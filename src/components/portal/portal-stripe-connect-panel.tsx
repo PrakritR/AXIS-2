@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -40,6 +40,7 @@ export function PortalStripeConnectPanel({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectStatus | null>(null);
+  const handledConnectParam = useRef(false);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -77,18 +78,42 @@ export function PortalStripeConnectPanel({
   }, [loadStatus]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || handledConnectParam.current) return;
     const q = new URLSearchParams(window.location.search).get("connect");
     if (q !== "done" && q !== "refresh") return;
-    showToast(q === "done" ? "Bank account linked." : "Setup link expired — try again.");
-    const id = window.setTimeout(() => void loadStatus(), 0);
+    handledConnectParam.current = true;
+    if (q === "done") {
+      showToast("Bank account linked.");
+      setActionError(null);
+    } else {
+      showToast("Setup link expired — try again.");
+    }
+    void loadStatus();
     window.history.replaceState({}, "", `${basePath}/payments`);
-    return () => window.clearTimeout(id);
   }, [basePath, loadStatus, showToast]);
 
   const startConnect = useCallback(async () => {
     setBusy(true);
     setActionError(null);
+
+    // Open synchronously on click so popup blockers allow a new tab (async window.open is often blocked).
+    const popup = window.open("about:blank", "_blank");
+    if (!popup) {
+      const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
+      setActionError(message);
+      showToast(message);
+      setBusy(false);
+      return;
+    }
+
+    try {
+      popup.document.title = "Opening Stripe…";
+      popup.document.body.innerHTML =
+        '<p style="font-family:system-ui,sans-serif;padding:2rem;color:#444">Opening secure bank setup…</p>';
+    } catch {
+      /* cross-origin once navigated; harmless on about:blank */
+    }
+
     try {
       const res = await fetch("/api/stripe/connect/onboard", {
         method: "POST",
@@ -97,28 +122,27 @@ export function PortalStripeConnectPanel({
       const body = (await res.json()) as OnboardResponse;
       if (!res.ok) {
         const message = body.error ?? "Could not start bank linking.";
+        popup.close();
         setActionError(message);
         showToast(message);
         return;
       }
       if (body.demo && body.message) {
+        popup.close();
         setActionError(body.message);
         showToast(body.message);
         return;
       }
       if (body.url) {
-        const popup = window.open(body.url, "_blank", "noopener,noreferrer");
-        if (!popup) {
-          const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
-          setActionError(message);
-          showToast(message);
-        }
+        popup.location.href = body.url;
         return;
       }
+      popup.close();
       const message = "Stripe did not return an onboarding URL.";
       setActionError(message);
       showToast(message);
     } catch {
+      popup.close();
       const message = "Could not start bank linking.";
       setActionError(message);
       showToast(message);
@@ -147,27 +171,27 @@ export function PortalStripeConnectPanel({
   const body = (
     <div className={`space-y-3 text-sm text-muted ${variant === "embedded" ? "" : "max-w-2xl"}`}>
       {status?.demo ? (
-        <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
+        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
           {status.message ?? "Add Stripe keys to enable bank linking."}
         </p>
       ) : null}
 
       {stripeTestMode && !status?.demo ? (
-        <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
+        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
           Stripe test mode is active — onboarding uses sandbox test banks (e.g. code <span className="font-mono">000000</span>).
           Set live keys (<span className="font-mono">sk_live_</span> / <span className="font-mono">pk_live_</span>) in production to link a real account.
         </p>
       ) : null}
 
       {liveOnLocalHttp && !blockingError ? (
-        <p className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-sm text-amber-950">
+        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
           You are using live Stripe keys on http://localhost. Bank linking requires HTTPS. Use test keys locally, or deploy
           to your https production URL.
         </p>
       ) : null}
 
       {blockingError ? (
-        <p className="rounded-xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-900">
+        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">
           {blockingError}
         </p>
       ) : null}
@@ -176,7 +200,7 @@ export function PortalStripeConnectPanel({
         <div className="rounded-2xl border border-border bg-card px-4 py-5">
           {ready ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900">
+              <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold portal-badge-success">
                 Bank linked
               </span>
               <Button

@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { deleteResidentAccount } from "@/lib/auth/delete-portal-account";
+import { deletePortalAccountCompletely } from "@/lib/auth/delete-portal-account";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-async function requireAdmin() {
+async function requireAdminActor(): Promise<{ ok: true; actorId: string } | { ok: false }> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return false;
-  return isAdminUser(user.id);
+  if (!user || !(await isAdminUser(user.id))) return { ok: false };
+  return { ok: true, actorId: user.id };
 }
 
 export async function GET() {
   try {
-    if (!(await requireAdmin())) {
+    if (!(await requireAdminActor()).ok) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     const supabase = createSupabaseServiceRoleClient();
@@ -59,7 +59,7 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   try {
-    if (!(await requireAdmin())) {
+    if (!(await requireAdminActor()).ok) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     const { id, active } = (await req.json()) as { id: string; active: boolean };
@@ -78,17 +78,18 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    if (!(await requireAdmin())) {
+    const auth = await requireAdminActor();
+    if (!auth.ok) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    if (id === auth.actorId) {
+      return NextResponse.json({ error: "You cannot delete your own account while signed in." }, { status: 400 });
+    }
 
     const supabase = createSupabaseServiceRoleClient();
-    const result = await deleteResidentAccount(supabase, { userId: id, purgeData: true });
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 409 });
-    }
+    const result = await deletePortalAccountCompletely(supabase, id);
     return NextResponse.json({ ok: true, mode: result.mode });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { resolveAppOrigin } from "@/lib/app-url";
-import { generateManagerId } from "@/lib/manager-id";
-import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
-import { stripePriceIdForPaidTier } from "@/lib/stripe-price-ids";
-import { getStripe } from "@/lib/stripe";
+import { ensureProvisionedManagerForPricing } from "@/lib/auth/manager-pricing-selection";
+import { createManagerCheckoutSession } from "@/lib/stripe/manager-checkout";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
@@ -17,8 +16,8 @@ type Body = {
   fullName?: string;
   phone?: string;
   userId?: string;
-  /** Optional; if set to FREEFIRST (or alias), checkout must be Pro monthly. */
   promo?: string;
+  discountPercent?: number;
   embedded?: boolean;
 };
 
@@ -35,7 +34,6 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body;
     const tierRaw = typeof body.tier === "string" ? body.tier.toLowerCase().trim() : "";
     const billingRaw = typeof body.billing === "string" ? body.billing.toLowerCase().trim() : "";
-    const useEmbedded = body.embedded !== false;
 
     if (!tierRaw || !billingRaw) {
       return NextResponse.json({ error: "tier and billing are required." }, { status: 400 });
@@ -47,98 +45,55 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "billing must be \"monthly\" or \"annual\"." }, { status: 400 });
     }
 
-    const tier = tierRaw;
-    const billing = billingRaw;
+    const supabaseAuth = await createSupabaseServerClient();
+    const {
+      data: { user: authUser },
+    } = await supabaseAuth.auth.getUser();
 
-    const price = stripePriceIdForPaidTier(tier, billing)?.trim();
-    if (!price) {
-      return NextResponse.json(
-        {
-          error: `Missing Stripe price for ${tier} ${billing}. Set STRIPE_PRICE_${tier.toUpperCase()}_${billing === "annual" ? "ANNUAL" : "MONTHLY"}.`,
-        },
-        { status: 500 },
-      );
-    }
-
-    const appUrl = resolveAppOrigin(req);
-
-    const email = typeof body.email === "string" ? body.email.trim() : "";
-    const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
-    const phone = typeof body.phone === "string" ? body.phone.trim() : "";
-    const userId = typeof body.userId === "string" ? body.userId.trim() : "";
-    const promoRaw = typeof body.promo === "string" ? normalizeProMonthlyPromoInput(body.promo) : "";
-    const promoUpper = promoRaw.toUpperCase();
-
-    const isProMonthly = tier === "pro" && billing === "monthly";
-    if (promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && !isProMonthly) {
-      return NextResponse.json(
-        { error: `Promo ${PRO_MONTHLY_FIRST_FREE_PROMO_CODE} applies only to Pro monthly billing.` },
-        { status: 400 },
-      );
-    }
-
-    const stripe = getStripe();
-
-    const metadata: Record<string, string> = {
-      tier,
-      billing,
-      manager_id: generateManagerId(),
-    };
-    if (email) metadata.email = email;
-    if (fullName) metadata.full_name = fullName;
-    if (phone) metadata.phone = phone;
-    if (userId) metadata.userId = userId;
-    if (promoRaw) metadata.promo = promoRaw;
-
-    /** Auto-apply first-month-free when configured (Dashboard promotion code id: promo_…). */
-    const promoCodeId = process.env.STRIPE_PROMOTION_CODE_ID_FIRST_MONTH_FREE?.trim();
-    const autoFirstMonthFree =
-      isProMonthly && promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && Boolean(promoCodeId);
-
-    /** Let customers enter other codes at Checkout when not auto-applying FREEFIRST. */
-    const allowPromotionCodes = isProMonthly && !autoFirstMonthFree;
-
-    const sessionBase = {
-      mode: "subscription" as const,
-      /** Manager plans bill by card only — ACH is for resident portal payments (Connect). */
-      payment_method_types: ["card"],
-      line_items: [{ price, quantity: 1 }],
-      ...(email ? { customer_email: email } : {}),
-      metadata,
-      ...(autoFirstMonthFree && promoCodeId ? { discounts: [{ promotion_code: promoCodeId }] } : {}),
-      ...(allowPromotionCodes ? { allow_promotion_codes: true } : {}),
-    };
-
-    if (useEmbedded) {
-      const session = await stripe.checkout.sessions.create({
-        ui_mode: "embedded_page",
-        ...sessionBase,
-        return_url: `${appUrl}/auth/manager-id?session_id={CHECKOUT_SESSION_ID}`,
-      } as Parameters<typeof stripe.checkout.sessions.create>[0]);
-
-      const clientSecret = session.client_secret;
-      if (!clientSecret) {
-        return NextResponse.json({ error: "Stripe did not return a client secret for embedded checkout." }, { status: 500 });
+    let managerId: string | undefined;
+    let userId = typeof body.userId === "string" ? body.userId.trim() : "";
+    if (authUser?.id) {
+      userId = authUser.id;
+      const email = authUser.email?.trim().toLowerCase() ?? (typeof body.email === "string" ? body.email.trim().toLowerCase() : "");
+      if (email) {
+        const supabase = createSupabaseServiceRoleClient();
+        const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+        const prepared = await ensureProvisionedManagerForPricing(supabase, {
+          userId: authUser.id,
+          email,
+          fullName: fullName || null,
+        });
+        if (prepared.kind === "complete") {
+          // Account already fully set up — client should send them to portal.
+          return NextResponse.json({ alreadyComplete: true, redirectTo: "/portal/dashboard" }, { status: 409 });
+        }
+        managerId = prepared.managerId;
       }
-
-      return NextResponse.json({
-        clientSecret,
-        sessionId: session.id,
-      });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      ui_mode: "hosted_page",
-      ...sessionBase,
-      success_url: `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/pricing`,
-    } as Parameters<typeof stripe.checkout.sessions.create>[0]);
+    const result = await createManagerCheckoutSession({
+      tier: tierRaw,
+      billing: billingRaw,
+      email: body.email,
+      fullName: body.fullName,
+      phone: body.phone,
+      userId: userId || undefined,
+      managerId,
+      promo: body.promo,
+      discountPercent: body.discountPercent,
+      embedded: body.embedded,
+      req,
+    });
 
-    if (!session.url) {
-      return NextResponse.json({ error: "Stripe did not return a checkout URL." }, { status: 500 });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
     }
 
-    return NextResponse.json({ url: session.url });
+    if (result.embedded) {
+      return NextResponse.json({ clientSecret: result.clientSecret, sessionId: result.sessionId });
+    }
+
+    return NextResponse.json({ url: result.url, sessionId: result.sessionId });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Checkout failed";
     return NextResponse.json({ error: message }, { status: 500 });

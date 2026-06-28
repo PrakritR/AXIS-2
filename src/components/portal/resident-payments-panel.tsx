@@ -16,10 +16,10 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -299,11 +299,7 @@ export function ResidentPaymentsPanel() {
       selectedIds.has(expandedId) && selectedIds.size > 1 ? [...selectedIds] : [expandedId];
     const key = checkoutKey(ids, paymentMethod);
     if (checkout?.key === key && (checkout.loading || checkout.clientSecret || checkout.error)) return;
-    // Defer the load a tick (matches the load-in-effect idiom used elsewhere) so
-    // the trigger isn't a synchronous setState. The key guard above prevents
-    // duplicate intent loads, and the cleanup cancels a superseded load.
-    const id = window.setTimeout(() => void loadCheckout(ids, paymentMethod), 0);
-    return () => window.clearTimeout(id);
+    void Promise.resolve().then(() => void loadCheckout(ids, paymentMethod));
   }, [
     charges,
     checkout?.key,
@@ -382,7 +378,7 @@ export function ResidentPaymentsPanel() {
         {checkout.loading ? (
           <p className="text-sm text-muted">Loading secure checkout…</p>
         ) : checkout.error ? (
-          <p className="rounded-xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-900">{checkout.error}</p>
+          <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">{checkout.error}</p>
         ) : checkout.clientSecret ? (
           <StripeEmbeddedCheckout clientSecret={checkout.clientSecret} />
         ) : null}
@@ -398,25 +394,6 @@ export function ResidentPaymentsPanel() {
   return (
     <ManagerPortalPageShell
       title="Payments"
-      titleAside={
-        <Button
-          type="button"
-          variant="outline"
-          className="shrink-0 rounded-full"
-          onClick={() => {
-            void (async () => {
-              await syncManagerApplicationsFromServer({ force: true });
-              await syncPropertyPipelineFromServer({ force: true });
-              await syncHouseholdChargesFromServer(true, { skipReconcile: true });
-            })().then(() => {
-              refresh();
-              showToast("Refreshed payments.");
-            });
-          }}
-        >
-          Refresh
-        </Button>
-      }
       filterRow={
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -492,12 +469,13 @@ export function ResidentPaymentsPanel() {
           ) : null}
           {rows.length === 0 ? (
             <PortalDataTableEmpty
+              icon="payment"
               message={
                 charges.length === 0
-                  ? "No charges yet. Submit a rental application to see your listing’s application fee and deposit lines here."
+                  ? "No charges yet."
                   : tab === "pending"
-                    ? "Nothing unpaid — you’re all caught up in this tab."
-                    : "No paid items yet."
+                    ? "No unpaid charges yet."
+                    : "No paid charges yet."
               }
             />
           ) : (
@@ -517,17 +495,28 @@ export function ResidentPaymentsPanel() {
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
                       <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                      <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => {
                       const achPayable = row.status === "pending" && canPayHouseholdChargeWithAxisAch(row);
                       const showSelectCol = tab === "pending" && unpaidAchCharges.length > 0;
-                      const detailColSpan = showSelectCol ? 8 : 7;
+                      const detailColSpan = showSelectCol ? 7 : 6;
                       return (
                         <Fragment key={row.id}>
-                          <tr className={PORTAL_TABLE_TR}>
+                          <tr
+                            className={PORTAL_TABLE_TR_EXPANDABLE}
+                            onClick={createPortalRowExpandClick(() =>
+                              setExpandedId((cur) => {
+                                const next = cur === row.id ? null : row.id;
+                                if (next !== cur && next) {
+                                  setCheckout(null);
+                                }
+                                return next;
+                              }),
+                            )}
+                            aria-expanded={expandedId === row.id}
+                          >
                             {showSelectCol ? (
                               <td className={PORTAL_TABLE_TD}>
                                 {achPayable ? (
@@ -552,24 +541,6 @@ export function ResidentPaymentsPanel() {
                               <Badge tone={statusClass(row.status === "paid" ? "Paid" : "Unpaid")}>
                                 {row.status === "paid" ? "Paid" : "Unpaid"}
                               </Badge>
-                            </td>
-                            <td className={`${PORTAL_TABLE_TD} text-right`}>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                                onClick={() =>
-                                  setExpandedId((cur) => {
-                                    const next = cur === row.id ? null : row.id;
-                                    if (next !== cur && next) {
-                                      setCheckout(null);
-                                    }
-                                    return next;
-                                  })
-                                }
-                              >
-                                {expandedId === row.id ? "Hide" : "Details"}
-                              </Button>
                             </td>
                           </tr>
                           {expandedId === row.id ? (
@@ -614,7 +585,7 @@ export function ResidentPaymentsPanel() {
                                 {row.blocksLeaseUntilPaid && row.status === "pending" ? (
                                   <p className="mt-3 text-sm text-amber-900">
                                     Pay this before signing your lease.{" "}
-                                    <Link href="/resident/lease" className="font-semibold text-primary underline underline-offset-2">
+                                    <Link href="/resident/documents/lease" className="font-semibold text-primary underline underline-offset-2">
                                       Open lease tab
                                     </Link>
                                     .
@@ -633,7 +604,7 @@ export function ResidentPaymentsPanel() {
                                     Copy balance
                                   </Button>
                                   <Link
-                                    href="/resident/lease"
+                                    href="/resident/documents/lease"
                                     className={`inline-flex items-center justify-center ${PORTAL_DETAIL_BTN}`}
                                   >
                                     Lease tab

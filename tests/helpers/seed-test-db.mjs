@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Seeds a dedicated Supabase test project with admin, manager, and sample data.
+ * Seeds a dedicated Supabase test project with admin, manager, resident, and sample data.
  * Usage: node --env-file=.env.test tests/helpers/seed-test-db.mjs [testRunId]
  */
 import { createClient } from "@supabase/supabase-js";
@@ -13,6 +13,8 @@ const adminEmail = (process.env.E2E_ADMIN_EMAIL ?? "admin@test.axis.local").toLo
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? "TestAdmin123!";
 const managerEmail = (process.env.E2E_MANAGER_EMAIL ?? "manager@test.axis.local").toLowerCase();
 const managerPassword = process.env.E2E_MANAGER_PASSWORD ?? "TestManager123!";
+const residentEmail = (process.env.E2E_RESIDENT_EMAIL ?? "resident@test.axis.local").toLowerCase();
+const residentPassword = process.env.E2E_RESIDENT_PASSWORD ?? "TestResident123!";
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
@@ -75,36 +77,110 @@ try {
   );
 
   const propertyId = `test-prop-${testRunId}`;
-  // manager_property_records uses: id (text PK), manager_user_id (auth uid),
-  // status, and a MockProperty-shaped property_data. row_data carries testRunId
-  // so cleanup-test-db can find it.
-  const { error: propertyError } = await supabase.from("manager_property_records").insert({
-    id: propertyId,
-    manager_user_id: managerUserId,
-    status: "live",
-    property_data: {
+  await supabase.from("manager_property_records").insert({
+    manager_id: managerId,
+    row_data: {
       id: propertyId,
-      title: `Seed Property ${testRunId}`,
-      tagline: "Seeded listing",
-      address: "123 Seed St, Austin, TX",
-      zip: "78701",
-      neighborhood: "Downtown",
-      beds: 2,
-      baths: 1,
-      rentLabel: "$1,800/mo",
-      available: "Now",
-      petFriendly: true,
-      buildingId: `bld-${testRunId}`,
-      buildingName: "Seed Building",
-      unitLabel: "Unit 1",
-      managerUserId,
-      adminPublishLive: true,
+      status: "live",
+      name: `Seed Property ${testRunId}`,
+      address: "123 Test St, San Francisco, CA 94105",
+      testRunId,
     },
-    row_data: { id: propertyId, testRunId },
   });
-  if (propertyError) throw new Error(`Seed property insert failed: ${propertyError.message}`);
 
-  console.log(JSON.stringify({ ok: true, testRunId, adminId, managerUserId, managerId, propertyId }));
+  // ── Resident account ──────────────────────────────────────────────────────
+  const residentUserId = await ensureUser(residentEmail, residentPassword, "resident");
+
+  // Approved application linking resident to manager
+  const applicationId = `test-app-${testRunId}`;
+  const residentAxisId = `AXIS-${testRunId.slice(0, 8).toUpperCase()}`;
+
+  await supabase.from("manager_application_records").insert({
+    id: applicationId,
+    manager_id: managerId,
+    manager_user_id: managerUserId,
+    resident_email: residentEmail,
+    row_data: {
+      id: applicationId,
+      bucket: "approved",
+      email: residentEmail,
+      name: "Test Resident",
+      axisId: residentAxisId,
+      managerUserId,
+      assignedPropertyId: propertyId,
+      leaseTerm: "12 months",
+      leaseStart: new Date().toISOString().slice(0, 10),
+      signedRent: 2500,
+      testRunId,
+    },
+  });
+
+  // Update resident profile with axis_id and mark application_approved
+  await supabase.from("profiles").upsert({
+    id: residentUserId,
+    email: residentEmail,
+    role: "resident",
+    full_name: "Test Resident",
+    application_approved: true,
+  });
+
+  // Household charge for resident
+  const chargeId = `test-charge-${testRunId}`;
+  await supabase.from("portal_household_charge_records").insert({
+    id: chargeId,
+    manager_user_id: managerUserId,
+    resident_user_id: residentUserId,
+    resident_email: residentEmail,
+    scope: "household",
+    row_data: {
+      id: chargeId,
+      kind: "rent",
+      status: "due",
+      label: "Rent – Test Month",
+      amountCents: 250000,
+      dueDateLabel: "1st of month",
+      residentEmail,
+      managerUserId,
+      testRunId,
+    },
+  });
+
+  // Tour / schedule record for manager
+  const tourId = `test-tour-${testRunId}`;
+  const tourStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const tourEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString();
+  await supabase.from("portal_schedule_records").insert({
+    id: tourId,
+    manager_user_id: managerUserId,
+    record_type: "event",
+    starts_at: tourStart,
+    ends_at: tourEnd,
+    row_data: {
+      id: tourId,
+      title: "Test Tour",
+      type: "tour",
+      propertyId,
+      managerUserId,
+      testRunId,
+    },
+  });
+
+  console.log(
+    JSON.stringify({
+      ok: true,
+      testRunId,
+      adminId,
+      managerUserId,
+      managerId,
+      propertyId,
+      residentUserId,
+      residentEmail,
+      residentAxisId,
+      applicationId,
+      chargeId,
+      tourId,
+    }),
+  );
 } catch (err) {
   console.error(err);
   process.exit(1);

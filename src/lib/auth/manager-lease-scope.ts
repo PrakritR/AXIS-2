@@ -1,5 +1,11 @@
 import "server-only";
 
+import { asStringArray, readPropertyPermissionsFromRow } from "@/app/api/pro/account-links/route";
+import {
+  hasCoManagerPermissionForProperty,
+  type CoManagerPermissionId,
+  type PropertyCoManagerPermissions,
+} from "@/lib/co-manager-permissions";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 type ServiceClient = ReturnType<typeof createSupabaseServiceRoleClient>;
@@ -34,6 +40,57 @@ export async function collectLinkedPropertyIdsForUser(db: ServiceClient, userId:
     /* table may not exist */
   }
   return linkedPropertyIds;
+}
+
+/** Per-property co-manager permissions for incoming accepted links. */
+export async function collectLinkedPropertyPermissionsForUser(
+  db: ServiceClient,
+  userId: string,
+): Promise<Map<string, PropertyCoManagerPermissions>> {
+  const byProperty = new Map<string, PropertyCoManagerPermissions>();
+  try {
+    const { data: linkRows, error } = await db
+      .from("account_link_invites")
+      .select("inviter_user_id, invitee_user_id, assigned_property_ids, property_co_manager_permissions, co_manager_permissions")
+      .eq("status", "accepted")
+      .eq("invitee_user_id", userId);
+    if (error && !String(error.message ?? "").toLowerCase().includes("account_link_invites")) {
+      return byProperty;
+    }
+    for (const row of linkRows ?? []) {
+      const assigned = asStringArray((row as { assigned_property_ids?: unknown }).assigned_property_ids);
+      const perms = readPropertyPermissionsFromRow(row as Parameters<typeof readPropertyPermissionsFromRow>[0]);
+      for (const propertyId of assigned) {
+        const existing = byProperty.get(propertyId) ?? {};
+        byProperty.set(propertyId, {
+          ...existing,
+          ...perms,
+          [propertyId]: perms[propertyId] ?? {},
+        });
+      }
+    }
+  } catch {
+    /* table may not exist */
+  }
+  return byProperty;
+}
+
+export async function managerHasCoManagerPermissionForProperty(
+  db: ServiceClient,
+  userId: string,
+  propertyId: string,
+  permission: CoManagerPermissionId,
+): Promise<boolean> {
+  const { data: propertyRow } = await db
+    .from("manager_property_records")
+    .select("manager_user_id")
+    .eq("id", propertyId)
+    .maybeSingle();
+  if (propertyRow?.manager_user_id === userId) return true;
+
+  const linked = await collectLinkedPropertyPermissionsForUser(db, userId);
+  const perms = linked.get(propertyId);
+  return hasCoManagerPermissionForProperty(perms, propertyId, permission);
 }
 
 export function leaseRecordVisibleToManager(

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   INBOX_TAB_DEFS,
   PORTAL_INBOX_TABLE_WRAP,
@@ -12,8 +12,10 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
@@ -212,12 +214,12 @@ function ComposeModal({
     <>
       <button
         type="button"
-        className="fixed inset-0 z-40 bg-slate-900/25 backdrop-blur-[1px]"
+        className="fixed inset-0 z-40 modal-overlay"
         aria-label="Close compose"
         onClick={onClose}
       />
       <div
-        className="fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
+        className="modal-panel fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,28rem)] max-h-[min(100%-2rem,90vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border p-5 shadow-[0_24px_60px_-20px_rgba(15,23,42,0.35)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-inbox-compose-title"
@@ -320,7 +322,7 @@ function ComposeModal({
 
 export function AdminInboxClient({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
-  const router = useRouter();
+  const navigate = usePortalNavigate();
   const [tick, setTick] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
@@ -329,13 +331,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     managers: [],
     residents: [],
   });
-
-  const refresh = useCallback(() => {
-    void syncInboxMessagesFromServer({ force: true }).then(() => {
-      setTick((t) => t + 1);
-      showToast("Refreshed inbox.");
-    });
-  }, [showToast]);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -421,12 +416,12 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
 
   const emptyCopy =
     tabId === "sent"
-      ? "No sent messages yet"
+      ? "No sent messages yet."
       : tabId === "trash"
-        ? "Trash is empty"
+        ? "No trash messages yet."
         : tabId === "opened" && rows.length === 0
-          ? "No opened messages yet"
-          : "No messages yet";
+          ? "No opened messages yet."
+          : "No messages yet.";
 
   const fromOrToHeader = tabId === "sent" ? "To" : "From";
 
@@ -449,7 +444,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              className="shrink-0 rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
               onClick={() => {
                 if (!window.confirm(`Delete all ${folderCounts.trash} trash message${folderCounts.trash === 1 ? "" : "s"}? This cannot be undone.`)) return;
                 void emptyAdminInboxTrash().then((ok) => {
@@ -466,9 +461,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
               Delete all trash
             </Button>
           ) : null}
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-            Refresh
-          </Button>
         </>
       }
       filterRow={
@@ -476,7 +468,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           activeTone="primary"
           tabs={inboxTabs}
           activeId={tabId}
-          onChange={(id) => router.push(`/admin/inbox/${id}`)}
+          onChange={(id) => navigate(`/admin/inbox/${id}`)}
         />
       }
     >
@@ -489,14 +481,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
         />
 
         {rows.length === 0 ? (
-          <PortalInboxEmptyState
-            title={emptyCopy}
-            hint={
-              tabId === "unopened" ? (
-                <p className="max-w-md">Partner inquiries from the public site and portal mail appear here.</p>
-              ) : undefined
-            }
-          />
+          <PortalInboxEmptyState title={emptyCopy} />
         ) : (
           <div className={PORTAL_INBOX_TABLE_WRAP}>
             <div className="overflow-x-auto">
@@ -524,7 +509,11 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                         : row.email;
                     return (
                       <Fragment key={row.id}>
-                        <tr className={`${PORTAL_TABLE_TR} ${isOpen ? "bg-accent/30/30" : ""}`}>
+                        <tr
+                          className={`${PORTAL_TABLE_TR_EXPANDABLE} ${isOpen ? "bg-accent/30/30" : ""}`}
+                          onClick={createPortalRowExpandClick(() => toggleDetails(row))}
+                          aria-expanded={isOpen}
+                        >
                           <td className={`${PORTAL_TABLE_TD} align-middle`}>
                             <p className="font-medium text-foreground">{primaryName}</p>
                             {primaryEmail ? <p className="mt-0.5 text-xs text-muted">{primaryEmail}</p> : null}
@@ -536,20 +525,12 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                           <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{formatWhen(row.createdAt)}</td>
                           <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                             <div className="flex flex-wrap justify-end gap-1.5">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                                onClick={() => toggleDetails(row)}
-                              >
-                                {isOpen ? "Hide" : "Details"}
-                              </Button>
                               {tabId === "trash" ? (
                                 <>
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-emerald-50`}
+                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-[var(--status-confirmed-bg)]`}
                                     onClick={() => {
                                       void restoreInboxMessageFromTrash(row.id).then((ok) => {
                                         if (ok) {
@@ -567,7 +548,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-rose-50`}
+                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                                     onClick={() => {
                                       void permanentlyDeleteInboxMessage(row.id).then((ok) => {
                                         if (ok) {

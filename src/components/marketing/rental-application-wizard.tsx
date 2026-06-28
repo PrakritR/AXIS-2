@@ -6,10 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 import {
-  loadPublicExtraListingsFromServer,
+  loadPublicPropertyLeadFromServer,
   PROPERTY_PIPELINE_EVENT,
-  readAllExtraListings,
-  readExtraListings,
 } from "@/lib/demo-property-pipeline";
 import {
   ensurePendingApplicationFeeCharge,
@@ -22,7 +20,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   getPropertyById,
-  getPropertySelectOptions,
+  getPropertyForPublicLink,
   getRoomOptionsForProperty,
   isRoomApprovedConflict,
   isRoomPendingConflict,
@@ -44,8 +42,13 @@ import {
   RENTAL_WIZARD_STEP_FIELD_ORDER,
   scrollToFirstWizardFieldError,
 } from "@/lib/wizard-field-errors";
-import { appendManagerApplicationRow, syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
+import {
+  appendManagerApplicationRow,
+  syncPublicApprovedApplicationsFromServer,
+  upsertApplicationRowToServerAwait,
+} from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
+import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
 import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
 
 const processedApplicationFeeSessions = new Set<string>();
@@ -100,7 +103,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const [feeStepUserId, setFeeStepUserId] = useState<string | null>(null);
   const [reviewReturnStep, setReviewReturnStep] = useState<number | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [postSubmit, setPostSubmit] = useState<{ axisId: string } | null>(null);
+  const [postSubmit, setPostSubmit] = useState<{
+    axisId: string;
+    email: string;
+    propertyTitle?: string;
+    emailSent?: boolean;
+    syncError?: string;
+  } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [showAvailabilityWarnings, setShowAvailabilityWarnings] = useState(false);
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
@@ -116,16 +126,20 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     ].join("|");
   }, [searchParams]);
 
+  const linkedPropertyId = searchParams.get("propertyId")?.trim() ?? "";
+
   useEffect(() => {
     void syncPublicApprovedApplicationsFromServer().then(() => setOccupancySyncEpoch((n) => n + 1));
   }, []);
 
   useEffect(() => {
     const on = () => setExtrasTick((n) => n + 1);
-    void loadPublicExtraListingsFromServer().then(() => on());
+    if (linkedPropertyId) {
+      void loadPublicPropertyLeadFromServer(linkedPropertyId).then(() => on());
+    }
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     return () => window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
-  }, []);
+  }, [linkedPropertyId]);
 
   useEffect(() => {
     const on = () => setChargeTick((n) => n + 1);
@@ -154,13 +168,17 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   const propertyOptions = useMemo(() => {
     void extrasTick;
-    const base = getPropertySelectOptions();
-    const seen = new Set(base.map((b) => b.value));
-    const extra = readExtraListings()
-      .filter((p) => !seen.has(p.id))
-      .map((p) => ({ value: p.id, label: p.title }));
-    return [...base, ...extra];
-  }, [extrasTick]);
+    if (!linkedPropertyId) return [];
+    const prop = getPropertyForPublicLink(linkedPropertyId);
+    if (!prop) return [];
+    return [{ value: prop.id, label: prop.title }];
+  }, [extrasTick, linkedPropertyId]);
+
+  const linkedProperty = useMemo(() => {
+    void extrasTick;
+    if (!linkedPropertyId) return undefined;
+    return getPropertyForPublicLink(linkedPropertyId);
+  }, [extrasTick, linkedPropertyId]);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -297,12 +315,15 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   }, [form.propertyId, form.email, feeStepUserId, chargeTick]);
 
   const finalizeApplicationSubmit = useCallback(
-    (residentUserId: string | null) => {
+    async (residentUserId: string | null) => {
+      if (submitting) return;
+      setSubmitting(true);
       const pid = form.propertyId.trim();
       const emailTrim = form.email.trim();
       const prop = pid ? getPropertyById(pid) : undefined;
       const axisId = makeNewApplicationId();
-      const listing = prop ?? readAllExtraListings().find((p) => p.id === pid);
+      const listing = prop;
+      const applicantName = form.fullLegalName.trim() || "Applicant";
 
       recordApplicationCharges({
         residentEmail: form.email,
@@ -314,29 +335,63 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       });
 
       const feeCharge = findApplicationFeeCharge(form.email, pid, residentUserId);
-      appendManagerApplicationRow({
+      const applicationRow = {
         id: axisId,
-        name: form.fullLegalName.trim() || "Applicant",
+        name: applicantName,
         property: (listing?.title?.trim() || pid.trim()) || "Listing",
         propertyId: pid || undefined,
         managerUserId: listing?.managerUserId ?? feeCharge?.managerUserId ?? prop?.managerUserId ?? null,
-        stage: "Submitted",
-        bucket: "pending",
-        backgroundCheckStatus: "pending_review",
+        stage: "Submitted" as const,
+        bucket: "pending" as const,
+        backgroundCheckStatus: "pending_review" as const,
         detail: `Submitted ${new Date().toLocaleString()}`,
         email: emailTrim,
         application: structuredClone(form),
-      });
+      };
+
+      appendManagerApplicationRow(applicationRow);
+      const sync = await upsertApplicationRowToServerAwait(applicationRow);
+
+      let emailSent = false;
+      const propertyTitle = (listing?.title?.trim() || pid.trim()) || undefined;
+      if (sync.ok && emailTrim.includes("@")) {
+        try {
+          const res = await fetch("/api/portal/send-application-submitted", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: emailTrim,
+              axisId,
+              applicantName: applicantName !== "Applicant" ? applicantName : undefined,
+              propertyTitle,
+            }),
+          });
+          emailSent = res.ok;
+        } catch {
+          emailSent = false;
+        }
+      }
 
       clearRentalWizardDraft();
       setForm(createInitialRentalWizardState());
       setStep(1);
       setErrors({});
-      setPostSubmit({ axisId });
+      setPostSubmit({
+        axisId,
+        email: emailTrim,
+        propertyTitle,
+        emailSent,
+        syncError: sync.ok ? undefined : sync.error,
+      });
       setChargeTick((n) => n + 1);
-      showToast("Application submitted.");
+      setSubmitting(false);
+      if (sync.ok) {
+        showToast("Application submitted.");
+      } else {
+        showToast(sync.error ?? "Application saved locally but could not sync to server. Try again from create account.");
+      }
     },
-    [form, showToast],
+    [form, showToast, submitting],
   );
 
   const primaryButtonLabel = useMemo(() => {
@@ -345,7 +400,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const email = form.email.trim();
     const { amount } = listingApplicationFeeAmount(pid);
     const needsFee = Boolean(pid && email.includes("@") && amount > 0);
-    if (!needsFee) return "Submit application";
+    if (!needsFee) return submitting ? "Submitting…" : "Submit application";
     const prop = pid ? getPropertyById(pid) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
@@ -363,6 +418,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     form.applicationFeePayChannel,
     checkoutBusy,
     applicationFeeGate.paid,
+    submitting,
   ]);
 
   useEffect(() => {
@@ -478,7 +534,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             return;
           }
 
-          const listingForPay = prop ?? readAllExtraListings().find((p) => p.id === pid);
+          const listingForPay = prop;
           const managerUserId = listingForPay?.managerUserId?.trim() ?? "";
           if (!managerUserId) {
             showToast("This listing cannot take Stripe payments yet. Contact the manager before submitting.");
@@ -615,7 +671,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
       <div className="text-center sm:text-left">
-        <h1 className="text-2xl font-bold tracking-tight text-[#0d1f4e] sm:text-3xl md:text-4xl">Residential rental application</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Residential rental application</h1>
       </div>
 
       <div className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
@@ -646,9 +702,20 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       </div>
 
       {applicationPath === "signer" ? (
-        postSubmit ? (
+        !linkedPropertyId || !linkedProperty ? (
+          <div className="mt-8">
+            <ManagerLinkGate
+              title="Open your manager’s apply link"
+              body={
+                linkedPropertyId && !linkedProperty
+                  ? "This property link is invalid or no longer active. Ask your property manager for a new apply link."
+                  : "Applications start from a link your property manager shares after you find a unit on Zillow, Redfin, or elsewhere."
+              }
+            />
+          </div>
+        ) : postSubmit ? (
           <div
-            className="mt-8 rounded-3xl border border-emerald-200/90 bg-emerald-50/40 p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+            className="mt-8 rounded-3xl border p-6 portal-banner-success shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
@@ -665,9 +732,29 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">Application ID</p>
               <p className="mt-2 font-mono text-xl font-bold tracking-tight text-foreground sm:text-2xl">{postSubmit.axisId}</p>
             </div>
+            {postSubmit.syncError ? (
+              <p className="mt-4 text-sm text-amber-800">
+                We could not confirm your application on our server ({postSubmit.syncError}). Save your Application ID
+                above and try creating your account — if that fails, contact the property manager.
+              </p>
+            ) : null}
+            {postSubmit.email ? (
+              postSubmit.emailSent ? (
+                <p className="mt-4 text-sm text-muted">
+                  We also emailed these instructions to{" "}
+                  <span className="font-medium text-foreground">{postSubmit.email}</span>.
+                </p>
+              ) : (
+                <p className="mt-4 text-sm text-muted">
+                  We could not send a confirmation email to{" "}
+                  <span className="font-medium text-foreground">{postSubmit.email}</span>. Use the button below with the
+                  same email address.
+                </p>
+              )
+            ) : null}
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
-                href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.axisId)}`}
+                href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.axisId)}${postSubmit.email ? `&email=${encodeURIComponent(postSubmit.email)}` : ""}`}
                 className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-card px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-card hover:shadow-md active:translate-y-px"
               >
                 Create resident account
@@ -729,6 +816,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 form={form}
                 errors={errors}
                 propertyOptions={propertyOptions}
+                propertyLocked={Boolean(linkedProperty)}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
                 occupancySyncEpoch={occupancySyncEpoch}
@@ -753,9 +841,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 type="button"
                 className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
                 onClick={handleContinue}
-                disabled={checkoutBusy}
+                disabled={checkoutBusy || submitting}
               >
-                {primaryButtonLabel}
+                {submitting ? "Submitting…" : primaryButtonLabel}
               </Button>
             </div>
           </div>

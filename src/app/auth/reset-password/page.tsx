@@ -5,6 +5,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { FIELD_LABEL_CLASS } from "@/lib/ui-styles";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -77,7 +78,7 @@ export default function ResetPasswordPage() {
   if (!hasSession) {
     return (
       <AuthCard>
-        <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Reset link expired</h1>
+        <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">Reset link expired</h1>
         <p className="mt-2 text-center text-sm text-muted">
           Request a new password reset link and open it from the same browser.
         </p>
@@ -93,12 +94,12 @@ export default function ResetPasswordPage() {
 
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-bold tracking-tight text-[#0f172a]">Choose a new password</h1>
+      <h1 className="text-center text-[22px] font-bold tracking-tight text-foreground">Choose a new password</h1>
       <p className="mt-2 text-center text-sm text-muted">Enter and confirm your new password below.</p>
 
       <div className="mt-8 space-y-4">
         <div>
-          <label className="text-xs font-semibold text-[#334155]" htmlFor="new-password">
+          <label className={FIELD_LABEL_CLASS} htmlFor="new-password">
             New password
           </label>
           <PasswordInput
@@ -111,7 +112,7 @@ export default function ResetPasswordPage() {
           />
         </div>
         <div>
-          <label className="text-xs font-semibold text-[#334155]" htmlFor="confirm-password">
+          <label className={FIELD_LABEL_CLASS} htmlFor="confirm-password">
             Confirm new password
           </label>
           <PasswordInput

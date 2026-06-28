@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   chargeDueLabel,
   chargeVisibleToManager,
+  dedupeHouseholdCharges,
+  duplicateHouseholdChargeIds,
   householdChargeToLedgerRow,
   isHouseholdChargeOverdue,
   mergeHouseholdChargesWithServer,
@@ -120,5 +122,34 @@ describe("mergeHouseholdChargesWithServer", () => {
     const { merged } = mergeHouseholdChargesWithServer([serverPending, serverPaid], [localPaid]);
     expect(merged).toHaveLength(1);
     expect(merged[0]?.status).toBe("paid");
+  });
+
+  it("dedupes duplicate application-fee rows to one canonical charge id", () => {
+    const fallback = makeCharge({
+      id: "hc_app_fee_res@test.com_prop1",
+      kind: "application_fee",
+      residentEmail: "res@test.com",
+      propertyId: "prop-1",
+      status: "paid",
+      paidAt: "2026-06-10T12:00:00.000Z",
+      balanceLabel: "$0.00",
+      amountLabel: "$50.00",
+    });
+    const canonical = makeCharge({
+      id: "hc_app_fee_app123",
+      kind: "application_fee",
+      applicationId: "app123",
+      residentEmail: "res@test.com",
+      propertyId: "prop-1",
+      status: "paid",
+      paidAt: "2026-06-10T12:00:00.000Z",
+      balanceLabel: "$0.00",
+      amountLabel: "$50.00",
+    });
+
+    const merged = dedupeHouseholdCharges([fallback, canonical]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.id).toBe("hc_app_fee_app123");
+    expect(duplicateHouseholdChargeIds([fallback, canonical])).toEqual(["hc_app_fee_res@test.com_prop1"]);
   });
 });

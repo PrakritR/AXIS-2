@@ -3,7 +3,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { PORTAL_TABLE_TR_EXPANDABLE, createPortalRowExpandClick } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDate } from "@/lib/pacific-time";
 
@@ -36,6 +38,19 @@ type UnifiedRow =
 type CategoryFilter = "management" | "resident";
 type StatusTab = "active" | "disabled";
 type TierFilter = "all" | "free" | "pro" | "business";
+type ManagerPlan = "free" | "pro" | "business";
+
+const MANAGER_PLAN_OPTIONS: { value: ManagerPlan; label: string }[] = [
+  { value: "free", label: "Free" },
+  { value: "pro", label: "Pro" },
+  { value: "business", label: "Business" },
+];
+
+function normalizeManagerPlan(tier: string): ManagerPlan {
+  const t = tier.toLowerCase();
+  if (t === "pro" || t === "business") return t;
+  return "free";
+}
 
 function UsersEmptyIcon({ className }: { className?: string }) {
   return (
@@ -51,7 +66,7 @@ function UsersEmptyIcon({ className }: { className?: string }) {
 function StatusPill({ active }: { active: boolean }) {
   if (active) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
+      <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold portal-badge-success">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
         Active
       </span>
@@ -67,8 +82,8 @@ function StatusPill({ active }: { active: boolean }) {
 
 function RolePill({ kind }: { kind: AccountKind }) {
   const styles: Record<AccountKind, string> = {
-    manager: "border-sky-200/90 bg-sky-50 text-sky-900",
-    resident: "border-violet-200/90 bg-violet-50 text-violet-900",
+    manager: "portal-badge-info border",
+    resident: "portal-badge-info border",
   };
   const labels: Record<AccountKind, string> = {
     manager: "Management",
@@ -83,8 +98,8 @@ function RolePill({ kind }: { kind: AccountKind }) {
 
 function TierBadge({ tier }: { tier: string }) {
   const colors: Record<string, string> = {
-    pro: "border-blue-200/90 bg-blue-50 text-blue-800",
-    business: "border-violet-200/90 bg-violet-50 text-violet-800",
+    pro: "portal-badge-info border",
+    business: "portal-badge-info border",
     free: "border-border bg-accent/30 text-muted",
   };
   const cls = colors[tier.toLowerCase()] ?? colors.free;
@@ -106,6 +121,35 @@ function ManagerDetailRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [plan, setPlan] = useState<ManagerPlan>(() => normalizeManagerPlan(row.tier));
+  const currentPlan = normalizeManagerPlan(row.tier);
+  const planDirty = plan !== currentPlan;
+
+  useEffect(() => {
+    setPlan(normalizeManagerPlan(row.tier));
+  }, [row.tier]);
+
+  const savePlan = async () => {
+    if (!planDirty) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/managers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id, tier: plan }),
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: "Could not update plan." }));
+        showToast((error as string) || "Could not update plan.");
+        return;
+      }
+      showToast(`Plan updated to ${plan === "free" ? "Free" : plan === "pro" ? "Pro" : "Business"}.`);
+      onRefresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggle = async () => {
     setBusy(true);
     try {
@@ -146,32 +190,47 @@ function ManagerDetailRow({
   };
   return (
     <tr className="bg-accent/30">
-      <td colSpan={5} className="px-5 py-5">
-        <div className="flex flex-wrap items-start gap-8">
-          <div className="min-w-[160px] space-y-1">
+      <td colSpan={5} className="px-5 py-4">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+          <div className="flex flex-wrap items-center gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <TierBadge tier={row.tier} />
-              <StatusPill active={row.active} />
-            </div>
-            {row.joinedAt && (
-              <p className="pt-1 text-xs text-muted">
+            <TierBadge tier={row.tier} />
+            <StatusPill active={row.active} />
+            {row.joinedAt ? (
+              <span className="text-xs text-muted">
                 Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
-              </p>
-            )}
+              </span>
+            ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</p>
+            <Select
+              className="h-9 min-h-0 w-auto min-w-[8.5rem] rounded-full px-3 py-1.5 text-sm"
+              value={plan}
+              onChange={(e) => setPlan(e.target.value as ManagerPlan)}
+              disabled={busy}
+            >
+              {MANAGER_PLAN_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
-              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-rose-50" : ""}`}
+              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
               onClick={() => void toggle()}
               disabled={busy}
             >
-              {busy && !confirmDelete ? "Updating…" : row.active ? "Disable account" : "Enable account"}
+              {busy && !confirmDelete && !planDirty ? "Updating…" : row.active ? "Disable account" : "Enable account"}
             </Button>
             {confirmDelete ? (
-              <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
+              <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 portal-banner-danger">
                 <span className="text-xs font-semibold text-rose-800">Delete manager and all properties?</span>
                 <button
                   type="button"
@@ -194,13 +253,25 @@ function ManagerDetailRow({
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
+                className="rounded-full border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
               >
                 Delete account
               </Button>
             )}
+          </div>
+
+          <div className="ml-auto shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 rounded-full px-4 text-xs"
+              onClick={() => void savePlan()}
+              disabled={busy || !planDirty}
+            >
+              {busy && planDirty ? "Saving…" : "Save plan"}
+            </Button>
           </div>
         </div>
       </td>
@@ -267,31 +338,30 @@ function SimpleAccountDetailRow({
   };
   return (
     <tr className="bg-accent/30">
-      <td colSpan={5} className="px-5 py-5">
-        <div className="flex flex-wrap items-start gap-8">
-          <div className="min-w-[160px] space-y-1">
+      <td colSpan={5} className="px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+          <div className="flex flex-wrap items-center gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
-            <div className="pt-1">
-              <StatusPill active={row.active} />
-            </div>
-            {row.joinedAt && (
-              <p className="pt-1 text-xs text-muted">
+            <StatusPill active={row.active} />
+            {row.joinedAt ? (
+              <span className="text-xs text-muted">
                 Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
-              </p>
-            )}
+              </span>
+            ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
-              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-rose-50" : ""}`}
+              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
               onClick={() => void toggle()}
               disabled={busy}
             >
               {busy && !confirmDelete ? "Updating…" : row.active ? "Disable account" : "Enable account"}
             </Button>
             {confirmDelete ? (
-              <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
+              <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 portal-banner-danger">
                 <span className="text-xs font-semibold text-rose-800">
                   {apiPath === "/api/admin/residents"
                     ? "Delete resident, leases, and payments?"
@@ -318,7 +388,7 @@ function SimpleAccountDetailRow({
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
+                className="rounded-full border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
               >
@@ -453,9 +523,6 @@ export function AdminAxisUsersClient() {
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Axis users</h1>
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={() => void load()}>
-          Refresh
-        </Button>
       </div>
 
       <div className="mt-5">
@@ -568,7 +635,6 @@ export function AdminAxisUsersClient() {
                   <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</th>
                   <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</th>
                   <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Status</th>
-                  <th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -577,7 +643,11 @@ export function AdminAxisUsersClient() {
                   const isOpen = expandedKey === rowKey;
                   return (
                     <Fragment key={rowKey}>
-                      <tr className={`border-b border-border ${isOpen ? "" : "last:border-0"}`}>
+                      <tr
+                        className={`border-b border-border ${isOpen ? "" : "last:border-0"} ${PORTAL_TABLE_TR_EXPANDABLE}`}
+                        onClick={createPortalRowExpandClick(() => setExpandedKey(isOpen ? null : rowKey))}
+                        aria-expanded={isOpen}
+                      >
                         <td className="px-5 py-4 align-middle">
                           <RolePill kind={row.kind} />
                         </td>
@@ -593,17 +663,6 @@ export function AdminAxisUsersClient() {
                         </td>
                         <td className="px-5 py-4 align-middle">
                           <StatusPill active={row.active} />
-                        </td>
-                        <td className="px-5 py-4 text-right align-middle">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded-full border-border px-4 py-2 text-sm font-medium text-foreground"
-                            onClick={() => setExpandedKey(isOpen ? null : rowKey)}
-                            aria-expanded={isOpen}
-                          >
-                            {isOpen ? "Hide" : "Details"}
-                          </Button>
                         </td>
                       </tr>
                       {isOpen ? (

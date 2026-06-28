@@ -20,7 +20,7 @@ function BillingSuccessContent() {
   if (sessionId) {
     return (
       <div className="relative flex min-h-[50vh] items-center justify-center px-4 py-16">
-        <ChromeSubstrate variant="quiet" />
+        <ChromeSubstrate variant="full" />
         <div className="glass-card relative mx-auto max-w-md rounded-[24px] px-8 py-10 text-center">
           <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
@@ -33,7 +33,7 @@ function BillingSuccessContent() {
 
   return (
     <div className="relative flex min-h-[60vh] items-center justify-center px-4 py-16">
-      <ChromeSubstrate variant="quiet" />
+      <ChromeSubstrate variant="full" />
       <div className="glass-card relative mx-auto max-w-lg rounded-[24px] px-8 py-10 text-center shadow-[0_24px_60px_-20px_rgba(8,11,20,0.55),inset_0_1px_0_rgba(255,255,255,0.22)]">
         <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

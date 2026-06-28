@@ -31,12 +31,10 @@
     "lockfile:verify": "node scripts/verify-lockfile.mjs",
     "seed:env": "node scripts/seed-worktree-env.mjs",
     "admin:sync-account": "node scripts/ensure-admin-account.mjs",
+    "admin:set-manager-plan": "node scripts/set-manager-plan.mjs",
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
     "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs",
-    "stripe:setup-plans": "node --env-file=.env.local scripts/setup-stripe-plan-prices.mjs --write-env",
-    "stripe:listen": "node scripts/stripe-listen.mjs",
-    "stripe:validate": "node --env-file=.env.local scripts/stripe-validate-env.mjs",
-    "stripe:validate-live": "node --env-file=.env.local scripts/stripe-validate-env.mjs --expect-live"
+    "db:apply-sql": "node --env-file=.env.local scripts/apply-supabase-sql.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
@@ -54,6 +52,9 @@
     "clsx": "^2.1.1",
     "leaflet": "^1.9.4",
     "next": "^16.2.9",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.16.3",
+    "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "stripe": "^22.0.2",
@@ -74,6 +75,8 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
+    "@types/pg": "^8.15.6",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.2",

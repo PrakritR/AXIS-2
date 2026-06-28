@@ -1,3 +1,6 @@
+import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
+import { resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
+
 /** Property caps by plan (houses / listings in the portal). Legacy unknown tier → no numeric cap (`null`). */
 export const FREE_MAX_PROPERTIES = 1;
 export const PRO_MAX_PROPERTIES = 2;
@@ -123,9 +126,125 @@ export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, str
   return "Axis";
 }
 
+export function isStripeManagedBilling(billing: string | null | undefined): boolean {
+  const b = String(billing ?? "").toLowerCase();
+  return b === "monthly" || b === "annual";
+}
+
+export type ManagerPurchaseRowRecord = {
+  id: string;
+  tier: string | null;
+  billing: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_checkout_session_id: string | null;
+  paid_at: string | null;
+  user_id: string | null;
+};
+
+/** Prefer the linked signup row; otherwise the most recent purchase — not the highest tier. */
+export function pickBestManagerPurchaseRow(
+  rows: ManagerPurchaseRowRecord[],
+  userId?: string,
+): ManagerPurchaseRowRecord | null {
+  if (rows.length === 0) return null;
+
+  const linked = userId ? rows.filter((r) => r.user_id === userId) : [];
+  const pool = linked.length > 0 ? linked : rows;
+
+  return [...pool].sort((a, b) => {
+    const aTime = a.paid_at ? Date.parse(a.paid_at) : 0;
+    const bTime = b.paid_at ? Date.parse(b.paid_at) : 0;
+    return bTime - aTime;
+  })[0]!;
+}
+
+export type ManagerSubscriptionTier = "free" | "paid" | null;
+
+/** Resolve subscription access from a purchase row (synced tier state). */
+export function resolveManagerSubscriptionTierFromPurchase(input: {
+  tier: string | null | undefined;
+  billing?: string | null | undefined;
+  stripeSubscriptionId?: string | null | undefined;
+  stripeCheckoutSessionId?: string | null | undefined;
+  paidAt?: string | null | undefined;
+  hasPurchaseRow: boolean;
+  nowMs?: number;
+}): ManagerSubscriptionTier {
+  if (!input.hasPurchaseRow) return null;
+
+  const normalized = normalizeManagerSkuTier(input.tier);
+  if (normalized === "free") return "free";
+
+  const hasStripe = Boolean(input.stripeSubscriptionId?.trim());
+  const billing = input.billing?.toLowerCase().trim() ?? "";
+  const isAdminGrant =
+    billing === "admin" || isAdminManagedManagerPurchase(input.stripeCheckoutSessionId);
+
+  if (normalized === "pro" || normalized === "business") {
+    if (hasStripe) return "paid";
+    if (isAdminGrant) {
+      const effective = resolveEffectiveManagerTier(
+        {
+          tier: normalized,
+          billing: input.billing,
+          paid_at: input.paidAt,
+          stripe_subscription_id: null,
+        },
+        input.nowMs,
+      );
+      return effective === "free" ? "free" : "paid";
+    }
+    return "free";
+  }
+
+  if (hasStripe) return "paid";
+  return "free";
+}
+
+export function isManagerFreePlan(tier: ManagerSubscriptionTier): boolean {
+  return tier === "free";
+}
+
 export function managerSectionAllowedForTier(section: string, tier: "free" | "paid" | null): boolean {
   if (tier !== "free") return true;
+  // Legacy route id kept for redirects and API checks.
+  if (section === "financials" || section === "documents") return false;
   return FREE_SUBSCRIPTION_SECTIONS.has(section);
+}
+
+export function managerSectionLockedForTier(
+  section: string,
+  tier: "free" | "paid" | null | undefined,
+): boolean {
+  return tier === "free" && !managerSectionAllowedForTier(section, "free");
+}
+
+/**
+ * Resident portal sections available when the linked property manager is on Free.
+ * Mirrors manager Pro-gated features (documents, finances, services, inbox).
+ */
+export const RESIDENT_FREE_MANAGER_SECTIONS = new Set([
+  "dashboard",
+  "payments",
+  "move-in",
+  "profile",
+  "bugs-feedback",
+]);
+
+export function residentSectionAllowedForManagerTier(
+  section: string,
+  managerTier: "free" | "paid" | null,
+): boolean {
+  if (managerTier !== "free") return true;
+  return RESIDENT_FREE_MANAGER_SECTIONS.has(section);
+}
+
+export function residentSectionLockedForManagerTier(
+  section: string,
+  managerTier: "free" | "paid" | null | undefined,
+): boolean {
+  return managerTier === "free" && !residentSectionAllowedForManagerTier(section, "free");
 }
 
 /** @deprecated Use FREE_SUBSCRIPTION_SECTIONS */

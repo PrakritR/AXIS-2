@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -134,14 +135,13 @@ export function ManagerServicesPanel() {
             {!resolvedPropertyId ? (
               <p className="py-8 text-center text-sm text-muted">Select a property to manage its request options.</p>
             ) : offers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-accent/30 py-16 text-center">
-                <p className="text-sm font-medium text-muted">No request options yet</p>
-                <p className="mt-1 max-w-xs text-xs text-muted">
-                  Add request options — like cleaning, linen sets, parking, or other amenities — that residents can choose directly from their portal.
-                </p>
-                <Button type="button" className="mt-5 rounded-full" onClick={openCreate}>
-                  Add first request
-                </Button>
+              <div className="space-y-5">
+                <PortalEmptyState title="No request options yet." icon="service" />
+                <div className="flex justify-center">
+                  <Button type="button" className="rounded-full" onClick={openCreate}>
+                    Add first request
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -163,14 +163,14 @@ export function ManagerServicesPanel() {
                           </span>
                         ) : null}
                         {offer.deposit ? (
-                          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200/80">
+                          <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                             Deposit {offer.deposit}
                           </span>
                         ) : null}
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${
                             offer.available
-                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200/80"
+                              ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
                               : "bg-accent/30 text-muted ring-border"
                           }`}
                         >
@@ -199,7 +199,7 @@ export function ManagerServicesPanel() {
                       <button
                         type="button"
                         onClick={() => handleDelete(offer)}
-                        className="rounded-full border border-rose-200 bg-card px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-50"
+                        className="rounded-full border border-rose-200 bg-card px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-[var(--status-overdue-bg)]"
                       >
                         Remove
                       </button>
@@ -215,7 +215,7 @@ export function ManagerServicesPanel() {
         open={modalOpen}
         title={editingOffer ? "Edit request option" : "Add request option"}
         onClose={() => setModalOpen(false)}
-        panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6"
+        panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6"
       >
         <div className="grid gap-3">
           <div>

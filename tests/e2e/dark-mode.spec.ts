@@ -70,9 +70,24 @@ test.describe("Dark mode — public surfaces", () => {
     expect(cardBg).not.toMatch(/rgb\(255,\s*255,\s*255/);
   });
 
-  test("rent listings page respects dark theme", async ({ page }) => {
-    await page.goto("/rent/listings");
-    await expect(page).toHaveURL(/\/rent\/listings/);
+  test("auth create-account labels and callouts are readable in dark mode", async ({ page }) => {
+    await page.goto("/auth/create-account");
+    await expect(page.getByRole("heading", { name: /create account/i })).toBeVisible();
+    await assertDarkThemeActive(page);
+
+    const portalTypeLabel = page.getByText("Portal type", { exact: true });
+    await expect(portalTypeLabel).toBeVisible();
+    const labelColor = await portalTypeLabel.evaluate((el) => getComputedStyle(el).color);
+    expect(labelColor).not.toMatch(/rgb\(51,\s*65,\s*85\)/);
+
+    const infoCallout = page.locator(".portal-banner-neutral").first();
+    await expect(infoCallout).toBeVisible();
+    const calloutStyle = await infoCallout.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { color: style.color, backgroundColor: style.backgroundColor };
+    });
+    expect(calloutStyle.backgroundColor).not.toMatch(/rgb\(248,\s*250,\s*252\)/);
+
     await assertMainContentNotLightThemed(page, 0);
   });
 
@@ -115,7 +130,7 @@ test.describe("Dark mode — resident portal", () => {
     await signInAsResident(page);
   });
 
-  const routes = ["/resident/dashboard", "/resident/lease", "/resident/payments"] as const;
+  const routes = ["/resident/dashboard", "/resident/documents/lease", "/resident/payments"] as const;
 
   for (const route of routes) {
     test(`${route} has no light-themed main content`, async ({ page }) => {

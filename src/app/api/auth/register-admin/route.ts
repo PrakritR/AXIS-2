@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isValidAdminRegisterKey } from "@/lib/auth/admin-register-key";
+import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { generateAxisId } from "@/lib/manager-id";
@@ -19,8 +20,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Valid email and password (8+ chars) required." }, { status: 400 });
     }
 
-    const supabase = createSupabaseServiceRoleClient();
     const normalEmail = email.trim().toLowerCase();
+    if (!isPrimaryAdminEmail(normalEmail)) {
+      return NextResponse.json({ error: "Admin registration is restricted to the primary Axis admin email." }, { status: 403 });
+    }
+
+    const supabase = createSupabaseServiceRoleClient();
     let userId: string;
 
     const { data, error } = await supabase.auth.admin.createUser({

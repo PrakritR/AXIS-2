@@ -28,24 +28,9 @@ export type WorkspaceModel = {
 };
 
 function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
-  const common: WorkspaceAction[] = [
-    {
-      label: "Refresh",
-      kind: "toast",
-      message: "Refreshed.",
-    },
-  ];
-
   if (portal === "manager" || portal === "pro") {
     if (section === "relationships") {
-      return [
-        {
-          label: "Refresh links",
-          kind: "toast",
-          message: "Relationship list refreshed.",
-        },
-        ...common,
-      ];
+      return [];
     }
     if (section === "properties") {
       return [
@@ -55,7 +40,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           kind: "modal",
           message: "Exports will connect to your database later.",
         },
-        ...common,
       ];
     }
     if (section === "applicants" || section === "applications") {
@@ -70,7 +54,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           kind: "modal",
           message: "Messaging will route through Inbox once connected.",
         },
-        ...common,
       ];
     }
     if (section === "payments")
@@ -81,7 +64,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           message: "Live payment processing is disabled in this shell.",
         },
         { label: "Send reminder", kind: "toast", message: "Reminder queued…" },
-        ...common,
       ];
     if (section === "stripe")
       return [
@@ -90,21 +72,19 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           kind: "modal",
           message: "Open Payments, then Payouts, to finish setup in Stripe.",
         },
-        ...common,
       ];
     if (section === "work-orders") {
       return [
         {
-          label: "Create work order",
-          kind: "toast",
-          message: "Work order draft created.",
+          label: "Log work order",
+          kind: "modal",
+          message: "Open Services → Work orders, then click Log work order to record completed work with cost and payment status.",
         },
         {
           label: "Assign vendor",
           kind: "modal",
-          message: "Vendor assignment is a placeholder for now.",
+          message: "Open Services → Work orders, expand a row, and pick a vendor from your directory.",
         },
-        ...common,
       ];
     }
     if (section === "documents")
@@ -114,19 +94,12 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           kind: "modal",
           message: "Uploads are disabled in the scaffold.",
         },
-        ...common,
       ];
   }
 
   if (portal === "resident") {
     if (section === "properties" || section === "applications" || section === "lease" || section === "calendar")
-      return [
-        {
-          label: "Refresh",
-          kind: "toast",
-          message: "Refreshed.",
-        },
-      ];
+      return [];
     if (section === "payments")
       return [
         { label: "Add payment", kind: "toast", message: "No charges are processed yet." },
@@ -134,11 +107,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           label: "Download receipt",
           kind: "modal",
           message: "Receipts will generate from real ledgers later.",
-        },
-        {
-          label: "Refresh",
-          kind: "toast",
-          message: "Payments refreshed.",
         },
       ];
     if (section === "work-orders")
@@ -148,11 +116,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           kind: "toast",
           message: "Request captured.",
         },
-        {
-          label: "Refresh",
-          kind: "toast",
-          message: "Work orders refreshed.",
-        },
       ];
     if (section === "inbox")
       return [
@@ -160,11 +123,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           label: "New message",
           kind: "modal",
           message: "Messaging is not wired yet.",
-        },
-        {
-          label: "Refresh",
-          kind: "toast",
-          message: "Inbox refreshed.",
         },
       ];
     if (section === "profile")
@@ -178,14 +136,7 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
   }
 
   if (portal === "admin") {
-    if (section === "properties")
-      return [
-        {
-          label: "Refresh",
-          kind: "toast",
-          message: "Property queue refreshed.",
-        },
-      ];
+    if (section === "properties") return [];
     if (
       section === "axis-users" ||
       section === "leases" ||
@@ -194,24 +145,13 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
       section === "payments" ||
       section === "work-orders"
     )
-      return [
-        {
-          label: "Refresh",
-          kind: "toast",
-          message: "Refreshed.",
-        },
-      ];
+      return [];
     if (section === "inbox")
       return [
         {
           label: "New message",
           kind: "modal",
           message: "Messaging is not wired yet.",
-        },
-        {
-          label: "Refresh",
-          kind: "toast",
-          message: "Inbox refreshed.",
         },
       ];
     if (section === "profile")
@@ -234,7 +174,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           kind: "modal",
           message: "External billing tools are not connected in this build.",
         },
-        ...common,
       ];
     if (section === "users")
       return [
@@ -243,7 +182,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
           kind: "modal",
           message: "RBAC editor ships in a later milestone.",
         },
-        ...common,
       ];
   }
 
@@ -253,7 +191,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
       kind: "toast",
       message: "Action recorded.",
     },
-    ...common,
   ];
 }
 
@@ -548,6 +485,23 @@ export function buildPortalWorkspaceModel(
         { key: "stage", label: "Stage" },
       ],
       rows: applicantRows as unknown as Record<string, string>[],
+    };
+  }
+
+  if (portal === "resident" && section === "documents") {
+    return {
+      eyebrow,
+      title: "Documents",
+      subtitle: "",
+      showToolbar: false,
+      showQuickLinks: false,
+      actions: actionsFor(portal, section),
+      columns: [
+        { key: "document", label: "Document" },
+        { key: "status", label: "Status" },
+        { key: "updated", label: "Updated" },
+      ],
+      rows: demoResidentLeaseRows as unknown as Record<string, string>[],
     };
   }
 

@@ -10,16 +10,18 @@ export function normalizeBugFeedbackRow(row: unknown): PortalBugFeedbackRow | nu
   if (!row || typeof row !== "object") return null;
   const r = row as Record<string, unknown>;
   const id = String(r.id ?? "").trim();
-  const type: BugFeedbackType = r.type === "feedback" ? "feedback" : "bug";
+  const type: BugFeedbackType =
+    r.type === "feedback" || r.report_type === "feedback" || r.reportType === "feedback" ? "feedback" : "bug";
   if (!id) return null;
+  const roleRaw = String(r.reporterRole ?? r.reporter_role ?? "").toLowerCase();
   return {
     id,
     type,
-    reporterUserId: String(r.reporterUserId ?? "").trim(),
-    reporterName: String(r.reporterName ?? "").trim(),
-    reporterEmail: String(r.reporterEmail ?? "").trim().toLowerCase(),
-    reporterRole: (["manager", "resident", "admin", "pro"].includes(String(r.reporterRole))
-      ? r.reporterRole
+    reporterUserId: String(r.reporterUserId ?? r.reporter_user_id ?? "").trim(),
+    reporterName: String(r.reporterName ?? r.reporter_name ?? "").trim(),
+    reporterEmail: String(r.reporterEmail ?? r.reporter_email ?? "").trim().toLowerCase(),
+    reporterRole: (["manager", "resident", "admin", "pro"].includes(roleRaw)
+      ? roleRaw
       : "manager") as BugFeedbackReporterRole,
     pageUrl: String(r.pageUrl ?? "").trim(),
     title: String(r.title ?? "").trim(),
@@ -32,8 +34,13 @@ export function normalizeBugFeedbackRow(row: unknown): PortalBugFeedbackRow | nu
       ? r.status
       : "open") as BugFeedbackStatus,
     adminNotes: typeof r.adminNotes === "string" ? r.adminNotes.trim() : undefined,
-    createdAt: String(r.createdAt ?? new Date().toISOString()),
-    updatedAt: String(r.updatedAt ?? new Date().toISOString()),
+    attachmentUrls: Array.isArray(r.attachmentUrls)
+      ? r.attachmentUrls.map(String).filter(Boolean)
+      : Array.isArray(r.attachment_urls)
+        ? r.attachment_urls.map(String).filter(Boolean)
+        : undefined,
+    createdAt: String(r.createdAt ?? r.created_at ?? new Date().toISOString()),
+    updatedAt: String(r.updatedAt ?? r.updated_at ?? new Date().toISOString()),
   };
 }
 
@@ -66,13 +73,17 @@ export function countBugFeedbackTabs(rows: PortalBugFeedbackRow[]): { bugs: numb
 
 export function groupBugFeedbackForAdmin(
   rows: PortalBugFeedbackRow[],
-  tabId: "bugs" | "feedback",
 ): { managerRows: PortalBugFeedbackRow[]; residentRows: PortalBugFeedbackRow[] } {
-  const filtered = filterBugFeedbackByTab(rows, tabId);
+  const filtered = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return {
     managerRows: filtered.filter((r) => isManagerSideReporterRole(r.reporterRole)),
     residentRows: filtered.filter((r) => r.reporterRole === "resident"),
   };
+}
+
+export function isPortalBugFeedbackSchemaError(message: string | undefined | null): boolean {
+  const m = String(message ?? "").toLowerCase();
+  return m.includes("portal_bug_feedback_records") && m.includes("schema cache");
 }
 
 export function buildBugFeedbackReportInput(input: {

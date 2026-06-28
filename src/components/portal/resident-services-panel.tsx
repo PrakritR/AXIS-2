@@ -20,10 +20,10 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { TabNav } from "@/components/ui/tabs";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
@@ -68,8 +68,8 @@ const STATUS_TABS: { id: ResidentWorkBucket; label: string }[] = [
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
-  if (x === "high") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
-  if (x === "medium") return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+  if (x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  if (x === "medium") return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
@@ -83,25 +83,25 @@ function formatDate(iso: string) {
 function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
   if (status === "pending")
     return (
-      <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+      <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
         Awaiting approval
       </span>
     );
   if (status === "approved")
     return (
-      <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-200">
+      <span className="rounded-full portal-badge-info px-2.5 py-0.5 text-[10px] font-semibold">
         Approved
       </span>
     );
   if (status === "denied")
     return (
-      <span className="rounded-full bg-rose-50 px-2.5 py-0.5 text-[10px] font-semibold text-rose-700 ring-1 ring-rose-200">
+      <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
         Denied
       </span>
     );
   if (status === "returned")
     return (
-      <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+      <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
         Return submitted
       </span>
     );
@@ -182,7 +182,7 @@ function ServiceRequestCard({
           </span>
         ) : null}
         {needsReturn ? (
-          <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
             Deposit {req.deposit}
           </span>
         ) : null}
@@ -205,7 +205,7 @@ function ServiceRequestCard({
             {req.price ? (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted">Request fee</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"}`}>
                   {req.servicePaid ? `Paid · ${req.price}` : `Pending · ${req.price}`}
                 </span>
               </div>
@@ -213,7 +213,7 @@ function ServiceRequestCard({
             {needsReturn ? (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted">Deposit (refundable)</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.depositPaid ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.depositPaid ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"}`}>
                   {req.depositPaid ? `Paid · ${req.deposit}` : `Pending · ${req.deposit}`}
                 </span>
               </div>
@@ -224,9 +224,9 @@ function ServiceRequestCard({
 
       {/* Checkout procedure */}
       {showCheckout ? (
-        <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-3">
-          <p className="text-xs font-bold text-violet-800">Return checklist</p>
-          <ol className="mt-2 space-y-1 pl-4 text-xs text-violet-700 list-decimal">
+        <div className="mt-3 rounded-xl border border-border bg-accent/30 p-3">
+          <p className="text-xs font-bold text-foreground">Return checklist</p>
+          <ol className="mt-2 space-y-1 pl-4 text-xs text-muted list-decimal">
             <li>Clean and prepare the item for return{req.returnByDate ? ` by ${formatDate(req.returnByDate)}` : ""}.</li>
             <li>Take a clear photo showing the item&apos;s current condition.</li>
             <li>Upload the photo below — your manager will review it.</li>
@@ -268,7 +268,7 @@ function ServiceRequestCard({
 
       {/* Denied */}
       {req.status === "denied" ? (
-        <div className="mt-3 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
+        <div className="mt-3 rounded-xl border p-3 text-xs portal-banner-danger">
           {req.managerNote ? (
             <p>Manager note: <span className="font-medium">{req.managerNote}</span></p>
           ) : (
@@ -713,12 +713,10 @@ export function ResidentServicesPanel({
       ) : null}
 
       {activeTab === "requests" ? (
+        serviceRequests.length === 0 ? (
+          <PortalDataTableEmpty message="No service requests yet." icon="service" />
+        ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
-          {serviceRequests.length === 0 ? (
-            <PortalDataTableEmpty
-              message="No requests yet. Use Submit request to send one to your manager."
-            />
-          ) : (
             <div className={PORTAL_DATA_TABLE_SCROLL}>
               <table className="min-w-[860px] w-full border-collapse text-left text-sm">
                 <thead>
@@ -727,7 +725,6 @@ export function ResidentServicesPanel({
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Price</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Return by</th>
-                    <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -735,27 +732,23 @@ export function ResidentServicesPanel({
                     const rowId = `request-${req.id}`;
                     return (
                       <Fragment key={req.id}>
-                        <tr className={PORTAL_TABLE_TR}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedId((c) => (c === rowId ? null : rowId)),
+                          )}
+                          aria-expanded={expandedId === rowId}
+                        >
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
                           <td className={PORTAL_TABLE_TD}>
                             <ServiceStatusBadge status={req.status} />
                           </td>
                           <td className={PORTAL_TABLE_TD}>{req.price || "—"}</td>
                           <td className={PORTAL_TABLE_TD}>{req.returnByDate ? formatDate(req.returnByDate) : "—"}</td>
-                          <td className={`${PORTAL_TABLE_TD} text-right`}>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                              onClick={() => setExpandedId((c) => (c === rowId ? null : rowId))}
-                            >
-                              {expandedId === rowId ? "Hide" : "Details"}
-                            </Button>
-                          </td>
                         </tr>
                         {expandedId === rowId ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                               <ServiceRequestCard
                                 req={req}
                                 onReturnPhotoUploaded={reloadServiceRequests}
@@ -770,8 +763,8 @@ export function ResidentServicesPanel({
                 </tbody>
               </table>
             </div>
-          )}
         </div>
+        )
       ) : (
         <div>
           <div className="mb-3 flex items-center gap-3">
@@ -795,16 +788,15 @@ export function ResidentServicesPanel({
             </div>
           </div>
 
-          <div className={PORTAL_DATA_TABLE_WRAP}>
-            {rows.length === 0 ? (
-              <PortalDataTableEmpty
-                message={
-                  myRows.length === 0
-                    ? "No work orders yet. Use Report maintenance to get started."
-                    : "No work orders in this status."
-                }
-              />
-            ) : (
+          {rows.length === 0 ? (
+            <PortalDataTableEmpty
+              icon="work-order"
+              message={
+                myRows.length === 0 ? "No work orders yet." : "No work orders in this status yet."
+              }
+            />
+          ) : (
+            <div className={PORTAL_DATA_TABLE_WRAP}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
                 <table className="min-w-[700px] w-full border-collapse text-left text-sm">
                   <thead>
@@ -812,30 +804,25 @@ export function ResidentServicesPanel({
                       <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                      <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => (
                       <Fragment key={row.id}>
-                        <tr className={PORTAL_TABLE_TR}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedId((c) => (c === row.id ? null : row.id)),
+                          )}
+                          aria-expanded={expandedId === row.id}
+                        >
                           <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-muted`}>{row.id}</td>
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
                           <td className={PORTAL_TABLE_TD}>{row.status}</td>
-                          <td className={`${PORTAL_TABLE_TD} text-right`}>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                              onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
-                            >
-                              {expandedId === row.id ? "Hide" : "Details"}
-                            </Button>
-                          </td>
                         </tr>
                         {expandedId === row.id ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                            <td colSpan={3} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
                               <p className="text-xs font-medium uppercase tracking-wide text-muted">Priority</p>
                               <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
                               <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Preferred arrival</p>
@@ -879,8 +866,8 @@ export function ResidentServicesPanel({
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -889,7 +876,7 @@ export function ResidentServicesPanel({
         open={modalMode === "maintenance"}
         title="Report maintenance"
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
-        panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl glass-card p-5 shadow-[var(--shadow-card)] sm:p-6"
+        panelClassName="max-w-lg"
       >
         <p className="text-xs text-muted">Describe the issue — your property manager will be notified.</p>
         <div className="mt-4 grid gap-3">
@@ -956,7 +943,7 @@ export function ResidentServicesPanel({
         open={modalMode === "service"}
         title="Submit request"
         onClose={() => { setModalMode("none"); resetService(); }}
-        panelClassName="relative w-full max-w-lg overflow-hidden rounded-2xl glass-card p-5 shadow-[var(--shadow-card)] sm:p-6"
+        panelClassName="max-w-lg"
       >
         {availableOffers.length === 0 ? (
           <div className="py-8 text-center">
@@ -974,7 +961,7 @@ export function ResidentServicesPanel({
                   onClick={() => { setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer)); setSReturnBy(""); }}
                   className={`w-full rounded-xl border px-4 py-3 text-left transition ${
                     selectedOffer?.id === offer.id
-                      ? "border-violet-300 bg-violet-50 ring-1 ring-violet-200"
+                      ? "border-primary/30 bg-accent/30 ring-1 ring-primary/20"
                       : "border-border bg-card hover:border-border hover:bg-accent/30"
                   }`}
                 >
@@ -988,7 +975,7 @@ export function ResidentServicesPanel({
                         <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-xs font-semibold text-muted">{offer.price}</span>
                       ) : null}
                       {hasDeposit(offer.deposit) ? (
-                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {offer.deposit}</span>
+                        <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Deposit {offer.deposit}</span>
                       ) : null}
                     </div>
                   </div>

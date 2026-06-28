@@ -1,7 +1,18 @@
 "use client";
 
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
+import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
+import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import {
+  buildPricingOffer,
+  continuePartnerPricingWithOffer,
+  fetchPartnerPricingSession,
+  handleGoogleSignedInReturn,
+  type PartnerPricingSession,
+} from "@/lib/auth/partner-pricing-google-flow";
+import { clearManagerPricingOffer, persistManagerPricingOffer, readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import {
   normalizeProMonthlyPromoInput,
@@ -12,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isManagerOnboardTier, parseOnboardOfferSearchParams } from "@/lib/manager-onboard-links";
 
 function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
   return tiers.find((t) => t.id === id) ?? tiers[0]!;
@@ -30,6 +42,14 @@ export default function PartnerPricingPage() {
   const [code, setCode] = useState("");
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+  const [googleCheckoutBusy, setGoogleCheckoutBusy] = useState(false);
+  const [onboardOffer, setOnboardOffer] = useState<ReturnType<typeof parseOnboardOfferSearchParams>>({});
+  const [googleSession, setGoogleSession] = useState<PartnerPricingSession | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+
+  const googleSignedIn = Boolean(googleSession?.authenticated && googleSession.isGoogle !== false);
+  const pricingAccountComplete = googleSignedIn && googleSession != null && !googleSession.needsPricing;
+  const showGoogleAccountPanel = googleSignedIn;
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +61,21 @@ export default function PartnerPricingPage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      const params = new URLSearchParams(window.location.search);
+      const tier = params.get("tier");
+      if (tier && isManagerOnboardTier(tier)) {
+        setSelectedTierId(tier);
+      }
+
+      const offer = parseOnboardOfferSearchParams(params);
+      setOnboardOffer(offer);
+      if (offer.billing) setBilling(offer.billing);
+      if (offer.promo) setCode(offer.promo);
+    });
   }, []);
 
   const selected = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
@@ -55,17 +90,27 @@ export default function PartnerPricingPage() {
     [showToast],
   );
 
+  const onboardDiscountPercent = onboardOffer.discountPercent ?? null;
+  const onboardIsFree = onboardDiscountPercent === 100;
+  const showOnboardDiscountNote =
+    onboardDiscountPercent != null &&
+    onboardDiscountPercent > 0 &&
+    selectedTierId !== "free" &&
+    (onboardIsFree || onboardDiscountPercent < 100);
+
   const startManagerSignupIntent = useCallback(
     async (opts: {
       tier: PlanTierId;
       billing: "monthly" | "annual";
       promo?: string;
+      discountPercent?: number;
     }): Promise<"redirected" | "needs-checkout" | "error"> => {
       setCheckoutBusy(true);
       try {
         const res = await fetch("/api/manager/signup-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             tier: opts.tier,
             billing: opts.billing,
@@ -73,11 +118,12 @@ export default function PartnerPricingPage() {
             fullName: typeof fullName === "string" ? fullName.trim() : "",
             phone: typeof phone === "string" ? phone.trim() : "",
             promo: opts.promo,
+            discountPercent: opts.discountPercent,
           }),
         });
-        let payload: { sessionId?: string; error?: string; code?: string };
+        let payload: { sessionId?: string; action?: string; error?: string; code?: string };
         try {
-          payload = (await res.json()) as { sessionId?: string; error?: string; code?: string };
+          payload = (await res.json()) as { sessionId?: string; action?: string; error?: string; code?: string };
         } catch {
           showToast("Invalid response from server. Try again.");
           return "error";
@@ -90,6 +136,10 @@ export default function PartnerPricingPage() {
           }
           showToast(typeof payload.error === "string" ? payload.error : "Could not start signup.");
           return "error";
+        }
+        if (payload.action === "portal") {
+          router.push("/portal/dashboard");
+          return "redirected";
         }
         if (payload.sessionId) {
           router.push(`/auth/manager-id?session_id=${encodeURIComponent(payload.sessionId)}`);
@@ -108,14 +158,169 @@ export default function PartnerPricingPage() {
   );
 
   useEffect(() => {
+    void Promise.resolve().then(() => {
+      void fetchPartnerPricingSession().then((session) => {
+        setGoogleSession(session);
+        setSessionLoading(false);
+        if (session.authenticated && session.email) {
+          setEmail(session.email);
+          if (session.fullName) setFullName(session.fullName);
+        }
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    persistManagerPricingOffer(
+      buildPricingOffer({
+        tier: selectedTierId,
+        billing,
+        promo: code.trim() || undefined,
+        discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
+      }),
+    );
+  }, [selectedTierId, billing, code, onboardIsFree, onboardDiscountPercent]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      setCheckoutClientSecret(null);
+    });
+  }, [selectedTierId, billing, code, onboardIsFree, onboardDiscountPercent]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("google_signed_in") !== "1" && params.get("google_checkout") !== "1") return;
+
+    let cancelled = false;
+    void (async () => {
+      setGoogleCheckoutBusy(true);
+      try {
+        const stored = readManagerPricingOffer();
+        if (stored) {
+          setSelectedTierId(stored.tier);
+          setBilling(stored.billing);
+          if (stored.promo) setCode(stored.promo);
+        }
+
+        const result = await handleGoogleSignedInReturn();
+        if (cancelled) return;
+
+        const session = await fetchPartnerPricingSession();
+        if (cancelled) return;
+        setGoogleSession(session);
+        if (session.email) setEmail(session.email);
+        if (session.fullName) setFullName(session.fullName);
+
+        if (result.status !== "provisioned") {
+          if (result.status === "error") {
+            showToast(result.message);
+          }
+          return;
+        }
+
+        const offer =
+          stored ??
+          buildPricingOffer({
+            tier: selectedTierId,
+            billing,
+            promo: code.trim() || undefined,
+            discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
+          });
+
+        if (offer.tier === "free") {
+          if (!session.needsPricing) {
+            router.replace("/portal/dashboard");
+            return;
+          }
+          const freeResult = await continuePartnerPricingWithOffer(offer);
+          if (cancelled) return;
+          if (freeResult.status === "portal") {
+            router.replace("/portal/dashboard");
+            return;
+          }
+          if (freeResult.status === "error") {
+            showToast(freeResult.message);
+          }
+          return;
+        }
+
+        const paidResult = await continuePartnerPricingWithOffer(offer);
+        if (cancelled) return;
+        if (paidResult.status === "checkout") {
+          setCheckoutClientSecret(paidResult.clientSecret);
+          return;
+        }
+        if (paidResult.status === "portal") {
+          router.replace("/portal/dashboard");
+          return;
+        }
+        if (paidResult.status === "error") {
+          showToast(paidResult.message);
+          return;
+        }
+
+        showToast("Signed in with Google. Complete payment below to upgrade your plan.");
+      } finally {
+        if (!cancelled) setGoogleCheckoutBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, showToast, selectedTierId, billing, code, onboardIsFree, onboardDiscountPercent]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const sid = params.get("session_id");
     if (sid) {
+      clearManagerPricingOffer();
       window.history.replaceState({}, "", "/partner/pricing");
       router.replace(`/auth/manager-id?session_id=${encodeURIComponent(sid)}`);
     }
   }, [router]);
+
+  const checkoutLocked = checkoutBusy || googleCheckoutBusy || Boolean(checkoutClientSecret);
+
+  const continueSignedInPricing = useCallback(async () => {
+    setCheckoutBusy(true);
+    try {
+      const offer = buildPricingOffer({
+        tier: selectedTierId,
+        billing,
+        promo: code.trim() || undefined,
+        discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
+      });
+      const result = await continuePartnerPricingWithOffer(offer);
+      if (result.status === "checkout") {
+        setCheckoutClientSecret(result.clientSecret);
+        return;
+      }
+      if (result.status === "finish") {
+        router.push(partnerPricingFinishPath(result.sessionId));
+        return;
+      }
+      if (result.status === "portal") {
+        router.push("/portal/dashboard");
+        return;
+      }
+      if (result.status === "error") {
+        showToast(result.message);
+      }
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }, [
+    billing,
+    code,
+    onboardDiscountPercent,
+    onboardIsFree,
+    router,
+    selectedTierId,
+    showToast,
+  ]);
 
   return (
     <div className="min-h-screen px-4 py-14 sm:px-5 sm:py-20">
@@ -123,9 +328,17 @@ export default function PartnerPricingPage() {
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Partner pricing</p>
         <h1 className="mt-3 text-4xl font-bold tracking-[-0.03em] text-foreground sm:text-5xl md:text-[3.25rem]">Start with Axis.</h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted">
-          Choose a tier, fill out the form below, and complete checkout (or free-tier setup). Your plan and contact
-          details are confirmed here before you create your property portal account.
+          Choose a tier and sign in with Google to create your account instantly. Free starts right away; Pro and
+          Business upgrade through secure checkout when you are ready.
         </p>
+
+        {showOnboardDiscountNote ? (
+          <p className="mx-auto mt-4 max-w-2xl rounded-2xl border border-[var(--status-confirmed-fg)]/25 bg-[var(--status-confirmed-bg)] px-4 py-3 text-sm font-medium text-[var(--status-confirmed-fg)]">
+            {onboardIsFree
+              ? "This invite link includes free signup — no payment required."
+              : `This invite link includes ${onboardDiscountPercent}% off your first payment (applied automatically at checkout).`}
+          </p>
+        ) : null}
 
         <div className="glass-card mt-8 inline-flex items-center gap-1 rounded-full p-1">
           <button
@@ -275,7 +488,51 @@ export default function PartnerPricingPage() {
             </div>
           </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          <div className="mt-8">
+            {showGoogleAccountPanel && googleSession?.email ? (
+              <>
+                <GoogleSignedInBanner
+                  email={googleSession.email}
+                  fullName={googleSession.fullName}
+                  subtitle={
+                    pricingAccountComplete
+                      ? "You're signed in. Browse plans below or use Portal in the nav to open your dashboard."
+                      : selectedTierId === "free"
+                        ? "Your free Axis account is ready. Continue below to open your portal — upgrade anytime."
+                        : `Choose ${selected.label} below. Payment updates your account; you stay signed in across Axis.`
+                  }
+                />
+                <p className="mt-4 text-center text-sm text-muted sm:text-left">
+                  Switch tiers above anytime — checkout updates to match your selection.
+                </p>
+              </>
+            ) : (
+              <>
+                <PricingGoogleContinueButton
+                  tier={selectedTierId}
+                  billing={billing}
+                  promo={code.trim() || undefined}
+                  discountPercent={onboardIsFree ? 100 : onboardDiscountPercent}
+                  disabled={checkoutLocked || sessionLoading}
+                />
+                <p className="mt-2 text-center text-xs text-muted sm:text-left">
+                  {googleCheckoutBusy
+                    ? "Creating your account…"
+                    : `Sign in with Google to create your account instantly${selectedTierId === "free" || onboardIsFree ? "" : ", then pay for your selected plan"} — no form required.`}
+                </p>
+              </>
+            )}
+          </div>
+
+          {!showGoogleAccountPanel ? (
+            <>
+              <div className="my-6 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" aria-hidden />
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or enter details manually</span>
+                <div className="h-px flex-1 bg-border" aria-hidden />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="text-xs font-semibold text-foreground" htmlFor="partner-name">
                 Full name
@@ -338,6 +595,8 @@ export default function PartnerPricingPage() {
               ) : null}
             </div>
           </div>
+            </>
+          ) : null}
 
           {checkoutClientSecret ? (
             <div className="glass-card mt-8 rounded-2xl p-4 sm:p-6">
@@ -373,8 +632,16 @@ export default function PartnerPricingPage() {
             </p>
             <button
               type="button"
-              disabled={checkoutBusy || Boolean(checkoutClientSecret)}
+              disabled={checkoutLocked}
               onClick={() => {
+                if (pricingAccountComplete) {
+                  router.push("/portal/dashboard");
+                  return;
+                }
+                if (showGoogleAccountPanel) {
+                  void continueSignedInPricing();
+                  return;
+                }
                 void (async () => {
                   try {
                     const emailSafe = typeof email === "string" ? email : "";
@@ -399,8 +666,12 @@ export default function PartnerPricingPage() {
                       return;
                     }
 
-                    if (selectedTierId === "free") {
-                      await startManagerSignupIntent({ tier: selectedTierId, billing });
+                    if (selectedTierId === "free" || onboardIsFree) {
+                      await startManagerSignupIntent({
+                        tier: selectedTierId,
+                        billing,
+                        ...(onboardIsFree ? { discountPercent: 100 } : {}),
+                      });
                       return;
                     }
 
@@ -412,6 +683,9 @@ export default function PartnerPricingPage() {
                         tier: selectedTierId,
                         billing,
                         promo: codeSafe.trim(),
+                        ...(onboardDiscountPercent != null && onboardDiscountPercent < 100
+                          ? { discountPercent: onboardDiscountPercent }
+                          : {}),
                       });
                       if (outcome !== "needs-checkout") {
                         return;
@@ -423,6 +697,7 @@ export default function PartnerPricingPage() {
                       const res = await fetch("/api/stripe/checkout", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
+                        credentials: "include",
                         body: JSON.stringify({
                           tier: selectedTierId,
                           billing,
@@ -431,10 +706,19 @@ export default function PartnerPricingPage() {
                           phone: typeof phone === "string" ? phone.trim() : "",
                           embedded: true,
                           ...(isProMonthly && codeSafe.trim() ? { promo: normalizedPromo } : {}),
+                          ...(onboardDiscountPercent != null &&
+                          onboardDiscountPercent > 0 &&
+                          onboardDiscountPercent < 100
+                            ? { discountPercent: onboardDiscountPercent }
+                            : {}),
                         }),
                       });
-                      const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };
+                      const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string; alreadyComplete?: boolean; redirectTo?: string };
                       if (!res.ok) {
+                        if (payload.alreadyComplete && payload.redirectTo) {
+                          router.push(payload.redirectTo);
+                          return;
+                        }
                         showToast(payload.error ?? "Could not start checkout. Ask your admin to configure billing.");
                         return;
                       }
@@ -460,7 +744,19 @@ export default function PartnerPricingPage() {
               }}
               className="btn-cobalt inline-flex shrink-0 items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-all duration-150 hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
             >
-              {checkoutBusy ? "Starting…" : checkoutClientSecret ? "Checkout open" : `Continue with ${selected.label}`}
+              {checkoutBusy
+                ? "Starting…"
+                : checkoutClientSecret
+                  ? "Checkout open"
+                  : pricingAccountComplete
+                    ? "Go to portal"
+                    : showGoogleAccountPanel
+                      ? selectedTierId === "free" || onboardIsFree
+                        ? "Open free portal"
+                        : `Pay for ${selected.label}`
+                    : selectedTierId === "free" || onboardIsFree
+                      ? "Create free account"
+                      : `Continue with ${selected.label}`}
             </button>
           </div>
 

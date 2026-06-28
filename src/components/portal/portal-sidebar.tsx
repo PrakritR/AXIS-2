@@ -1,9 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { MouseEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
@@ -12,7 +8,13 @@ import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button"
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
+import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
+import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import type { PortalDefinition } from "@/lib/portal-types";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
@@ -48,6 +50,7 @@ function PortalBrandLogoTile() {
 }
 
 function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
+  const router = useRouter();
   const isAdmin = definition.kind === "admin";
   const isResident = definition.kind === "resident";
   const brandTitle = definition.title.trim().toLowerCase() === "axis" ? "Axis" : definition.title;
@@ -64,8 +67,10 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
       />
       <Link
         href="/"
+        prefetch
         aria-label="Axis home"
         className={`relative flex gap-3 transition-opacity hover:opacity-90 ${isAdmin || isResident ? "items-start" : "items-center"}`}
+        onClick={portalNavClick(router, "/")}
       >
         <PortalBrandLogoTile />
         <div className={`min-w-0 ${isAdmin || isResident ? "pt-0.5" : ""}`}>
@@ -98,17 +103,44 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
   );
 }
 
-function navLinkClass(active: boolean) {
+function navLinkClass(active: boolean, locked?: boolean) {
   return [
     "relative flex min-h-10 items-center justify-between gap-2 rounded-[14px] px-3 py-2.5 text-[14px] font-medium transition duration-200",
     active
       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-border/60 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-      : "text-muted hover:bg-accent/70 hover:text-foreground",
+      : locked
+        ? "text-muted/80 hover:bg-accent/50 hover:text-muted [html[data-theme=dark]_&]:text-white/55"
+        : "text-muted hover:bg-accent/70 hover:text-foreground [html[data-theme=dark]_&]:text-white/78",
   ].join(" ");
 }
 
-export function PortalSidebar({ definition }: { definition: PortalDefinition }) {
+function NavLockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
+export function PortalSidebar({
+  definition,
+  subscriptionTier,
+}: {
+  definition: PortalDefinition;
+  subscriptionTier?: "free" | "paid" | null;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
   const navCounts = usePortalNavCounts(definition.kind);
@@ -119,9 +151,16 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         section: section.section,
         label: section.label,
         href: hrefForSection(definition, section.section),
+        prefetchHrefs: section.tabs.length
+          ? section.tabs.map((tab) => `${definition.basePath}/${section.section}/${tab.id}`)
+          : [`${definition.basePath}/${section.section}`],
       })),
     [definition, visibleSections],
   );
+
+  useEffect(() => {
+    prefetchPortalPanelChunks();
+  }, []);
 
   const activeSection = useMemo(() => {
     const parts = pathname.split("/").filter(Boolean);
@@ -139,13 +178,6 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
     definition.kind === "pro" ||
     definition.kind === "resident" ||
     definition.kind === "manager";
-
-  const leavePaymentsSection = (event: MouseEvent<HTMLAnchorElement>, targetSection: string, href: string) => {
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-    if (activeSection !== "payments" || targetSection === "payments") return;
-    event.preventDefault();
-    window.location.assign(href);
-  };
 
   useEffect(() => {
     if (!accountOpen || typeof document === "undefined") return;
@@ -165,6 +197,20 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
           ? "Axis"
           : definition.title;
 
+  const showManagerTierLocks =
+    (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
+  const showResidentTierLocks = definition.kind === "resident" && subscriptionTier === "free";
+
+  const isSectionLocked = (section: string) => {
+    if (showResidentTierLocks) {
+      return residentSectionLockedForManagerTier(section, subscriptionTier);
+    }
+    if (showManagerTierLocks) {
+      return managerSectionLockedForTier(section, subscriptionTier);
+    }
+    return false;
+  };
+
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[16.625rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex">
       <SidebarBrandHeader definition={definition} />
@@ -172,14 +218,25 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
           {navItems.map((s) => {
             const active = activeSection === s.section;
+            const locked = isSectionLocked(s.section);
             const count = navCounts[s.section] ?? 0;
             return (
               <Link
                 key={s.section}
                 href={s.href}
                 prefetch
-                onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
-                className={navLinkClass(active)}
+                onMouseEnter={() => {
+                  prefetchPortalHref(router, s.href);
+                  for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
+                }}
+                className={navLinkClass(active, locked)}
+                aria-label={
+                  locked
+                    ? definition.kind === "resident"
+                      ? `${s.label} — unavailable on your property's Free plan`
+                      : `${s.label} — locked on Pro or Business`
+                    : s.label
+                }
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   {active ? (
@@ -189,13 +246,16 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     />
                   ) : null}
                   {showNavIcons ? (
-                    <span className={`shrink-0 ${active ? "ml-2 opacity-100" : "opacity-80"}`} aria-hidden>
+                    <span className={`shrink-0 ${active ? "ml-2 opacity-100" : locked ? "ml-0 opacity-60" : "opacity-80"}`} aria-hidden>
                       <PortalNavIcon section={s.section} />
                     </span>
                   ) : null}
                   <span className={`min-w-0 truncate ${active && !showNavIcons ? "pl-2" : ""}`}>{s.label}</span>
                 </span>
-                <PortalNavCountBadge count={count} />
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {!locked ? <PortalNavCountBadge count={count} /> : null}
+                  {locked ? <NavLockIcon className="h-3.5 w-3.5 text-muted" /> : null}
+                </span>
               </Link>
             );
           })}
@@ -241,33 +301,47 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
               </button>
             ) : null}
           </div>
-          <div className="mt-1.5 flex gap-1.5 overflow-x-auto px-3 pb-2 pt-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden">
+          <nav className="mt-1.5 flex gap-1.5 overflow-x-auto px-3 pb-2 pt-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden" aria-label="Portal sections">
             {navItems.map((s) => {
               const active = activeSection === s.section;
+              const locked = isSectionLocked(s.section);
               const count = navCounts[s.section] ?? 0;
               return (
                 <Link
                   key={s.section}
                   href={s.href}
                   prefetch
-                  onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
+                  onMouseEnter={() => {
+                    prefetchPortalHref(router, s.href);
+                    for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
+                  }}
                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
                     active
                       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-                      : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground"
+                      : locked
+                        ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
+                        : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
                   }`}
+                  aria-label={
+                    locked
+                      ? definition.kind === "resident"
+                        ? `${s.label} — unavailable on your property's Free plan`
+                        : `${s.label} — locked on Pro or Business`
+                      : s.label
+                  }
                 >
                   {showNavIcons ? (
-                    <span className="shrink-0 opacity-90" aria-hidden>
+                    <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
                       <PortalNavIcon section={s.section} />
                     </span>
                   ) : null}
                   {s.label}
-                  <PortalNavCountBadge count={count} />
+                  {!locked ? <PortalNavCountBadge count={count} /> : null}
+                  {locked ? <NavLockIcon className="h-3 w-3 text-muted" /> : null}
                 </Link>
               );
             })}
-          </div>
+          </nav>
         </div>
 
         {accountOpen && hasSignOut ? (

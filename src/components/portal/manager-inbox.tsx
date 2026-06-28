@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -14,14 +14,26 @@ import {
   PORTAL_INBOX_CHANGED_EVENT,
   deleteInboxThreadIds,
   invalidatePersistedInboxCache,
+  inboxMutationInFlight,
   loadPersistedInbox,
   persistInbox,
   persistInboxAwait,
+  runInboxMutation,
+  stagePersistedInboxRows,
   syncPersistedInboxFromServer,
   upsertPersistedInboxRows,
+  inboxThreadMessages,
+  appendReplyToInboxThread,
+  type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
+import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
+import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { readManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import {
+  isUpcomingScheduledInboxMessage,
+  type ScheduledInboxMessageRecord,
+} from "@/lib/scheduled-inbox-messages";
 import { readProRelationships } from "@/lib/pro-relationships";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
@@ -57,10 +69,11 @@ function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
   }));
 }
 
-function countThreads(threads: InboxThread[]) {
+function countThreads(threads: InboxThread[], scheduleCount: number) {
   return {
     unopened: threads.filter((t) => t.folder === "inbox" && t.unread).length,
     opened: threads.filter((t) => t.folder === "inbox" && !t.unread).length,
+    schedule: scheduleCount,
     sent: threads.filter((t) => t.folder === "sent").length,
     trash: threads.filter((t) => t.folder === "trash").length,
   };
@@ -68,8 +81,32 @@ function countThreads(threads: InboxThread[]) {
 
 export function ManagerInbox({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
-  const router = useRouter();
+  const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
+  const { messages: scheduledMessages } = useScheduledPaymentMessages({ includeHidden: false });
+  const [manualScheduledMessages, setManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });
+      if (!res.ok || cancelled) return;
+      const body = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
+      setManualScheduledMessages(Array.isArray(body.messages) ? body.messages : []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const scheduleCount = useMemo(() => {
+    const upcoming = (status: string, sendAt: string) =>
+      status === "scheduled" && isUpcomingScheduledInboxMessage(sendAt, status);
+    return (
+      manualScheduledMessages.filter((m) => upcoming(m.status, m.sendAt)).length +
+      scheduledMessages.filter((m) => upcoming(m.status, m.sendAt)).length
+    );
+  }, [manualScheduledMessages, scheduledMessages]);
   const { userId } = useManagerUserId();
   const [local, setLocal] = useState<InboxThread[]>(() => loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[]);
   const [inboxSynced, setInboxSynced] = useState(false);
@@ -140,7 +177,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     persistInbox(MANAGER_INBOX_STORAGE_KEY, local);
   }, [local, inboxSynced]);
 
-  const counts = useMemo(() => countThreads(local), [local]);
+  const counts = useMemo(() => countThreads(local, scheduleCount), [local, scheduleCount]);
   const tabs = useMemo(
     () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
     [counts],
@@ -175,29 +212,34 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   }, [local]);
 
   const moveToTrash = (id: string) => {
-    void (async () => {
-      const prev = local;
-      const target = prev.find((t) => t.id === id);
-      if (!target || target.folder === "trash" || (target.folder !== "inbox" && target.folder !== "sent")) return;
-      const updated: InboxThread = {
-        ...target,
-        folder: "trash",
-        previousFolder: target.folder,
-        unread: false,
-      };
-      const next = prev.map((t) => (t.id === id ? updated : t));
+    void runInboxMutation(async () => {
       persistInboxRef.current = false;
-      setLocal(next);
-      setExpandedId((e) => (e === id ? null : e));
-      const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
-      persistInboxRef.current = true;
-      if (!ok) {
-        setLocal(prev);
-        showToast("Could not move message to trash.");
-        return;
+      try {
+        const prev = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[];
+        const target = prev.find((t) => t.id === id);
+        if (!target || target.folder === "trash" || (target.folder !== "inbox" && target.folder !== "sent")) return;
+        const updated: InboxThread = {
+          ...target,
+          folder: "trash",
+          previousFolder: target.folder,
+          unread: false,
+        };
+        const next = prev.map((t) => (t.id === id ? updated : t));
+        stagePersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, next);
+        setLocal(next);
+        setExpandedId((e) => (e === id ? null : e));
+        const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+        if (!ok) {
+          stagePersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, prev);
+          setLocal(prev);
+          showToast("Could not move message to trash.");
+          return;
+        }
+        showToast("Moved to trash.");
+      } finally {
+        persistInboxRef.current = true;
       }
-      showToast("Moved to trash.");
-    })();
+    });
   };
 
   function inferPreviousFolder(t: InboxThread): "inbox" | "sent" {
@@ -207,25 +249,30 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   }
 
   const restoreFromTrash = (id: string) => {
-    void (async () => {
-      const prev = local;
-      const target = prev.find((t) => t.id === id && t.folder === "trash");
-      if (!target) return;
-      const dest = inferPreviousFolder(target);
-      const updated: InboxThread = { ...target, folder: dest, previousFolder: undefined, unread: false };
-      const next = prev.map((t) => (t.id === id ? updated : t));
+    void runInboxMutation(async () => {
       persistInboxRef.current = false;
-      setLocal(next);
-      setExpandedId((e) => (e === id ? null : e));
-      const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
-      persistInboxRef.current = true;
-      if (!ok) {
-        setLocal(prev);
-        showToast("Could not restore message.");
-        return;
+      try {
+        const prev = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as InboxThread[];
+        const target = prev.find((t) => t.id === id && t.folder === "trash");
+        if (!target) return;
+        const dest = inferPreviousFolder(target);
+        const updated: InboxThread = { ...target, folder: dest, previousFolder: undefined, unread: false };
+        const next = prev.map((t) => (t.id === id ? updated : t));
+        stagePersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, next);
+        setLocal(next);
+        setExpandedId((e) => (e === id ? null : e));
+        const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+        if (!ok) {
+          stagePersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, prev);
+          setLocal(prev);
+          showToast("Could not restore message.");
+          return;
+        }
+        showToast("Restored.");
+      } finally {
+        persistInboxRef.current = true;
       }
-      showToast("Restored.");
-    })();
+    });
   };
 
   const deleteForever = (id: string) => {
@@ -282,6 +329,44 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     setExpandedId((cur) => (cur === id ? null : id));
   };
 
+  const handleReply = useCallback(
+    async (row: PortalInboxTableRow, text: string) => {
+      const thread = local.find((t) => t.id === row.id);
+      if (!thread) return;
+      const reply: InboxThreadMessage = {
+        id: `reply-${Date.now().toString(36)}`,
+        from: "Property manager",
+        body: text,
+        at: new Date().toLocaleString(),
+      };
+      const updated = appendReplyToInboxThread(thread, reply);
+      const next = local.map((t) => (t.id === thread.id ? updated : t));
+      persistInboxRef.current = false;
+      setLocal(next);
+      const ok = await upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+      persistInboxRef.current = true;
+      if (!ok) {
+        setLocal(local);
+        throw new Error("persist failed");
+      }
+      const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
+      await fetch("/api/portal/send-inbox-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          threadId: thread.id,
+          subject,
+          text,
+          toEmails: [thread.email],
+          deliverToPortalInbox: true,
+        }),
+      });
+      void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+    },
+    [local],
+  );
+
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
       if (p.includesAxisAdmin) {
@@ -326,32 +411,25 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
               ? "Message sent to Axis admin."
               : "Message sent via inbox and email.",
           );
-          router.push(`${portalBase}/inbox/sent`);
+          navigate(`${portalBase}/inbox/sent`);
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [router, showToast, portalBase],
+    [navigate, showToast, portalBase],
   );
-
-  const refreshInbox = () => {
-    void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
-      setLocal(rows as InboxThread[]);
-      showToast("Inbox refreshed.");
-    });
-  };
 
   const emptyCopy =
     tabId === "sent" && rowsForTab.length === 0
-      ? "No sent messages yet"
+      ? "No sent messages yet."
       : tabId === "trash" && rowsForTab.length === 0
-        ? "Trash is empty"
+        ? "No trash messages yet."
         : tabId === "opened" && rowsForTab.length === 0
-          ? "No opened messages yet"
+          ? "No opened messages yet."
           : tabId === "unopened" && rowsForTab.length === 0
-            ? "No unopened messages"
-            : "No messages yet";
+            ? "No unopened messages yet."
+            : "No messages yet.";
 
   return (
     <ManagerPortalPageShell
@@ -362,7 +440,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             <Button
               type="button"
               variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
               onClick={deleteAllTrash}
             >
               Delete all trash
@@ -371,9 +449,6 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
             New message
           </Button>
-          <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={refreshInbox}>
-            Refresh
-          </Button>
         </>
       }
       filterRow={
@@ -381,7 +456,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           <ManagerPortalStatusPills
             tabs={tabs}
             activeId={tabId}
-            onChange={(id) => router.push(`${portalBase}/inbox/${id}`)}
+            onChange={(id) => navigate(`${portalBase}/inbox/${id}`)}
           />
         </ManagerPortalFilterRow>
       }
@@ -396,21 +471,21 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
         liveContacts={liveContacts}
       />
 
-      {rowsForTab.length === 0 ? (
-        <PortalInboxEmptyState
-          title={emptyCopy}
-          hint={
-            tabId === "unopened" ? (
-              <p className="max-w-md">Messages from applicants, residents, and vendors appear here.</p>
-            ) : undefined
-          }
-        />
+      {tabId === "schedule" ? (
+        <ManagerInboxSchedulePanel portalBase={portalBase} />
+      ) : rowsForTab.length === 0 ? (
+        <PortalInboxEmptyState title={emptyCopy} />
       ) : (
         <PortalInboxMessageTable
           rows={toRows(rowsForTab, tabId)}
           primaryPartyHeader={tabId === "sent" ? "To" : "From"}
           onMarkRead={tabId === "unopened" ? markRead : undefined}
           getDetailBody={(row) => bodyById[row.id]}
+          getThreadMessages={(row) => {
+            const thread = local.find((t) => t.id === row.id);
+            return thread ? inboxThreadMessages(thread) : [];
+          }}
+          onReply={tabId === "trash" ? undefined : handleReply}
           expandedId={expandedId}
           onToggleExpand={toggleExpand}
           renderExtraActions={(row) => {
@@ -423,7 +498,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-800 hover:bg-rose-50"
+                    className="rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                     onClick={() => deleteForever(row.id)}
                   >
                     Delete

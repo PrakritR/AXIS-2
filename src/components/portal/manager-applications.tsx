@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -18,19 +19,22 @@ import { PortalPropertyFilterPill } from "@/components/portal/manager-section-sh
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
+import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
+import { ManagerScreeningSettingsPanel } from "@/components/portal/manager-screening-settings";
 import { ManagerCosignerReadonlyReview } from "@/components/portal/manager-cosigner-readonly-review";
-import { readCosignerSubmissionsForSignerAppId } from "@/lib/cosigner-submissions-storage";
+import { fetchCosignerSubmissionsForSignerAppId, type CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   MANAGER_APPLICATIONS_EVENT,
@@ -48,7 +52,8 @@ import {
   buildManagerPropertyFilterOptions,
   type ManagerPropertyFilterOption,
 } from "@/lib/manager-portfolio-access";
-import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
+import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
 import { getPropertyById, getRoomChoiceLabel, getRoomOptionsForProperty, LEASE_TERM_OPTIONS, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
 import {
   computeLeaseEndDate,
@@ -78,50 +83,51 @@ import {
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
 import {
-  APPLICATION_BACKGROUND_CHECK_STATUSES,
   applicationShowsBackgroundCheck,
   backgroundCheckStatusClassName,
   backgroundCheckStatusLabel,
   resolveBackgroundCheckStatus,
 } from "@/lib/application-background-check";
+import { recommendationLabel } from "@/lib/screening/recommendation";
 
 function ApplicationBackgroundCheckStatusBadge({ row }: { row: DemoApplicantRow }) {
   if (!applicationShowsBackgroundCheck(row)) return null;
   const status = resolveBackgroundCheckStatus(row);
+  const screening = row.screening;
   return (
-    <span
-      className={`mt-2 inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(status)}`}
-    >
-      {backgroundCheckStatusLabel(status)}
-    </span>
-  );
-}
-
-function ApplicationBackgroundCheckStatusField({ row }: { row: DemoApplicantRow }) {
-  if (!applicationShowsBackgroundCheck(row)) return null;
-  const status = resolveBackgroundCheckStatus(row);
-  return (
-    <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Background check</p>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-        Screening status for this application. Results appear here automatically once background checks are enabled for your plan.
-      </p>
-      <label className="mt-4 block max-w-md">
-        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Status</span>
-        <Select value={status} disabled aria-readonly>
-          {APPLICATION_BACKGROUND_CHECK_STATUSES.filter((value) => value !== "not_applicable").map((value) => (
-            <option key={value} value={value}>
-              {backgroundCheckStatusLabel(value)}
-            </option>
-          ))}
-        </Select>
-      </label>
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <span
+        className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(status)}`}
+      >
+        {backgroundCheckStatusLabel(status)}
+      </span>
+      {screening?.recommendation && screening.recommendation !== "not_available" ? (
+        <span className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200/80">
+          {recommendationLabel(screening.recommendation)}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 function CosignerSection({ applicationId }: { applicationId: string }) {
-  const subs = readCosignerSubmissionsForSignerAppId(applicationId);
+  const [subs, setSubs] = useState<CosignerSubmission[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCosignerSubmissionsForSignerAppId(applicationId).then((rows) => {
+      if (!cancelled) {
+        setSubs(rows);
+        setLoaded(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationId]);
+
+  if (!loaded) return null;
   if (subs.length === 0) return null;
   return (
     <div className="mt-6 space-y-6">
@@ -352,7 +358,7 @@ function ManagerApplicationPlacementEditor({
             Update the final resident setup here. These saved values drive lease details and resident payment charges.
           </p>
         </div>
-        <span className="inline-flex w-fit shrink-0 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 ring-1 ring-blue-200/80">
+        <span className="inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
           {row.bucket === "approved" ? "Approved application" : "Editable placement"}
         </span>
       </div>
@@ -600,27 +606,25 @@ function ManagerApplicationPlacementEditor({
 }
 
 export function ManagerApplications() {
-  return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted">Loading applications…</div>}>
-      <ManagerApplicationsContent />
-    </Suspense>
-  );
-}
-
-function ManagerApplicationsContent() {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
-  const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const openHandled = useRef(false);
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [rows, setRows] = useState<DemoApplicantRow[]>([]);
-  const [portfolioTick, setPortfolioTick] = useState(0);
+  const [rows, setRows] = useState<DemoApplicantRow[]>(() =>
+    typeof window === "undefined" ? [] : readManagerApplicationRows(),
+  );
+  const [portfolioTick, setPortfolioTick] = useState(() =>
+    typeof window === "undefined" ? 0 : hasCachedPropertyPipeline() ? 1 : 0,
+  );
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   useEffect(() => {
+    if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
     sync();
     void syncManagerApplicationsFromServer({ managerUserId: userId }).then(sync);
@@ -628,15 +632,16 @@ function ManagerApplicationsContent() {
     return () => {
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, sync);
     };
-  }, [userId]);
+  }, [authReady, userId]);
 
   useEffect(() => {
     if (!authReady || !userId) return;
     let cancelled = false;
-    syncPropertyPipelineFromServer()
+    void syncPropertyPipelineFromServer()
+      .catch(() => undefined)
       .finally(() => {
         if (cancelled) return;
-        setPortfolioTick((n) => n + 1);
+        setPortfolioTick((n) => (n > 0 ? n : 1));
       });
     return () => {
       cancelled = true;
@@ -660,14 +665,14 @@ function ManagerApplicationsContent() {
     writeManagerApplicationRows(next);
   }, []);
 
-  const propertyDataLoading = authReady && Boolean(userId) && portfolioTick === 0;
   const propertyOptions = buildManagerPropertyFilterOptions(userId);
+  const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(userId), [userId, portfolioTick]);
   const placementPropertyOptions = propertyOptions;
 
   const scopedRows = useMemo(() => {
-    if (!authReady) return [];
+    if (!userId) return [];
     return rows.filter((r) => applicationVisibleToPortalUser(r, userId));
-  }, [rows, userId, authReady]);
+  }, [rows, userId]);
 
   const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
   const tabs = useMemo(
@@ -689,11 +694,14 @@ function ManagerApplicationsContent() {
   }, [scopedRows, bucket, propertyFilter]);
 
   useEffect(() => {
-    const raw = (searchParams.get("open") ?? searchParams.get("axisId") ?? "").trim();
-    if (!raw || scopedRows.length === 0) return;
+    if (openHandled.current || scopedRows.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const raw = (params.get("open") ?? params.get("axisId") ?? "").trim();
+    if (!raw) return;
     const id = normalizeApplicationAxisId(raw).toUpperCase();
     const hit = scopedRows.find((r) => normalizeApplicationAxisId(r.id).toUpperCase() === id);
     if (!hit) return;
+    openHandled.current = true;
     queueMicrotask(() => {
       setBucket(hit.bucket);
       setExpandedId(hit.id);
@@ -701,18 +709,11 @@ function ManagerApplicationsContent() {
     requestAnimationFrame(() => {
       document.getElementById(`portal-application-${hit.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.delete("open");
-    nextParams.delete("axisId");
-    const qs = nextParams.toString();
+    params.delete("open");
+    params.delete("axisId");
+    const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [searchParams, scopedRows, pathname, router]);
-
-  const refreshTable = useCallback(() => {
-    setRows(readManagerApplicationRows());
-    void syncPropertyPipelineFromServer().then(() => setPortfolioTick((n) => n + 1));
-    showToast("Refreshed.");
-  }, [showToast]);
+  }, [scopedRows, pathname, router]);
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
     const row = rows.find((r) => r.id === id);
@@ -908,18 +909,43 @@ function ManagerApplicationsContent() {
             propertyValue={propertyFilter}
             onPropertyChange={(id) => setPropertyFilter(id)}
           />
-          <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={refreshTable}>
-            Refresh
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => setInviteModalOpen(true)}
+            disabled={shareableProperties.length === 0}
+            title={shareableProperties.length === 0 ? "List a property as active before inviting prospects" : undefined}
+          >
+            Invite to apply
           </Button>
         </>
       }
       filterRow={
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          {propertyDataLoading ? <p className="text-xs text-muted">Loading properties from backend…</p> : null}
         </ManagerPortalFilterRow>
       }
     >
+      <div className="mb-4">
+        <ManagerScreeningSettingsPanel />
+      </div>
+      {!authReady && rows.length === 0 ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
+          <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
+        </div>
+      ) : rowsForBucket.length === 0 ? (
+        <PortalDataTableEmpty
+          icon="application"
+          message={
+            scopedRows.length === 0
+              ? "No applications yet."
+              : propertyFilter.trim()
+                ? "No applications for this property yet."
+                : "No applications in this tab yet."
+          }
+        />
+      ) : (
       <div className={PORTAL_DATA_TABLE_WRAP}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className="w-full min-w-[640px] border-collapse text-left text-sm">
@@ -928,30 +954,19 @@ function ManagerApplicationsContent() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-                <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {!authReady ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
-                    Loading applications…
-                  </td>
-                </tr>
-              ) : rowsForBucket.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
-                    {scopedRows.length === 0
-                      ? "No applications yet for your listings and linked properties."
-                      : propertyFilter.trim()
-                        ? "No applications for this property in this tab."
-                        : "No applications in this tab."}
-                  </td>
-                </tr>
-              ) : (
-                rowsForBucket.map((row) => (
+              {rowsForBucket.map((row) => (
                   <Fragment key={row.id}>
-                    <tr id={`portal-application-${row.id}`} className={PORTAL_TABLE_TR}>
+                    <tr
+                      id={`portal-application-${row.id}`}
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                      )}
+                      aria-expanded={expandedId === row.id}
+                    >
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
                         <p className="font-medium leading-snug text-foreground">{row.name}</p>
                         {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{row.email}</p> : null}
@@ -960,20 +975,10 @@ function ManagerApplicationsContent() {
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
-                      <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                          onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                        >
-                          {expandedId === row.id ? "Hide" : "Details"}
-                        </Button>
-                      </td>
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                           <div className="mx-auto max-w-5xl space-y-8">
                           <PortalTableDetailActions placement="top">
                             {row.bucket === "pending" ? (
@@ -993,7 +998,7 @@ function ManagerApplicationsContent() {
                             <Button
                               type="button"
                               variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                               onClick={() => void deleteApplication(row.id)}
                             >
                               Delete application
@@ -1061,7 +1066,12 @@ function ManagerApplicationsContent() {
                             </div>
                           ) : null}
 
-                          <ApplicationBackgroundCheckStatusField row={row} />
+                          <ApplicationScreeningPanel
+                            row={row}
+                            onUpdated={() => {
+                              void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
+                            }}
+                          />
 
                           <div className="space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6">
                           <ApplicantIds axisId={row.id} />
@@ -1075,12 +1085,12 @@ function ManagerApplicationsContent() {
                       </tr>
                     ) : null}
                   </Fragment>
-                ))
-              )}
+                ))}
             </tbody>
           </table>
         </div>
       </div>
+      )}
     </ManagerPortalPageShell>
       <PortalNotificationPreviewModal
         open={approvePreviewRow !== null}
@@ -1113,6 +1123,12 @@ function ManagerApplicationsContent() {
           setApproveBusyId(row.id);
           void setRowBucket(row.id, "approved", { skipWelcomeEmail: skipMessage }).finally(() => setApproveBusyId(null));
         }}
+      />
+      <ShareLeadLinkModal
+        open={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        kind="apply"
+        properties={shareableProperties}
       />
     </>
   );

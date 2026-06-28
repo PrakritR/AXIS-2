@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Modal, MODAL_FIELD_LABEL_CLASS, MODAL_INSET_BOX_CLASS, MODAL_INSET_BOX_PRE_CLASS, MODAL_WARNING_BOX_CLASS } from "@/components/ui/modal";
 
 export function PortalNotificationPreviewModal({
   open,
@@ -12,6 +12,7 @@ export function PortalNotificationPreviewModal({
   subject,
   body,
   intro,
+  warning,
   footerNote,
   skipMessageLabel = "Don't message resident",
   confirmLabel,
@@ -29,6 +30,7 @@ export function PortalNotificationPreviewModal({
   subject: string;
   body: string;
   intro?: string;
+  warning?: string;
   footerNote?: string;
   skipMessageLabel?: string;
   confirmLabel: string;
@@ -52,24 +54,23 @@ export function PortalNotificationPreviewModal({
   return (
     <Modal open={open} title={title} onClose={onClose} panelClassName={panelClassName}>
       <div className="space-y-3">
+        {warning ? (
+          <p className={MODAL_WARNING_BOX_CLASS}>
+            <strong>AI-generated draft.</strong> {warning}
+          </p>
+        ) : null}
         {intro ? <p className="text-sm text-muted">{intro}</p> : null}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">To</p>
-          <p className="text-sm text-foreground">{recipient}</p>
+          <p className={MODAL_FIELD_LABEL_CLASS}>To</p>
+          <p className={`mt-1 ${MODAL_INSET_BOX_CLASS}`}>{recipient}</p>
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Subject</p>
-          <p className={`text-sm text-foreground ${skipMessage ? "opacity-50" : ""}`}>{subject}</p>
+          <p className={MODAL_FIELD_LABEL_CLASS}>Subject</p>
+          <p className={`mt-1 ${MODAL_INSET_BOX_CLASS} ${skipMessage ? "opacity-50" : ""}`}>{subject}</p>
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">Message</p>
-          <pre
-            className={`mt-1 whitespace-pre-wrap rounded-xl border border-border bg-accent/30 p-3 text-sm leading-relaxed text-muted ${
-              skipMessage ? "opacity-50" : ""
-            }`}
-          >
-            {body}
-          </pre>
+          <p className={MODAL_FIELD_LABEL_CLASS}>Message</p>
+          <pre className={`${MODAL_INSET_BOX_PRE_CLASS} mt-1 ${skipMessage ? "opacity-50" : ""}`}>{body}</pre>
         </div>
         <label className="flex items-start gap-2 text-sm">
           <input

@@ -20,7 +20,7 @@ import {
   validateZip,
 } from "./apply-validation";
 import { ApplyFieldRow } from "./apply-field-row";
-import { appendCosignerSubmission } from "@/lib/cosigner-submissions-storage";
+import { submitCosignerToServerAwait } from "@/lib/cosigner-submissions-storage";
 import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
 import {
   COSIGNER_STEP_FIELD_ORDER,
@@ -125,7 +125,9 @@ export function CosignerApplyFlow({
     linkedAxisId: string;
     linkedSignerName: string;
     cosignerName: string;
+    syncError?: string;
   } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -248,7 +250,7 @@ export function CosignerApplyFlow({
     return errs;
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (step === 1) {
       const errs1 = validateStep1();
       if (Object.keys(errs1).length > 0) {
@@ -286,7 +288,15 @@ export function CosignerApplyFlow({
       const linkedAxisId = f.signerAppId.trim();
       const linkedSignerName = f.signerFullName.trim();
       const cosignerName = f.fullName.trim();
-      appendCosignerSubmission({ ...f, submittedAt: new Date().toISOString() });
+      if (submitting) return;
+      setSubmitting(true);
+      const submission = { ...f, signerAppId: linkedAxisId, submittedAt: new Date().toISOString() };
+      const sync = await submitCosignerToServerAwait(submission);
+      setSubmitting(false);
+      if (!sync.ok) {
+        setFieldErrors({ submit: sync.error ?? "Could not save co-signer form." });
+        return;
+      }
       clearCosignerDraft();
       setF(emptyCosigner());
       setStep(1);
@@ -321,7 +331,7 @@ export function CosignerApplyFlow({
     const displayAxis = postSubmit.linkedAxisId ? normalizeApplicationAxisId(postSubmit.linkedAxisId) : "";
     return (
       <div
-        className="mt-8 rounded-3xl border border-emerald-200/90 bg-emerald-50/40 p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+        className="mt-8 rounded-3xl border p-6 portal-banner-success shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
         style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
       >
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Co-signer form received</p>
@@ -810,8 +820,8 @@ export function CosignerApplyFlow({
         <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack}>
           Back
         </Button>
-        <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue}>
-          {step === 5 ? "Submit co-signer form" : "Continue"}
+        <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={handleContinue} disabled={submitting}>
+          {submitting ? "Submitting…" : step === 5 ? "Submit co-signer form" : "Continue"}
         </Button>
       </div>
     </div>

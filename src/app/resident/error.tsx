@@ -10,7 +10,7 @@ export default function ResidentPortalError({
   reset: () => void;
 }) {
   return (
-    <div className="mx-auto max-w-lg rounded-2xl border border-rose-200/90 bg-rose-50/90 px-5 py-8 text-center text-sm text-rose-950 shadow-sm">
+    <div className="mx-auto max-w-lg rounded-2xl border px-5 py-8 text-center text-sm portal-banner-danger shadow-sm">
       <p className="text-lg font-semibold text-rose-950">Resident portal error</p>
       <p className="mt-2 leading-relaxed text-rose-900/90">
         {error.message || "This page could not be displayed. Try again or return to the dashboard."}

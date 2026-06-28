@@ -3,10 +3,14 @@
 import { useEffect } from "react";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
+  fetchAccountLinksCached,
+} from "@/lib/portal-data-store";
+import {
   proRelationshipRowsFromInvites,
   readProRelationships,
   writeProRelationships,
 } from "@/lib/pro-relationships";
+import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 export function AccountLinksSync() {
@@ -15,7 +19,7 @@ export function AccountLinksSync() {
   useEffect(() => {
     let cancelled = false;
 
-    const sync = async () => {
+    const sync = async (forcePortfolio = false) => {
       try {
         if (!session.userId || cancelled) return;
 
@@ -24,12 +28,8 @@ export function AccountLinksSync() {
           credentials: "include",
         }).catch(() => undefined);
 
-        const res = await fetch("/api/pro/account-links", { credentials: "include" });
-        const body = (await res.json()) as {
-          invites?: AccountLinkInviteDto[];
-          migrationRequired?: boolean;
-        };
-        if (!res.ok || body.migrationRequired || cancelled) return;
+        const body = await fetchAccountLinksCached();
+        if (body.migrationRequired || cancelled) return;
 
         const active = (body.invites ?? []).filter((inv) => inv.status === "accepted");
         const next = proRelationshipRowsFromInvites(active);
@@ -51,6 +51,12 @@ export function AccountLinksSync() {
 
         if (changed) {
           writeProRelationships(session.userId, next);
+          await syncManagerPortfolioFromServer(session.userId, { force: true });
+          return;
+        }
+
+        if (forcePortfolio) {
+          await syncManagerPortfolioFromServer(session.userId, { force: true });
         }
       } catch {
         /* ignore */
@@ -64,11 +70,9 @@ export function AccountLinksSync() {
     };
 
     window.addEventListener("focus", rerun);
-    window.addEventListener("axis-pro-relationships", rerun);
     return () => {
       cancelled = true;
       window.removeEventListener("focus", rerun);
-      window.removeEventListener("axis-pro-relationships", rerun);
     };
   }, [session.userId]);
 

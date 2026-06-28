@@ -306,6 +306,11 @@ function readAll(): HouseholdCharge[] {
   return isBrowser() ? memoryCharges : [];
 }
 
+/** All household charges currently in the browser session (manager + resident rows). */
+export function readHouseholdCharges(): HouseholdCharge[] {
+  return readAll();
+}
+
 function writeAll(rows: HouseholdCharge[], silent = false) {
   if (!isBrowser()) return;
   const normalized = dedupeCharges(rows);
@@ -509,6 +514,20 @@ function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
   return [...byKey.values()];
 }
 
+export function householdChargeBusinessKey(charge: HouseholdCharge): string {
+  return chargeBusinessKey(charge);
+}
+
+export function dedupeHouseholdCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
+  return dedupeCharges(rows);
+}
+
+/** Charge row ids dropped when deduping (e.g. legacy fallback application-fee ids). */
+export function duplicateHouseholdChargeIds(rows: HouseholdCharge[]): string[] {
+  const canonicalIds = new Set(dedupeCharges(rows).map((charge) => charge.id));
+  return [...new Set(rows.map((charge) => charge.id).filter((id) => !canonicalIds.has(id)))];
+}
+
 function formatRecurringRentDueLabel(month: string, dueDay: number, dueDayMode?: RentDueDayMode) {
   const day = effectiveDueDayForMonth(dueDay, dueDayMode, month);
   const [year, monthIndex] = month.split("-").map(Number);
@@ -562,11 +581,84 @@ export function householdChargeDueDate(charge: HouseholdCharge): Date | null {
 }
 
 export function isHouseholdChargeOverdue(charge: HouseholdCharge, now = new Date()): boolean {
-  if (charge.status === "paid") return false;
+  if (!isUnpaidHouseholdCharge(charge)) return false;
   const due = householdChargeDueDate(charge);
   if (!due) return false;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
   return due.getTime() < today.getTime();
+}
+
+/** True when a charge still has an outstanding balance and should receive payment reminders. */
+export function isUnpaidHouseholdCharge(charge: HouseholdCharge): boolean {
+  if (charge.status === "paid") return false;
+  if (charge.paidAt) return false;
+  if (parseMoneyAmount(charge.balanceLabel) <= 0) return false;
+  return true;
+}
+
+function hasUpfrontProratedLastMonthCharge(
+  allCharges: HouseholdCharge[],
+  residentEmail: string,
+  propertyId: string,
+  kind: "prorated_last_month_rent" | "prorated_last_month_utilities",
+): boolean {
+  const emailLower = residentEmail.trim().toLowerCase();
+  return allCharges.some(
+    (c) => c.kind === kind && c.residentEmail.trim().toLowerCase() === emailLower && c.propertyId === propertyId,
+  );
+}
+
+/** Pending recurring rent/utilities rows that should not bill or receive reminders. */
+export function isStaleRecurringHouseholdCharge(
+  charge: HouseholdCharge,
+  profileById: Map<string, RecurringRentProfile>,
+  allCharges: HouseholdCharge[],
+): boolean {
+  if (charge.status === "paid" || !charge.recurringRentProfileId || !charge.rentMonth) return false;
+  if (charge.kind !== "rent" && charge.kind !== "utilities") return false;
+  const prof = profileById.get(charge.recurringRentProfileId);
+  if (!prof) return false;
+
+  const startMonth = prof.startMonth?.trim();
+  if (startMonth && charge.rentMonth < startMonth) return true;
+
+  const leaseEndParts = prof.leaseEnd?.trim().split("-").map(Number) ?? [];
+  const leaseEndYear = leaseEndParts[0] && Number.isFinite(leaseEndParts[0]) ? leaseEndParts[0] : null;
+  const leaseEndMonthNum = leaseEndParts[1] && Number.isFinite(leaseEndParts[1]) ? leaseEndParts[1] : null;
+  const leaseEndDay = leaseEndParts[2] && Number.isFinite(leaseEndParts[2]) ? leaseEndParts[2] : null;
+
+  if (leaseEndYear && leaseEndMonthNum) {
+    const leaseEndMonth = `${leaseEndYear}-${String(leaseEndMonthNum).padStart(2, "0")}`;
+    if (charge.rentMonth > leaseEndMonth) return true;
+
+    const daysInEndMonth = new Date(leaseEndYear, leaseEndMonthNum, 0).getDate();
+    const partialLastMonth = leaseEndDay != null && leaseEndDay > 0 && leaseEndDay < daysInEndMonth;
+    if (partialLastMonth && charge.rentMonth === leaseEndMonth) {
+      const hasUpfront =
+        charge.kind === "rent"
+          ? hasUpfrontProratedLastMonthCharge(allCharges, prof.residentEmail, prof.propertyId, "prorated_last_month_rent")
+          : hasUpfrontProratedLastMonthCharge(
+              allCharges,
+              prof.residentEmail,
+              prof.propertyId,
+              "prorated_last_month_utilities",
+            );
+      if (hasUpfront) return true;
+    }
+  }
+
+  return false;
+}
+
+/** Charges that should appear in payment reminders (excludes paid and stale recurring rows). */
+export function filterChargesEligibleForPaymentReminders(
+  charges: HouseholdCharge[],
+  rentProfiles: RecurringRentProfile[],
+): HouseholdCharge[] {
+  const profileById = new Map(rentProfiles.map((profile) => [profile.id, profile]));
+  return charges.filter(
+    (charge) => isUnpaidHouseholdCharge(charge) && !isStaleRecurringHouseholdCharge(charge, profileById, charges),
+  );
 }
 
 function dueLabelForLeaseStart(leaseStart?: string | null): string {
@@ -893,8 +985,13 @@ function selectedRoomRentAmount(row: DemoApplicantRow): number {
   return room?.monthlyRent && room.monthlyRent > 0 ? room.monthlyRent : 0;
 }
 
+export function findWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
+  return readAll().find((c) => c.workOrderId === workOrderId && c.kind === "work_order_charge");
+}
+
 export function findPendingWorkOrderCharge(workOrderId: string): HouseholdCharge | undefined {
-  return readAll().find((c) => c.workOrderId === workOrderId && c.kind === "work_order_charge" && c.status === "pending");
+  const charge = findWorkOrderCharge(workOrderId);
+  return charge?.status === "pending" ? charge : undefined;
 }
 
 /** Removes pending pass-through lines tied to a work order (e.g. when the manager deletes the work order). */
@@ -1063,6 +1160,9 @@ export function recordWorkOrderResidentCharge(input: {
   amountInput: string;
   residentEmail: string;
   residentName: string;
+  /** Actual property id for finances filtering; falls back to work-order pseudo id. */
+  propertyId?: string;
+  initialStatus?: "pending" | "paid";
   zelleContactSnapshot?: string | null;
 }): HouseholdCharge | null {
   const amt = parseMoneyAmount(input.amountInput);
@@ -1070,26 +1170,28 @@ export function recordWorkOrderResidentCharge(input: {
   const email = input.residentEmail.trim().toLowerCase();
   if (!email || !email.includes("@")) return null;
 
-  const existing = findPendingWorkOrderCharge(input.workOrderId);
-  if (existing) {
+  if (findWorkOrderCharge(input.workOrderId)) {
     return null;
   }
 
+  const isPaid = input.initialStatus === "paid";
   const balance = `$${amt.toFixed(2)}`;
+  const now = new Date().toISOString();
   const charge: HouseholdCharge = {
     id: `hc_wo_${input.workOrderId}_${Date.now()}`,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
     residentEmail: input.residentEmail.trim(),
     residentName: input.residentName.trim() || "Resident",
     residentUserId: null,
-    propertyId: `workorder:${input.workOrderId}`,
+    propertyId: input.propertyId?.trim() || `workorder:${input.workOrderId}`,
     propertyLabel: `${input.propertyLabel} · ${input.unit}`,
     managerUserId: input.managerUserId,
     kind: "work_order_charge",
     title: `Work order · ${input.workOrderTitle}`,
     amountLabel: balance,
-    balanceLabel: balance,
-    status: "pending",
+    balanceLabel: isPaid ? "$0.00" : balance,
+    status: isPaid ? "paid" : "pending",
+    paidAt: isPaid ? now : undefined,
     zelleContactSnapshot: input.zelleContactSnapshot ?? undefined,
     blocksLeaseUntilPaid: false,
     workOrderId: input.workOrderId,
@@ -1246,46 +1348,7 @@ function syncAllRecurringRentCharges(): boolean {
   // This cleans up incorrect charges created before the correct startMonth was computed.
   const staleIds = new Set<string>();
   for (const c of existing) {
-    if (c.status === "paid" || !c.recurringRentProfileId || !c.rentMonth) continue;
-    if (c.kind !== "rent" && c.kind !== "utilities") continue;
-    const prof = profileById.get(c.recurringRentProfileId);
-    if (!prof) continue;
-
-    // 1) Never bill before first full month.
-    if (c.rentMonth < prof.startMonth) {
-      staleIds.add(c.id);
-      continue;
-    }
-
-    const leaseEndParts = prof.leaseEnd?.trim().split("-").map(Number) ?? [];
-    const leaseEndYear = leaseEndParts[0] && Number.isFinite(leaseEndParts[0]) ? leaseEndParts[0] : null;
-    const leaseEndMonthNum = leaseEndParts[1] && Number.isFinite(leaseEndParts[1]) ? leaseEndParts[1] : null;
-    const leaseEndDay = leaseEndParts[2] && Number.isFinite(leaseEndParts[2]) ? leaseEndParts[2] : null;
-
-    if (leaseEndYear && leaseEndMonthNum) {
-      const leaseEndMonth = `${leaseEndYear}-${String(leaseEndMonthNum).padStart(2, "0")}`;
-
-      // 2) Never keep recurring rows after lease end month.
-      if (c.rentMonth > leaseEndMonth) {
-        staleIds.add(c.id);
-        continue;
-      }
-
-      // 3) If end month is partial and we already have upfront prorated last-month charges,
-      //    remove recurring rows in that same month to prevent duplicate billing.
-      const daysInEndMonth = new Date(leaseEndYear, leaseEndMonthNum, 0).getDate();
-      const partialLastMonth = leaseEndDay != null && leaseEndDay > 0 && leaseEndDay < daysInEndMonth;
-      if (partialLastMonth && c.rentMonth === leaseEndMonth) {
-        const hasUpfront =
-          c.kind === "rent"
-            ? hasUpfrontProratedLastCharge(prof.residentEmail, prof.propertyId, "prorated_last_month_rent")
-            : hasUpfrontProratedLastCharge(prof.residentEmail, prof.propertyId, "prorated_last_month_utilities");
-        if (hasUpfront) {
-          staleIds.add(c.id);
-          continue;
-        }
-      }
-    }
+    if (isStaleRecurringHouseholdCharge(c, profileById, existing)) staleIds.add(c.id);
   }
 
   const cleanedExisting = staleIds.size > 0 ? existing.filter((c) => !staleIds.has(c.id)) : existing;
@@ -1463,22 +1526,14 @@ export function readChargesForResident(email: string, userId: string | null): Ho
   const profiles = readRentProfiles();
   const profileById = new Map(profiles.map((p) => [p.id, p]));
 
-  return dedupeCharges(readAll())
-    .filter((r) => {
-      if (userId && r.residentUserId === userId) return true;
-      return Boolean(e && r.residentEmail.trim().toLowerCase() === e);
-    })
+  const scoped = dedupeCharges(readAll()).filter((r) => {
+    if (userId && r.residentUserId === userId) return true;
+    return Boolean(e && r.residentEmail.trim().toLowerCase() === e);
+  });
+
+  return scoped
     .filter((charge) => shouldDisplayChargeInPayments(charge))
-    .filter((charge) => {
-      // Mirror the stale-charge boundary used in syncAllRecurringRentCharges:
-      // hide orphaned pending recurring charges that predate the profile's first full month.
-      if (charge.status === "paid") return true;
-      if (!charge.recurringRentProfileId || !charge.rentMonth) return true;
-      if (charge.kind !== "rent" && charge.kind !== "utilities") return true;
-      const prof = profileById.get(charge.recurringRentProfileId);
-      if (!prof?.startMonth) return true;
-      return charge.rentMonth >= prof.startMonth;
-    });
+    .filter((charge) => charge.status === "paid" || !isStaleRecurringHouseholdCharge(charge, profileById, scoped));
 }
 
 /**
@@ -1564,11 +1619,13 @@ export function markHouseholdChargePaid(chargeId: string, managerUserId: string 
   const updated = { ...next[i]!, status: "paid" as const, paidAt: now, balanceLabel: "$0.00" };
   next[i] = updated;
   writeAll(next);
-  // Awaitable upsert so a sync right after mark-paid does not resurrect stale pending rows.
+  // Re-emit after server sync so schedule/inbox views reload with paid status applied.
   void postHouseholdPayloadAwait({
     action: "replace",
     charges: [updated],
     rentProfiles: readRentProfiles(),
+  }).then((ok) => {
+    if (ok) emit();
   });
   return true;
 }
@@ -1594,6 +1651,8 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
     action: "replace",
     charges: [updated],
     rentProfiles: readRentProfiles(),
+  }).then((ok) => {
+    if (ok) emit();
   });
   return true;
 }

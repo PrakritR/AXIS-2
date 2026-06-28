@@ -21,7 +21,7 @@ import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { rentSummaryFromApplication } from "@/lib/generated-lease";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
-import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR } from "@/components/portal/portal-data-table";
+import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR_EXPANDABLE, createPortalRowExpandClick } from "@/components/portal/portal-data-table";
 
 function naturalLabelSort(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -260,11 +260,6 @@ export function AdminLeasesClient() {
   const [tick, setTick] = useState(0);
   const [expandedLeaseId, setExpandedLeaseId] = useState<string | null>(null);
 
-  const refresh = useCallback(() => {
-    setTick((t) => t + 1);
-    showToast("Refreshed leases.");
-  }, [showToast]);
-
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
     window.addEventListener(LEASE_PIPELINE_EVENT, on);
@@ -308,9 +303,6 @@ export function AdminLeasesClient() {
             propertyValue={selectedPropertyFilter}
             onPropertyChange={setPropertyFilter}
           />
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-            Refresh
-          </Button>
         </div>
       </div>
 
@@ -332,7 +324,6 @@ export function AdminLeasesClient() {
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Lease</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Rent</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -340,7 +331,13 @@ export function AdminLeasesClient() {
                   const rentLabel = rentSummaryFromApplication(row.application);
                   return (
                   <Fragment key={row.id}>
-                    <tr className={PORTAL_TABLE_TR}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        setExpandedLeaseId((cur) => (cur === row.id ? null : row.id)),
+                      )}
+                      aria-expanded={visibleExpandedLeaseId === row.id}
+                    >
                       <td className="px-5 py-4 align-middle">
                         <p className="font-semibold text-foreground">{row.unit || "—"}</p>
                         <p className="mt-0.5 text-sm text-muted">{row.residentName || "—"}</p>
@@ -352,20 +349,10 @@ export function AdminLeasesClient() {
                       <td className="px-5 py-4 align-middle">
                         <StatusPill bucket={bucketToPillIndex(row.bucket)} />
                       </td>
-                      <td className="px-5 py-4 text-right align-middle">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-full border-border px-4 py-2 text-sm font-medium text-foreground"
-                          onClick={() => setExpandedLeaseId((cur) => (cur === row.id ? null : row.id))}
-                        >
-                          {visibleExpandedLeaseId === row.id ? "Hide" : "Details"}
-                        </Button>
-                      </td>
                     </tr>
                     {visibleExpandedLeaseId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={4} className="px-5 py-4">
+                        <td colSpan={3} className="px-5 py-4">
                           <LeasePipelineAdminDetail
                             row={row}
                             onSaved={() => setTick((t) => t + 1)}

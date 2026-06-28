@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
@@ -17,12 +17,18 @@ import {
   type PersistedInboxThread,
   deleteInboxThreadIds,
   invalidatePersistedInboxCache,
+  inboxMutationInFlight,
   persistInbox,
   persistInboxAwait,
   loadPersistedInbox,
   RESIDENT_INBOX_STORAGE_KEY,
+  runInboxMutation,
+  stagePersistedInboxRows,
   syncPersistedInboxFromServer,
   upsertPersistedInboxRows,
+  inboxThreadMessages,
+  appendReplyToInboxThread,
+  type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
 
 type InboxThread = PersistedInboxThread;
@@ -69,7 +75,7 @@ function countThreads(threads: InboxThread[]) {
 
 export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
-  const router = useRouter();
+  const navigate = usePortalNavigate();
   const [local, setLocal] = useState<InboxThread[]>(
     () => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[],
   );
@@ -81,9 +87,13 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   useEffect(() => {
     persistInboxRef.current = false;
     void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY).then((rows) => {
-      setLocal(rows as InboxThread[]);
+      if (!inboxMutationInFlight()) {
+        setLocal(rows as InboxThread[]);
+      }
       setPersistReady(true);
-      persistInboxRef.current = true;
+      if (!inboxMutationInFlight()) {
+        persistInboxRef.current = true;
+      }
     });
   }, []);
 
@@ -148,61 +158,71 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const moveToTrash = useCallback(
     (id: string) => {
-      void (async () => {
-        const prev = local;
-        const target = prev.find((t) => t.id === id);
-        if (!target || target.folder === "trash" || (target.folder !== "inbox" && target.folder !== "sent")) return;
-        const updated: InboxThread = {
-          ...target,
-          folder: "trash",
-          previousFolder: target.folder,
-          unread: false,
-        };
-        const next = prev.map((t) => (t.id === id ? updated : t));
+      void runInboxMutation(async () => {
         persistInboxRef.current = false;
-        setLocal(next);
-        setExpandedId(null);
-        const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
-        persistInboxRef.current = true;
-        if (!ok) {
-          setLocal(prev);
-          showToast("Could not move message to trash.");
-          return;
+        try {
+          const prev = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[];
+          const target = prev.find((t) => t.id === id);
+          if (!target || target.folder === "trash" || (target.folder !== "inbox" && target.folder !== "sent")) return;
+          const updated: InboxThread = {
+            ...target,
+            folder: "trash",
+            previousFolder: target.folder,
+            unread: false,
+          };
+          const next = prev.map((t) => (t.id === id ? updated : t));
+          stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, next);
+          setLocal(next);
+          setExpandedId(null);
+          const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
+          if (!ok) {
+            stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, prev);
+            setLocal(prev);
+            showToast("Could not move message to trash.");
+            return;
+          }
+          showToast("Moved to trash.");
+        } finally {
+          persistInboxRef.current = true;
         }
-        showToast("Moved to trash.");
-      })();
+      });
     },
-    [local, showToast],
+    [showToast],
   );
 
   const restoreFromTrash = useCallback(
     (id: string) => {
-      void (async () => {
-        const prev = local;
-        const target = prev.find((t) => t.id === id && t.folder === "trash");
-        if (!target) return;
-        const dest = inferPreviousFolder(target);
-        const updated: InboxThread = {
-          ...target,
-          folder: dest,
-          previousFolder: undefined,
-          unread: dest === "inbox" ? target.unread : false,
-        };
-        const next = prev.map((t) => (t.id === id ? updated : t));
+      void runInboxMutation(async () => {
         persistInboxRef.current = false;
-        setLocal(next);
-        setExpandedId(null);
-        const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
-        persistInboxRef.current = true;
-        if (!ok) {
-          setLocal(prev);
-          showToast("Could not restore message.");
-          return;
+        try {
+          const prev = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[];
+          const target = prev.find((t) => t.id === id && t.folder === "trash");
+          if (!target) return;
+          const dest = inferPreviousFolder(target);
+          const updated: InboxThread = {
+            ...target,
+            folder: dest,
+            previousFolder: undefined,
+            unread: dest === "inbox" ? target.unread : false,
+          };
+          const next = prev.map((t) => (t.id === id ? updated : t));
+          stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, next);
+          setLocal(next);
+          setExpandedId(null);
+          const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
+          if (!ok) {
+            stagePersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, prev);
+            setLocal(prev);
+            showToast("Could not restore message.");
+            return;
+          }
+          showToast("Restored.");
+        } finally {
+          persistInboxRef.current = true;
         }
-        showToast("Restored.");
-      })();
+      });
     },
-    [local, showToast],
+    [showToast],
   );
 
   const deleteForever = useCallback(
@@ -303,21 +323,52 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
               ? "Message sent to Axis admin."
               : "Message sent via inbox and email.",
           );
-          router.push("/resident/inbox/sent");
+          navigate("/resident/inbox/sent");
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [router, showToast],
+    [navigate, showToast],
   );
 
-  const refreshInbox = () => {
-    void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true }).then((rows) => {
-      setLocal(rows as InboxThread[]);
-      showToast("Inbox refreshed.");
-    });
-  };
+  const handleReply = useCallback(
+    async (row: PortalInboxTableRow, text: string) => {
+      const thread = local.find((t) => t.id === row.id);
+      if (!thread) return;
+      const reply: InboxThreadMessage = {
+        id: `reply-${Date.now().toString(36)}`,
+        from: "Resident",
+        body: text,
+        at: new Date().toLocaleString(),
+      };
+      const updated = appendReplyToInboxThread(thread, reply);
+      const next = local.map((t) => (t.id === thread.id ? updated : t));
+      persistInboxRef.current = false;
+      setLocal(next);
+      const ok = await upsertPersistedInboxRows(RESIDENT_INBOX_STORAGE_KEY, [updated], next);
+      persistInboxRef.current = true;
+      if (!ok) {
+        setLocal(local);
+        throw new Error("persist failed");
+      }
+      const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
+      await fetch("/api/portal/send-inbox-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          threadId: thread.id,
+          subject,
+          text,
+          toEmails: [thread.email],
+          deliverToPortalInbox: true,
+        }),
+      });
+      void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
+    },
+    [local],
+  );
 
   const renderExtraActions = useCallback(
     (row: PortalInboxTableRow) => {
@@ -371,12 +422,12 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const emptyCopy =
     tabId === "trash"
-      ? "Trash is empty"
+      ? "No trash messages yet."
       : tabId === "sent"
-        ? "No sent messages yet"
+        ? "No sent messages yet."
         : tabId === "opened"
-          ? "No opened messages yet"
-          : "No messages yet";
+          ? "No opened messages yet."
+          : "No messages yet.";
 
   return (
     <ManagerPortalPageShell
@@ -396,9 +447,6 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
               Empty trash
             </Button>
           ) : null}
-          <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refreshInbox}>
-            Refresh
-          </Button>
         </>
       }
       filterRow={
@@ -406,7 +454,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           activeTone="primary"
           tabs={tabs}
           activeId={tabId}
-          onChange={(id) => router.push(`/resident/inbox/${id}`)}
+          onChange={(id) => navigate(`/resident/inbox/${id}`)}
         />
       }
     >
@@ -420,20 +468,18 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       />
 
       {rowsForTab.length === 0 ? (
-        <PortalInboxEmptyState
-          title={emptyCopy}
-          hint={
-            tabId === "unopened" ? (
-              <p className="max-w-md">Notices from your property team and maintenance will appear here.</p>
-            ) : undefined
-          }
-        />
+        <PortalInboxEmptyState title={emptyCopy} />
       ) : (
         <PortalInboxMessageTable
           rows={toRows(rowsForTab, tabId)}
           primaryPartyHeader={tabId === "sent" ? "To" : "From"}
           onMarkRead={tabId === "unopened" ? markRead : undefined}
           getDetailBody={(row) => bodyById[row.id]}
+          getThreadMessages={(row) => {
+            const thread = local.find((t) => t.id === row.id);
+            return thread ? inboxThreadMessages(thread) : [];
+          }}
+          onReply={tabId === "trash" ? undefined : handleReply}
           expandedId={expandedId}
           onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
           renderExtraActions={renderExtraActions}

@@ -4,6 +4,7 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -215,6 +216,9 @@ export async function POST(req: Request) {
       }
       for (const row of rows) {
         await persistNormalizedRow(db, row.id, row);
+        if (row.bucket === "pending" && row.application?.consentCredit) {
+          void tryAutoOrderScreening(db, row);
+        }
       }
       return NextResponse.json({ ok: true });
     }
@@ -259,6 +263,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     await persistNormalizedRow(db, row.id, row);
+    if (row.bucket === "pending" && row.application?.consentCredit) {
+      void tryAutoOrderScreening(db, row);
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save application.";

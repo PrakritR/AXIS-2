@@ -1,6 +1,6 @@
 /** Shared types for `/api/pro/account-links` (server + client). */
 
-import type { CoManagerPermissions } from "@/lib/co-manager-permissions";
+import type { CoManagerPermissions, PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
 
 /** @deprecated Owner tab removed — only manager co-manager links are supported. */
 export type AccountLinkTabKind = "manager";
@@ -19,9 +19,14 @@ export type AccountLinkInviteDto = {
   /** For the signed-in user: the other workspace’s Axis ID and label. */
   linkedAxisId: string;
   linkedDisplayName: string | null;
+  /** The other workspace's auth user id (for ownership transfer, etc.). */
+  linkedUserId: string;
   assignedPropertyIds: string[];
   payoutPercentForManager: number;
+  /** Merged flat permissions across all assigned properties (nav gating). */
   coManagerPermissions: CoManagerPermissions;
+  /** Per-property permission grants. */
+  propertyCoManagerPermissions: PropertyCoManagerPermissions;
   createdAt: string;
   respondedAt: string | null;
 };

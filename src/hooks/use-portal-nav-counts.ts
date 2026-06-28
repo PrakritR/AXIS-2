@@ -19,14 +19,13 @@ import {
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
-  syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import {
   countUnopenedPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   RESIDENT_INBOX_STORAGE_KEY,
-  syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
+import { prefetchPortalData } from "@/lib/portal-data-store";
 import type { PortalKind } from "@/lib/portal-types";
 
 /** Pending / unread counts for sidebar nav badges (0 = hide badge). */
@@ -42,12 +41,9 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
         syncLeasePipelineFromServer(null),
       ]).then(() => bump());
     } else if (kind === "manager" || kind === "pro") {
-      void Promise.allSettled([
-        syncManagerApplicationsFromServer(),
-        syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
-      ]).then(() => bump());
+      void prefetchPortalData(kind, userId ?? undefined).then(() => bump());
     } else if (kind === "resident") {
-      void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY).then(() => bump());
+      void prefetchPortalData(kind).then(() => bump());
     }
 
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
@@ -62,7 +58,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
-  }, [kind, bump]);
+  }, [kind, bump, userId]);
 
   return useMemo(() => {
     void tick;

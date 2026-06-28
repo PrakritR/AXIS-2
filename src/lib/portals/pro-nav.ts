@@ -1,10 +1,10 @@
-import { portalDashboardPath } from "@/components/auth/portal-switcher";
+import { portalDashboardPath } from "@/lib/auth/portal-roles";
 import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
-import { FREE_SUBSCRIPTION_SECTIONS, normalizeManagerSkuTier, paidWorkspacePortalTitle } from "@/lib/manager-access";
-import { getManagerPurchaseSku } from "@/lib/manager-access-server";
+import { isManagerFreePlan, paidWorkspacePortalTitle } from "@/lib/manager-access";
+import { getManagerPurchaseSku, getManagerSubscriptionTier } from "@/lib/manager-access-server";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { proPortal } from "./pro";
@@ -31,16 +31,9 @@ export const getProPortalRenderContext = cache(async () => {
   if (!effectiveUserId) redirect("/admin/dashboard");
 
   const purchase = await getManagerPurchaseSku(effectiveUserId);
+  const subscriptionTier = await getManagerSubscriptionTier(effectiveUserId);
   const portalTitle = paidWorkspacePortalTitle(purchase.tier, purchase.stripeSubscriptionId);
-  const missingTier = purchase.tier == null || String(purchase.tier).trim() === "";
-  const stripeManaged = Boolean(purchase.stripeSubscriptionId);
-  const isFree = normalizeManagerSkuTier(purchase.tier) === "free" || (missingTier && !stripeManaged);
-  const subscriptionTier: "free" | "paid" | null =
-    purchase.tier == null || String(purchase.tier).trim() === ""
-      ? null
-      : String(purchase.tier).toLowerCase() === "free"
-        ? "free"
-        : "paid";
+  const isFree = isManagerFreePlan(subscriptionTier);
 
   return {
     ctx,
@@ -53,13 +46,14 @@ export const getProPortalRenderContext = cache(async () => {
   };
 });
 
-export async function buildProPortalDefinition(): Promise<{
+export const buildProPortalDefinition = cache(async (): Promise<{
   definition: PortalDefinition;
   showPlanBanner: boolean;
   showPreviewBanner: boolean;
   previewLabel: string | null;
-}> {
-  const { ctx, preview, portalTitle, isFree } = await getProPortalRenderContext();
+  subscriptionTier: "free" | "paid" | null;
+}> => {
+  const { ctx, preview, portalTitle, isFree, subscriptionTier } = await getProPortalRenderContext();
 
   const showPreviewBanner = hasAdminRole(ctx) && !!preview?.targetUserId;
 
@@ -74,14 +68,11 @@ export async function buildProPortalDefinition(): Promise<{
     previewLabel = p?.full_name?.trim() || p?.email || preview.targetUserId;
   }
 
-  const sections = isFree
-    ? proPortal.sections.filter((s) => FREE_SUBSCRIPTION_SECTIONS.has(s.section))
-    : proPortal.sections;
-
   return {
-    definition: { ...proPortal, sections, title: portalTitle },
+    definition: { ...proPortal, sections: proPortal.sections, title: portalTitle },
     showPlanBanner: isFree,
     showPreviewBanner,
     previewLabel,
+    subscriptionTier,
   };
-}
+});

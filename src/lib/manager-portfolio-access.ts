@@ -7,24 +7,45 @@ import type { MockProperty } from "@/data/types";
 import {
   PROPERTY_PIPELINE_EVENT,
   readAllExtraListings,
+  readAllPendingManagerProperties,
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
+  syncPropertyPipelineFromServer,
+  buildMockPropertyFromDraft,
 } from "@/lib/demo-property-pipeline";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
-import { readProRelationships } from "@/lib/pro-relationships";
-import { hasCoManagerPermission } from "@/lib/co-manager-permissions";
+import { readProRelationships, syncProRelationshipsFromServer } from "@/lib/pro-relationships";
+import { hasCoManagerPermission, hasCoManagerPermissionForProperty } from "@/lib/co-manager-permissions";
+
+/** Property ids explicitly assigned via accepted co-manager account links. */
+export function collectLinkedPropertyIds(userId: string): Set<string> {
+  const s = new Set<string>();
+  for (const rel of readProRelationships(userId)) {
+    for (const id of rel.assignedPropertyIds) {
+      if (id.trim()) s.add(id.trim());
+    }
+  }
+  return s;
+}
 
 /** Property ids from this user's listings plus pending rows and account-link assignments. */
 export function collectAccessiblePropertyIds(userId: string): Set<string> {
   const s = new Set<string>();
   for (const p of readExtraListingsForUser(userId)) s.add(p.id);
   for (const r of readPendingManagerPropertiesForUser(userId)) s.add(r.id);
-  for (const rel of readProRelationships(userId)) {
-    for (const id of rel.assignedPropertyIds) {
-      if (id.trim()) s.add(id);
-    }
-  }
+  for (const id of collectLinkedPropertyIds(userId)) s.add(id);
   return s;
+}
+
+/** Refresh co-manager relationships and property pipeline (includes linked owner listings). */
+export async function syncManagerPortfolioFromServer(userId: string, opts?: { force?: boolean }): Promise<void> {
+  if (!userId.trim()) return;
+  try {
+    await syncProRelationshipsFromServer(userId, { force: opts?.force === true });
+    await syncPropertyPipelineFromServer({ force: opts?.force === true });
+  } catch {
+    /* offline or dev server recompiling */
+  }
 }
 
 /** Whether an application row should appear for this portal user. */
@@ -94,17 +115,36 @@ export function readLinkedListingsForUser(userId: string): { listing: MockProper
   const allListings = readAllExtraListings();
   const seen = new Set<string>();
   const result: { listing: MockProperty; canEdit: boolean; ownerUserId: string }[] = [];
+
+  const resolveListing = (pid: string): { listing: MockProperty; ownerUserId: string } | null => {
+    const fromExtras = allListings.find((l) => l.id === pid);
+    if (fromExtras) {
+      const ownerUserId = fromExtras.managerUserId?.trim() ?? "";
+      return ownerUserId ? { listing: fromExtras, ownerUserId } : null;
+    }
+    const pending = readAllPendingManagerProperties().find((p) => p.id === pid);
+    if (pending) {
+      const ownerUserId = pending.submittedByUserId?.trim() ?? "";
+      if (!ownerUserId) return null;
+      return { listing: buildMockPropertyFromDraft(pending, pid), ownerUserId };
+    }
+    return null;
+  };
+
   for (const rel of readProRelationships(userId)) {
     for (const pid of rel.assignedPropertyIds) {
       if (seen.has(pid)) continue;
-      const listing = allListings.find((l) => l.id === pid);
-      if (!listing) continue;
-      const ownerUserId = listing.managerUserId?.trim() ?? "";
-      if (!ownerUserId || ownerUserId === userId) continue;
+      const resolved = resolveListing(pid);
+      if (!resolved) continue;
+      const { listing, ownerUserId } = resolved;
+      if (ownerUserId === userId) continue;
       seen.add(pid);
       result.push({
         listing,
-        canEdit: hasCoManagerPermission(rel.coManagerPermissions, "editListings") || rel.canEditListing === true,
+        canEdit:
+          hasCoManagerPermissionForProperty(rel.propertyCoManagerPermissions, pid, "editListings") ||
+          hasCoManagerPermission(rel.coManagerPermissions, "editListings") ||
+          rel.canEditListing === true,
         ownerUserId,
       });
     }

@@ -52,7 +52,7 @@ export function ManagerCosignerReadonlyReview({
   return (
     <div className="space-y-3">
       {primaryApplicationAxisId.trim() ? (
-        <div className="rounded-xl border border-sky-200/90 bg-sky-50/80 px-4 py-3">
+        <div className="rounded-xl border px-4 py-3 portal-banner-info">
           <Link
             href={buildPortalApplicationOpenHref(primaryApplicationAxisId)}
             className="text-sm font-semibold text-sky-900 underline-offset-4 hover:underline"

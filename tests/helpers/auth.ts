@@ -51,3 +51,50 @@ export function mockStripeCheckoutRoutes(page: Page) {
     await route.continue();
   });
 }
+
+export function mockStripeAllRoutes(page: Page) {
+  return page.route("**/api/stripe/**", async (route) => {
+    const url = route.request().url();
+    if (url.includes("application-fee-checkout") || url.includes("household-charge-checkout")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ clientSecret: "cs_test_mock_secret", sessionId: "cs_test_mock_session", platformFeeCents: 0 }),
+      });
+      return;
+    }
+    if (url.includes("application-fee-verify") || url.includes("household-charge-verify")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ paid: true, processing: false }),
+      });
+      return;
+    }
+    if (url.includes("/api/stripe/checkout")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ clientSecret: "cs_test_mock", sessionId: "cs_test_mock_session" }),
+      });
+      return;
+    }
+    if (url.includes("checkout-portal") || url.includes("billing-portal")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ url: "https://checkout.stripe.test/mock" }),
+      });
+      return;
+    }
+    if (url.includes("confirm-checkout-session")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+}

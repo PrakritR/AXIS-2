@@ -23,6 +23,14 @@ export function PortalNavIcon({ section }: { section: string }) {
           <rect x="3" y="16" width="7" height="5" rx="1" />
         </svg>
       );
+    case "onboard":
+      return (
+        <svg className={cls} aria-hidden {...svgProps}>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M19 8v6M22 11h-6" />
+        </svg>
+      );
     case "properties":
       return (
         <svg className={cls} aria-hidden {...svgProps}>
@@ -74,6 +82,23 @@ export function PortalNavIcon({ section }: { section: string }) {
           <rect x="2" y="5" width="20" height="14" rx="2" />
           <path d="M2 10h20" />
           <path d="M6 15h2" />
+        </svg>
+      );
+    case "documents":
+      return (
+        <svg className={cls} aria-hidden {...svgProps}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" />
+          <path d="M14 2v6h6" />
+          <path d="M8 13h8M8 17h5" />
+        </svg>
+      );
+    case "financials":
+      return (
+        <svg className={cls} aria-hidden {...svgProps}>
+          <path d="M4 20V10" />
+          <path d="M10 20V4" />
+          <path d="M16 20v-8" />
+          <path d="M3 20h18" />
         </svg>
       );
     case "services":

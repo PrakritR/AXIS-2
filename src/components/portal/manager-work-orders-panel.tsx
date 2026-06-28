@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
@@ -15,33 +16,44 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import {
   findPendingWorkOrderCharge,
+  findWorkOrderCharge,
   HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
   HOUSEHOLD_CHARGES_EVENT,
   parseMoneyAmount,
   recordWorkOrderResidentCharge,
 } from "@/lib/household-charges";
 import { deleteManagerWorkOrderRow, updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
+import {
+  MANAGER_VENDORS_EVENT,
+  readActiveManagerVendorRows,
+  syncManagerVendorsFromServer,
+} from "@/lib/manager-vendors-storage";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-documents/spec";
+import type { WorkOrderCategory } from "@/lib/reports/categories";
+import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
-  if (x === "high") return "bg-rose-50 text-rose-800 ring-1 ring-rose-200/80";
-  if (x === "medium") return "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+  if (x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  if (x === "medium") return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
-type BillDraft = { cost: string; email: string; name: string };
+type BillDraft = { cost: string; email: string; name: string; paymentStatus: "pending" | "paid" };
 
 function defaultBillDraft(row: DemoManagerWorkOrderRow): BillDraft {
   const cost = row.cost !== "—" && row.cost.trim() ? row.cost : "";
-  return { cost, email: row.residentEmail ?? "", name: row.residentName ?? "" };
+  return { cost, email: row.residentEmail ?? "", name: row.residentName ?? "", paymentStatus: "pending" };
 }
 
 function pad2(n: number) {
@@ -67,6 +79,14 @@ function formatScheduledLabel(iso: string): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+/** Restrict photo links to http(s) or inline image data URLs (CodeQL xss-through-dom). */
+function safePhotoHref(src: string): string | null {
+  const trimmed = src.trim();
+  if (trimmed.startsWith("data:image/")) return trimmed;
+  if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) return trimmed;
+  return null;
+}
+
 export function ManagerWorkOrdersPanel({
   allRows,
   bucket,
@@ -83,6 +103,28 @@ export function ManagerWorkOrdersPanel({
   const [billDraftById, setBillDraftById] = useState<Record<string, BillDraft>>({});
   const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [hcTick, setHcTick] = useState(0);
+  const [vendorTick, setVendorTick] = useState(0);
+  const [completeRow, setCompleteRow] = useState<DemoManagerWorkOrderRow | null>(null);
+  const [completeBusy, setCompleteBusy] = useState(false);
+  const [completeDraft, setCompleteDraft] = useState({
+    category: "general" as WorkOrderCategory,
+    vendorCost: "",
+    materialsCost: "",
+    materialsMemo: "",
+    workDoneSummary: "",
+  });
+
+  useEffect(() => {
+    void syncManagerVendorsFromServer();
+    const onVendors = () => setVendorTick((n) => n + 1);
+    window.addEventListener(MANAGER_VENDORS_EVENT, onVendors);
+    return () => window.removeEventListener(MANAGER_VENDORS_EVENT, onVendors);
+  }, []);
+
+  const activeVendors = useMemo(() => {
+    void vendorTick;
+    return readActiveManagerVendorRows();
+  }, [vendorTick]);
 
   const rows = useMemo(() => allRows.filter((r) => r.bucket === bucket), [allRows, bucket]);
 
@@ -113,7 +155,7 @@ export function ManagerWorkOrdersPanel({
     if (!authReady) return;
     for (const row of allRows) {
       if (row.bucket !== "scheduled") continue;
-      if (findPendingWorkOrderCharge(row.id)) continue;
+      if (findWorkOrderCharge(row.id)) continue;
       const draft = billDraftById[row.id] ?? defaultBillDraft(row);
       const amountInput = draft.cost.trim() ? draft.cost : row.cost;
       const amt = parseMoneyAmount(amountInput);
@@ -122,12 +164,14 @@ export function ManagerWorkOrdersPanel({
       const created = recordWorkOrderResidentCharge({
         managerUserId: effectiveManagerId,
         workOrderId: row.id,
+        propertyId: row.propertyId || row.assignedPropertyId,
         propertyLabel: row.propertyName,
         unit: row.unit,
         workOrderTitle: row.title,
         amountInput,
         residentEmail: draft.email.trim() || (row.residentEmail ?? ""),
         residentName: draft.name.trim() || row.residentName || "",
+        initialStatus: draft.paymentStatus,
       });
       if (created) {
         setHcTick((n) => n + 1);
@@ -140,11 +184,11 @@ export function ManagerWorkOrdersPanel({
     return () => window.clearTimeout(t);
   }, [tryAutoChargeScheduled, hcTick]);
 
-  const pendingByWoId = useMemo(() => {
+  const chargeByWoId = useMemo(() => {
     void hcTick;
-    const m = new Map<string, ReturnType<typeof findPendingWorkOrderCharge>>();
+    const m = new Map<string, ReturnType<typeof findWorkOrderCharge>>();
     for (const r of rows) {
-      const c = findPendingWorkOrderCharge(r.id);
+      const c = findWorkOrderCharge(r.id);
       if (c) m.set(r.id, c);
     }
     return m;
@@ -179,18 +223,22 @@ export function ManagerWorkOrdersPanel({
       created = recordWorkOrderResidentCharge({
         managerUserId: effectiveManagerId,
         workOrderId: row.id,
+        propertyId: row.propertyId || row.assignedPropertyId,
         propertyLabel: row.propertyName,
         unit: row.unit,
         workOrderTitle: row.title,
         amountInput: draft.cost,
         residentEmail: draft.email,
         residentName: draft.name,
+        initialStatus: draft.paymentStatus,
       });
     }
     if (created) setHcTick((n) => n + 1);
     showToast(
       created
-        ? "Work order scheduled and pending payment created."
+        ? created.status === "paid"
+          ? "Work order scheduled and payment recorded as paid."
+          : "Work order scheduled and pending payment created."
         : "Work order scheduled. Add cost and resident email in Details to bill the resident.",
     );
     setExpandedId(null);
@@ -212,21 +260,105 @@ export function ManagerWorkOrdersPanel({
     showToast("Visit time updated.");
   };
 
-  const markComplete = (row: DemoManagerWorkOrderRow) => {
+  const openCompleteModal = (row: DemoManagerWorkOrderRow) => {
     if (row.bucket !== "scheduled") return;
-    updateManagerWorkOrder(row.id, (r) => ({
-      ...r,
-      bucket: "completed",
-      status: "Completed",
-    }));
-    showToast("Marked complete.");
-    setExpandedId(null);
+    setCompleteRow(row);
+    setCompleteDraft({
+      category: row.category ?? parseWorkOrderCategoryFromDescription(row.description),
+      vendorCost: row.vendorCostCents ? String(row.vendorCostCents / 100) : "",
+      materialsCost: row.materialsCostCents ? String(row.materialsCostCents / 100) : "",
+      materialsMemo: row.materialsMemo ?? "",
+      workDoneSummary: row.workDoneSummary ?? row.title,
+    });
+  };
+
+  const submitComplete = async () => {
+    if (!completeRow) return;
+    setCompleteBusy(true);
+    try {
+      const vendorCostCents = completeDraft.vendorCost.trim()
+        ? Math.round(Number.parseFloat(completeDraft.vendorCost.replace(/[^0-9.]/g, "")) * 100)
+        : 0;
+      const materialsCostCents = completeDraft.materialsCost.trim()
+        ? Math.round(Number.parseFloat(completeDraft.materialsCost.replace(/[^0-9.]/g, "")) * 100)
+        : 0;
+      const res = await fetch("/api/portal/work-orders/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          workOrder: completeRow,
+          category: completeDraft.category,
+          vendorCostCents: vendorCostCents > 0 ? vendorCostCents : undefined,
+          materialsCostCents: materialsCostCents > 0 ? materialsCostCents : undefined,
+          materialsMemo: completeDraft.materialsMemo,
+          workDoneSummary: completeDraft.workDoneSummary,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not complete work order.");
+      updateManagerWorkOrder(completeRow.id, () => data.workOrder as DemoManagerWorkOrderRow);
+      void syncManagerWorkOrdersFromServer();
+      showToast(
+        data.expenseEntryIds?.length
+          ? "Work order completed and expenses logged."
+          : "Work order marked complete.",
+      );
+      setCompleteRow(null);
+      setExpandedId(null);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not complete work order.");
+    } finally {
+      setCompleteBusy(false);
+    }
+  };
+
+  const markComplete = (row: DemoManagerWorkOrderRow) => {
+    openCompleteModal(row);
+  };
+
+  const createBillingCharge = (row: DemoManagerWorkOrderRow) => {
+    const existing = findWorkOrderCharge(row.id);
+    if (existing) {
+      showToast("A payment line already exists for this work order.");
+      return;
+    }
+    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+    const amt = parseMoneyAmount(draft.cost);
+    const email = draft.email.trim().toLowerCase();
+    if (!draft.cost.trim() || !Number.isFinite(amt) || amt <= 0) {
+      showToast("Enter a valid cost first.");
+      return;
+    }
+    if (!email.includes("@")) {
+      showToast("Enter the resident email.");
+      return;
+    }
+    const created = recordWorkOrderResidentCharge({
+      managerUserId: effectiveManagerId,
+      workOrderId: row.id,
+      propertyId: row.propertyId || row.assignedPropertyId,
+      propertyLabel: row.propertyName,
+      unit: row.unit,
+      workOrderTitle: row.title,
+      amountInput: draft.cost,
+      residentEmail: draft.email,
+      residentName: draft.name,
+      initialStatus: draft.paymentStatus,
+    });
+    if (!created) {
+      showToast("Could not create payment line.");
+      return;
+    }
+    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}`, residentEmail: draft.email.trim(), residentName: draft.name.trim() || r.residentName }));
+    setHcTick((n) => n + 1);
+    showToast(created.status === "paid" ? "Payment recorded as paid." : "Pending payment line created.");
   };
 
   /** Persist cost without changing bucket. */
-  const saveLoggedCost = (row: DemoManagerWorkOrderRow, pendingCharge: ReturnType<typeof findPendingWorkOrderCharge>) => {
-    if (pendingCharge) {
-      showToast("Cost is locked while a pending payment exists.");
+  const saveLoggedCost = (row: DemoManagerWorkOrderRow, linkedCharge: ReturnType<typeof findWorkOrderCharge>) => {
+    if (linkedCharge) {
+      showToast("Cost is locked while a payment line exists.");
       return;
     }
     const draft = billDraftById[row.id] ?? defaultBillDraft(row);
@@ -255,10 +387,36 @@ export function ManagerWorkOrdersPanel({
     } else showToast("Could not delete work order.");
   };
 
+  const assignVendor = (row: DemoManagerWorkOrderRow, vendorId: string) => {
+    if (!vendorId) {
+      updateManagerWorkOrder(row.id, (r) => ({
+        ...r,
+        vendorId: undefined,
+        vendorName: undefined,
+        vendorAssignedAt: undefined,
+      }));
+      showToast("Vendor unassigned.");
+      return;
+    }
+    const vendor = activeVendors.find((v) => v.id === vendorId);
+    if (!vendor) {
+      showToast("Vendor not found.");
+      return;
+    }
+    updateManagerWorkOrder(row.id, (r) => ({
+      ...r,
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      vendorAssignedAt: new Date().toISOString(),
+    }));
+    showToast(`Assigned ${vendor.name}.`);
+  };
+
   if (rows.length === 0) {
     return (
       <PortalDataTableEmpty
-        message={allRows.length === 0 ? "No work orders yet." : "No work orders in this bucket."}
+        icon="work-order"
+        message={allRows.length === 0 ? "No work orders yet." : "No work orders in this bucket yet."}
       />
     );
   }
@@ -281,13 +439,19 @@ export function ManagerWorkOrdersPanel({
           <tbody>
             {rows.map((row) => {
               const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-              const pendingCharge = pendingByWoId.get(row.id);
+              const linkedCharge = chargeByWoId.get(row.id);
               const visitAt = visitAtById[row.id] ?? "";
               const isExpanded = expandedId === row.id;
 
               return (
                 <Fragment key={row.id}>
-                  <tr className={PORTAL_TABLE_TR}>
+                  <tr
+                    className={PORTAL_TABLE_TR_EXPANDABLE}
+                    onClick={createPortalRowExpandClick(() =>
+                      isExpanded ? setExpandedId(null) : openExpand(row),
+                    )}
+                    aria-expanded={isExpanded}
+                  >
                     <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                       {row.title}
                       <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
@@ -311,14 +475,27 @@ export function ManagerWorkOrdersPanel({
                         <span className="text-muted text-xs">—</span>
                       )}
                     </td>
-                    <td className={PORTAL_TABLE_TD}>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</td>
+                    <td className={PORTAL_TABLE_TD}>
+                      <div className="flex flex-col gap-1">
+                        <span>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
+                        {linkedCharge?.status === "paid" ? (
+                          <span className="inline-flex w-fit rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                            Paid
+                          </span>
+                        ) : linkedCharge?.status === "pending" ? (
+                          <span className="inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                            Pending
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className={`${PORTAL_TABLE_TD} text-right`}>
                       <div className="flex justify-end gap-1.5 flex-wrap">
                         {row.bucket === "open" ? (
                           <Button
                             type="button"
                             variant="outline"
-                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100`}
+                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
                             onClick={() => openExpand(row)}
                           >
                             Schedule
@@ -328,7 +505,7 @@ export function ManagerWorkOrdersPanel({
                           <Button
                             type="button"
                             variant="outline"
-                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100`}
+                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
                             onClick={() => markComplete(row)}
                           >
                             Complete
@@ -337,15 +514,7 @@ export function ManagerWorkOrdersPanel({
                         <Button
                           type="button"
                           variant="outline"
-                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                          onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
-                        >
-                          {isExpanded ? "Hide" : "Details"}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                          className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                           onClick={() => onDeleteWorkOrder(row)}
                         >
                           Delete
@@ -365,16 +534,19 @@ export function ManagerWorkOrdersPanel({
                           <div className="mt-4">
                             <p className="text-xs font-medium uppercase tracking-wide text-muted">Photos</p>
                             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              {row.photoDataUrls.map((src, index) => (
+                              {row.photoDataUrls.map((src, index) => {
+                                const href = safePhotoHref(src);
+                                if (!href) return null;
+                                return (
                                 <a
                                   key={`${row.id}-photo-${index}`}
-                                  href={src}
+                                  href={href}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="block overflow-hidden rounded-xl border border-border bg-accent/30"
                                 >
                                   <Image
-                                    src={src}
+                                    src={href}
                                     alt={`Work order photo ${index + 1}`}
                                     width={240}
                                     height={180}
@@ -382,7 +554,8 @@ export function ManagerWorkOrdersPanel({
                                     unoptimized
                                   />
                                 </a>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         ) : null}
@@ -433,19 +606,61 @@ export function ManagerWorkOrdersPanel({
                           </div>
                         ) : null}
 
-                        {/* Billing section */}
+                        {/* Vendor assignment */}
                         {row.bucket !== "completed" ? (
+                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
+                            <p className="text-xs font-semibold text-foreground">Assigned vendor</p>
+                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
+                              Pick from your vendor directory. Add vendors under Services → Vendors.
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-end gap-2">
+                              <Select
+                                className="h-9 min-w-[200px] rounded-md text-sm"
+                                value={row.vendorId ?? ""}
+                                onChange={(e) => assignVendor(row, e.target.value)}
+                              >
+                                <option value="">No vendor assigned</option>
+                                {activeVendors.map((v) => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.name}{v.trade ? ` · ${v.trade}` : ""}
+                                  </option>
+                                ))}
+                              </Select>
+                              {row.vendorId ? (
+                                <>
+                                  {activeVendors.find((v) => v.id === row.vendorId)?.phone ? (
+                                    <a
+                                      href={`tel:${activeVendors.find((v) => v.id === row.vendorId)!.phone}`}
+                                      className="text-xs font-medium text-primary hover:underline"
+                                    >
+                                      Call vendor
+                                    </a>
+                                  ) : null}
+                                  {activeVendors.find((v) => v.id === row.vendorId)?.email ? (
+                                    <a
+                                      href={`mailto:${activeVendors.find((v) => v.id === row.vendorId)!.email}`}
+                                      className="text-xs font-medium text-primary hover:underline"
+                                    >
+                                      Email vendor
+                                    </a>
+                                  ) : null}
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : row.vendorName ? (
+                          <p className="mt-4 text-xs text-muted">
+                            Vendor: <span className="font-medium text-foreground">{row.vendorName}</span>
+                          </p>
+                        ) : null}
+
+                        {/* Billing section */}
+                        {!linkedCharge ? (
                           <div className="mt-4 rounded-lg border border-border bg-card p-3">
                             <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
                             <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              Enter a pass-through cost and resident email to create a pending payment line. Leave blank if there is no charge.
+                              Bill the resident for pass-through costs. Choose paid if they already paid you (e.g. lockout fee).
                             </p>
-                            {pendingCharge ? (
-                              <p className="mt-2 rounded-md bg-emerald-50/90 px-2.5 py-1.5 text-[11px] text-emerald-900 ring-1 ring-emerald-200/70">
-                                Pending: <span className="font-semibold">{pendingCharge.balanceLabel}</span> ·{" "}
-                                <span className="font-medium">{pendingCharge.residentEmail}</span>. Mark paid in Payments before changing the amount.
-                              </p>
-                            ) : null}
                             <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
                               <div>
                                 <p className="mb-1 text-[11px] font-medium text-muted">Cost</p>
@@ -461,10 +676,28 @@ export function ManagerWorkOrdersPanel({
                                     }))
                                   }
                                   className="h-8 rounded-md text-sm"
-                                  disabled={!!pendingCharge}
                                 />
                               </div>
-                              <div className="sm:col-span-2">
+                              <div>
+                                <p className="mb-1 text-[11px] font-medium text-muted">Payment status</p>
+                                <Select
+                                  className="h-8 rounded-md text-sm"
+                                  value={draft.paymentStatus}
+                                  onChange={(e) =>
+                                    setBillDraftById((prev) => ({
+                                      ...prev,
+                                      [row.id]: {
+                                        ...(prev[row.id] ?? defaultBillDraft(row)),
+                                        paymentStatus: e.target.value as "pending" | "paid",
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="pending">Pending</option>
+                                  <option value="paid">Paid</option>
+                                </Select>
+                              </div>
+                              <div className="sm:col-span-1">
                                 <p className="mb-1 text-[11px] font-medium text-muted">Resident email</p>
                                 <Input
                                   type="email"
@@ -478,7 +711,6 @@ export function ManagerWorkOrdersPanel({
                                     }))
                                   }
                                   className="h-8 rounded-md text-sm"
-                                  disabled={!!pendingCharge}
                                 />
                               </div>
                               <div className="sm:col-span-3">
@@ -495,29 +727,36 @@ export function ManagerWorkOrdersPanel({
                                     }))
                                   }
                                   className="h-8 rounded-md text-sm"
-                                  disabled={!!pendingCharge}
                                 />
                               </div>
                             </div>
                           </div>
-                        ) : null}
-
-                        {row.bucket === "completed" ? (
-                          <p className="mt-3 text-xs text-muted">
-                            This work order is completed.{row.scheduled && row.scheduled !== "—" ? ` Visit was on ${row.scheduled}.` : ""} Billing history is in Payments.
+                        ) : (
+                          <p className="mt-4 text-xs text-muted">
+                            Payment: {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel} · {linkedCharge.residentEmail}
                           </p>
-                        ) : null}
+                        )}
 
                         <PortalTableDetailActions>
-                          {row.bucket !== "completed" && !pendingCharge ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => saveLoggedCost(row, pendingCharge)}
-                            >
-                              Save cost
-                            </Button>
+                          {!linkedCharge ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => saveLoggedCost(row, linkedCharge)}
+                              >
+                                Save cost
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="primary"
+                                className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                                onClick={() => createBillingCharge(row)}
+                              >
+                                Create payment line
+                              </Button>
+                            </>
                           ) : null}
                           {row.bucket === "scheduled" ? (
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markComplete(row)}>
@@ -527,7 +766,7 @@ export function ManagerWorkOrdersPanel({
                           <Button
                             type="button"
                             variant="outline"
-                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                             onClick={() => onDeleteWorkOrder(row)}
                           >
                             Delete work order
@@ -542,6 +781,72 @@ export function ManagerWorkOrdersPanel({
           </tbody>
         </table>
       </div>
+
+      <Modal open={Boolean(completeRow)} onClose={() => setCompleteRow(null)} title="Complete work order">
+        {completeRow ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              {completeRow.propertyName} · {completeRow.title}
+            </p>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Category
+              <select
+                className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+                value={completeDraft.category}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, category: e.target.value as WorkOrderCategory })}
+                disabled={completeBusy}
+              >
+                <option value="cleaning">Cleaning</option>
+                <option value="plumbing">Plumbing</option>
+                <option value="mold">Mold remediation</option>
+                <option value="electrical">Electrical</option>
+                <option value="hvac">HVAC</option>
+                <option value="general">General maintenance</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Vendor / labor cost (USD)
+              <Input
+                value={completeDraft.vendorCost}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, vendorCost: e.target.value })}
+                disabled={completeBusy}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Materials / equipment cost (USD)
+              <Input
+                value={completeDraft.materialsCost}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, materialsCost: e.target.value })}
+                disabled={completeBusy}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Materials notes
+              <Input
+                value={completeDraft.materialsMemo}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, materialsMemo: e.target.value })}
+                disabled={completeBusy}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Work done summary
+              <Input
+                value={completeDraft.workDoneSummary}
+                onChange={(e) => setCompleteDraft({ ...completeDraft, workDoneSummary: e.target.value })}
+                disabled={completeBusy}
+              />
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
+                Complete &amp; log expenses
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

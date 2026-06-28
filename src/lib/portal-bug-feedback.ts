@@ -20,6 +20,7 @@ export type PortalBugFeedbackRow = {
   severity?: BugSeverity;
   status: BugFeedbackStatus;
   adminNotes?: string;
+  attachmentUrls?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -43,33 +44,51 @@ function writeLocal(rows: PortalBugFeedbackRow[]) {
 
 async function persistRow(row: PortalBugFeedbackRow) {
   if (!isBrowser()) return;
-  await fetch("/api/portal-bug-feedback", {
+  const res = await fetch("/api/portal-bug-feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ action: "upsert", row }),
   });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Could not save feedback.");
+  }
 }
 
 export function readBugFeedbackRows(): PortalBugFeedbackRow[] {
   return cachedRows;
 }
 
-export async function syncBugFeedbackFromServer(opts?: { force?: boolean }): Promise<PortalBugFeedbackRow[]> {
-  if (!isBrowser()) return [];
-  if (syncedFromServer && !opts?.force) return cachedRows;
+export type BugFeedbackSyncResult = {
+  rows: PortalBugFeedbackRow[];
+  error?: string;
+  schemaMissing?: boolean;
+};
+
+export async function syncBugFeedbackFromServer(opts?: {
+  force?: boolean;
+}): Promise<BugFeedbackSyncResult> {
+  if (!isBrowser()) return { rows: [] };
+  if (syncedFromServer && !opts?.force) return { rows: cachedRows };
   try {
     const res = await fetch("/api/portal-bug-feedback", { credentials: "include" });
-    const data = (await res.json().catch(() => ({}))) as { rows?: unknown[] };
-    if (!res.ok) return cachedRows;
+    const data = (await res.json().catch(() => ({}))) as { rows?: unknown[]; error?: string };
+    if (!res.ok) {
+      const error = data.error ?? "Could not load feedback.";
+      const schemaMissing =
+        error.toLowerCase().includes("portal_bug_feedback_records") &&
+        error.toLowerCase().includes("schema cache");
+      return { rows: cachedRows, error, schemaMissing };
+    }
     const rows = (Array.isArray(data.rows) ? data.rows : [])
       .map(normalizeBugFeedbackRow)
       .filter((r): r is PortalBugFeedbackRow => Boolean(r));
     cachedRows = rows;
     syncedFromServer = true;
-    return rows;
+    return { rows };
   } catch {
-    return cachedRows;
+    return { rows: cachedRows, error: "Could not load feedback." };
   }
 }
 
@@ -84,6 +103,7 @@ export async function submitBugFeedbackReport(input: {
   description: string;
   stepsToReproduce?: string;
   severity?: BugSeverity;
+  attachmentUrls?: string[];
 }): Promise<PortalBugFeedbackRow> {
   const now = new Date().toISOString();
   const row: PortalBugFeedbackRow = {
@@ -93,17 +113,18 @@ export async function submitBugFeedbackReport(input: {
     reporterName: input.reporterName.trim(),
     reporterEmail: input.reporterEmail.trim().toLowerCase(),
     reporterRole: input.reporterRole,
-    pageUrl: (input.pageUrl ?? (isBrowser() ? window.location.href : "")).trim(),
+    pageUrl: (input.pageUrl ?? "").trim(),
     title: input.title.trim(),
     description: input.description.trim(),
     stepsToReproduce: input.type === "bug" ? input.stepsToReproduce?.trim() : undefined,
     severity: input.type === "bug" ? input.severity ?? "medium" : undefined,
+    attachmentUrls: input.attachmentUrls?.length ? input.attachmentUrls : undefined,
     status: "open",
     createdAt: now,
     updatedAt: now,
   };
-  writeLocal([row, ...cachedRows.filter((r) => r.id !== row.id)]);
   await persistRow(row);
+  writeLocal([row, ...cachedRows.filter((r) => r.id !== row.id)]);
   return row;
 }
 
@@ -122,4 +143,25 @@ export async function updateBugFeedbackRow(
   rows[idx] = next;
   writeLocal(rows);
   await persistRow(next);
+}
+
+export async function deleteBugFeedbackRow(id: string, opts?: { admin?: boolean }): Promise<void> {
+  if (!isBrowser()) return;
+  const trimmedId = id.trim();
+  if (!trimmedId) throw new Error("Missing feedback id.");
+  const endpoint = opts?.admin ? "/api/admin/portal-bug-feedback" : "/api/portal-bug-feedback";
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "delete", id: trimmedId }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string; deleted?: number };
+  if (!res.ok) {
+    throw new Error(body.error ?? "Could not delete feedback.");
+  }
+  if (typeof body.deleted === "number" && body.deleted < 1) {
+    throw new Error("Could not delete feedback.");
+  }
+  writeLocal(cachedRows.filter((r) => r.id !== trimmedId));
 }

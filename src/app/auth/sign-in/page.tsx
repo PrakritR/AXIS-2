@@ -1,6 +1,8 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +10,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 const LOGIN_TIMEOUT_MS = 6000;
 
@@ -78,6 +80,8 @@ function SignInForm() {
   const { showToast } = useAppUi();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
+  const authError = searchParams.get("error");
+  const oauthMessage = searchParams.get("message");
 
   const [email, setEmail] = useState(readRememberedLoginEmail);
   const [password, setPassword] = useState("");
@@ -85,6 +89,18 @@ function SignInForm() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      if (authError === "oauth" && oauthMessage) {
+        setErrorText(oauthMessage);
+        return;
+      }
+      if (authError === "auth" || authError === "oauth") {
+        setErrorText("Google sign-in could not be completed. Try again or use email and password.");
+      }
+    });
+  }, [authError, oauthMessage]);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {
@@ -164,7 +180,21 @@ function SignInForm() {
     <AuthCard>
       <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Portal sign-in</h1>
 
-      <div className="mt-8 space-y-4">
+      <div className="mt-8">
+        <GoogleSignInButton
+          nextPath={nextPath}
+          viaContinue={!usesDirectOAuthReturn(nextPath)}
+          disabled={busy}
+        />
+      </div>
+
+      <div className="my-6 flex items-center gap-3">
+        <div className="h-px flex-1 bg-border" aria-hidden />
+        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or</span>
+        <div className="h-px flex-1 bg-border" aria-hidden />
+      </div>
+
+      <div className="space-y-4">
         <div>
           <label className="text-xs font-semibold text-muted" htmlFor="email">
             Email

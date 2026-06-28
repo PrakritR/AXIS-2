@@ -13,7 +13,7 @@ export async function ResidentMoveInPanel({ residentEmail }: ResidentMoveInPanel
     <ManagerPortalPageShell title="Move-in">
       <div className="space-y-6 text-sm leading-relaxed text-muted">
         {!email ? (
-          <p className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-amber-950">
+          <p className="rounded-2xl border px-4 py-3 portal-banner-pending">
             Sign in to see move-in information for your placement.
           </p>
         ) : !resolved ? (

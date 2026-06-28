@@ -15,13 +15,14 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import type { ManagerLeaseBucket } from "@/data/demo-portal";
+import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
@@ -31,6 +32,8 @@ import {
   downloadLeaseFromRow,
   generateLeaseHtmlForRow,
   getLeaseDocumentHtml,
+  leaseAllowsManagerDocumentEdits,
+  leaseGenerationSupportedForRow,
   managerSignLease,
   managerUploadLeasePdf,
   printLeaseAsPdf,
@@ -38,6 +41,7 @@ import {
   sendLeaseToAdminReview,
   sendLeaseToResident,
   hasBothLeaseSignatures,
+  leaseRowMatchesManagerTab,
   residentHasSignedLease,
   syncLeasePipelineFromServer,
   type LeasePipelineRow,
@@ -56,7 +60,7 @@ function ThreadView({ row }: { row: LeasePipelineRow }) {
             key={m.id}
             className={`rounded-lg px-2.5 py-1.5 text-xs shadow-sm ring-1 ${
               m.role === "admin"
-                ? "bg-sky-50/90 ring-sky-200/90"
+                ? "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
                 : "bg-card ring-slate-100"
             }`}
           >
@@ -72,14 +76,14 @@ function ThreadView({ row }: { row: LeasePipelineRow }) {
 
 export function ManagerLeasesPipelinePanel({
   rows,
-  bucket,
+  tab,
   refreshKey,
   managerUserId,
   residentAccountEmails,
   onEmailAccountSetup,
 }: {
   rows: LeasePipelineRow[];
-  bucket: ManagerLeaseBucket;
+  tab: ManagerLeaseTab;
   refreshKey: number;
   managerUserId?: string | null;
   residentAccountEmails: Set<string>;
@@ -108,6 +112,7 @@ export function ManagerLeasesPipelinePanel({
     body: string;
   } | null>(null);
   const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
+  const [regenerateConfirmRow, setRegenerateConfirmRow] = useState<LeasePipelineRow | null>(null);
 
   const handleAmendLeaseSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(managerUserId, { force: true });
@@ -235,22 +240,33 @@ export function ManagerLeasesPipelinePanel({
     });
   }
 
+  const generationGate = (row: LeasePipelineRow) => leaseGenerationSupportedForRow(row);
+  const generationGateTitle = (row: LeasePipelineRow) => {
+    const gate = generationGate(row);
+    return gate.ok ? undefined : gate.error;
+  };
   void refreshKey;
-  const bucketRows = useMemo(() => rows.filter((r) => r.bucket === bucket), [rows, bucket]);
+  const bucketRows = useMemo(() => rows.filter((r) => leaseRowMatchesManagerTab(r, tab)), [rows, tab]);
 
-  const onGeneratePdf = (row: LeasePipelineRow) => {
+  const runGenerateLease = (row: LeasePipelineRow) => {
     if (generatingRowId) return;
     setGeneratingRowId(row.id);
     window.setTimeout(() => {
       try {
         const res = generateLeaseHtmlForRow(row.id, managerUserId);
         if (res.ok) {
-          showToast(`Lease generated from application data (v${res.version}).`);
+          showToast(`Lease generated (v${res.version}).`);
         } else showToast(res.error ?? "Could not generate.");
       } finally {
         setGeneratingRowId(null);
+        setRegenerateConfirmRow(null);
       }
     }, 0);
+  };
+
+  const onGeneratePdf = (row: LeasePipelineRow) => {
+    if (generatingRowId || !generationGate(row).ok || !leaseAllowsManagerDocumentEdits(row)) return;
+    setRegenerateConfirmRow(row);
   };
 
   const onDownload = (row: LeasePipelineRow) => {
@@ -289,14 +305,14 @@ export function ManagerLeasesPipelinePanel({
   const confirmSendLeaseToResident = async (skipMessage: boolean) => {
     if (!leaseSentPreview || sendingToResidentRowId) return;
     const { row } = leaseSentPreview;
-    setLeaseSentPreview(null);
     setSendingToResidentRowId(row.id);
     try {
       const result = await sendLeaseToResident(row.id, managerUserId);
       if (!result.ok) {
-        showToast(result.error);
+        showToast(result.error ?? "Could not send lease.");
         return;
       }
+      setLeaseSentPreview(null);
       appendLeaseThreadMessage(row.id, "manager", "Sent lease to resident for review and signature.", managerUserId);
       if (skipMessage) {
         showToast("Lease sent to resident portal (no notification sent).");
@@ -312,7 +328,6 @@ export function ManagerLeasesPipelinePanel({
           showToast("Lease sent to resident portal. Notification could not be delivered.");
         }
       }
-      setExpandedId(null);
     } finally {
       setSendingToResidentRowId(null);
     }
@@ -325,8 +340,7 @@ export function ManagerLeasesPipelinePanel({
   const onDeleteLease = (row: LeasePipelineRow) => {
     if (!window.confirm(`Delete lease for ${row.residentName} (${row.unit})? This cannot be undone.`)) return;
     if (deleteLeasePipelineRow(row.id, managerUserId)) {
-      showToast("Lease removed from pipeline.");
-      setExpandedId(null);
+      showToast("Lease deleted.");
     } else showToast("Could not delete lease.");
   };
 
@@ -359,10 +373,6 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onManagerSign = (row: LeasePipelineRow) => {
-    if (row.managerUploadedPdf?.dataUrl) {
-      showToast("Uploaded PDF leases should be signed offline and re-uploaded, not electronically signed here.");
-      return;
-    }
     if (!residentHasSignedLease(row)) {
       showToast("The resident must sign first before the manager can countersign.");
       return;
@@ -370,9 +380,10 @@ export function ManagerLeasesPipelinePanel({
     setSigningRow(row);
   };
 
-  const handleManagerModalSign = (signatureName: string) => {
+  const handleManagerModalSign = async (signatureName: string) => {
     if (!signingRow) return false;
-    if (managerSignLease(signingRow.id, signatureName.trim(), managerUserId)) {
+    const ok = await managerSignLease(signingRow.id, signatureName.trim(), managerUserId);
+    if (ok) {
       showToast(
         hasBothLeaseSignatures({
           ...signingRow,
@@ -405,9 +416,8 @@ export function ManagerLeasesPipelinePanel({
   if (bucketRows.length === 0) {
     return (
       <PortalDataTableEmpty
-        message={
-          rows.length === 0 ? "No lease drafts yet." : "No leases in this stage."
-        }
+        icon="lease"
+        message={rows.length === 0 ? "No lease drafts yet." : "No leases in this stage yet."}
       />
     );
   }
@@ -424,6 +434,17 @@ export function ManagerLeasesPipelinePanel({
           onClose={() => setSigningRow(null)}
         />
       ) : null}
+      <LeaseRegenerateConfirmModal
+        open={regenerateConfirmRow !== null}
+        busy={Boolean(regenerateConfirmRow && generatingRowId === regenerateConfirmRow.id)}
+        onClose={() => {
+          if (generatingRowId) return;
+          setRegenerateConfirmRow(null);
+        }}
+        onConfirm={() => {
+          if (regenerateConfirmRow) runGenerateLease(regenerateConfirmRow);
+        }}
+      />
       <PortalNotificationPreviewModal
         open={leaseSentPreview !== null}
         title="Send lease to resident — preview"
@@ -434,7 +455,7 @@ export function ManagerLeasesPipelinePanel({
         footerNote="The lease will be released to the resident portal after you confirm. This message is delivered to Axis inbox and email."
         confirmLabel="Send lease & notification"
         confirmLabelWithoutMessage="Send lease only"
-        confirmBusy={Boolean(leaseSentPreview?.row && sendingToResidentRowId === leaseSentPreview.row.id)}
+        confirmBusy={Boolean(leaseSentPreview && sendingToResidentRowId === leaseSentPreview.row.id)}
         confirmBusyLabel="Sending…"
         onConfirm={(skipMessage) => void confirmSendLeaseToResident(skipMessage)}
       />
@@ -479,37 +500,34 @@ export function ManagerLeasesPipelinePanel({
               <th className={`${MANAGER_TABLE_TH} text-left`}>Unit / home</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Stage</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
-              <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {bucketRows.map((row) => (
               <Fragment key={row.id}>
                 {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
-                <tr className={PORTAL_TABLE_TR}>
+                <tr
+                  className={PORTAL_TABLE_TR_EXPANDABLE}
+                  onClick={createPortalRowExpandClick(() =>
+                    setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                  )}
+                  aria-expanded={expandedId === row.id}
+                >
                   <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.residentName}</td>
                   <td className={PORTAL_TABLE_TD}>{row.unit}</td>
                   <td className={PORTAL_TABLE_TD}>{row.status ?? row.stageLabel}</td>
                   <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
-                  <td className={`${PORTAL_TABLE_TD} text-right`}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                    >
-                      {expandedId === row.id ? "Hide" : "Details"}
-                    </Button>
-                  </td>
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                      <p className="text-sm leading-relaxed text-muted">{row.notes}</p>
+                    <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                      {row.notes?.trim() ? (
+                        <p className="text-sm leading-relaxed text-muted">{row.notes}</p>
+                      ) : null}
                       <p className="mt-1.5 text-xs text-muted">Version v{row.versionNumber ?? row.pdfVersion}</p>
                       <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted">{row.status ?? row.stageLabel}</p>
                       {row.managerSignature || row.residentSignature ? (
-                        <div className="mt-2 grid gap-2 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3 py-2.5 text-xs text-emerald-900 sm:grid-cols-2">
+                        <div className="mt-2 grid gap-2 rounded-xl border px-3 py-2.5 text-xs portal-banner-success sm:grid-cols-2">
                           <div>
                             <span className="font-semibold">Manager signature</span>
                             {row.managerSignature ? (
@@ -545,7 +563,7 @@ export function ManagerLeasesPipelinePanel({
                         </div>
                       ) : null}
 
-                      {bucket === "manager" ? (
+                      {tab === "manager" ? (
                         <div className="mt-3 space-y-3">
                           <Textarea
                             rows={2}
@@ -577,11 +595,13 @@ export function ManagerLeasesPipelinePanel({
                               type="button"
                               variant="outline"
                               className={PORTAL_DETAIL_BTN}
-                              disabled={generatingRowId === row.id}
+                              disabled={generatingRowId === row.id || !generationGate(row).ok || !leaseAllowsManagerDocumentEdits(row)}
+                              title={generationGateTitle(row)}
                               onClick={() => onGeneratePdf(row)}
                             >
                               {generatingRowId === row.id ? "Generating..." : "Regenerate lease"}
                             </Button>
+                            {leaseAllowsManagerDocumentEdits(row) ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -594,13 +614,14 @@ export function ManagerLeasesPipelinePanel({
                             >
                               Upload corrected lease
                             </Button>
+                            ) : null}
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onMoveToManagerReview(row)}>
                               Send back to manager
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                               onClick={() => onDeleteLease(row)}
                             >
                               Delete lease
@@ -612,7 +633,8 @@ export function ManagerLeasesPipelinePanel({
                               type="button"
                               variant="outline"
                               className={PORTAL_DETAIL_BTN}
-                              disabled={generatingRowId === row.id}
+                              disabled={generatingRowId === row.id || !generationGate(row).ok || !leaseAllowsManagerDocumentEdits(row)}
+                              title={generationGateTitle(row)}
                               onClick={() => onGeneratePdf(row)}
                             >
                               {generatingRowId === row.id ? "Generating..." : "Regenerate lease"}
@@ -635,17 +657,18 @@ export function ManagerLeasesPipelinePanel({
                                 Renew or extend lease
                               </Button>
                             ) : null}
-                            {!row.managerSignature && residentHasSignedLease(row) && !row.managerUploadedPdf?.dataUrl ? (
+                            {!row.managerSignature && residentHasSignedLease(row) ? (
                               <Button
                                 type="button"
                                 variant="outline"
                                 className={PORTAL_DETAIL_BTN}
                                 onClick={() => onManagerSign(row)}
-                                disabled={!row.generatedHtml}
+                                disabled={!row.generatedHtml && !row.managerUploadedPdf?.dataUrl}
                               >
                                 Sign as manager
                               </Button>
                             ) : null}
+                            {leaseAllowsManagerDocumentEdits(row) ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -658,6 +681,7 @@ export function ManagerLeasesPipelinePanel({
                             >
                               Upload replacement
                             </Button>
+                            ) : null}
 
                             {row.status === "Manager Review" || row.status === "Draft" ? (
                               <>
@@ -701,13 +725,13 @@ export function ManagerLeasesPipelinePanel({
                                 </Button>
                               </>
                             ) : null}
-                            {row.status === "Manager Signature Pending" && !row.managerUploadedPdf?.dataUrl ? (
+                            {row.status === "Manager Signature Pending" ? (
                               <Button
                                 type="button"
                                 variant="outline"
                                 className={PORTAL_DETAIL_BTN}
                                 onClick={() => onManagerSign(row)}
-                                disabled={!residentHasSignedLease(row) || !getLeaseDocumentHtml(row)}
+                                disabled={!residentHasSignedLease(row) || (!getLeaseDocumentHtml(row) && !row.managerUploadedPdf?.dataUrl)}
                               >
                                 Manager sign lease
                               </Button>
@@ -737,7 +761,7 @@ export function ManagerLeasesPipelinePanel({
                             <Button
                               type="button"
                               variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                               onClick={() => onDeleteLease(row)}
                             >
                               Delete lease

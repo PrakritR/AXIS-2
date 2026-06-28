@@ -65,6 +65,42 @@ export function appendCosignerSubmission(sub: CosignerSubmission) {
   persist();
 }
 
+export async function submitCosignerToServerAwait(
+  sub: CosignerSubmission,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch("/api/public/cosigner-submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sub),
+    });
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (!res.ok) return { ok: false, error: body?.error ?? "Could not save co-signer form." };
+    appendCosignerSubmission(sub);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not save co-signer form." };
+  }
+}
+
+export async function fetchCosignerSubmissionsForSignerAppId(
+  signerAppId: string,
+): Promise<CosignerSubmission[]> {
+  const id = normalizeApplicationAxisId(signerAppId).toUpperCase();
+  if (!id) return [];
+  try {
+    const res = await fetch(`/api/cosigner-submissions?signerAppId=${encodeURIComponent(id)}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!res.ok) return readCosignerSubmissionsForSignerAppId(signerAppId);
+    const body = (await res.json()) as { rows?: CosignerSubmission[] };
+    return Array.isArray(body.rows) ? body.rows : [];
+  } catch {
+    return readCosignerSubmissionsForSignerAppId(signerAppId);
+  }
+}
+
 export function readCosignerSubmissionsForSignerAppId(signerAppId: string): CosignerSubmission[] {
   hydrate();
   const id = normalizeApplicationAxisId(signerAppId).toUpperCase();

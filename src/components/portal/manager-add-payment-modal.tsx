@@ -334,7 +334,7 @@ export function ManagerAddPaymentModal({
         open={open && noticePreview === null}
         title="Add payment"
         onClose={handleClose}
-        panelClassName="relative z-[71] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border bg-card p-4 shadow-2xl sm:my-4 sm:p-6"
+        panelClassName="modal-panel relative z-[71] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border p-4 shadow-2xl sm:my-4 sm:p-6"
       >
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
@@ -437,7 +437,7 @@ export function ManagerAddPaymentModal({
         confirmBusy={noticeBusy}
         confirmBusyLabel="Adding…"
         cancelLabel="Back"
-        panelClassName="relative z-[72] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border bg-card p-4 shadow-2xl sm:my-4 sm:p-6"
+        panelClassName="modal-panel relative z-[72] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border p-4 shadow-2xl sm:my-4 sm:p-6"
         onConfirm={(skipMessage) => void confirmPayment(skipMessage)}
       />
     </>

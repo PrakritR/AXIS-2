@@ -1,38 +1,71 @@
 "use client";
 
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
-import { ManagerSectionShell, PortalPropertyFilter, type ShellAction } from "@/components/portal/manager-section-shell";
-import { PORTAL_KPI_LABEL, PORTAL_KPI_VALUE } from "@/components/portal/portal-metrics";
+import { PortalPropertyFilter } from "@/components/portal/manager-section-shell";
+import {
+  MANAGER_TABLE_TH,
+  ManagerPortalPageShell,
+  PortalKpiTabStrip,
+  PORTAL_KPI_LABEL,
+  PORTAL_KPI_VALUE,
+} from "@/components/portal/portal-metrics";
+import {
+  PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_TD,
+  PORTAL_TABLE_TR,
+} from "@/components/portal/portal-data-table";
+import { PortalListSectionShell, PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DataTable } from "@/components/ui/table";
-import { EmptyState, Toolbar } from "@/components/ui/empty-state";
+import { Toolbar } from "@/components/ui/empty-state";
 import type { WorkspaceAction, WorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/input";
 import { TabNav, type TabItem } from "@/components/ui/tabs";
+import type { ReactNode } from "react";
+import { useState } from "react";
 
-function toShellActions(
+function toHeaderActions(
   actions: WorkspaceAction[],
   openModal: (p: { title: string; body: string }) => void,
   showToast: (m: string) => void,
-): ShellAction[] {
+): ReactNode {
+  if (!actions.length) return null;
+
   let primaryPlaced = false;
-  return actions.map((a) => {
-    const label = a.label.trim();
-    const isRefresh = /^refresh/i.test(label);
-    const variant: "primary" | "outline" = isRefresh || primaryPlaced ? "outline" : "primary";
-    if (!isRefresh && variant === "primary") primaryPlaced = true;
-    return {
-      label,
-      variant,
-      onClick: () =>
-        a.kind === "modal" ? openModal({ title: label, body: a.message }) : showToast(a.message),
-    };
-  });
+  return (
+    <>
+      {actions.map((a) => {
+        const label = a.label.trim();
+        const isRefresh = /^refresh/i.test(label);
+        const isPrimary = !isRefresh && !primaryPlaced;
+        if (isPrimary) primaryPlaced = true;
+
+        const onClick = () =>
+          a.kind === "modal" ? openModal({ title: label, body: a.message }) : showToast(a.message);
+
+        if (isPrimary) {
+          return (
+            <PortalSectionPrimaryButton key={a.label} onClick={onClick}>
+              {label}
+            </PortalSectionPrimaryButton>
+          );
+        }
+
+        return (
+          <Button key={a.label} type="button" variant="outline" onClick={onClick}>
+            {label}
+          </Button>
+        );
+      })}
+    </>
+  );
 }
 
 export function PortalWorkspaceClient({
@@ -52,15 +85,13 @@ export function PortalWorkspaceClient({
 }) {
   const { showToast, openModal } = useAppUi();
   const isCompactPortalShell =
-    portalKind === "admin" || portalKind === "resident" || portalKind === "manager";
-  const useSectionShell =
-    portalKind === "admin" || portalKind === "resident" || portalKind === "manager";
+    portalKind === "admin" || portalKind === "resident" || portalKind === "manager" || portalKind === "pro";
+  const useSectionShell = isCompactPortalShell;
   const showToolbar = model.showToolbar !== false;
   const showQuickLinks = model.showQuickLinks !== false;
 
   const hasTable = Boolean(model.columns && model.rows?.length);
-
-  const shellActions = toShellActions(model.actions, openModal, showToast);
+  const [activeKpi, setActiveKpi] = useState(0);
 
   const legacyKpiGrid =
     !useSectionShell && model.kpis?.length ? (
@@ -84,6 +115,42 @@ export function PortalWorkspaceClient({
         ))}
       </div>
     ) : null;
+
+  const tableContent = hasTable ? (
+    <div className={PORTAL_DATA_TABLE_WRAP}>
+      <div className={PORTAL_DATA_TABLE_SCROLL}>
+        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <thead>
+            <tr className={PORTAL_TABLE_HEAD_ROW}>
+              {model.columns!.map((c) => (
+                <th key={c.key} className={MANAGER_TABLE_TH}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {model.rows!.map((row, idx) => (
+              <tr key={idx} className={PORTAL_TABLE_TR}>
+                {model.columns!.map((c) => (
+                  <td key={c.key} className={PORTAL_TABLE_TD}>
+                    {row[c.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ) : model.emptyState ? (
+    <PortalDataTableEmpty
+      message={model.emptyState.title}
+      icon="data"
+    />
+  ) : (
+    <PortalDataTableEmpty message="Nothing to show yet" icon="default" />
+  );
 
   const workspaceBody = (
     <>
@@ -117,7 +184,7 @@ export function PortalWorkspaceClient({
       ) : null}
 
       {!isCompactPortalShell && model.notes ? (
-        <div className="rounded-[24px] border border-amber-200/80 bg-amber-50/80 px-5 py-4 text-sm text-amber-950">{model.notes}</div>
+        <div className="rounded-[24px] border px-5 py-4 text-sm portal-banner-pending">{model.notes}</div>
       ) : null}
 
       {!isCompactPortalShell ? (
@@ -137,31 +204,7 @@ export function PortalWorkspaceClient({
         </div>
       ) : null}
 
-      {hasTable ? (
-        <DataTable columns={model.columns!} rows={model.rows!} />
-      ) : model.emptyState ? (
-        <EmptyState
-          variant={isCompactPortalShell ? "panel" : "default"}
-          title={model.emptyState.title}
-          description={model.emptyState.description ?? ""}
-          actionLabel={model.emptyState.actionLabel}
-          onAction={
-            model.emptyState.actionLabel
-              ? () => showToast("Action recorded.")
-              : undefined
-          }
-        />
-      ) : (
-        <EmptyState
-          variant={isCompactPortalShell ? "panel" : "default"}
-          title="Nothing to show yet"
-          description={
-            isCompactPortalShell ? "" : "This tab is wired for navigation. Add your query + UI states when backend work begins."
-          }
-          actionLabel={isCompactPortalShell ? undefined : "Show sample toast"}
-          onAction={isCompactPortalShell ? undefined : () => showToast("Action recorded.")}
-        />
-      )}
+      {tableContent}
 
       {showQuickLinks ? (
         <Card className="p-5">
@@ -187,12 +230,12 @@ export function PortalWorkspaceClient({
   );
 
   const hideInboxPropertyFilter =
-    (portalKind === "admin" || portalKind === "manager") && model.title === "Inbox";
+    (portalKind === "admin" || portalKind === "manager" || portalKind === "pro") && model.title === "Inbox";
 
   const headerFilters =
     portalKind === "admin" && !hideInboxPropertyFilter ? (
       <PortalPropertyFilter residents={model.title === "Payments"} applications={model.title === "Work orders"} />
-    ) : portalKind === "manager" && !hideInboxPropertyFilter ? (
+    ) : (portalKind === "manager" || portalKind === "pro") && !hideInboxPropertyFilter ? (
       <PortalPropertyFilter residents={model.title === "Payments"} applications={model.title === "Applications"} />
     ) : portalKind === "resident" ? (
       <PortalPropertyFilter residents={model.title === "Payments"} />
@@ -206,14 +249,19 @@ export function PortalWorkspaceClient({
       })) ?? undefined;
 
     return (
-      <ManagerSectionShell
+      <PortalListSectionShell
         title={model.title}
-        filters={headerFilters ?? undefined}
-        actions={shellActions}
-        kpis={kpisForShell}
+        subtitle={model.subtitle.trim() || undefined}
+        primaryAction={toHeaderActions(model.actions, openModal, showToast)}
+        filterRow={headerFilters ?? undefined}
       >
-        <div className="space-y-5">{workspaceBody}</div>
-      </ManagerSectionShell>
+        <div className="space-y-5">
+          {kpisForShell?.length ? (
+            <PortalKpiTabStrip items={kpisForShell} activeIndex={activeKpi} onSelect={setActiveKpi} textAlign="center" />
+          ) : null}
+          {workspaceBody}
+        </div>
+      </PortalListSectionShell>
     );
   }
 

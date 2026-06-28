@@ -7,18 +7,13 @@ import {
   maxPropertiesForManagerTier,
   monthlyUsdForManagerTier,
   PRO_MAX_PROPERTIES,
-  type ManagerSkuTier,
 } from "@/lib/manager-access";
-import {
-  getManagerPurchaseSku,
-  setManagerPurchaseTier,
-  upgradeManagerAccountToBusiness,
-} from "@/lib/manager-access-server";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { getStripe } from "@/lib/stripe";
 import { stripeSubscriptionPeriodEndSec } from "@/lib/stripe-subscription-helpers";
 import { META_SCHEDULED_BILLING, META_SCHEDULED_TIER } from "@/lib/stripe-subscription-metadata";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
+import { syncManagerPurchaseTierState } from "@/lib/manager-tier-sync";
 
 export const runtime = "nodejs";
 
@@ -40,10 +35,6 @@ function subscriptionJson(tier: string | null, billing: string | null) {
   };
 }
 
-function isManagerSkuTier(s: string): s is ManagerSkuTier {
-  return s === "free" || s === "pro" || s === "business";
-}
-
 export async function GET() {
   try {
     const supabase = await createSupabaseServerClient();
@@ -55,7 +46,7 @@ export async function GET() {
     }
 
     try {
-      await reconcileManagerPurchaseWithStripe(user.id);
+      await syncManagerPurchaseTierState(user.id);
     } catch {
       /* Stripe not configured or transient error — serve last known DB state */
     }
@@ -116,37 +107,11 @@ export async function POST(req: Request) {
       | { action?: string; tier?: string }
       | null;
 
-    if (body?.action === "set_tier" && typeof body.tier === "string") {
-      const tierRaw = body.tier.toLowerCase().trim();
-      if (!isManagerSkuTier(tierRaw)) {
-        return NextResponse.json({ error: "Invalid tier. Use free, pro, or business." }, { status: 400 });
-      }
-      const result = await setManagerPurchaseTier(user.id, tierRaw);
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error }, { status: 400 });
-      }
-      const { tier, billing, stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
-      return NextResponse.json({
-        ok: true,
-        ...subscriptionJson(tier, billing),
-        stripeManaged: Boolean(stripeSubscriptionId),
-      });
-    }
-
-    if (body?.action === "upgrade_business") {
-      const result = await upgradeManagerAccountToBusiness(user.id);
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error }, { status: 400 });
-      }
-
-      const { tier, billing, stripeSubscriptionId } = await getManagerPurchaseSku(user.id);
-      const alreadyBusiness = result.ok && "alreadyBusiness" in result && result.alreadyBusiness === true;
-      return NextResponse.json({
-        ok: true,
-        alreadyBusiness,
-        ...subscriptionJson(tier, billing),
-        stripeManaged: Boolean(stripeSubscriptionId),
-      });
+    if (body?.action === "set_tier" || body?.action === "upgrade_business") {
+      return NextResponse.json(
+        { error: "Plan changes must go through checkout, billing settings, or an admin assignment." },
+        { status: 403 },
+      );
     }
 
     return NextResponse.json({ error: "Unsupported action." }, { status: 400 });

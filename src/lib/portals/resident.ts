@@ -2,6 +2,7 @@ import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
+import { cache } from "react";
 
 const residentPortalLimited: PortalDefinition = {
   kind: "resident",
@@ -22,6 +23,19 @@ const residentPortalLimited: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    {
+      section: "documents",
+      label: "Documents",
+      tabs: [{ id: "receipts", label: "Rent receipts" }],
+    },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [
+        { id: "summary", label: "Summary" },
+        { id: "statements", label: "Rent statements" },
+      ],
+    },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
@@ -35,7 +49,6 @@ const residentPortalApproved: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "payments", label: "Payments", tabs: [] },
-    { section: "lease", label: "Lease", tabs: [] },
     { section: "move-in", label: "Move-in", tabs: [] },
     {
       section: "services",
@@ -55,12 +68,28 @@ const residentPortalApproved: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    {
+      section: "documents",
+      label: "Documents",
+      tabs: [
+        { id: "lease", label: "Lease" },
+        { id: "receipts", label: "Rent receipts" },
+      ],
+    },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [
+        { id: "summary", label: "Summary" },
+        { id: "statements", label: "Rent statements" },
+      ],
+    },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };
 
-export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
+export const getResidentPortalDefinition = cache(async (): Promise<PortalDefinition> => {
   const { profile, user } = await getEffectiveSessionForPortal("resident");
   const managerSubscriptionTier = profile?.manager_id?.trim()
     ? await getManagerSubscriptionTierByManagerId(profile.manager_id.trim())
@@ -73,4 +102,4 @@ export async function getResidentPortalDefinition(): Promise<PortalDefinition> {
   });
   if (access.leaseAccessUnlocked) return residentPortalApproved;
   return residentPortalLimited;
-}
+});

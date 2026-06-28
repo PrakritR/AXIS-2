@@ -148,7 +148,7 @@ export function LeaseAmendMoveOutModal({
     : "—";
 
   return (
-    <Modal open={open} title={title} onClose={onClose} panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-2xl sm:p-6">
+    <Modal open={open} title={title} onClose={onClose} panelClassName="modal-panel relative w-full max-w-md overflow-hidden rounded-2xl border border-border p-5 shadow-2xl sm:p-6">
       <div className="mb-5 flex items-center gap-3 rounded-xl bg-accent/30 px-4 py-3 text-sm">
         <span className="text-muted">Current move-out date</span>
         <span className="ml-auto font-semibold text-foreground">{currentEndFormatted}</span>
@@ -168,7 +168,7 @@ export function LeaseAmendMoveOutModal({
       {selectedDate && selectedDate !== currentEnd ? (
         <div className="mb-5 space-y-2">
           {direction === "decrease" ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
               Moving out earlier may result in an early termination fee. Confirm any charges with your property manager.
             </div>
           ) : null}
@@ -176,7 +176,7 @@ export function LeaseAmendMoveOutModal({
             <p className="text-sm text-muted">Checking room availability…</p>
           ) : null}
           {direction === "extend" && availability.status === "available" ? (
-            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-success">
               Room is available through the new date.
             </p>
           ) : null}

@@ -163,9 +163,3 @@ export function resetManagerWorkOrderRows(): void {
   if (canUseStorage()) window.sessionStorage.removeItem(MANAGER_WORK_ORDERS_SESSION_KEY);
   emit();
 }
-
-export function subscribeManagerWorkOrders(cb: () => void) {
-  if (typeof window === "undefined") return () => {};
-  window.addEventListener(MANAGER_WORK_ORDERS_EVENT, cb);
-  return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, cb);
-}

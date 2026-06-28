@@ -5,6 +5,7 @@ import {
   filterBugFeedbackByTab,
   groupBugFeedbackForAdmin,
   isManagerSideReporterRole,
+  isPortalBugFeedbackSchemaError,
   normalizeBugFeedbackRow,
   roleGroupLabelForFeedback,
 } from "@/lib/portal-bug-feedback-utils";
@@ -36,9 +37,50 @@ describe("portal bug feedback utils", () => {
     expect(feedback?.severity).toBeUndefined();
   });
 
+  it("normalizes DB column aliases and report_type", () => {
+    const row = normalizeBugFeedbackRow({
+      id: "bf-3",
+      report_type: "feedback",
+      reporter_user_id: "user-1",
+      reporter_name: "Sam",
+      reporter_email: "Sam@Example.com",
+      reporter_role: "resident",
+      title: "Great app",
+      description: "Works well",
+      created_at: "2026-02-01T12:00:00.000Z",
+      updated_at: "2026-02-02T12:00:00.000Z",
+    });
+    expect(row?.type).toBe("feedback");
+    expect(row?.reporterUserId).toBe("user-1");
+    expect(row?.reporterName).toBe("Sam");
+    expect(row?.reporterEmail).toBe("sam@example.com");
+    expect(row?.reporterRole).toBe("resident");
+    expect(row?.createdAt).toBe("2026-02-01T12:00:00.000Z");
+  });
+
+  it("normalizes attachment urls", () => {
+    const row = normalizeBugFeedbackRow({
+      id: "bf-4",
+      type: "bug",
+      attachmentUrls: ["https://example.com/a.png"],
+      title: "Screenshot bug",
+      description: "See image",
+    });
+    expect(row?.attachmentUrls).toEqual(["https://example.com/a.png"]);
+  });
+
   it("rejects malformed rows", () => {
     expect(normalizeBugFeedbackRow(null)).toBeNull();
     expect(normalizeBugFeedbackRow({ type: "bug" })).toBeNull();
+  });
+
+  it("detects missing feedback table errors", () => {
+    expect(
+      isPortalBugFeedbackSchemaError(
+        "Could not find the 'portal_bug_feedback_records' table in the schema cache",
+      ),
+    ).toBe(true);
+    expect(isPortalBugFeedbackSchemaError("Unauthorized")).toBe(false);
   });
 
   it("builds a new report with trimmed fields", () => {
@@ -110,7 +152,7 @@ describe("portal bug feedback utils", () => {
         id: "r1",
       }),
     ];
-    const grouped = groupBugFeedbackForAdmin(rows, "bugs");
+    const grouped = groupBugFeedbackForAdmin(rows);
     expect(grouped.managerRows).toHaveLength(1);
     expect(grouped.residentRows).toHaveLength(1);
     expect(isManagerSideReporterRole("pro")).toBe(true);

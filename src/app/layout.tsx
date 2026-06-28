@@ -1,5 +1,6 @@
 import { AppUiProvider } from "@/components/providers/app-ui-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { AuthOAuthErrorHandler } from "@/components/auth/auth-oauth-error-handler";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s · Axis",
   },
   description:
-    "Axis — find rooms for rent, apply online, and manage your lease in one place.",
+    "Axis — AI-powered property management for applications, screening, leases, and rent collection.",
 };
 
 export default function RootLayout({
@@ -36,7 +37,10 @@ export default function RootLayout({
       </head>
       <body className="min-h-full overflow-x-clip bg-background text-foreground">
         <ThemeProvider defaultTheme="dark">
-          <AppUiProvider>{children}</AppUiProvider>
+          <AppUiProvider>
+            <AuthOAuthErrorHandler />
+            {children}
+          </AppUiProvider>
         </ThemeProvider>
       </body>
     </html>

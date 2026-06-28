@@ -32,7 +32,7 @@ function normalizeRoles(rows: { role: string }[] | null | undefined, fallbackRol
   if (unique.length > 0) return unique;
   const mappedFallback = mapLegacyPortalRole(fallbackRole);
   if (mappedFallback) return [mappedFallback];
-  return ["resident"];
+  return [];
 }
 
 /**

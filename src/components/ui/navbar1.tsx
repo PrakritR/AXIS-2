@@ -44,6 +44,7 @@ export interface Navbar1Props {
     login: { text: string; url: string };
     signup: { text: string; url: string };
   };
+  portalLink?: { text: string; url: string };
   actionsSlot?: ReactNode;
 }
 
@@ -62,6 +63,7 @@ export function Navbar1({
     login: { text: "Log in", url: "#" },
     signup: { text: "Sign up", url: "#" },
   },
+  portalLink,
   actionsSlot,
 }: Navbar1Props) {
   return (
@@ -80,16 +82,28 @@ export function Navbar1({
         </div>
         <div className="flex items-center gap-2">
           {actionsSlot && <div className="hidden items-center lg:flex">{actionsSlot}</div>}
-          <Button asChild variant="outline" size="sm">
-            <Link href={auth.login.url}>{auth.login.text}</Link>
-          </Button>
-          <Button
-            asChild
-            size="sm"
-            className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
-          >
-            <Link href={auth.signup.url}>{auth.signup.text}</Link>
-          </Button>
+          {portalLink ? (
+            <Button
+              asChild
+              size="sm"
+              className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+            >
+              <Link href={portalLink.url}>{portalLink.text}</Link>
+            </Button>
+          ) : (
+            <>
+              <Button asChild variant="outline" size="sm">
+                <Link href={auth.login.url}>{auth.login.text}</Link>
+              </Button>
+              <Button
+                asChild
+                size="sm"
+                className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+              >
+                <Link href={auth.signup.url}>{auth.signup.text}</Link>
+              </Button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -115,17 +129,26 @@ export function Navbar1({
               {actionsSlot && (
                 <div className="flex justify-center border-t border-border pt-4">{actionsSlot}</div>
               )}
-              <div className="flex flex-col gap-3">
-                <Button asChild variant="outline">
-                  <Link href={auth.login.url}>{auth.login.text}</Link>
-                </Button>
+              {portalLink ? (
                 <Button
                   asChild
                   className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
                 >
-                  <Link href={auth.signup.url}>{auth.signup.text}</Link>
+                  <Link href={portalLink.url}>{portalLink.text}</Link>
                 </Button>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <Button asChild variant="outline">
+                    <Link href={auth.login.url}>{auth.login.text}</Link>
+                  </Button>
+                  <Button
+                    asChild
+                    className="text-white shadow-[0_1px_0_rgba(255,255,255,0.3)_inset,0_6px_22px_rgba(47,107,255,0.28)] hover:brightness-110 [background:linear-gradient(135deg,var(--cobalt-deep)_0%,var(--sky)_100%)]"
+                  >
+                    <Link href={auth.signup.url}>{auth.signup.text}</Link>
+                  </Button>
+                </div>
+              )}
             </div>
           </SheetContent>
         </Sheet>

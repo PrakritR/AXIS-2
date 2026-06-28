@@ -18,13 +18,93 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
    Axis runs two projects (a shared dev/test project and production) that are kept
    identical via these migrations. See [`docs/database-environments.md`](docs/database-environments.md)
    for the full two-project model and the dev → prod push workflow.
-4. **Authentication → Providers**: enable **Email** (password). For development you may disable **Confirm email** under Auth settings so sign-up can insert `profiles` immediately; in production keep confirmations on and confirm email before expecting a `profiles` row from client sign-up.
-5. **URL configuration** (Auth): add site URL `NEXT_PUBLIC_APP_URL` and redirect URL `{NEXT_PUBLIC_APP_URL}/auth/callback` if you add magic links later.
+4. **Authentication → Providers**: enable **Email** (password). Enable **Google** and add your Google OAuth client ID/secret (see below). For development you may disable **Confirm email** under Auth settings so sign-up can insert `profiles` immediately; in production keep confirmations on and confirm email before expecting a `profiles` row from client sign-up.
+5. **Authentication → URL configuration** (Auth): set site URL to your production domain (`NEXT_PUBLIC_CANONICAL_APP_URL` or `NEXT_PUBLIC_APP_URL`) and add redirect URLs:
+   - `{your-domain}/auth/callback`
+   - `{your-domain}/auth/callback/partner-pricing` (Google signup from Partner pricing)
+   - `{your-domain}/auth/callback/resident-signup` (Google signup from Create account → Resident)
+   - `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/callback/partner-pricing`, and `http://localhost:3000/auth/callback/resident-signup` for local dev (exact paths — no `?next=` query on OAuth redirect URLs)
+   - Optional: `http://localhost:3000/**` wildcard if you use older callback links with query params
+
+For shareable onboarding links and QR codes, set `NEXT_PUBLIC_CANONICAL_APP_URL` to your custom domain so links do not use the default `*.vercel.app` deployment URL.
 
 ### Profiles and manager purchases
 
 - `profiles`: one row per user (`id` = `auth.users.id`), `role`, optional `manager_id`, `application_approved` for residents.
 - `manager_purchases`: written when Stripe checkout completes; links `stripe_checkout_session_id`, `email`, `manager_id`, and later `user_id` when the manager finishes password setup.
+
+### Google sign-in
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create an OAuth 2.0 **Web application** client.
+2. Add **Authorized redirect URI**: `https://<your-supabase-project-ref>.supabase.co/auth/v1/callback`
+3. In Supabase **Authentication → Providers → Google**, paste the client ID and secret, then enable Google.
+4. In Google Cloud **Credentials → your OAuth client → Authorized redirect URIs**, add **only** the Supabase callback (copy from Supabase Google provider screen):
+
+   `https://<your-project-ref>.supabase.co/auth/v1/callback`
+
+   Do **not** put your website URL (`https://www.axis-seattle-housing.com/auth/callback`) here — that causes `redirect_uri_mismatch`.
+
+5. Ensure `{your-domain}/auth/callback` is listed under Supabase **Authentication → URL configuration → Redirect URLs** (not in Google Cloud redirect URIs).
+6. Users sign in at `/auth/sign-in` via **Continue with Google**. Existing Axis accounts match by email; new Google users without a profile are sent through `/auth/continue` (create an account first if you are not already provisioned).
+
+### Google “Continue to …” branding (show Axis, not supabase.co)
+
+Google’s account picker shows **“to continue to {domain}”** based on your OAuth client’s **redirect URI host**. With Supabase Auth, that host is `*.supabase.co`, so users may see `qahnczmilgptcedaqype.supabase.co` until you brand the consent screen.
+
+**In [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → OAuth consent screen:**
+
+1. Set **App name** to `Axis` (or `Axis Seattle Housing`).
+2. Upload your **App logo** (square, at least 120×120 px — use your Axis mark).
+3. Set **User support email** and **Developer contact** to your team address.
+4. Under **Authorized domains**, add `axis-seattle-housing.com` (and `supabase.co` if not already present).
+5. Add **Application home page**: `https://www.axis-seattle-housing.com`
+6. Add **Privacy policy** and **Terms of service** URLs on your domain (required for production / verification).
+7. Publish the consent screen to **Production** when ready (Testing mode only allows listed test users).
+
+After saving, new sign-ins should show your **Axis** name and logo (like other apps’ “Continue to Yelp” screen). The subtitle may still mention the Supabase hostname in some cases; fully replacing it requires a [Supabase custom auth domain](https://supabase.com/docs/guides/auth/auth-helpers/auth-ui#custom-domains) (paid add-on) so the redirect host is `auth.axis-seattle-housing.com`.
+
+**Checklist:**
+
+| Where | What to set |
+|-------|-------------|
+| Google OAuth consent screen | App name **Axis**, logo, home page, privacy/terms |
+| Google Credentials → OAuth client | Redirect URI = `https://<project-ref>.supabase.co/auth/v1/callback` only |
+| Supabase → Auth → URL config | Site URL = `https://www.axis-seattle-housing.com`, redirect URLs include `/auth/callback` |
+| Supabase → Auth → Google provider | Same Google client ID + secret as Cloud Console |
+
+### Production Axis (`www.axis-seattle-housing.com`)
+
+Use these exact values when configuring Google + Supabase for the live site:
+
+| Setting | Value |
+|---------|--------|
+| Supabase project URL | `https://qahnczmilgptcedaqype.supabase.co` |
+| Google **Authorized redirect URI** (Google Cloud only) | `https://qahnczmilgptcedaqype.supabase.co/auth/v1/callback` |
+| Supabase **Site URL** | `https://www.axis-seattle-housing.com` |
+| Supabase **Redirect URLs** | `https://www.axis-seattle-housing.com/auth/callback`, `https://www.axis-seattle-housing.com/auth/callback/partner-pricing`, `https://www.axis-seattle-housing.com/auth/callback/resident-signup`, `https://www.axis-seattle-housing.com/**`, `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/callback/partner-pricing`, `http://localhost:3000/auth/callback/resident-signup` |
+| App OAuth callback (this website) | `https://www.axis-seattle-housing.com/auth/callback` and `/auth/callback/partner-pricing` for Partner pricing Google signup |
+
+Verify live config: open `https://www.axis-seattle-housing.com/api/auth/oauth-providers` — it should report `googleEnabled: true` and the redirect URIs above.
+
+#### Error: `Unable to exchange external code`
+
+This means **Supabase could not trade Google's authorization code for a session** — the failure happens before your app runs (users land on the homepage with `?error=server_error`).
+
+Fix in this order:
+
+1. **Google Cloud Console → Credentials** — OAuth client must be type **Web application** (not Desktop).
+2. **Authorized redirect URIs** must include exactly `https://qahnczmilgptcedaqype.supabase.co/auth/v1/callback` — do **not** put `https://www.axis-seattle-housing.com/auth/callback` here.
+3. **Supabase → Authentication → Providers → Google** — paste the **same** Client ID and Client secret from that Google OAuth client (re-copy if the secret was ever rotated). Save and re-enable Google.
+4. **Supabase → Authentication → URL configuration** — Site URL and redirect URLs as in the table above.
+5. Retest at `/auth/sign-in` → Continue with Google. After OAuth works, paid manager signup (Pro/Business → Continue with Google) will proceed to Stripe checkout.
+
+### Tenant screening (Certn)
+
+1. Create a [Certn](https://certn.co) partner account with API access (pay-per-report).
+2. Set `CERTN_API_KEY` and `CERTN_WEBHOOK_SECRET` in `.env.local`.
+3. In Certn **Partner settings**, enable webhooks pointing to `{NEXT_PUBLIC_APP_URL}/api/webhooks/screening/certn`.
+4. Managers choose screening mode on **Applications** → **Off**, **Manual per applicant**, or **Auto on submit**.
+5. Each report bills the manager’s Stripe card on file (`SCREENING_COST_CENTS`, default $39.99) before Certn is called.
 
 ## 2. Stripe
 
@@ -84,6 +164,7 @@ Restart `npm run dev` after changes.
 
 - [ ] Apply migrations with `npm run db:push` (CLI), not the SQL Editor.
 - [ ] Set all Supabase env vars in hosting (Vercel, etc.). Production Supabase creds live in Vercel only; local `.env` points at the dev/test project. See [`docs/database-environments.md`](docs/database-environments.md).
+- [ ] Set `FINANCIALS_TIN_ENCRYPTION_KEY` (32+ character random secret) before using manager Financials 1099 / vendor W-9 tax profiles. Required server-side; without it, TIN encrypt/decrypt endpoints fail closed.
 - [ ] Create Stripe prices and webhook; set Stripe env vars.
 - [ ] Set `NEXT_PUBLIC_APP_URL` to production origin.
 - [ ] Set a strong random `AXIS_ADMIN_REGISTER_KEY` in production (admin registration is disabled if unset). Remove any legacy `NEXT_PUBLIC_AXIS_ADMIN_REGISTER_KEY` and rotate the previously exposed key.

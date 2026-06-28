@@ -3,15 +3,18 @@ import type { ManagerSkuTier } from "@/lib/manager-access";
 export type PaidTier = "pro" | "business";
 export type StripeBilling = "monthly" | "annual";
 
-/** Stripe Price IDs from env — shared by Checkout and subscription updates. */
+/** Stripe Price IDs from env — shared by Checkout and subscription updates. Ignores non-`price_` values. */
 export function stripePriceIdForPaidTier(tier: PaidTier, billing: StripeBilling): string | undefined {
-  if (tier === "pro") {
-    return billing === "annual" ? process.env.STRIPE_PRICE_PRO_ANNUAL : process.env.STRIPE_PRICE_PRO_MONTHLY;
-  }
-  if (tier === "business") {
-    return billing === "annual" ? process.env.STRIPE_PRICE_BUSINESS_ANNUAL : process.env.STRIPE_PRICE_BUSINESS_MONTHLY;
-  }
-  return undefined;
+  const raw =
+    tier === "pro"
+      ? billing === "annual"
+        ? process.env.STRIPE_PRICE_PRO_ANNUAL
+        : process.env.STRIPE_PRICE_PRO_MONTHLY
+      : billing === "annual"
+        ? process.env.STRIPE_PRICE_BUSINESS_ANNUAL
+        : process.env.STRIPE_PRICE_BUSINESS_MONTHLY;
+  const trimmed = raw?.trim();
+  return trimmed?.startsWith("price_") ? trimmed : undefined;
 }
 
 /** Map manager SKU to Stripe tier (free has no price). */

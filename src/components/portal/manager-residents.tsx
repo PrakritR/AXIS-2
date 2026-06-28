@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -19,13 +21,25 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_HEAD_ROW,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+import {
+  ReminderSettingsModal,
+  ScheduledMessageEditModal,
+  patchScheduledMessage,
+  useScheduledPaymentMessages,
+} from "@/components/portal/payment-schedule-ui";
+import { ChargeReminderList } from "@/components/portal/manager-inbox-schedule-panel";
+import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
+import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import {
   createManagerCharge,
   chargeDueLabel,
@@ -43,9 +57,6 @@ import {
   syncHouseholdChargesFromServer,
   updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
-  cancelHouseholdChargeReminder,
-  uncancelHouseholdChargeReminder,
-  householdChargeDueDate,
   type HouseholdCharge,
 } from "@/lib/household-charges";
 import {
@@ -77,7 +88,10 @@ import {
   deleteLeasePipelineRow,
   deleteLeasePipelineRowsForResident,
   generateLeaseHtmlForRow,
+  hasAnyLeaseSignature,
+  leaseGenerationSupportedForRow,
   managerSignLease,
+  leaseAllowsManagerDocumentEdits,
   LEASE_PIPELINE_EVENT,
   managerUploadLeasePdf,
   readLeasePipeline,
@@ -88,7 +102,6 @@ import {
   downloadLeaseFromRow,
   printLeaseAsPdf,
   hasBothLeaseSignatures,
-  hasAnyLeaseSignature,
   residentHasSignedLease,
   updateLeasePipelineRow,
   type LeasePipelineRow,
@@ -169,8 +182,8 @@ const AR_LEASE_TERM_PRESETS = ["Month-to-month", "12 months", "6 months", "3 mon
 
 function statusPill(status: "pending" | "paid") {
   return status === "paid"
-    ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80"
-    : "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+    ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+    : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 }
 
 function centsFromLabel(label: string): number {
@@ -293,7 +306,12 @@ function chargeEditAmountValue(charge: HouseholdCharge): string {
 
 export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId }) {
   const { showToast } = useAppUi();
+  const navigate = usePortalNavigate();
+  const portalBase = usePaidPortalBasePath();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
+  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
+  const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
+  const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
@@ -322,6 +340,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [portalSetupMap, setPortalSetupMap] = useState<Map<string, boolean>>(new Map());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
   const [generatingLeaseRowId, setGeneratingLeaseRowId] = useState<string | null>(null);
+  const [regenerateConfirmLeaseId, setRegenerateConfirmLeaseId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageSubject, setMessageSubject] = useState("");
   const [messageBody, setMessageBody] = useState("");
@@ -692,29 +711,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
     setSelectedId(null);
   }
-
-  // Auto-regenerate unsigned leases when a resident is selected so stale HTML is always refreshed
-  useEffect(() => {
-    if (!selectedId) return;
-    const resident = residents.find((r) => r.id === selectedId);
-    if (!resident?.email) return;
-    const email = resident.email.trim().toLowerCase();
-    const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
-      (lr) =>
-        lr.residentEmail.trim().toLowerCase() === email &&
-        !hasAnyLeaseSignature(lr) &&
-        lr.status !== "Voided" &&
-        Boolean(lr.application),
-    );
-    if (leasesToRegen.length === 0) return;
-    for (const lr of leasesToRegen) {
-      generateLeaseHtmlForRow(lr.id, userId);
-    }
-    queueMicrotask(() => {
-      setLeaseTick((n) => n + 1);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
 
   const residentCharges = useMemo<HouseholdCharge[]>(() => {
     void hcTick;
@@ -1167,14 +1163,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   async function confirmSendLeaseToResident(skipMessage: boolean) {
     if (!leaseSentPreview || leaseSendBusy) return;
     const { res, lease, subject, body } = leaseSentPreview;
-    setLeaseSentPreview(null);
     setLeaseSendBusy(true);
     try {
       const sendResult = await sendLeaseToResident(lease.id, userId);
       if (!sendResult.ok) {
-        showToast(sendResult.error);
+        showToast(sendResult.error ?? "Could not send lease.");
         return;
       }
+      setLeaseSentPreview(null);
       appendLeaseThreadMessage(lease.id, "manager", "Sent lease to resident for review and signature.", userId);
       if (skipMessage) {
         showToast("Lease sent to resident portal (no notification sent).");
@@ -1195,7 +1191,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           showToast("Lease sent to resident portal. Notification could not be delivered.");
         }
       }
-      await syncLeasePipelineFromServer(userId);
       setLeaseTick((n) => n + 1);
     } finally {
       setLeaseSendBusy(false);
@@ -1361,8 +1356,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
         (lr) =>
           lr.residentEmail.trim().toLowerCase() === residentEmail.trim().toLowerCase() &&
-          !hasAnyLeaseSignature(lr) &&
-          lr.status !== "Voided",
+          leaseAllowsManagerDocumentEdits(lr),
       );
       for (const lr of leasesToRegen) {
         updateLeasePipelineRow(lr.id, {
@@ -1460,7 +1454,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     if (markHouseholdChargePaid(chargeId, userId ?? null)) {
       showToast("Marked as paid.");
       setHcTick((n) => n + 1);
-      void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
+      void reloadSchedule();
+      void syncHouseholdChargesFromServer(true).then(() => {
+        setHcTick((n) => n + 1);
+        void reloadSchedule();
+      });
     }
   }
 
@@ -1473,7 +1471,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
-  function generateLeaseDeferred(rowId: string) {
+  function leaseGenerationGateTitle(row: LeasePipelineRow): string | undefined {
+    const gate = leaseGenerationSupportedForRow(row);
+    return gate.ok ? undefined : gate.error;
+  }
+
+  function runGenerateLease(rowId: string) {
     if (generatingLeaseRowId) return;
     setGeneratingLeaseRowId(rowId);
     window.setTimeout(() => {
@@ -1487,15 +1490,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         }
       } finally {
         setGeneratingLeaseRowId(null);
+        setRegenerateConfirmLeaseId(null);
       }
     }, 0);
   }
 
+  function openGenerateLeaseConfirm(rowId: string) {
+    if (generatingLeaseRowId) return;
+    const row = readLeasePipeline(userId).find((r) => r.id === rowId);
+    if (!row || !leaseAllowsManagerDocumentEdits(row) || !leaseGenerationSupportedForRow(row).ok) return;
+    setRegenerateConfirmLeaseId(rowId);
+  }
+
   function signLeaseAsManager(row: LeasePipelineRow) {
-    if (row.managerUploadedPdf?.dataUrl) {
-      showToast("Uploaded PDF leases should be signed offline and re-uploaded, not electronically signed here.");
-      return;
-    }
     if (!residentHasSignedLease(row)) {
       showToast("The resident must sign the lease before you can countersign.");
       return;
@@ -1503,9 +1510,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setSigningLease(row);
   }
 
-  function handleManagerModalSign(signatureName: string) {
+  async function handleManagerModalSign(signatureName: string) {
     if (!signingLease) return false;
-    if (managerSignLease(signingLease.id, signatureName.trim(), userId)) {
+    const ok = await managerSignLease(signingLease.id, signatureName.trim(), userId);
+    if (ok) {
       setLeaseTick((n) => n + 1);
       showToast(
         hasBothLeaseSignatures({
@@ -1525,6 +1533,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   return (
     <>
+      <LeaseRegenerateConfirmModal
+        open={regenerateConfirmLeaseId !== null}
+        busy={Boolean(regenerateConfirmLeaseId && generatingLeaseRowId === regenerateConfirmLeaseId)}
+        onClose={() => {
+          if (generatingLeaseRowId) return;
+          setRegenerateConfirmLeaseId(null);
+        }}
+        onConfirm={() => {
+          if (regenerateConfirmLeaseId) runGenerateLease(regenerateConfirmLeaseId);
+        }}
+      />
       {signingLease ? (
         <LeaseSigningModal
           row={signingLease}
@@ -1557,19 +1576,24 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 { id: "previous", label: "Previous", count: previousResidentsCount },
               ]}
               activeId={residentsTab}
-              onChange={(id) => setResidentsTab(id as ResidentsTabId)}
+              onChange={(id) => {
+                const next = id as ResidentsTabId;
+                setResidentsTab(next);
+                navigate(`${portalBase}/residents/${next}`);
+              }}
             />
           </ManagerPortalFilterRow>
         }
       >
       {filtered.length === 0 ? (
         <PortalDataTableEmpty
+          icon="residents"
           message={
             residents.length === 0
-              ? "No residents yet. Residents appear here after approval and once they create an Axis resident account."
+              ? "No residents yet."
               : residentsTab === "current"
-                ? "No current residents match the current filter."
-                : "No previous residents match the current filter."
+                ? "No current residents yet."
+                : "No previous residents yet."
           }
         />
       ) : (
@@ -1585,13 +1609,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Portal</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((res) => (
                   <Fragment key={res.id}>
-                    <tr className={PORTAL_TABLE_TR}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        setSelectedId((cur) => (cur === res.id ? null : res.id)),
+                      )}
+                      aria-expanded={selectedId === res.id}
+                    >
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                         <div className="flex items-center gap-2">
                           <span>{res.name || "—"}</span>
@@ -1611,31 +1640,21 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                         {res.portalSetup === null ? (
                           <span className="text-muted">—</span>
                         ) : res.portalSetup ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
+                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                             Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200/80">
+                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                             Pending
                           </span>
                         )}
                       </td>
-                      <td className={`${PORTAL_TABLE_TD} text-right`}>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-full px-3 py-1 text-xs"
-                          onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
-                        >
-                          {selectedId === res.id ? "Close" : "Manage"}
-                        </Button>
-                      </td>
                     </tr>
                     {selectedId === res.id && selected ? (
                       <tr>
-                        <td colSpan={8} className="bg-accent/30 px-4 py-5">
+                        <td colSpan={7} className="bg-accent/30 px-4 py-5">
                           <div className="flex flex-col gap-4">
                             <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1684,8 +1703,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           const leasesToRegen = readLeasePipeline(userId ?? undefined).filter(
                                             (lr) =>
                                               lr.residentEmail.trim().toLowerCase() === email &&
-                                              !hasAnyLeaseSignature(lr) &&
-                                              lr.status !== "Voided",
+                                              leaseAllowsManagerDocumentEdits(lr),
                                           );
                                           for (const lr of leasesToRegen) {
                                             updateLeasePipelineRow(lr.id, { application: { ...(lr.application ?? {}), ...row.application } }, userId);
@@ -1702,7 +1720,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
+                                    className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                                     onClick={deleteSelectedResident}
                                   >
                                     Delete resident
@@ -1771,7 +1789,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <div>
                                   <span className="text-muted">Status</span>
                                   <div className="mt-1 flex flex-wrap gap-2">
-                                    <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200/80">
+                                    <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                       Active resident
                                     </span>
                                     {selected.manuallyAdded ? (
@@ -1780,20 +1798,20 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       </span>
                                     ) : null}
                                     {residentAccountEmails.has(selected.email.trim().toLowerCase()) ? (
-                                      <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
+                                      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                         Portal account active
                                       </span>
                                     ) : (
-                                      <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200/80">
+                                      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                         No portal account
                                       </span>
                                     )}
                                     {selected.signedMonthlyRent ? (
-                                      <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80">
+                                      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                         Rent set
                                       </span>
                                     ) : (
-                                      <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200/80">
+                                      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                         No rent set
                                       </span>
                                     )}
@@ -1814,21 +1832,53 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 </div>
                                 {residentLease ? (
                                   <div className="flex flex-wrap gap-2">
+                                    {leaseAllowsManagerDocumentEdits(residentLease) ? (
+                                      <>
                                     <Button
                                       type="button"
                                       variant="outline"
                                       className="rounded-full px-3 py-1 text-xs"
-                                      disabled={generatingLeaseRowId === residentLease.id}
-                                      onClick={() => generateLeaseDeferred(residentLease.id)}
+                                      disabled={
+                                        generatingLeaseRowId === residentLease.id ||
+                                        !leaseGenerationSupportedForRow(residentLease).ok
+                                      }
+                                      title={leaseGenerationGateTitle(residentLease)}
+                                      onClick={() => openGenerateLeaseConfirm(residentLease.id)}
                                     >
                                       {generatingLeaseRowId === residentLease.id ? "Generating..." : "Generate lease"}
                                     </Button>
-                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) && !residentLease.managerUploadedPdf?.dataUrl ? (
+                                    <label className="inline-flex cursor-pointer items-center rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent/30">
+                                      {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
+                                      <input
+                                        type="file"
+                                        accept="application/pdf"
+                                        className="sr-only"
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file || !residentLease) return;
+                                          setUploadingLeaseRowId(residentLease.id);
+                                          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
+                                          setUploadingLeaseRowId(null);
+                                          e.currentTarget.value = "";
+                                          if (result.ok) {
+                                            setLeaseTick((n) => n + 1);
+                                            showToast("Lease PDF uploaded.");
+                                          } else {
+                                            showToast(result.error ?? "Upload failed.");
+                                          }
+                                        }}
+                                      />
+                                    </label>
+                                      </>
+                                    ) : null}
+                                    {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
                                       <Button
                                         type="button"
                                         variant="outline"
                                         className="rounded-full px-3 py-1 text-xs"
-                                        disabled={!residentLease.generatedHtml}
+                                        disabled={
+                                          !residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl
+                                        }
                                         onClick={() => signLeaseAsManager(residentLease)}
                                       >
                                         Sign as manager
@@ -1892,32 +1942,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         </Button>
                                       </>
                                     ) : null}
-                                    <label className="inline-flex cursor-pointer items-center rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent/30">
-                                      {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
-                                      <input
-                                        type="file"
-                                        accept="application/pdf"
-                                        className="sr-only"
-                                        onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file || !residentLease) return;
-                                          setUploadingLeaseRowId(residentLease.id);
-                                          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
-                                          setUploadingLeaseRowId(null);
-                                          e.currentTarget.value = "";
-                                          if (result.ok) {
-                                            setLeaseTick((n) => n + 1);
-                                            showToast("Lease PDF uploaded.");
-                                          } else {
-                                            showToast(result.error ?? "Upload failed.");
-                                          }
-                                        }}
-                                      />
-                                    </label>
                                     <Button
                                       type="button"
                                       variant="outline"
-                                      className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
+                                      className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                                       onClick={() => {
                                         if (!window.confirm(`Delete the lease for ${selected.name}? This cannot be undone.`)) return;
                                         if (deleteLeasePipelineRow(residentLease.id, userId)) {
@@ -1998,6 +2026,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   ) : null}
                                   <Button
                                     type="button"
+                                    variant="outline"
+                                    className="rounded-full px-3 py-1 text-xs"
+                                    onClick={() => setReminderSettingsOpen(true)}
+                                  >
+                                    Reminder settings
+                                  </Button>
+                                  <Button
+                                    type="button"
                                     variant="primary"
                                     className="rounded-full px-3 py-1 text-xs"
                                     onClick={openAddCharge}
@@ -2045,6 +2081,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       <tr className="border-b border-border">
                                         <th className="pb-2 text-left text-xs font-semibold text-muted">Charge</th>
                                         <th className="pb-2 text-left text-xs font-semibold text-muted">Due</th>
+                                        <th className="pb-2 text-left text-xs font-semibold text-muted">Reminders</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-muted">Amount</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-muted">Balance</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-muted">Status</th>
@@ -2052,10 +2089,36 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {visibleCharges.map((c) => (
+                                      {visibleCharges.map((c) => {
+                                        const chargeReminders =
+                                          c.status === "pending" ? manageableRemindersForCharge(scheduledMessages, c.id) : [];
+                                        return (
                                         <tr key={c.id} className="border-b border-border last:border-0">
                                           <td className="py-2 pr-4 font-medium text-foreground">{c.title}</td>
                                           <td className="py-2 pr-4 text-xs text-muted">{chargeDueLabel(c)}</td>
+                                          <td className="py-2 pr-4 align-top">
+                                            {c.status === "pending" ? (
+                                              chargeReminders.length > 0 ? (
+                                                <ChargeReminderList
+                                                  messages={chargeReminders}
+                                                  onEdit={setScheduleEdit}
+                                                  onToggleCancel={async (msg, cancelled) => {
+                                                    try {
+                                                      await patchScheduledMessage(msg.id, { cancelled });
+                                                      showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
+                                                      void reloadSchedule();
+                                                    } catch (e) {
+                                                      showToast(e instanceof Error ? e.message : "Could not update reminder.");
+                                                    }
+                                                  }}
+                                                />
+                                              ) : (
+                                                <span className="text-xs text-muted">None scheduled</span>
+                                              )
+                                            ) : (
+                                              <span className="text-xs text-muted">—</span>
+                                            )}
+                                          </td>
                                           <td className="py-2 pr-4 text-right tabular-nums text-muted">{c.amountLabel}</td>
                                           <td className="py-2 pr-4 text-right tabular-nums font-medium text-foreground">{c.balanceLabel}</td>
                                           <td className="py-2 pr-4 text-right">
@@ -2091,38 +2154,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                   >
                                                     Delete
                                                   </Button>
-                                                  {(() => {
-                                                    const due = householdChargeDueDate(c);
-                                                    if (!due) return null;
-                                                    const hours = (due.getTime() - Date.now()) / 3_600_000;
-                                                    const slots: Array<"3d" | "12h"> = [];
-                                                    if (hours > 13) slots.push("3d");
-                                                    if (hours > 1) slots.push("12h");
-                                                    if (!slots.length) return null;
-                                                    return slots.map((slot) => {
-                                                      const isCancelled = (c.cancelledReminders ?? []).includes(slot);
-                                                      const label = slot === "3d" ? "3-day reminder" : "12-hr reminder";
-                                                      return (
-                                                        <Button
-                                                          key={slot}
-                                                          type="button"
-                                                          variant="outline"
-                                                          title={isCancelled ? `Re-enable ${label}` : `Cancel ${label}`}
-                                                          className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-muted line-through" : "text-violet-700 hover:border-violet-300"}`}
-                                                          onClick={() => {
-                                                            if (isCancelled) {
-                                                              uncancelHouseholdChargeReminder(c.id, slot, userId ?? null);
-                                                            } else {
-                                                              cancelHouseholdChargeReminder(c.id, slot, userId ?? null);
-                                                            }
-                                                            void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
-                                                          }}
-                                                        >
-                                                          {isCancelled ? `↺ ${label}` : `✕ ${label}`}
-                                                        </Button>
-                                                      );
-                                                    });
-                                                  })()}
                                                 </>
                                               ) : (
                                                 <>
@@ -2147,7 +2178,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             </div>
                                           </td>
                                         </tr>
-                                      ))}
+                                        );
+                                      })}
                                     </tbody>
                                   </table>
                                 </div>
@@ -2177,10 +2209,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   {residentServiceRequests.map((req) => {
                                     const needsReturn = hasDeposit(req.deposit);
                                     const statusColors: Record<string, string> = {
-                                      pending: "bg-amber-50 text-amber-700 ring-amber-200",
-                                      approved: "bg-violet-50 text-violet-700 ring-violet-200",
-                                      returned: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-                                      denied: "bg-rose-50 text-rose-700 ring-rose-200",
+                                      pending: "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+                                      approved: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+                                      returned: "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+                                      denied: "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
                                     };
                                     const statusLabels: Record<string, string> = {
                                       pending: "Pending approval",
@@ -2189,13 +2221,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       denied: "Denied",
                                     };
                                     return (
-                                      <div key={req.id} className={`rounded-2xl border p-4 ${req.status === "pending" ? "border-amber-200 bg-amber-50/40" : "border-border bg-accent/30"}`}>
+                                      <div key={req.id} className={`rounded-2xl border p-4 ${req.status === "pending" ? "portal-banner-pending" : "border-border bg-accent/30"}`}>
                                         <div className="flex flex-wrap items-start justify-between gap-2">
                                           <div>
                                             <p className="font-semibold text-foreground">{req.offerName}</p>
                                             <div className="mt-1 flex flex-wrap gap-1">
                                               {req.price ? <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted">{req.price}</span> : null}
-                                              {needsReturn ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {req.deposit}</span> : null}
+                                              {needsReturn ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Deposit {req.deposit}</span> : null}
                                               {req.returnByDate ? <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">Return by {formatPacificDate(req.returnByDate, { month: "short", day: "numeric" })}</span> : null}
                                             </div>
                                           </div>
@@ -2218,7 +2250,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             <Button
                                               type="button"
                                               variant="outline"
-                                              className="h-7 rounded-full border-rose-200 px-3 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                                              className="h-7 rounded-full border-rose-200 px-3 text-[11px] font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]"
                                               onClick={() => { denyServiceRequest(req.id); setSrTick((t) => t + 1); showToast("Request denied."); }}
                                             >
                                               Deny
@@ -2235,7 +2267,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                 <div className="flex items-center justify-between">
                                                   <span className="text-xs text-muted">Service fee · {req.price}</span>
                                                   {req.servicePaid ? (
-                                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
+                                                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
                                                   ) : (
                                                     <Button type="button" className="h-6 rounded-full px-2.5 text-[10px] font-semibold" onClick={() => { markServiceRequestServicePaid(req.id); setSrTick((t) => t + 1); showToast("Service charge marked paid."); }}>
                                                       Mark paid
@@ -2247,7 +2279,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                 <div className="flex items-center justify-between">
                                                   <span className="text-xs text-muted">Deposit · {req.deposit}</span>
                                                   {req.depositPaid ? (
-                                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
+                                                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
                                                   ) : (
                                                     <Button type="button" className="h-6 rounded-full px-2.5 text-[10px] font-semibold" onClick={() => { markServiceRequestDepositPaid(req.id); setSrTick((t) => t + 1); showToast("Deposit marked refunded."); }}>
                                                       Mark refunded
@@ -2413,7 +2445,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                               <Button
                                                 type="button"
                                                 variant="outline"
-                                                className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+                                                className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                                                 onClick={() => {
                                                   deleteManagerWorkOrderRow(workOrder.id);
                                                   setWorkOrderTick((n) => n + 1);
@@ -2923,6 +2955,22 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         </div>
       </Modal>
       </ManagerPortalPageShell>
+
+      <ScheduledMessageEditModal
+        open={Boolean(scheduleEdit)}
+        message={scheduleEdit}
+        onClose={() => setScheduleEdit(null)}
+        onSaved={() => void reloadSchedule()}
+      />
+      <ReminderSettingsModal
+        open={reminderSettingsOpen}
+        onClose={() => setReminderSettingsOpen(false)}
+        settings={reminderSettings}
+        onSaved={(next) => {
+          setReminderSettings(next);
+          void reloadSchedule();
+        }}
+      />
     </>
   );
 }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 /** Dashboard / KPI link tiles (manager, resident, admin). */
@@ -9,7 +10,8 @@ export const PORTAL_SECTION_SURFACE =
   "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
-export const PORTAL_CALENDAR_FRAME = "overflow-hidden rounded-2xl border border-border bg-accent/40";
+export const PORTAL_CALENDAR_FRAME =
+  "overflow-hidden rounded-2xl border border-border bg-accent/40 [html[data-theme=dark]_&]:portal-calendar-grid";
 
 /** Pill toggles: Day / Week / Month (Managers filter style). */
 export function PortalSegmentedControl<T extends string>({
@@ -221,8 +223,8 @@ export function ManagerPortalStatusPills({
               active
                 ? isPrimary
                   ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
-                  : "bg-card text-foreground shadow-[var(--shadow-sm)]"
-                : "text-muted hover:text-foreground"
+                  : "bg-card text-foreground shadow-[var(--shadow-sm)] [html[data-theme=dark]_&]:portal-status-pill-active"
+                : "text-muted hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
             }`}
           >
             {tab.label}
@@ -231,8 +233,8 @@ export function ManagerPortalStatusPills({
                 active
                   ? isPrimary
                     ? "bg-primary-foreground/20 text-primary-foreground"
-                    : "bg-accent text-foreground"
-                  : "bg-accent/50 text-muted"
+                    : "bg-accent text-foreground [html[data-theme=dark]_&]:portal-status-pill-count-active"
+                  : "bg-accent/50 text-muted [html[data-theme=dark]_&]:bg-white/10 [html[data-theme=dark]_&]:text-white/75"
               }`}
             >
               {tab.count}
@@ -244,14 +246,70 @@ export function ManagerPortalStatusPills({
   );
 }
 
+/** Linked KPI tile on manager / resident dashboards. */
+export function PortalDashboardTile({
+  label,
+  value,
+  sub,
+  href,
+  urgent,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  href: string;
+  urgent?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`surface-panel group flex min-h-[88px] flex-col justify-center gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] ${
+        urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
+      }`}
+    >
+      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground">{value}</p>
+      <p className="text-sm font-medium text-muted">{label}</p>
+      {sub ? <p className="text-xs text-muted">{sub}</p> : null}
+    </Link>
+  );
+}
+
+/** Section title row with optional link (manager / resident dashboards). */
+export function PortalDashboardSectionHeader({
+  title,
+  href,
+  linkLabel,
+}: {
+  title: string;
+  href?: string;
+  linkLabel?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
+      {href && linkLabel ? (
+        <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
+          {linkLabel}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+/** Inner card shell for dashboard section panels. */
+export const PORTAL_DASHBOARD_SECTION_CARD =
+  "rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]";
+
 /** Manager sections aligned with admin portal leases / managers shell. */
 export function ManagerPortalPageShell({
   title,
+  subtitle,
   titleAside,
   filterRow,
   children,
 }: {
   title: string;
+  subtitle?: string;
   titleAside?: ReactNode;
   filterRow?: ReactNode;
   children: ReactNode;
@@ -259,7 +317,10 @@ export function ManagerPortalPageShell({
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <h1 className="min-w-0 text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">{title}</h1>
+        <div className="min-w-0">
+          <h1 className="text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">{title}</h1>
+          {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+        </div>
         {titleAside ? <div className="flex flex-wrap items-center gap-2.5 sm:justify-end sm:pt-0.5">{titleAside}</div> : null}
       </div>
       {filterRow ? <div className="mt-6 border-b border-border pb-6">{filterRow}</div> : null}
@@ -270,7 +331,7 @@ export function ManagerPortalPageShell({
 
 /** Table header cell class (admin leases / managers / portal tabs). */
 export const MANAGER_TABLE_TH =
-  "px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-5";
+  "portal-table-th px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-5";
 
 /** Shared toolbar shell for filters/toggles in portal tabs. */
 export const PORTAL_TOOLBAR_GROUP =
@@ -278,11 +339,11 @@ export const PORTAL_TOOLBAR_GROUP =
 
 /** Shared pill toggle button in portal toolbars. */
 export const PORTAL_TOOLBAR_PILL_BUTTON =
-  "min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold text-muted transition hover:text-foreground";
+  "min-h-9 rounded-full px-4 py-1.5 text-sm font-semibold text-muted transition hover:text-foreground [html[data-theme=dark]_&]:text-white/78";
 
 /** Active variant for toolbar pill buttons. */
 export const PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE =
-  "bg-card text-foreground shadow-[var(--shadow-sm)]";
+  "bg-card text-foreground shadow-[var(--shadow-sm)] [html[data-theme=dark]_&]:portal-status-pill-active";
 
 /** Label used before toolbar selects (Property/Sort/etc.). */
 export const PORTAL_TOOLBAR_LABEL = "text-xs font-semibold text-muted";

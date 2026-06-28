@@ -6,10 +6,12 @@ import { resolveAppOrigin } from "@/lib/app-url";
 import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
   TOUR_REQUEST_MANAGER_SUBJECT,
+  TOUR_REQUEST_TENANT_SUBJECT,
   buildTourConfirmedTenantBody,
   buildTourConfirmedTenantHtml,
   buildTourNotificationContext,
   buildTourRequestManagerBody,
+  buildTourRequestTenantBody,
 } from "@/lib/tour-notifications";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
@@ -173,6 +175,44 @@ export async function notifyManagerTourRequest(
   });
 
   const email = await deliverEmail([managerEmail], subject, text);
+  if (email.error) return { ok: true, skipped: true, error: email.error };
+  return { ok: true, skipped: email.skipped };
+}
+
+export async function notifyTenantTourRequestReceived(
+  db: Db,
+  req: Request,
+  inquiry: TourInquiryPayload,
+  window?: { start: string; end: string },
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  const guestEmail = textField(inquiry as Record<string, unknown>, "email");
+  if (!guestEmail || !guestEmail.includes("@")) {
+    return { ok: false, error: "Guest email is required." };
+  }
+
+  const tourStartIso = window?.start || textField(inquiry as Record<string, unknown>, "proposedStart");
+  const tourEndIso = window?.end || textField(inquiry as Record<string, unknown>, "proposedEnd");
+  const propertyId = textField(inquiry as Record<string, unknown>, "propertyId");
+  const propertyAddress = await resolvePropertyAddressForTour(db, propertyId);
+  const origin = resolveAppOrigin(req);
+  const ctx = buildTourNotificationContext({
+    origin,
+    guestName: textField(inquiry as Record<string, unknown>, "name") || "Guest",
+    guestEmail,
+    guestPhone: textField(inquiry as Record<string, unknown>, "phone") || null,
+    propertyId,
+    propertyTitle: textField(inquiry as Record<string, unknown>, "propertyTitle") || "Property",
+    propertyAddress,
+    roomLabel: textField(inquiry as Record<string, unknown>, "roomLabel") || null,
+    tourStartIso,
+    tourEndIso,
+    notes: textField(inquiry as Record<string, unknown>, "notes") || null,
+    managerLabel: textField(inquiry as Record<string, unknown>, "adminLabel") || null,
+  });
+
+  const subject = TOUR_REQUEST_TENANT_SUBJECT;
+  const text = buildTourRequestTenantBody(ctx);
+  const email = await deliverEmail([guestEmail], subject, text);
   if (email.error) return { ok: true, skipped: true, error: email.error };
   return { ok: true, skipped: email.skipped };
 }

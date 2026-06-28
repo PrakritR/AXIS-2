@@ -13,9 +13,9 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import {
@@ -61,14 +61,6 @@ const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
   2: "No listed properties.",
   3: "No unlisted properties.",
   4: "No rejected properties.",
-};
-
-const ADMIN_TAB_BANNER: Record<AdminPropertyBucketIndex, string> = {
-  0: "New manager submissions and edited live listings re-enter the queue here until you approve, request changes, or reject them.",
-  1: "Managers should revise and resubmit. When ready, you can return items to the pending review queue or close them out from the property detail view.",
-  2: "These listings are on the public Rent with Axis catalog. Unlist, request edits, or open the detail view for full review actions.",
-  3: "Listings the manager took off the public site. You can request changes, reject, or work from the detail view if needed.",
-  4: "Declined or removed from the catalog. Use the detail view to move back to pending or clear from the queue.",
 };
 
 function HouseIcon({ className }: { className?: string }) {
@@ -353,7 +345,8 @@ function AdminPropertyInlineDetails({
       </div>
       <div
         data-listing-preview-scroll
-        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card"
+        data-surface="light"
+        className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-[#f5f8fd]"
       >
         <ListingDetailSections property={mock} rich={rich} previewModal />
       </div>
@@ -367,11 +360,6 @@ export function AdminPropertiesClient() {
   const [activeKpi, setActiveKpi] = useState<AdminPropertyBucketIndex>(0);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
-
-  const refresh = useCallback(() => {
-    setTick((t) => t + 1);
-    showToast("Refreshed property queue.");
-  }, [showToast]);
 
   useEffect(() => {
     void syncPropertyPipelineFromServer().then(() => {
@@ -400,11 +388,6 @@ export function AdminPropertiesClient() {
   return (
     <ManagerPortalPageShell
       title="Properties"
-      titleAside={
-        <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={refresh}>
-          Refresh
-        </Button>
-      }
     >
       <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
         {KPI_LABELS.map((label, i) => (
@@ -431,10 +414,6 @@ export function AdminPropertiesClient() {
         ))}
       </div>
 
-      <div className="mt-4 glass-card rounded-2xl px-4 py-3 text-sm text-muted">
-        {ADMIN_TAB_BANNER[activeKpi]}
-      </div>
-
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-accent/30/20 px-4 py-14 text-center sm:py-16">
@@ -451,7 +430,6 @@ export function AdminPropertiesClient() {
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -460,7 +438,13 @@ export function AdminPropertiesClient() {
                   const expanded = expandedRowKey === rowKey;
                   return (
                     <Fragment key={rowKey}>
-                      <tr className={PORTAL_TABLE_TR}>
+                      <tr
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() =>
+                          setExpandedRowKey(expanded ? null : rowKey),
+                        )}
+                        aria-expanded={expanded}
+                      >
                         <td className={PORTAL_TABLE_TD}>
                           <p className="font-medium text-foreground">
                             {row.buildingName} · {row.unitLabel}
@@ -482,21 +466,10 @@ export function AdminPropertiesClient() {
                         <td className={PORTAL_TABLE_TD}>
                           <StatusPill label={status.label} tone={status.tone} />
                         </td>
-                        <td className={`${PORTAL_TABLE_TD} text-right`}>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                            onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
-                            aria-expanded={expanded}
-                          >
-                            {expanded ? "Hide details" : "Details"}
-                          </Button>
-                        </td>
                       </tr>
                       {expanded ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className="bg-accent/30 px-4 py-4">
+                          <td colSpan={3} className="bg-accent/30 px-4 py-4">
                             <AdminPropertyInlineDetails
                               key={rowKey}
                               bucket={activeKpi}

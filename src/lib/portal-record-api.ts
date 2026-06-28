@@ -61,8 +61,20 @@ export function createJsonRecordRoute(config: RecordConfig) {
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
         const records = (Array.isArray(data) ? data : []) as unknown as Record<string, unknown>[];
         const rows = records.map((record) => {
-          const row = (record.row_data && typeof record.row_data === "object" ? record.row_data : record) as Record<string, unknown>;
-          return config.normalize ? config.normalize(row) : row;
+          const payload = (
+            record.row_data && typeof record.row_data === "object" ? record.row_data : record
+          ) as Record<string, unknown>;
+          const merged = {
+            ...payload,
+            id: payload.id ?? record.id,
+            reporter_user_id: payload.reporter_user_id ?? payload.reporterUserId ?? record.reporter_user_id,
+            reporter_email: payload.reporter_email ?? payload.reporterEmail ?? record.reporter_email,
+            reporter_role: payload.reporter_role ?? payload.reporterRole ?? record.reporter_role,
+            report_type: payload.report_type ?? payload.type ?? record.report_type,
+            created_at: payload.created_at ?? payload.createdAt ?? record.created_at,
+            updated_at: payload.updated_at ?? payload.updatedAt ?? record.updated_at,
+          };
+          return config.normalize ? config.normalize(merged) : merged;
         });
         return NextResponse.json({ rows });
       } catch (e) {
@@ -93,6 +105,9 @@ export function createJsonRecordRoute(config: RecordConfig) {
             const { data, error } = await deleteQuery;
             if (error) return NextResponse.json({ error: error.message }, { status: 500 });
             deleted += Array.isArray(data) ? data.length : 0;
+          }
+          if (deleted === 0) {
+            return NextResponse.json({ error: "Record not found." }, { status: 404 });
           }
           return NextResponse.json({ ok: true, deleted });
         }

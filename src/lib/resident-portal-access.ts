@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 type ManagerSubscriptionTier = "free" | "paid" | null;
@@ -76,6 +77,73 @@ function readLatestApplication(
   };
 }
 
+const loadResidentPortalAccessStateCached = cache(
+  async (
+    userId: string | null,
+    role: string | null,
+    email: string,
+    managerSubscriptionTier: ManagerSubscriptionTier,
+  ): Promise<ResidentPortalAccessState> => {
+    const roleOk = !role || role === "resident";
+    if (!roleOk || !email) return emptyAccessState(managerSubscriptionTier);
+
+    const db = createSupabaseServiceRoleClient();
+    const { data: applicationRows } = await db
+      .from("manager_application_records")
+      .select("row_data, updated_at")
+      .eq("resident_email", email)
+      .order("updated_at", { ascending: false });
+
+    let latestApplication = readLatestApplication(applicationRows ?? [], email);
+    let applicationApproved = latestApplication.bucket === "approved";
+
+    if ((!latestApplication.id || !applicationApproved) && userId) {
+      const { data: profile } = await db
+        .from("profiles")
+        .select("application_approved, manager_id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      const profileAxisId = typeof profile?.manager_id === "string" ? profile.manager_id.trim() : "";
+      if (profileAxisId && profileAxisId.toUpperCase().startsWith("AXIS-")) {
+        const { data: axisRecord } = await db
+          .from("manager_application_records")
+          .select("row_data, updated_at")
+          .eq("id", profileAxisId)
+          .maybeSingle();
+
+        if (axisRecord?.row_data && typeof axisRecord.row_data === "object" && !Array.isArray(axisRecord.row_data)) {
+          const axisRow = axisRecord.row_data as Record<string, unknown>;
+          latestApplication = {
+            id: typeof axisRow.id === "string" ? axisRow.id.trim() || null : null,
+            bucket: typeof axisRow.bucket === "string" ? axisRow.bucket.trim().toLowerCase() || null : null,
+            stage: typeof axisRow.stage === "string" ? axisRow.stage.trim() || null : null,
+            property: typeof axisRow.property === "string" ? axisRow.property.trim() || null : null,
+          };
+          applicationApproved = latestApplication.bucket === "approved";
+        }
+      }
+
+      if (!applicationApproved) {
+        applicationApproved = Boolean(profile?.application_approved === true);
+      }
+    }
+
+    const leaseAccessUnlocked = applicationApproved;
+
+    return {
+      roleOk,
+      applicationApproved,
+      applicationId: latestApplication.id,
+      applicationStage: latestApplication.stage,
+      applicationProperty: latestApplication.property,
+      leaseAccessUnlocked,
+      fullPortalAccess: applicationApproved,
+      managerSubscriptionTier,
+    };
+  },
+);
+
 export async function loadResidentPortalAccessState(params: {
   userId: string | null | undefined;
   role: string | null | undefined;
@@ -83,67 +151,13 @@ export async function loadResidentPortalAccessState(params: {
   managerSubscriptionTier?: ManagerSubscriptionTier;
 }): Promise<ResidentPortalAccessState> {
   const managerSubscriptionTier = params.managerSubscriptionTier ?? null;
-  const roleOk = !params.role || params.role === "resident";
   const email = normalizeEmail(params.email);
-  if (!roleOk || !email) return emptyAccessState(managerSubscriptionTier);
-
-  const db = createSupabaseServiceRoleClient();
-  const { data: applicationRows } = await db
-    .from("manager_application_records")
-    .select("row_data, updated_at")
-    .eq("resident_email", email)
-    .order("updated_at", { ascending: false });
-
-  let latestApplication = readLatestApplication(applicationRows ?? [], email);
-  let applicationApproved = latestApplication.bucket === "approved";
-
-  // Fallback 1: resolve by Axis ID when auth/profile email differs from submitted application email.
-  // The legacy `profiles.manager_id` stores the resident's public Axis ID for provisioned accounts.
-  if ((!latestApplication.id || !applicationApproved) && params.userId) {
-    const { data: profile } = await db
-      .from("profiles")
-      .select("application_approved, manager_id")
-      .eq("id", params.userId)
-      .maybeSingle();
-
-    const profileAxisId = typeof profile?.manager_id === "string" ? profile.manager_id.trim() : "";
-    if (profileAxisId && profileAxisId.toUpperCase().startsWith("AXIS-")) {
-      const { data: axisRecord } = await db
-        .from("manager_application_records")
-        .select("row_data, updated_at")
-        .eq("id", profileAxisId)
-        .maybeSingle();
-
-      if (axisRecord?.row_data && typeof axisRecord.row_data === "object" && !Array.isArray(axisRecord.row_data)) {
-        const axisRow = axisRecord.row_data as Record<string, unknown>;
-        latestApplication = {
-          id: typeof axisRow.id === "string" ? axisRow.id.trim() || null : null,
-          bucket: typeof axisRow.bucket === "string" ? axisRow.bucket.trim().toLowerCase() || null : null,
-          stage: typeof axisRow.stage === "string" ? axisRow.stage.trim() || null : null,
-          property: typeof axisRow.property === "string" ? axisRow.property.trim() || null : null,
-        };
-        applicationApproved = latestApplication.bucket === "approved";
-      }
-    }
-
-    // Fallback 2: trust explicit profile approval when application row cannot be resolved.
-    if (!applicationApproved) {
-      applicationApproved = Boolean(profile?.application_approved === true);
-    }
-  }
-
-  const leaseAccessUnlocked = applicationApproved;
-
-  return {
-    roleOk,
-    applicationApproved,
-    applicationId: latestApplication.id,
-    applicationStage: latestApplication.stage,
-    applicationProperty: latestApplication.property,
-    leaseAccessUnlocked,
-    fullPortalAccess: applicationApproved,
+  return loadResidentPortalAccessStateCached(
+    params.userId ?? null,
+    params.role ?? null,
+    email,
     managerSubscriptionTier,
-  };
+  );
 }
 
 /** Server-side: returns true when the resident has a lease that both manager and resident signed. */

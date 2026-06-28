@@ -41,7 +41,12 @@ import {
   PORTAL_INBOX_CHANGED_EVENT,
   syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalPageShell,
+  PortalDashboardSectionHeader,
+  PortalDashboardTile,
+  PORTAL_DASHBOARD_SECTION_CARD,
+} from "@/components/portal/portal-metrics";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
 const BASE = "/portal";
@@ -60,59 +65,18 @@ function NotifBanner({
   tone,
   children,
 }: {
-  tone: "amber" | "blue" | "yellow" | "violet" | "rose";
+  tone: "amber" | "blue" | "yellow" | "rose";
   children: React.ReactNode;
 }) {
   const cls = {
     amber: "portal-banner-pending",
     blue: "portal-banner-info",
     yellow: "portal-banner-pending",
-    violet: "portal-banner-notice",
     rose: "portal-banner-danger",
   }[tone];
   return (
     <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
       {children}
-    </div>
-  );
-}
-
-function Tile({
-  label,
-  value,
-  sub,
-  href,
-  urgent,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  href: string;
-  urgent?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`surface-panel group flex flex-col gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] ${
-        urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
-      }`}
-    >
-      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground">{value}</p>
-      <p className="text-sm font-medium text-muted">{label}</p>
-      {sub ? <p className="text-xs text-muted">{sub}</p> : null}
-    </Link>
-  );
-}
-
-function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
-      {href && linkLabel ? (
-        <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
-          {linkLabel}
-        </Link>
-      ) : null}
     </div>
   );
 }
@@ -287,7 +251,7 @@ export function ManagerDashboard() {
               </NotifBanner>
             )}
             {needsManagerSig > 0 && (
-              <NotifBanner tone="violet">
+              <NotifBanner tone="blue">
                 <span>
                   <span className="font-semibold">{needsManagerSig}</span> lease{needsManagerSig === 1 ? "" : "s"} need{needsManagerSig === 1 ? "s" : ""} your signature
                 </span>
@@ -341,14 +305,14 @@ export function ManagerDashboard() {
 
         {/* ── KPI tiles ── */}
         <div className="grid grid-cols-2 gap-3">
-          <Tile
+          <PortalDashboardTile
             label="Properties"
             value={totalProperties}
             sub={pendingProperties > 0 ? `${pendingProperties} pending approval` : undefined}
             href={`${BASE}/properties`}
             urgent={pendingProperties > 0}
           />
-          <Tile
+          <PortalDashboardTile
             label="Active residents"
             value={activeResidents.length}
             sub={pendingApps.length > 0 ? `${pendingApps.length} pending review` : undefined}
@@ -361,8 +325,8 @@ export function ManagerDashboard() {
         <div className="grid gap-4 lg:grid-cols-2">
 
           {/* Pending tours */}
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-            <SectionHeader
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
               title="Pending tour requests"
               href={`${BASE}/calendar`}
               linkLabel="Tours →"
@@ -387,8 +351,8 @@ export function ManagerDashboard() {
           </div>
 
           {/* Pending applications */}
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-            <SectionHeader
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
               title="Pending applications"
               href={`${BASE}/applications`}
               linkLabel="Applications →"
@@ -416,8 +380,8 @@ export function ManagerDashboard() {
 
         {/* ── Leases & payments ── */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-            <SectionHeader
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
               title="Leases pending signature"
               href={`${BASE}/leases`}
               linkLabel="Leases →"
@@ -437,7 +401,7 @@ export function ManagerDashboard() {
                     <span
                       className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
                         lease.status === "Manager Signature Pending"
-                          ? "bg-violet-100 text-violet-800"
+                          ? "bg-blue-100 text-blue-800"
                           : "bg-amber-100 text-amber-800"
                       }`}
                     >
@@ -449,8 +413,8 @@ export function ManagerDashboard() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-            <SectionHeader
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
               title="Pending & overdue payments"
               href={`${BASE}/payments`}
               linkLabel="Payments →"
@@ -485,8 +449,8 @@ export function ManagerDashboard() {
         </div>
 
         {/* ── Inbox ── */}
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
-          <SectionHeader
+        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+          <PortalDashboardSectionHeader
             title="Inbox"
             href={`${BASE}/inbox/unopened`}
             linkLabel="Inbox →"

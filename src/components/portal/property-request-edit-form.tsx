@@ -16,7 +16,7 @@ export function PropertyRequestEditForm({
 }) {
   const [note, setNote] = useState("");
   return (
-    <div className="space-y-3 rounded-xl border border-amber-200/80 bg-amber-50/60 p-4">
+    <div className="space-y-3 rounded-xl border p-4 portal-banner-pending">
       <div>
         <label htmlFor="property-request-edit-note" className="text-xs font-bold uppercase tracking-[0.12em] text-muted">
           Message to {recipientHint}

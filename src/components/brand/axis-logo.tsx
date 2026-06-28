@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 const markTileBase =
-  "flex shrink-0 items-center justify-center border border-[var(--glass-border)] bg-[var(--glass-fill)] shadow-[var(--shadow-card)] backdrop-blur-xl [background-image:linear-gradient(145deg,rgba(255,255,255,0.92)_0%,rgba(188,212,255,0.35)_100%)]";
+  "flex shrink-0 items-center justify-center border border-white/35 bg-[linear-gradient(150deg,rgba(255,255,255,0.34),rgba(255,255,255,0.1))] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] [html[data-theme=light]_&]:border-border/80 [html[data-theme=light]_&]:bg-[linear-gradient(150deg,#ffffff,#e9eefb)] [html[data-theme=light]_&]:shadow-[inset_0_1px_0_#ffffff,0_1px_2px_rgba(15,23,42,0.05)]";
 
 const markTileSizes = {
   default: "h-14 w-14 rounded-[18px]",
@@ -20,7 +20,7 @@ export type AxisLogoSize = keyof typeof markTileSizes;
 
 export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 
-/** Inline "AX": quieter architectural mark with a balanced A and a brighter brand X. */
+/** Inline "AX": crisp architectural mark — solid strokes, no glow or gradient blur. */
 function AxisLogoGlyph({
   className = "",
   size = "default",
@@ -34,34 +34,33 @@ function AxisLogoGlyph({
       viewBox="0 0 46 26"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      shapeRendering="geometricPrecision"
       aria-hidden
     >
-      <defs>
-        <radialGradient id="axis-logo-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(34 7) rotate(132.734) scale(20.9165 19.7768)">
-          <stop offset="0%" stopColor="var(--steel-light)" />
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id="axis-logo-x" x1="27" y1="4" x2="43" y2="22" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="var(--steel-light)" />
-          <stop offset="42%" stopColor="var(--sky)" />
-          <stop offset="100%" stopColor="var(--primary)" />
-        </linearGradient>
-      </defs>
-      <path d="M15 0H46V26H15Z" fill="url(#axis-logo-glow)" />
       <path
         d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45"
-        stroke="var(--foreground)"
+        className="stroke-white [html[data-theme=light]_&]:stroke-foreground"
         strokeWidth="2.55"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M27 4L43 22" stroke="url(#axis-logo-x)" strokeWidth="2.75" strokeLinecap="round" />
-      <path d="M43 4L27 22" stroke="var(--cobalt-deep)" strokeWidth="2.55" strokeLinecap="round" />
+      <path
+        d="M27 4L43 22"
+        className="stroke-steel-light [html[data-theme=light]_&]:stroke-primary"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+      />
+      <path
+        d="M43 4L27 22"
+        className="stroke-white/85 [html[data-theme=light]_&]:stroke-cobalt-deep"
+        strokeWidth="2.55"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
-/** Primary AX mark — frosted gradient tile + SVG glyph. */
+/** Primary AX mark — crisp gradient tile + SVG glyph. */
 export function AxisLogoMark({
   className = "",
   variant,
@@ -80,8 +79,8 @@ export function AxisLogoMark({
 }
 
 /**
- * Same sky-gradient tile as the header AX mark — use for portal empty states
- * so icons read with the same weight and chrome as the global header.
+ * Same tile chrome as the header AX mark — use for portal empty states
+ * so icons read with the same weight as the global header.
  */
 export function AxisHeaderMarkTile({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
@@ -91,13 +90,10 @@ export function AxisHeaderMarkTile({ children, className = "" }: { children: Rea
   );
 }
 
-/** Softer shadow variant — same glyph and frosted tile. */
+/** Lighter shadow variant — same glyph and tile. */
 export function AxisLogoMarkSoft({ className = "" }: { className?: string }) {
   return (
-    <div
-      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-[var(--glass-border)] bg-[var(--glass-fill)] shadow-[0_8px_22px_-18px_rgba(15,23,42,0.16)] backdrop-blur-xl [background-image:linear-gradient(145deg,rgba(255,255,255,0.92)_0%,rgba(188,212,255,0.35)_100%)] ${className}`}
-      aria-hidden
-    >
+    <div className={`${markTileBase} h-14 w-14 rounded-[20px] ${className}`} aria-hidden>
       <AxisLogoGlyph />
     </div>
   );

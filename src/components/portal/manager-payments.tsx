@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
@@ -34,6 +33,12 @@ import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
+import {
+  PaymentAutomationSettingsPanel,
+  ScheduledMessageEditModal,
+  useScheduledPaymentMessages,
+} from "@/components/portal/payment-schedule-ui";
+import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -69,6 +74,8 @@ export function ManagerPayments() {
   const [residentFilter, setResidentFilter] = useState("");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
+  const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
+  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
 
   useEffect(() => {
@@ -151,11 +158,11 @@ export function ManagerPayments() {
         window.close();
         return;
       }
+      // Same-tab return: PortalStripeConnectPanel clears ?connect= and refreshes status.
+      return;
     }
     if (payouts === "1") {
       window.location.replace(`${portalBase}/payments`);
-    } else if (connect === "done" || connect === "refresh") {
-      window.location.replace(`${portalBase}/payments?connect=${encodeURIComponent(connect)}`);
     }
   }, [portalBase]);
 
@@ -164,7 +171,7 @@ export function ManagerPayments() {
       if (e.origin !== window.location.origin) return;
       if (e.data?.type !== "axis-stripe-connect") return;
       if (e.data?.connect === "done") {
-        showToast("Payout status updated.");
+        showToast("Bank account linked.");
       } else if (e.data?.connect === "refresh") {
         showToast("Setup link expired — open Payouts to try again.");
       }
@@ -295,50 +302,8 @@ export function ManagerPayments() {
             residentValue={activeResidentFilter}
             onResidentChange={setResidentFilter}
           />
-          <Link
-            href={`${portalBase}/payments/payouts`}
-            className={`inline-flex shrink-0 items-center justify-center rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent ${PORTAL_HEADER_ACTION_BTN}`}
-          >
-            Payout settings
-          </Link>
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
             Add payment
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => {
-              void Promise.all([
-                syncPropertyPipelineFromServer({ force: true }),
-                syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
-              ]).then(() => {
-                reconcileApprovedResidentPaymentSchedules(userId ?? null, true);
-                setHcTick((n) => n + 1);
-                showToast("Payments regenerated from current listing settings.");
-              });
-            }}
-          >
-            Regenerate
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => {
-              void Promise.all([
-                syncHouseholdChargesFromServer(),
-                syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
-                syncPropertyPipelineFromServer({ force: true }),
-              ]).then(() => {
-                setHcTick((n) => n + 1);
-                setApplicationTick((n) => n + 1);
-                setPropertyTick((n) => n + 1);
-                showToast("Payments refreshed.");
-              });
-            }}
-          >
-            Refresh
           </Button>
         </>
       }
@@ -347,11 +312,36 @@ export function ManagerPayments() {
       <div className="mb-8">
         <PortalStripeConnectPanel basePath="/portal" variant="embedded" />
       </div>
+      {reminderSettings ? (
+        <div id="payment-reminder-settings" className="mb-6">
+          <PaymentAutomationSettingsPanel
+            variant="payments"
+            settings={reminderSettings}
+            onSaved={(next) => {
+              setReminderSettings(next);
+              void reloadSchedule();
+            }}
+          />
+        </div>
+      ) : null}
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}
         activeBucket={bucket}
+        scheduledMessages={scheduledMessages}
+        schedulePortalBase={portalBase}
+        onScheduleEdit={setScheduleEdit}
+        onReminderSettings={() => {
+          document.getElementById("payment-reminder-settings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+        onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
+      />
+      <ScheduledMessageEditModal
+        open={Boolean(scheduleEdit)}
+        message={scheduleEdit}
+        onClose={() => setScheduleEdit(null)}
+        onSaved={() => void reloadSchedule()}
       />
       <ManagerAddPaymentModal
         open={addOpen}

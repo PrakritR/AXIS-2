@@ -54,25 +54,26 @@ export function roomAvailabilityTone(text: string): RoomAvailabilityTone {
 }
 
 export function roomAvailabilityPillClasses(tone: RoomAvailabilityTone): { wrap: string; dot: string } {
+  const ring = "ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   switch (tone) {
     case "available":
       return {
-        wrap: "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
+        wrap: `portal-badge-success ${ring}`,
         dot: "bg-emerald-500",
       };
     case "unavailable":
       return {
-        wrap: "bg-rose-50 text-rose-800 ring-rose-200/80",
+        wrap: `portal-badge-danger ${ring}`,
         dot: "bg-rose-500",
       };
     case "future":
       return {
-        wrap: "bg-amber-50 text-amber-900 ring-amber-200/80",
+        wrap: `portal-badge-pending ${ring}`,
         dot: "bg-amber-500",
       };
     default:
       return {
-        wrap: "bg-slate-100 text-slate-700 ring-slate-200/80",
+        wrap: `bg-foreground/5 text-muted ${ring}`,
         dot: "bg-slate-400",
       };
   }
@@ -82,12 +83,12 @@ export function roomAvailabilityPillClasses(tone: RoomAvailabilityTone): { wrap:
 export function roomAvailabilityTextClasses(tone: RoomAvailabilityTone): string {
   switch (tone) {
     case "available":
-      return "text-emerald-700";
+      return "text-[var(--status-confirmed-fg)]";
     case "unavailable":
-      return "text-rose-700";
+      return "text-[var(--status-overdue-fg)]";
     case "future":
-      return "text-amber-800";
+      return "text-[var(--status-pending-fg)]";
     default:
-      return "text-slate-600";
+      return "text-muted";
   }
 }

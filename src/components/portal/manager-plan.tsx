@@ -14,6 +14,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { submitBugFeedbackReport } from "@/lib/portal-bug-feedback";
 import { loadManagerPlanTiers } from "@/lib/site-content";
+import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 
 type SubPayload = {
   tier: string | null;
@@ -63,13 +64,38 @@ function continueInCurrentTab(url: string) {
   window.location.href = url;
 }
 
+function planPriceLabel(tiers: ManagerPlanTierDefinition[], tierId: ManagerSkuTier, billing: "monthly" | "annual"): string {
+  const tier = tiers.find((t) => t.id === tierId);
+  if (!tier) return "";
+  const pb = billing === "monthly" ? tier.monthly : tier.annual;
+  return `${pb.headline}${pb.period ?? ""}`;
+}
+
 function periodEndLabel(unix: number | null | undefined): string | null {
   if (unix == null || typeof unix !== "number" || !Number.isFinite(unix) || unix <= 0) return null;
   return formatPacificDate(new Date(unix * 1000), { month: "long", day: "numeric", year: "numeric" });
 }
 
-type PlanFeedbackModalState =
+type PlanModalState =
   | null
+  | {
+      kind: "checkout";
+      tier: "pro" | "business";
+      billing: "monthly" | "annual";
+      clientSecret: string | null;
+      loading?: boolean;
+    }
+  | {
+      kind: "confirm_upgrade";
+      target: "pro" | "business";
+    }
+  | {
+      kind: "confirm_downgrade";
+      target: ManagerSkuTier;
+    }
+  | {
+      kind: "confirm_annual";
+    }
   | {
       kind: "annual_to_monthly";
     }
@@ -92,7 +118,7 @@ export function ManagerPlan() {
   const [billingPortalBusy, setBillingPortalBusy] = useState(false);
   const [resumeBusy, setResumeBusy] = useState(false);
   const [cancelDowngradeBusy, setCancelDowngradeBusy] = useState(false);
-  const [feedbackModal, setFeedbackModal] = useState<PlanFeedbackModalState>(null);
+  const [planModal, setPlanModal] = useState<PlanModalState>(null);
   const [feedbackReason, setFeedbackReason] = useState("");
   const [feedbackBusy, setFeedbackBusy] = useState(false);
 
@@ -202,11 +228,31 @@ export function ManagerPlan() {
     [email, planBasePath, userId],
   );
 
-  const closeFeedbackModal = useCallback(() => {
+  const closePlanModal = useCallback(() => {
     if (feedbackBusy) return;
-    setFeedbackModal(null);
+    setPlanModal(null);
     setFeedbackReason("");
   }, [feedbackBusy]);
+
+  const planModalTitle = useMemo(() => {
+    if (!planModal) return "";
+    switch (planModal.kind) {
+      case "checkout":
+        return `Subscribe to ${tierLabel(planModal.tier)}`;
+      case "confirm_upgrade":
+        return `Upgrade to ${tierLabel(planModal.target)}`;
+      case "confirm_downgrade":
+        return `Switch to ${tierLabel(planModal.target)}`;
+      case "confirm_annual":
+        return "Switch to annual billing";
+      case "annual_to_monthly":
+        return "Switch to monthly billing";
+      case "cancel_plan":
+        return "Before you cancel";
+      default:
+        return "";
+    }
+  }, [planModal]);
 
   const scheduledBillingChange =
     sub?.scheduledDowngrade &&
@@ -237,25 +283,27 @@ export function ManagerPlan() {
     }
   };
 
-  const startStripeCheckout = async (tier: "pro" | "business", billingInterval: "monthly" | "annual") => {
+  const startEmbeddedCheckout = async (tier: "pro" | "business", billingInterval: "monthly" | "annual") => {
     flushSync(() => setBusyTier(tier));
+    setPlanModal({ kind: "checkout", tier, billing: billingInterval, clientSecret: null, loading: true });
     try {
       const res = await fetch("/api/stripe/checkout-portal", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, billing: billingInterval, returnBasePath: planBasePath }),
+        body: JSON.stringify({ tier, billing: billingInterval, returnBasePath: planBasePath, embedded: true }),
       });
-      const body = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !body.url) {
+      const body = (await res.json()) as { clientSecret?: string; error?: string };
+      if (!res.ok || !body.clientSecret) {
         showToast(body.error ?? "Could not start checkout.");
-        setBusyTier(null);
+        setPlanModal(null);
         return;
       }
-      continueInCurrentTab(body.url);
-      setBusyTier(null);
+      setPlanModal({ kind: "checkout", tier, billing: billingInterval, clientSecret: body.clientSecret });
     } catch {
       showToast("Network error.");
+      setPlanModal(null);
+    } finally {
       setBusyTier(null);
     }
   };
@@ -358,19 +406,16 @@ export function ManagerPlan() {
 
     if (next === "monthly" && currentBilling === "annual") {
       setFeedbackReason("");
-      setFeedbackModal({ kind: "annual_to_monthly" });
+      setPlanModal({ kind: "annual_to_monthly" });
       return;
     }
 
-    const renewalNote = renewalLabel ? ` on ${renewalLabel}` : " at your next renewal";
-    if (
-      !window.confirm(
-        `Switch to annual billing? You'll be billed annually (~20% savings). After one year${renewalNote}, you can switch back to monthly billing if you prefer.`,
-      )
-    ) {
-      return;
-    }
-    await setTierViaApi(currentTier, { billingInterval: next, billingOnly: true });
+    setPlanModal({ kind: "confirm_annual" });
+  };
+
+  const confirmAnnualBilling = async () => {
+    setPlanModal(null);
+    await setTierViaApi(currentTier, { billingInterval: "annual", billingOnly: true });
   };
 
   const confirmAnnualToMonthly = async () => {
@@ -382,7 +427,7 @@ export function ManagerPlan() {
     setFeedbackBusy(true);
     try {
       await submitPlanChangeFeedback("Plan: switch from annual to monthly billing", reason);
-      setFeedbackModal(null);
+      setPlanModal(null);
       setFeedbackReason("");
       await setTierViaApi(currentTier, { billingInterval: "monthly", billingOnly: true });
     } catch {
@@ -401,7 +446,7 @@ export function ManagerPlan() {
     setFeedbackBusy(true);
     try {
       await submitPlanChangeFeedback(`Plan: cancelled ${tierLabel(currentTier)} subscription`, reason);
-      setFeedbackModal(null);
+      setPlanModal(null);
       setFeedbackReason("");
       await setTierViaApi("free");
     } catch {
@@ -414,43 +459,47 @@ export function ManagerPlan() {
   const changePlan = async (target: ManagerSkuTier) => {
     if (!sub || anyBusy || target === currentTier) return;
 
-    if (
-      sub.stripeManaged &&
-      target !== "free" &&
-      tierRank(target) < tierRank(currentTier)
-    ) {
-      if (
-        !window.confirm(
-          `Downgrade to ${tierLabel(target)} at your next renewal? You keep ${tierLabel(currentTier)} until then.`,
-        )
-      ) {
+    if (target === "free" && currentTier !== "free") {
+      if (sub.cancelAtPeriodEnd) {
+        showToast("Your subscription is already scheduled to cancel at the end of your billing period.");
         return;
       }
+      setFeedbackReason("");
+      setPlanModal({ kind: "cancel_plan", fromTier: currentTier });
+      return;
     }
 
-    if (target === "free" && currentTier !== "free") {
-      const msg = sub.stripeManaged
-        ? `Cancel your ${tierLabel(currentTier)} subscription? You keep paid features until ${
-            renewalLabel ?? "the end of your billing period"
-          }, then move to Free.`
-        : `Switch to the Free plan? Some features will be limited.`;
-      if (!window.confirm(msg)) return;
-      setFeedbackReason("");
-      setFeedbackModal({ kind: "cancel_plan", fromTier: currentTier });
+    if (sub.stripeManaged && target !== "free" && tierRank(target) < tierRank(currentTier)) {
+      setPlanModal({ kind: "confirm_downgrade", target });
       return;
     }
 
     const paidTarget = target as "pro" | "business";
     if (!sub.stripeManaged) {
-      await startStripeCheckout(paidTarget, priceView);
+      await startEmbeddedCheckout(paidTarget, priceView);
       return;
     }
 
     if (tierRank(paidTarget) > tierRank(currentTier)) {
-      if (!window.confirm(`Upgrade to ${tierLabel(paidTarget)} now? Your card will be charged with proration.`)) return;
+      setPlanModal({ kind: "confirm_upgrade", target: paidTarget });
+      return;
     }
 
     await setTierViaApi(paidTarget, { billingInterval: priceView });
+  };
+
+  const confirmPlanDowngrade = async () => {
+    if (!planModal || planModal.kind !== "confirm_downgrade") return;
+    const target = planModal.target;
+    setPlanModal(null);
+    await setTierViaApi(target, { billingInterval: priceView });
+  };
+
+  const confirmPlanUpgrade = async () => {
+    if (!planModal || planModal.kind !== "confirm_upgrade") return;
+    const target = planModal.target;
+    setPlanModal(null);
+    await setTierViaApi(target, { billingInterval: priceView });
   };
 
   const planActionLabel = (tierId: ManagerSkuTier): string => {
@@ -614,7 +663,6 @@ export function ManagerPlan() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-foreground">Compare plans</h3>
-              <p className="mt-0.5 text-sm text-muted">Choose a plan below. Upgrades apply immediately; downgrades and billing changes take effect at renewal.</p>
             </div>
             <div className="surface-panel inline-flex shrink-0 items-center gap-1 rounded-full border border-border p-1 shadow-sm">
               <button
@@ -744,17 +792,99 @@ export function ManagerPlan() {
       </div>
 
       <Modal
-        open={feedbackModal !== null}
-        title={
-          feedbackModal?.kind === "annual_to_monthly"
-            ? "Switch to monthly billing"
-            : feedbackModal?.kind === "cancel_plan"
-              ? "Before you cancel"
-              : ""
-        }
-        onClose={closeFeedbackModal}
+        open={planModal !== null}
+        title={planModalTitle}
+        onClose={closePlanModal}
+        panelClassName={planModal?.kind === "checkout" ? "w-full max-w-3xl" : undefined}
       >
-        {feedbackModal?.kind === "annual_to_monthly" ? (
+        {planModal?.kind === "checkout" ? (
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-muted">
+              Complete checkout below to activate{" "}
+              <span className="font-semibold text-foreground">{tierLabel(planModal.tier)}</span> on your Axis portal
+              {planModal.billing === "annual" ? " with annual billing (~20% savings)." : "."}
+              {" "}
+              You&apos;ll stay on this page — billing is handled securely by Stripe.
+            </p>
+            <p className="text-sm font-medium text-foreground">
+              {planPriceLabel(planTiers, planModal.tier, planModal.billing)}
+            </p>
+            {planModal.clientSecret ? (
+              <EmbeddedCheckoutMount
+                clientSecret={planModal.clientSecret}
+                onError={(message) => {
+                  showToast(message);
+                  setPlanModal(null);
+                }}
+              />
+            ) : (
+              <p className="py-8 text-center text-sm text-muted">Preparing secure checkout…</p>
+            )}
+          </div>
+        ) : planModal?.kind === "confirm_upgrade" ? (
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-muted">
+              Upgrade to <span className="font-semibold text-foreground">{tierLabel(planModal.target)}</span> now? Your
+              saved card will be charged with proration. Changes apply immediately in your Axis portal.
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
+                Cancel
+              </Button>
+              <Button type="button" variant="primary" className="rounded-full" onClick={() => void confirmPlanUpgrade()}>
+                Confirm upgrade
+              </Button>
+            </div>
+          </div>
+        ) : planModal?.kind === "confirm_downgrade" ? (
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-muted">
+              Downgrade to <span className="font-semibold text-foreground">{tierLabel(planModal.target)}</span> at your
+              next renewal? You keep <span className="font-semibold text-foreground">{tierLabel(currentTier)}</span>
+              {renewalLabel ? (
+                <>
+                  {" "}
+                  until <span className="font-semibold text-foreground">{renewalLabel}</span>
+                </>
+              ) : (
+                " until the end of your billing period"
+              )}
+              .
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
+                Keep {tierLabel(currentTier)}
+              </Button>
+              <Button type="button" variant="primary" className="rounded-full" onClick={() => void confirmPlanDowngrade()}>
+                Schedule downgrade
+              </Button>
+            </div>
+          </div>
+        ) : planModal?.kind === "confirm_annual" ? (
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-muted">
+              Switch to annual billing for <span className="font-semibold text-foreground">{tierLabel(currentTier)}</span>?
+              You&apos;ll be billed annually (~20% savings). After one year
+              {renewalLabel ? (
+                <>
+                  {" "}
+                  on <span className="font-semibold text-foreground">{renewalLabel}</span>
+                </>
+              ) : (
+                " at your next renewal"
+              )}
+              , you can switch back to monthly billing if you prefer.
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
+                Keep monthly
+              </Button>
+              <Button type="button" variant="primary" className="rounded-full" onClick={() => void confirmAnnualBilling()}>
+                Switch to annual
+              </Button>
+            </div>
+          </div>
+        ) : planModal?.kind === "annual_to_monthly" ? (
           <div className="space-y-4">
             <p className="text-sm leading-6 text-muted">
               You&apos;re currently on <span className="font-semibold text-foreground">annual billing</span>. Switching to
@@ -783,7 +913,7 @@ export function ManagerPlan() {
               <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closeFeedbackModal}>
+              <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closePlanModal}>
                 Keep annual
               </Button>
               <Button
@@ -797,10 +927,10 @@ export function ManagerPlan() {
               </Button>
             </div>
           </div>
-        ) : feedbackModal?.kind === "cancel_plan" ? (
+        ) : planModal?.kind === "cancel_plan" ? (
           <div className="space-y-4">
             <p className="text-sm leading-6 text-muted">
-              You&apos;ll keep <span className="font-semibold text-foreground">{tierLabel(feedbackModal.fromTier)}</span>{" "}
+              You&apos;ll keep <span className="font-semibold text-foreground">{tierLabel(planModal.fromTier)}</span>{" "}
               until
               {renewalLabel ? (
                 <>
@@ -810,7 +940,7 @@ export function ManagerPlan() {
               ) : (
                 " the end of your billing period"
               )}
-              , then move to Free.
+              , then move to Free. Paid features stay available until then — nothing changes immediately.
             </p>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-foreground" htmlFor="plan-cancel-reason">
@@ -826,7 +956,7 @@ export function ManagerPlan() {
               <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closeFeedbackModal}>
+              <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closePlanModal}>
                 Keep my plan
               </Button>
               <Button
