@@ -3,7 +3,8 @@ import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { getManagerPurchaseSku, normalizeManagerSkuTier } from "@/lib/manager-access";
+import { normalizeManagerSkuTier } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
 import {
   APPLICATION_FEE_CHECKOUT_PURPOSE,

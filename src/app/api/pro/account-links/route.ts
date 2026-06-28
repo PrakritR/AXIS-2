@@ -6,8 +6,9 @@ import {
   type AccountLinkTabKind,
   type AccountLinksPayload,
 } from "@/lib/account-links";
-import { normalizeCoManagerPermissions, normalizePropertyCoManagerPermissions, prunePropertyCoManagerPermissions, flatCoManagerPermissionsFromProperty, type CoManagerPermissions, type PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
-import { getManagerPurchaseSku, maxAccountLinksForTier } from "@/lib/manager-access";
+import { normalizePropertyCoManagerPermissions, flatCoManagerPermissionsFromProperty, type CoManagerPermissions, type PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
+import { maxAccountLinksForTier } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 

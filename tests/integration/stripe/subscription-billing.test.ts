@@ -14,7 +14,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 
-vi.mock("@/lib/manager-access", () => ({
+vi.mock("@/lib/manager-access-server", () => ({
   getManagerPurchaseSku: vi.fn(),
 }));
 
@@ -42,7 +42,7 @@ vi.mock("@/lib/supabase/service", () => ({
 
 import { getStripe } from "@/lib/stripe";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getManagerPurchaseSku } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { reconcileManagerPurchaseByStripeSubscriptionId } from "@/lib/manager-stripe-subscription-sync";
 import { POST as checkout } from "@/app/api/stripe/checkout/route";
@@ -201,7 +201,7 @@ describe("Stripe subscription billing", () => {
 
     const req = jsonRequest("http://localhost/api/stripe/checkout-portal", {
       method: "POST",
-      body: { tier: "business", billing: "annual" },
+      body: { tier: "business", billing: "annual", embedded: false },
     });
     const res = await checkoutPortal(req);
     const { status, data } = await parseJsonResponse<{ url?: string }>(res);

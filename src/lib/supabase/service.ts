@@ -1,7 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
+import { assertNonProdDatabase } from "@/lib/server-env";
 
 /** Service role — server-only (webhooks, privileged signup). Never import in client code. */
 export function createSupabaseServiceRoleClient() {
+  assertNonProdDatabase();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {

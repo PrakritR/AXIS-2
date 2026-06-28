@@ -1,0 +1,34 @@
+---
+description: Keep web and Capacitor native app in sync when changing portal UI, routes, or notifications
+globs:
+  - src/components/portal/**
+  - src/lib/portals/**
+  - src/lib/render-portal-section.tsx
+  - src/lib/platform/**
+  - src/lib/native/**
+  - src/lib/auth/native-entry-paths.ts
+  - src/lib/push-notifications.server.ts
+  - src/app/api/cron/**
+  - tests/e2e/**-portal*.spec.ts
+alwaysApply: false
+---
+
+# Web + native parity (Axis)
+
+Axis uses **one Next.js codebase** for the website and iOS/Android apps. Capacitor loads the deployed site in a WebView — **do not build separate mobile-only portal UIs**.
+
+## Before finishing portal / notification work
+
+1. **Nav sections** — Update `src/lib/portals/*-sections.ts` (resident: `resident-sections.ts`), wire `render-portal-section.tsx`, and tier gating (`RESIDENT_FREE_TIER_SECTION_IDS` / `manager-access.ts`).
+2. **Routes** — New top-level prefixes go in `IN_APP_PATH_PREFIXES` (`src/lib/platform/parity.ts`) so deep links and push taps work in the app.
+3. **Push** — `sendPushToUser` URLs must be in-app paths; add to `REGISTERED_PUSH_DEEP_LINKS`.
+4. **Uploads** — Use `useNativeCamera()` for photo flows.
+5. **Safe area** — Portal shells use `portal-layout-classes.ts` and `html[data-native]` (see `globals.css`).
+6. **Tests** — Run `npm run test:unit`; `platform-parity.test.ts` must pass.
+
+## Deploy model
+
+- **Portal UI / API** → Vercel deploy updates **web and app** together.
+- **Native shell only** (plugins, icons, permissions) → `npx cap sync` + store rebuild.
+
+Full guide: `docs/web-and-native-parity.md`

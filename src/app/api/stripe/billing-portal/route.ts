@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getManagerPurchaseSku } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { backfillOrphanGoogleOAuthManagers } from "@/lib/auth/provision-free-manager-oauth";
 import { deletePortalAccountCompletely } from "@/lib/auth/delete-portal-account";
-import { normalizeManagerSkuTier, pickBestManagerPurchaseRow, setManagerPurchaseTier } from "@/lib/manager-access";
+import { normalizeManagerSkuTier, pickBestManagerPurchaseRow } from "@/lib/manager-access";
+import { setManagerPurchaseTier } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 

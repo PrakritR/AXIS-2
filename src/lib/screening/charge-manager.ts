@@ -1,4 +1,4 @@
-import { getManagerPurchaseSku } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { getStripe } from "@/lib/stripe";
 import type Stripe from "stripe";
 

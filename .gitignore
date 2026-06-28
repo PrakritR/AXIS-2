@@ -64,3 +64,7 @@ playwright.config.ts
 /android/local.properties
 /android/.idea/
 /android/captures/
+
+# Claude Code local state (worktrees, jobs, plans, memory)
+.claude/
+.cursor/skills/

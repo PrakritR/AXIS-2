@@ -1,15 +1,17 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
+import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { PORTAL_MAIN_CONTENT_CLASS, PORTAL_MAIN_CONTENT_ID, PORTAL_SHELL_ROOT_CLASS } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
-  const nav = await buildProPortalDefinition();
+  const [nav, { profile }] = await Promise.all([buildProPortalDefinition(), getServerSessionProfile()]);
 
   return (
     <div className={PORTAL_SHELL_ROOT_CLASS}>
@@ -34,6 +36,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
           </main>
         </div>
       </div>
+      <AxisAssistant managerName={profile?.full_name ?? null} />
     </div>
   );
 }

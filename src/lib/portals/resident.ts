@@ -1,5 +1,5 @@
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
-import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access";
+import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import type { PortalDefinition } from "@/lib/portal-types";
 import {
   RESIDENT_APPROVED_PORTAL_SECTIONS,

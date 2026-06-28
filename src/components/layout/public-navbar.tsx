@@ -36,7 +36,7 @@ export function PublicNavbar() {
   const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
-    setSignedIn(readSignedInFromStorage());
+    queueMicrotask(() => setSignedIn(readSignedInFromStorage()));
 
     const supabase = createSupabaseBrowserClient();
     void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {

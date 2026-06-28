@@ -84,7 +84,7 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
   }, []);
 
   useEffect(() => {
-    void reloadManual();
+    queueMicrotask(() => void reloadManual());
   }, [reloadManual]);
 
   useEffect(() => {

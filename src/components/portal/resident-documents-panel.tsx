@@ -47,8 +47,10 @@ export function ResidentDocumentsPanel({
   }, [range.from, range.to]);
 
   useEffect(() => {
-    setLedgerReport(null);
-    setGenerated(false);
+    queueMicrotask(() => {
+      setLedgerReport(null);
+      setGenerated(false);
+    });
   }, [tabId]);
 
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();

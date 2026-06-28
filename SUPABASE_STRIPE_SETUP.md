@@ -9,8 +9,16 @@ This app uses **Supabase Auth** for logins and **Stripe Checkout** (subscription
    - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (keep secret; server-only)
-3. Open **SQL Editor** and run the migration in `supabase/migrations/20250418140000_profiles_manager_purchases.sql`.
-4. **Authentication → Providers**: enable **Email** (password). Enable **Google** and add your Google OAuth client ID/secret (see below).
+3. Apply the schema with the Supabase CLI (do **not** copy migrations into the SQL Editor by hand — that lets environments drift). Install the CLI, then from the repo root:
+   ```bash
+   supabase login
+   supabase link --project-ref <your-project-ref>
+   npm run db:push        # applies everything in supabase/migrations/
+   ```
+   Axis runs two projects (a shared dev/test project and production) that are kept
+   identical via these migrations. See [`docs/database-environments.md`](docs/database-environments.md)
+   for the full two-project model and the dev → prod push workflow.
+4. **Authentication → Providers**: enable **Email** (password). Enable **Google** and add your Google OAuth client ID/secret (see below). For development you may disable **Confirm email** under Auth settings so sign-up can insert `profiles` immediately; in production keep confirmations on and confirm email before expecting a `profiles` row from client sign-up.
 5. **Authentication → URL configuration** (Auth): set site URL to your production domain (`NEXT_PUBLIC_CANONICAL_APP_URL` or `NEXT_PUBLIC_APP_URL`) and add redirect URLs:
    - `{your-domain}/auth/callback`
    - `{your-domain}/auth/callback/partner-pricing` (Google signup from Partner pricing)
@@ -154,8 +162,8 @@ Restart `npm run dev` after changes.
 
 ## 5. Your checklist
 
-- [ ] Run SQL migration in Supabase.
-- [ ] Set all Supabase env vars in hosting (Vercel, etc.).
+- [ ] Apply migrations with `npm run db:push` (CLI), not the SQL Editor.
+- [ ] Set all Supabase env vars in hosting (Vercel, etc.). Production Supabase creds live in Vercel only; local `.env` points at the dev/test project. See [`docs/database-environments.md`](docs/database-environments.md).
 - [ ] Set `FINANCIALS_TIN_ENCRYPTION_KEY` (32+ character random secret) before using manager Financials 1099 / vendor W-9 tax profiles. Required server-side; without it, TIN encrypt/decrypt endpoints fail closed.
 - [ ] Create Stripe prices and webhook; set Stripe env vars.
 - [ ] Set `NEXT_PUBLIC_APP_URL` to production origin.

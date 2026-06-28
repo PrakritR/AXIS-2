@@ -8,7 +8,8 @@ import {
   listingFromPropertyData,
   resolveListingForHouseholdCharge,
 } from "@/lib/household-charge-payment-eligibility";
-import { getManagerPurchaseSku, normalizeManagerSkuTier } from "@/lib/manager-access";
+import { normalizeManagerSkuTier } from "@/lib/manager-access";
+import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { axisPaymentsEnabledOnListing, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
 import { householdChargeAmountCents, HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE } from "@/lib/stripe-household-charge";
 import { createAxisAchCheckoutSession, stripeNotConfiguredError } from "@/lib/stripe-axis-ach-checkout";
@@ -19,6 +20,12 @@ import {
 } from "@/lib/stripe-connect";
 
 export const runtime = "nodejs";
+
+// Stripe limits a metadata value to 500 chars. Charge ids are joined into the
+// `charge_ids` value the webhook reads back, so cap the bulk count to keep the
+// CSV safely under that limit and never truncate an id (which would silently
+// leave a paid charge unmarked).
+const MAX_BULK_CHARGES = 10;
 
 type Body = {
   chargeId?: string;
@@ -63,6 +70,12 @@ export async function POST(req: Request) {
     const uniqueIds = [...new Set(requestedIds)];
     if (uniqueIds.length === 0) {
       return NextResponse.json({ error: "chargeId or chargeIds is required." }, { status: 400 });
+    }
+    if (uniqueIds.length > MAX_BULK_CHARGES) {
+      return NextResponse.json(
+        { error: `You can pay at most ${MAX_BULK_CHARGES} charges at once.` },
+        { status: 400 },
+      );
     }
 
     const db = createSupabaseServiceRoleClient();
@@ -155,7 +168,7 @@ export async function POST(req: Request) {
     const amountCents = lineItems.reduce((sum, item) => sum + item.amountCents, 0);
     const residentEmail = loaded[0]!.charge.residentEmail.trim().toLowerCase();
     const appUrl = resolveAppOrigin(req);
-    const chargeIdsCsv = loaded.map((row) => row.id).join(",").slice(0, 450);
+    const chargeIdsCsv = loaded.map((row) => row.id).join(",");
 
     const metadata: Record<string, string> = {
       purpose: HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE,
