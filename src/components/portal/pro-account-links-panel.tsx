@@ -172,9 +172,22 @@ export function ProAccountLinksPanel({
     return readProRelationships(userId);
   }, [userId, localTick]);
 
-  const activeRemote = remoteInvites.filter((i) => i.status === "accepted");
-  const incomingPending = remoteInvites.filter((i) => i.status === "pending" && i.direction === "incoming");
-  const outgoingPending = remoteInvites.filter((i) => i.status === "pending" && i.direction === "outgoing");
+  // Memoized so the reference is stable across renders. activeRemote feeds the
+  // relationship-sync effect below; a fresh array each render would re-run that
+  // effect every render, and its writeProRelationships dispatch bumps the nav
+  // hook's tick, causing an infinite render loop.
+  const activeRemote = useMemo(
+    () => remoteInvites.filter((i) => i.status === "accepted"),
+    [remoteInvites],
+  );
+  const incomingPending = useMemo(
+    () => remoteInvites.filter((i) => i.status === "pending" && i.direction === "incoming"),
+    [remoteInvites],
+  );
+  const outgoingPending = useMemo(
+    () => remoteInvites.filter((i) => i.status === "pending" && i.direction === "outgoing"),
+    [remoteInvites],
+  );
 
   const propertyOptions = useMemo(() => {
     void localTick;
