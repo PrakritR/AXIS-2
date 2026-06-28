@@ -8,17 +8,40 @@ import type { Session } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+const AUTH_STORAGE_KEY = "axis:signed_in";
+
+function readSignedInFromStorage(): boolean {
+  try {
+    return typeof window !== "undefined" && localStorage.getItem(AUTH_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistSignedIn(value: boolean) {
+  try {
+    if (value) localStorage.setItem(AUTH_STORAGE_KEY, "1");
+    else localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {}
+}
+
 export function PublicNavbar() {
   const pathname = usePathname();
-  const [signedIn, setSignedIn] = useState(false);
+  // Initialize from localStorage so client-side navigation (e.g. portal → home) is instant.
+  // During SSR window is undefined so this returns false — hydration matches the server render.
+  const [signedIn, setSignedIn] = useState<boolean>(() => readSignedInFromStorage());
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
-      setSignedIn(!!result.data.session);
+      const isSignedIn = !!result.data.session;
+      setSignedIn(isSignedIn);
+      persistSignedIn(isSignedIn);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
-      setSignedIn(!!session);
+      const isSignedIn = !!session;
+      setSignedIn(isSignedIn);
+      persistSignedIn(isSignedIn);
     });
     return () => listener.subscription.unsubscribe();
   }, []);
