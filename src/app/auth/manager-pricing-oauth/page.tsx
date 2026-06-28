@@ -182,8 +182,8 @@ function ManagerPricingOauthContent() {
       <AuthCard>
         <p className="text-center text-sm text-rose-600">{errorText}</p>
         <div className="mt-6 flex justify-center gap-4">
-          <Link className="text-sm font-semibold text-primary hover:underline" href="/partner/pricing">
-            Partner pricing
+          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/manager/plan">
+            Choose plan
           </Link>
           <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/sign-in">
             Sign in

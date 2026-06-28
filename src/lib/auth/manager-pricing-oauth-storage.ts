@@ -10,6 +10,8 @@ export type ManagerPricingOffer = {
   billing: "monthly" | "annual";
   discountPercent?: number;
   promo?: string;
+  /** Where Google OAuth should return after partner-pricing callback. */
+  returnSurface?: "mobile-plan" | "partner-pricing";
 };
 
 /** Compact persisted shape — avoids storing plan-cycle fields as cleartext JSON. */
@@ -18,6 +20,7 @@ type StoredPricingOffer = {
   i: "m" | "a";
   d?: number;
   p?: string;
+  s?: "m" | "p";
 };
 
 function toStoredOffer(offer: ManagerPricingOffer): StoredPricingOffer {
@@ -26,6 +29,7 @@ function toStoredOffer(offer: ManagerPricingOffer): StoredPricingOffer {
     i: offer.billing === "annual" ? "a" : "m",
     ...(typeof offer.discountPercent === "number" ? { d: offer.discountPercent } : {}),
     ...(offer.promo ? { p: offer.promo } : {}),
+    ...(offer.returnSurface === "mobile-plan" ? { s: "m" } : offer.returnSurface === "partner-pricing" ? { s: "p" } : {}),
   };
 }
 
@@ -37,6 +41,7 @@ function fromStoredOffer(stored: StoredPricingOffer): ManagerPricingOffer | null
     billing: stored.i === "a" ? "annual" : "monthly",
     discountPercent: stored.d,
     promo: stored.p,
+    returnSurface: stored.s === "m" ? "mobile-plan" : stored.s === "p" ? "partner-pricing" : undefined,
   };
 }
 
@@ -62,7 +67,13 @@ function parseLegacyOffer(raw: string): ManagerPricingOffer | null {
     const parsed = JSON.parse(raw) as ManagerPricingOffer;
     if (parsed.tier !== "free" && parsed.tier !== "pro" && parsed.tier !== "business") return null;
     if (parsed.billing !== "monthly" && parsed.billing !== "annual") return null;
-    return parsed;
+    return {
+      tier: parsed.tier,
+      billing: parsed.billing,
+      discountPercent: parsed.discountPercent,
+      promo: parsed.promo,
+      returnSurface: parsed.returnSurface,
+    };
   } catch {
     return null;
   }

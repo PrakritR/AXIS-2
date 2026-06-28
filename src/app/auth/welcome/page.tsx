@@ -81,7 +81,7 @@ export default function AuthWelcomePage() {
         ))}
       </AuthChoiceList>
 
-      <AuthFooterLink href="/auth/sign-in">Already signed in?</AuthFooterLink>
+      <AuthFooterLink href="/auth/sign-in">Sign in</AuthFooterLink>
     </AuthCard>
   );
 }

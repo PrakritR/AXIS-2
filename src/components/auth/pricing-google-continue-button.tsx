@@ -11,12 +11,14 @@ export function PricingGoogleContinueButton({
   discountPercent,
   promo,
   disabled = false,
+  returnSurface = "partner-pricing",
 }: {
   tier: PlanTierId;
   billing: "monthly" | "annual";
   discountPercent?: number | null;
   promo?: string;
   disabled?: boolean;
+  returnSurface?: "mobile-plan" | "partner-pricing";
 }) {
   const nextPath = managerPricingOauthPath({
     tier,
@@ -31,6 +33,7 @@ export function PricingGoogleContinueButton({
       billing,
       discountPercent: discountPercent ?? undefined,
       promo,
+      returnSurface,
     });
   };
 

@@ -15,6 +15,9 @@ export async function GET(request: NextRequest) {
       if (tier === "free") {
         return "/portal/dashboard";
       }
+      if (offer?.returnSurface === "mobile-plan") {
+        return "/auth/manager/plan?google_signed_in=1";
+      }
       return "/partner/pricing?google_signed_in=1&upgrade=1";
     },
   });

@@ -142,6 +142,7 @@ export function buildPricingOffer(opts: {
   billing: "monthly" | "annual";
   promo?: string;
   discountPercent?: number | null;
+  returnSurface?: "mobile-plan" | "partner-pricing";
 }): ManagerPricingOffer {
   const stored = readManagerPricingOffer();
   return {
@@ -149,6 +150,7 @@ export function buildPricingOffer(opts: {
     billing: opts.billing,
     promo: opts.promo ?? stored?.promo,
     discountPercent: opts.discountPercent ?? stored?.discountPercent,
+    returnSurface: opts.returnSurface ?? stored?.returnSurface,
   };
 }
 
@@ -159,10 +161,17 @@ export async function handleGoogleSignedInReturn(): Promise<{ status: "provision
   }
 
   if (typeof window !== "undefined") {
-    const params = new URLSearchParams(window.location.search);
-    const upgrade = params.get("upgrade") === "1";
-    const nextUrl = upgrade ? "/partner/pricing?upgrade=1" : "/partner/pricing";
-    window.history.replaceState({}, "", nextUrl);
+    const stored = readManagerPricingOffer();
+    const onMobilePlan =
+      stored?.returnSurface === "mobile-plan" || window.location.pathname.startsWith("/auth/manager/plan");
+    if (onMobilePlan) {
+      window.history.replaceState({}, "", "/auth/manager/plan");
+    } else {
+      const params = new URLSearchParams(window.location.search);
+      const upgrade = params.get("upgrade") === "1";
+      const nextUrl = upgrade ? "/partner/pricing?upgrade=1" : "/partner/pricing";
+      window.history.replaceState({}, "", nextUrl);
+    }
   }
 
   return { status: "provisioned" };

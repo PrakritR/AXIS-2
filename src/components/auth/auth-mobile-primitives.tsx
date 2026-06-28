@@ -137,6 +137,16 @@ export function AuthLoadingCard({ label = "Loading…" }: { label?: string }) {
   );
 }
 
+export function AuthDivider({ label = "or" }: { label?: string }) {
+  return (
+    <div className="auth-divider flex items-center gap-3">
+      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" aria-hidden />
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</span>
+      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" aria-hidden />
+    </div>
+  );
+}
+
 export function AuthFieldBlock({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="auth-field-block rounded-2xl border border-border/70 bg-card/40 p-3.5 backdrop-blur-sm sm:p-4">

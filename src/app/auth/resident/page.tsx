@@ -2,9 +2,11 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { MobileEmailSignIn } from "@/components/auth/mobile-email-sign-in";
 import {
   AuthBackLink,
   AuthChoiceList,
+  AuthDivider,
   AuthFieldBlock,
   AuthPageHeader,
   AuthRoleCard,
@@ -58,24 +60,15 @@ export default function ResidentAuthPage() {
       <AuthCard>
         <AuthPageHeader eyebrow="Resident" title="Sign in" accent={false} />
 
-        <div className="mt-5 sm:mt-6">
+        <div className="mt-5">
           <GoogleSignInButton nextPath="/resident/dashboard" />
         </div>
 
-        <div className="auth-divider my-4 flex items-center gap-3 sm:my-5">
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" aria-hidden />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:text-xs">or</span>
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" aria-hidden />
+        <div className="my-4">
+          <AuthDivider />
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full rounded-full py-2.5 text-[15px] font-semibold sm:py-3 sm:text-base"
-          onClick={() => router.push("/auth/sign-in?intent=resident&next=/resident/dashboard")}
-        >
-          Email sign in
-        </Button>
+        <MobileEmailSignIn nextPath="/resident/dashboard" />
 
         <AuthBackLink onClick={() => setMode("choose")}>← Back</AuthBackLink>
       </AuthCard>
