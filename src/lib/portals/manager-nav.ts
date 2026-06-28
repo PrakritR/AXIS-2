@@ -13,6 +13,7 @@ export async function buildManagerPortalDefinition(): Promise<{
   showPlanBanner: boolean;
   showPreviewBanner: boolean;
   previewLabel: string | null;
+  subscriptionTier: "free" | "paid" | null;
 }> {
   const ctx = await getPortalAccessContext();
   if (!ctx.user) redirect("/auth/sign-in");
@@ -56,5 +57,6 @@ export async function buildManagerPortalDefinition(): Promise<{
     showPlanBanner: isFree,
     showPreviewBanner,
     previewLabel,
+    subscriptionTier: tier,
   };
 }

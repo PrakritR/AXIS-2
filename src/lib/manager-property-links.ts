@@ -1,7 +1,7 @@
 import type { AdminPropertyRow } from "@/lib/demo-admin-property-inventory";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
-import { readExtraListingsForUser } from "@/lib/demo-property-pipeline";
-import { collectAccessiblePropertyIds, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
+import { readExtraListingsForUser, readAllExtraListings } from "@/lib/demo-property-pipeline";
+import { collectAccessiblePropertyIds, readLinkedListingsForUser, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 
 export type ManagerApplyLinkParams = {
   propertyId: string;
@@ -40,12 +40,18 @@ export function managerPropertyIdForLinks(row: Pick<AdminPropertyRow, "listingId
 /** Active listed properties managers can share apply/tour links for. */
 export function buildManagerShareablePropertyOptions(userId: string | null): ManagerPropertyFilterOption[] {
   if (!userId) return [];
-  return readExtraListingsForUser(userId)
-    .filter((p) => p.adminPublishLive === true)
-    .map((p) => ({
-      id: p.id,
-      label: (p.title || p.buildingName || p.address).trim() || p.id,
-    }))
+  const labelById = new Map<string, string>();
+  for (const p of readExtraListingsForUser(userId)) {
+    if (p.adminPublishLive !== true) continue;
+    labelById.set(p.id, (p.title || p.buildingName || p.address).trim() || p.id);
+  }
+  for (const { listing } of readLinkedListingsForUser(userId)) {
+    if (listing.adminPublishLive !== true) continue;
+    if (labelById.has(listing.id)) continue;
+    labelById.set(listing.id, (listing.title || listing.buildingName || listing.address).trim() || listing.id);
+  }
+  return [...labelById.entries()]
+    .map(([id, label]) => ({ id, label }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 }
 
@@ -53,7 +59,9 @@ export function managerCanSharePropertyForUser(userId: string | null, propertyId
   if (!userId) return false;
   const id = propertyId.trim();
   if (!id || !collectAccessiblePropertyIds(userId).has(id)) return false;
-  const listing = readExtraListingsForUser(userId).find((p) => p.id === id);
+  const listing =
+    readExtraListingsForUser(userId).find((p) => p.id === id) ??
+    readAllExtraListings().find((p) => p.id === id);
   if (!listing) return false;
   return listing.adminPublishLive === true;
 }

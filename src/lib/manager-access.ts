@@ -349,5 +349,12 @@ export function managerSectionAllowedForTier(section: string, tier: "free" | "pa
   return FREE_SUBSCRIPTION_SECTIONS.has(section);
 }
 
+export function managerSectionLockedForTier(
+  section: string,
+  tier: "free" | "paid" | null | undefined,
+): boolean {
+  return tier === "free" && !managerSectionAllowedForTier(section, "free");
+}
+
 /** @deprecated Use FREE_SUBSCRIPTION_SECTIONS */
 export const FREE_MANAGER_SECTIONS = FREE_SUBSCRIPTION_SECTIONS;

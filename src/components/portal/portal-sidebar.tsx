@@ -12,6 +12,7 @@ import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button"
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { managerSectionLockedForTier } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function hrefForSection(def: PortalDefinition, section: string) {
@@ -98,16 +99,42 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
   );
 }
 
-function navLinkClass(active: boolean) {
+function navLinkClass(active: boolean, locked?: boolean) {
   return [
     "relative flex min-h-10 items-center justify-between gap-2 rounded-[14px] px-3 py-2.5 text-[14px] font-medium transition duration-200",
     active
       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-border/60 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-      : "text-muted hover:bg-accent/70 hover:text-foreground [html[data-theme=dark]_&]:text-white/78",
+      : locked
+        ? "text-muted/80 hover:bg-accent/50 hover:text-muted [html[data-theme=dark]_&]:text-white/55"
+        : "text-muted hover:bg-accent/70 hover:text-foreground [html[data-theme=dark]_&]:text-white/78",
   ].join(" ");
 }
 
-export function PortalSidebar({ definition }: { definition: PortalDefinition }) {
+function NavLockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
+export function PortalSidebar({
+  definition,
+  subscriptionTier,
+}: {
+  definition: PortalDefinition;
+  subscriptionTier?: "free" | "paid" | null;
+}) {
   const pathname = usePathname();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
@@ -165,6 +192,12 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
           ? "Axis"
           : definition.title;
 
+  const showTierLocks =
+    (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
+
+  const isSectionLocked = (section: string) =>
+    showTierLocks && managerSectionLockedForTier(section, subscriptionTier);
+
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[16.625rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex">
       <SidebarBrandHeader definition={definition} />
@@ -172,6 +205,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
         <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
           {navItems.map((s) => {
             const active = activeSection === s.section;
+            const locked = isSectionLocked(s.section);
             const count = navCounts[s.section] ?? 0;
             return (
               <Link
@@ -179,7 +213,8 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                 href={s.href}
                 prefetch
                 onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
-                className={navLinkClass(active)}
+                className={navLinkClass(active, locked)}
+                aria-label={locked ? `${s.label} — locked on Pro or Business` : s.label}
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   {active ? (
@@ -189,13 +224,16 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                     />
                   ) : null}
                   {showNavIcons ? (
-                    <span className={`shrink-0 ${active ? "ml-2 opacity-100" : "opacity-80"}`} aria-hidden>
+                    <span className={`shrink-0 ${active ? "ml-2 opacity-100" : locked ? "ml-0 opacity-60" : "opacity-80"}`} aria-hidden>
                       <PortalNavIcon section={s.section} />
                     </span>
                   ) : null}
                   <span className={`min-w-0 truncate ${active && !showNavIcons ? "pl-2" : ""}`}>{s.label}</span>
                 </span>
-                <PortalNavCountBadge count={count} />
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {!locked ? <PortalNavCountBadge count={count} /> : null}
+                  {locked ? <NavLockIcon className="h-3.5 w-3.5 text-muted" /> : null}
+                </span>
               </Link>
             );
           })}
@@ -244,6 +282,7 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
           <div className="mt-1.5 flex gap-1.5 overflow-x-auto px-3 pb-2 pt-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden">
             {navItems.map((s) => {
               const active = activeSection === s.section;
+              const locked = isSectionLocked(s.section);
               const count = navCounts[s.section] ?? 0;
               return (
                 <Link
@@ -254,16 +293,20 @@ export function PortalSidebar({ definition }: { definition: PortalDefinition }) 
                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
                     active
                       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-                      : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
+                      : locked
+                        ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
+                        : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
                   }`}
+                  aria-label={locked ? `${s.label} — locked on Pro or Business` : s.label}
                 >
                   {showNavIcons ? (
-                    <span className="shrink-0 opacity-90" aria-hidden>
+                    <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
                       <PortalNavIcon section={s.section} />
                     </span>
                   ) : null}
                   {s.label}
-                  <PortalNavCountBadge count={count} />
+                  {!locked ? <PortalNavCountBadge count={count} /> : null}
+                  {locked ? <NavLockIcon className="h-3 w-3 text-muted" /> : null}
                 </Link>
               );
             })}

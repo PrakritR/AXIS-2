@@ -7,18 +7,19 @@ const primaryCta =
 /** Shown when a property portal user on the Free plan opens a paid section. */
 export function PortalTierPaywall({ basePath }: { basePath: "/portal" }) {
   return (
-    <ManagerPortalPageShell title="Upgrade to Pro">
+    <ManagerPortalPageShell title="Locked">
       <div className="relative mx-auto max-w-lg overflow-hidden rounded-3xl border border-border glass-card p-8 text-center">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#2f6bff,#5a8cff,#bcd4ff)]"
           aria-hidden
         />
         <div className="space-y-4">
+          <p className="text-lg font-semibold tracking-[-0.02em] text-foreground">Locked on Pro or Business</p>
           <p className="text-sm leading-relaxed text-muted">
-            This area requires <span className="font-semibold text-foreground">Pro</span> or{" "}
-            <span className="font-semibold text-foreground">Business</span>. Upgrade to unlock the Residents tab — lease
-            generation, work orders, inbox, and co-managers. The Free plan includes property listings, applications, and
-            the touring calendar.
+            This section is not included on the Free plan. Upgrade to{" "}
+            <span className="font-semibold text-foreground">Pro</span> or{" "}
+            <span className="font-semibold text-foreground">Business</span> to unlock residents, leases, services,
+            inbox, and co-managers. Free includes properties, applications, tours, and payments.
           </p>
           <Link href={`${basePath}/plan`} className={primaryCta}>
             View plans &amp; upgrade

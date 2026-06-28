@@ -145,17 +145,23 @@ export async function updateBugFeedbackRow(
   await persistRow(next);
 }
 
-export async function deleteBugFeedbackRow(id: string): Promise<void> {
+export async function deleteBugFeedbackRow(id: string, opts?: { admin?: boolean }): Promise<void> {
   if (!isBrowser()) return;
-  const res = await fetch("/api/portal-bug-feedback", {
+  const trimmedId = id.trim();
+  if (!trimmedId) throw new Error("Missing feedback id.");
+  const endpoint = opts?.admin ? "/api/admin/portal-bug-feedback" : "/api/portal-bug-feedback";
+  const res = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ action: "delete", id }),
+    body: JSON.stringify({ action: "delete", id: trimmedId }),
   });
+  const body = (await res.json().catch(() => ({}))) as { error?: string; deleted?: number };
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? "Could not delete feedback.");
   }
-  writeLocal(cachedRows.filter((r) => r.id !== id));
+  if (typeof body.deleted === "number" && body.deleted < 1) {
+    throw new Error("Could not delete feedback.");
+  }
+  writeLocal(cachedRows.filter((r) => r.id !== trimmedId));
 }

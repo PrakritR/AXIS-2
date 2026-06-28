@@ -18,6 +18,7 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { collectLinkedPropertyIds, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
 import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 
 /** Admin-wide queue (all managers). Manager portal passes `forManagerUserId` for isolated side-buckets. */
@@ -214,6 +215,55 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
   });
 }
 
+function dedupeAdminPropertyRows(rows: AdminPropertyRow[]): AdminPropertyRow[] {
+  const seen = new Set<string>();
+  const out: AdminPropertyRow[] = [];
+  for (const row of rows) {
+    const key = (row.listingId ?? row.adminRefId).trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, userId: string): AdminPropertyRow[] {
+  const linkedIds = collectLinkedPropertyIds(userId);
+  if (linkedIds.size === 0) return [];
+
+  if (bucket === 0) {
+    const rows: AdminPropertyRow[] = [];
+    for (const pending of readAllPendingManagerProperties()) {
+      if (linkedIds.has(pending.id)) rows.push(pendingToAdminRow(pending));
+    }
+    for (const { listing } of readLinkedListingsForUser(userId)) {
+      if (listing.id.startsWith("mgr-") && listing.adminPublishLive !== true) {
+        rows.push(mockToAdminRow(listing, listing.id));
+      }
+    }
+    return rows;
+  }
+
+  if (bucket === 2) {
+    return readLinkedListingsForUser(userId)
+      .filter(({ listing }) => listing.id.startsWith("mgr-") && listing.adminPublishLive === true)
+      .map(({ listing }) => mockToAdminRow(listing, listing.id));
+  }
+
+  const matchesLinked = (row: AdminPropertyRow) =>
+    linkedIds.has(row.adminRefId) || (row.listingId != null && linkedIds.has(row.listingId));
+
+  const rows: AdminPropertyRow[] = [];
+  for (const { listing, ownerUserId } of readLinkedListingsForUser(userId)) {
+    if (!linkedIds.has(listing.id)) continue;
+    const side = readSide(ownerUserId);
+    if (bucket === 1) rows.push(...side.requestChange.filter(matchesLinked));
+    if (bucket === 3) rows.push(...side.unlisted.filter(matchesLinked));
+    if (bucket === 4) rows.push(...side.rejected.filter(matchesLinked));
+  }
+  return rows.map((row) => normalizeAdminPropertyRow(row));
+}
+
 /** When `forManagerUserId` is set, counts only that manager’s pipeline + side buckets (property portal). */
 export function adminKpiCounts(forManagerUserId?: string | null): [number, number, number, number, number] {
   try {
@@ -223,7 +273,13 @@ export function adminKpiCounts(forManagerUserId?: string | null): [number, numbe
       const awaitingReapproval = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive !== true).length;
       const side = readSide(forManagerUserId);
       const listed = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true).length;
-      return [pending + awaitingReapproval, side.requestChange.length, listed, side.unlisted.length, side.rejected.length];
+      return [
+        pending + awaitingReapproval + linkedAdminPropertyRowsForBucket(0, forManagerUserId).length,
+        side.requestChange.length + linkedAdminPropertyRowsForBucket(1, forManagerUserId).length,
+        listed + linkedAdminPropertyRowsForBucket(2, forManagerUserId).length,
+        side.unlisted.length + linkedAdminPropertyRowsForBucket(3, forManagerUserId).length,
+        side.rejected.length + linkedAdminPropertyRowsForBucket(4, forManagerUserId).length,
+      ];
     }
     const pending = readAllPendingManagerProperties().length;
     const awaitingReapproval = readAllExtraListings().filter(
@@ -251,17 +307,24 @@ export function readAdminPropertyRows(
       ? readExtraListingsForUser(forManagerUserId).filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true)
       : readAllExtraListings().filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true);
     const awaitingRows = awaitingExtras.map((p) => mockToAdminRow(p, p.id));
-    return [...pendingRows, ...awaitingRows];
+    const linked = forManagerUserId ? linkedAdminPropertyRowsForBucket(0, forManagerUserId) : [];
+    return dedupeAdminPropertyRows([...pendingRows, ...awaitingRows, ...linked]);
   }
-  if (bucket === 1) return side.requestChange.map((r) => normalizeAdminPropertyRow(r));
+  if (bucket === 1) {
+    return dedupeAdminPropertyRows([
+      ...side.requestChange.map((r) => normalizeAdminPropertyRow(r)),
+      ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(1, forManagerUserId) : []),
+    ]);
+  }
   if (bucket === 2) {
     const extras = forManagerUserId ? readExtraListingsForUser(forManagerUserId) : readAllExtraListings();
     /** Must match {@link adminKpiCounts}: only catalog-live mgr listings. Edits set `adminPublishLive: false` until admin re-approves (see {@link updateExtraListingFromSubmission}). */
     const live = extras.filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive === true);
-    return live.map((p) => mockToAdminRow(p, p.id));
+    const linked = forManagerUserId ? linkedAdminPropertyRowsForBucket(2, forManagerUserId) : [];
+    return dedupeAdminPropertyRows([...live.map((p) => mockToAdminRow(p, p.id)), ...linked]);
   }
-  if (bucket === 3) return side.unlisted.map((r) => normalizeAdminPropertyRow(r));
-  return side.rejected.map((r) => normalizeAdminPropertyRow(r));
+  if (bucket === 3) return dedupeAdminPropertyRows([...side.unlisted.map((r) => normalizeAdminPropertyRow(r)), ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(3, forManagerUserId) : [])]);
+  return dedupeAdminPropertyRows([...side.rejected.map((r) => normalizeAdminPropertyRow(r)), ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(4, forManagerUserId) : [])]);
 }
 
 export function movePendingToRequestChange(

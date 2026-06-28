@@ -21,7 +21,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
         />
       </div>
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
-        <PortalSidebar definition={nav.definition} />
+        <PortalSidebar definition={nav.definition} subscriptionTier={nav.subscriptionTier} />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <main className={PORTAL_MAIN_CONTENT_CLASS}>
             {children}
