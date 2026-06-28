@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
-import { FREE_SUBSCRIPTION_SECTIONS, getManagerPurchaseSku, normalizeManagerSkuTier, paidWorkspacePortalTitle } from "@/lib/manager-access";
+import { getManagerPurchaseSku, normalizeManagerSkuTier, paidWorkspacePortalTitle } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { proPortal } from "./pro";
@@ -57,8 +57,9 @@ export async function buildProPortalDefinition(): Promise<{
   showPlanBanner: boolean;
   showPreviewBanner: boolean;
   previewLabel: string | null;
+  subscriptionTier: "free" | "paid" | null;
 }> {
-  const { ctx, preview, portalTitle, isFree } = await getProPortalRenderContext();
+  const { ctx, preview, portalTitle, isFree, subscriptionTier } = await getProPortalRenderContext();
 
   const showPreviewBanner = hasAdminRole(ctx) && !!preview?.targetUserId;
 
@@ -73,14 +74,13 @@ export async function buildProPortalDefinition(): Promise<{
     previewLabel = p?.full_name?.trim() || p?.email || preview.targetUserId;
   }
 
-  const sections = isFree
-    ? proPortal.sections.filter((s) => FREE_SUBSCRIPTION_SECTIONS.has(s.section))
-    : proPortal.sections;
+  const sections = proPortal.sections;
 
   return {
     definition: { ...proPortal, sections, title: portalTitle },
     showPlanBanner: isFree,
     showPreviewBanner,
     previewLabel,
+    subscriptionTier,
   };
 }

@@ -7,6 +7,7 @@ import {
   readProRelationships,
   writeProRelationships,
 } from "@/lib/pro-relationships";
+import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 export function AccountLinksSync() {
@@ -52,6 +53,7 @@ export function AccountLinksSync() {
         if (changed) {
           writeProRelationships(session.userId, next);
         }
+        await syncManagerPortfolioFromServer(session.userId, { force: true });
       } catch {
         /* ignore */
       }

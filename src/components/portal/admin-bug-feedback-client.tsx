@@ -129,7 +129,7 @@ export function AdminBugFeedbackClient({ tabId }: { tabId: "bugs" | "feedback" }
     }
     setSavingId(row.id);
     try {
-      await deleteBugFeedbackRow(row.id);
+      await deleteBugFeedbackRow(row.id, { admin: true });
       await refresh();
       setExpandedId((cur) => (cur === row.id ? null : cur));
       showToast("Deleted.");
@@ -292,6 +292,7 @@ function FeedbackRoleGroup({
                 <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -324,10 +325,34 @@ function FeedbackRoleGroup({
                           {row.status}
                         </span>
                       </td>
+                      <td className={`${PORTAL_TABLE_TD} text-right`} onClick={(e) => e.stopPropagation()}>
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          {row.status !== "resolved" && row.status !== "closed" ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="min-h-0 rounded-full px-3 py-1 text-[11px]"
+                              disabled={savingId === row.id}
+                              onClick={() => onResolve(row)}
+                            >
+                              Resolve
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="danger"
+                            className="min-h-0 rounded-full px-3 py-1 text-[11px]"
+                            disabled={savingId === row.id}
+                            onClick={() => onDelete(row)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                     {open ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                           <div className="space-y-3 text-sm text-muted">
                             <p className="whitespace-pre-wrap">{row.description}</p>
                             {row.stepsToReproduce ? (
@@ -431,21 +456,24 @@ function AdminRowEditor({
         <p className="mb-1 text-[11px] font-medium text-muted">Admin notes (internal)</p>
         <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-card" placeholder="Triage notes…" />
       </div>
-      <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={() => onSave(status, notes)}>
+      <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={(e) => { e.stopPropagation(); onSave(status, notes); }}>
         {busy ? "Saving…" : "Save"}
       </Button>
-      <div className="flex flex-wrap gap-2 sm:col-span-3">
+      <div className="flex flex-wrap gap-2 sm:col-span-3" onClick={(e) => e.stopPropagation()}>
         {row.status !== "resolved" && row.status !== "closed" ? (
-          <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={onResolve}>
+          <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={(e) => { e.stopPropagation(); onResolve(); }}>
             Mark resolved
           </Button>
         ) : null}
         <Button
           type="button"
-          variant="outline"
-          className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+          variant="danger"
+          className="rounded-full"
           disabled={busy}
-          onClick={onDelete}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
         >
           Delete
         </Button>

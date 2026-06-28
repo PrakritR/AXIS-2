@@ -106,6 +106,9 @@ export function createJsonRecordRoute(config: RecordConfig) {
             if (error) return NextResponse.json({ error: error.message }, { status: 500 });
             deleted += Array.isArray(data) ? data.length : 0;
           }
+          if (deleted === 0) {
+            return NextResponse.json({ error: "Record not found." }, { status: 404 });
+          }
           return NextResponse.json({ ok: true, deleted });
         }
 

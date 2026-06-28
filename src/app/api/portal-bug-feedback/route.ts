@@ -18,7 +18,15 @@ const route = createJsonRecordRoute({
   select: "id, reporter_user_id, reporter_email, reporter_role, report_type, row_data, created_at, updated_at",
   scope: (query, user) => {
     if (user.role === "admin") return query;
-    return (query as { eq: (col: string, val: string) => unknown }).eq("reporter_user_id", user.id);
+    const scoped = query as {
+      eq: (col: string, val: string) => unknown;
+      or: (filters: string) => unknown;
+    };
+    const email = user.email?.trim().toLowerCase();
+    if (email) {
+      return scoped.or(`reporter_user_id.eq.${user.id},reporter_email.eq.${email}`);
+    }
+    return scoped.eq("reporter_user_id", user.id);
   },
   normalize: (row) => ({
     ...row,

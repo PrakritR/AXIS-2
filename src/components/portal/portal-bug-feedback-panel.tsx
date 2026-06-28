@@ -10,6 +10,7 @@ import {
   readBugFeedbackRows,
   submitBugFeedbackReport,
   syncBugFeedbackFromServer,
+  deleteBugFeedbackRow,
   type BugFeedbackReporterRole,
   type BugFeedbackType,
   type BugSeverity,
@@ -45,6 +46,7 @@ export function PortalBugFeedbackPanel({
   const [severity, setSeverity] = useState<BugSeverity>("medium");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
 
   const refresh = useCallback(async () => {
@@ -112,6 +114,20 @@ export function PortalBugFeedbackPanel({
       showToast("Could not send. Try again.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleDelete = async (row: PortalBugFeedbackRow) => {
+    if (!window.confirm(`Delete this ${row.type === "bug" ? "bug report" : "feedback item"}?`)) return;
+    setDeletingId(row.id);
+    try {
+      await deleteBugFeedbackRow(row.id);
+      await refresh();
+      showToast("Deleted.");
+    } catch {
+      showToast("Could not delete.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -234,8 +250,20 @@ export function PortalBugFeedbackPanel({
               <p className="text-xs text-muted">Nothing submitted yet.</p>
             ) : (
               <>
-                <SubmissionGroup title="Bug reports" rows={myRows.filter((r) => r.type === "bug")} empty="No bug reports yet." />
-                <SubmissionGroup title="Feedback" rows={myRows.filter((r) => r.type === "feedback")} empty="No feedback yet." />
+                <SubmissionGroup
+                  title="Bug reports"
+                  rows={myRows.filter((r) => r.type === "bug")}
+                  empty="No bug reports yet."
+                  deletingId={deletingId}
+                  onDelete={(row) => void handleDelete(row)}
+                />
+                <SubmissionGroup
+                  title="Feedback"
+                  rows={myRows.filter((r) => r.type === "feedback")}
+                  empty="No feedback yet."
+                  deletingId={deletingId}
+                  onDelete={(row) => void handleDelete(row)}
+                />
               </>
             )}
           </div>
@@ -249,10 +277,14 @@ function SubmissionGroup({
   title,
   rows,
   empty,
+  deletingId,
+  onDelete,
 }: {
   title: string;
   rows: PortalBugFeedbackRow[];
   empty: string;
+  deletingId: string | null;
+  onDelete: (row: PortalBugFeedbackRow) => void;
 }) {
   return (
     <details className="group rounded-xl border border-border bg-card open:shadow-sm" open={rows.length > 0}>
@@ -279,6 +311,15 @@ function SubmissionGroup({
               <p className="mt-2 text-[10px] text-muted">
                 {formatWhen(row.createdAt)} · {row.status}
               </p>
+              <Button
+                type="button"
+                variant="danger"
+                className="mt-2 min-h-0 rounded-full px-3 py-1 text-[10px]"
+                disabled={deletingId === row.id}
+                onClick={() => onDelete(row)}
+              >
+                {deletingId === row.id ? "Deleting…" : "Delete"}
+              </Button>
             </div>
           ))
         )}

@@ -42,9 +42,9 @@ import {
   mirrorLocalPropertyPipelineToServer,
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
-  syncPropertyPipelineFromServer,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
+import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import {
   legacyAdminFieldsToSubmission,
   normalizeManagerListingSubmissionV1,
@@ -513,16 +513,21 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
   }, [pathname, router, searchParams]);
 
   useEffect(() => {
-    void syncPropertyPipelineFromServer().then(() => {
+    if (!managerUserId) return;
+    void syncManagerPortfolioFromServer(managerUserId, { force: true }).then(() => {
       setTick((t) => t + 1);
       void mirrorLocalPropertyPipelineToServer();
     });
-    const on = () => setTick((t) => t + 1);
+    const on = () => {
+      void syncManagerPortfolioFromServer(managerUserId, { force: true }).then(() => setTick((t) => t + 1));
+    };
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
+    window.addEventListener("axis-pro-relationships", on);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
+      window.removeEventListener("axis-pro-relationships", on);
     };
-  }, []);
+  }, [managerUserId]);
 
   const kpiValues = useMemo(() => {
     void tick;

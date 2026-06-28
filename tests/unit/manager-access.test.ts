@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatManagerMonthlyLabel,
   managerSectionAllowedForTier,
+  managerSectionLockedForTier,
   managerTierPropertyLimitReached,
   maxAccountLinksForTier,
   maxPropertiesForManagerTier,
@@ -38,6 +39,14 @@ describe("manager-access", () => {
     expect(managerSectionAllowedForTier("services", "free")).toBe(false);
     expect(managerSectionAllowedForTier("inbox", "free")).toBe(false);
     expect(managerSectionAllowedForTier("inbox", "paid")).toBe(true);
+  });
+
+  it("marks paid-only sections as locked on free tier", () => {
+    expect(managerSectionLockedForTier("residents", "free")).toBe(true);
+    expect(managerSectionLockedForTier("relationships", "free")).toBe(true);
+    expect(managerSectionLockedForTier("properties", "free")).toBe(false);
+    expect(managerSectionLockedForTier("residents", "paid")).toBe(false);
+    expect(managerSectionLockedForTier("residents", null)).toBe(false);
   });
 
   it("formats monthly labels", () => {
