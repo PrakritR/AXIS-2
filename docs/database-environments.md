@@ -58,7 +58,7 @@ unset the guard is a no-op.
 
 ## Schema workflow (Supabase CLI)
 
-The 35 files in `supabase/migrations/` are the versioned schema history. Apply
+The files in `supabase/migrations/` are the versioned schema history. Apply
 the same migrations to both projects so they stay identical.
 
 One-time login + link to the dev/test project (the default working DB):
@@ -90,7 +90,7 @@ baseline (non-destructive — nothing is dropped or re-run):
 supabase link --project-ref qahnczmilgptcedaqype
 npm run db:pull                 # if it writes a migration, that is prod drift — commit it
 npm run db:baseline            # mark all current migrations as applied on prod
-npm run db:status              # all 35 show applied
+npm run db:status              # every migration shows applied
 
 # 2. Do the same on dev/test, then keep it linked as the default
 npm run db:link:dev
