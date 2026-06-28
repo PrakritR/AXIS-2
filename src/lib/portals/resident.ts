@@ -11,6 +11,17 @@ const residentPortalLimited: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "payments", label: "Payments", tabs: [] },
+    { section: "move-in", label: "Move-in", tabs: [] },
+    {
+      section: "inbox",
+      label: "Inbox",
+      tabs: [
+        { id: "unopened", label: "Unopened" },
+        { id: "opened", label: "Opened" },
+        { id: "sent", label: "Sent" },
+        { id: "trash", label: "Trash" },
+      ],
+    },
     {
       section: "documents",
       label: "Documents",
@@ -22,17 +33,6 @@ const residentPortalLimited: PortalDefinition = {
       tabs: [
         { id: "summary", label: "Summary" },
         { id: "statements", label: "Rent statements" },
-      ],
-    },
-    { section: "move-in", label: "Move-in", tabs: [] },
-    {
-      section: "inbox",
-      label: "Inbox",
-      tabs: [
-        { id: "unopened", label: "Unopened" },
-        { id: "opened", label: "Opened" },
-        { id: "sent", label: "Sent" },
-        { id: "trash", label: "Trash" },
       ],
     },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
@@ -48,22 +48,6 @@ const residentPortalApproved: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "payments", label: "Payments", tabs: [] },
-    {
-      section: "documents",
-      label: "Documents",
-      tabs: [
-        { id: "lease", label: "Lease" },
-        { id: "receipts", label: "Rent receipts" },
-      ],
-    },
-    {
-      section: "financials",
-      label: "Finances",
-      tabs: [
-        { id: "summary", label: "Summary" },
-        { id: "statements", label: "Rent statements" },
-      ],
-    },
     { section: "move-in", label: "Move-in", tabs: [] },
     {
       section: "services",
@@ -81,6 +65,22 @@ const residentPortalApproved: PortalDefinition = {
         { id: "opened", label: "Opened" },
         { id: "sent", label: "Sent" },
         { id: "trash", label: "Trash" },
+      ],
+    },
+    {
+      section: "documents",
+      label: "Documents",
+      tabs: [
+        { id: "lease", label: "Lease" },
+        { id: "receipts", label: "Rent receipts" },
+      ],
+    },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [
+        { id: "summary", label: "Summary" },
+        { id: "statements", label: "Rent statements" },
       ],
     },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { humanizePropertyId, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import type { RecurringRentProfile } from "@/lib/household-charges";
 import { chartAccountLabel } from "@/lib/reports/categories";
 import {
@@ -106,6 +106,7 @@ export async function queryFormalPropertyRentReceipts(
   const rangeStart = new Date(from);
   const rangeEnd = new Date(to);
   const landlord = await loadManagerTaxProfile(db, managerUserId);
+  const display = await loadManagerReportDisplayContext(db, managerUserId);
   const profiles = await loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined)
     .then((rows) =>
       rows.filter((p) => p.active !== false).filter((p) => profileMatchesScope(p, scope, filters)),
@@ -132,7 +133,7 @@ export async function queryFormalPropertyRentReceipts(
 
   for (const p of profiles) {
     const propertyId = p.propertyId?.trim() || "unassigned";
-    const propertyLabel = p.propertyLabel?.trim() || propertyId;
+    const propertyLabel = p.propertyLabel?.trim() || display.propertyLabel(propertyId);
     propertyLabels.set(propertyId, propertyLabel);
     const { daysRented, daysAvailable } = daysRentedForProfile(p, rangeStart, rangeEnd);
     if (daysRented <= 0) continue;
@@ -142,7 +143,7 @@ export async function queryFormalPropertyRentReceipts(
     const unitMap = unitsByProperty.get(propertyId)!;
     unitMap.set(unitKey, {
       unit: p.roomLabel?.trim() || "—",
-      resident: p.residentName?.trim() || p.residentEmail?.trim() || "—",
+      resident: p.residentName?.trim() || display.residentLabel(p.residentEmail) || "—",
       daysRented,
       daysAvailable,
       rentCollected: "$0.00",
@@ -179,7 +180,7 @@ export async function queryFormalPropertyRentReceipts(
         : { daysRented: 0, daysAvailable: daysInclusive(rangeStart, rangeEnd) };
       unitMap.set(unitKey, {
         unit: unitLabel || profile?.roomLabel?.trim() || "—",
-        resident: profile?.residentName?.trim() || email || "—",
+        resident: profile?.residentName?.trim() || display.residentLabel(email) || "—",
         daysRented: days.daysRented,
         daysAvailable: days.daysAvailable,
         rentCollected: "$0.00",
@@ -206,7 +207,7 @@ export async function queryFormalPropertyRentReceipts(
       0,
     );
     const receiptCount = units.reduce((sum, u) => sum + u.receiptCount, 0);
-    const propertyLabel = propertyLabels.get(propertyId) ?? propertyId;
+    const propertyLabel = propertyLabels.get(propertyId) ?? humanizePropertyId(propertyId);
 
     documents.push({
       id: `property-${propertyId}-${from}-${to}`,
@@ -281,6 +282,7 @@ export async function queryFormalRentReceipts(
   const rangeStart = new Date(from);
   const rangeEnd = new Date(to);
   const landlord = await loadManagerTaxProfile(db, managerUserId);
+  const display = await loadManagerReportDisplayContext(db, managerUserId);
   const profiles = await loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined);
   const profileByEmail = new Map(profiles.map((p) => [p.residentEmail?.toLowerCase(), p]));
 
@@ -317,9 +319,9 @@ export async function queryFormalRentReceipts(
       issueDate,
       landlordName: landlord.name,
       landlordAddress: landlord.address,
-      tenantName: profile?.residentName || email || "Resident",
+      tenantName: profile?.residentName?.trim() || display.residentLabel(email) || "Resident",
       tenantEmail: row.resident_email ?? "",
-      propertyLabel: profile?.propertyLabel || String(row.property_id ?? "—"),
+      propertyLabel: profile?.propertyLabel?.trim() || display.propertyLabel(String(row.property_id ?? "")),
       unitLabel: row.unit_label || profile?.roomLabel || "—",
       propertyAddress: profile?.propertyLabel || "—",
       paymentDate: String(row.posted_date),

@@ -6,6 +6,7 @@ import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
+import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
 
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
@@ -13,6 +14,9 @@ export default async function ResidentLayout({ children }: { children: React.Rea
 
   const residentPortal = await getResidentPortalDefinition();
   const { profile } = await getEffectiveSessionForPortal("resident");
+  const managerSubscriptionTier = profile?.manager_id?.trim()
+    ? await getManagerSubscriptionTierByManagerId(profile.manager_id.trim())
+    : null;
 
   const ctx = await getPortalAccessContext();
   const preview = await getAdminPreviewFromCookies();
@@ -27,7 +31,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
       <SurfaceThemeDefault theme="light" />
       {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
-        <PortalSidebar definition={residentPortal} />
+        <PortalSidebar definition={residentPortal} subscriptionTier={managerSubscriptionTier} />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <main className={PORTAL_MAIN_CONTENT_CLASS}>
             {children}

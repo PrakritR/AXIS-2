@@ -30,24 +30,6 @@ export const proPortal: PortalDefinition = {
       tabs: [],
     },
     {
-      section: "documents",
-      label: "Documents",
-      tabs: [
-        { id: "expense-documents", label: "Expense documents" },
-        { id: "income-documents", label: "Income documents" },
-        { id: "1099", label: "1099 forms" },
-        { id: "tax-summary", label: "Tax summary" },
-      ],
-    },
-    {
-      section: "financials",
-      label: "Finances",
-      tabs: [
-        { id: "income", label: "Income" },
-        { id: "expenses", label: "Expenses" },
-      ],
-    },
-    {
       section: "services",
       label: "Services",
       tabs: [
@@ -67,13 +49,31 @@ export const proPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
-    { section: "bugs-feedback", label: "Feedback", tabs: [] },
+    {
+      section: "documents",
+      label: "Documents",
+      tabs: [
+        { id: "expense-documents", label: "Expense documents" },
+        { id: "income-documents", label: "Income documents" },
+        { id: "1099", label: "1099 forms" },
+        { id: "tax-summary", label: "Tax summary" },
+      ],
+    },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [
+        { id: "income", label: "Income" },
+        { id: "expenses", label: "Expenses" },
+      ],
+    },
     {
       section: "relationships",
       label: "Co-managers",
       tabs: [],
     },
     { section: "plan", label: "Plan", tabs: [] },
+    { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Profile", tabs: [] },
   ],
 };

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import type { RecurringRentProfile } from "@/lib/household-charges";
 import { chartAccountLabel } from "@/lib/reports/categories";
+import { loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
 import type { ManagerReportFilters, ReportResult } from "@/lib/reports/types";
 import { parseMoneyAmount } from "@/lib/parse-money";
@@ -231,6 +232,7 @@ export async function queryExpenses(
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
+  const display = await loadManagerReportDisplayContext(db, managerUserId);
 
   let query = db
     .from("manager_expense_entries")
@@ -247,9 +249,9 @@ export async function queryExpenses(
     date: e.expense_date,
     category: chartAccountLabel(e.category_code),
     amount: centsToUsd(Number(e.amount_cents)),
-    vendorId: e.vendor_id ?? "",
+    vendor: display.vendorLabel(e.vendor_id),
     memo: e.memo ?? "",
-    propertyId: e.property_id ?? "",
+    property: display.propertyLabel(e.property_id),
     workOrderId: e.source_work_order_id ?? "",
   }));
 
@@ -257,18 +259,18 @@ export async function queryExpenses(
 
   return {
     id: "expenses",
-    title: "Expense documents",
+    title: "Property expense register",
     columns: [
       { key: "date", label: "Date", format: "date" },
       { key: "category", label: "Category" },
       { key: "amount", label: "Amount", align: "right", format: "money" },
-      { key: "vendorId", label: "Vendor ID" },
-      { key: "memo", label: "Memo" },
-      { key: "propertyId", label: "Property" },
-      { key: "workOrderId", label: "Work order" },
+      { key: "vendor", label: "Vendor" },
+      { key: "memo", label: "Description" },
+      { key: "property", label: "Property" },
+      { key: "workOrderId", label: "Work order ref." },
     ],
     rows,
-    totals: { date: "Total", category: "", amount: centsToUsd(totalCents), vendorId: "", memo: "", propertyId: "", workOrderId: "" },
+    totals: { date: "Total expenses", category: "", amount: centsToUsd(totalCents), vendor: "", memo: "", property: "", workOrderId: "" },
     meta: { from, to },
   };
 }
@@ -279,6 +281,7 @@ export async function queryRentReceipts(
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
+  const display = await loadManagerReportDisplayContext(db, managerUserId);
 
   let query = db
     .from("ledger_entries")
@@ -298,8 +301,8 @@ export async function queryRentReceipts(
       description: row.description?.trim() || chartAccountLabel(String(row.category_code)),
       amount: centsToUsd(Number(row.amount_cents)),
       category: chartAccountLabel(String(row.category_code)),
-      propertyId: row.property_id ?? "",
-      residentEmail: row.resident_email ?? "",
+      property: display.propertyLabel(row.property_id),
+      resident: display.residentLabel(row.resident_email),
     }));
 
   const totalCents = (data ?? [])
@@ -308,14 +311,14 @@ export async function queryRentReceipts(
 
   return {
     id: "rent-receipts",
-    title: "Rent receipts",
+    title: "Rent collection summary",
     columns: [
       { key: "date", label: "Date received", format: "date" },
       { key: "description", label: "Description" },
       { key: "category", label: "Type" },
       { key: "amount", label: "Amount", align: "right", format: "money" },
-      { key: "propertyId", label: "Property" },
-      { key: "residentEmail", label: "Resident" },
+      { key: "property", label: "Property" },
+      { key: "resident", label: "Resident" },
     ],
     rows,
     totals: {
@@ -323,8 +326,8 @@ export async function queryRentReceipts(
       description: "",
       category: "",
       amount: centsToUsd(totalCents),
-      propertyId: "",
-      residentEmail: "",
+      property: "",
+      resident: "",
     },
     meta: { from, to, totalEarned: centsToUsd(totalCents) },
   };

@@ -5,6 +5,19 @@ import {
   queryTaxSummary,
 } from "@/lib/reports/queries";
 
+function emptyDisplayContextHandlers() {
+  const emptyChain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: [] }),
+  };
+  return {
+    portal_recurring_rent_profile_records: () => emptyChain,
+    manager_application_records: () => ({ select: vi.fn().mockReturnThis(), limit: vi.fn().mockResolvedValue({ data: [] }) }),
+    manager_vendor_records: () => emptyChain,
+  };
+}
+
 function mockDb(handlers: Record<string, () => unknown>) {
   const from = vi.fn((table: string) => {
     const handler = handlers[table];
@@ -59,6 +72,7 @@ describe("document report queries", () => {
     };
     const db = mockDb({
       ledger_entries: () => chain,
+      ...emptyDisplayContextHandlers(),
     });
 
     const report = await queryRentReceipts(db, "mgr-1", { from: "2026-01-01", to: "2026-01-31" });
@@ -139,6 +153,12 @@ describe("document report queries", () => {
         return queryChain(expenseRows, expenseCalls === 2 ? "order" : "lte");
       },
       portal_recurring_rent_profile_records: () => profileChain,
+      manager_application_records: () => ({ select: vi.fn().mockReturnThis(), limit: vi.fn().mockResolvedValue({ data: [] }) }),
+      manager_vendor_records: () => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue({ data: [] }),
+      }),
     });
 
     const report = await queryTaxSummary(db, "mgr-1", { from: "2026-01-01", to: "2026-03-31" });

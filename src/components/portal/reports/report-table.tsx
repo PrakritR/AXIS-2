@@ -10,18 +10,30 @@ import {
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR,
 } from "@/components/portal/portal-data-table";
+import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 
 function cellAlign(col: ReportColumn): string {
   return col.align === "right" ? "text-right tabular-nums" : "text-left";
 }
 
-export function ReportTable({ report, loading }: { report: ReportResult | null; loading?: boolean }) {
+export function ReportTable({
+  report,
+  loading,
+  generated = true,
+}: {
+  report: ReportResult | null;
+  loading?: boolean;
+  generated?: boolean;
+}) {
   if (loading) {
     return (
       <div className={PORTAL_DATA_TABLE_WRAP}>
-        <div className="px-5 py-12 text-center text-sm text-muted">Loading report…</div>
+        <div className="px-5 py-12 text-center text-sm text-muted">Generating report…</div>
       </div>
     );
+  }
+  if (!generated) {
+    return <ReportGeneratePrompt />;
   }
   if (!report || report.rows.length === 0) {
     return <PortalDataTableEmpty message="No data for the selected filters." />;

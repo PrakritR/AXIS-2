@@ -7,6 +7,9 @@ export const CO_MANAGER_PERMISSION_OPTIONS = [
   { id: "residents", label: "Residents" },
   { id: "leases", label: "Leases" },
   { id: "payments", label: "Payments" },
+  { id: "documents", label: "Documents" },
+  { id: "financials", label: "Finances" },
+  { id: "services", label: "Services & work orders" },
   { id: "inbox", label: "Inbox" },
   { id: "calendar", label: "Calendar" },
 ] as const;
@@ -64,10 +67,24 @@ export const PORTAL_SECTION_CO_MANAGER_PERMISSION: Partial<Record<string, CoMana
   residents: "residents",
   leases: "leases",
   payments: "payments",
+  documents: "documents",
+  financials: "financials",
   inbox: "inbox",
   calendar: "calendar",
-  services: "properties",
+  services: "services",
 };
+
+function coManagerHasSectionPermission(
+  section: string,
+  permissions: CoManagerPermissions,
+): boolean {
+  const perm = PORTAL_SECTION_CO_MANAGER_PERMISSION[section];
+  if (!perm) return false;
+  if (hasCoManagerPermission(permissions, perm)) return true;
+  // Legacy grants: properties permission also unlocked services before services was its own checkbox.
+  if (section === "services" && hasCoManagerPermission(permissions, "properties")) return true;
+  return false;
+}
 
 export function mergeCoManagerPermissions(
   rows: { coManagerPermissions?: CoManagerPermissions }[],
@@ -89,7 +106,5 @@ export function coManagerPortalSectionAllowed(input: {
   if (input.isPrimaryManager) return true;
   if (input.section === "relationships") return false;
   if (CO_MANAGER_ALWAYS_ALLOWED_SECTIONS.has(input.section)) return true;
-  const perm = PORTAL_SECTION_CO_MANAGER_PERMISSION[input.section];
-  if (!perm) return true;
-  return hasCoManagerPermission(input.mergedPermissions, perm);
+  return coManagerHasSectionPermission(input.section, input.mergedPermissions);
 }

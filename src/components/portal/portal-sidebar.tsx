@@ -12,7 +12,7 @@ import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button"
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
-import { managerSectionLockedForTier } from "@/lib/manager-access";
+import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function hrefForSection(def: PortalDefinition, section: string) {
@@ -192,11 +192,19 @@ export function PortalSidebar({
           ? "Axis"
           : definition.title;
 
-  const showTierLocks =
+  const showManagerTierLocks =
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
+  const showResidentTierLocks = definition.kind === "resident" && subscriptionTier === "free";
 
-  const isSectionLocked = (section: string) =>
-    showTierLocks && managerSectionLockedForTier(section, subscriptionTier);
+  const isSectionLocked = (section: string) => {
+    if (showResidentTierLocks) {
+      return residentSectionLockedForManagerTier(section, subscriptionTier);
+    }
+    if (showManagerTierLocks) {
+      return managerSectionLockedForTier(section, subscriptionTier);
+    }
+    return false;
+  };
 
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[16.625rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex">
@@ -214,7 +222,13 @@ export function PortalSidebar({
                 prefetch
                 onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
                 className={navLinkClass(active, locked)}
-                aria-label={locked ? `${s.label} — locked on Pro or Business` : s.label}
+                aria-label={
+                  locked
+                    ? definition.kind === "resident"
+                      ? `${s.label} — unavailable on your property's Free plan`
+                      : `${s.label} — locked on Pro or Business`
+                    : s.label
+                }
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   {active ? (
@@ -297,7 +311,13 @@ export function PortalSidebar({
                         ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
                         : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
                   }`}
-                  aria-label={locked ? `${s.label} — locked on Pro or Business` : s.label}
+                  aria-label={
+                    locked
+                      ? definition.kind === "resident"
+                        ? `${s.label} — unavailable on your property's Free plan`
+                        : `${s.label} — locked on Pro or Business`
+                      : s.label
+                  }
                 >
                   {showNavIcons ? (
                     <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>

@@ -17,10 +17,13 @@ import {
 } from "@/components/portal/reports/formal-document-scope-bar";
 import { PROPERTY_RENT_RECEIPT_DEFAULT_FIELDS } from "@/lib/reports/formal-documents/spec";
 import { ReportTable } from "@/components/portal/reports/report-table";
+import { FormalDocumentsPreview, FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
+import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { VendorTaxProfileModal } from "@/components/portal/vendor-tax-profile-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import type { PropertyRentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import type { ReportResult } from "@/lib/reports/types";
 
 export const DOCUMENT_TABS = [
@@ -86,7 +89,9 @@ export function ManagerDocumentsPanel({
   const [filters, setFilters] = useState(defaultFilters);
   const [scopeFilters, setScopeFilters] = useState(defaultIncomeScopeFilters);
   const [report, setReport] = useState<ReportResult | null>(null);
+  const [propertyDocuments, setPropertyDocuments] = useState<PropertyRentReceiptDocument[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
   const [taxVendorId, setTaxVendorId] = useState<string | null>(null);
   const [taxVendorName, setTaxVendorName] = useState("");
 
@@ -109,6 +114,7 @@ export function ManagerDocumentsPanel({
         const res = await fetch(`/api/reports/expenses?${params}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load expense documents.");
+        setPropertyDocuments(null);
         setReport(data as ReportResult);
       } else if (tabId === "income-documents") {
         const qs = buildFormalDocumentQuery(
@@ -119,12 +125,14 @@ export function ManagerDocumentsPanel({
         const res = await fetch(`/api/reports/formal-documents/preview?${qs}`, { credentials: "include" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load rent receipts.");
+        setPropertyDocuments((data.documents as PropertyRentReceiptDocument[]) ?? []);
         setReport(data.preview as ReportResult);
       } else if (tabId === "1099") {
         const params = new URLSearchParams({ taxYear: filters.taxYear });
         const res = await fetch(`/api/reports/1099-candidates?${params}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load report.");
+        setPropertyDocuments(null);
         setReport(data as ReportResult);
       } else if (tabId === "tax-summary") {
         const params = new URLSearchParams({ from: filters.from, to: filters.to, backfill: "1" });
@@ -132,21 +140,28 @@ export function ManagerDocumentsPanel({
         const res = await fetch(`/api/reports/tax-summary?${params}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load report.");
+        setPropertyDocuments(null);
         setReport(data as ReportResult);
       } else {
+        setPropertyDocuments(null);
         setReport(null);
       }
+      setGenerated(true);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Failed to load report.");
+      setPropertyDocuments(null);
       setReport(null);
+      setGenerated(false);
     } finally {
       setLoading(false);
     }
   }, [tabId, filters, scopeFilters, showToast]);
 
   useEffect(() => {
-    void Promise.resolve().then(() => void runReport());
-  }, [runReport, tabId]);
+    setReport(null);
+    setPropertyDocuments(null);
+    setGenerated(false);
+  }, [tabId]);
 
   const incomeReceiptExportHref =
     tabId === "income-documents"
@@ -224,26 +239,36 @@ export function ManagerDocumentsPanel({
                 Download all 1099s
               </a>
             ) : null}
-            {tabId === "expense-documents" ? (
+            {tabId === "expense-documents" && generated ? (
               <ReportExportButtons reportId="expenses" query={expenseExportQuery} />
             ) : null}
-            {incomeReceiptExportHref ? (
+            {incomeReceiptExportHref && generated ? (
               <a
                 href={incomeReceiptExportHref}
                 className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
               >
-                Download rent receipts PDF
+                Download PDF
               </a>
             ) : null}
           </div>
         </div>
 
-        {tabId === "tax-summary" ? <TaxSummaryCards report={report} /> : null}
+        {tabId === "tax-summary" && generated ? <TaxSummaryCards report={report} /> : null}
 
         {tabId === "income-documents" ? (
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-foreground">Rent receipts by property</h3>
-            <ReportTable report={report} loading={loading} />
+            {loading ? (
+              <ReportGeneratePrompt title="Generating documents…" description="Building rent receipt statements for the selected period." />
+            ) : !generated ? (
+              <ReportGeneratePrompt
+                title="Generate rent receipt documents"
+                description="Set your date range and scope, then click Generate report. Formal receipts appear here for review and PDF export."
+              />
+            ) : propertyDocuments && propertyDocuments.length > 0 ? (
+              <FormalDocumentsPreview propertyDocuments={propertyDocuments} />
+            ) : (
+              <ReportTable report={report} loading={loading} generated={generated} />
+            )}
           </div>
         ) : tabId === "1099" && report ? (
           <div className={PORTAL_SECTION_SURFACE}>
@@ -285,8 +310,12 @@ export function ManagerDocumentsPanel({
               PDF download is blocked.
             </p>
           </div>
+        ) : tabId === "expense-documents" && generated && report ? (
+          <FinancialReportDocumentView report={report} />
+        ) : tabId === "tax-summary" && generated && report ? (
+          <FinancialReportDocumentView report={report} />
         ) : (
-          <ReportTable report={report} loading={loading} />
+          <ReportTable report={report} loading={loading} generated={generated} />
         )}
       </div>
 

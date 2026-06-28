@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ManagerPortalPageShell, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
+import { FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
+import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { ReportTable } from "@/components/portal/reports/report-table";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import type { ReportResult } from "@/lib/reports/types";
@@ -25,6 +27,7 @@ export function ResidentDocumentsPanel({
 }) {
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
   const [range, setRange] = useState(defaultReceiptRange);
 
   const loadReceipts = useCallback(async () => {
@@ -33,17 +36,19 @@ export function ResidentDocumentsPanel({
       const params = new URLSearchParams({ from: range.from, to: range.to, backfill: "1" });
       const res = await fetch(`/api/reports/resident-ledger?${params}`);
       const data = await res.json();
-      if (res.ok) setLedgerReport(data as ReportResult);
+      if (res.ok) {
+        setLedgerReport(data as ReportResult);
+        setGenerated(true);
+      }
     } finally {
       setLoading(false);
     }
   }, [range.from, range.to]);
 
   useEffect(() => {
-    void Promise.resolve().then(() => {
-      if (tabId === "receipts") void loadReceipts();
-    });
-  }, [tabId, loadReceipts]);
+    setLedgerReport(null);
+    setGenerated(false);
+  }, [tabId]);
 
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
@@ -91,15 +96,27 @@ export function ResidentDocumentsPanel({
               </label>
               <button
                 type="button"
-                className="mt-5 h-10 rounded-full border border-border bg-card px-4 text-xs font-medium hover:bg-accent/40"
+                className="mt-5 h-10 rounded-full border border-border bg-foreground px-4 text-xs font-medium text-background hover:opacity-90"
                 onClick={() => void loadReceipts()}
+                disabled={loading}
               >
-                Update
+                {loading ? "Generating…" : "Generate receipts"}
               </button>
             </div>
-            <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} />
+            {generated ? <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} /> : null}
           </div>
-          <ReportTable report={ledgerReport} loading={loading} />
+          {loading ? (
+            <ReportGeneratePrompt title="Generating receipts…" description="Compiling your payment history for the selected period." />
+          ) : !generated ? (
+            <ReportGeneratePrompt
+              title="Generate rent receipts"
+              description="Select a date range and click Generate receipts. Official receipt documents appear here for your records."
+            />
+          ) : ledgerReport ? (
+            <FinancialReportDocumentView report={ledgerReport} />
+          ) : (
+            <ReportTable report={ledgerReport} loading={loading} generated={generated} />
+          )}
         </div>
       ) : null}
     </ManagerPortalPageShell>

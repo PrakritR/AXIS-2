@@ -103,7 +103,7 @@ export function ReportFilterBar({
 
       <div className={PORTAL_TOOLBAR_GROUP}>
         <Button variant="primary" onClick={onRun} disabled={loading}>
-          {loading ? "Running…" : "Run report"}
+          {loading ? "Generating…" : "Generate report"}
         </Button>
       </div>
     </div>

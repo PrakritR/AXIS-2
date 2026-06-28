@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ManagerPortalPageShell, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
+import { FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
+import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { ReportTable } from "@/components/portal/reports/report-table";
 import type { ReportResult } from "@/lib/reports/types";
 
@@ -28,6 +30,7 @@ export function ResidentFinancialsPanel({
   const [balanceReport, setBalanceReport] = useState<ReportResult | null>(null);
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
   const [range, setRange] = useState(defaultStatementRange);
 
   const loadSummary = useCallback(async () => {
@@ -35,7 +38,10 @@ export function ResidentFinancialsPanel({
     try {
       const res = await fetch("/api/reports/resident-balance?backfill=1");
       const data = await res.json();
-      if (res.ok) setBalanceReport(data as ReportResult);
+      if (res.ok) {
+        setBalanceReport(data as ReportResult);
+        setGenerated(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -47,18 +53,20 @@ export function ResidentFinancialsPanel({
       const params = new URLSearchParams({ from: range.from, to: range.to, backfill: "1" });
       const res = await fetch(`/api/reports/resident-ledger?${params}`);
       const data = await res.json();
-      if (res.ok) setLedgerReport(data as ReportResult);
+      if (res.ok) {
+        setLedgerReport(data as ReportResult);
+        setGenerated(true);
+      }
     } finally {
       setLoading(false);
     }
   }, [range.from, range.to]);
 
   useEffect(() => {
-    void Promise.resolve().then(() => {
-      if (tabId === "summary") void loadSummary();
-      if (tabId === "statements") void loadLedger();
-    });
-  }, [tabId, loadSummary, loadLedger]);
+    setBalanceReport(null);
+    setLedgerReport(null);
+    setGenerated(false);
+  }, [tabId]);
 
   const tabsList = tabs;
 
@@ -84,13 +92,36 @@ export function ResidentFinancialsPanel({
 
       {tabId === "summary" ? (
         <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
-          <ReportTable report={balanceReport} loading={loading} />
-          <Link
-            href={`${basePath}/payments`}
-            className="inline-flex h-9 items-center rounded-full bg-foreground px-4 text-xs font-medium text-background"
-          >
-            Pay now
-          </Link>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <button
+              type="button"
+              className="h-10 rounded-full bg-foreground px-4 text-xs font-medium text-background hover:opacity-90"
+              onClick={() => void loadSummary()}
+              disabled={loading}
+            >
+              {loading ? "Generating…" : "Generate summary"}
+            </button>
+          </div>
+          {loading ? (
+            <ReportGeneratePrompt title="Generating summary…" description="Calculating your current balance and charges." />
+          ) : !generated ? (
+            <ReportGeneratePrompt
+              title="Generate balance summary"
+              description="Click Generate summary to view your current rent balance and pending charges."
+            />
+          ) : balanceReport ? (
+            <FinancialReportDocumentView report={balanceReport} />
+          ) : (
+            <ReportTable report={balanceReport} loading={loading} generated={generated} />
+          )}
+          {generated ? (
+            <Link
+              href={`${basePath}/payments`}
+              className="inline-flex h-9 items-center rounded-full bg-foreground px-4 text-xs font-medium text-background"
+            >
+              Pay now
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
@@ -118,15 +149,27 @@ export function ResidentFinancialsPanel({
               </label>
               <button
                 type="button"
-                className="mt-5 h-10 rounded-full border border-border bg-card px-4 text-xs font-medium hover:bg-accent/40"
+                className="mt-5 h-10 rounded-full bg-foreground px-4 text-xs font-medium text-background hover:opacity-90"
                 onClick={() => void loadLedger()}
+                disabled={loading}
               >
-                Update
+                {loading ? "Generating…" : "Generate statement"}
               </button>
             </div>
-            <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} />
+            {generated ? <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} /> : null}
           </div>
-          <ReportTable report={ledgerReport} loading={loading} />
+          {loading ? (
+            <ReportGeneratePrompt title="Generating statement…" description="Compiling your rent ledger for the selected period." />
+          ) : !generated ? (
+            <ReportGeneratePrompt
+              title="Generate rent statement"
+              description="Select a date range and click Generate statement. Your official rent ledger appears below."
+            />
+          ) : ledgerReport ? (
+            <FinancialReportDocumentView report={ledgerReport} />
+          ) : (
+            <ReportTable report={ledgerReport} loading={loading} generated={generated} />
+          )}
         </div>
       ) : null}
     </ManagerPortalPageShell>
