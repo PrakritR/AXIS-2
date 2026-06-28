@@ -11,6 +11,7 @@ import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
+import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { PORTAL_MOBILE_CHROME_CLASS } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import type { PortalDefinition } from "@/lib/portal-types";
@@ -171,6 +172,7 @@ export function PortalSidebar({
   );
 
   useEffect(() => {
+    if (!portalBackgroundPrefetchEnabled()) return;
     prefetchPortalPanelChunks();
   }, []);
 
@@ -227,11 +229,15 @@ export function PortalSidebar({
               <Link
                 key={s.section}
                 href={s.href}
-                prefetch
-                onMouseEnter={() => {
-                  prefetchPortalHref(router, s.href);
-                  for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
-                }}
+                prefetch={portalBackgroundPrefetchEnabled()}
+                onMouseEnter={
+                  portalBackgroundPrefetchEnabled()
+                    ? () => {
+                        prefetchPortalHref(router, s.href);
+                        for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
+                      }
+                    : undefined
+                }
                 className={navLinkClass(active, locked)}
                 aria-label={
                   locked
@@ -294,11 +300,8 @@ export function PortalSidebar({
                 <Link
                   key={s.section}
                   href={s.href}
-                  prefetch
-                  onMouseEnter={() => {
-                    prefetchPortalHref(router, s.href);
-                    for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
-                  }}
+                  prefetch={portalMobileLinkPrefetchEnabled()}
+                  onClick={portalNavClick(router, s.href)}
                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
                     active
                       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"

@@ -12,6 +12,7 @@ import {
   loadProAccountLinksPanel,
   loadResidentServicesPanel,
 } from "@/lib/portal-panel-imports";
+import { portalBackgroundPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 
 const PANEL_LOADERS = [
   loadManagerResidents,
@@ -30,6 +31,7 @@ let prefetchStarted = false;
 
 /** Import one panel chunk at a time so dev compile stays responsive. */
 export function prefetchPortalPanelChunks() {
+  if (!portalBackgroundPrefetchEnabled()) return;
   if (prefetchStarted || typeof window === "undefined") return;
   prefetchStarted = true;
 

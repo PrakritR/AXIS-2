@@ -1,5 +1,6 @@
 "use client";
 
+import { portalBackgroundPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { useRouter } from "next/navigation";
 import { startTransition, useCallback, type MouseEvent } from "react";
 
@@ -13,6 +14,7 @@ export function portalNavClick(router: ReturnType<typeof useRouter>, href: strin
 }
 
 export function prefetchPortalHref(router: ReturnType<typeof useRouter>, href: string) {
+  if (!portalBackgroundPrefetchEnabled()) return;
   router.prefetch(href);
 }
 
