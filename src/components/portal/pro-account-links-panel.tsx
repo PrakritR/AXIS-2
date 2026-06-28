@@ -269,8 +269,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   }, [refreshLocal]);
 
   useEffect(() => {
+    const saveTimers = saveTimersRef.current;
     return () => {
-      for (const timer of Object.values(saveTimersRef.current)) {
+      for (const timer of Object.values(saveTimers)) {
         window.clearTimeout(timer);
       }
     };

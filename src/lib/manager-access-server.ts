@@ -233,8 +233,8 @@ export async function setManagerPurchaseTier(
  * Sets this account to Business in `manager_purchases` (service role).
  * Used for self-serve upgrade from the property portal; billing is marked `portal` until live checkout is wired.
  */
-export async function upgradeManagerAccountToBusiness(
-  userId: string,
-): Promise<{ ok: true; alreadyBusiness?: boolean } | { ok: false; error: string }> {
+export async function upgradeManagerAccountToBusiness(): Promise<
+  { ok: true; alreadyBusiness?: boolean } | { ok: false; error: string }
+> {
   return { ok: false, error: "Business upgrades require Stripe checkout or an admin assignment." };
 }
