@@ -62,8 +62,13 @@ export async function markHouseholdChargePaidFromStripeSession(
     return { ok: false };
   }
 
-  const expectedEmail =
-    session.customer_email?.trim().toLowerCase() ?? session.metadata?.resident_email?.trim().toLowerCase() ?? "";
+  // The id list comes from session metadata we set only after validating that
+  // the paying user owns every charge, so it is trusted. Keep a defensive
+  // consistency check that each charge belongs to the manager this session paid
+  // out to. Do NOT gate on resident email: a bulk session carries a single
+  // customer_email, so a charge whose stored email drifted from it would be
+  // silently left unmarked even though the resident already paid for it.
+  const expectedManagerUserId = session.metadata?.manager_user_id?.trim() ?? "";
 
   let marked = 0;
   let alreadyPaid = false;
@@ -87,8 +92,8 @@ export async function markHouseholdChargePaidFromStripeSession(
       continue;
     }
 
-    const chargeEmail = charge.residentEmail.trim().toLowerCase();
-    if (expectedEmail && chargeEmail && expectedEmail !== chargeEmail) {
+    const chargeManagerUserId = charge.managerUserId?.trim() ?? "";
+    if (expectedManagerUserId && chargeManagerUserId && chargeManagerUserId !== expectedManagerUserId) {
       continue;
     }
 
