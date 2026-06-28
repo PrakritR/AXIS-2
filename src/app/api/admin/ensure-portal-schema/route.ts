@@ -5,29 +5,11 @@ import pg from "pg";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { postgresConnectionStringFromEnv, postgresSslFromEnv } from "@/lib/supabase/postgres-connection";
 
 export const runtime = "nodejs";
 
 const BUG_FEEDBACK_MIGRATION = "20260622120000_portal_bug_feedback_records.sql";
-
-function postgresConnectionString(): string | null {
-  const direct = process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim();
-  if (direct) return direct;
-
-  const password = process.env.SUPABASE_DB_PASSWORD?.trim();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  if (!password || !url) return null;
-
-  const ref = new URL(url).hostname.split(".")[0];
-  const host =
-    process.env.SUPABASE_DB_HOST?.trim() ||
-    process.env.SUPABASE_POOLER_HOST?.trim() ||
-    `aws-1-us-west-2.pooler.supabase.com`;
-  const port = process.env.SUPABASE_DB_PORT?.trim() || "6543";
-  const user = process.env.SUPABASE_DB_USER?.trim() || `postgres.${ref}`;
-  const database = process.env.SUPABASE_DB_NAME?.trim() || "postgres";
-  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
-}
 
 async function requireAdminActor(): Promise<{ ok: true } | { ok: false }> {
   const supabase = await createSupabaseServerClient();
@@ -44,7 +26,7 @@ async function feedbackTableExists(): Promise<boolean> {
   return !error;
 }
 
-/** Admin-only: apply missing portal schema (requires DATABASE_URL or SUPABASE_DB_PASSWORD). */
+/** Admin-only: apply missing portal schema (requires DATABASE_URL or Supabase_Database_Password). */
 export async function POST() {
   try {
     if (!(await requireAdminActor()).ok) {
@@ -55,12 +37,12 @@ export async function POST() {
       return NextResponse.json({ ok: true, alreadyApplied: true, table: "portal_bug_feedback_records" });
     }
 
-    const conn = postgresConnectionString();
+    const conn = postgresConnectionStringFromEnv();
     if (!conn) {
       return NextResponse.json(
         {
           error:
-            "Database credentials not configured. Set DATABASE_URL or SUPABASE_DB_PASSWORD, or run the SQL migration in Supabase.",
+            "Database credentials not configured. Set DATABASE_URL or Supabase_Database_Password, or run the SQL migration in Supabase.",
           migrationFile: `supabase/migrations/${BUG_FEEDBACK_MIGRATION}`,
         },
         { status: 503 },
@@ -71,7 +53,7 @@ export async function POST() {
     const sql = fs.readFileSync(sqlPath, "utf8");
     const client = new pg.Client({
       connectionString: conn,
-      ssl: process.env.SUPABASE_DB_SSL === "false" ? false : { rejectUnauthorized: false },
+      ssl: postgresSslFromEnv(),
     });
     await client.connect();
     try {
