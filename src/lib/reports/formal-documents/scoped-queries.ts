@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { humanizePropertyId, humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import type { RecurringRentProfile } from "@/lib/household-charges";
 import { chartAccountLabel, chartAccountScheduleE, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";

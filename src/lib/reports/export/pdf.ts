@@ -55,9 +55,9 @@ export async function reportToPdf(report: ReportResult): Promise<Uint8Array> {
     if (y - needed < FOOTER_Y + 24) newPage();
   };
 
-  drawWrappedLine(page, "AXIS PROPERTY MANAGEMENT", MARGIN, y, 9, bold);
+  drawWrappedLine(page, "AXIS PROPERTY MANAGEMENT", MARGIN, y, 9, bold, tableWidth);
   y -= 14;
-  drawWrappedLine(page, report.title.toUpperCase(), MARGIN, y, 18, bold);
+  drawWrappedLine(page, report.title.toUpperCase(), MARGIN, y, 18, bold, tableWidth);
   y -= 22;
   drawWrappedLine(
     page,
