@@ -671,7 +671,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
       <div className="text-center sm:text-left">
-        <h1 className="text-2xl font-bold tracking-tight text-[#0d1f4e] sm:text-3xl md:text-4xl">Residential rental application</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Residential rental application</h1>
       </div>
 
       <div className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
@@ -715,7 +715,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           </div>
         ) : postSubmit ? (
           <div
-            className="mt-8 rounded-3xl border border-emerald-200/90 bg-emerald-50/40 p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+            className="mt-8 rounded-3xl border p-6 portal-banner-success shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>

@@ -1,5 +1,6 @@
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
+import { clearOAuthNextCookie } from "@/lib/auth/oauth-next-cookie";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
@@ -90,5 +91,6 @@ export async function handleOAuthCallback(request: NextRequest, redirectPath: st
     console.error("OAuth profile sync failed:", syncError);
   }
 
+  clearOAuthNextCookie(response);
   return response;
 }

@@ -87,7 +87,7 @@ export function LeaseSigningModal({
 
           <div className="space-y-4 px-5 py-4">
             {signed ? (
-              <div className="rounded-2xl border border-emerald-200/90 bg-emerald-50/90 px-5 py-5 text-center">
+              <div className="rounded-2xl border px-5 py-5 text-center portal-banner-success">
                 <p className="text-2xl font-black text-emerald-700">✓ Signed</p>
                 <p className="mt-2 text-sm text-muted">
                   Your electronic signature has been recorded. Closing this window…

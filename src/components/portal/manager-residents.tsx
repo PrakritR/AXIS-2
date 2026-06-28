@@ -30,11 +30,13 @@ import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
+  ReminderSettingsModal,
   ScheduledMessageEditModal,
+  patchScheduledMessage,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
-import { ScheduledReminderChips } from "@/components/portal/manager-inbox-schedule-panel";
-import { upcomingScheduledForCharge } from "@/lib/scheduled-payment-messages";
+import { ChargeReminderList } from "@/components/portal/manager-inbox-schedule-panel";
+import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import {
   createManagerCharge,
@@ -178,8 +180,8 @@ const AR_LEASE_TERM_PRESETS = ["Month-to-month", "12 months", "6 months", "3 mon
 
 function statusPill(status: "pending" | "paid") {
   return status === "paid"
-    ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80"
-    : "bg-amber-50 text-amber-900 ring-1 ring-amber-200/80";
+    ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+    : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 }
 
 function centsFromLabel(label: string): number {
@@ -304,8 +306,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const { showToast } = useAppUi();
   const portalBase = usePaidPortalBasePath();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
-  const { messages: scheduledMessages, reload: reloadSchedule } = useScheduledPaymentMessages();
+  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
   const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
+  const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
@@ -1620,12 +1623,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                         {res.portalSetup === null ? (
                           <span className="text-muted">—</span>
                         ) : res.portalSetup ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
+                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                             Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200/80">
+                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                             Pending
                           </span>
@@ -1710,7 +1713,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
+                                    className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                                     onClick={deleteSelectedResident}
                                   >
                                     Delete resident
@@ -1779,7 +1782,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <div>
                                   <span className="text-muted">Status</span>
                                   <div className="mt-1 flex flex-wrap gap-2">
-                                    <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200/80">
+                                    <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                       Active resident
                                     </span>
                                     {selected.manuallyAdded ? (
@@ -1788,20 +1791,20 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       </span>
                                     ) : null}
                                     {residentAccountEmails.has(selected.email.trim().toLowerCase()) ? (
-                                      <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200/80">
+                                      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                         Portal account active
                                       </span>
                                     ) : (
-                                      <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200/80">
+                                      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                         No portal account
                                       </span>
                                     )}
                                     {selected.signedMonthlyRent ? (
-                                      <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200/80">
+                                      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                         Rent set
                                       </span>
                                     ) : (
-                                      <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200/80">
+                                      <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                         No rent set
                                       </span>
                                     )}
@@ -1935,7 +1938,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     <Button
                                       type="button"
                                       variant="outline"
-                                      className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-rose-50"
+                                      className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                                       onClick={() => {
                                         if (!window.confirm(`Delete the lease for ${selected.name}? This cannot be undone.`)) return;
                                         if (deleteLeasePipelineRow(residentLease.id, userId)) {
@@ -2014,9 +2017,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       {reminderBusy ? "Sending…" : "Send reminder"}
                                     </Button>
                                   ) : null}
-                                  <Link href={`${portalBase}/inbox/schedule`} className="rounded-full px-3 py-1 text-xs font-semibold text-primary hover:underline">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="rounded-full px-3 py-1 text-xs"
+                                    onClick={() => setReminderSettingsOpen(true)}
+                                  >
                                     Reminder settings
-                                  </Link>
+                                  </Button>
                                   <Button
                                     type="button"
                                     variant="primary"
@@ -2066,6 +2074,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       <tr className="border-b border-border">
                                         <th className="pb-2 text-left text-xs font-semibold text-muted">Charge</th>
                                         <th className="pb-2 text-left text-xs font-semibold text-muted">Due</th>
+                                        <th className="pb-2 text-left text-xs font-semibold text-muted">Reminders</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-muted">Amount</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-muted">Balance</th>
                                         <th className="pb-2 text-right text-xs font-semibold text-muted">Status</th>
@@ -2073,10 +2082,36 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {visibleCharges.map((c) => (
+                                      {visibleCharges.map((c) => {
+                                        const chargeReminders =
+                                          c.status === "pending" ? manageableRemindersForCharge(scheduledMessages, c.id) : [];
+                                        return (
                                         <tr key={c.id} className="border-b border-border last:border-0">
                                           <td className="py-2 pr-4 font-medium text-foreground">{c.title}</td>
                                           <td className="py-2 pr-4 text-xs text-muted">{chargeDueLabel(c)}</td>
+                                          <td className="py-2 pr-4 align-top">
+                                            {c.status === "pending" ? (
+                                              chargeReminders.length > 0 ? (
+                                                <ChargeReminderList
+                                                  messages={chargeReminders}
+                                                  onEdit={setScheduleEdit}
+                                                  onToggleCancel={async (msg, cancelled) => {
+                                                    try {
+                                                      await patchScheduledMessage(msg.id, { cancelled });
+                                                      showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
+                                                      void reloadSchedule();
+                                                    } catch (e) {
+                                                      showToast(e instanceof Error ? e.message : "Could not update reminder.");
+                                                    }
+                                                  }}
+                                                />
+                                              ) : (
+                                                <span className="text-xs text-muted">None scheduled</span>
+                                              )
+                                            ) : (
+                                              <span className="text-xs text-muted">—</span>
+                                            )}
+                                          </td>
                                           <td className="py-2 pr-4 text-right tabular-nums text-muted">{c.amountLabel}</td>
                                           <td className="py-2 pr-4 text-right tabular-nums font-medium text-foreground">{c.balanceLabel}</td>
                                           <td className="py-2 pr-4 text-right">
@@ -2112,44 +2147,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                   >
                                                     Delete
                                                   </Button>
-                                                  {(() => {
-                                                    const chargeSchedules = upcomingScheduledForCharge(scheduledMessages, c.id, 6);
-                                                    if (!chargeSchedules.length) return null;
-                                                    return (
-                                                      <>
-                                                        <ScheduledReminderChips messages={chargeSchedules} onEdit={setScheduleEdit} />
-                                                        {chargeSchedules.map((msg) => {
-                                                          const isCancelled = msg.status === "cancelled";
-                                                          return (
-                                                            <Button
-                                                              key={msg.id}
-                                                              type="button"
-                                                              variant="outline"
-                                                              title={isCancelled ? `Re-enable ${msg.typeLabel}` : `Cancel ${msg.typeLabel}`}
-                                                              className={`rounded-full px-2 py-0.5 text-xs ${isCancelled ? "text-muted line-through" : "text-primary hover:border-primary/30"}`}
-                                                              onClick={() => {
-                                                                void fetch(`/api/portal/scheduled-messages/${encodeURIComponent(msg.id)}`, {
-                                                                  method: "PATCH",
-                                                                  headers: { "Content-Type": "application/json" },
-                                                                  credentials: "include",
-                                                                  body: JSON.stringify({ cancelled: !isCancelled }),
-                                                                }).then(async (res) => {
-                                                                  if (!res.ok) {
-                                                                    showToast("Could not update reminder.");
-                                                                    return;
-                                                                  }
-                                                                  showToast(isCancelled ? "Reminder restored." : "Reminder cancelled.");
-                                                                  void reloadSchedule();
-                                                                });
-                                                              }}
-                                                            >
-                                                              {isCancelled ? `↺ ${msg.typeLabel}` : `✕ ${msg.typeLabel}`}
-                                                            </Button>
-                                                          );
-                                                        })}
-                                                      </>
-                                                    );
-                                                  })()}
                                                 </>
                                               ) : (
                                                 <>
@@ -2174,7 +2171,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             </div>
                                           </td>
                                         </tr>
-                                      ))}
+                                        );
+                                      })}
                                     </tbody>
                                   </table>
                                 </div>
@@ -2204,10 +2202,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   {residentServiceRequests.map((req) => {
                                     const needsReturn = hasDeposit(req.deposit);
                                     const statusColors: Record<string, string> = {
-                                      pending: "bg-amber-50 text-amber-700 ring-amber-200",
-                                      approved: "bg-blue-50 text-blue-700 ring-blue-200",
-                                      returned: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-                                      denied: "bg-rose-50 text-rose-700 ring-rose-200",
+                                      pending: "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+                                      approved: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+                                      returned: "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
+                                      denied: "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
                                     };
                                     const statusLabels: Record<string, string> = {
                                       pending: "Pending approval",
@@ -2216,13 +2214,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       denied: "Denied",
                                     };
                                     return (
-                                      <div key={req.id} className={`rounded-2xl border p-4 ${req.status === "pending" ? "border-amber-200 bg-amber-50/40" : "border-border bg-accent/30"}`}>
+                                      <div key={req.id} className={`rounded-2xl border p-4 ${req.status === "pending" ? "portal-banner-pending" : "border-border bg-accent/30"}`}>
                                         <div className="flex flex-wrap items-start justify-between gap-2">
                                           <div>
                                             <p className="font-semibold text-foreground">{req.offerName}</p>
                                             <div className="mt-1 flex flex-wrap gap-1">
                                               {req.price ? <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted">{req.price}</span> : null}
-                                              {needsReturn ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">Deposit {req.deposit}</span> : null}
+                                              {needsReturn ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Deposit {req.deposit}</span> : null}
                                               {req.returnByDate ? <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">Return by {formatPacificDate(req.returnByDate, { month: "short", day: "numeric" })}</span> : null}
                                             </div>
                                           </div>
@@ -2245,7 +2243,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             <Button
                                               type="button"
                                               variant="outline"
-                                              className="h-7 rounded-full border-rose-200 px-3 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                                              className="h-7 rounded-full border-rose-200 px-3 text-[11px] font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]"
                                               onClick={() => { denyServiceRequest(req.id); setSrTick((t) => t + 1); showToast("Request denied."); }}
                                             >
                                               Deny
@@ -2262,7 +2260,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                 <div className="flex items-center justify-between">
                                                   <span className="text-xs text-muted">Service fee · {req.price}</span>
                                                   {req.servicePaid ? (
-                                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Paid</span>
+                                                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
                                                   ) : (
                                                     <Button type="button" className="h-6 rounded-full px-2.5 text-[10px] font-semibold" onClick={() => { markServiceRequestServicePaid(req.id); setSrTick((t) => t + 1); showToast("Service charge marked paid."); }}>
                                                       Mark paid
@@ -2274,7 +2272,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                 <div className="flex items-center justify-between">
                                                   <span className="text-xs text-muted">Deposit · {req.deposit}</span>
                                                   {req.depositPaid ? (
-                                                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">Refunded</span>
+                                                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
                                                   ) : (
                                                     <Button type="button" className="h-6 rounded-full px-2.5 text-[10px] font-semibold" onClick={() => { markServiceRequestDepositPaid(req.id); setSrTick((t) => t + 1); showToast("Deposit marked refunded."); }}>
                                                       Mark refunded
@@ -2440,7 +2438,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                               <Button
                                                 type="button"
                                                 variant="outline"
-                                                className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+                                                className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                                                 onClick={() => {
                                                   deleteManagerWorkOrderRow(workOrder.id);
                                                   setWorkOrderTick((n) => n + 1);
@@ -2956,6 +2954,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         message={scheduleEdit}
         onClose={() => setScheduleEdit(null)}
         onSaved={() => void reloadSchedule()}
+      />
+      <ReminderSettingsModal
+        open={reminderSettingsOpen}
+        onClose={() => setReminderSettingsOpen(false)}
+        settings={reminderSettings}
+        onSaved={(next) => {
+          setReminderSettings(next);
+          void reloadSchedule();
+        }}
       />
     </>
   );

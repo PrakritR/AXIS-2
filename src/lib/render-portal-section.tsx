@@ -40,7 +40,7 @@ import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
-import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId, managerSectionAllowedForTier } from "@/lib/manager-access";
+import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId, managerSectionAllowedForTier, residentSectionAllowedForManagerTier } from "@/lib/manager-access";
 import { loadResidentPortalAccessState, loadResidentLeaseSignedStatus, residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
@@ -65,6 +65,12 @@ const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
   "rental-days": "income-documents",
 };
 const FINANCIALS_TABS = ["income", "expenses"] as const;
+
+const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash"] as const;
+
+function isManagerInboxTab(tab: string): tab is (typeof MANAGER_INBOX_TABS)[number] {
+  return (MANAGER_INBOX_TABS as readonly string[]).includes(tab);
+}
 
 const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, string> = {
   expenses: "expenses",
@@ -167,6 +173,15 @@ function ResidentFreeTierFeatureNotice({ title }: { title: string }) {
       </ManagerPortalPageShell>
     </div>
   );
+}
+
+function residentManagerTierGate(
+  section: string,
+  managerTier: "free" | "paid" | null,
+  featureLabel: string,
+): ReactNode | null {
+  if (residentSectionAllowedForManagerTier(section, managerTier)) return null;
+  return <ResidentFreeTierFeatureNotice title={featureLabel} />;
 }
 
 export async function renderPortalSection(
@@ -334,7 +349,7 @@ export async function renderPortalSection(
         redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
       }
       const inboxTab = tabParts[0]!;
-      if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+      if (!isManagerInboxTab(inboxTab)) notFound();
       return subscriptionGated(
         <ManagerInbox tabId={inboxTab} />,
         kind,
@@ -456,7 +471,7 @@ export async function renderPortalSection(
         redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
       }
       const inboxTab = tabParts[0]!;
-      if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+      if (!isManagerInboxTab(inboxTab)) notFound();
       return subscriptionGated(
         <ManagerInbox tabId={inboxTab} />,
         kind,
@@ -610,6 +625,8 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "financials") {
+    const tierGate = residentManagerTierGate("financials", residentManagerTier, meta.label);
+    if (tierGate) return tierGate;
     const allowedTabs = meta.tabs.map((t) => t.id);
     if (!tabParts?.length) {
       redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "summary"}`);
@@ -621,6 +638,8 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "documents") {
+    const tierGate = residentManagerTierGate("documents", residentManagerTier, meta.label);
+    if (tierGate) return tierGate;
     const allowedTabs = meta.tabs.map((t) => t.id);
     if (!tabParts?.length) {
       redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "receipts"}`);
@@ -628,13 +647,8 @@ export async function renderPortalSection(
     if (tabParts.length > 1) notFound();
     const docTab = tabParts[0]!;
     if (!allowedTabs.includes(docTab)) notFound();
-    if (docTab === "lease") {
-      if (!residentWorkspaceUnlocked && !(residentAccess?.leaseAccessUnlocked ?? false)) {
-        return <ResidentFreeTierFeatureNotice title="Documents — Lease" />;
-      }
-      if ((residentAccess?.leaseAccessUnlocked ?? false) && residentManagerTier === "free") {
-        return <ResidentFreeTierFeatureNotice title="Documents — Lease" />;
-      }
+    if (docTab === "lease" && !residentWorkspaceUnlocked && !(residentAccess?.leaseAccessUnlocked ?? false)) {
+      return <ResidentFreeTierFeatureNotice title="Documents — Lease" />;
     }
     return <ResidentDocumentsPanel tabId={docTab} basePath={def.basePath} tabs={meta.tabs} />;
   }
@@ -677,6 +691,8 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "inbox") {
+    const tierGate = residentManagerTierGate("inbox", residentManagerTier, meta.label);
+    if (tierGate) return tierGate;
     if (!meta.tabs.length) notFound();
     if (!tabParts?.length) {
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
@@ -689,6 +705,8 @@ export async function renderPortalSection(
   if (kind === "resident") {
     if (residentWorkspaceUnlocked) {
       if (section === "services") {
+        const tierGate = residentManagerTierGate("services", residentManagerTier, meta.label);
+        if (tierGate) return tierGate;
         if (!tabParts?.length) {
           redirect(`${def.basePath}/services/requests`);
         }
@@ -699,29 +717,6 @@ export async function renderPortalSection(
       }
       if (tabParts?.length) notFound();
       if (section === "work-orders") return <ResidentServicesPanel tabId="work-orders" basePath={def.basePath} />;
-    }
-    if ((residentAccess?.leaseAccessUnlocked ?? false) && residentManagerTier === "free") {
-      if (section === "documents") {
-        if (!tabParts?.length) {
-          redirect(`${def.basePath}/documents/receipts`);
-        }
-        if (tabParts.length > 1) notFound();
-        if (tabParts[0] === "lease") return <ResidentFreeTierFeatureNotice title="Documents — Lease" />;
-        if (tabParts[0] === "receipts") {
-          return <ResidentDocumentsPanel tabId="receipts" basePath={def.basePath} tabs={meta.tabs} />;
-        }
-        notFound();
-      }
-      if (section === "services") {
-        if (!tabParts?.length) {
-          redirect(`${def.basePath}/services/requests`);
-        }
-        if (tabParts.length > 1) notFound();
-        if (!["requests", "work-orders"].includes(tabParts[0]!)) notFound();
-        return <ResidentFreeTierFeatureNotice title="Services" />;
-      }
-      if (tabParts?.length) notFound();
-      if (section === "work-orders") return <ResidentFreeTierFeatureNotice title="Services" />;
     }
   }
 

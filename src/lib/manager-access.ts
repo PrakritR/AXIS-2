@@ -388,5 +388,32 @@ export function managerSectionLockedForTier(
   return tier === "free" && !managerSectionAllowedForTier(section, "free");
 }
 
+/**
+ * Resident portal sections available when the linked property manager is on Free.
+ * Mirrors manager Pro-gated features (documents, finances, services, inbox).
+ */
+export const RESIDENT_FREE_MANAGER_SECTIONS = new Set([
+  "dashboard",
+  "payments",
+  "move-in",
+  "profile",
+  "bugs-feedback",
+]);
+
+export function residentSectionAllowedForManagerTier(
+  section: string,
+  managerTier: "free" | "paid" | null,
+): boolean {
+  if (managerTier !== "free") return true;
+  return RESIDENT_FREE_MANAGER_SECTIONS.has(section);
+}
+
+export function residentSectionLockedForManagerTier(
+  section: string,
+  managerTier: "free" | "paid" | null | undefined,
+): boolean {
+  return managerTier === "free" && !residentSectionAllowedForManagerTier(section, "free");
+}
+
 /** @deprecated Use FREE_SUBSCRIPTION_SECTIONS */
 export const FREE_MANAGER_SECTIONS = FREE_SUBSCRIPTION_SECTIONS;

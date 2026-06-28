@@ -8,6 +8,8 @@ import {
   maxPropertiesForManagerTier,
   normalizeManagerSkuTier,
   pickBestManagerPurchaseRow,
+  residentSectionAllowedForManagerTier,
+  residentSectionLockedForManagerTier,
   resolveManagerSubscriptionTierFromPurchase,
 } from "@/lib/manager-access";
 
@@ -52,6 +54,16 @@ describe("manager-access", () => {
     expect(managerSectionLockedForTier("properties", "free")).toBe(false);
     expect(managerSectionLockedForTier("residents", "paid")).toBe(false);
     expect(managerSectionLockedForTier("residents", null)).toBe(false);
+  });
+
+  it("locks resident portal sections when linked manager is on free", () => {
+    expect(residentSectionAllowedForManagerTier("payments", "free")).toBe(true);
+    expect(residentSectionAllowedForManagerTier("services", "free")).toBe(false);
+    expect(residentSectionAllowedForManagerTier("documents", "free")).toBe(false);
+    expect(residentSectionAllowedForManagerTier("financials", "free")).toBe(false);
+    expect(residentSectionAllowedForManagerTier("inbox", "free")).toBe(false);
+    expect(residentSectionLockedForManagerTier("services", "free")).toBe(true);
+    expect(residentSectionAllowedForManagerTier("services", "paid")).toBe(true);
   });
 
   it("resolves subscription tier from purchase rows", () => {

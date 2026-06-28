@@ -73,10 +73,34 @@ export function computePreDueSendAt(dueDate: Date, daysBeforeDue: number): Date 
 }
 
 function typeLabel(kind: PaymentReminderKind, daysBeforeDue: number | null): string {
-  if (kind === "pre_due") return `${daysBeforeDue ?? 0} day(s) before due`;
+  if (kind === "pre_due") {
+    const d = daysBeforeDue ?? 0;
+    return d === 1 ? "1 day before due" : `${d} days before due`;
+  }
   if (kind === "same_day") return "Due day";
   if (kind === "overdue_daily") return "Overdue daily";
   return "Late fee notice";
+}
+
+export function scheduledReminderShortLabel(kind: PaymentReminderKind, daysBeforeDue: number | null): string {
+  if (kind === "pre_due") {
+    const d = daysBeforeDue ?? 0;
+    return d === 1 ? "1 day before" : `${d} days before`;
+  }
+  if (kind === "same_day") return "Due date";
+  if (kind === "overdue_daily") return "Follow-up";
+  return "Notice";
+}
+
+/** Generic labels for inbox schedule UI (not payment-specific). */
+export function inboxScheduleTypeLabel(kind: PaymentReminderKind, daysBeforeDue: number | null): string {
+  if (kind === "pre_due") {
+    const d = daysBeforeDue ?? 0;
+    return d === 1 ? "1 day before send" : `${d} days before send`;
+  }
+  if (kind === "same_day") return "Send on due date";
+  if (kind === "overdue_daily") return "Daily follow-up";
+  return "Notice";
 }
 
 function isVisible(
@@ -343,7 +367,16 @@ export function upcomingScheduledForCharge(
   chargeId: string,
   limit = 3,
 ): ScheduledPaymentMessage[] {
+  return manageableRemindersForCharge(messages, chargeId, limit).filter((m) => m.status === "scheduled");
+}
+
+/** Scheduled and cancelled reminders for a charge (excludes already sent). */
+export function manageableRemindersForCharge(
+  messages: ScheduledPaymentMessage[],
+  chargeId: string,
+  limit = 6,
+): ScheduledPaymentMessage[] {
   return messages
-    .filter((m) => m.chargeId === chargeId && m.status === "scheduled")
+    .filter((m) => m.chargeId === chargeId && (m.status === "scheduled" || m.status === "cancelled"))
     .slice(0, limit);
 }

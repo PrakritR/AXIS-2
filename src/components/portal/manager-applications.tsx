@@ -357,7 +357,7 @@ function ManagerApplicationPlacementEditor({
             Update the final resident setup here. These saved values drive lease details and resident payment charges.
           </p>
         </div>
-        <span className="inline-flex w-fit shrink-0 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 ring-1 ring-blue-200/80">
+        <span className="inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
           {row.bucket === "approved" ? "Approved application" : "Editable placement"}
         </span>
       </div>
@@ -1004,7 +1004,7 @@ function ManagerApplicationsContent() {
                             <Button
                               type="button"
                               variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-rose-50`}
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                               onClick={() => void deleteApplication(row.id)}
                             >
                               Delete application

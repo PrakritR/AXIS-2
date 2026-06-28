@@ -44,15 +44,31 @@ describe("co-manager portal access", () => {
     ).toBe(true);
   });
 
-  it("maps calendar and services to property permissions", () => {
-    const merged = mergeCoManagerPermissions([{ coManagerPermissions: { calendar: true } }]);
+  it("maps calendar, services, documents, and finances to permission grants", () => {
+    const calendarOnly = mergeCoManagerPermissions([{ coManagerPermissions: { calendar: true } }]);
     expect(
-      coManagerPortalSectionAllowed({ section: "calendar", isPrimaryManager: false, mergedPermissions: merged }),
+      coManagerPortalSectionAllowed({ section: "calendar", isPrimaryManager: false, mergedPermissions: calendarOnly }),
     ).toBe(true);
+    expect(
+      coManagerPortalSectionAllowed({ section: "documents", isPrimaryManager: false, mergedPermissions: calendarOnly }),
+    ).toBe(false);
 
     const propertiesOnly = mergeCoManagerPermissions([{ coManagerPermissions: { properties: true } }]);
     expect(
       coManagerPortalSectionAllowed({ section: "services", isPrimaryManager: false, mergedPermissions: propertiesOnly }),
+    ).toBe(true);
+
+    const documentsOnly = mergeCoManagerPermissions([{ coManagerPermissions: { documents: true } }]);
+    expect(
+      coManagerPortalSectionAllowed({ section: "documents", isPrimaryManager: false, mergedPermissions: documentsOnly }),
+    ).toBe(true);
+    expect(
+      coManagerPortalSectionAllowed({ section: "financials", isPrimaryManager: false, mergedPermissions: documentsOnly }),
+    ).toBe(false);
+
+    const financesOnly = mergeCoManagerPermissions([{ coManagerPermissions: { financials: true } }]);
+    expect(
+      coManagerPortalSectionAllowed({ section: "financials", isPrimaryManager: false, mergedPermissions: financesOnly }),
     ).toBe(true);
   });
 });
@@ -89,7 +105,7 @@ describe("co-manager permissions normalization", () => {
 
   it("exposes all permission options for the co-manager UI", () => {
     expect(CO_MANAGER_PERMISSION_OPTIONS.map((o) => o.id)).toEqual(
-      expect.arrayContaining(["properties", "editListings", "applications", "calendar"]),
+      expect.arrayContaining(["properties", "editListings", "applications", "calendar", "documents", "financials", "services"]),
     );
   });
 });

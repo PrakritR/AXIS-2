@@ -11,7 +11,7 @@ export function ListingLocationBlock({
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
-      <h2 className="text-xl font-bold tracking-tight text-[#0f172a]">Location</h2>
+      <h2 className="text-xl font-bold tracking-tight text-foreground">Location</h2>
       <p className="mt-2 text-sm text-muted">{address}</p>
       <div className="mt-4 overflow-hidden rounded-2xl">
         <ListingLocationMap lat={lat} lng={lng} />

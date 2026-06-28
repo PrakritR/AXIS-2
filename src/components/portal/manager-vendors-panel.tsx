@@ -207,14 +207,14 @@ export function ManagerVendorsPanel({
                             <span
                               className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
                                 row.active !== false
-                                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                  ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
                                   : "bg-accent/30 text-muted ring-border"
                               }`}
                             >
                               {row.active !== false ? "Active" : "Inactive"}
                             </span>
                             {sharedByOther ? (
-                              <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-blue-200">
+                              <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                 Shared
                               </span>
                             ) : row.sharedWithManagers ? (

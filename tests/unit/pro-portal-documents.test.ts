@@ -25,6 +25,15 @@ describe("pro portal documents section", () => {
     expect(financials?.tabs.map((t) => t.id)).toEqual(["income", "expenses"]);
   });
 
+  it("orders feedback before profile and documents/finances before co-managers", () => {
+    const sections = proPortal.sections.map((s) => s.section);
+    expect(sections.indexOf("bugs-feedback")).toBeGreaterThan(sections.indexOf("relationships"));
+    expect(sections.indexOf("profile")).toBe(sections.indexOf("bugs-feedback") + 1);
+    expect(sections.indexOf("documents")).toBeGreaterThan(sections.indexOf("inbox"));
+    expect(sections.indexOf("financials")).toBe(sections.indexOf("documents") + 1);
+    expect(sections.indexOf("relationships")).toBe(sections.indexOf("financials") + 1);
+  });
+
   it("services tabs are requests, work orders, and vendors", () => {
     const services = proPortal.sections.find((s) => s.section === "services");
     expect(services?.tabs.map((t) => t.id)).toEqual(["requests", "work-orders", "vendors"]);

@@ -2573,7 +2573,7 @@ export function ManagerAddListingForm({
                               </Button>
                               <button
                                 type="button"
-                                className="rounded-full px-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                                className="rounded-full px-2 text-xs font-semibold text-rose-600 hover:bg-[var(--status-overdue-bg)]"
                                 onClick={() => removeBundle(i)}
                               >
                                 Remove
@@ -3570,7 +3570,7 @@ export function ManagerAddListingForm({
             id="edit-shared"
             title="Shared spaces"
           >
-              <div className="mb-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+              <div className="mb-5 rounded-2xl border p-4 portal-banner-info">
                 <p className="text-sm font-semibold text-blue-950">Quick add</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {SHARED_SPACE_TEMPLATES.map((template) => (
@@ -3632,7 +3632,7 @@ export function ManagerAddListingForm({
                           <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setSharedSpaceRoomAccess(i, "none")}>
                             Clear rooms
                           </Button>
-                          <button type="button" className="rounded-full px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50" onClick={() => removeSharedSpace(i)}>
+                          <button type="button" className="rounded-full px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-[var(--status-overdue-bg)]" onClick={() => removeSharedSpace(i)}>
                             Remove
                           </button>
                         </div>
@@ -3892,7 +3892,7 @@ export function ManagerAddListingForm({
                         }} className="rounded-full border border-border bg-card px-3 py-0.5 text-[11px] font-semibold text-muted hover:bg-accent/30">{offer.available ? "Pause" : "Resume"}</button>
                         <button type="button" onClick={() => {
                           setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
-                        }} className="rounded-full border border-rose-200 bg-card px-3 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">Remove</button>
+                        }} className="rounded-full border border-rose-200 bg-card px-3 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]">Remove</button>
                       </div>
                     </div>
                   ))}

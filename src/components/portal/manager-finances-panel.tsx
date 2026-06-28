@@ -13,6 +13,8 @@ import {
   type ReportFilterState,
 } from "@/components/portal/reports/report-filter-bar";
 import { ReportTable } from "@/components/portal/reports/report-table";
+import { FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
+import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
@@ -71,6 +73,7 @@ export function ManagerFinancesPanel({
   const [filters, setFilters] = useState(defaultFilters);
   const [report, setReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
   const [expenseModal, setExpenseModal] = useState(false);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft>({
     categoryCode: "maintenance",
@@ -110,17 +113,20 @@ export function ManagerFinancesPanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load report.");
       setReport(data as ReportResult);
+      setGenerated(true);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Failed to load report.");
       setReport(null);
+      setGenerated(false);
     } finally {
       setLoading(false);
     }
   }, [reportId, filters, showToast]);
 
   useEffect(() => {
-    void Promise.resolve().then(() => void runReport());
-  }, [runReport, tabId]);
+    setReport(null);
+    setGenerated(false);
+  }, [tabId]);
 
   async function saveExpense() {
     const amountCents = Math.round(Number.parseFloat(expenseDraft.amount.replace(/[^0-9.]/g, "")) * 100);
@@ -175,12 +181,6 @@ export function ManagerFinancesPanel({
       </div>
 
       <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
-        {tabId === "expenses" ? (
-          <p className="text-sm text-muted">
-            Log property costs — maintenance, utilities, cleaning, insurance, mortgage, vendor work, and other
-            expenses. These feed Expense documents and your tax summary.
-          </p>
-        ) : null}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <ReportFilterBar
             showProperty
@@ -212,10 +212,21 @@ export function ManagerFinancesPanel({
                 Add expense
               </Button>
             ) : null}
-            <ReportExportButtons reportId={reportId} query={query} />
+            {generated ? <ReportExportButtons reportId={reportId} query={query} /> : null}
           </div>
         </div>
-        <ReportTable report={report} loading={loading} />
+        {loading ? (
+          <ReportGeneratePrompt title="Generating report…" description="Compiling ledger entries for the selected period." />
+        ) : !generated ? (
+          <ReportGeneratePrompt
+            title="Generate financial report"
+            description="Choose filters and click Generate report. Your income or expense statement will appear below for review and export."
+          />
+        ) : report ? (
+          <FinancialReportDocumentView report={report} />
+        ) : (
+          <ReportTable report={report} loading={loading} generated={generated} />
+        )}
       </div>
 
       <Modal open={expenseModal} onClose={() => setExpenseModal(false)} title="Add expense">

@@ -116,7 +116,7 @@ export function AdminOnboardClient() {
         tier — free signup or a percentage discount is applied automatically in Stripe checkout.
       </p>
       {origin.includes("vercel.app") ? (
-        <p className="mt-3 max-w-2xl rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <p className="mt-3 max-w-2xl rounded-xl border px-4 py-3 text-sm portal-banner-pending">
           Links use your Vercel deployment URL. Set <code className="font-mono text-xs">NEXT_PUBLIC_CANONICAL_APP_URL</code>{" "}
           in production to your custom domain (for example <code className="font-mono text-xs">https://yourdomain.com</code>
           ).

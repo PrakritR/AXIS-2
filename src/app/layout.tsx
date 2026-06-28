@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s · Axis",
   },
   description:
-    "Axis — property management software for applications, leases, and rent collection.",
+    "Axis — AI-powered property management for applications, screening, leases, and rent collection.",
 };
 
 export default function RootLayout({

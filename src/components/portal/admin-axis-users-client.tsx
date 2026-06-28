@@ -65,7 +65,7 @@ function UsersEmptyIcon({ className }: { className?: string }) {
 function StatusPill({ active }: { active: boolean }) {
   if (active) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900">
+      <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold portal-badge-success">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
         Active
       </span>
@@ -81,8 +81,8 @@ function StatusPill({ active }: { active: boolean }) {
 
 function RolePill({ kind }: { kind: AccountKind }) {
   const styles: Record<AccountKind, string> = {
-    manager: "border-sky-200/90 bg-sky-50 text-sky-900",
-    resident: "border-blue-200/90 bg-blue-50 text-blue-900",
+    manager: "portal-badge-info border",
+    resident: "portal-badge-info border",
   };
   const labels: Record<AccountKind, string> = {
     manager: "Management",
@@ -97,8 +97,8 @@ function RolePill({ kind }: { kind: AccountKind }) {
 
 function TierBadge({ tier }: { tier: string }) {
   const colors: Record<string, string> = {
-    pro: "border-blue-200/90 bg-blue-50 text-blue-800",
-    business: "border-sky-200/90 bg-sky-50 text-sky-800",
+    pro: "portal-badge-info border",
+    business: "portal-badge-info border",
     free: "border-border bg-accent/30 text-muted",
   };
   const cls = colors[tier.toLowerCase()] ?? colors.free;
@@ -236,14 +236,14 @@ function ManagerDetailRow({
             <Button
               type="button"
               variant="outline"
-              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-rose-50" : ""}`}
+              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
               onClick={() => void toggle()}
               disabled={busy}
             >
               {busy && !confirmDelete && !planDirty ? "Updating…" : row.active ? "Disable account" : "Enable account"}
             </Button>
             {confirmDelete ? (
-              <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
+              <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 portal-banner-danger">
                 <span className="text-xs font-semibold text-rose-800">Delete manager and all properties?</span>
                 <button
                   type="button"
@@ -266,7 +266,7 @@ function ManagerDetailRow({
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
+                className="rounded-full border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
               >
@@ -356,14 +356,14 @@ function SimpleAccountDetailRow({
             <Button
               type="button"
               variant="outline"
-              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-rose-50" : ""}`}
+              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
               onClick={() => void toggle()}
               disabled={busy}
             >
               {busy && !confirmDelete ? "Updating…" : row.active ? "Disable account" : "Enable account"}
             </Button>
             {confirmDelete ? (
-              <div className="flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5">
+              <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 portal-banner-danger">
                 <span className="text-xs font-semibold text-rose-800">
                   {apiPath === "/api/admin/residents"
                     ? "Delete resident, leases, and payments?"
@@ -390,7 +390,7 @@ function SimpleAccountDetailRow({
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
+                className="rounded-full border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
                 onClick={() => setConfirmDelete(true)}
                 disabled={busy}
               >

@@ -52,7 +52,7 @@ export const DAYS_RENTED_DEFAULT_FIELDS: FormalFieldKey[] = [
 ];
 
 export const RENT_RECEIPT_FOOTER =
-  "This receipt confirms payment received. Retain for your tax records. Not legal or tax advice.";
+  "I certify that the above amount was received in full for the rental period described. This receipt serves as proof of payment and should be retained for tax, legal, and dispute-resolution purposes.";
 
 export const DAYS_RENTED_FOOTER =
   "Days rented vs days available may be used for rental-use percentage calculations. Consult your tax advisor.";
@@ -87,6 +87,14 @@ export type PropertyRentReceiptUnitRow = {
   receiptCount: number;
 };
 
+export type IncomeCategoryRow = {
+  categoryCode: string;
+  label: string;
+  scheduleERef: string;
+  amountCents: number;
+  amount: string;
+};
+
 export type PropertyRentReceiptDocument = {
   id: string;
   propertyId: string;
@@ -102,6 +110,8 @@ export type PropertyRentReceiptDocument = {
   receiptCount: number;
   rentalUsePct: number;
   units: PropertyRentReceiptUnitRow[];
+  incomeByCategory?: IncomeCategoryRow[];
+  grossIncomeCents?: number;
 };
 
 export type DaysRentedRow = {

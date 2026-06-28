@@ -11,7 +11,7 @@ export default function RootError({
 }) {
   return (
     <div className="mx-auto flex min-h-[40vh] max-w-lg flex-col justify-center px-4 py-10">
-      <div className="rounded-2xl border border-rose-200/90 bg-rose-50/90 px-5 py-6 text-sm text-rose-950 shadow-sm">
+      <div className="rounded-2xl border px-5 py-6 text-sm portal-banner-danger shadow-sm">
         <p className="font-semibold text-rose-950">This page could not load.</p>
         <p className="mt-2 leading-relaxed text-rose-900/90">
           {error.message || "Something went wrong. Try again or go back home."}

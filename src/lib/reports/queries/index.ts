@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import type { RecurringRentProfile } from "@/lib/household-charges";
-import { chartAccountLabel } from "@/lib/reports/categories";
+import { chartAccountLabel, chartAccountScheduleE } from "@/lib/reports/categories";
+import { loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
 import type { ManagerReportFilters, ReportResult } from "@/lib/reports/types";
 import { parseMoneyAmount } from "@/lib/parse-money";
@@ -192,35 +193,52 @@ export async function queryIncomeStatement(
     expenseByCat.set(code, (expenseByCat.get(code) ?? 0) + Number(row.amount_cents));
   }
 
-  const rows: Record<string, string>[] = [];
+  const rows: Record<string, string | boolean>[] = [];
   let totalIncome = 0;
   let totalExpense = 0;
 
   for (const [code, cents] of incomeByCat) {
     totalIncome += cents;
-    rows.push({ section: "Income", category: chartAccountLabel(code), amount: centsToUsd(cents) });
+    const schedE = chartAccountScheduleE(code);
+    rows.push({
+      section: "Rental Income",
+      category: chartAccountLabel(code),
+      scheduleERef: schedE?.ref ?? "Sch. E, Line 3",
+      amount: centsToUsd(cents),
+    });
   }
   for (const [code, cents] of expenseByCat) {
     totalExpense += cents;
-    rows.push({ section: "Expense", category: chartAccountLabel(code), amount: centsToUsd(cents) });
+    const schedE = chartAccountScheduleE(code);
+    rows.push({
+      section: "Operating Expenses",
+      category: chartAccountLabel(code),
+      scheduleERef: schedE?.ref ?? "Sch. E, Line 19",
+      amount: centsToUsd(cents),
+    });
   }
 
   rows.sort((a, b) => `${a.section}-${a.category}`.localeCompare(`${b.section}-${b.category}`));
 
+  // Append Net Operating Income as a visually distinct total row
+  rows.push({
+    section: "",
+    category: "Net Operating Income",
+    scheduleERef: "",
+    amount: centsToUsd(totalIncome - totalExpense),
+    _isTotal: true,
+  });
+
   return {
     id: "income-statement",
-    title: "Profit & loss",
+    title: "Income Statement (Schedule E)",
     columns: [
       { key: "section", label: "Section" },
       { key: "category", label: "Category" },
+      { key: "scheduleERef", label: "Schedule E Ref." },
       { key: "amount", label: "Amount", align: "right", format: "money" },
     ],
     rows,
-    totals: {
-      section: "Net operating income",
-      category: "",
-      amount: centsToUsd(totalIncome - totalExpense),
-    },
     meta: { from, to, totalIncome: centsToUsd(totalIncome), totalExpense: centsToUsd(totalExpense) },
   };
 }
@@ -231,6 +249,7 @@ export async function queryExpenses(
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
+  const display = await loadManagerReportDisplayContext(db, managerUserId);
 
   let query = db
     .from("manager_expense_entries")
@@ -246,10 +265,11 @@ export async function queryExpenses(
     id: e.id,
     date: e.expense_date,
     category: chartAccountLabel(e.category_code),
+    scheduleERef: chartAccountScheduleE(e.category_code)?.ref ?? "Sch. E, Line 19",
     amount: centsToUsd(Number(e.amount_cents)),
-    vendorId: e.vendor_id ?? "",
+    vendor: display.vendorLabel(e.vendor_id),
     memo: e.memo ?? "",
-    propertyId: e.property_id ?? "",
+    property: display.propertyLabel(e.property_id),
     workOrderId: e.source_work_order_id ?? "",
   }));
 
@@ -257,18 +277,18 @@ export async function queryExpenses(
 
   return {
     id: "expenses",
-    title: "Expense documents",
+    title: "Property Expense Register (Schedule E)",
     columns: [
       { key: "date", label: "Date", format: "date" },
       { key: "category", label: "Category" },
+      { key: "scheduleERef", label: "Sch. E Line" },
       { key: "amount", label: "Amount", align: "right", format: "money" },
-      { key: "vendorId", label: "Vendor ID" },
-      { key: "memo", label: "Memo" },
-      { key: "propertyId", label: "Property" },
-      { key: "workOrderId", label: "Work order" },
+      { key: "vendor", label: "Vendor" },
+      { key: "memo", label: "Description" },
+      { key: "property", label: "Property" },
     ],
     rows,
-    totals: { date: "Total", category: "", amount: centsToUsd(totalCents), vendorId: "", memo: "", propertyId: "", workOrderId: "" },
+    totals: { date: "Total expenses", category: "", scheduleERef: "", amount: centsToUsd(totalCents), vendor: "", memo: "", property: "" },
     meta: { from, to },
   };
 }
@@ -279,6 +299,7 @@ export async function queryRentReceipts(
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
+  const display = await loadManagerReportDisplayContext(db, managerUserId);
 
   let query = db
     .from("ledger_entries")
@@ -298,8 +319,8 @@ export async function queryRentReceipts(
       description: row.description?.trim() || chartAccountLabel(String(row.category_code)),
       amount: centsToUsd(Number(row.amount_cents)),
       category: chartAccountLabel(String(row.category_code)),
-      propertyId: row.property_id ?? "",
-      residentEmail: row.resident_email ?? "",
+      property: display.propertyLabel(row.property_id),
+      resident: display.residentLabel(row.resident_email),
     }));
 
   const totalCents = (data ?? [])
@@ -308,14 +329,14 @@ export async function queryRentReceipts(
 
   return {
     id: "rent-receipts",
-    title: "Rent receipts",
+    title: "Rent collection summary",
     columns: [
       { key: "date", label: "Date received", format: "date" },
       { key: "description", label: "Description" },
       { key: "category", label: "Type" },
       { key: "amount", label: "Amount", align: "right", format: "money" },
-      { key: "propertyId", label: "Property" },
-      { key: "residentEmail", label: "Resident" },
+      { key: "property", label: "Property" },
+      { key: "resident", label: "Resident" },
     ],
     rows,
     totals: {
@@ -323,8 +344,8 @@ export async function queryRentReceipts(
       description: "",
       category: "",
       amount: centsToUsd(totalCents),
-      propertyId: "",
-      residentEmail: "",
+      property: "",
+      resident: "",
     },
     meta: { from, to, totalEarned: centsToUsd(totalCents) },
   };

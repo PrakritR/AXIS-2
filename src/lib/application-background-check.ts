@@ -38,16 +38,17 @@ export function backgroundCheckStatusTone(
 }
 
 export function backgroundCheckStatusClassName(status: ApplicationBackgroundCheckStatus): string {
+  const ring = "ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   switch (backgroundCheckStatusTone(status)) {
     case "success":
-      return "bg-emerald-50 text-emerald-800 ring-emerald-200/80";
+      return `portal-badge-success ${ring}`;
     case "warning":
-      return "bg-amber-50 text-amber-900 ring-amber-200/80";
+      return `portal-badge-pending ${ring}`;
     case "muted":
-      return "bg-slate-100 text-slate-600 ring-slate-200/80";
+      return `bg-foreground/5 text-muted ${ring}`;
     case "neutral":
     default:
-      return "bg-blue-50 text-blue-800 ring-blue-200/80";
+      return `portal-badge-info ${ring}`;
   }
 }
 

@@ -117,7 +117,7 @@ export function PortalWorkspaceClient({
       ) : null}
 
       {!isCompactPortalShell && model.notes ? (
-        <div className="rounded-[24px] border border-amber-200/80 bg-amber-50/80 px-5 py-4 text-sm text-amber-950">{model.notes}</div>
+        <div className="rounded-[24px] border px-5 py-4 text-sm portal-banner-pending">{model.notes}</div>
       ) : null}
 
       {!isCompactPortalShell ? (

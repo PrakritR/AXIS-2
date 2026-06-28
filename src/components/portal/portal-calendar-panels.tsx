@@ -68,11 +68,11 @@ const CALENDAR_OPEN_SLOT =
 const CALENDAR_OPEN_SLOT_SOFT =
   "border-emerald-300 bg-emerald-100 text-emerald-900 [html[data-theme=dark]_&]:portal-calendar-open-slot";
 const CALENDAR_BADGE_SUCCESS =
-  "rounded-full bg-emerald-50 text-emerald-700 [html[data-theme=dark]_&]:portal-calendar-badge-success";
+  "rounded-full portal-badge-success";
 const CALENDAR_BADGE_INFO =
-  "rounded-full bg-blue-50 text-blue-700 [html[data-theme=dark]_&]:portal-calendar-badge-info";
+  "rounded-full portal-badge-info";
 const CALENDAR_BADGE_ERROR =
-  "rounded-full bg-rose-50 text-rose-700 [html[data-theme=dark]_&]:portal-calendar-badge-error";
+  "rounded-full portal-badge-danger";
 const CALENDAR_OPEN_COUNT = "text-emerald-700 [html[data-theme=dark]_&]:portal-calendar-open-count";
 const CALENDAR_EMPTY_SLOT =
   "bg-card text-transparent hover:bg-primary/[0.07] hover:text-primary [html[data-theme=dark]_&]:portal-calendar-empty-slot";
@@ -864,7 +864,7 @@ export function PortalCalendarPanels({
           ) : null}
 
           {selectedBlock.meeting.instructions ? (
-            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm portal-calendar-callout-sky [html[data-theme=dark]_&]:portal-calendar-callout-sky">
+            <div className="rounded-2xl border px-4 py-3 text-sm portal-banner-info">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700 portal-calendar-callout-sky-sub [html[data-theme=dark]_&]:portal-calendar-callout-sky-sub">Confirmation details</p>
               <p className="mt-1.5 whitespace-pre-wrap text-sky-950 portal-calendar-callout-sky-title [html[data-theme=dark]_&]:portal-calendar-callout-sky-title">{selectedBlock.meeting.instructions}</p>
             </div>
@@ -877,7 +877,7 @@ export function PortalCalendarPanels({
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
               onClick={deleteSelectedMeeting}
             >
               {selectedBlock.meeting.source === "planned" ? "Delete event" : "Delete request"}
@@ -897,7 +897,7 @@ export function PortalCalendarPanels({
         </div>
       ) : selectedBlock?.kind === "availability" ? (
         <div className="space-y-5">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 portal-calendar-badge-success [html[data-theme=dark]_&]:portal-calendar-badge-success">
+          <div className="rounded-2xl border px-4 py-3 text-sm portal-banner-success">
             <p className="font-semibold">Open tour window</p>
             <p className="mt-1">
               {formatRangeLabel(
@@ -914,7 +914,7 @@ export function PortalCalendarPanels({
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-rose-50"
+              className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
               onClick={deleteAvailabilitySlot}
             >
               Delete slot
@@ -1007,7 +1007,7 @@ export function PortalCalendarPanels({
           </div>
 
           {upcomingMeetingSummary.total > 0 ? (
-            <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3 portal-calendar-callout-sky [html[data-theme=dark]_&]:portal-calendar-callout-sky">
+            <div className="mt-4 rounded-2xl border px-4 py-3 portal-banner-info">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-bold text-sky-950 portal-calendar-callout-sky-title [html[data-theme=dark]_&]:portal-calendar-callout-sky-title">
@@ -1024,7 +1024,7 @@ export function PortalCalendarPanels({
                   <button
                     key={meeting.id}
                     type="button"
-                    className="rounded-xl border border-sky-200 bg-card px-3 py-2 text-left text-xs shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
+                    className="rounded-xl border bg-card px-3 py-2 text-left text-xs shadow-sm transition hover:border-primary/30 hover:bg-[var(--status-approved-bg)]"
                     onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(meeting.dateStr, meeting.startSlot, e.currentTarget, meeting)}
                   >
                     <span className="block font-bold text-foreground">{meeting.title}</span>

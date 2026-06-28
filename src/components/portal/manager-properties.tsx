@@ -123,7 +123,7 @@ export function ManagerProperties() {
       }
     >
       {atPropertyLimit && limitMax != null ? (
-        <p className="mb-4 rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm text-rose-950">
+        <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger">
           You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.{" "}
           <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={`${portalBase}/plan`}>
             View plans
@@ -132,7 +132,7 @@ export function ManagerProperties() {
         </p>
       ) : null}
       {pendingCount > 0 ? (
-        <p className="mb-4 rounded-2xl border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-sm text-amber-950">
+        <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-pending">
           <span className="font-semibold">{pendingCount}</span> propert{pendingCount === 1 ? "y" : "ies"} awaiting admin
           approval before they go live on Axis listings.
         </p>
