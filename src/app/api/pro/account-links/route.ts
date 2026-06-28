@@ -6,7 +6,7 @@ import {
   type AccountLinkTabKind,
   type AccountLinksPayload,
 } from "@/lib/account-links";
-import { normalizeCoManagerPermissions, type CoManagerPermissions } from "@/lib/co-manager-permissions";
+import { normalizeCoManagerPermissions, normalizePropertyCoManagerPermissions, prunePropertyCoManagerPermissions, flatCoManagerPermissionsFromProperty, type CoManagerPermissions, type PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
 import { getManagerPurchaseSku, maxAccountLinksForTier } from "@/lib/manager-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -25,6 +25,7 @@ export type InviteRow = {
   assigned_property_ids: unknown;
   payout_percent_for_manager: number;
   co_manager_permissions?: unknown;
+  property_co_manager_permissions?: unknown;
   status: string;
   created_at: string;
   responded_at: string | null;
@@ -35,10 +36,21 @@ export function asStringArray(v: unknown): string[] {
   return v.filter((x) => typeof x === "string") as string[];
 }
 
+export function readPropertyPermissionsFromRow(
+  row: Pick<InviteRow, "assigned_property_ids" | "property_co_manager_permissions" | "co_manager_permissions">,
+): PropertyCoManagerPermissions {
+  const assigned = asStringArray(row.assigned_property_ids);
+  const raw = row.property_co_manager_permissions ?? row.co_manager_permissions;
+  return normalizePropertyCoManagerPermissions(raw, assigned);
+}
+
 export function serializeInvite(row: InviteRow, viewerId: string): AccountLinkInviteDto {
   const out = row.inviter_user_id === viewerId;
   const linkedAxisId = out ? row.invitee_axis_id : row.inviter_axis_id;
   const linkedDisplayName = out ? row.invitee_display_name : row.inviter_display_name;
+  const linkedUserId = out ? row.invitee_user_id : row.inviter_user_id;
+  const assignedPropertyIds = asStringArray(row.assigned_property_ids);
+  const propertyCoManagerPermissions = readPropertyPermissionsFromRow(row);
   return {
     id: row.id,
     tabKind: "manager",
@@ -56,9 +68,11 @@ export function serializeInvite(row: InviteRow, viewerId: string): AccountLinkIn
     inviteeDisplayName: row.invitee_display_name,
     linkedAxisId,
     linkedDisplayName,
-    assignedPropertyIds: asStringArray(row.assigned_property_ids),
+    linkedUserId,
+    assignedPropertyIds,
     payoutPercentForManager: Number(row.payout_percent_for_manager),
-    coManagerPermissions: normalizeCoManagerPermissions(row.co_manager_permissions),
+    coManagerPermissions: flatCoManagerPermissionsFromProperty(propertyCoManagerPermissions),
+    propertyCoManagerPermissions,
     createdAt: row.created_at,
     respondedAt: row.responded_at,
   };
@@ -124,6 +138,7 @@ export async function GET(): Promise<NextResponse<AccountLinksPayload | { error:
           "invitee_display_name",
           "assigned_property_ids",
           "payout_percent_for_manager",
+          "property_co_manager_permissions",
           "co_manager_permissions",
           "status",
           "created_at",
@@ -165,6 +180,7 @@ export async function POST(req: Request) {
       assignedPropertyIds?: unknown;
       payoutPercentForManager?: number;
       coManagerPermissions?: unknown;
+      propertyCoManagerPermissions?: unknown;
     } | null;
 
     const inviteeAxisId = body?.inviteeAxisId?.trim() ?? "";
@@ -175,7 +191,11 @@ export async function POST(req: Request) {
       100,
       Math.max(0, Math.round(Number(body?.payoutPercentForManager ?? 15) * 10) / 10),
     );
-    const coManagerPermissions: CoManagerPermissions = normalizeCoManagerPermissions(body?.coManagerPermissions);
+    const propertyCoManagerPermissions = normalizePropertyCoManagerPermissions(
+      body?.propertyCoManagerPermissions ?? body?.coManagerPermissions,
+      assignedPropertyIds,
+    );
+    const coManagerPermissions: CoManagerPermissions = flatCoManagerPermissionsFromProperty(propertyCoManagerPermissions);
 
     if (!inviteeAxisId) {
       return NextResponse.json({ error: "inviteeAxisId is required." }, { status: 400 });
@@ -352,6 +372,7 @@ export async function POST(req: Request) {
           null,
         assigned_property_ids: assignedPropertyIds,
         payout_percent_for_manager: payoutPercentForManager,
+        property_co_manager_permissions: propertyCoManagerPermissions,
         co_manager_permissions: coManagerPermissions,
         status: "pending",
       })
@@ -367,6 +388,7 @@ export async function POST(req: Request) {
           "invitee_display_name",
           "assigned_property_ids",
           "payout_percent_for_manager",
+          "property_co_manager_permissions",
           "co_manager_permissions",
           "status",
           "created_at",
@@ -397,6 +419,33 @@ export async function POST(req: Request) {
     if (!row?.id) {
       return NextResponse.json({ error: "Failed to create invite." }, { status: 500 });
     }
+
+    void (async () => {
+      try {
+        const { notifyCoManagerInviteSent } = await import("@/lib/co-manager-notification.server");
+        const { data: props } = await svc
+          .from("manager_property_records")
+          .select("id, property_data, row_data")
+          .in("id", assignedPropertyIds);
+        const labels = (props ?? []).map((p) => {
+          const pd = (p.property_data ?? p.row_data ?? {}) as Record<string, unknown>;
+          const building = String(pd.buildingName ?? pd.title ?? "").trim();
+          const unit = String(pd.unitLabel ?? "").trim();
+          return [building, unit].filter(Boolean).join(" · ") || p.id;
+        });
+        await notifyCoManagerInviteSent({
+          inviterUserId: user.id,
+          inviteeUserId: inviteeProfile.id,
+          inviterName:
+            (inviterProfile as { full_name?: string | null }).full_name?.trim() ||
+            (inviterProfile as { email?: string | null }).email ||
+            "A manager",
+          propertyLabels: labels.length > 0 ? labels : assignedPropertyIds,
+        });
+      } catch {
+        /* notification failure should not block invite */
+      }
+    })();
 
     return NextResponse.json({ ok: true, invite: serializeInvite(row, user.id) });
   } catch (e) {

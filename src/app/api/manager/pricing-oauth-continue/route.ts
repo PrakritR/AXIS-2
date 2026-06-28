@@ -71,10 +71,8 @@ export async function POST(req: Request) {
       fullName,
     });
     if (prepared.kind === "complete") {
-      return NextResponse.json(
-        { error: "A manager account already exists for this email. Sign in instead." },
-        { status: 409 },
-      );
+      // Account is already fully set up — send them straight to the portal.
+      return NextResponse.json({ action: "portal" });
     }
 
     const waiverCode = getPaymentWaiverCode();

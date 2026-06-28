@@ -18,7 +18,18 @@ export type CoManagerPermissionId = (typeof CO_MANAGER_PERMISSION_OPTIONS)[numbe
 
 export type CoManagerPermissions = Partial<Record<CoManagerPermissionId, boolean>>;
 
+/** Per-property permission grants on an account link. */
+export type PropertyCoManagerPermissions = Record<string, CoManagerPermissions>;
+
 export const EMPTY_CO_MANAGER_PERMISSIONS: CoManagerPermissions = {};
+
+const CO_MANAGER_PERMISSION_ID_SET = new Set<string>(CO_MANAGER_PERMISSION_OPTIONS.map(({ id }) => id));
+
+function isFlatCoManagerPermissionsObject(raw: Record<string, unknown>): boolean {
+  const keys = Object.keys(raw);
+  if (keys.length === 0) return true;
+  return keys.some((k) => CO_MANAGER_PERMISSION_ID_SET.has(k));
+}
 
 export function normalizeCoManagerPermissions(raw: unknown): CoManagerPermissions {
   if (!raw || typeof raw !== "object") return {};
@@ -27,6 +38,70 @@ export function normalizeCoManagerPermissions(raw: unknown): CoManagerPermission
     if ((raw as Record<string, unknown>)[id] === true) out[id] = true;
   }
   return out;
+}
+
+export function normalizePropertyCoManagerPermissions(
+  raw: unknown,
+  assignedPropertyIds: string[],
+): PropertyCoManagerPermissions {
+  if (!raw || typeof raw !== "object") {
+    return Object.fromEntries(assignedPropertyIds.map((id) => [id, {}]));
+  }
+  const obj = raw as Record<string, unknown>;
+  if (isFlatCoManagerPermissionsObject(obj)) {
+    const flat = normalizeCoManagerPermissions(obj);
+    return Object.fromEntries(assignedPropertyIds.map((id) => [id, { ...flat }]));
+  }
+  const out: PropertyCoManagerPermissions = {};
+  for (const propertyId of assignedPropertyIds) {
+    out[propertyId] = normalizeCoManagerPermissions(obj[propertyId]);
+  }
+  for (const [key, value] of Object.entries(obj)) {
+    if (!assignedPropertyIds.includes(key)) continue;
+    out[key] = normalizeCoManagerPermissions(value);
+  }
+  return out;
+}
+
+export function permissionsForProperty(
+  perms: PropertyCoManagerPermissions | undefined,
+  propertyId: string,
+): CoManagerPermissions {
+  return normalizeCoManagerPermissions(perms?.[propertyId]);
+}
+
+export function prunePropertyCoManagerPermissions(
+  perms: PropertyCoManagerPermissions,
+  assignedPropertyIds: string[],
+): PropertyCoManagerPermissions {
+  const allowed = new Set(assignedPropertyIds);
+  const out: PropertyCoManagerPermissions = {};
+  for (const id of assignedPropertyIds) {
+    out[id] = normalizeCoManagerPermissions(perms[id]);
+  }
+  for (const [key, value] of Object.entries(perms)) {
+    if (!allowed.has(key)) continue;
+    out[key] = normalizeCoManagerPermissions(value);
+  }
+  return out;
+}
+
+export function flatCoManagerPermissionsFromProperty(
+  perms: PropertyCoManagerPermissions | undefined,
+): CoManagerPermissions {
+  return mergeCoManagerPermissions(
+    Object.values(perms ?? {}).map((coManagerPermissions) => ({ coManagerPermissions })),
+  );
+}
+
+export function summarizePropertyCoManagerPermissions(
+  perms: PropertyCoManagerPermissions | undefined,
+): string {
+  const flat = flatCoManagerPermissionsFromProperty(perms);
+  const labels = CO_MANAGER_PERMISSION_OPTIONS.filter(({ id }) => hasCoManagerPermission(flat, id)).map(
+    ({ label }) => label,
+  );
+  return labels.join(" · ") || "No section access granted yet.";
 }
 
 /** Map legacy single checkbox to structured permissions. */
@@ -46,6 +121,14 @@ export function hasCoManagerPermission(
   id: CoManagerPermissionId,
 ): boolean {
   return permissions?.[id] === true;
+}
+
+export function hasCoManagerPermissionForProperty(
+  propertyPermissions: PropertyCoManagerPermissions | undefined,
+  propertyId: string,
+  id: CoManagerPermissionId,
+): boolean {
+  return hasCoManagerPermission(permissionsForProperty(propertyPermissions, propertyId), id);
 }
 
 export function countCoManagerPermissions(permissions: CoManagerPermissions | undefined): number {
@@ -96,6 +179,22 @@ export function mergeCoManagerPermissions(
     }
   }
   return merged;
+}
+
+export function mergeCoManagerPermissionsFromPropertyRows(
+  rows: { propertyCoManagerPermissions?: PropertyCoManagerPermissions; coManagerPermissions?: CoManagerPermissions }[],
+): CoManagerPermissions {
+  const propertyValues = rows.flatMap((row) => {
+    const map = row.propertyCoManagerPermissions;
+    if (map && Object.keys(map).length > 0) {
+      return Object.values(map).map((coManagerPermissions) => ({ coManagerPermissions }));
+    }
+    if (row.coManagerPermissions && Object.keys(row.coManagerPermissions).length > 0) {
+      return [{ coManagerPermissions: row.coManagerPermissions }];
+    }
+    return [];
+  });
+  return mergeCoManagerPermissions(propertyValues);
 }
 
 export function coManagerPortalSectionAllowed(input: {

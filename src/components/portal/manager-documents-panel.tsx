@@ -32,18 +32,19 @@ import {
 } from "@/components/portal/reports/formal-document-scope-bar";
 import { PROPERTY_RENT_RECEIPT_DEFAULT_FIELDS } from "@/lib/reports/formal-documents/spec";
 import { ReportTable } from "@/components/portal/reports/report-table";
-import { FormalDocumentsPreview, FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
+import { FormalDocumentsPreview, FinancialReportDocumentView, OccupancyDocumentView } from "@/components/portal/reports/formal-document-preview";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { VendorTaxProfileModal } from "@/components/portal/vendor-tax-profile-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
-import type { PropertyRentReceiptDocument } from "@/lib/reports/formal-documents/spec";
+import type { OccupancyReport, PropertyRentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import type { ReportResult } from "@/lib/reports/types";
 
 export const DOCUMENT_TABS = [
-  { id: "expense-documents", label: "Expense documents" },
   { id: "income-documents", label: "Income documents" },
+  { id: "expense-documents", label: "Expense documents" },
+  { id: "occupancy", label: "Occupancy" },
   { id: "1099", label: "1099 forms" },
   { id: "tax-summary", label: "Tax summary" },
 ] as const;
@@ -113,6 +114,7 @@ export function ManagerDocumentsPanel({
   const [scopeFilters, setScopeFilters] = useState(defaultIncomeScopeFilters);
   const [report, setReport] = useState<ReportResult | null>(null);
   const [propertyDocuments, setPropertyDocuments] = useState<PropertyRentReceiptDocument[] | null>(null);
+  const [occupancyReport, setOccupancyReport] = useState<OccupancyReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [taxVendorId, setTaxVendorId] = useState<string | null>(null);
@@ -166,9 +168,19 @@ export function ManagerDocumentsPanel({
         if (!res.ok) throw new Error(data.error ?? "Failed to load report.");
         setPropertyDocuments(null);
         setReport(data as ReportResult);
+      } else if (tabId === "occupancy") {
+        const params = new URLSearchParams({ from: filters.from, to: filters.to });
+        if (filters.propertyId) params.set("propertyId", filters.propertyId);
+        const res = await fetch(`/api/reports/occupancy?${params}`, { credentials: "include" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to load occupancy report.");
+        setPropertyDocuments(null);
+        setReport(null);
+        setOccupancyReport(data as OccupancyReport);
       } else {
         setPropertyDocuments(null);
         setReport(null);
+        setOccupancyReport(null);
       }
       setGenerated(true);
     } catch (e) {
@@ -184,6 +196,7 @@ export function ManagerDocumentsPanel({
   useEffect(() => {
     setReport(null);
     setPropertyDocuments(null);
+    setOccupancyReport(null);
     setGenerated(false);
   }, [tabId]);
 
@@ -199,7 +212,7 @@ export function ManagerDocumentsPanel({
   })();
 
   const showDateRange = tabId !== "1099";
-  const showProperty = tabId === "tax-summary" || tabId === "expense-documents";
+  const showProperty = tabId === "tax-summary" || tabId === "expense-documents" || tabId === "occupancy";
   const showTaxYear = tabId === "1099";
 
   return (
@@ -359,6 +372,12 @@ export function ManagerDocumentsPanel({
               </div>
             )}
           </div>
+        ) : tabId === "occupancy" && generated && occupancyReport ? (
+          <div className="rounded-2xl border border-border bg-[#eef2f7] p-4 sm:p-6">
+            <OccupancyDocumentView report={occupancyReport} />
+          </div>
+        ) : tabId === "occupancy" && generated && !occupancyReport ? (
+          <ReportGeneratePrompt title="No occupancy data" description="No active leases found for the selected period and property filter." />
         ) : tabId === "expense-documents" && generated && report ? (
           <FinancialReportDocumentView report={report} />
         ) : tabId === "tax-summary" && generated && report ? (

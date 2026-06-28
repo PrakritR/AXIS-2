@@ -206,11 +206,32 @@ export default function PartnerPricingPage() {
         if (cancelled) return;
 
         const session = await fetchPartnerPricingSession();
+        if (cancelled) return;
         setGoogleSession(session);
         if (session.email) setEmail(session.email);
         if (session.fullName) setFullName(session.fullName);
 
         if (result.status === "provisioned") {
+          // Account was already complete (returning user) — go straight to portal.
+          if (!session.needsPricing) {
+            router.replace("/portal/dashboard");
+            return;
+          }
+
+          // Auto-complete free tier without requiring an extra button click.
+          if (stored && stored.tier === "free") {
+            const freeResult = await continuePartnerPricingWithOffer(stored);
+            if (cancelled) return;
+            if (freeResult.status === "portal") {
+              router.replace("/portal/dashboard");
+              return;
+            }
+            if (freeResult.status === "error") {
+              showToast(freeResult.message);
+              return;
+            }
+          }
+
           showToast("Signed in with Google. Your account is ready — choose a plan below.");
           return;
         }
@@ -237,6 +258,19 @@ export default function PartnerPricingPage() {
       router.replace(`/auth/manager-id?session_id=${encodeURIComponent(sid)}`);
     }
   }, [router]);
+
+  // When a Google-authenticated user with a complete account lands on pricing, send them to portal.
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (!googleSignedIn) return;
+    if (googleSession && !googleSession.needsPricing) {
+      // Check we're not in the middle of the google_signed_in flow (it handles its own redirect).
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("google_signed_in") !== "1" && params.get("google_checkout") !== "1") {
+        router.replace("/portal/dashboard");
+      }
+    }
+  }, [googleSignedIn, googleSession, sessionLoading, router]);
 
   const checkoutLocked = checkoutBusy || googleCheckoutBusy || Boolean(checkoutClientSecret);
 
@@ -663,8 +697,12 @@ export default function PartnerPricingPage() {
                             : {}),
                         }),
                       });
-                      const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string };
+                      const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string; alreadyComplete?: boolean; redirectTo?: string };
                       if (!res.ok) {
+                        if (payload.alreadyComplete && payload.redirectTo) {
+                          router.push(payload.redirectTo);
+                          return;
+                        }
                         showToast(payload.error ?? "Could not start checkout. Ask your admin to configure billing.");
                         return;
                       }

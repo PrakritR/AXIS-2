@@ -72,6 +72,11 @@ export async function continuePartnerPricingWithOffer(
   }
 
   const session = await fetchPartnerPricingSession();
+  if (session.authenticated && !session.needsPricing) {
+    // Account is already fully provisioned — no need to hit the pricing API.
+    clearManagerPricingOffer();
+    return { status: "portal" };
+  }
   if (session.authenticated && session.needsPricing) {
     const provision = await provisionPartnerPricingGoogleAccount();
     if (!provision.ok) {

@@ -3,11 +3,25 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { Session } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export function PublicNavbar() {
   const pathname = usePathname();
+  const [signedIn, setSignedIn] = useState(false);
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
+      setSignedIn(!!result.data.session);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
+      setSignedIn(!!session);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   const pricingActive = useMemo(
     () => pathname === "/pricing" || pathname.startsWith("/partner/pricing"),
@@ -38,6 +52,7 @@ export function PublicNavbar() {
           login: { text: "Log in", url: "/auth/sign-in" },
           signup: { text: "Get started", url: "/auth/create-account" },
         }}
+        portalLink={signedIn ? { text: "Portal", url: "/portal/dashboard" } : undefined}
         actionsSlot={<ThemeToggle />}
       />
     </div>

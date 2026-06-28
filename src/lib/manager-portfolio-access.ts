@@ -15,7 +15,7 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readProRelationships, syncProRelationshipsFromServer } from "@/lib/pro-relationships";
-import { hasCoManagerPermission } from "@/lib/co-manager-permissions";
+import { hasCoManagerPermission, hasCoManagerPermissionForProperty } from "@/lib/co-manager-permissions";
 
 /** Property ids explicitly assigned via accepted co-manager account links. */
 export function collectLinkedPropertyIds(userId: string): Set<string> {
@@ -137,7 +137,10 @@ export function readLinkedListingsForUser(userId: string): { listing: MockProper
       seen.add(pid);
       result.push({
         listing,
-        canEdit: hasCoManagerPermission(rel.coManagerPermissions, "editListings") || rel.canEditListing === true,
+        canEdit:
+          hasCoManagerPermissionForProperty(rel.propertyCoManagerPermissions, pid, "editListings") ||
+          hasCoManagerPermission(rel.coManagerPermissions, "editListings") ||
+          rel.canEditListing === true,
         ownerUserId,
       });
     }

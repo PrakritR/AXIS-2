@@ -118,7 +118,19 @@ function ManagerPricingOauthContent() {
         };
 
         if (!res.ok) {
+          if (res.status === 409) {
+            // Account already complete — send directly to portal
+            clearManagerPricingOffer();
+            window.location.replace("/portal/dashboard");
+            return;
+          }
           setErrorText(body.error ?? "Could not continue signup.");
+          return;
+        }
+
+        if (body.action === "portal") {
+          clearManagerPricingOffer();
+          window.location.replace("/portal/dashboard");
           return;
         }
 
