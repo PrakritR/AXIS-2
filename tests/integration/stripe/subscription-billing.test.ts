@@ -92,12 +92,12 @@ describe("Stripe subscription billing", () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",
-        payment_method_types: ["card"],
         ui_mode: "embedded_page",
         line_items: [{ price: "price_pro_monthly_test", quantity: 1 }],
         metadata: expect.objectContaining({ tier: "pro", billing: "monthly" }),
       }),
     );
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty("payment_method_types");
   });
 
   it("POST /api/stripe/checkout applies onboard discount coupon", async () => {
@@ -211,11 +211,11 @@ describe("Stripe subscription billing", () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",
-        payment_method_types: ["card"],
         line_items: [{ price: "price_business_annual_test", quantity: 1 }],
         metadata: expect.objectContaining({ userId: "user_1", tier: "business" }),
       }),
     );
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty("payment_method_types");
   });
 
   it("POST /api/stripe/billing-portal opens portal for Stripe customer", async () => {

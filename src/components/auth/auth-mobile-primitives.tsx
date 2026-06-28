@@ -33,6 +33,53 @@ export function AuthChoiceList({ children }: { children: ReactNode }) {
   return <div className="auth-choice-list mt-5 space-y-2.5 sm:mt-6 sm:space-y-3">{children}</div>;
 }
 
+type AuthRoleTabOption = {
+  id: string;
+  label: string;
+  hint?: string;
+  icon: AuthRoleIconName;
+  tone?: "blue" | "steel";
+};
+
+export function AuthRoleTabs({
+  options,
+  onSelect,
+}: {
+  options: AuthRoleTabOption[];
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="auth-role-tabs mt-5 flex flex-wrap justify-center gap-3 sm:mt-6">
+      {options.map((option) => {
+        const iconWrap =
+          option.tone === "steel"
+            ? "bg-[linear-gradient(135deg,rgba(255,255,255,0.4),rgba(188,212,255,0.3))] text-[#1a2f5c]"
+            : "bg-[linear-gradient(135deg,var(--primary),var(--sky))] text-white shadow-[0_8px_20px_-10px_rgba(47,107,255,0.55)]";
+
+        return (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => onSelect(option.id)}
+            className="auth-role-tab group flex min-w-[7.5rem] flex-1 flex-col items-center rounded-[1.125rem] border border-border/70 bg-card/50 px-4 py-4 text-center transition-all duration-200 hover:border-primary/35 hover:bg-card/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-[0.98] sm:min-w-[8.5rem] sm:px-5 sm:py-5"
+          >
+            <span
+              className={`flex h-11 w-11 items-center justify-center rounded-2xl sm:h-12 sm:w-12 ${iconWrap}`}
+              aria-hidden
+            >
+              <AuthRoleIcon name={option.icon} className="h-5 w-5 sm:h-[22px] sm:w-[22px]" />
+            </span>
+            <span className="mt-3 text-[15px] font-semibold text-foreground sm:text-base">{option.label}</span>
+            {option.hint ? (
+              <span className="auth-role-tab-hint mt-1 text-[11px] leading-snug text-muted sm:text-xs">{option.hint}</span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 type AuthRoleCardProps = {
   label: string;
   hint?: string;

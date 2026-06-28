@@ -134,6 +134,7 @@ See [`docs/mobile-app.md`](docs/mobile-app.md) and [`docs/firebase-push-setup.md
 | [`SUPABASE_STRIPE_SETUP.md`](SUPABASE_STRIPE_SETUP.md) | Supabase Auth, Google OAuth, Stripe subscriptions |
 | [`docs/stripe-connect-ach-setup.md`](docs/stripe-connect-ach-setup.md) | Resident payments via Stripe Connect |
 | [`docs/stripe-go-live.md`](docs/stripe-go-live.md) | Production Stripe checklist |
+| [`docs/stripe-apple-pay-subscriptions.md`](docs/stripe-apple-pay-subscriptions.md) | Apple Pay for manager subscriptions |
 | [`docs/stripe-ach-local-test.md`](docs/stripe-ach-local-test.md) | Local ACH / webhook testing |
 | [`docs/design.md`](docs/design.md) | Blue Steel design system |
 | [`docs/mobile-app.md`](docs/mobile-app.md) | Capacitor native app workflow |

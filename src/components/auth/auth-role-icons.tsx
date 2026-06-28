@@ -2,40 +2,59 @@ import type { FC } from "react";
 
 type IconProps = { className?: string };
 
+/** Tenant / home — rounded door + roof */
 export function AuthIconResident({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
+        d="M4 11.5 12 5l8 6.5V20a1.25 1.25 0 0 1-1.25 1.25H5.25A1.25 1.25 0 0 1 4 20v-8.5Z"
         stroke="currentColor"
-        strokeWidth="1.75"
+        strokeWidth="1.65"
         strokeLinejoin="round"
       />
+      <path
+        d="M10 21.25V14a2 2 0 0 1 2-2v0a2 2 0 0 1 2 2v7.25"
+        stroke="currentColor"
+        strokeWidth="1.65"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="11" r="1" fill="currentColor" />
     </svg>
   );
 }
 
+/** Property portfolio — stacked building */
 export function AuthIconManager({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M5 21V6.2a1 1 0 0 1 .55-.9L12 2l6.45 3.3a1 1 0 0 1 .55.9V21"
+        d="M4 21V8.5l8-4.5 8 4.5V21"
         stroke="currentColor"
-        strokeWidth="1.75"
+        strokeWidth="1.65"
         strokeLinejoin="round"
       />
-      <path d="M9 21v-5h6v5M9 10h.01M15 10h.01M9 14h.01M15 14h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M4 21h16" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" />
+      <path d="M9 21v-6h6v6" stroke="currentColor" strokeWidth="1.65" strokeLinejoin="round" />
+      <path d="M9.5 10h1M13.5 10h1M9.5 13h1M13.5 13h1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
     </svg>
   );
 }
 
+/** Sign in — user + arrow */
 export function AuthIconSignIn({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="9" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.65" />
       <path
-        d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"
+        d="M4 19.5c0-2.75 2.24-5 5-5s5 2.25 5 5"
         stroke="currentColor"
-        strokeWidth="1.75"
+        strokeWidth="1.65"
+        strokeLinecap="round"
+      />
+      <path
+        d="M16 12h5M19.5 8.5 23 12l-3.5 3.5"
+        stroke="currentColor"
+        strokeWidth="1.65"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -43,34 +62,32 @@ export function AuthIconSignIn({ className = "h-5 w-5" }: IconProps) {
   );
 }
 
+/** Application link — clipboard */
 export function AuthIconApply({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
+        d="M9 5h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
         stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
+        strokeWidth="1.65"
+        strokeLinejoin="round"
       />
       <path
-        d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+        d="M9 5V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V5"
         stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
+        strokeWidth="1.65"
       />
+      <path d="M9 11h6M9 15h4" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" />
     </svg>
   );
 }
 
+/** New account — plus badge */
 export function AuthIconSpark({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 3 13.9 8.1 19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-      />
+      <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.65" />
+      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
     </svg>
   );
 }

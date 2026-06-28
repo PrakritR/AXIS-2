@@ -56,7 +56,20 @@ Do **not** use `stripe listen` signing secrets in production — those are for l
 
 **Settings → Billing → Customer portal** (live mode): enable so managers can update cards and cancel from `/portal/plan`.
 
-## 7. Update hosting (Vercel)
+## 7. Apple Pay for subscriptions
+
+Manager Pro/Business checkout supports **Apple Pay** via Stripe dynamic payment methods.
+
+1. **Settings → Payment methods** — enable **Apple Pay**.
+2. Register domains:
+   ```bash
+   node --env-file=.env.local scripts/setup-stripe-apple-pay-domains.mjs
+   ```
+3. Test on Safari (HTTPS) at `/partner/pricing` or `/portal/plan`.
+
+Full guide: [`docs/stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md).
+
+## 8. Update hosting (Vercel)
 
 Project → **Settings → Environment Variables** → Production:
 
@@ -73,7 +86,7 @@ STRIPE_PRICE_BUSINESS_ANNUAL=price_…
 
 Redeploy after saving.
 
-## 8. Validate
+## 9. Validate
 
 Locally (after updating `.env.local` with live keys):
 
@@ -83,7 +96,7 @@ npm run stripe:validate-live
 
 All checks should pass and mode should report **live** (no TEST MODE badge at checkout).
 
-## 9. Optional live promos
+## 10. Optional live promos
 
 Recreate in **live mode** if you use them:
 

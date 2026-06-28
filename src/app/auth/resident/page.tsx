@@ -5,11 +5,10 @@ import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { MobileEmailSignIn } from "@/components/auth/mobile-email-sign-in";
 import {
   AuthBackLink,
-  AuthChoiceList,
   AuthDivider,
   AuthFieldBlock,
   AuthPageHeader,
-  AuthRoleCard,
+  AuthRoleTabs,
 } from "@/components/auth/auth-mobile-primitives";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
@@ -41,10 +40,13 @@ export default function ResidentAuthPage() {
       <AuthCard>
         <AuthPageHeader eyebrow="Resident" title="Get started" subtitle="Sign in or apply with your manager's link" />
 
-        <AuthChoiceList>
-          <AuthRoleCard label="Sign in" hint="Google or email" icon="sign-in" onClick={() => setMode("sign-in")} />
-          <AuthRoleCard label="Apply" hint="Paste your manager's link" icon="apply" tone="steel" onClick={() => setMode("apply")} />
-        </AuthChoiceList>
+        <AuthRoleTabs
+          options={[
+            { id: "sign-in", label: "Sign in", hint: "Google or email", icon: "sign-in" },
+            { id: "apply", label: "Apply", hint: "Paste link", icon: "apply", tone: "steel" },
+          ]}
+          onSelect={(id) => setMode(id as ResidentMode)}
+        />
 
         <p className="auth-footer-link mt-5 text-center text-[13px] text-muted sm:mt-6 sm:text-sm">
           <Link className="font-semibold text-primary hover:opacity-90" href="/auth/welcome">

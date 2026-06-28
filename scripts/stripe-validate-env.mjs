@@ -97,6 +97,8 @@ if (secretMode === "live") {
   console.log("  • NEXT_PUBLIC_APP_URL matches your production domain");
   console.log("  • Vercel/hosting env vars updated and redeployed");
   console.log("  • Stripe Dashboard → Settings → Billing → Customer portal enabled");
+  console.log("  • Stripe Dashboard → Settings → Payment methods → Apple Pay enabled");
+  console.log("  • Run: node --env-file=.env.local scripts/setup-stripe-apple-pay-domains.mjs");
   console.log("  • Stripe account activation / payouts completed");
 } else {
   console.log("\nStill in test mode. To accept real payments:");

@@ -1072,8 +1072,19 @@ html[data-native] .auth-card-shell > div:first-child {
 }
 
 html[data-native] .auth-page-subtitle,
-html[data-native] .auth-choice-hint {
+html[data-native] .auth-choice-hint,
+html[data-native] .auth-role-tab-hint {
   display: none;
+}
+
+html[data-native] .auth-role-tabs {
+  gap: 0.625rem;
+}
+
+html[data-native] .auth-role-tab {
+  min-width: 0;
+  max-width: 11rem;
+  padding: 0.875rem 0.75rem;
 }
 
 html[data-native] .auth-choice-button {
@@ -1124,7 +1135,8 @@ html[data-native] #axis-public-navbar {
     line-height: 1.35;
   }
 
-  .auth-choice-hint {
+  .auth-choice-hint,
+  .auth-role-tab-hint {
     display: none;
   }
 

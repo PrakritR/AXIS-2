@@ -27,6 +27,7 @@
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
     "admin:purge-managers": "node scripts/purge-non-demo-managers.mjs",
     "db:apply-sql": "node --env-file=.env.local scripts/apply-supabase-sql.mjs",
+    "stripe:apple-pay-domains": "node --env-file=.env.local scripts/setup-stripe-apple-pay-domains.mjs",
     "cap:sync": "cap sync",
     "cap:copy": "cap copy",
     "cap:ios": "cap open ios",

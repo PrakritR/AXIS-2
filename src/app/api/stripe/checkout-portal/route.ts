@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { resolveStripePriceIdForPaidTier } from "@/lib/stripe/resolve-manager-price";
+import { buildManagerSubscriptionCheckoutBase } from "@/lib/stripe/subscription-checkout-session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 
@@ -94,15 +95,13 @@ export async function POST(req: Request) {
     const fn = profile?.full_name?.trim();
     if (fn) metadata.full_name = fn;
 
-    const sessionBase = {
-      mode: "subscription" as const,
-      payment_method_types: ["card"] as string[],
-      line_items: [{ price, quantity: 1 }],
-      customer_email: email,
-      client_reference_id: user.id,
+    const sessionBase = buildManagerSubscriptionCheckoutBase({
+      priceId: price,
       metadata,
-      allow_promotion_codes: tier === "pro" && billing === "monthly",
-    };
+      customerEmail: email,
+      clientReferenceId: user.id,
+      allowPromotionCodes: tier === "pro" && billing === "monthly",
+    });
 
     if (useEmbedded) {
       const session = await stripe.checkout.sessions.create({

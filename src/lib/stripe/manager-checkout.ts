@@ -7,6 +7,7 @@ import {
 } from "@/lib/stripe-onboard-discount";
 import { resolveStripePriceIdForPaidTier } from "@/lib/stripe/resolve-manager-price";
 import type { PaidTier, StripeBilling } from "@/lib/stripe-price-ids";
+import { buildManagerSubscriptionCheckoutBase } from "@/lib/stripe/subscription-checkout-session";
 import { getStripe } from "@/lib/stripe";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -95,16 +96,14 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
     onboardCouponId = await stripeCouponIdForOnboardDiscount(onboardDiscount, "once");
   }
 
-  const sessionBase = {
-    mode: "subscription" as const,
-    payment_method_types: ["card"],
-    line_items: [{ price, quantity: 1 }],
-    ...(email ? { customer_email: email } : {}),
+  const sessionBase = buildManagerSubscriptionCheckoutBase({
+    priceId: price,
     metadata,
+    ...(email ? { customerEmail: email } : {}),
     ...(autoFirstMonthFree && promoCodeId ? { discounts: [{ promotion_code: promoCodeId }] } : {}),
     ...(onboardCouponId ? { discounts: [{ coupon: onboardCouponId }] } : {}),
-    ...(allowPromotionCodes ? { allow_promotion_codes: true } : {}),
-  };
+    allowPromotionCodes,
+  });
 
   const returnTarget = userId ? "manager-oauth-finish" : "manager-id";
   const finishPath = `/auth/${returnTarget}?session_id={CHECKOUT_SESSION_ID}`;
