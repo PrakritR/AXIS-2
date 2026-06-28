@@ -1,11 +1,13 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
+import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { PORTAL_MAIN_CONTENT_CLASS } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 
 export default async function ProPortalLayout({ children }: { children: React.ReactNode }) {
-  const nav = await buildProPortalDefinition();
+  const [nav, { profile }] = await Promise.all([buildProPortalDefinition(), getServerSessionProfile()]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
@@ -26,6 +28,7 @@ export default async function ProPortalLayout({ children }: { children: React.Re
           </main>
         </div>
       </div>
+      <AxisAssistant managerName={profile?.full_name ?? null} />
     </div>
   );
 }

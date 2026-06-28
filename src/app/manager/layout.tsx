@@ -1,12 +1,14 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
+import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { PORTAL_MAIN_CONTENT_CLASS } from "@/lib/portal-layout-classes";
 import { buildManagerPortalDefinition } from "@/lib/portals/manager-nav";
 
 export default async function ManagerLayout({ children }: { children: React.ReactNode }) {
-  const nav = await buildManagerPortalDefinition();
+  const [nav, { profile }] = await Promise.all([buildManagerPortalDefinition(), getServerSessionProfile()]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
@@ -28,6 +30,7 @@ export default async function ManagerLayout({ children }: { children: React.Reac
           </main>
         </div>
       </div>
+      <AxisAssistant managerName={profile?.full_name ?? null} />
     </div>
   );
 }
