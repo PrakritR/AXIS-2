@@ -61,7 +61,9 @@ export function AdminOnboardClient() {
   const [offerByTier, setOfferByTier] = useState<Record<string, TierOfferState>>({});
 
   useEffect(() => {
-    setOrigin(resolveShareableAppOrigin(window.location.origin));
+    void Promise.resolve().then(() => {
+      setOrigin(resolveShareableAppOrigin(window.location.origin));
+    });
   }, []);
 
   const tiers = useMemo(

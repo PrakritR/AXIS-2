@@ -8,6 +8,7 @@ import {
   maxPropertiesForManagerTier,
   normalizeManagerSkuTier,
   pickBestManagerPurchaseRow,
+  resolveManagerSubscriptionTierFromPurchase,
 } from "@/lib/manager-access";
 
 describe("manager-access", () => {
@@ -38,15 +39,50 @@ describe("manager-access", () => {
     expect(managerSectionAllowedForTier("leases", "free")).toBe(false);
     expect(managerSectionAllowedForTier("services", "free")).toBe(false);
     expect(managerSectionAllowedForTier("inbox", "free")).toBe(false);
+    expect(managerSectionAllowedForTier("documents", "free")).toBe(false);
+    expect(managerSectionAllowedForTier("financials", "free")).toBe(false);
+    expect(managerSectionAllowedForTier("documents", "paid")).toBe(true);
     expect(managerSectionAllowedForTier("inbox", "paid")).toBe(true);
   });
 
   it("marks paid-only sections as locked on free tier", () => {
     expect(managerSectionLockedForTier("residents", "free")).toBe(true);
     expect(managerSectionLockedForTier("relationships", "free")).toBe(true);
+    expect(managerSectionLockedForTier("documents", "free")).toBe(true);
     expect(managerSectionLockedForTier("properties", "free")).toBe(false);
     expect(managerSectionLockedForTier("residents", "paid")).toBe(false);
     expect(managerSectionLockedForTier("residents", null)).toBe(false);
+  });
+
+  it("resolves subscription tier from purchase rows", () => {
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: "free",
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("free");
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: null,
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("free");
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: null,
+        stripeSubscriptionId: "sub_123",
+        hasPurchaseRow: true,
+      }),
+    ).toBe("paid");
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: null,
+        stripeSubscriptionId: null,
+        hasPurchaseRow: false,
+      }),
+    ).toBeNull();
   });
 
   it("formats monthly labels", () => {

@@ -16,7 +16,7 @@ import { getStripe } from "@/lib/stripe";
 import { stripeSubscriptionPeriodEndSec } from "@/lib/stripe-subscription-helpers";
 import { META_SCHEDULED_BILLING, META_SCHEDULED_TIER } from "@/lib/stripe-subscription-metadata";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
+import { syncManagerPurchaseTierState } from "@/lib/manager-tier-sync";
 
 export const runtime = "nodejs";
 
@@ -53,7 +53,7 @@ export async function GET() {
     }
 
     try {
-      await reconcileManagerPurchaseWithStripe(user.id);
+      await syncManagerPurchaseTierState(user.id);
     } catch {
       /* Stripe not configured or transient error — serve last known DB state */
     }

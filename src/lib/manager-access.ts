@@ -203,35 +203,65 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
   };
 });
 
-const getManagerPurchaseTierByManagerId = cache(async (managerId: string): Promise<string | null> => {
-  const supabase = createSupabaseServiceRoleClient();
-  const { data } = await supabase.from("manager_purchases").select("tier").eq("manager_id", managerId).maybeSingle();
-  return data?.tier != null ? String(data.tier) : null;
-});
+export type ManagerSubscriptionTier = "free" | "paid" | null;
+
+/** Resolve subscription access from a purchase row (synced tier state). */
+export function resolveManagerSubscriptionTierFromPurchase(input: {
+  tier: string | null | undefined;
+  stripeSubscriptionId: string | null | undefined;
+  hasPurchaseRow: boolean;
+}): ManagerSubscriptionTier {
+  const normalized = normalizeManagerSkuTier(input.tier);
+  if (normalized === "free") return "free";
+  if (normalized === "pro" || normalized === "business") return "paid";
+
+  const stripeManaged = Boolean(input.stripeSubscriptionId?.trim());
+  const missingTier = input.tier == null || String(input.tier).trim() === "";
+
+  if (!input.hasPurchaseRow) return null;
+  if (stripeManaged) return "paid";
+  if (missingTier) return "free";
+  return "paid";
+}
+
+export function isManagerFreePlan(tier: ManagerSubscriptionTier): boolean {
+  return tier === "free";
+}
 
 /**
  * Returns "free" if the manager's purchase row is tier free; "paid" if any paid tier;
  * null if no purchase row (legacy / unknown — treat as full access).
  */
-export async function getManagerSubscriptionTier(userId: string): Promise<"free" | "paid" | null> {
+export async function getManagerSubscriptionTier(userId: string): Promise<ManagerSubscriptionTier> {
   try {
     const purchase = await getManagerPurchaseRowByUserId(userId);
-    if (!purchase.tier) return null;
-    if (String(purchase.tier).toLowerCase() === "free") return "free";
-    return "paid";
+    const rows = await loadManagerPurchaseRowsForUser(userId);
+    return resolveManagerSubscriptionTierFromPurchase({
+      tier: purchase.tier,
+      stripeSubscriptionId: purchase.stripeSubscriptionId,
+      hasPurchaseRow: rows.length > 0,
+    });
   } catch {
     return null;
   }
 }
 
-export async function getManagerSubscriptionTierByManagerId(managerId: string): Promise<"free" | "paid" | null> {
+export async function getManagerSubscriptionTierByManagerId(managerId: string): Promise<ManagerSubscriptionTier> {
   const normalized = managerId.trim();
   if (!normalized) return null;
   try {
-    const tier = await getManagerPurchaseTierByManagerId(normalized);
-    if (!tier) return null;
-    if (String(tier).toLowerCase() === "free") return "free";
-    return "paid";
+    const supabase = createSupabaseServiceRoleClient();
+    const { data } = await supabase
+      .from("manager_purchases")
+      .select("tier, stripe_subscription_id")
+      .eq("manager_id", normalized)
+      .maybeSingle();
+    if (!data) return null;
+    return resolveManagerSubscriptionTierFromPurchase({
+      tier: data.tier != null ? String(data.tier) : null,
+      stripeSubscriptionId: data.stripe_subscription_id ?? null,
+      hasPurchaseRow: true,
+    });
   } catch {
     return null;
   }
@@ -346,6 +376,8 @@ export async function upgradeManagerAccountToBusiness(
 
 export function managerSectionAllowedForTier(section: string, tier: "free" | "paid" | null): boolean {
   if (tier !== "free") return true;
+  // Legacy route id kept for redirects and API checks.
+  if (section === "financials" || section === "documents") return false;
   return FREE_SUBSCRIPTION_SECTIONS.has(section);
 }
 

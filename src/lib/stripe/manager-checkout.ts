@@ -16,6 +16,8 @@ export type ManagerCheckoutInput = {
   fullName?: string;
   phone?: string;
   userId?: string;
+  /** Reuse Axis ID from a pending manager signup instead of generating a new one. */
+  managerId?: string;
   promo?: string;
   discountPercent?: number;
   embedded?: boolean;
@@ -72,7 +74,7 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
   const metadata: Record<string, string> = {
     tier,
     billing,
-    manager_id: generateManagerId(),
+    manager_id: input.managerId?.trim() || generateManagerId(),
   };
   if (email) metadata.email = email;
   if (fullName) metadata.full_name = fullName;
