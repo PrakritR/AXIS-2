@@ -28,6 +28,7 @@ import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oaut
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import { isManagerOnboardTier, parseOnboardOfferSearchParams } from "@/lib/manager-onboard-links";
+import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -61,6 +62,7 @@ function ManagerPlanPickerInner() {
   const sessionSignedIn = Boolean(session?.authenticated);
   const pricingComplete = sessionSignedIn && session != null && !session.needsPricing;
   const isPaidTier = selectedTierId !== "free";
+  const requiresPaymentSetup = !pricingComplete;
   const checkoutLocked = checkoutBusy || googleCheckoutBusy || emailSignupBusy || Boolean(checkoutClientSecret);
 
   const selected = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
@@ -238,10 +240,13 @@ function ManagerPlanPickerInner() {
       <AuthCard>
         <AuthPageHeader
           eyebrow="Manager"
-          title="Complete payment"
-          subtitle={`${selected.label} · ${price.headline}${price.period ?? ""}`}
+          title="Add payment method"
+          subtitle={`${selected.label} · ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then ${price.headline}${price.period ?? ""}`}
           accent={false}
         />
+        <p className="mt-2 text-center text-xs leading-relaxed text-muted">
+          Secure checkout with card or Apple Pay. You won&apos;t be charged until your trial ends.
+        </p>
         <div className="mt-4 rounded-2xl border border-border bg-card/50 p-3">
           <EmbeddedCheckoutMount clientSecret={checkoutClientSecret} onError={onEmbeddedError} />
         </div>
@@ -262,16 +267,20 @@ function ManagerPlanPickerInner() {
       ? "Working…"
       : googleCheckoutBusy
         ? "Setting up…"
-        : isPaidTier
-          ? `Continue · ${selected.label}`
-          : "Create free account";
+        : requiresPaymentSetup
+          ? `Start ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day trial · ${selected.label}`
+          : "Continue";
 
   return (
     <AuthCard>
       <AuthPageHeader
         eyebrow="Manager"
         title="Choose plan"
-        subtitle={sessionSignedIn ? "Finish setup for your account" : "Pick a plan, then create your account"}
+        subtitle={
+          sessionSignedIn
+            ? "Add a card or Apple Pay to start your free trial"
+            : "Pick a plan — first 2 weeks free with card or Apple Pay"
+        }
         accent={false}
       />
 
@@ -318,6 +327,12 @@ function ManagerPlanPickerInner() {
         <span className="text-2xl font-bold tracking-tight text-foreground">{price.headline}</span>
         {price.period ? <span className="text-sm font-medium text-muted">{price.period}</span> : null}
       </p>
+      {requiresPaymentSetup ? (
+        <p className="mt-1.5 text-center text-xs text-muted">
+          {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial
+          {isPaidTier ? `, then ${price.headline}${price.period ?? ""}` : " on Free — card required"}
+        </p>
+      ) : null}
 
       <div className="mt-5 space-y-3">
         {sessionSignedIn && session?.email ? (
@@ -326,7 +341,11 @@ function ManagerPlanPickerInner() {
               email={session.email}
               fullName={session.fullName}
               provider={session.isGoogle === false ? "email" : "google"}
-              subtitle={pricingComplete ? "Your portal is ready." : isPaidTier ? "Continue to secure checkout." : "Continue to open your portal."}
+              subtitle={
+                pricingComplete
+                  ? "Your portal is ready."
+                  : "Continue to secure checkout (card or Apple Pay)."
+              }
             />
             <Button
               type="button"

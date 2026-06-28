@@ -1040,7 +1040,7 @@ html[data-native] .auth-layout-footer {
 }
 
 html[data-native] .auth-layout-main {
-  justify-content: flex-start;
+  justify-content: center;
   padding-top: max(0.75rem, var(--native-safe-top));
   padding-bottom: max(0.75rem, var(--native-safe-bottom));
 }
@@ -1133,8 +1133,8 @@ html[data-native] #axis-public-navbar {
 
 @media (max-width: 639px) {
   .auth-layout-main {
-    justify-content: flex-start;
-    padding-top: 0.75rem;
+    justify-content: center;
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
   }
 

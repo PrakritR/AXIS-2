@@ -88,11 +88,10 @@ export async function POST(req: Request) {
     }
 
     const waiverCode = getPaymentWaiverCode();
-    const skipStripeForFree = tierRaw === "free" && prepared.kind !== "complete";
     const skipStripeForPromo = waiverCode != null && promo === waiverCode.trim().toUpperCase();
     const skipStripeForOnboardOffer = tierRaw !== "free" && onboardDiscount === 100;
 
-    if (skipStripeForFree || skipStripeForPromo || skipStripeForOnboardOffer) {
+    if (skipStripeForPromo || skipStripeForOnboardOffer) {
       const { managerId: finalizedId } = await completeFreeManagerTierForUser(supabase, {
         userId: user.id,
         email,
@@ -106,10 +105,6 @@ export async function POST(req: Request) {
             : null,
       });
       return NextResponse.json({ action: "portal", managerId: finalizedId });
-    }
-
-    if (tierRaw !== "pro" && tierRaw !== "business") {
-      return NextResponse.json({ error: "Checkout requires a paid tier." }, { status: 400 });
     }
 
     const checkout = await createManagerCheckoutSession({

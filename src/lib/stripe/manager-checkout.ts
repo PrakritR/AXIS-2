@@ -5,14 +5,17 @@ import {
   normalizeOnboardDiscountPercent,
   stripeCouponIdForOnboardDiscount,
 } from "@/lib/stripe-onboard-discount";
-import { resolveStripePriceIdForPaidTier } from "@/lib/stripe/resolve-manager-price";
-import type { PaidTier, StripeBilling } from "@/lib/stripe-price-ids";
-import { buildManagerSubscriptionCheckoutBase } from "@/lib/stripe/subscription-checkout-session";
+import { resolveStripePriceIdForManagerTier } from "@/lib/stripe/resolve-manager-price";
+import type { ManagerSubscriptionTier, StripeBilling } from "@/lib/stripe-price-ids";
+import {
+  buildManagerSubscriptionCheckoutBase,
+  MANAGER_SUBSCRIPTION_TRIAL_DAYS,
+} from "@/lib/stripe/subscription-checkout-session";
 import { getStripe } from "@/lib/stripe";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export type ManagerCheckoutInput = {
-  tier: PaidTier;
+  tier: ManagerSubscriptionTier;
   billing: StripeBilling;
   email?: string;
   fullName?: string;
@@ -35,12 +38,13 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
   const { tier, billing, req } = input;
   const useEmbedded = input.embedded !== false;
 
-  const price = await resolveStripePriceIdForPaidTier(tier, billing);
+  const price = await resolveStripePriceIdForManagerTier(tier, billing);
   if (!price) {
+    const tierLabel = tier === "free" ? "free" : `${tier} ${billing}`;
     return {
       ok: false,
       status: 500,
-      error: `No Stripe price found for ${tier} ${billing}. In Stripe, set lookup_key to axis_manager_${tier}_${billing} on the active price, or run scripts/setup-stripe-plan-prices.mjs.`,
+      error: `No Stripe price found for ${tierLabel}. In Stripe, set lookup_key to axis_manager_${tier === "free" ? "free_monthly" : `${tier}_${billing}`} on the active price, or run scripts/setup-stripe-plan-prices.mjs.`,
     };
   }
 
@@ -103,6 +107,7 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
     ...(autoFirstMonthFree && promoCodeId ? { discounts: [{ promotion_code: promoCodeId }] } : {}),
     ...(onboardCouponId ? { discounts: [{ coupon: onboardCouponId }] } : {}),
     allowPromotionCodes,
+    trialPeriodDays: MANAGER_SUBSCRIPTION_TRIAL_DAYS,
   });
 
   const returnTarget = userId ? "manager-oauth-finish" : "manager-id";

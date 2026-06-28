@@ -1,5 +1,8 @@
 import type Stripe from "stripe";
 
+/** Default trial for new manager software subscriptions (card or Apple Pay required). */
+export const MANAGER_SUBSCRIPTION_TRIAL_DAYS = 14;
+
 /**
  * Manager Pro/Business subscription checkout — shared by signup and portal upgrade.
  *
@@ -18,6 +21,8 @@ export type ManagerSubscriptionCheckoutBaseInput = {
   clientReferenceId?: string;
   discounts?: Stripe.Checkout.SessionCreateParams.Discount[];
   allowPromotionCodes?: boolean;
+  /** When set, Checkout collects a payment method and defers billing until trial ends. */
+  trialPeriodDays?: number;
 };
 
 export type ManagerSubscriptionCheckoutBaseParams = Pick<
@@ -30,6 +35,7 @@ export type ManagerSubscriptionCheckoutBaseParams = Pick<
   | "discounts"
   | "allow_promotion_codes"
   | "payment_method_configuration"
+  | "subscription_data"
 >;
 
 /** Checkout fields shared by embedded and hosted manager subscription sessions. */
@@ -37,6 +43,11 @@ export function buildManagerSubscriptionCheckoutBase(
   input: ManagerSubscriptionCheckoutBaseInput,
 ): ManagerSubscriptionCheckoutBaseParams {
   const paymentMethodConfiguration = process.env.STRIPE_SUBSCRIPTION_PAYMENT_METHOD_CONFIGURATION?.trim();
+
+  const trialDays =
+    typeof input.trialPeriodDays === "number" && input.trialPeriodDays > 0
+      ? Math.floor(input.trialPeriodDays)
+      : null;
 
   return {
     mode: "subscription",
@@ -47,6 +58,14 @@ export function buildManagerSubscriptionCheckoutBase(
     ...(input.discounts?.length ? { discounts: input.discounts } : {}),
     ...(input.allowPromotionCodes ? { allow_promotion_codes: true } : {}),
     ...(paymentMethodConfiguration ? { payment_method_configuration: paymentMethodConfiguration } : {}),
+    ...(trialDays
+      ? {
+          subscription_data: {
+            trial_period_days: trialDays,
+            metadata: input.metadata,
+          },
+        }
+      : {}),
     // Do not set payment_method_types — it restricts to card-only and blocks Apple Pay.
   };
 }

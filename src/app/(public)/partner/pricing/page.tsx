@@ -238,39 +238,26 @@ export default function PartnerPricingPage() {
             discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
           });
 
-        if (offer.tier === "free") {
-          if (!session.needsPricing) {
-            router.replace("/portal/dashboard");
-            return;
-          }
-          const freeResult = await continuePartnerPricingWithOffer(offer);
-          if (cancelled) return;
-          if (freeResult.status === "portal") {
-            router.replace("/portal/dashboard");
-            return;
-          }
-          if (freeResult.status === "error") {
-            showToast(freeResult.message);
-          }
-          return;
-        }
-
-        const paidResult = await continuePartnerPricingWithOffer(offer);
+        const result = await continuePartnerPricingWithOffer(offer);
         if (cancelled) return;
-        if (paidResult.status === "checkout") {
-          setCheckoutClientSecret(paidResult.clientSecret);
+        if (result.status === "checkout") {
+          setCheckoutClientSecret(result.clientSecret);
           return;
         }
-        if (paidResult.status === "portal") {
+        if (result.status === "portal") {
           router.replace("/portal/dashboard");
           return;
         }
-        if (paidResult.status === "error") {
-          showToast(paidResult.message);
+        if (result.status === "finish") {
+          router.push(partnerPricingFinishPath(result.sessionId));
+          return;
+        }
+        if (result.status === "error") {
+          showToast(result.message);
           return;
         }
 
-        showToast("Signed in with Google. Complete payment below to upgrade your plan.");
+        showToast("Signed in with Google. Complete checkout below to activate your plan.");
       } finally {
         if (!cancelled) setGoogleCheckoutBusy(false);
       }
