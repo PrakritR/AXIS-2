@@ -238,22 +238,22 @@ export default function PartnerPricingPage() {
             discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
           });
 
-        const result = await continuePartnerPricingWithOffer(offer);
+        const pricingResult = await continuePartnerPricingWithOffer(offer);
         if (cancelled) return;
-        if (result.status === "checkout") {
-          setCheckoutClientSecret(result.clientSecret);
+        if (pricingResult.status === "checkout") {
+          setCheckoutClientSecret(pricingResult.clientSecret);
           return;
         }
-        if (result.status === "portal") {
+        if (pricingResult.status === "portal") {
           router.replace("/portal/dashboard");
           return;
         }
-        if (result.status === "finish") {
-          router.push(partnerPricingFinishPath(result.sessionId));
+        if (pricingResult.status === "finish") {
+          router.push(partnerPricingFinishPath(pricingResult.sessionId));
           return;
         }
-        if (result.status === "error") {
-          showToast(result.message);
+        if (pricingResult.status === "error") {
+          showToast(pricingResult.message);
           return;
         }
 
