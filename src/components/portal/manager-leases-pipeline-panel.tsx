@@ -15,10 +15,10 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
@@ -501,32 +501,27 @@ export function ManagerLeasesPipelinePanel({
               <th className={`${MANAGER_TABLE_TH} text-left`}>Unit / home</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Stage</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
-              <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {bucketRows.map((row) => (
               <Fragment key={row.id}>
                 {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
-                <tr className={PORTAL_TABLE_TR}>
+                <tr
+                  className={PORTAL_TABLE_TR_EXPANDABLE}
+                  onClick={createPortalRowExpandClick(() =>
+                    setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                  )}
+                  aria-expanded={expandedId === row.id}
+                >
                   <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.residentName}</td>
                   <td className={PORTAL_TABLE_TD}>{row.unit}</td>
                   <td className={PORTAL_TABLE_TD}>{row.status ?? row.stageLabel}</td>
                   <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
-                  <td className={`${PORTAL_TABLE_TD} text-right`}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                    >
-                      {expandedId === row.id ? "Hide" : "Details"}
-                    </Button>
-                  </td>
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                    <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                       {row.notes?.trim() ? (
                         <p className="text-sm leading-relaxed text-muted">{row.notes}</p>
                       ) : null}

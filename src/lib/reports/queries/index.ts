@@ -2,9 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import type { RecurringRentProfile } from "@/lib/household-charges";
 import { chartAccountLabel, chartAccountScheduleE } from "@/lib/reports/categories";
-import { loadManagerReportDisplayContext } from "@/lib/reports/display-context";
+import { humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
+import { scopeLabel } from "@/lib/reports/formal-documents/spec";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
-import type { ManagerReportFilters, ReportResult } from "@/lib/reports/types";
+import { resolveDocumentScope } from "@/lib/reports/parse-filters";
+import type { DocumentScope, ManagerReportFilters, ReportResult } from "@/lib/reports/types";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
 function defaultDateRange(from?: string, to?: string): { from: string; to: string } {
@@ -45,6 +47,75 @@ async function loadRentProfiles(db: SupabaseClient, managerUserId: string, prope
   return (data ?? [])
     .map((r) => r.row_data as RecurringRentProfile)
     .filter((p) => p?.active !== false);
+}
+
+type ExpenseWorkOrderRef = {
+  id: string;
+  residentEmail?: string;
+  assignedRoomChoice?: string;
+  unit?: string;
+};
+
+async function loadExpenseWorkOrders(db: SupabaseClient, managerUserId: string): Promise<Map<string, ExpenseWorkOrderRef>> {
+  const { data } = await db
+    .from("portal_work_order_records")
+    .select("id, row_data")
+    .eq("manager_user_id", managerUserId)
+    .limit(2000);
+  const map = new Map<string, ExpenseWorkOrderRef>();
+  for (const row of data ?? []) {
+    const payload = row.row_data as ExpenseWorkOrderRef | null;
+    if (!payload) continue;
+    map.set(String(row.id), { ...payload, id: String(row.id) });
+  }
+  return map;
+}
+
+function roomLabelsMatch(a: string, b: string): boolean {
+  const left = a.trim();
+  const right = b.trim();
+  if (!left || !right) return false;
+  if (left.toLowerCase() === right.toLowerCase()) return true;
+  return humanizeUnitLabel(left) === humanizeUnitLabel(right);
+}
+
+function expenseMatchesScope(
+  expense: { property_id?: string | null; source_work_order_id?: string | null },
+  scope: DocumentScope,
+  filters: ManagerReportFilters,
+  workOrdersById: Map<string, ExpenseWorkOrderRef>,
+): boolean {
+  const propertyId = filters.propertyId?.trim();
+
+  if (scope === "portfolio") return true;
+
+  if (scope === "property") {
+    return propertyId ? String(expense.property_id ?? "") === propertyId : true;
+  }
+
+  if (propertyId && String(expense.property_id ?? "") !== propertyId) return false;
+
+  if (scope === "tenant") {
+    const email = filters.residentEmail?.trim().toLowerCase();
+    if (!email) return true;
+    const workOrderId = expense.source_work_order_id?.trim();
+    if (!workOrderId) return true;
+    const workOrder = workOrdersById.get(workOrderId);
+    return workOrder ? (workOrder.residentEmail ?? "").trim().toLowerCase() === email : true;
+  }
+
+  if (scope === "room") {
+    const roomLabel = filters.roomLabel?.trim();
+    if (!roomLabel) return true;
+    const workOrderId = expense.source_work_order_id?.trim();
+    if (!workOrderId) return false;
+    const workOrder = workOrdersById.get(workOrderId);
+    if (!workOrder) return false;
+    const unitRef = (workOrder.assignedRoomChoice ?? workOrder.unit ?? "").trim();
+    return roomLabelsMatch(unitRef, roomLabel);
+  }
+
+  return true;
 }
 
 export async function queryRentRoll(
@@ -250,6 +321,10 @@ export async function queryExpenses(
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
   const display = await loadManagerReportDisplayContext(db, managerUserId);
+  const scope = resolveDocumentScope(filters);
+  const propertyId = filters.propertyId?.trim();
+  const needsWorkOrders = scope === "tenant" || scope === "room";
+  const workOrdersById = needsWorkOrders ? await loadExpenseWorkOrders(db, managerUserId) : new Map();
 
   let query = db
     .from("manager_expense_entries")
@@ -258,10 +333,12 @@ export async function queryExpenses(
     .gte("expense_date", from)
     .lte("expense_date", to)
     .order("expense_date", { ascending: false });
-  if (filters.propertyId) query = query.eq("property_id", filters.propertyId);
+  if (scope === "property" && propertyId) query = query.eq("property_id", propertyId);
+  if ((scope === "tenant" || scope === "room") && propertyId) query = query.eq("property_id", propertyId);
 
   const { data } = await query;
-  const rows = (data ?? []).map((e) => ({
+  const filtered = (data ?? []).filter((expense) => expenseMatchesScope(expense, scope, filters, workOrdersById));
+  const rows = filtered.map((e) => ({
     id: e.id,
     date: e.expense_date,
     category: chartAccountLabel(e.category_code),
@@ -273,7 +350,9 @@ export async function queryExpenses(
     workOrderId: e.source_work_order_id ?? "",
   }));
 
-  const totalCents = (data ?? []).reduce((sum, e) => sum + Number(e.amount_cents), 0);
+  const totalCents = filtered.reduce((sum, e) => sum + Number(e.amount_cents), 0);
+  const propertyLabel = propertyId ? display.propertyLabel(propertyId) : undefined;
+  const tenantLabel = filters.residentEmail ? display.residentLabel(filters.residentEmail) : undefined;
 
   return {
     id: "expenses",
@@ -289,7 +368,12 @@ export async function queryExpenses(
     ],
     rows,
     totals: { date: "Total expenses", category: "", scheduleERef: "", amount: centsToUsd(totalCents), vendor: "", memo: "", property: "" },
-    meta: { from, to },
+    meta: {
+      from,
+      to,
+      scope,
+      scopeLabel: scopeLabel(scope, propertyLabel, tenantLabel, filters.roomLabel),
+    },
   };
 }
 

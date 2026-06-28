@@ -6,25 +6,14 @@ import {
 } from "@/lib/reports/auth";
 import { reportToCsv } from "@/lib/reports/export/csv";
 import { reportToPdf } from "@/lib/reports/export/pdf";
+import { parseManagerReportFilters } from "@/lib/reports/parse-filters";
 import {
   MANAGER_REPORT_IDS,
   RESIDENT_REPORT_IDS,
-  type ManagerReportFilters,
 } from "@/lib/reports/types";
 import { runManagerReport, queryResidentBalance, queryResidentLedger } from "@/lib/reports/queries";
 
 export const runtime = "nodejs";
-
-function parseFilters(searchParams: URLSearchParams): ManagerReportFilters {
-  return {
-    propertyId: searchParams.get("propertyId")?.trim() || undefined,
-    from: searchParams.get("from")?.trim() || undefined,
-    to: searchParams.get("to")?.trim() || undefined,
-    daysAhead: searchParams.get("daysAhead") ? Number(searchParams.get("daysAhead")) : undefined,
-    taxYear: searchParams.get("taxYear") ? Number(searchParams.get("taxYear")) : undefined,
-    vendorId: searchParams.get("vendorId")?.trim() || undefined,
-  };
-}
 
 export async function GET(
   req: Request,
@@ -59,7 +48,7 @@ export async function GET(
       if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
       const managerUserId =
         auth.role === "admin" ? searchParams.get("managerUserId")?.trim() || auth.userId : auth.userId;
-      report = await runManagerReport(auth.db, managerUserId, reportId, parseFilters(searchParams));
+      report = await runManagerReport(auth.db, managerUserId, reportId, parseManagerReportFilters(searchParams));
     }
 
     if (!report) return NextResponse.json({ error: "Unknown report." }, { status: 404 });

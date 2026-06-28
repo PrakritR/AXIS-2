@@ -10,15 +10,15 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
   PORTAL_DETAIL_BTN,
   PORTAL_DETAIL_BTN_PRIMARY,
   PortalTableDetailActions,
   PortalDataTableEmpty,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import {
   ReportExportButtons,
@@ -28,9 +28,9 @@ import {
 import {
   FormalDocumentScopeBar,
   buildFormalDocumentQuery,
+  buildScopedReportQuery,
   type FormalDocumentFilterState,
 } from "@/components/portal/reports/formal-document-scope-bar";
-import { PROPERTY_RENT_RECEIPT_DEFAULT_FIELDS } from "@/lib/reports/formal-documents/spec";
 import { ReportTable } from "@/components/portal/reports/report-table";
 import { FormalDocumentsPreview, FinancialReportDocumentView, OccupancyDocumentView } from "@/components/portal/reports/formal-document-preview";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
@@ -62,13 +62,12 @@ function defaultFilters(): ReportFilterState {
   };
 }
 
-function defaultIncomeScopeFilters(): FormalDocumentFilterState {
+function defaultDocumentScopeFilters(): FormalDocumentFilterState {
   return {
     scope: "portfolio",
     propertyId: "",
     residentEmail: "",
     roomLabel: "",
-    includeFields: [...PROPERTY_RENT_RECEIPT_DEFAULT_FIELDS],
   };
 }
 
@@ -111,7 +110,7 @@ export function ManagerDocumentsPanel({
   const { userId, ready } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
   const [filters, setFilters] = useState(defaultFilters);
-  const [scopeFilters, setScopeFilters] = useState(defaultIncomeScopeFilters);
+  const [scopeFilters, setScopeFilters] = useState(defaultDocumentScopeFilters);
   const [report, setReport] = useState<ReportResult | null>(null);
   const [propertyDocuments, setPropertyDocuments] = useState<PropertyRentReceiptDocument[] | null>(null);
   const [occupancyReport, setOccupancyReport] = useState<OccupancyReport | null>(null);
@@ -135,9 +134,12 @@ export function ManagerDocumentsPanel({
     setLoading(true);
     try {
       if (tabId === "expense-documents") {
-        const params = new URLSearchParams({ from: filters.from, to: filters.to, backfill: "1" });
-        if (filters.propertyId) params.set("propertyId", filters.propertyId);
-        const res = await fetch(`/api/reports/expenses?${params}`);
+        const qs = buildScopedReportQuery(
+          { from: filters.from, to: filters.to },
+          scopeFilters,
+          { backfill: "1" },
+        );
+        const res = await fetch(`/api/reports/expenses?${qs}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load expense documents.");
         setPropertyDocuments(null);
@@ -205,14 +207,13 @@ export function ManagerDocumentsPanel({
       ? `/api/reports/formal-documents/export?${buildFormalDocumentQuery("property_rent_receipt", { from: filters.from, to: filters.to }, scopeFilters)}`
       : null;
 
-  const expenseExportQuery = (() => {
-    const params = new URLSearchParams({ from: filters.from, to: filters.to });
-    if (filters.propertyId) params.set("propertyId", filters.propertyId);
-    return params.toString();
-  })();
+  const expenseExportQuery =
+    tabId === "expense-documents"
+      ? buildScopedReportQuery({ from: filters.from, to: filters.to }, scopeFilters)
+      : "";
 
   const showDateRange = tabId !== "1099";
-  const showProperty = tabId === "tax-summary" || tabId === "expense-documents" || tabId === "occupancy";
+  const showProperty = tabId === "tax-summary" || tabId === "occupancy";
   const showTaxYear = tabId === "1099";
 
   return (
@@ -234,9 +235,8 @@ export function ManagerDocumentsPanel({
       </div>
 
       <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
-        {tabId === "income-documents" ? (
+        {tabId === "income-documents" || tabId === "expense-documents" ? (
           <FormalDocumentScopeBar
-            kind="property_rent_receipt"
             filters={scopeFilters}
             onChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
           />
@@ -307,7 +307,6 @@ export function ManagerDocumentsPanel({
                         <th className={`${MANAGER_TABLE_TH} text-left`}>Vendor</th>
                         <th className={`${MANAGER_TABLE_TH} text-left`}>Total paid</th>
                         <th className={`${MANAGER_TABLE_TH} text-left`}>W-9 status</th>
-                        <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -316,7 +315,13 @@ export function ManagerDocumentsPanel({
                         const w9Status = String(row.w9Status ?? "");
                         return (
                           <Fragment key={vendorId}>
-                            <tr className={PORTAL_TABLE_TR}>
+                            <tr
+                              className={PORTAL_TABLE_TR_EXPANDABLE}
+                              onClick={createPortalRowExpandClick(() =>
+                                setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId)),
+                              )}
+                              aria-expanded={expanded1099Id === vendorId}
+                            >
                               <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{String(row.vendorName)}</td>
                               <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{String(row.totalPaid)}</td>
                               <td className={PORTAL_TABLE_TD}>
@@ -324,19 +329,10 @@ export function ManagerDocumentsPanel({
                                   {w9Status || "Unknown"}
                                 </span>
                               </td>
-                              <td className={`${PORTAL_TABLE_TD} text-right`}>
-                                <button
-                                  type="button"
-                                  className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                                  onClick={() => setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId))}
-                                >
-                                  {expanded1099Id === vendorId ? "Hide" : "Details"}
-                                </button>
-                              </td>
                             </tr>
                             {expanded1099Id === vendorId ? (
                               <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                                <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                                   <PortalTableDetailActions>
                                     <Button
                                       type="button"
@@ -380,6 +376,11 @@ export function ManagerDocumentsPanel({
           <ReportGeneratePrompt title="No occupancy data" description="No active leases found for the selected period and property filter." />
         ) : tabId === "expense-documents" && generated && report ? (
           <FinancialReportDocumentView report={report} />
+        ) : tabId === "expense-documents" && !generated ? (
+          <ReportGeneratePrompt
+            title="Generate expense documents"
+            description="Set your date range and scope, then click Generate report. Schedule E expense records appear here for review and export."
+          />
         ) : tabId === "tax-summary" && generated && report ? (
           <FinancialReportDocumentView report={report} />
         ) : (

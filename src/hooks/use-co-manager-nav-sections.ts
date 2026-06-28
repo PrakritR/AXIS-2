@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import { coManagerPortalSectionAllowed } from "@/lib/co-manager-permissions";
 import { deriveManagerNavRole } from "@/lib/co-manager-nav";
+import { fetchAccountLinksCached } from "@/lib/portal-data-store";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 const REFRESH_EVENTS = ["axis-pro-relationships", "axis-property-pipeline", "storage"] as const;
@@ -18,9 +19,8 @@ export function useCoManagerNavSections(definition: PortalDefinition, userId: st
       return;
     }
     try {
-      const res = await fetch("/api/pro/account-links", { credentials: "include", cache: "no-store" });
-      const body = (await res.json()) as { invites?: AccountLinkInviteDto[]; migrationRequired?: boolean };
-      if (!res.ok || body.migrationRequired) {
+      const body = await fetchAccountLinksCached();
+      if (body.migrationRequired) {
         setInvites([]);
         return;
       }

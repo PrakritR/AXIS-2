@@ -152,7 +152,7 @@ const SCHEDULE_SETTINGS_COPY: Record<
   inbox: {
     savedToast: "Schedule settings saved.",
     title: "Schedule settings",
-    description: "Control which scheduled messages appear in this tab and when automated charge messages are shown.",
+    description: "",
     daysBeforeLabel: "Days before send date",
     sameDayLabel: "Same-day message",
     followUpLabel: "Daily follow-up messages",
@@ -231,13 +231,6 @@ function PaymentAutomationSettingsForm({
     <div className="rounded-2xl border border-border bg-accent/20 p-4 space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-foreground">{copy.title}</h3>
-        <p className="mt-1 text-xs text-muted">{copy.description}</p>
-        {variant === "inbox" ? (
-          <p className="mt-2 text-xs text-muted">
-            Charge-related messages are generated from pending payments. For late fees and charge timing, use{" "}
-            <span className="font-semibold text-foreground">Payments → Reminder settings</span>.
-          </p>
-        ) : null}
       </div>
 
       {variant === "payments" ? (
@@ -311,7 +304,7 @@ function PaymentAutomationSettingsForm({
               onChange={(e) => setDraft({ ...draft, scheduleVisibilityDays: Number(e.target.value) || 2 })}
               disabled={busy || draft.scheduleVisibilityMode !== "days_before_send"}
             />
-            days before send
+            days before send date
           </label>
         </div>
       </div>
@@ -413,7 +406,7 @@ export function ReminderSettingsModal({
 
   return (
     <Modal open={open} onClose={onClose} title={variant === "inbox" ? "Schedule settings" : "Payment reminder settings"}>
-      <p className="mb-4 text-sm text-muted">{copy.description}</p>
+      {copy.description ? <p className="mb-4 text-sm text-muted">{copy.description}</p> : null}
       <PaymentAutomationSettingsPanel
         settings={settings}
         variant={variant}

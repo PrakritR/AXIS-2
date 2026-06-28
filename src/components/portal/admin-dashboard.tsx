@@ -23,7 +23,6 @@ import {
 } from "@/lib/lease-pipeline-storage";
 import { syncHouseholdChargesFromServer } from "@/lib/household-charges";
 import { readBugFeedbackRows, syncBugFeedbackFromServer } from "@/lib/portal-bug-feedback";
-import { countBugFeedbackTabs } from "@/lib/portal-bug-feedback-utils";
 
 type PortalCounts = { managers: number; residents: number };
 
@@ -159,7 +158,7 @@ export function AdminDashboard() {
     const inboxPreview = inboxMessages.filter((m) => m.folder === "inbox" && !m.read).slice(0, 5);
 
     const feedbackRows = readBugFeedbackRows();
-    const feedbackCounts = countBugFeedbackTabs(feedbackRows);
+    const feedbackTotal = feedbackRows.length;
     const openFeedbackAll = feedbackRows.filter((row) => row.status === "open" || row.status === "reviewing");
     const openFeedback = openFeedbackAll.slice(0, 5);
 
@@ -200,7 +199,7 @@ export function AdminDashboard() {
       pendingPropertyRows,
       inboxUnread,
       inboxPreview,
-      feedbackCounts,
+      feedbackTotal,
       openFeedback,
       openFeedbackTotal: openFeedbackAll.length,
       upcomingMeetings,
@@ -218,7 +217,7 @@ export function AdminDashboard() {
     pendingPropertyRows,
     inboxUnread,
     inboxPreview,
-    feedbackCounts,
+    feedbackTotal,
     openFeedback,
     openFeedbackTotal,
     upcomingMeetings,
@@ -281,9 +280,9 @@ export function AdminDashboard() {
           {openFeedbackCount > 0 && (
             <NotifBanner tone="rose">
               <span>
-                <span className="font-semibold">{openFeedbackCount}</span> open bug{openFeedbackCount === 1 ? "" : "s"} or feedback item{openFeedbackCount === 1 ? "" : "s"} to review
+                <span className="font-semibold">{openFeedbackCount}</span> open feedback item{openFeedbackCount === 1 ? "" : "s"} to review
               </span>
-              <Link href="/admin/bugs-feedback/bugs" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
+              <Link href="/admin/bugs-feedback" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
                 Feedback →
               </Link>
             </NotifBanner>
@@ -383,10 +382,10 @@ export function AdminDashboard() {
         </div>
 
         <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
-          <SectionHeader title="Feedback" href="/admin/bugs-feedback/bugs" linkLabel="Feedback →" />
+          <SectionHeader title="Feedback" href="/admin/bugs-feedback" linkLabel="Feedback →" />
           {openFeedback.length === 0 ? (
             <p className="mt-4 text-sm text-muted">
-              No open bugs or feedback — {feedbackCounts.bugs} bug{feedbackCounts.bugs === 1 ? "" : "s"} and {feedbackCounts.feedback} feedback item{feedbackCounts.feedback === 1 ? "" : "s"} on file.
+              No open feedback — {feedbackTotal} submission{feedbackTotal === 1 ? "" : "s"} on file.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">

@@ -20,8 +20,9 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_HEAD_ROW,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
@@ -1597,13 +1598,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Portal</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((res) => (
                   <Fragment key={res.id}>
-                    <tr className={PORTAL_TABLE_TR}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        setSelectedId((cur) => (cur === res.id ? null : res.id)),
+                      )}
+                      aria-expanded={selectedId === res.id}
+                    >
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                         <div className="flex items-center gap-2">
                           <span>{res.name || "—"}</span>
@@ -1634,20 +1640,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                           </span>
                         )}
                       </td>
-                      <td className={`${PORTAL_TABLE_TD} text-right`}>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-full px-3 py-1 text-xs"
-                          onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
-                        >
-                          {selectedId === res.id ? "Close" : "Manage"}
-                        </Button>
-                      </td>
                     </tr>
                     {selectedId === res.id && selected ? (
                       <tr>
-                        <td colSpan={8} className="bg-accent/30 px-4 py-5">
+                        <td colSpan={7} className="bg-accent/30 px-4 py-5">
                           <div className="flex flex-col gap-4">
                             <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2">

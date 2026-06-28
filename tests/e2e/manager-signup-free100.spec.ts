@@ -5,6 +5,10 @@ const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.
 test.describe("Manager FREE100 signup", () => {
   test.skip(!hasSupabase, "Requires Supabase test project");
 
+  test.skip("new Google sign-in from /auth/sign-in lands on portal (requires live Google OAuth)", async () => {
+    // Manual: sign in with a brand-new Google account at /auth/sign-in → expect /portal/dashboard.
+  });
+
   test("pro signup with FREE100 waiver", async ({ page }) => {
     const uniqueEmail = `mgr-e2e-${Date.now()}@test.axis.local`;
     await page.goto("/partner/pricing");

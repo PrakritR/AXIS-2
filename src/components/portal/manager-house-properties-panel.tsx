@@ -16,9 +16,9 @@ import { MANAGER_TABLE_TH, ManagerPortalStatusPills } from "@/components/portal/
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
@@ -109,8 +109,8 @@ function deferCatalogMutation(fn: () => void) {
 }
 
 const MANAGER_STAGES = [
-  { key: "pending", label: "Pending review", buckets: [0, 1] as AdminPropertyBucketIndex[] },
-  { key: "listed", label: "Active", buckets: [2] as AdminPropertyBucketIndex[] },
+  { key: "pending", label: "Pending", buckets: [0, 1] as AdminPropertyBucketIndex[] },
+  { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
   { key: "rejected", label: "Rejected", buckets: [4] as AdminPropertyBucketIndex[] },
 ] as const;
@@ -119,16 +119,9 @@ type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
 
 const EMPTY_COPY: Record<ManagerStageKey, string> = {
   pending: "Nothing awaiting review.",
-  listed: "No active properties.",
+  listed: "No listed properties.",
   unlisted: "No unlisted properties.",
   rejected: "No rejected properties.",
-};
-
-const BANNER_COPY: Record<ManagerStageKey, string> = {
-  pending: `New submissions and listings that need updates appear here until ${PRIMARY_AXIS_ADMIN_LABEL} clears them to go live.`,
-  listed: "Active listings accept apply & tour links — use Send to prospect to email a concise summary.",
-  unlisted: "These listings are off the public site. You can relist or delete them from your queue.",
-  rejected: "Rejected submissions stay here until you restore them to pending or delete them permanently.",
 };
 
 function managerStageFromParam(raw: string | null): ManagerStageKey {
@@ -589,8 +582,6 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
         }}
       />
 
-      <div className="mt-4 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted [html[data-theme=dark]_&]:portal-surface-muted">{BANNER_COPY[activeStage]}</div>
-
       <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-accent/30/20 px-4 py-14 text-center sm:py-16">
@@ -606,7 +597,6 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -616,7 +606,13 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
 
                   return (
                     <Fragment key={rowKey}>
-                      <tr className={PORTAL_TABLE_TR}>
+                      <tr
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() =>
+                          setExpandedRowKey(expanded ? null : rowKey),
+                        )}
+                        aria-expanded={expanded}
+                      >
                         <td className={PORTAL_TABLE_TD}>
                           <p className="font-medium text-foreground">
                             {row.buildingName}
@@ -633,21 +629,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                           </p>
                           {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
                         </td>
-                        <td className={`${PORTAL_TABLE_TD} text-right`}>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                            onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
-                            aria-expanded={expanded}
-                          >
-                            {expanded ? "Hide details" : "More details"}
-                          </Button>
-                        </td>
                       </tr>
                       {expanded ? (
                         <tr key={`${rowKey}-details`} className="border-b border-border">
-                          <td colSpan={3} className="bg-accent/30/40 px-4 py-4">
+                          <td colSpan={2} className="bg-accent/30/40 px-4 py-4">
                             <ManagerPropertyInlineDetails
                               key={rowKey}
                               bucket={sourceBucket}

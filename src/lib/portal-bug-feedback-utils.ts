@@ -73,9 +73,8 @@ export function countBugFeedbackTabs(rows: PortalBugFeedbackRow[]): { bugs: numb
 
 export function groupBugFeedbackForAdmin(
   rows: PortalBugFeedbackRow[],
-  tabId: "bugs" | "feedback",
 ): { managerRows: PortalBugFeedbackRow[]; residentRows: PortalBugFeedbackRow[] } {
-  const filtered = filterBugFeedbackByTab(rows, tabId);
+  const filtered = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return {
     managerRows: filtered.filter((r) => isManagerSideReporterRole(r.reporterRole)),
     residentRows: filtered.filter((r) => r.reporterRole === "resident"),

@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@supabase/supabase-js";
 
+const ensureFreeManagerPortalAccess = vi.fn();
 const completeResidentSignupFromOAuth = vi.fn();
+
+vi.mock("@/lib/auth/manager-portal-provision", () => ({
+  ensureFreeManagerPortalAccess: (...args: unknown[]) => ensureFreeManagerPortalAccess(...args),
+}));
 
 vi.mock("@/lib/auth/complete-resident-signup-oauth", () => ({
   completeResidentSignupFromOAuth: (...args: unknown[]) => completeResidentSignupFromOAuth(...args),
@@ -17,7 +22,7 @@ vi.mock("@/lib/auth/primary-admin", () => ({
   isPrimaryAdminEmail: vi.fn(() => false),
 }));
 
-function mockSupabase(applicationRows: { id: string; resident_email: string; row_data: object }[]) {
+function mockSupabase(applicationRows: { id: string; resident_email: string; row_data: object }[] = []) {
   return {
     from: (table: string) => {
       if (table === "profile_roles") {
@@ -61,6 +66,21 @@ function mockSupabase(applicationRows: { id: string; resident_email: string; row
 describe("resolveOAuthPortalRedirect", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("provisions a free manager and routes unknown accounts to portal", async () => {
+    const { resolveOAuthPortalRedirect } = await import("@/lib/auth/resolve-oauth-portal-access");
+    ensureFreeManagerPortalAccess.mockResolvedValue({
+      status: "portal_ready",
+      managerId: "AXIS-NEW",
+      provisioned: true,
+    });
+
+    const user = { id: "user-1", email: "new@test.com" } as User;
+    const path = await resolveOAuthPortalRedirect(mockSupabase() as never, user, "/portal/dashboard");
+
+    expect(ensureFreeManagerPortalAccess).toHaveBeenCalled();
+    expect(path).toBe("/portal/dashboard");
   });
 
   it("routes failed approved resident signup to create-account with error", async () => {

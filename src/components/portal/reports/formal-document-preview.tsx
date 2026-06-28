@@ -255,6 +255,13 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
 export function FinancialReportDocumentView({ report }: { report: ReportResult }) {
   const period =
     report.meta?.from && report.meta?.to ? `${String(report.meta.from)} — ${String(report.meta.to)}` : undefined;
+  const scope =
+    report.meta?.scopeLabel && String(report.meta.scopeLabel) !== "All properties"
+      ? String(report.meta.scopeLabel)
+      : undefined;
+  const subtitle = [period ? `Reporting period: ${period}` : null, scope ? `Scope: ${scope}` : null]
+    .filter(Boolean)
+    .join(" · ");
 
   // Detect section grouping: if rows have a "section" column, render section headers
   const hasSections = report.columns.some((c) => c.key === "section");
@@ -283,7 +290,7 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
 
   return (
     <DocumentPaper>
-      <DocHeader title={report.title} subtitle={period ? `Reporting period: ${period}` : undefined} />
+      <DocHeader title={report.title} subtitle={subtitle || undefined} />
       <div className="px-8 py-6">
         <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
           <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>

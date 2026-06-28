@@ -22,6 +22,8 @@ export function ReportFilterBar({
   onChange,
   onRun,
   loading,
+  runLabel = "Generate report",
+  showRunButton = true,
 }: {
   showProperty?: boolean;
   showDateRange?: boolean;
@@ -32,6 +34,8 @@ export function ReportFilterBar({
   onChange: (next: Partial<ReportFilterState>) => void;
   onRun: () => void;
   loading?: boolean;
+  runLabel?: string;
+  showRunButton?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -102,30 +106,44 @@ export function ReportFilterBar({
       ) : null}
 
       <div className={PORTAL_TOOLBAR_GROUP}>
-        <Button variant="primary" onClick={onRun} disabled={loading}>
-          {loading ? "Generating…" : "Generate report"}
-        </Button>
+        {showRunButton ? (
+          <Button variant="primary" onClick={onRun} disabled={loading}>
+            {loading ? "Loading…" : runLabel}
+          </Button>
+        ) : null}
       </div>
     </div>
   );
 }
 
-export function ReportExportButtons({ reportId, query }: { reportId: string; query: string }) {
+export function ReportExportButtons({
+  reportId,
+  query,
+  formats = ["csv", "pdf"],
+}: {
+  reportId: string;
+  query: string;
+  formats?: ("csv" | "pdf")[];
+}) {
   const base = `/api/reports/${reportId}/export?${query}`;
   return (
     <div className="flex flex-wrap gap-2">
-      <a
-        href={`${base}&format=csv`}
-        className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
-      >
-        Export CSV
-      </a>
-      <a
-        href={`${base}&format=pdf`}
-        className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
-      >
-        Export PDF
-      </a>
+      {formats.includes("csv") ? (
+        <a
+          href={`${base}&format=csv`}
+          className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
+        >
+          Export CSV
+        </a>
+      ) : null}
+      {formats.includes("pdf") ? (
+        <a
+          href={`${base}&format=pdf`}
+          className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
+        >
+          Export PDF
+        </a>
+      ) : null}
     </div>
   );
 }

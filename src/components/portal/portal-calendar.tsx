@@ -57,11 +57,6 @@ function ManagerCalendarPropertyFilter({
           ))}
         </select>
       </div>
-      {!value ? (
-        <p className="min-w-0 text-xs leading-snug text-muted">
-          Choose a house before creating tour windows.
-        </p>
-      ) : null}
     </div>
   );
 }

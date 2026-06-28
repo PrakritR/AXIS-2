@@ -152,7 +152,7 @@ describe("portal bug feedback utils", () => {
         id: "r1",
       }),
     ];
-    const grouped = groupBugFeedbackForAdmin(rows, "bugs");
+    const grouped = groupBugFeedbackForAdmin(rows);
     expect(grouped.managerRows).toHaveLength(1);
     expect(grouped.residentRows).toHaveLength(1);
     expect(isManagerSideReporterRole("pro")).toBe(true);

@@ -28,6 +28,10 @@ vi.mock("@/lib/auth/reconcile-auth-accounts-by-email", () => ({
   reconcileAuthAccountsByEmail: vi.fn(async () => undefined),
 }));
 
+vi.mock("@/lib/auth/manager-portal-provision", () => ({
+  ensureFreeManagerPortalAccess: vi.fn(async () => ({ status: "skipped", reason: "test" })),
+}));
+
 vi.mock("@/lib/auth/resolve-oauth-portal-access", () => ({
   resolveOAuthPortalRedirect: vi.fn(async () => "/partner/pricing"),
 }));

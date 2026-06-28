@@ -1,4 +1,5 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
+import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
@@ -11,6 +12,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <SurfaceThemeDefault theme="light" />
+      <PortalDataPrefetch kind="pro" />
       <AccountLinksSync />
       <div className="shrink-0">
         <PortalTopBanners

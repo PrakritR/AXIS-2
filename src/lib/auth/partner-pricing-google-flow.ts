@@ -31,14 +31,23 @@ export async function fetchPartnerPricingSession(): Promise<PartnerPricingSessio
   }
 }
 
-export async function provisionPartnerPricingGoogleAccount(): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function ensurePartnerPricingFreeAccount(): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
+    const supabase = createSupabaseBrowserClient();
+    const user = await waitForAuthUser(supabase);
+    if (!user) {
+      return { ok: false, error: "Sign in with Google first." };
+    }
+
     const res = await fetch("/api/auth/provision-pending-manager", {
       method: "POST",
       credentials: "include",
     });
-    const body = (await res.json()) as { error?: string };
+    const body = (await res.json()) as { error?: string; skipped?: boolean };
     if (!res.ok) {
+      if (res.status === 409 && body.skipped) {
+        return { ok: true };
+      }
       const message = body.error ?? "Could not create your account.";
       if (res.status === 409 && message.toLowerCase().includes("already exists")) {
         return { ok: true };
@@ -72,15 +81,24 @@ export async function continuePartnerPricingWithOffer(
   }
 
   const session = await fetchPartnerPricingSession();
-  if (session.authenticated && !session.needsPricing) {
-    // Account is already fully provisioned — no need to hit the pricing API.
+  const isPaidUpgrade = offer.tier !== "free" && session.authenticated && !session.needsPricing;
+
+  if (session.authenticated && !session.needsPricing && offer.tier === "free") {
     clearManagerPricingOffer();
     return { status: "portal" };
   }
+
   if (session.authenticated && session.needsPricing) {
-    const provision = await provisionPartnerPricingGoogleAccount();
+    const provision = await ensurePartnerPricingFreeAccount();
     if (!provision.ok) {
       return { status: "error", message: provision.error };
+    }
+  }
+
+  if (isPaidUpgrade) {
+    const ensureFree = await ensurePartnerPricingFreeAccount();
+    if (!ensureFree.ok) {
+      return { status: "error", message: ensureFree.error };
     }
   }
 
@@ -135,13 +153,16 @@ export function buildPricingOffer(opts: {
 }
 
 export async function handleGoogleSignedInReturn(): Promise<{ status: "provisioned" } | { status: "error"; message: string }> {
-  const provision = await provisionPartnerPricingGoogleAccount();
+  const provision = await ensurePartnerPricingFreeAccount();
   if (!provision.ok) {
     return { status: "error", message: provision.error };
   }
 
   if (typeof window !== "undefined") {
-    window.history.replaceState({}, "", "/partner/pricing");
+    const params = new URLSearchParams(window.location.search);
+    const upgrade = params.get("upgrade") === "1";
+    const nextUrl = upgrade ? "/partner/pricing?upgrade=1" : "/partner/pricing";
+    window.history.replaceState({}, "", nextUrl);
   }
 
   return { status: "provisioned" };

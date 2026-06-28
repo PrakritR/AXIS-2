@@ -5,25 +5,14 @@ import {
   getReportsAuthContext,
 } from "@/lib/reports/auth";
 import { backfillLedgerForResident, backfillLedgerFromCharges } from "@/lib/reports/ledger-sync";
+import { parseManagerReportFilters } from "@/lib/reports/parse-filters";
 import {
   MANAGER_REPORT_IDS,
   RESIDENT_REPORT_IDS,
-  type ManagerReportFilters,
 } from "@/lib/reports/types";
 import { runManagerReport, queryResidentBalance, queryResidentLedger } from "@/lib/reports/queries";
 
 export const runtime = "nodejs";
-
-function parseFilters(searchParams: URLSearchParams): ManagerReportFilters {
-  return {
-    propertyId: searchParams.get("propertyId")?.trim() || undefined,
-    from: searchParams.get("from")?.trim() || undefined,
-    to: searchParams.get("to")?.trim() || undefined,
-    daysAhead: searchParams.get("daysAhead") ? Number(searchParams.get("daysAhead")) : undefined,
-    taxYear: searchParams.get("taxYear") ? Number(searchParams.get("taxYear")) : undefined,
-    vendorId: searchParams.get("vendorId")?.trim() || undefined,
-  };
-}
 
 export async function GET(
   req: Request,
@@ -75,7 +64,7 @@ export async function GET(
       await backfillLedgerFromCharges(auth.db, managerUserId);
     }
 
-    const report = await runManagerReport(auth.db, managerUserId, reportId, parseFilters(searchParams));
+    const report = await runManagerReport(auth.db, managerUserId, reportId, parseManagerReportFilters(searchParams));
     if (!report) return NextResponse.json({ error: "Unknown report." }, { status: 404 });
     return NextResponse.json(report);
   } catch (e) {

@@ -24,10 +24,10 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
@@ -939,19 +939,18 @@ function ManagerApplicationsContent() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-                <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {!authReady ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
+                  <td colSpan={3} className="px-4 py-12 text-center text-sm text-muted">
                     Loading applications…
                   </td>
                 </tr>
               ) : rowsForBucket.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-muted">
+                  <td colSpan={3} className="px-4 py-12 text-center text-sm text-muted">
                     {scopedRows.length === 0
                       ? "No applications yet. Use Invite to apply to send prospects a link when you are ready."
                       : propertyFilter.trim()
@@ -962,7 +961,14 @@ function ManagerApplicationsContent() {
               ) : (
                 rowsForBucket.map((row) => (
                   <Fragment key={row.id}>
-                    <tr id={`portal-application-${row.id}`} className={PORTAL_TABLE_TR}>
+                    <tr
+                      id={`portal-application-${row.id}`}
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                      )}
+                      aria-expanded={expandedId === row.id}
+                    >
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
                         <p className="font-medium leading-snug text-foreground">{row.name}</p>
                         {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{row.email}</p> : null}
@@ -971,20 +977,10 @@ function ManagerApplicationsContent() {
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
-                      <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                          onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                        >
-                          {expandedId === row.id ? "Hide" : "Details"}
-                        </Button>
-                      </td>
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                           <div className="mx-auto max-w-5xl space-y-8">
                           <PortalTableDetailActions placement="top">
                             {row.bucket === "pending" ? (

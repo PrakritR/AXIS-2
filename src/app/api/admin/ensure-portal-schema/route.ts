@@ -86,7 +86,7 @@ export async function GET() {
       portalBugFeedbackTable: exists ? "ready" : "missing",
       migrationFile: `supabase/migrations/${BUG_FEEDBACK_MIGRATION}`,
       migrationSql,
-      canAutoApply: Boolean(postgresConnectionString()),
+      canAutoApply: Boolean(postgresConnectionStringFromEnv()),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to check schema.";

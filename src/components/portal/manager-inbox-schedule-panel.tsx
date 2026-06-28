@@ -10,9 +10,9 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
 import { ScheduleInboxComposeModal } from "@/components/portal/schedule-inbox-compose-modal";
@@ -36,6 +36,16 @@ import {
 function formatSendDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function startOfToday(): Date {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+function isUpcomingScheduled(sendAt: string, status: string): boolean {
+  if (status === "sent") return false;
+  return new Date(sendAt).getTime() >= startOfToday().getTime();
 }
 
 function messagePreview(body: string, max = 120): string {
@@ -62,7 +72,7 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
   const { showToast } = useAppUi();
   const { userId } = useManagerUserId();
   const { settings, messages: automationMessages, loading: automationLoading, reload: reloadAutomation, setSettings } =
-    useScheduledPaymentMessages({ includeHidden: true });
+    useScheduledPaymentMessages({ includeHidden: false });
 
   const [manualMessages, setManualMessages] = useState<ScheduledInboxMessageRecord[]>([]);
   const [manualLoading, setManualLoading] = useState(true);
@@ -122,8 +132,12 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
   }, [userId, contactTick]);
 
   const rows = useMemo((): ScheduleRow[] => {
-    const manual: ScheduleRow[] = manualMessages.map((message) => ({ kind: "manual", message }));
-    const automation: ScheduleRow[] = automationMessages.map((message) => ({ kind: "automation", message }));
+    const manual: ScheduleRow[] = manualMessages
+      .filter((message) => isUpcomingScheduled(message.sendAt, message.status))
+      .map((message) => ({ kind: "manual", message }));
+    const automation: ScheduleRow[] = automationMessages
+      .filter((message) => isUpcomingScheduled(message.sendAt, message.status))
+      .map((message) => ({ kind: "automation", message }));
     return [...manual, ...automation].sort((a, b) => {
       const aAt = a.kind === "manual" ? a.message.sendAt : a.message.sendAt;
       const bAt = b.kind === "manual" ? b.message.sendAt : b.message.sendAt;
@@ -133,8 +147,8 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
 
   const scheduledCount = useMemo(
     () =>
-      manualMessages.filter((m) => m.status === "scheduled").length +
-      automationMessages.filter((m) => m.status === "scheduled").length,
+      manualMessages.filter((m) => m.status === "scheduled" && isUpcomingScheduled(m.sendAt, m.status)).length +
+      automationMessages.filter((m) => m.status === "scheduled" && isUpcomingScheduled(m.sendAt, m.status)).length,
     [manualMessages, automationMessages],
   );
 
@@ -239,7 +253,13 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
 
                   return (
                     <Fragment key={id}>
-                      <tr className={PORTAL_TABLE_TR}>
+                      <tr
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() =>
+                          setExpandedId((cur) => (cur === id ? null : id)),
+                        )}
+                        aria-expanded={expandedId === id}
+                      >
                         <td className={PORTAL_TABLE_TD}>{formatSendDate(sendAt)}</td>
                         <td className={PORTAL_TABLE_TD}>
                           <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
@@ -267,14 +287,6 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
                         <td className={`${PORTAL_TABLE_TD} capitalize ${statusClass(status)}`}>{status}</td>
                         <td className={`${PORTAL_TABLE_TD} text-right`}>
                           <div className="inline-flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                              onClick={() => setExpandedId((cur) => (cur === id ? null : id))}
-                            >
-                              {expandedId === id ? "Hide" : "View"}
-                            </Button>
                             {status === "scheduled" || status === "cancelled" ? (
                               <Button
                                 type="button"

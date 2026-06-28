@@ -1,4 +1,5 @@
 import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
+import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
 import { PORTAL_MAIN_CONTENT_CLASS } from "@/lib/portal-layout-classes";
@@ -29,6 +30,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <SurfaceThemeDefault theme="light" />
+      <PortalDataPrefetch kind="resident" />
       {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSidebar definition={residentPortal} subscriptionTier={managerSubscriptionTier} />

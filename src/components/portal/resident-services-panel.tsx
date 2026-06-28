@@ -20,10 +20,10 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { TabNav } from "@/components/ui/tabs";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
@@ -727,7 +727,6 @@ export function ResidentServicesPanel({
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Price</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Return by</th>
-                    <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -735,27 +734,23 @@ export function ResidentServicesPanel({
                     const rowId = `request-${req.id}`;
                     return (
                       <Fragment key={req.id}>
-                        <tr className={PORTAL_TABLE_TR}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedId((c) => (c === rowId ? null : rowId)),
+                          )}
+                          aria-expanded={expandedId === rowId}
+                        >
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
                           <td className={PORTAL_TABLE_TD}>
                             <ServiceStatusBadge status={req.status} />
                           </td>
                           <td className={PORTAL_TABLE_TD}>{req.price || "—"}</td>
                           <td className={PORTAL_TABLE_TD}>{req.returnByDate ? formatDate(req.returnByDate) : "—"}</td>
-                          <td className={`${PORTAL_TABLE_TD} text-right`}>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                              onClick={() => setExpandedId((c) => (c === rowId ? null : rowId))}
-                            >
-                              {expandedId === rowId ? "Hide" : "Details"}
-                            </Button>
-                          </td>
                         </tr>
                         {expandedId === rowId ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                               <ServiceRequestCard
                                 req={req}
                                 onReturnPhotoUploaded={reloadServiceRequests}
@@ -812,30 +807,25 @@ export function ResidentServicesPanel({
                       <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                      <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => (
                       <Fragment key={row.id}>
-                        <tr className={PORTAL_TABLE_TR}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedId((c) => (c === row.id ? null : row.id)),
+                          )}
+                          aria-expanded={expandedId === row.id}
+                        >
                           <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-muted`}>{row.id}</td>
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
                           <td className={PORTAL_TABLE_TD}>{row.status}</td>
-                          <td className={`${PORTAL_TABLE_TD} text-right`}>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                              onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
-                            >
-                              {expandedId === row.id ? "Hide" : "Details"}
-                            </Button>
-                          </td>
                         </tr>
                         {expandedId === row.id ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                            <td colSpan={3} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
                               <p className="text-xs font-medium uppercase tracking-wide text-muted">Priority</p>
                               <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
                               <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Preferred arrival</p>

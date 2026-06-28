@@ -61,6 +61,36 @@ describe("scheduled-payment-messages", () => {
     expect(messages.length).toBe(0);
   });
 
+  it("shows messages only within days-before-send window", () => {
+    const now = new Date(2026, 5, 1);
+    const messages = projectScheduledPaymentMessages({
+      managerUserId: "mgr-1",
+      charges: [makeCharge()],
+      settings: {
+        ...DEFAULT_MANAGER_AUTOMATION_SETTINGS,
+        preDueReminderDays: [7],
+        scheduleVisibilityMode: "days_before_send",
+        scheduleVisibilityDays: 2,
+      },
+      now,
+      includeHidden: false,
+    });
+    expect(messages.some((m) => m.kind === "pre_due" && m.daysBeforeDue === 7)).toBe(true);
+  });
+
+  it("excludes past scheduled messages from the schedule tab", () => {
+    const now = new Date(2026, 5, 15);
+    const messages = projectScheduledPaymentMessages({
+      managerUserId: "mgr-1",
+      charges: [makeCharge()],
+      settings: { ...DEFAULT_MANAGER_AUTOMATION_SETTINGS, scheduleVisibilityMode: "all" },
+      now,
+      includeHidden: false,
+    });
+    expect(messages.every((m) => new Date(m.sendAt).getTime() >= new Date(2026, 5, 15).setHours(0, 0, 0, 0))).toBe(true);
+    expect(messages.every((m) => m.status !== "sent")).toBe(true);
+  });
+
   it("shows all upcoming when visibility mode is all", () => {
     const now = new Date(2026, 4, 1);
     const messages = projectScheduledPaymentMessages({

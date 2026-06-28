@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
@@ -167,13 +166,6 @@ export function PortalSidebar({
     definition.kind === "resident" ||
     definition.kind === "manager";
 
-  const leavePaymentsSection = (event: MouseEvent<HTMLAnchorElement>, targetSection: string, href: string) => {
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-    if (activeSection !== "payments" || targetSection === "payments") return;
-    event.preventDefault();
-    window.location.assign(href);
-  };
-
   useEffect(() => {
     if (!accountOpen || typeof document === "undefined") return;
     const prev = document.body.style.overflow;
@@ -220,7 +212,6 @@ export function PortalSidebar({
                 key={s.section}
                 href={s.href}
                 prefetch
-                onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
                 className={navLinkClass(active, locked)}
                 aria-label={
                   locked
@@ -303,7 +294,6 @@ export function PortalSidebar({
                   key={s.section}
                   href={s.href}
                   prefetch
-                  onClick={(event) => leavePaymentsSection(event, s.section, s.href)}
                   className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
                     active
                       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"

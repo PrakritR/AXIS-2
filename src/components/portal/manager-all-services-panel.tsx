@@ -38,9 +38,9 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 
 type FilterType = "requests" | "work-orders" | "vendors";
@@ -262,8 +262,7 @@ export function ManagerAllServicesPanel({
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Details</th>
-                    <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -276,7 +275,11 @@ export function ManagerAllServicesPanel({
                 const needsReturn = hasDeposit(req.deposit);
                 return (
                   <Fragment key={`req-${req.id}`}>
-                    <tr className={PORTAL_TABLE_TR}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() => setExpandedId(isExpanded ? null : id))}
+                      aria-expanded={isExpanded}
+                    >
                       <td className={PORTAL_TABLE_TD}>Request</td>
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
                       <td className={PORTAL_TABLE_TD}>{req.residentName || req.residentEmail}</td>
@@ -293,19 +296,10 @@ export function ManagerAllServicesPanel({
                       <td className={PORTAL_TABLE_TD}>
                         {[req.price, needsReturn ? `Deposit ${req.deposit}` : null].filter(Boolean).join(" · ") || "—"}
                       </td>
-                      <td className={`${PORTAL_TABLE_TD} text-right`}>
-                        <button
-                          type="button"
-                          onClick={() => setExpandedId(isExpanded ? null : id)}
-                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                        >
-                          {isExpanded ? "Hide" : "Details"}
-                        </button>
-                      </td>
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                           <div className="space-y-3">
                             {req.notes ? <p className="text-xs italic text-muted">&ldquo;{req.notes}&rdquo;</p> : null}
                         {req.status === "pending" ? (
@@ -382,7 +376,11 @@ export function ManagerAllServicesPanel({
               const wo = item.data;
               return (
                 <Fragment key={`wo-${wo.id}`}>
-                  <tr className={PORTAL_TABLE_TR}>
+                  <tr
+                    className={PORTAL_TABLE_TR_EXPANDABLE}
+                    onClick={createPortalRowExpandClick(() => setExpandedId(isExpanded ? null : id))}
+                    aria-expanded={isExpanded}
+                  >
                     <td className={PORTAL_TABLE_TD}>Work order</td>
                     <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{wo.title}</td>
                     <td className={PORTAL_TABLE_TD}>{wo.residentName ?? wo.residentEmail ?? "Resident"}</td>
@@ -395,19 +393,10 @@ export function ManagerAllServicesPanel({
                       </span>
                     </td>
                     <td className={PORTAL_TABLE_TD}>{wo.priority}</td>
-                    <td className={`${PORTAL_TABLE_TD} text-right`}>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isExpanded ? null : id)}
-                        className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                      >
-                        {isExpanded ? "Hide" : "Details"}
-                      </button>
-                    </td>
                   </tr>
                   {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                      <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                         {wo.description ? (
                           <p className="mb-3 text-sm leading-relaxed text-muted">{wo.description}</p>
                         ) : null}

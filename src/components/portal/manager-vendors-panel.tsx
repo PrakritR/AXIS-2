@@ -22,9 +22,9 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 
 const TRADE_OPTIONS = [
@@ -171,23 +171,23 @@ export function ManagerVendorsPanel({
         </div>
       ) : null}
 
-      <div className={PORTAL_DATA_TABLE_WRAP}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={MANAGER_TABLE_TH}>Name</th>
-                <th className={MANAGER_TABLE_TH}>Trade</th>
-                <th className={MANAGER_TABLE_TH}>Phone</th>
-                <th className={MANAGER_TABLE_TH}>Email</th>
-                <th className={MANAGER_TABLE_TH}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendors.length === 0 ? (
-                <PortalDataTableEmpty message="No vendors yet. Add contractors you use for maintenance." />
-              ) : (
-                vendors.map((row) => {
+      {vendors.length === 0 ? (
+        <PortalDataTableEmpty message="No vendors yet. Add contractors you use for maintenance." />
+      ) : (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
+          <div className={PORTAL_DATA_TABLE_SCROLL}>
+            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+              <thead>
+                <tr className={PORTAL_TABLE_HEAD_ROW}>
+                  <th className={MANAGER_TABLE_TH}>Name</th>
+                  <th className={MANAGER_TABLE_TH}>Trade</th>
+                  <th className={MANAGER_TABLE_TH}>Phone</th>
+                  <th className={MANAGER_TABLE_TH}>Email</th>
+                  <th className={MANAGER_TABLE_TH}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vendors.map((row) => {
                   const open = expandedId === row.id;
                   const editing = editingId === row.id;
                   const own = isOwnVendor(row);
@@ -195,8 +195,9 @@ export function ManagerVendorsPanel({
                   return (
                     <Fragment key={row.id}>
                       <tr
-                        className={`${PORTAL_TABLE_TR} ${PORTAL_TABLE_ROW_TOGGLE_CLASS}`}
-                        onClick={() => setExpandedId(open ? null : row.id)}
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() => setExpandedId(open ? null : row.id))}
+                        aria-expanded={open}
                       >
                         <td className={PORTAL_TABLE_TD}>{row.name}</td>
                         <td className={PORTAL_TABLE_TD}>{row.trade || "—"}</td>
@@ -275,12 +276,12 @@ export function ManagerVendorsPanel({
                       ) : null}
                     </Fragment>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 

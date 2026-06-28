@@ -16,9 +16,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import {
@@ -442,7 +444,13 @@ export function ManagerWorkOrdersPanel({
 
               return (
                 <Fragment key={row.id}>
-                  <tr className={PORTAL_TABLE_TR}>
+                  <tr
+                    className={PORTAL_TABLE_TR_EXPANDABLE}
+                    onClick={createPortalRowExpandClick(() =>
+                      isExpanded ? setExpandedId(null) : openExpand(row),
+                    )}
+                    aria-expanded={isExpanded}
+                  >
                     <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                       {row.title}
                       <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
@@ -502,14 +510,6 @@ export function ManagerWorkOrdersPanel({
                             Complete
                           </Button>
                         ) : null}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                          onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
-                        >
-                          {isExpanded ? "Hide" : "Details"}
-                        </Button>
                         <Button
                           type="button"
                           variant="outline"

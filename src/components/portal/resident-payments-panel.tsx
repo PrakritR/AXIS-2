@@ -16,10 +16,10 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -494,17 +494,28 @@ export function ResidentPaymentsPanel() {
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
                       <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                      <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => {
                       const achPayable = row.status === "pending" && canPayHouseholdChargeWithAxisAch(row);
                       const showSelectCol = tab === "pending" && unpaidAchCharges.length > 0;
-                      const detailColSpan = showSelectCol ? 8 : 7;
+                      const detailColSpan = showSelectCol ? 7 : 6;
                       return (
                         <Fragment key={row.id}>
-                          <tr className={PORTAL_TABLE_TR}>
+                          <tr
+                            className={PORTAL_TABLE_TR_EXPANDABLE}
+                            onClick={createPortalRowExpandClick(() =>
+                              setExpandedId((cur) => {
+                                const next = cur === row.id ? null : row.id;
+                                if (next !== cur && next) {
+                                  setCheckout(null);
+                                }
+                                return next;
+                              }),
+                            )}
+                            aria-expanded={expandedId === row.id}
+                          >
                             {showSelectCol ? (
                               <td className={PORTAL_TABLE_TD}>
                                 {achPayable ? (
@@ -529,24 +540,6 @@ export function ResidentPaymentsPanel() {
                               <Badge tone={statusClass(row.status === "paid" ? "Paid" : "Unpaid")}>
                                 {row.status === "paid" ? "Paid" : "Unpaid"}
                               </Badge>
-                            </td>
-                            <td className={`${PORTAL_TABLE_TD} text-right`}>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                                onClick={() =>
-                                  setExpandedId((cur) => {
-                                    const next = cur === row.id ? null : row.id;
-                                    if (next !== cur && next) {
-                                      setCheckout(null);
-                                    }
-                                    return next;
-                                  })
-                                }
-                              >
-                                {expandedId === row.id ? "Hide" : "Details"}
-                              </Button>
                             </td>
                           </tr>
                           {expandedId === row.id ? (

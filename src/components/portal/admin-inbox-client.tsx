@@ -12,8 +12,10 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
@@ -514,7 +516,11 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                         : row.email;
                     return (
                       <Fragment key={row.id}>
-                        <tr className={`${PORTAL_TABLE_TR} ${isOpen ? "bg-accent/30/30" : ""}`}>
+                        <tr
+                          className={`${PORTAL_TABLE_TR_EXPANDABLE} ${isOpen ? "bg-accent/30/30" : ""}`}
+                          onClick={createPortalRowExpandClick(() => toggleDetails(row))}
+                          aria-expanded={isOpen}
+                        >
                           <td className={`${PORTAL_TABLE_TD} align-middle`}>
                             <p className="font-medium text-foreground">{primaryName}</p>
                             {primaryEmail ? <p className="mt-0.5 text-xs text-muted">{primaryEmail}</p> : null}
@@ -526,14 +532,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                           <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{formatWhen(row.createdAt)}</td>
                           <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                             <div className="flex flex-wrap justify-end gap-1.5">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                                onClick={() => toggleDetails(row)}
-                              >
-                                {isOpen ? "Hide" : "Details"}
-                              </Button>
                               {tabId === "trash" ? (
                                 <>
                                   <Button

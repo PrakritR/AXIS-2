@@ -13,10 +13,10 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
@@ -227,7 +227,13 @@ export function ManagerPaymentsLedgerPanel({
           <tbody>
             {rows.map((row) => (
               <Fragment key={row.id}>
-                <tr className={PORTAL_TABLE_TR}>
+                <tr
+                  className={PORTAL_TABLE_TR_EXPANDABLE}
+                  onClick={createPortalRowExpandClick(() =>
+                    setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                  )}
+                  aria-expanded={expandedId === row.id}
+                >
                   <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.propertyName}</td>
                   <td className={PORTAL_TABLE_TD}>Room {row.roomNumber}</td>
                   <td className={PORTAL_TABLE_TD}>{row.residentName}</td>
@@ -258,26 +264,16 @@ export function ManagerPaymentsLedgerPanel({
                     </span>
                   </td>
                   <td className={`${PORTAL_TABLE_TD} text-right`}>
-                    <div className="inline-flex items-center gap-2">
-                      {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_DETAIL_BTN_PRIMARY}
-                          onClick={() => recordPaid(row, "Marked as paid.")}
-                        >
-                          Mark as paid
-                        </Button>
-                      ) : null}
+                    {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
                       <Button
                         type="button"
                         variant="outline"
-                        className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                        onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                        className={PORTAL_DETAIL_BTN_PRIMARY}
+                        onClick={() => recordPaid(row, "Marked as paid.")}
                       >
-                        {expandedId === row.id ? "Hide" : "Details"}
+                        Mark as paid
                       </Button>
-                    </div>
+                    ) : null}
                   </td>
                 </tr>
                 {expandedId === row.id ? (

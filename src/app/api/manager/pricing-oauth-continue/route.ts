@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { findManagerPurchaseForAccount } from "@/lib/auth/manager-onboarding";
 import { completeFreeManagerTierForUser, ensureProvisionedManagerForPricing } from "@/lib/auth/manager-pricing-selection";
 import { createManagerCheckoutSession } from "@/lib/stripe/manager-checkout";
 import { normalizeOnboardDiscountPercent } from "@/lib/stripe-onboard-discount";
@@ -70,18 +71,29 @@ export async function POST(req: Request) {
       email,
       fullName,
     });
-    if (prepared.kind === "complete") {
-      // Account is already fully set up — send them straight to the portal.
+
+    if (prepared.kind === "complete" && tierRaw === "free") {
       return NextResponse.json({ action: "portal" });
     }
 
+    let managerId: string;
+    if (prepared.kind === "complete") {
+      const purchase = await findManagerPurchaseForAccount(supabase, user.id, email);
+      managerId = purchase?.manager_id?.trim() ?? "";
+      if (!managerId) {
+        return NextResponse.json({ error: "Manager account not found." }, { status: 500 });
+      }
+    } else {
+      managerId = prepared.managerId;
+    }
+
     const waiverCode = getPaymentWaiverCode();
-    const skipStripeForFree = tierRaw === "free";
+    const skipStripeForFree = tierRaw === "free" && prepared.kind !== "complete";
     const skipStripeForPromo = waiverCode != null && promo === waiverCode.trim().toUpperCase();
     const skipStripeForOnboardOffer = tierRaw !== "free" && onboardDiscount === 100;
 
     if (skipStripeForFree || skipStripeForPromo || skipStripeForOnboardOffer) {
-      const { managerId } = await completeFreeManagerTierForUser(supabase, {
+      const { managerId: finalizedId } = await completeFreeManagerTierForUser(supabase, {
         userId: user.id,
         email,
         fullName,
@@ -93,7 +105,11 @@ export async function POST(req: Request) {
             ? `ONBOARD_FREE_${tierRaw.toUpperCase()}`
             : null,
       });
-      return NextResponse.json({ action: "portal", managerId });
+      return NextResponse.json({ action: "portal", managerId: finalizedId });
+    }
+
+    if (tierRaw !== "pro" && tierRaw !== "business") {
+      return NextResponse.json({ error: "Checkout requires a paid tier." }, { status: 400 });
     }
 
     const checkout = await createManagerCheckoutSession({
@@ -103,7 +119,7 @@ export async function POST(req: Request) {
       fullName,
       phone,
       userId: user.id,
-      managerId: prepared.managerId,
+      managerId,
       promo,
       discountPercent: onboardDiscount ?? undefined,
       embedded: true,
@@ -117,13 +133,13 @@ export async function POST(req: Request) {
     try {
       const stripe = getStripe();
       const session = await stripe.checkout.sessions.retrieve(checkout.sessionId);
-      const managerId = session.metadata?.manager_id?.trim() ?? prepared.managerId;
-      if (managerId) {
+      const reservedManagerId = session.metadata?.manager_id?.trim() ?? managerId;
+      if (reservedManagerId) {
         const { error: reserveErr } = await supabase.from("manager_purchases").upsert(
           {
             stripe_checkout_session_id: checkout.sessionId,
             email,
-            manager_id: managerId,
+            manager_id: reservedManagerId,
             full_name: fullName || null,
             user_id: user.id,
           },

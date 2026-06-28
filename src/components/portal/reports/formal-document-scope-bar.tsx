@@ -2,61 +2,28 @@
 
 import { useEffect, useState } from "react";
 import type { DocumentScope } from "@/lib/reports/types";
-import {
-  DAYS_RENTED_DEFAULT_FIELDS,
-  PROPERTY_RENT_RECEIPT_DEFAULT_FIELDS,
-  RENT_RECEIPT_DEFAULT_FIELDS,
-  type FormalFieldKey,
-} from "@/lib/reports/formal-documents/spec";
 
 export type FormalDocumentFilterState = {
   scope: DocumentScope;
   propertyId: string;
   residentEmail: string;
   roomLabel: string;
-  includeFields: FormalFieldKey[];
 };
 
 type ScopeOptions = {
   properties: { id: string; label: string }[];
   tenants: { email: string; name: string }[];
-  rooms: string[];
-};
-
-const FIELD_LABELS: Record<FormalFieldKey, string> = {
-  receiptNumber: "Receipt number",
-  issueDate: "Issue date",
-  landlordBlock: "Landlord info",
-  tenantBlock: "Tenant info",
-  propertyBlock: "Property info",
-  paymentDate: "Payment date",
-  amount: "Amount",
-  paymentMethod: "Payment method",
-  periodCovered: "Period covered",
-  category: "Category",
-  balanceAfter: "Balance after payment",
-  daysRented: "Days rented totals",
-  daysAvailable: "Days available",
-  personalUseNote: "Schedule E note",
+  rooms: { id: string; label: string }[];
 };
 
 export function FormalDocumentScopeBar({
-  kind,
   filters,
   onChange,
 }: {
-  kind: "rent_receipt" | "days_rented" | "property_rent_receipt";
   filters: FormalDocumentFilterState;
   onChange: (next: Partial<FormalDocumentFilterState>) => void;
 }) {
   const [options, setOptions] = useState<ScopeOptions>({ properties: [], tenants: [], rooms: [] });
-  const defaultFields =
-    kind === "rent_receipt"
-      ? RENT_RECEIPT_DEFAULT_FIELDS
-      : kind === "property_rent_receipt"
-        ? PROPERTY_RENT_RECEIPT_DEFAULT_FIELDS
-        : DAYS_RENTED_DEFAULT_FIELDS;
-  const availableFields = defaultFields;
 
   useEffect(() => {
     const qs = filters.propertyId ? `?propertyId=${encodeURIComponent(filters.propertyId)}` : "";
@@ -66,18 +33,8 @@ export function FormalDocumentScopeBar({
       .catch(() => setOptions({ properties: [], tenants: [], rooms: [] }));
   }, [filters.propertyId]);
 
-  const activeFields = filters.includeFields.length ? filters.includeFields : defaultFields;
-
-  const toggleField = (key: FormalFieldKey) => {
-    const base = filters.includeFields.length ? filters.includeFields : defaultFields;
-    const has = base.includes(key);
-    onChange({
-      includeFields: has ? base.filter((f) => f !== key) : [...base, key],
-    });
-  };
-
   return (
-    <div className="space-y-3 rounded-2xl border border-border bg-accent/15 p-4">
+    <div className="rounded-2xl border border-border bg-accent/15 p-4">
       <div className="flex flex-wrap gap-3">
         <label className="flex min-w-[8rem] flex-col gap-1 text-xs font-medium text-muted">
           Scope
@@ -146,32 +103,35 @@ export function FormalDocumentScopeBar({
             >
               <option value="">Select room</option>
               {options.rooms.map((r) => (
-                <option key={r} value={r}>
-                  {r}
+                <option key={r.id} value={r.id}>
+                  {r.label}
                 </option>
               ))}
             </select>
           </label>
         ) : null}
       </div>
-
-      <div>
-        <p className="text-xs font-medium text-muted">Include in document</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {availableFields.map((key) => (
-            <label key={key} className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs">
-              <input
-                type="checkbox"
-                checked={activeFields.includes(key)}
-                onChange={() => toggleField(key)}
-              />
-              {FIELD_LABELS[key]}
-            </label>
-          ))}
-        </div>
-      </div>
     </div>
   );
+}
+
+export function appendDocumentScopeParams(params: URLSearchParams, scopeFilters: FormalDocumentFilterState): void {
+  params.set("scope", scopeFilters.scope);
+  if (scopeFilters.propertyId) params.set("propertyId", scopeFilters.propertyId);
+  if (scopeFilters.residentEmail) params.set("residentEmail", scopeFilters.residentEmail);
+  if (scopeFilters.roomLabel) params.set("roomLabel", scopeFilters.roomLabel);
+}
+
+export function buildScopedReportQuery(
+  dateFilters: { from: string; to: string },
+  scopeFilters: FormalDocumentFilterState,
+  extra?: Record<string, string>,
+): string {
+  const params = new URLSearchParams(extra);
+  params.set("from", dateFilters.from);
+  params.set("to", dateFilters.to);
+  appendDocumentScopeParams(params, scopeFilters);
+  return params.toString();
 }
 
 export function buildFormalDocumentQuery(
@@ -181,13 +141,9 @@ export function buildFormalDocumentQuery(
 ): string {
   const params = new URLSearchParams();
   params.set("kind", kind);
-  params.set("scope", scopeFilters.scope);
+  params.set("backfill", "1");
+  appendDocumentScopeParams(params, scopeFilters);
   params.set("from", dateFilters.from);
   params.set("to", dateFilters.to);
-  params.set("backfill", "1");
-  if (scopeFilters.propertyId) params.set("propertyId", scopeFilters.propertyId);
-  if (scopeFilters.residentEmail) params.set("residentEmail", scopeFilters.residentEmail);
-  if (scopeFilters.roomLabel) params.set("roomLabel", scopeFilters.roomLabel);
-  if (scopeFilters.includeFields.length) params.set("include", scopeFilters.includeFields.join(","));
   return params.toString();
 }

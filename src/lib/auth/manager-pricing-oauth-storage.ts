@@ -1,6 +1,9 @@
 import type { PlanTierId } from "@/data/manager-plan-tiers";
+import type { NextRequest, NextResponse } from "next/server";
 
 const STORAGE_KEY = "axis:manager-pricing-offer";
+export const PRICING_OFFER_COOKIE = "axis_pricing_offer";
+const COOKIE_MAX_AGE_SEC = 600;
 
 export type ManagerPricingOffer = {
   tier: PlanTierId;
@@ -68,7 +71,9 @@ function parseLegacyOffer(raw: string): ManagerPricingOffer | null {
 export function persistManagerPricingOffer(offer: ManagerPricingOffer): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, encodeStoredOffer(toStoredOffer(offer)));
+    const encoded = encodeStoredOffer(toStoredOffer(offer));
+    window.sessionStorage.setItem(STORAGE_KEY, encoded);
+    document.cookie = `${PRICING_OFFER_COOKIE}=${encodeURIComponent(encoded)}; path=/; max-age=${COOKIE_MAX_AGE_SEC}; SameSite=Lax`;
   } catch {
     /* ignore quota / private mode */
   }
@@ -91,7 +96,25 @@ export function clearManagerPricingOffer(): void {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.removeItem(STORAGE_KEY);
+    document.cookie = `${PRICING_OFFER_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
   } catch {
     /* ignore */
   }
+}
+
+export function readPricingOfferFromRequest(request: NextRequest): ManagerPricingOffer | null {
+  const raw = request.cookies.get(PRICING_OFFER_COOKIE)?.value;
+  if (!raw) return null;
+  try {
+    const decoded = decodeURIComponent(raw);
+    const stored = decodeStoredOffer(decoded);
+    if (stored) return fromStoredOffer(stored);
+    return parseLegacyOffer(decoded);
+  } catch {
+    return null;
+  }
+}
+
+export function clearPricingOfferCookie(response: NextResponse): void {
+  response.cookies.set(PRICING_OFFER_COOKIE, "", { path: "/", maxAge: 0 });
 }

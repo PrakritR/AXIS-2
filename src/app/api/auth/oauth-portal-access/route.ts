@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
 
     const service = createSupabaseServiceRoleClient();
     await reconcileAuthAccountsByEmail(service, user);
+    await ensureFreeManagerPortalAccess(service, user);
     const redirectTo = await resolveOAuthPortalRedirect(service, user, intendedPath);
 
     return NextResponse.json({ redirectTo });

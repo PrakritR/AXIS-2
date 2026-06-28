@@ -355,7 +355,7 @@ export async function queryFormalRentReceipts(
       tenantName: profile?.residentName?.trim() || display.residentLabel(email) || "Resident",
       tenantEmail: row.resident_email ?? "",
       propertyLabel: profile?.propertyLabel?.trim() || display.propertyLabel(String(row.property_id ?? "")),
-      unitLabel: row.unit_label || profile?.roomLabel || "—",
+      unitLabel: humanizeUnitLabel(String(row.unit_label || profile?.roomLabel || "").trim()) || "—",
       propertyAddress: profile?.propertyLabel || "—",
       paymentDate: String(row.posted_date),
       amount: centsToUsd(Number(row.amount_cents)),
@@ -435,7 +435,7 @@ export async function queryFormalDaysRented(
         : rangeStart;
       return {
         property: p.propertyLabel,
-        unit: p.roomLabel || "—",
+        unit: humanizeUnitLabel(p.roomLabel?.trim() || "") || "—",
         resident: p.residentName,
         residentEmail: p.residentEmail,
         leaseStart: leaseStart.toISOString().slice(0, 10),
@@ -516,7 +516,17 @@ export async function loadFormalDocumentScopeOptions(
   return {
     properties: [...properties.entries()].map(([id, label]) => ({ id, label })),
     tenants: [...tenants.entries()].map(([email, name]) => ({ email, name })),
-    rooms: [...rooms].sort(),
+    rooms: [...rooms]
+      .sort((a, b) => humanizeUnitLabel(a).localeCompare(humanizeUnitLabel(b), undefined, { numeric: true }))
+      .map((id) => {
+        const unit = humanizeUnitLabel(id);
+        if (propertyId?.trim() || !id.includes("::")) {
+          return { id, label: unit };
+        }
+        const propId = id.split("::")[0]?.trim() ?? "";
+        const propLabel = properties.get(propId) ?? humanizePropertyId(propId);
+        return { id, label: `${propLabel} · ${unit}` };
+      }),
   };
 }
 

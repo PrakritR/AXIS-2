@@ -1,13 +1,8 @@
 import { AdminDashboard } from "@/components/portal/admin-dashboard";
-import { ManagerApplications } from "@/components/portal/manager-applications";
-import { PortalCalendar } from "@/components/portal/portal-calendar";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
-import { ManagerInbox } from "@/components/portal/manager-inbox";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerPayments } from "@/components/portal/manager-payments";
-import { ManagerDocumentsPanel } from "@/components/portal/manager-documents-panel";
-import { ManagerFinancesPanel } from "@/components/portal/manager-finances-panel";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
@@ -20,9 +15,6 @@ import { AdminEventsClient } from "@/components/portal/admin-events-client";
 import { AdminProfileSection } from "@/components/portal/admin-profile-section";
 import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
 import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
-import { ManagerProperties } from "@/components/portal/manager-properties";
-import { ManagerResidents } from "@/components/portal/manager-residents";
-import { ManagerAllServicesPanel } from "@/components/portal/manager-all-services-panel";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
@@ -31,11 +23,21 @@ import { ResidentFinancialsPanel } from "@/components/portal/resident-financials
 import { ResidentDocumentsPanel } from "@/components/portal/resident-documents-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
-import { ResidentServicesPanel } from "@/components/portal/resident-services-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
 import { PortalWorkspaceClient } from "@/components/portal/portal-workspace-client";
-import { ProAccountLinksPanel } from "@/components/portal/pro-account-links-panel";
+import {
+  loadManagerAllServicesPanel,
+  loadManagerApplications,
+  loadManagerDocumentsPanel,
+  loadManagerFinancesPanel,
+  loadManagerInbox,
+  loadManagerProperties,
+  loadManagerResidents,
+  loadPortalCalendar,
+  loadProAccountLinksPanel,
+  loadResidentServicesPanel,
+} from "@/lib/portal-panel-imports";
 import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
@@ -77,7 +79,7 @@ const LEGACY_DOCUMENTS_TO_FINANCIALS: Record<string, string> = {
   "profit-loss": "expenses",
 };
 
-function renderManagerFinancesSection(
+async function renderManagerFinancesSection(
   section: string,
   tabParts: string[] | undefined,
   basePath: string,
@@ -95,6 +97,7 @@ function renderManagerFinancesSection(
     if (mapped) redirect(`${basePath}/financials/${mapped}`);
     notFound();
   }
+  const ManagerFinancesPanel = await loadManagerFinancesPanel();
   return subscriptionGated(
     <ManagerFinancesPanel tabId={finTab} basePath={basePath} />,
     kind,
@@ -103,7 +106,7 @@ function renderManagerFinancesSection(
   );
 }
 
-function renderManagerDocumentsSection(
+async function renderManagerDocumentsSection(
   section: string,
   tabParts: string[] | undefined,
   basePath: string,
@@ -123,6 +126,7 @@ function renderManagerDocumentsSection(
     redirect(`${basePath}/financials/${financesRedirect}`);
   }
   if (!DOCUMENTS_TABS.includes(docTab as (typeof DOCUMENTS_TABS)[number])) notFound();
+  const ManagerDocumentsPanel = await loadManagerDocumentsPanel();
   return subscriptionGated(
     <ManagerDocumentsPanel tabId={docTab} basePath={basePath} />,
     kind,
@@ -238,15 +242,17 @@ export async function renderPortalSection(
 
   let managerOwnerSubscriptionTier: "free" | "paid" | null = null;
   let effectiveWorkspaceUserId: string | null = null;
-  if (kind === "manager") {
-    const uid = await getEffectiveUserIdForPortal("manager");
-    if (!uid) redirect("/admin/dashboard");
-    effectiveWorkspaceUserId = uid;
-    managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
-  } else if (kind === "pro") {
-    const proRender = await getProPortalRenderContext();
-    effectiveWorkspaceUserId = proRender.effectiveUserId;
-    managerOwnerSubscriptionTier = proRender.subscriptionTier;
+  if (kind === "manager" || kind === "pro") {
+    if (kind === "pro") {
+      const proRender = await getProPortalRenderContext();
+      effectiveWorkspaceUserId = proRender.effectiveUserId;
+      managerOwnerSubscriptionTier = proRender.subscriptionTier;
+    } else {
+      const uid = await getEffectiveUserIdForPortal("manager");
+      if (!uid) redirect("/admin/dashboard");
+      effectiveWorkspaceUserId = uid;
+      managerOwnerSubscriptionTier = await getManagerSubscriptionTier(uid);
+    }
   }
 
   const managerPaywall =
@@ -306,13 +312,10 @@ export async function renderPortalSection(
   }
 
   if (kind === "admin" && section === "bugs-feedback") {
-    if (!meta.tabs.length) notFound();
-    if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    if (tabParts?.length) {
+      redirect(`${def.basePath}/${section}`);
     }
-    const bfTab = tabParts[0]!;
-    if (!["bugs", "feedback"].includes(bfTab)) notFound();
-    return <AdminBugFeedbackClient tabId={bfTab as "bugs" | "feedback"} />;
+    return <AdminBugFeedbackClient />;
   }
 
   if (kind === "admin" && section === "events") {
@@ -322,134 +325,14 @@ export async function renderPortalSection(
     return <AdminEventsClient />;
   }
 
-  if (kind === "manager") {
-    if (section === "work-orders") {
-      redirect(`${def.basePath}/services/work-orders`);
-    }
-    if (section === "residents") {
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/current`);
-      }
-      if (tabParts.length > 1) notFound();
-      const residentsTab = tabParts[0]!;
-      if (![
-        "current",
-        "previous",
-      ].includes(residentsTab)) notFound();
-      return subscriptionGated(
-        <ManagerResidents tabId={residentsTab as "current" | "previous"} />,
-        kind,
-        "residents",
-        managerOwnerSubscriptionTier,
-      );
-    }
-    if (section === "inbox") {
-      if (!meta.tabs.length) notFound();
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
-      }
-      const inboxTab = tabParts[0]!;
-      if (!isManagerInboxTab(inboxTab)) notFound();
-      return subscriptionGated(
-        <ManagerInbox tabId={inboxTab} />,
-        kind,
-        "inbox",
-        managerOwnerSubscriptionTier,
-      );
-    }
-    if (section === "work-orders" || section === "services") {
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/services/requests`);
-      }
-      if (tabParts.length > 1) notFound();
-      const servicesTab = tabParts[0]!;
-      if (servicesTab === "work-done") {
-        redirect(`${def.basePath}/financials/expenses`);
-      }
-      if (!["requests", "work-orders", "vendors"].includes(servicesTab)) notFound();
-      return subscriptionGated(
-        <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders" | "vendors"} basePath={def.basePath} />,
-        kind,
-        "services",
-        managerOwnerSubscriptionTier,
-      );
-    }
-    if (section === "payments") {
-      if (tabParts?.length === 1 && tabParts[0] === "payouts") {
-        return subscriptionGated(
-          <PortalStripeConnectPanel basePath={def.basePath} />,
-          kind,
-          "payments",
-          managerOwnerSubscriptionTier,
-        );
-      }
-      if (tabParts?.length) {
-        redirect(`${def.basePath}/${section}`);
-      }
-      return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
-    }
-    const financesView = renderManagerFinancesSection(
-      section,
-      tabParts,
-      def.basePath,
-      kind,
-      managerOwnerSubscriptionTier,
-    );
-    if (financesView) return financesView;
-    const documentsView = renderManagerDocumentsSection(
-      section,
-      tabParts,
-      def.basePath,
-      kind,
-      managerOwnerSubscriptionTier,
-    );
-    if (documentsView) return documentsView;
-    if (tabParts?.length) notFound();
-    if (section === "dashboard") {
-      return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
-    }
-    if (section === "properties") {
-      return subscriptionGated(<ManagerProperties />, kind, "properties", managerOwnerSubscriptionTier);
-    }
-    if (section === "applications") {
-      return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
-    }
-    if (section === "residents") {
-      return subscriptionGated(<ManagerResidents tabId="current" />, kind, "residents", managerOwnerSubscriptionTier);
-    }
-    if (section === "leases") {
-      return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
-    }
-    if (section === "calendar") {
-      return subscriptionGated(
-        <PortalCalendar portal="manager" initialUserId={effectiveWorkspaceUserId} />,
-        kind,
-        "calendar",
-        managerOwnerSubscriptionTier,
-      );
-    }
-    if (section === "plan") {
-      return subscriptionGated(<ManagerPlan />, kind, "plan", managerOwnerSubscriptionTier);
-    }
-    if (section === "bugs-feedback") {
-      return subscriptionGated(
-        <PortalBugFeedbackPanel reporterRole="manager" />,
-        kind,
-        "bugs-feedback",
-        managerOwnerSubscriptionTier,
-      );
-    }
-    if (section === "profile") {
-      return subscriptionGated(<ManagerProfile />, kind, "profile", managerOwnerSubscriptionTier);
-    }
-  }
+  if (kind === "manager" || kind === "pro") {
+    const reporterRole = kind === "pro" ? "pro" : "manager";
 
-  if (kind === "pro") {
     if (section === "work-orders") {
       redirect(`${def.basePath}/services/work-orders`);
     }
 
-    if (section === "relationships") {
+    if (kind === "pro" && section === "relationships") {
       if (tabParts?.length) {
         const legacyRelTab = tabParts[0]!;
         if (legacyRelTab === "owner" || legacyRelTab === "manager") {
@@ -457,6 +340,7 @@ export async function renderPortalSection(
         }
         notFound();
       }
+      const ProAccountLinksPanel = await loadProAccountLinksPanel();
       return subscriptionGated(
         <ProAccountLinksPanel userId={effectiveWorkspaceUserId!} />,
         kind,
@@ -465,30 +349,14 @@ export async function renderPortalSection(
       );
     }
 
-    if (section === "inbox") {
-      if (!meta.tabs.length) notFound();
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
-      }
-      const inboxTab = tabParts[0]!;
-      if (!isManagerInboxTab(inboxTab)) notFound();
-      return subscriptionGated(
-        <ManagerInbox tabId={inboxTab} />,
-        kind,
-        "inbox",
-        managerOwnerSubscriptionTier,
-      );
-    }
     if (section === "residents") {
       if (!tabParts?.length) {
         redirect(`${def.basePath}/${section}/current`);
       }
       if (tabParts.length > 1) notFound();
       const residentsTab = tabParts[0]!;
-      if (![
-        "current",
-        "previous",
-      ].includes(residentsTab)) notFound();
+      if (!["current", "previous"].includes(residentsTab)) notFound();
+      const ManagerResidents = await loadManagerResidents();
       return subscriptionGated(
         <ManagerResidents tabId={residentsTab as "current" | "previous"} />,
         kind,
@@ -496,6 +364,42 @@ export async function renderPortalSection(
         managerOwnerSubscriptionTier,
       );
     }
+
+    if (section === "inbox") {
+      if (!meta.tabs.length) notFound();
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+      }
+      const inboxTab = tabParts[0]!;
+      if (!isManagerInboxTab(inboxTab)) notFound();
+      const ManagerInbox = await loadManagerInbox();
+      return subscriptionGated(
+        <ManagerInbox tabId={inboxTab} />,
+        kind,
+        "inbox",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
+    if (section === "work-orders" || section === "services") {
+      if (!tabParts?.length) {
+        redirect(`${def.basePath}/services/requests`);
+      }
+      if (tabParts.length > 1) notFound();
+      const servicesTab = tabParts[0]!;
+      if (servicesTab === "work-done") {
+        redirect(`${def.basePath}/financials/expenses`);
+      }
+      if (!["requests", "work-orders", "vendors"].includes(servicesTab)) notFound();
+      const ManagerAllServicesPanel = await loadManagerAllServicesPanel();
+      return subscriptionGated(
+        <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders" | "vendors"} basePath={def.basePath} />,
+        kind,
+        "services",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
     if (section === "payments") {
       if (tabParts?.length === 1 && tabParts[0] === "payouts") {
         return subscriptionGated(
@@ -510,7 +414,8 @@ export async function renderPortalSection(
       }
       return subscriptionGated(<ManagerPayments />, kind, "payments", managerOwnerSubscriptionTier);
     }
-    const financesView = renderManagerFinancesSection(
+
+    const financesView = await renderManagerFinancesSection(
       section,
       tabParts,
       def.basePath,
@@ -518,7 +423,7 @@ export async function renderPortalSection(
       managerOwnerSubscriptionTier,
     );
     if (financesView) return financesView;
-    const documentsView = renderManagerDocumentsSection(
+    const documentsView = await renderManagerDocumentsSection(
       section,
       tabParts,
       def.basePath,
@@ -526,51 +431,29 @@ export async function renderPortalSection(
       managerOwnerSubscriptionTier,
     );
     if (documentsView) return documentsView;
+
     if (section === "leases") {
       if (tabParts?.length) {
         redirect(`${def.basePath}/${section}`);
       }
       return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
     }
-    if (section === "work-orders" || section === "services") {
-      if (!tabParts?.length) {
-        redirect(`${def.basePath}/services/requests`);
-      }
-      if (tabParts.length > 1) notFound();
-      const servicesTab = tabParts[0]!;
-      if (servicesTab === "work-done") {
-        redirect(`${def.basePath}/financials/expenses`);
-      }
-      if (!["requests", "work-orders", "vendors"].includes(servicesTab)) notFound();
-      return subscriptionGated(
-        <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders" | "vendors"} basePath={def.basePath} />,
-        kind,
-        "services",
-        managerOwnerSubscriptionTier,
-      );
-    }
+
     if (tabParts?.length) notFound();
+
     if (section === "dashboard") {
       return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
     }
     if (section === "properties") {
-      return subscriptionGated(
-        <ManagerProperties />,
-        kind,
-        "properties",
-        managerOwnerSubscriptionTier,
-      );
+      const ManagerProperties = await loadManagerProperties();
+      return subscriptionGated(<ManagerProperties />, kind, "properties", managerOwnerSubscriptionTier);
     }
     if (section === "applications") {
+      const ManagerApplications = await loadManagerApplications();
       return subscriptionGated(<ManagerApplications />, kind, "applications", managerOwnerSubscriptionTier);
     }
-    if (section === "residents") {
-      return subscriptionGated(<ManagerResidents tabId="current" />, kind, "residents", managerOwnerSubscriptionTier);
-    }
-    if (section === "leases") {
-      return subscriptionGated(<ManagerLeases />, kind, "leases", managerOwnerSubscriptionTier);
-    }
     if (section === "calendar") {
+      const PortalCalendar = await loadPortalCalendar();
       return subscriptionGated(
         <PortalCalendar portal="manager" initialUserId={effectiveWorkspaceUserId} />,
         kind,
@@ -583,7 +466,7 @@ export async function renderPortalSection(
     }
     if (section === "bugs-feedback") {
       return subscriptionGated(
-        <PortalBugFeedbackPanel reporterRole="pro" />,
+        <PortalBugFeedbackPanel reporterRole={reporterRole} />,
         kind,
         "bugs-feedback",
         managerOwnerSubscriptionTier,
@@ -713,10 +596,14 @@ export async function renderPortalSection(
         if (tabParts.length > 1) notFound();
         const servicesTab = tabParts[0]!;
         if (!["requests", "work-orders"].includes(servicesTab)) notFound();
+        const ResidentServicesPanel = await loadResidentServicesPanel();
         return <ResidentServicesPanel tabId={servicesTab as "requests" | "work-orders"} basePath={def.basePath} />;
       }
       if (tabParts?.length) notFound();
-      if (section === "work-orders") return <ResidentServicesPanel tabId="work-orders" basePath={def.basePath} />;
+      if (section === "work-orders") {
+        const ResidentServicesPanel = await loadResidentServicesPanel();
+        return <ResidentServicesPanel tabId="work-orders" basePath={def.basePath} />;
+      }
     }
   }
 

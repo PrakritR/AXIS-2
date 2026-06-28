@@ -6,7 +6,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ManagerScreeningSettings, ScreeningMode } from "@/lib/screening/types";
 
 const MODE_OPTIONS: { value: ScreeningMode; label: string; description: string }[] = [
-  { value: "off", label: "Off", description: "No screening orders." },
+  { value: "off", label: "Off", description: "Screening is off." },
   { value: "manual", label: "Manual per applicant", description: "You run screening when you open an application." },
   { value: "auto_on_submit", label: "Auto on submit", description: "Screen each new application automatically (billed per report)." },
 ];
@@ -57,11 +57,7 @@ export function ManagerScreeningSettingsPanel() {
       if (body.settings) setSettings(body.settings);
       const certnReady = Boolean(body.configured ?? configured);
       setConfigured(certnReady);
-      if (!certnReady && body.settings?.mode !== "off") {
-        showToast("Screening preference saved. Add CERTN_API_KEY to start ordering reports.");
-      } else {
-        showToast("Screening settings saved.");
-      }
+      showToast("Screening settings saved.");
     } catch {
       showToast("Network error saving screening settings.");
     } finally {
@@ -95,13 +91,11 @@ export function ManagerScreeningSettingsPanel() {
           </Select>
         </div>
       </div>
-      <p className="mt-3 text-xs text-muted">
-        {configured
-          ? `Pay-as-you-go via Certn — about $${(costCents / 100).toFixed(2)} per applicant report, charged to your plan card.`
-          : settings.mode === "off"
-            ? "Screening is off. Add CERTN_API_KEY to your server env when you are ready to order credit and background reports."
-            : "Your preference is saved. Reports will not run until CERTN_API_KEY is added to the server environment."}
-      </p>
+      {configured ? (
+        <p className="mt-3 text-xs text-muted">
+          {`Pay-as-you-go via Certn — about $${(costCents / 100).toFixed(2)} per applicant report, charged to your plan card.`}
+        </p>
+      ) : null}
     </div>
   );
 }

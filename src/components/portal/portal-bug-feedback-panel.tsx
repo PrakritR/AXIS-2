@@ -1,22 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
+import { PortalFeedbackSubmitModal } from "@/components/portal/portal-feedback-submit-modal";
+import {
+  PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
+  PORTAL_DETAIL_BTN,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_TD,
+  PortalTableDetailActions,
+  createPortalRowExpandClick,
+} from "@/components/portal/portal-data-table";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   readBugFeedbackRows,
-  submitBugFeedbackReport,
   syncBugFeedbackFromServer,
   deleteBugFeedbackRow,
   type BugFeedbackReporterRole,
-  type BugFeedbackType,
-  type BugSeverity,
+  type BugFeedbackStatus,
   type PortalBugFeedbackRow,
 } from "@/lib/portal-bug-feedback";
-import { BUG_FEEDBACK_MAX_ATTACHMENTS, uploadBugFeedbackImages } from "@/lib/bug-feedback-attachments";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 function formatWhen(iso: string) {
@@ -32,6 +43,19 @@ function formatWhen(iso: string) {
   }
 }
 
+function feedbackStatusClass(status: BugFeedbackStatus) {
+  switch (status) {
+    case "open":
+      return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+    case "reviewing":
+      return "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+    case "resolved":
+      return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+    default:
+      return "bg-accent/30 text-muted ring-1 ring-border";
+  }
+}
+
 export function PortalBugFeedbackPanel({
   reporterRole,
 }: {
@@ -39,15 +63,10 @@ export function PortalBugFeedbackPanel({
 }) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
-  const [formType, setFormType] = useState<BugFeedbackType>("bug");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [steps, setSteps] = useState("");
-  const [severity, setSeverity] = useState<BugSeverity>("medium");
-  const [attachments, setAttachments] = useState<File[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [submitOpen, setSubmitOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     const result = await syncBugFeedbackFromServer({ force: true });
@@ -64,64 +83,17 @@ export function PortalBugFeedbackPanel({
   const myRows = useMemo(() => {
     const uid = session.userId ?? "";
     const email = (session.email ?? "").trim().toLowerCase();
-    return rows.filter(
-      (r) => (uid && r.reporterUserId === uid) || (email && r.reporterEmail === email),
-    );
+    return rows
+      .filter((r) => (uid && r.reporterUserId === uid) || (email && r.reporterEmail === email))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [rows, session.email, session.userId]);
 
-  const resetForm = () => {
-    setTitle("");
-    setDescription("");
-    setSteps("");
-    setSeverity("medium");
-    setAttachments([]);
-  };
-
-  const handleSubmit = async () => {
-    const userId = session.userId;
-    const email = (session.email ?? "").trim();
-    if (!userId || !email.includes("@")) {
-      showToast("Sign in to submit a report.");
-      return;
-    }
-    if (!title.trim()) {
-      showToast("Add a short title.");
-      return;
-    }
-    if (!description.trim()) {
-      showToast("Describe the issue or feedback.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const attachmentUrls = attachments.length > 0 ? await uploadBugFeedbackImages(attachments) : undefined;
-      await submitBugFeedbackReport({
-        type: formType,
-        reporterUserId: userId,
-        reporterName: email,
-        reporterEmail: email,
-        reporterRole,
-        title,
-        description,
-        stepsToReproduce: formType === "bug" ? steps : undefined,
-        severity: formType === "bug" ? severity : undefined,
-        attachmentUrls,
-      });
-      resetForm();
-      await refresh();
-      showToast(formType === "bug" ? "Bug report sent. Our team will review it." : "Thanks for your feedback!");
-    } catch {
-      showToast("Could not send. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleDelete = async (row: PortalBugFeedbackRow) => {
-    if (!window.confirm(`Delete this ${row.type === "bug" ? "bug report" : "feedback item"}?`)) return;
+    if (!window.confirm("Delete this feedback item?")) return;
     setDeletingId(row.id);
     try {
       await deleteBugFeedbackRow(row.id);
+      if (expandedId === row.id) setExpandedId(null);
       await refresh();
       showToast("Deleted.");
     } catch {
@@ -132,198 +104,107 @@ export function PortalBugFeedbackPanel({
   };
 
   return (
-    <ManagerPortalPageShell title="Feedback">
-      <p className="mb-6 text-sm text-muted">
-        Report something broken or share ideas to improve Axis.
-      </p>
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setFormType("bug")}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-                formType === "bug"
-                  ? "bg-primary text-white"
-                  : "border border-border bg-card text-muted hover:bg-accent/30"
-              }`}
-            >
-              Report a bug
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormType("feedback")}
-              className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-                formType === "feedback"
-                  ? "bg-primary text-white"
-                  : "border border-border bg-card text-muted hover:bg-accent/30"
-              }`}
-            >
-              Send feedback
-            </button>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted">Title *</p>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={formType === "bug" ? "e.g. Payments page shows blank after save" : "e.g. Easier way to duplicate a room"}
-                className="bg-card"
-              />
-            </div>
-            {formType === "bug" ? (
-              <div>
-                <p className="mb-1 text-[11px] font-medium text-muted">Severity</p>
-                <Select value={severity} onChange={(e) => setSeverity(e.target.value as BugSeverity)} className="bg-card">
-                  <option value="low">Low — cosmetic or minor</option>
-                  <option value="medium">Medium — workaround exists</option>
-                  <option value="high">High — blocks important work</option>
-                  <option value="critical">Critical — cannot use the product</option>
-                </Select>
-              </div>
-            ) : null}
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted">
-                {formType === "bug" ? "What happened? *" : "Your feedback *"}
-              </p>
-              <Textarea
-                rows={5}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={
-                  formType === "bug"
-                    ? "What you expected vs what you saw, and any error messages."
-                    : "What would help you or your residents?"
-                }
-                className="bg-card"
-              />
-            </div>
-            {formType === "bug" ? (
-              <div>
-                <p className="mb-1 text-[11px] font-medium text-muted">Steps to reproduce (optional)</p>
-                <Textarea
-                  rows={3}
-                  value={steps}
-                  onChange={(e) => setSteps(e.target.value)}
-                  placeholder="1. Go to… 2. Click… 3. See error"
-                  className="bg-card"
-                />
-              </div>
-            ) : null}
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted">
-                Screenshots (optional, up to {BUG_FEEDBACK_MAX_ATTACHMENTS})
-              </p>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                multiple
-                className="block w-full text-xs text-muted file:mr-3 file:rounded-full file:border-0 file:bg-accent/50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-foreground"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files ?? []).slice(0, BUG_FEEDBACK_MAX_ATTACHMENTS);
-                  setAttachments(files);
-                }}
-              />
-              {attachments.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {attachments.map((file) => (
-                    <span key={`${file.name}-${file.lastModified}`} className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] text-muted">
-                      {file.name}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <Button type="button" className="rounded-full" disabled={busy} onClick={() => void handleSubmit()}>
-              {busy ? "Sending…" : formType === "bug" ? "Submit bug report" : "Send feedback"}
-            </Button>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-accent/30 p-4">
-          <p className="text-sm font-semibold text-foreground">Your submissions</p>
-          <p className="mt-1 text-xs text-muted">We review every report. Status updates appear here.</p>
-          <div className="mt-4 space-y-3">
-            {myRows.length === 0 ? (
-              <p className="text-xs text-muted">Nothing submitted yet.</p>
-            ) : (
-              <>
-                <SubmissionGroup
-                  title="Bug reports"
-                  rows={myRows.filter((r) => r.type === "bug")}
-                  empty="No bug reports yet."
-                  deletingId={deletingId}
-                  onDelete={(row) => void handleDelete(row)}
-                />
-                <SubmissionGroup
-                  title="Feedback"
-                  rows={myRows.filter((r) => r.type === "feedback")}
-                  empty="No feedback yet."
-                  deletingId={deletingId}
-                  onDelete={(row) => void handleDelete(row)}
-                />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </ManagerPortalPageShell>
-  );
-}
-
-function SubmissionGroup({
-  title,
-  rows,
-  empty,
-  deletingId,
-  onDelete,
-}: {
-  title: string;
-  rows: PortalBugFeedbackRow[];
-  empty: string;
-  deletingId: string | null;
-  onDelete: (row: PortalBugFeedbackRow) => void;
-}) {
-  return (
-    <details className="group rounded-xl border border-border bg-card open:shadow-sm" open={rows.length > 0}>
-      <summary className="cursor-pointer list-none px-3 py-2.5 [&::-webkit-details-marker]:hidden">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-foreground">{title}</p>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-bold tabular-nums text-muted">
-              {rows.length}
-            </span>
-            <span className="text-[10px] font-semibold text-primary group-open:hidden">Open</span>
-            <span className="hidden text-[10px] font-semibold text-muted group-open:inline">Hide</span>
-          </div>
-        </div>
-      </summary>
-      <div className="space-y-2 border-t border-border px-3 py-2.5">
-        {rows.length === 0 ? (
-          <p className="text-[11px] text-muted">{empty}</p>
+    <>
+      <ManagerPortalPageShell
+        title="Feedback"
+        subtitle="We review every submission. Status updates appear in your list below."
+        titleAside={
+          <PortalSectionPrimaryButton onClick={() => setSubmitOpen(true)}>Add feedback</PortalSectionPrimaryButton>
+        }
+      >
+        {myRows.length === 0 ? (
+          <PortalDataTableEmpty message="No feedback yet. Use Add feedback to send your first note to the Axis team." />
         ) : (
-          rows.slice(0, 8).map((row) => (
-            <div key={row.id} className="rounded-lg border border-border bg-accent/30 p-2.5">
-              <p className="text-xs font-semibold text-foreground">{row.title}</p>
-              <p className="mt-1 line-clamp-2 text-[11px] text-muted">{row.description}</p>
-              <p className="mt-2 text-[10px] text-muted">
-                {formatWhen(row.createdAt)} · {row.status}
-              </p>
-              <Button
-                type="button"
-                variant="danger"
-                className="mt-2 min-h-0 rounded-full px-3 py-1 text-[10px]"
-                disabled={deletingId === row.id}
-                onClick={() => onDelete(row)}
-              >
-                {deletingId === row.id ? "Deleting…" : "Delete"}
-              </Button>
+          <div className={PORTAL_DATA_TABLE_WRAP}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Submitted</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myRows.map((row) => {
+                    const open = expandedId === row.id;
+                    return (
+                      <Fragment key={row.id}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                          )}
+                          aria-expanded={open}
+                        >
+                          <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
+                            {formatWhen(row.createdAt)}
+                          </td>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
+                            >
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                        {open ? (
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                              <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{row.description}</p>
+                              {row.attachmentUrls && row.attachmentUrls.length > 0 ? (
+                                <div className="mt-4">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Attachments</p>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {row.attachmentUrls.map((url) => (
+                                      <a
+                                        key={url}
+                                        href={url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="block overflow-hidden rounded-lg border border-border bg-card transition hover:opacity-90"
+                                      >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={url} alt="Feedback attachment" className="h-24 w-24 object-cover" />
+                                      </a>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                              <PortalTableDetailActions>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+                                  disabled={deletingId === row.id}
+                                  onClick={() => void handleDelete(row)}
+                                >
+                                  {deletingId === row.id ? "Deleting…" : "Delete"}
+                                </Button>
+                              </PortalTableDetailActions>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ))
+          </div>
         )}
-      </div>
-    </details>
+      </ManagerPortalPageShell>
+
+      <PortalFeedbackSubmitModal
+        open={submitOpen}
+        onClose={() => setSubmitOpen(false)}
+        reporterRole={reporterRole}
+        reporterUserId={session.userId}
+        reporterEmail={session.email ?? ""}
+        reporterName={session.email ?? ""}
+        onSubmitted={refresh}
+      />
+    </>
   );
 }

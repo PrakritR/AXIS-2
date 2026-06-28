@@ -1,5 +1,7 @@
 /** Canonical fields for formal tax record PDFs (Schedule E recordkeeping). */
 
+import { humanizeUnitLabel } from "@/lib/reports/display-context";
+
 export type FormalFieldKey =
   | "receiptNumber"
   | "issueDate"
@@ -187,7 +189,7 @@ export function scopeLabel(
 ): string {
   if (scope === "property" && propertyLabel) return propertyLabel;
   if (scope === "tenant" && tenantLabel) return tenantLabel;
-  if (scope === "room" && roomLabel) return roomLabel;
+  if (scope === "room" && roomLabel) return humanizeUnitLabel(roomLabel) || roomLabel;
   return "All properties";
 }
 

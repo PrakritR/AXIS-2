@@ -39,6 +39,13 @@ export function humanizeUnitLabel(label: string): string {
   if (!trimmed || trimmed === "—") return trimmed || "—";
   // Extract room portion from composite "propertyId::roomLabel" format
   const roomPart = trimmed.includes("::") ? (trimmed.split("::")[1]?.trim() ?? trimmed) : trimmed;
+  const roomMatch = roomPart.match(/(?:^|-)(room|unit)-([a-z0-9]+)$/i);
+  if (roomMatch) {
+    const kind = roomMatch[1]!.toLowerCase() === "unit" ? "Unit" : "Room";
+    const suffix = roomMatch[2]!;
+    const formatted = /^\d/.test(suffix) ? suffix.toUpperCase() : suffix.toUpperCase();
+    return `${kind} ${formatted}`;
+  }
   // Strip seed hash prefix: "seed-4709b-room-3" → "room-3"
   const stripped = roomPart.replace(/^seed-[^-]+-/, "");
   if (!stripped) return roomPart;

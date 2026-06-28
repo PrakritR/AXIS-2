@@ -13,9 +13,9 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import {
@@ -442,7 +442,6 @@ export function AdminPropertiesClient() {
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={`${MANAGER_TABLE_TH} text-right`}>Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -451,7 +450,13 @@ export function AdminPropertiesClient() {
                   const expanded = expandedRowKey === rowKey;
                   return (
                     <Fragment key={rowKey}>
-                      <tr className={PORTAL_TABLE_TR}>
+                      <tr
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() =>
+                          setExpandedRowKey(expanded ? null : rowKey),
+                        )}
+                        aria-expanded={expanded}
+                      >
                         <td className={PORTAL_TABLE_TD}>
                           <p className="font-medium text-foreground">
                             {row.buildingName} · {row.unitLabel}
@@ -473,21 +478,10 @@ export function AdminPropertiesClient() {
                         <td className={PORTAL_TABLE_TD}>
                           <StatusPill label={status.label} tone={status.tone} />
                         </td>
-                        <td className={`${PORTAL_TABLE_TD} text-right`}>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                            onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
-                            aria-expanded={expanded}
-                          >
-                            {expanded ? "Hide details" : "Details"}
-                          </Button>
-                        </td>
                       </tr>
                       {expanded ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className="bg-accent/30 px-4 py-4">
+                          <td colSpan={3} className="bg-accent/30 px-4 py-4">
                             <AdminPropertyInlineDetails
                               key={rowKey}
                               bucket={activeKpi}

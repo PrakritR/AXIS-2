@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -311,13 +310,6 @@ export function ManagerPayments() {
       }
       filterRow={filterRow}
     >
-      <div className="mb-4 rounded-2xl border border-border bg-accent/20 px-4 py-3 text-sm text-muted">
-        Automated charge reminders appear in{" "}
-        <Link href={`${portalBase}/inbox/schedule`} className="font-semibold text-primary hover:underline">
-          Inbox → Schedule
-        </Link>
-        . Configure payment timing and late fees under Reminder settings below.
-      </div>
       <div className="mb-8">
         <PortalStripeConnectPanel basePath="/portal" variant="embedded" />
       </div>

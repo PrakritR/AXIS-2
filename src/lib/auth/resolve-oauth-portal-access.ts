@@ -1,4 +1,5 @@
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
+import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import {
   findManagerPurchaseForAccount,
   isManagerOnboardingComplete,
@@ -134,6 +135,11 @@ export async function resolveOAuthPortalRedirect(
   const hasUnapprovedApplication = (applicationRows ?? []).some((row) => applicationBucket(row.row_data) !== "approved");
   if (hasUnapprovedApplication) {
     return "/auth/create-account?role=resident&message=application_pending";
+  }
+
+  const freeProvision = await ensureFreeManagerPortalAccess(supabase, user);
+  if (freeProvision.status === "portal_ready") {
+    return "/portal/dashboard";
   }
 
   return "/partner/pricing";

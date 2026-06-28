@@ -99,22 +99,30 @@ function ContinueContent() {
         }
 
         if (roles.length === 0) {
-          try {
-            const accessRes = await fetch(
-              `/api/auth/oauth-portal-access?next=${encodeURIComponent(nextPath || "/auth/continue")}`,
-              { credentials: "include", cache: "no-store" },
-            );
-            if (accessRes.ok) {
+          const resolvePortalAccess = async (): Promise<string | null> => {
+            try {
+              const accessRes = await fetch(
+                `/api/auth/oauth-portal-access?next=${encodeURIComponent(nextPath || "/auth/continue")}`,
+                { credentials: "include", cache: "no-store" },
+              );
+              if (!accessRes.ok) return null;
               const body = (await accessRes.json()) as { redirectTo?: string };
-              if (body.redirectTo?.startsWith("/")) {
-                if (cancelled || didRedirectRef.current) return;
-                didRedirectRef.current = true;
-                window.location.replace(body.redirectTo);
-                return;
-              }
+              return body.redirectTo?.startsWith("/") ? body.redirectTo : null;
+            } catch {
+              return null;
             }
-          } catch {
-            /* fall through to sign-in message */
+          };
+
+          let redirectTo = await resolvePortalAccess();
+          if (!redirectTo) {
+            await new Promise((resolve) => window.setTimeout(resolve, 400));
+            redirectTo = await resolvePortalAccess();
+          }
+          if (redirectTo) {
+            if (cancelled || didRedirectRef.current) return;
+            didRedirectRef.current = true;
+            window.location.replace(redirectTo);
+            return;
           }
           if (cancelled || didRedirectRef.current) return;
           didRedirectRef.current = true;

@@ -191,9 +191,7 @@ export function ApplicationScreeningPanel({
             View full vendor report
           </Link>
         ) : null}
-        {!configured ? (
-          <p className="text-xs text-muted">Connect Certn (`CERTN_API_KEY`) to enable outsourced screening.</p>
-        ) : settings?.mode === "off" ? (
+        {configured && settings?.mode === "off" ? (
           <p className="text-xs text-muted">Turn screening on in Applications settings to order reports.</p>
         ) : settings?.mode === "auto_on_submit" ? (
           <p className="text-xs text-muted">Auto screening on submit is enabled (${(costCents / 100).toFixed(2)} / report).</p>

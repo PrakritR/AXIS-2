@@ -1,3 +1,4 @@
+import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { clearOAuthNextCookie } from "@/lib/auth/oauth-next-cookie";
@@ -5,10 +6,21 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import type { SupabaseClient, User } from "@supabase/supabase-js";
+
 type PendingCookie = {
   name: string;
   value: string;
   options?: Parameters<NextResponse["cookies"]["set"]>[2];
+};
+
+export type OAuthCallbackOptions = {
+  /** Override post-provision redirect (e.g. partner pricing tier routing). */
+  resolveRedirect?: (
+    service: SupabaseClient,
+    user: User,
+    safePath: string,
+  ) => Promise<string>;
 };
 
 function authFailureRedirect(requestUrl: URL, reason: string): NextResponse {
@@ -17,7 +29,11 @@ function authFailureRedirect(requestUrl: URL, reason: string): NextResponse {
 }
 
 /** Exchange Supabase OAuth code for a session, then redirect to a same-origin path. */
-export async function handleOAuthCallback(request: NextRequest, redirectPath: string): Promise<NextResponse> {
+export async function handleOAuthCallback(
+  request: NextRequest,
+  redirectPath: string,
+  options?: OAuthCallbackOptions,
+): Promise<NextResponse> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
@@ -82,7 +98,10 @@ export async function handleOAuthCallback(request: NextRequest, redirectPath: st
     if (user) {
       const service = createSupabaseServiceRoleClient();
       await reconcileAuthAccountsByEmail(service, user);
-      const resolvedPath = await resolveOAuthPortalRedirect(service, user, safePath);
+      await ensureFreeManagerPortalAccess(service, user);
+      const resolvedPath = options?.resolveRedirect
+        ? await options.resolveRedirect(service, user, safePath)
+        : await resolveOAuthPortalRedirect(service, user, safePath);
       if (resolvedPath !== safePath) {
         applyRedirect(new URL(resolvedPath, requestUrl.origin));
       }

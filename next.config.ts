@@ -31,6 +31,8 @@ const nextConfig: NextConfig = {
       { source: "/admin/leases/admin-review", destination: "/admin/leases", permanent: false },
       { source: "/admin/leases/with-resident", destination: "/admin/leases", permanent: false },
       { source: "/admin/leases/signed", destination: "/admin/leases", permanent: false },
+      { source: "/admin/bugs-feedback/bugs", destination: "/admin/bugs-feedback", permanent: false },
+      { source: "/admin/bugs-feedback/feedback", destination: "/admin/bugs-feedback", permanent: false },
       { source: "/resident/home", destination: "/resident/properties", permanent: false },
       { source: "/resident/home/:path*", destination: "/resident/properties", permanent: false },
       { source: "/resident/leases", destination: "/resident/documents/lease", permanent: false },

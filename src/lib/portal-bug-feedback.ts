@@ -113,7 +113,7 @@ export async function submitBugFeedbackReport(input: {
     reporterName: input.reporterName.trim(),
     reporterEmail: input.reporterEmail.trim().toLowerCase(),
     reporterRole: input.reporterRole,
-    pageUrl: (input.pageUrl ?? (isBrowser() ? window.location.href : "")).trim(),
+    pageUrl: (input.pageUrl ?? "").trim(),
     title: input.title.trim(),
     description: input.description.trim(),
     stepsToReproduce: input.type === "bug" ? input.stepsToReproduce?.trim() : undefined,
