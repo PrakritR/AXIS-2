@@ -11,7 +11,29 @@ import type { CapacitorConfig } from "@capacitor/cli";
  *   CAP_SERVER_URL=http://<your-LAN-ip>:3000 npx cap sync
  * Point the simulator/device at your machine instead of production.
  */
-const serverUrl = process.env.CAP_SERVER_URL ?? "https://www.axis-seattle-housing.com";
+const serverBase = (process.env.CAP_SERVER_URL ?? "https://www.axis-seattle-housing.com").replace(/\/$/, "");
+/** Native app opens here — not the marketing homepage. */
+const nativeAppUrl = `${serverBase}/auth/welcome`;
+
+function allowNavigationHosts(): string[] {
+  const hosts = [
+    "www.axis-seattle-housing.com",
+    "axis-seattle-housing.com",
+    "localhost",
+    "*.supabase.co",
+    "*.supabase.in",
+    "js.stripe.com",
+    "checkout.stripe.com",
+    "*.stripe.com",
+  ];
+  try {
+    const devHost = new URL(serverBase).hostname;
+    if (devHost && !hosts.includes(devHost)) hosts.unshift(devHost);
+  } catch {
+    /* ignore */
+  }
+  return hosts;
+}
 
 const config: CapacitorConfig = {
   appId: "com.axisseattlehousing.app",
@@ -20,19 +42,11 @@ const config: CapacitorConfig = {
   // Ours doubles as the branded offline fallback screen.
   webDir: "native-shell",
   server: {
-    url: serverUrl,
+    url: nativeAppUrl,
     // Needed only when pointing at an http:// dev server (iOS ATS / Android cleartext).
-    cleartext: serverUrl.startsWith("http://"),
+    cleartext: serverBase.startsWith("http://"),
     // Origins that stay inside the WebView; anything else opens the system browser.
-    allowNavigation: [
-      "www.axis-seattle-housing.com",
-      "axis-seattle-housing.com",
-      "*.supabase.co",
-      "*.supabase.in",
-      "js.stripe.com",
-      "checkout.stripe.com",
-      "*.stripe.com",
-    ],
+    allowNavigation: allowNavigationHosts(),
   },
   ios: {
     contentInset: "always",

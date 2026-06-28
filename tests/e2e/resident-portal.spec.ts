@@ -1,15 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { signInAsResident, mockStripeCheckoutRoutes } from "../helpers/auth";
+import { RESIDENT_PORTAL_SMOKE_PATHS } from "../../src/lib/portals/resident-sections";
 
 const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 
 const RESIDENT_SECTIONS = [
-  { label: "Dashboard", path: "/resident/dashboard" },
-  { label: "Payments", path: "/resident/payments" },
-  { label: "Move-in", path: "/resident/move-in" },
-  { label: "Inbox", path: "/resident/inbox/unopened" },
-  { label: "Documents", path: "/resident/documents/receipts" },
-  { label: "Finances", path: "/resident/finances/summary" },
+  ...RESIDENT_PORTAL_SMOKE_PATHS,
   { label: "Services", path: "/resident/services/requests" },
 ] as const;
 

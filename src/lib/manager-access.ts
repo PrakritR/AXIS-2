@@ -2,6 +2,7 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { generateManagerId } from "@/lib/manager-id";
 import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
 import { resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
+import { RESIDENT_FREE_TIER_SECTION_IDS } from "@/lib/portals/resident-sections";
 import { cache } from "react";
 
 /** Property caps by plan (houses / listings in the portal). Legacy unknown tier → no numeric cap (`null`). */
@@ -449,13 +450,7 @@ export function managerSectionLockedForTier(
  * Resident portal sections available when the linked property manager is on Free.
  * Mirrors manager Pro-gated features (documents, finances, services, inbox).
  */
-export const RESIDENT_FREE_MANAGER_SECTIONS = new Set([
-  "dashboard",
-  "payments",
-  "move-in",
-  "profile",
-  "bugs-feedback",
-]);
+export const RESIDENT_FREE_MANAGER_SECTIONS = new Set<string>(RESIDENT_FREE_TIER_SECTION_IDS);
 
 export function residentSectionAllowedForManagerTier(
   section: string,

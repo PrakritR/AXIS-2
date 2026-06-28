@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { assertInAppPushPath } from "@/lib/platform/parity";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 /**
@@ -126,6 +127,8 @@ export async function sendPushToUser(
   userId: string,
   payload: PushPayload,
 ): Promise<{ sent: number; skipped?: boolean }> {
+  if (payload.url) assertInAppPushPath(payload.url);
+
   const creds = readCreds();
   if (!creds) return { sent: 0, skipped: true };
 

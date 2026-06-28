@@ -10,6 +10,9 @@ portals — and adds real native capabilities (push notifications, camera) on to
 - **Native-shell changes** (new plugins, icons, permissions, the Capacitor
   version) require rebuilding and resubmitting the app.
 
+**Web + native parity:** see [`docs/web-and-native-parity.md`](web-and-native-parity.md)
+for the checklist and registries that keep browser and app behavior aligned.
+
 ---
 
 ## What's already in the repo
@@ -67,7 +70,8 @@ git-ignored). Then generate app icons and splash screens from the Axis mark:
 # Default sources are committed in resources/ (regenerate the Axis-mark
 # defaults anytime: python3 scripts/generate-app-icons.py). Swap in designer
 # artwork at resources/icon.png (1024×1024) + resources/splash.png (2732×2732)
-# when ready, then:
+# when ready, then copy into assets/ and run:
+mkdir -p assets && cp resources/icon.png assets/icon.png && cp resources/splash.png assets/splash.png
 npx @capacitor/assets generate --iconBackgroundColor '#ffffff' --splashBackgroundColor '#080b14'
 ```
 
@@ -137,6 +141,8 @@ await sendPushToUser(residentUserId, {
 
 It looks up the user's active tokens, sends via FCM, and prunes dead tokens.
 Until `FCM_*` is set it returns `{ sent: 0, skipped: true }` and changes nothing.
+
+**Step-by-step Firebase setup:** see [`docs/firebase-push-setup.md`](firebase-push-setup.md).
 
 **Suggested wiring** (alongside the existing SMS sends — push complements, not
 replaces, Twilio): the rent/move-in reminder crons in

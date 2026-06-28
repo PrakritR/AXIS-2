@@ -108,7 +108,7 @@ export function GoogleSignInButton({
       type="button"
       onClick={() => void signInWithGoogle()}
       disabled={disabled || busy}
-      className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-[var(--shadow-sm)] transition hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-60"
+      className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-card px-4 py-2.5 text-[15px] font-semibold text-foreground shadow-[var(--shadow-sm)] transition hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-60 sm:py-3 sm:text-sm"
     >
       <GoogleGlyph />
       {busy ? "Redirecting…" : label}

@@ -4,7 +4,7 @@ import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
-import { PORTAL_MAIN_CONTENT_CLASS, PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
+import { PORTAL_MAIN_CONTENT_CLASS, PORTAL_MAIN_CONTENT_ID, PORTAL_SHELL_ROOT_CLASS } from "@/lib/portal-layout-classes";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
@@ -30,7 +30,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
+    <div className={PORTAL_SHELL_ROOT_CLASS}>
       <SurfaceThemeDefault theme="light" />
       <PublicHomePrefetch />
       <PortalDataPrefetch kind="resident" />

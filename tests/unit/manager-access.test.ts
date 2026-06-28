@@ -58,6 +58,7 @@ describe("manager-access", () => {
 
   it("locks resident portal sections when linked manager is on free", () => {
     expect(residentSectionAllowedForManagerTier("payments", "free")).toBe(true);
+    expect(residentSectionAllowedForManagerTier("applications", "free")).toBe(true);
     expect(residentSectionAllowedForManagerTier("services", "free")).toBe(false);
     expect(residentSectionAllowedForManagerTier("documents", "free")).toBe(false);
     expect(residentSectionAllowedForManagerTier("financials", "free")).toBe(false);

@@ -4,7 +4,7 @@ import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
 import { assertAdminPortalAccess } from "@/lib/auth/portal-access";
-import { PORTAL_MAIN_CONTENT_CLASS, PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
+import { PORTAL_MAIN_CONTENT_CLASS, PORTAL_MAIN_CONTENT_ID, PORTAL_SHELL_ROOT_CLASS } from "@/lib/portal-layout-classes";
 import { adminPortal } from "@/lib/portals/admin";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await assertAdminPortalAccess();
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background" data-surface="admin">
+    <div className={PORTAL_SHELL_ROOT_CLASS} data-surface="admin">
       <SurfaceThemeDefault theme="dark" />
       <PublicHomePrefetch />
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">

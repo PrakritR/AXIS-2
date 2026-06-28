@@ -3,6 +3,7 @@
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   buildPricingOffer,
@@ -31,7 +32,16 @@ function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
 
 export default function PartnerPricingPage() {
   const router = useRouter();
+  const { isNative } = useIsNativeApp();
   const { showToast } = useAppUi();
+
+  useEffect(() => {
+    if (isNative !== true) return;
+    router.replace(`/auth/manager/plan${window.location.search}`);
+  }, [isNative, router]);
+
+  if (isNative) return null;
+
   /** Default monthly so Pro shows $20/mo and optional first-month promo applies. */
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedTierId, setSelectedTierId] = useState<PlanTierId>("pro");

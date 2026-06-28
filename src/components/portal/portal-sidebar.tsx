@@ -10,6 +10,7 @@ import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
+import { PORTAL_MOBILE_CHROME_CLASS } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import type { PortalDefinition } from "@/lib/portal-types";
 import Link from "next/link";
@@ -278,7 +279,7 @@ export function PortalSidebar({
       {desktopAside}
 
       <div className="shrink-0 lg:hidden">
-        <div className="border-b border-border bg-background lg:hidden">
+        <div className={PORTAL_MOBILE_CHROME_CLASS}>
           <div className="flex items-center gap-2.5 px-3 pt-2 sm:px-4">
             <div className="h-11 w-1 shrink-0 rounded-full bg-primary shadow-[0_0_10px_rgba(47,107,255,0.45)]" aria-hidden />
             <div className="min-w-0 flex-1 py-1">
@@ -352,7 +353,7 @@ export function PortalSidebar({
               aria-label="Close account menu"
               onClick={() => setAccountOpen(false)}
             />
-            <div className="fixed right-0 bottom-0 left-0 z-[100] max-h-[min(70vh,28rem)] overflow-y-auto rounded-t-[1.35rem] border border-border bg-background px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] shadow-[0_-24px_48px_-20px_rgba(15,23,42,0.28)] lg:hidden">
+            <div className="portal-native-account-sheet fixed right-0 bottom-0 left-0 z-[100] max-h-[min(70vh,28rem)] overflow-y-auto rounded-t-[1.35rem] border border-border bg-background px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] shadow-[0_-24px_48px_-20px_rgba(15,23,42,0.28)] lg:hidden">
               <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
               <p className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Account</p>
               <div className="mt-3 space-y-1 border-t border-border pt-3">

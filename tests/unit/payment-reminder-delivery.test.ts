@@ -1,0 +1,79 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/push-notifications.server", () => ({
+  sendPushToUser: vi.fn().mockResolvedValue({ sent: 1 }),
+}));
+
+vi.mock("@/lib/twilio", () => ({
+  sendSms: vi.fn().mockResolvedValue({ sent: false }),
+}));
+
+import { sendPushToUser } from "@/lib/push-notifications.server";
+import { deliverPaymentReminder } from "@/lib/payment-reminder-delivery";
+import type { HouseholdCharge } from "@/lib/household-charges";
+
+function makeCharge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
+  return {
+    id: "charge-1",
+    kind: "rent",
+    title: "July rent",
+    amountLabel: "$1,200.00",
+    balanceLabel: "$1,200.00",
+    residentEmail: "resident@example.com",
+    residentName: "Resident",
+    residentUserId: "user-res-1",
+    propertyId: "prop-1",
+    propertyLabel: "Oak House",
+    managerUserId: "mgr-1",
+    status: "pending",
+    createdAt: "2026-07-01T00:00:00.000Z",
+    blocksLeaseUntilPaid: false,
+    ...overrides,
+  };
+}
+
+describe("deliverPaymentReminder push", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
+    );
+  });
+
+  it("sends push to resident profile when delivery succeeds", async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const maybeSingle = vi.fn().mockResolvedValue({ data: { id: "user-res-1" } });
+    const eq = vi.fn().mockReturnValue({ maybeSingle });
+    const select = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockImplementation((table: string) => {
+      if (table === "profiles") return { select };
+      if (table === "portal_inbox_thread_records") return { upsert };
+      if (table === "portal_outbound_mail_records") return { upsert };
+      return { select, upsert };
+    });
+
+    const result = await deliverPaymentReminder({
+      db: { from } as never,
+      charge: makeCharge(),
+      managerId: "mgr-1",
+      dedupId: "payment_reminder_test",
+      managerName: "Manager",
+      managerSmsFromNumber: "",
+      apiKey: "",
+      from: "Axis <test@example.com>",
+      subject: "Rent due in 3 days",
+      text: "Your rent for July is due in 3 days.",
+      html: "<p>test</p>",
+      slotLabel: "3_days_before",
+    });
+
+    expect(result.sent).toBe(true);
+    expect(sendPushToUser).toHaveBeenCalledWith("user-res-1", {
+      title: "Rent due in 3 days",
+      body: "Your rent for July is due in 3 days.",
+      url: "/resident/payments",
+      data: { chargeId: "charge-1", slot: "3_days_before" },
+    });
+  });
+});

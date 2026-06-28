@@ -8,6 +8,10 @@ vi.mock("@/lib/twilio", () => ({
   sendSms: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
+vi.mock("@/lib/push-notifications.server", () => ({
+  sendPushToUser: vi.fn().mockResolvedValue({ sent: 0, skipped: true }),
+}));
+
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { GET as paymentReminders } from "@/app/api/cron/send-payment-reminders/route";
 

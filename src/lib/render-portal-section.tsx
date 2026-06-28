@@ -21,6 +21,7 @@ import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
 import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-panel";
 import { ResidentFinancialsPanel } from "@/components/portal/resident-financials-panel";
 import { ResidentDocumentsPanel } from "@/components/portal/resident-documents-panel";
+import { ResidentApplicationsPanel } from "@/components/portal/resident-applications-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
@@ -511,6 +512,11 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "payments") {
     if (tabParts?.length) notFound();
     return <ResidentPaymentsPanel />;
+  }
+
+  if (kind === "resident" && section === "applications") {
+    if (tabParts?.length) notFound();
+    return <ResidentApplicationsPanel />;
   }
 
   if (kind === "resident" && section === "financials") {

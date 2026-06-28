@@ -5,14 +5,14 @@ import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
-import { PORTAL_MAIN_CONTENT_CLASS, PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
+import { PORTAL_MAIN_CONTENT_CLASS, PORTAL_MAIN_CONTENT_ID, PORTAL_SHELL_ROOT_CLASS } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
   const nav = await buildProPortalDefinition();
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
+    <div className={PORTAL_SHELL_ROOT_CLASS}>
       <SurfaceThemeDefault theme="light" />
       <PublicHomePrefetch />
       <PortalDataPrefetch kind="pro" />

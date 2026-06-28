@@ -392,6 +392,19 @@ export function resetManagerApplicationRowsToDemo(): void {
 }
 
 /** Append one application (e.g. after resident submit). Skips if the same id already exists. */
+/** Update one row in the in-memory / session cache after a successful server upsert. */
+export function replaceManagerApplicationRowInCache(row: DemoApplicantRow): void {
+  const normalizedRow = normalizeApplicationRow(row);
+  const rows = readManagerApplicationRows();
+  const idx = rows.findIndex((r) => r.id === normalizedRow.id);
+  const next =
+    idx >= 0 ? rows.map((r, i) => (i === idx ? normalizedRow : r)) : [...rows, normalizedRow];
+  memoryRows = next;
+  persistManagerApplicationsToSession(next, activeApplicationsScopeUserId);
+  managerApplicationsLastSyncedAt = Date.now();
+  emit();
+}
+
 export function appendManagerApplicationRow(row: DemoApplicantRow): void {
   const normalizedRow = normalizeApplicationRow(row);
   const rows = readManagerApplicationRows();

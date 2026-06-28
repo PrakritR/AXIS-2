@@ -1,7 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { isNativeDeepLinkPath } from "@/lib/auth/native-entry-paths";
+import { redirectNativeFromMarketing } from "@/lib/auth/native-welcome-redirect";
+import { detectNativePlatformSync, tagHtmlNativePlatform } from "@/lib/native/detect-native";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getNativeInfo, registerPushIfGranted, resendCachedToken } from "@/lib/native/push-client";
+import { useEffect } from "react";
+
+async function redirectNativeFromMarketingPage(): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
+  await redirectNativeFromMarketing(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return { session };
+  });
+}
 
 /**
  * Runs only inside the Capacitor native shell (the iOS/Android app). On the web
@@ -20,10 +34,13 @@ export function NativeBridge() {
     const cleanups: Array<() => void> = [];
 
     void (async () => {
-      const { isNative, platform } = await getNativeInfo();
+      const syncPlatform = detectNativePlatformSync();
+      const { isNative, platform } = syncPlatform
+        ? { isNative: true as const, platform: syncPlatform }
+        : await getNativeInfo();
       if (disposed || !isNative) return;
 
-      document.documentElement.setAttribute("data-native", platform);
+      tagHtmlNativePlatform(platform);
 
       try {
         const { SplashScreen } = await import("@capacitor/splash-screen");
@@ -50,11 +67,28 @@ export function NativeBridge() {
 
       try {
         const { App } = await import("@capacitor/app");
-        const resume = await App.addListener("resume", () => void resendCachedToken());
+        const resume = await App.addListener("resume", () => {
+          void resendCachedToken();
+          void redirectNativeFromMarketingPage();
+        });
         cleanups.push(() => void resume.remove());
+
+        const urlOpen = await App.addListener("appUrlOpen", (event) => {
+          try {
+            const opened = new URL(event.url);
+            if (!isNativeDeepLinkPath(opened.pathname)) return;
+            const target = `${opened.pathname}${opened.search}${opened.hash}`;
+            window.location.assign(target);
+          } catch {
+            /* ignore malformed deep links */
+          }
+        });
+        cleanups.push(() => void urlOpen.remove());
       } catch {
         /* app plugin unavailable — non-fatal */
       }
+
+      await redirectNativeFromMarketingPage();
     })();
 
     return () => {
