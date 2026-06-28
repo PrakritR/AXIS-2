@@ -12,6 +12,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
+import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 export function ResidentProfilePanel() {
@@ -167,6 +168,8 @@ export function ResidentProfilePanel() {
             </div>
           </div>
         </div>
+
+        <NotificationsToggle />
 
         <PortalChangePasswordPanel accountEmail={email} accountLabel="this resident account" />
       </div>

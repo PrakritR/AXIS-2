@@ -1,6 +1,7 @@
 import { AppUiProvider } from "@/components/providers/app-ui-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { AuthOAuthErrorHandler } from "@/components/auth/auth-oauth-error-handler";
+import { NativeBridge } from "@/components/native/native-bridge";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
@@ -39,6 +40,7 @@ export default function RootLayout({
         <ThemeProvider defaultTheme="dark">
           <AppUiProvider>
             <AuthOAuthErrorHandler />
+            <NativeBridge />
             {children}
           </AppUiProvider>
         </ThemeProvider>

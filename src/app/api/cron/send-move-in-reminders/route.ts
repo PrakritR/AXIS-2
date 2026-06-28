@@ -8,6 +8,7 @@ import {
   buildMoveInReminderHtml,
 } from "@/lib/move-in-reminder-email";
 import { sendSms } from "@/lib/twilio";
+import { sendPushToUser } from "@/lib/push-notifications.server";
 
 export const runtime = "nodejs";
 
@@ -230,6 +231,21 @@ export async function GET(req: Request) {
           }
         }
       } catch { /* non-critical */ }
+    }
+
+    // Push to the resident's registered app device(s); no-ops until FCM is set up.
+    try {
+      const { data: residentForPush } = await db.from("profiles").select("id").eq("email", email).maybeSingle();
+      const residentUserId = String(residentForPush?.id ?? "").trim();
+      if (residentUserId) {
+        await sendPushToUser(residentUserId, {
+          title: "Move-in is tomorrow",
+          body: `Your move-in at ${propertyLabel} is tomorrow.${addressLine ? ` ${addressLine}.` : ""}`,
+          url: "/resident/dashboard",
+        });
+      }
+    } catch {
+      /* non-critical */
     }
 
     sent++;

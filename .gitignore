@@ -53,3 +53,14 @@ coverage/
 # Cursor IDE (local editor settings)
 .cursor/settings.json
 playwright.config.ts
+
+# Capacitor native projects (commit ios/ and android/, ignore build output)
+.capacitor/
+/ios/App/Pods/
+/ios/App/App/public/
+/ios/DerivedData/
+/android/.gradle/
+/android/app/src/main/assets/public/
+/android/local.properties
+/android/.idea/
+/android/captures/
