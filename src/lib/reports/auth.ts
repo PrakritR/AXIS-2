@@ -1,5 +1,6 @@
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { getManagerSubscriptionTier, managerSectionAllowedForTier } from "@/lib/manager-access";
+import { managerSectionAllowedForTier } from "@/lib/manager-access";
+import { getManagerSubscriptionTier } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 

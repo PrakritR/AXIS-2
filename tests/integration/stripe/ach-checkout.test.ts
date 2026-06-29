@@ -18,7 +18,7 @@ vi.mock("@/lib/stripe", () => ({
   getStripe: vi.fn(),
 }));
 
-vi.mock("@/lib/manager-access", () => ({
+vi.mock("@/lib/manager-access-server", () => ({
   getManagerPurchaseSku: vi.fn().mockResolvedValue({ tier: "pro", stripeCustomerId: null }),
   normalizeManagerSkuTier: vi.fn((t: string) => t),
 }));

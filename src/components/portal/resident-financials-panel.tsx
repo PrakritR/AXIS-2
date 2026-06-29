@@ -63,12 +63,14 @@ export function ResidentFinancialsPanel({
   }, [range.from, range.to]);
 
   useEffect(() => {
-    setBalanceReport(null);
-    setLedgerReport(null);
-    setGenerated(false);
-    if (tabId === "summary") {
-      void loadSummary();
-    }
+    queueMicrotask(() => {
+      setBalanceReport(null);
+      setLedgerReport(null);
+      setGenerated(false);
+      if (tabId === "summary") {
+        void loadSummary();
+      }
+    });
   }, [tabId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabsList = tabs;

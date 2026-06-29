@@ -142,8 +142,7 @@ describe("POST /api/portal/send-inbox-message", () => {
       error: null,
     });
 
-    let selectCallCount = 0;
-    const from = vi.fn().mockImplementation((table: string) => {
+    const from = vi.fn().mockImplementation(() => {
       const obj: Record<string, unknown> = {};
       obj.upsert = upsert;
       obj.select = vi.fn().mockReturnValue({

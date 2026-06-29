@@ -408,9 +408,11 @@ export function ManagerFinancesPanel({
 
   useEffect(() => {
     const defaults = DEFAULT_SORT[tabId] ?? { key: "date", dir: "desc" as const };
-    setSortKey(defaults.key);
-    setSortDir(defaults.dir);
-    setRowFilters(emptyRowFilters());
+    queueMicrotask(() => {
+      setSortKey(defaults.key);
+      setSortDir(defaults.dir);
+      setRowFilters(emptyRowFilters());
+    });
   }, [tabId]);
 
   useEffect(() => {

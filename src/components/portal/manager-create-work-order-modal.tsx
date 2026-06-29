@@ -169,15 +169,17 @@ export function ManagerCreateWorkOrderModal({
 
   useEffect(() => {
     if (!open) return;
-    setTitle("");
-    setDescription("");
-    setCategory("general");
-    setPriority("Medium");
-    setPropertyId(defaultPropertyId?.trim() || "");
-    setResidentEmail("");
-    setCost("");
-    setPaymentStatus("paid");
-    setBucket("completed");
+    queueMicrotask(() => {
+      setTitle("");
+      setDescription("");
+      setCategory("general");
+      setPriority("Medium");
+      setPropertyId(defaultPropertyId?.trim() || "");
+      setResidentEmail("");
+      setCost("");
+      setPaymentStatus("paid");
+      setBucket("completed");
+    });
   }, [open, defaultPropertyId]);
 
   const propertyOptions = useMemo(() => {
