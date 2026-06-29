@@ -88,7 +88,12 @@ export function PublicFooter() {
       <div className="glass-nav border-t border-border bg-[var(--glass-fill)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1.5 text-center text-[13px] font-normal text-muted sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <span>© 2026 Axis. All rights reserved.</span>
-          <span className="text-muted">Axis Housing</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:justify-end">
+            <Link href="/privacy" className="transition-colors hover:text-primary">
+              Privacy Policy
+            </Link>
+            <span className="text-muted">Axis Housing</span>
+          </div>
         </div>
       </div>
     </footer>
