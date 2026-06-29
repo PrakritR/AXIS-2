@@ -9,7 +9,7 @@ import { nativeAuthEntryPathFromServerBase } from "./src/lib/auth/native-auth-en
  * work natively.
  *
  * Local development against a dev server (required to see unreleased mobile UI):
- *   CAP_SERVER_URL=http://127.0.0.1:3000 npx cap sync
+ *   CAP_SERVER_URL=http://localhost:3000 npx cap sync
  * On a physical device, use your LAN IP instead of 127.0.0.1.
  */
 const serverBase = (process.env.CAP_SERVER_URL ?? "https://www.axis-seattle-housing.com").replace(/\/$/, "");
@@ -54,10 +54,12 @@ const config: CapacitorConfig = {
   },
   ios: {
     contentInset: "always",
+    backgroundColor: "#080b14",
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 1500,
+      launchShowDuration: 2000,
+      launchAutoHide: true,
       backgroundColor: "#080b14",
       showSpinner: false,
     },

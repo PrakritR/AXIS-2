@@ -53,5 +53,10 @@
 	<string>Axis lets you choose photos to attach to documents.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Axis can save document photos to your library when you choose to.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

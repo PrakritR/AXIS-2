@@ -12,7 +12,10 @@ function localLanHosts(): string[] {
 }
 
 function capacitorDevOrigins(): string[] {
-  const origins = new Set<string>(process.env.NODE_ENV === "development" ? localLanHosts() : []);
+  const origins = new Set<string>(["127.0.0.1", "localhost"]);
+  if (process.env.NODE_ENV === "development") {
+    for (const host of localLanHosts()) origins.add(host);
+  }
   const capServer = process.env.CAP_SERVER_URL?.trim();
   if (capServer) {
     try {
