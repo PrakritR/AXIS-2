@@ -1,7 +1,36 @@
-import type Stripe from "stripe";
-
 /** Default trial for new manager software subscriptions (card or Apple Pay required). */
 export const MANAGER_SUBSCRIPTION_TRIAL_DAYS = 14;
+
+export type ManagerSubscriptionCheckoutDiscount = {
+  coupon?: string;
+  promotion_code?: string;
+};
+
+export type ManagerSubscriptionCheckoutBaseInput = {
+  priceId: string;
+  metadata: Record<string, string>;
+  customerEmail?: string;
+  clientReferenceId?: string;
+  discounts?: ManagerSubscriptionCheckoutDiscount[];
+  allowPromotionCodes?: boolean;
+  /** When set, Checkout collects a payment method and defers billing until trial ends. */
+  trialPeriodDays?: number;
+};
+
+export type ManagerSubscriptionCheckoutBaseParams = {
+  mode: "subscription";
+  line_items: Array<{ price: string; quantity: number }>;
+  metadata: Record<string, string>;
+  customer_email?: string;
+  client_reference_id?: string;
+  discounts?: ManagerSubscriptionCheckoutDiscount[];
+  allow_promotion_codes?: boolean;
+  payment_method_configuration?: string;
+  subscription_data?: {
+    trial_period_days?: number;
+    metadata?: Record<string, string>;
+  };
+};
 
 /**
  * Manager Pro/Business subscription checkout — shared by signup and portal upgrade.
@@ -13,30 +42,6 @@ export const MANAGER_SUBSCRIPTION_TRIAL_DAYS = 14;
  *
  * @see docs/stripe-apple-pay-subscriptions.md
  */
-
-export type ManagerSubscriptionCheckoutBaseInput = {
-  priceId: string;
-  metadata: Record<string, string>;
-  customerEmail?: string;
-  clientReferenceId?: string;
-  discounts?: Stripe.Checkout.SessionCreateParams.Discount[];
-  allowPromotionCodes?: boolean;
-  /** When set, Checkout collects a payment method and defers billing until trial ends. */
-  trialPeriodDays?: number;
-};
-
-export type ManagerSubscriptionCheckoutBaseParams = Pick<
-  Stripe.Checkout.SessionCreateParams,
-  | "mode"
-  | "line_items"
-  | "metadata"
-  | "customer_email"
-  | "client_reference_id"
-  | "discounts"
-  | "allow_promotion_codes"
-  | "payment_method_configuration"
-  | "subscription_data"
->;
 
 /** Checkout fields shared by embedded and hosted manager subscription sessions. */
 export function buildManagerSubscriptionCheckoutBase(
