@@ -1,3 +1,5 @@
+import type { NativePlatform } from "@/lib/native/push-client";
+
 /** Sent by the Capacitor shell so APIs can apply native-only payment rules. */
 export const AXIS_NATIVE_PLATFORM_HEADER = "x-axis-native-platform";
 
@@ -9,7 +11,7 @@ export function readNativePlatformHeader(req: Request): AxisNativePlatform | nul
   return null;
 }
 
-export function nativePlatformRequestHeaders(platform: AxisNativePlatform | null): Record<string, string> {
-  if (!platform) return {};
+export function nativePlatformRequestHeaders(platform: NativePlatform | null): Record<string, string> {
+  if (platform !== "ios" && platform !== "android") return {};
   return { [AXIS_NATIVE_PLATFORM_HEADER]: platform };
 }

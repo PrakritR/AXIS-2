@@ -16,6 +16,7 @@ import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
 import { ScheduleInboxComposeModal } from "@/components/portal/schedule-inbox-compose-modal";
 import {
   ChargeReminderList,
+  PaymentAutomationSettingsPanel,
   ReminderSettingsModal,
   ScheduledMessageEditModal,
   useScheduledPaymentMessages,
