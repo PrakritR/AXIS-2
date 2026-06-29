@@ -1495,14 +1495,9 @@ html[data-axis-assistant-open] .axis-assistant-root {
   z-index: 2147483000;
 }
 
-/* Native: keep Next.js dev issue badge off the bottom tab bar. */
+/* Native: hide Next.js dev issue badge — it blocks bottom nav touches in the WebView. */
 html[data-native] nextjs-portal {
-  position: fixed !important;
-  top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem)) !important;
-  right: auto !important;
-  bottom: auto !important;
-  left: max(0.75rem, var(--native-safe-left)) !important;
-  z-index: 2147483646;
+  display: none !important;
 }
 
 html[data-axis-assistant-open] nextjs-portal {

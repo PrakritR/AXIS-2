@@ -3,6 +3,7 @@
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { portalNavClick } from "@/lib/portal-nav-client";
 import { portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import Link from "next/link";
@@ -54,13 +55,14 @@ function MoreNavRow({
   onNavigate: () => void;
 }) {
   const router = useRouter();
+  const nativeChrome = useNativeChrome();
 
   return (
     <Link
       href={item.href}
       prefetch={portalMobileLinkPrefetchEnabled()}
       onClick={(e) => {
-        portalNavClick(router, item.href)(e);
+        portalNavClick(router, item.href, { preferFullNavigation: nativeChrome })(e);
         onNavigate();
       }}
       className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${

@@ -9,7 +9,7 @@ import {
   type PortalMoreNavItem,
 } from "@/components/portal/portal-native-more-sheet";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
-import { useIsNativeApp } from "@/hooks/use-is-native-app";
+import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
@@ -59,8 +59,7 @@ function PortalBrandLogoTile() {
   );
 }
 
-function sidebarBrandHref(definition: PortalDefinition, nativeChrome: boolean): string {
-  if (!nativeChrome) return "/";
+function sidebarBrandHref(definition: PortalDefinition): string {
   const dashboard = definition.sections.find((s) => s.section === "dashboard");
   if (dashboard) return `${definition.basePath}/dashboard`;
   return definition.basePath;
@@ -165,13 +164,8 @@ export function PortalSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const isClient = useIsClient();
-  const { isNative } = useIsNativeApp();
-  /** Wait for useIsNativeApp — sync Capacitor detection during hydration breaks SSR/client markup. */
-  const showNativeChrome = isNative === true;
-  const brandHref = useMemo(
-    () => sidebarBrandHref(definition, showNativeChrome),
-    [definition, showNativeChrome],
-  );
+  const showNativeChrome = useNativeChrome();
+  const brandHref = useMemo(() => sidebarBrandHref(definition), [definition]);
   const hasAssistant = useHasAxisAssistant();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
@@ -280,7 +274,11 @@ export function PortalSidebar({
           href={s.href}
           data-native-nav-section={s.section}
           prefetch={portalMobileLinkPrefetchEnabled()}
-          onClick={portalNavClick(router, s.href)}
+          onClick={
+            showNativeChrome
+              ? portalNavClick(router, s.href, { preferFullNavigation: true })
+              : portalNavClick(router, s.href)
+          }
           className={`flex w-[3.5rem] shrink-0 snap-center flex-col items-center justify-end gap-0 px-0.5 pt-0 pb-0 text-[9px] font-semibold leading-none transition sm:w-[3.65rem] ${
             active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
           }`}
@@ -398,19 +396,17 @@ export function PortalSidebar({
     <>
       {desktopAside}
 
-      {!showNativeChrome ? (
-        <div className="shrink-0 lg:hidden">
-          <div className={PORTAL_MOBILE_CHROME_CLASS}>
-            <nav
-              ref={topNavScrollRef}
-              className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
-              aria-label="Portal sections"
-            >
-              {navItems.map((s) => renderMobileNavLink(s, "top"))}
-            </nav>
-          </div>
+      <div className="shrink-0 lg:hidden">
+        <div className={PORTAL_MOBILE_CHROME_CLASS}>
+          <nav
+            ref={topNavScrollRef}
+            className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
+            aria-label="Portal sections"
+          >
+            {navItems.map((s) => renderMobileNavLink(s, "top"))}
+          </nav>
         </div>
-      ) : null}
+      </div>
 
       <PortalNativeMoreSheet
         open={moreOpen}

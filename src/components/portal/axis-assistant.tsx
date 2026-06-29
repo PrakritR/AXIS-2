@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useIsClient } from "@/hooks/use-is-client";
-import { useIsNativeApp } from "@/hooks/use-is-native-app";
+import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { useVisualViewportBottomInset } from "@/hooks/use-visual-viewport-bottom-inset";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { cn } from "@/lib/utils";
@@ -68,8 +68,7 @@ export function AxisAssistantNavButton() {
 
 function AxisAssistantFixedTrigger() {
   const ctx = useAxisAssistant();
-  const { isNative } = useIsNativeApp();
-  const showNativeChrome = isNative === true;
+  const showNativeChrome = useNativeChrome();
   if (!ctx || showNativeChrome || ctx.open) return null;
 
   return (
@@ -184,8 +183,7 @@ export function AxisAssistant({
   children: ReactNode;
 }) {
   const isClient = useIsClient();
-  const { isNative } = useIsNativeApp();
-  const showNativeChrome = isNative === true;
+  const showNativeChrome = useNativeChrome();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);

@@ -9,7 +9,7 @@ import { PortalChangePasswordPanel } from "@/components/portal/portal-change-pas
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { useIsNativeApp, useNativeChrome } from "@/hooks/use-is-native-app";
 import type { PortalKind } from "@/lib/portal-types";
 
 function dashToEmpty(v: string) {
@@ -141,7 +141,7 @@ export function PortalProfileClient({
     setEditing(false);
   }, [initialFullName, initialPhone]);
 
-  const compactNative = Boolean(detectNativePlatformSync());
+  const compactNative = useNativeChrome();
 
   const headerActions = editing
     ? [
