@@ -39,8 +39,6 @@ export default function PartnerPricingPage() {
     router.replace(`/auth/manager/plan${window.location.search}`);
   }, [isNative, router]);
 
-  if (isNative) return null;
-
   /** Default monthly so Pro shows $20/mo and optional first-month promo applies. */
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedTierId, setSelectedTierId] = useState<PlanTierId>("pro");
@@ -304,6 +302,8 @@ export default function PartnerPricingPage() {
     selectedTierId,
     showToast,
   ]);
+
+  if (isNative) return null;
 
   return (
     <div className="min-h-screen px-4 py-14 sm:px-5 sm:py-20">
