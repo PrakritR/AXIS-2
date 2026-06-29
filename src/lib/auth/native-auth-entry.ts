@@ -36,9 +36,11 @@ export function nativeAuthEntryPathClient(): string {
 }
 
 export function nativeAwarePath(path: string): string {
-  if (!detectNativePlatformSync() && typeof document !== "undefined" && !document.documentElement.hasAttribute("data-native")) {
-    return path;
-  }
+  if (typeof window === "undefined") return path;
+  const isNative =
+    detectNativePlatformSync() ||
+    (typeof document !== "undefined" && document.documentElement.hasAttribute("data-native"));
+  if (!isNative) return path;
   return mapPostOAuthPathForNative(path);
 }
 

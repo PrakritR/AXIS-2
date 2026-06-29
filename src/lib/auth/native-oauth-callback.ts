@@ -1,3 +1,4 @@
+import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
 import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
@@ -18,10 +19,17 @@ export function isNativeOAuthShell(): boolean {
   return document.documentElement.hasAttribute("data-native");
 }
 
-/** Supabase OAuth redirectTo — custom scheme in native shell, https callback on web. */
+/**
+ * Supabase OAuth redirectTo.
+ * Native: HTTPS callback with a bridge flag (allowlisted like web) → HTML bounce → custom scheme → app WebView.
+ * Web: same-origin /auth/callback.
+ */
 export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
   if (isNativeOAuthShell()) {
-    return nativeOAuthCallbackUrl(fixedCallbackPath);
+    const base = fixedCallbackPath?.startsWith("/")
+      ? `${origin.replace(/\/$/, "")}${fixedCallbackPath}`
+      : bareAuthCallbackUrl(origin);
+    return appendNativeOAuthBridgeParam(base);
   }
   if (fixedCallbackPath?.startsWith("/")) {
     return `${origin.replace(/\/$/, "")}${fixedCallbackPath}`;

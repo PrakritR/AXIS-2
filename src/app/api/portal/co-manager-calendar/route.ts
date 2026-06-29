@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
+import { managerHasCalendarAccessForProperty } from "@/lib/auth/manager-lease-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import {
-  calendarShareAvailabilityStorageKey,
-  managerPropertyAvailabilityStorageKey,
-} from "@/lib/demo-admin-scheduling";
+import { expectedManagerScheduleRecordIds } from "@/lib/portal-schedule-record-scope";
 
 export const runtime = "nodejs";
 
@@ -43,6 +41,11 @@ function readAvailabilitySlots(rowData: unknown): string[] {
   return [];
 }
 
+function scheduleRecordOwnedByPeer(record: ScheduleRecordRow | undefined, peerId: string): boolean {
+  if (!record) return false;
+  const ownerId = String(record.manager_user_id ?? "").trim();
+  return !ownerId || ownerId === peerId;
+}
 
 export async function GET(req: Request) {
   try {
@@ -56,26 +59,27 @@ export async function GET(req: Request) {
     if (!propertyId) return NextResponse.json({ error: "propertyId required" }, { status: 400 });
 
     const db = createSupabaseServiceRoleClient();
-    const peers = new Map<string, { label: string; isSelf: boolean }>();
-    peers.set(user.id, { label: "You", isSelf: true });
 
-    const { data: propertyRows, error: propertyError } = await db
+    const hasAccess = await managerHasCalendarAccessForProperty(db, user.id, propertyId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: "You do not have calendar access to this property." }, { status: 403 });
+    }
+
+    const peers = new Map<string, { label: string; isSelf: boolean }>();
+
+    const { data: propertyRow, error: propertyError } = await db
       .from("manager_property_records")
-      .select("manager_user_id, property_data");
+      .select("manager_user_id, property_data")
+      .eq("id", propertyId)
+      .maybeSingle();
     if (propertyError) return NextResponse.json({ error: propertyError.message }, { status: 500 });
 
-    for (const row of propertyRows ?? []) {
-      const property = asObject((row as { property_data?: unknown }).property_data);
-      if (!property) continue;
-      const id = textField(property, "id");
-      if (id !== propertyId) continue;
-      const ownerId = String((row as { manager_user_id?: string | null }).manager_user_id ?? "").trim();
-      if (ownerId) {
-        peers.set(ownerId, {
-          label: ownerId === user.id ? "You" : "Primary manager",
-          isSelf: ownerId === user.id,
-        });
-      }
+    const ownerId = String(propertyRow?.manager_user_id ?? "").trim();
+    if (ownerId) {
+      peers.set(ownerId, {
+        label: ownerId === user.id ? "You" : "Primary manager",
+        isSelf: ownerId === user.id,
+      });
     }
 
     const { data: linkRows, error: linkError } = await db
@@ -118,10 +122,10 @@ export async function GET(req: Request) {
     }
 
     const peerIds = [...peers.keys()];
-    const recordIds = peerIds.flatMap((peerId) => [
-      calendarShareAvailabilityStorageKey(peerId, propertyId),
-      managerPropertyAvailabilityStorageKey(peerId, propertyId),
-    ]);
+    const recordIds = peerIds.flatMap((peerId) => {
+      const { shareKey, availKey } = expectedManagerScheduleRecordIds(peerId, propertyId);
+      return [shareKey, availKey];
+    });
 
     const { data: scheduleRows, error: scheduleError } = await db
       .from("portal_schedule_records")
@@ -137,15 +141,18 @@ export async function GET(req: Request) {
 
     const result = peerIds.map((peerId) => {
       const meta = peers.get(peerId)!;
-      const shareKey = calendarShareAvailabilityStorageKey(peerId, propertyId);
-      const availKey = managerPropertyAvailabilityStorageKey(peerId, propertyId);
+      const { shareKey, availKey } = expectedManagerScheduleRecordIds(peerId, propertyId);
       const shareRecord = recordsById.get(shareKey);
       const availRecord = recordsById.get(availKey);
-      const sharesAvailability = readShareAvailability(shareRecord?.row_data ?? null);
+      const sharesAvailability =
+        scheduleRecordOwnedByPeer(shareRecord, peerId) &&
+        readShareAvailability(shareRecord?.row_data ?? null);
 
       let slots: string[] = [];
       if (meta.isSelf || sharesAvailability) {
-        slots = readAvailabilitySlots(availRecord?.row_data ?? null);
+        if (scheduleRecordOwnedByPeer(availRecord, peerId)) {
+          slots = readAvailabilitySlots(availRecord?.row_data ?? null);
+        }
       }
 
       return {

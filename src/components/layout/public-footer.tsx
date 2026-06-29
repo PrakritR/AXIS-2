@@ -24,6 +24,9 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
               <Link href="/privacy" className="transition-colors hover:text-primary">
                 Privacy Policy
               </Link>
+              <Link href="/tos" className="transition-colors hover:text-primary">
+                Terms of Service
+              </Link>
               <span className="text-muted">Axis Housing</span>
             </div>
           </div>
@@ -109,6 +112,9 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:justify-end">
             <Link href="/privacy" className="transition-colors hover:text-primary">
               Privacy Policy
+            </Link>
+            <Link href="/tos" className="transition-colors hover:text-primary">
+              Terms of Service
             </Link>
             <span className="text-muted">Axis Housing</span>
           </div>

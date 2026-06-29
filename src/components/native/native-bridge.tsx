@@ -23,8 +23,15 @@ async function redirectNativeFromMarketingPage(): Promise<void> {
 
 async function recoverFromMarketingDuringOAuth(): Promise<void> {
   if (!isNativeOAuthInProgress()) return;
-  const { pathname } = window.location;
+  const { pathname, search, hash } = window.location;
   if (pathname !== "/" && pathname !== "") return;
+
+  const params = new URLSearchParams(search);
+  if (params.get("code") || params.get("error")) {
+    window.location.replace(`/auth/callback?${params.toString()}${hash}`);
+    return;
+  }
+
   window.location.replace(
     `/auth/sign-in?error=oauth&message=${encodeURIComponent(
       `Google sign-in opened the marketing site instead of the portal. ${nativeOAuthSetupHint()}`,

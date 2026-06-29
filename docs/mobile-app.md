@@ -219,18 +219,24 @@ Until `FCM_*` is set it returns `{ sent: 0, skipped: true }` and changes nothing
 Google OAuth opens in the **system in-app browser** (not the main WebView). After you pick an
 account, Supabase must redirect back into the Axis app — not the marketing homepage.
 
-**1. Supabase redirect URLs** (Authentication → URL configuration → Redirect URLs). Add:
+**1. Supabase redirect URLs** (Authentication → URL configuration → Redirect URLs). **Required:**
 
 ```
-com.axisseattlehousing.app://auth/callback
-com.axisseattlehousing.app://auth/callback/**
 https://www.axis-seattle-housing.com/auth/callback
 https://www.axis-seattle-housing.com/auth/callback/partner-pricing
 https://www.axis-seattle-housing.com/auth/callback/resident-signup
 ```
 
-If the custom scheme is missing, Supabase falls back to the **Site URL** and you land on
-`axis-seattle-housing.com` instead of the portal.
+The native app uses these HTTPS callbacks (same as web). A small bridge page bounces back into the app via the custom URL scheme registered in Xcode/Android.
+
+**Optional** (direct scheme return without the bridge page):
+
+```
+com.axisseattlehousing.app://auth/callback
+com.axisseattlehousing.app://auth/callback/**
+```
+
+If the HTTPS callback is missing, Supabase falls back to the **Site URL** and Google sign-in opens the marketing homepage in the system browser instead of the portal.
 
 **2. Universal / app links (https fallback)** — committed in `public/.well-known/`:
 

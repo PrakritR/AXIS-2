@@ -1,4 +1,8 @@
 import { createJsonRecordRoute } from "@/lib/portal-record-api";
+import {
+  isManagerScopedScheduleRecordType,
+  managerScheduleRecordIdOwnedByUser,
+} from "@/lib/portal-schedule-record-scope";
 
 export const runtime = "nodejs";
 
@@ -16,7 +20,7 @@ const route = createJsonRecordRoute({
   },
   buildUpsert: (row, user) => {
     const recordType = String(row.recordType ?? row.record_type ?? "event");
-    const managerScoped = recordType === "manager_availability" || recordType === "manager_property_availability" || recordType === "calendar_share_settings";
+    const managerScoped = isManagerScopedScheduleRecordType(recordType);
     return {
       id: row.id,
       manager_user_id: managerScoped && user.role !== "admin" ? user.id : row.managerUserId ?? row.manager_user_id ?? null,
@@ -31,10 +35,20 @@ const route = createJsonRecordRoute({
   assignOwnership: (record, user) => {
     if (user.role === "admin") return record;
     const recordType = String(record.record_type ?? "");
-    const managerScoped = recordType === "manager_availability" || recordType === "manager_property_availability" || recordType === "calendar_share_settings";
+    const managerScoped = isManagerScopedScheduleRecordType(recordType);
     // Only stamp ownership on manager-scoped types; shared singleton records
     // (partner inquiries, planned events) keep their existing owner handling.
     return managerScoped ? { ...record, manager_user_id: user.id } : record;
+  },
+  assertInsertAllowed: (record, user) => {
+    if (user.role === "admin") return null;
+    const recordType = String(record.record_type ?? "");
+    if (!isManagerScopedScheduleRecordType(recordType)) return null;
+    const id = String(record.id ?? "");
+    if (!managerScheduleRecordIdOwnedByUser(id, user.id, recordType)) {
+      return "Record id must belong to the authenticated manager.";
+    }
+    return null;
   },
 });
 

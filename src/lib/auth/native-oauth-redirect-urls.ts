@@ -24,11 +24,11 @@ export function httpsOAuthCallbackUrls(origin?: string): string[] {
 }
 
 export function nativeOAuthSetupHint(): string {
-  const native = nativeSupabaseRedirectUrls()[0];
   const https = httpsOAuthCallbackUrls()[0];
+  const native = nativeSupabaseRedirectUrls()[0];
   return (
-    `In Supabase → Authentication → URL configuration → Redirect URLs, add: ${native} ` +
-    `(or com.axisseattlehousing.app://auth/callback/**) and ${https}. ` +
-    `Without these, Google sign-in returns to the marketing homepage instead of the portal.`
+    `In Supabase → Authentication → URL configuration → Redirect URLs, add ${https} ` +
+    `(required). Optionally add ${native} for direct scheme returns. ` +
+    `Without the HTTPS callback, Google sign-in opens the marketing homepage instead of the portal.`
   );
 }

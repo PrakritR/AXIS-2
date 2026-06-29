@@ -1432,12 +1432,7 @@ html[data-native] .axis-page-frame > footer {
   display: none;
 }
 
-/* Axis Assistant — fixed nav slot on native; floating trigger on web. */
-.axis-assistant-fab {
-  position: relative;
-  flex-shrink: 0;
-}
-
+/* Axis Assistant — native bottom-nav slot uses .axis-assistant-nav-btn; web FAB stays fixed via Tailwind. */
 .axis-assistant-nav-btn {
   touch-action: manipulation;
 }

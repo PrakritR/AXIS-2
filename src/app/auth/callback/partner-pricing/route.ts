@@ -1,4 +1,5 @@
 import { handleOAuthCallback } from "@/lib/auth/oauth-callback-handler";
+import { maybeNativeOAuthBridgeResponse } from "@/lib/auth/native-oauth-bridge";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import {
   clearPricingOfferCookie,
@@ -8,6 +9,9 @@ import type { NextRequest } from "next/server";
 
 /** Fixed OAuth return path for partner pricing — tier-aware redirect after free account setup. */
 export async function GET(request: NextRequest) {
+  const bridge = maybeNativeOAuthBridgeResponse(request);
+  if (bridge) return bridge;
+
   const offer = readPricingOfferFromRequest(request);
 
   const response = await handleOAuthCallback(request, `${MANAGER_PRICING_ENTRY_PATH}?google_signed_in=1`, {
