@@ -4,7 +4,12 @@ import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
 import { assertAdminPortalAccess } from "@/lib/auth/portal-access";
-import { PORTAL_MAIN_CONTENT_CLASS, PORTAL_MAIN_CONTENT_ID, PORTAL_SHELL_ROOT_CLASS } from "@/lib/portal-layout-classes";
+import {
+  PORTAL_MAIN_CONTENT_CLASS,
+  PORTAL_MAIN_CONTENT_ID,
+  PORTAL_MAIN_CONTENT_INNER_CLASS,
+  PORTAL_SHELL_ROOT_CLASS,
+} from "@/lib/portal-layout-classes";
 import { adminPortal } from "@/lib/portals/admin";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +25,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <PortalSidebar definition={adminPortal} />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
-            <AdminNotificationBanners />
-            {children}
+            <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
+              <AdminNotificationBanners />
+              {children}
+            </div>
           </main>
         </div>
       </div>
