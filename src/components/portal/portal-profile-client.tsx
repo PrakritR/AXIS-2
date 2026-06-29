@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
+import { ManagerPlan } from "@/components/portal/manager-plan";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useIsNativeApp, useNativeChrome } from "@/hooks/use-is-native-app";
@@ -233,6 +234,12 @@ export function PortalProfileClient({
       >
         <div className="space-y-3 [html[data-native]_&]:space-y-2.5">
           <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">{inner}</Card>
+          <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">Billing</h2>
+            <div className="mt-4">
+              <ManagerPlan embedded />
+            </div>
+          </Card>
           <NotificationsToggle />
           <PortalChangePasswordPanel
             accountEmail={dashToEmpty(initialEmail) || initialEmail}

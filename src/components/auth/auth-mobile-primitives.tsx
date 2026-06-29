@@ -12,19 +12,25 @@ type AuthPageHeaderProps = {
   showLogo?: boolean;
 };
 
-/** Welcome / entry — logo mark + title (fills vertical space on phone). */
-export function AuthBrandHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+/** Welcome / entry — logo mark with optional title and subtitle. */
+export function AuthBrandHeader({ title, subtitle }: { title?: string; subtitle?: string }) {
   return (
     <div className="auth-brand-header flex flex-col items-center text-center">
       <AxisLogoMark
         size="default"
         className="auth-brand-logo shadow-[0_14px_44px_-14px_rgba(47,107,255,0.5)]"
       />
-      <h1 className="auth-brand-title mt-4 text-[1.5rem] font-semibold tracking-tight text-gradient-accent sm:mt-5 sm:text-[1.625rem]">
-        {title}
-      </h1>
+      {title ? (
+        <h1 className="auth-brand-title mt-4 text-[1.5rem] font-semibold tracking-tight text-gradient-accent sm:mt-5 sm:text-[1.625rem]">
+          {title}
+        </h1>
+      ) : null}
       {subtitle ? (
-        <p className="auth-brand-subtitle mt-1.5 max-w-[17rem] text-[13px] leading-snug text-muted sm:text-sm">
+        <p
+          className={`auth-brand-subtitle max-w-[17rem] text-[13px] leading-snug text-muted sm:text-sm ${
+            title ? "mt-1.5" : "mt-2.5"
+          }`}
+        >
           {subtitle}
         </p>
       ) : null}
@@ -42,7 +48,7 @@ export function AuthPageHeader({
   return (
     <header className="auth-page-header text-center">
       {showLogo ? (
-        <AxisLogoMark size="compact" className="auth-page-logo mx-auto mb-3 sm:mb-3.5" />
+        <AxisLogoMark size="compact" className="auth-page-logo mx-auto mb-2 sm:mb-2.5" />
       ) : (
         <p className="auth-page-eyebrow text-[10px] font-bold uppercase tracking-[0.22em] text-primary/75 sm:text-[11px]">
           {eyebrow}
@@ -136,7 +142,7 @@ export function AuthRoleStack({
   busyId?: string | null;
 }) {
   return (
-    <div className="auth-role-stack mt-4 flex w-full flex-col gap-2.5 sm:mt-5 sm:gap-3">
+    <div className="auth-role-stack mt-3 flex w-full flex-col gap-2 sm:mt-4 sm:gap-2.5">
       {options.map((option) => (
         <AuthRoleCard
           key={option.id}

@@ -27,9 +27,8 @@ import {
   readManagerPricingOffer,
 } from "@/lib/auth/manager-pricing-oauth-storage";
 import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
-import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
+import { MANAGER_PLAN_TIERS, isPlanTierId, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import { loadManagerPlanTiers } from "@/lib/site-content";
-import { isManagerOnboardTier, parseOnboardOfferSearchParams } from "@/lib/manager-onboard-links";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { stripeLiveJsBlockedMessage } from "@/lib/stripe/stripe-js-client";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -92,9 +91,9 @@ function ManagerPlanPickerInner() {
 
   useEffect(() => {
     const tier = searchParams.get("tier");
-    if (tier && isManagerOnboardTier(tier)) setSelectedTierId(tier);
-    const offer = parseOnboardOfferSearchParams(searchParams);
-    if (offer.billing) setBilling(offer.billing);
+    if (tier && isPlanTierId(tier)) setSelectedTierId(tier);
+    const billing = searchParams.get("billing");
+    if (billing === "monthly" || billing === "annual") setBilling(billing);
   }, [searchParams]);
 
   useEffect(() => {

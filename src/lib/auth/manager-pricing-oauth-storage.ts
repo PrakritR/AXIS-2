@@ -8,7 +8,6 @@ const COOKIE_MAX_AGE_SEC = 600;
 export type ManagerPricingOffer = {
   tier: PlanTierId;
   billing: "monthly" | "annual";
-  discountPercent?: number;
   promo?: string;
   /** Where Google OAuth should return after partner-pricing callback. */
   returnSurface?: "mobile-plan" | "partner-pricing";
@@ -18,7 +17,6 @@ export type ManagerPricingOffer = {
 type StoredPricingOffer = {
   t: PlanTierId;
   i: "m" | "a";
-  d?: number;
   p?: string;
   s?: "m" | "p";
 };
@@ -27,7 +25,6 @@ function toStoredOffer(offer: ManagerPricingOffer): StoredPricingOffer {
   return {
     t: offer.tier,
     i: offer.billing === "annual" ? "a" : "m",
-    ...(typeof offer.discountPercent === "number" ? { d: offer.discountPercent } : {}),
     ...(offer.promo ? { p: offer.promo } : {}),
     ...(offer.returnSurface === "mobile-plan" ? { s: "m" } : offer.returnSurface === "partner-pricing" ? { s: "p" } : {}),
   };
@@ -39,7 +36,6 @@ function fromStoredOffer(stored: StoredPricingOffer): ManagerPricingOffer | null
   return {
     tier: stored.t,
     billing: stored.i === "a" ? "annual" : "monthly",
-    discountPercent: stored.d,
     promo: stored.p,
     returnSurface: stored.s === "m" ? "mobile-plan" : stored.s === "p" ? "partner-pricing" : undefined,
   };
@@ -70,7 +66,6 @@ function parseLegacyOffer(raw: string): ManagerPricingOffer | null {
     return {
       tier: parsed.tier,
       billing: parsed.billing,
-      discountPercent: parsed.discountPercent,
       promo: parsed.promo,
       returnSurface: parsed.returnSurface,
     };

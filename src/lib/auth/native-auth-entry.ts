@@ -17,10 +17,7 @@ export {
   nativeShellEntryPath,
 };
 
-const WEB_TO_NATIVE_PATH: Record<string, string> = {
-  "/partner/pricing": NATIVE_MANAGER_PLAN_PATH,
-  "/pricing": NATIVE_MANAGER_PLAN_PATH,
-};
+import { mapPostOAuthPathForNative } from "@/lib/auth/post-oauth-routing";
 
 /** @deprecated Use nativeShellEntryPath — kept for capacitor.config import stability. */
 export function nativeAuthEntryPathFromServerBase(_serverBase?: string): string {
@@ -38,17 +35,11 @@ export function nativeAuthEntryPathClient(): string {
   return NATIVE_AUTH_WEB_ENTRY_PATH;
 }
 
-/** Map web marketing URLs to in-app equivalents when running in the native shell. */
 export function nativeAwarePath(path: string): string {
-  if (!detectNativePlatformSync()) return path;
-  try {
-    const url = new URL(path, "http://local");
-    const mapped = WEB_TO_NATIVE_PATH[url.pathname];
-    if (!mapped) return path;
-    return `${mapped}${url.search}${url.hash}`;
-  } catch {
-    return WEB_TO_NATIVE_PATH[path] ?? path;
+  if (!detectNativePlatformSync() && typeof document !== "undefined" && !document.documentElement.hasAttribute("data-native")) {
+    return path;
   }
+  return mapPostOAuthPathForNative(path);
 }
 
 /** @deprecated Use nativeShellEntryPath / nativeAuthEntryPathClient. */

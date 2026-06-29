@@ -4,10 +4,11 @@ import { usePathname } from "next/navigation";
 import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { ManagerPlanBanner } from "@/components/portal/manager-plan-banner";
 import { PORTAL_TOP_BANNER_STRIP_CLASS } from "@/lib/portal-layout-classes";
+import { MANAGER_PLAN_PORTAL_PATH } from "@/lib/portals/manager-plan-path";
 
 /**
- * Portal chrome below the marketing navbar. Hides the upgrade strip on the Plan page
- * so stacked banners don’t shift layout while editing the plan.
+ * Portal chrome below the marketing navbar. Hides the upgrade strip on Settings
+ * (where plan lives) so stacked banners don’t shift layout while editing the plan.
  */
 export function PortalTopBanners({
   planHref,
@@ -15,13 +16,13 @@ export function PortalTopBanners({
   previewLabel,
   showPlanBanner,
 }: {
-  planHref: "/manager/plan" | "/pro/plan" | "/portal/plan";
+  planHref: string;
   showPreviewBanner: boolean;
   previewLabel: string | null;
   showPlanBanner: boolean;
 }) {
   const pathname = usePathname();
-  const onPlanPage = pathname === planHref;
+  const onPlanPage = pathname === MANAGER_PLAN_PORTAL_PATH || pathname === planHref;
   const hasBanner = showPreviewBanner || (showPlanBanner && !onPlanPage);
 
   if (!hasBanner) return null;

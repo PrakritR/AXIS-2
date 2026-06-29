@@ -10,8 +10,9 @@ const PORTAL_METRICS_SOURCE = readFileSync(
 const GLOBALS_CSS = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
 
 describe("portal mobile shell conventions", () => {
-  it("stacks ManagerPortalPageShell header on narrow screens", () => {
-    expect(PORTAL_METRICS_SOURCE).toContain("flex-col items-stretch gap-3 sm:flex-row");
+  it("keeps ManagerPortalPageShell header compact on narrow screens", () => {
+    expect(PORTAL_METRICS_SOURCE).toContain("flex-wrap items-center justify-between");
+    expect(PORTAL_METRICS_SOURCE).toContain("hideTitleOnNative = false");
   });
 
   it("uses horizontal scroll for status pills on mobile", () => {
@@ -29,6 +30,12 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain("scroll-padding-bottom: var(--portal-native-bottom-nav-inset)");
   });
 
+  it("documents native dashboard preview list spacing", () => {
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-preview-list");
+    expect(PORTAL_METRICS_SOURCE).toContain("PORTAL_DASHBOARD_STACK");
+    expect(PORTAL_METRICS_SOURCE).toContain("PortalDashboardPreviewList");
+  });
+
   it("uses native safe-area top padding on portal main content", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] #portal-main-content");
     expect(GLOBALS_CSS).toContain("padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem))");
@@ -42,10 +49,11 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain("padding-right: max(0.5rem, var(--native-safe-right))");
   });
 
-  it("sizes native assistant trigger to fit the bottom-right nav slot", () => {
+  it("sizes native bottom tab icons and assistant trigger consistently", () => {
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll a svg");
+    expect(GLOBALS_CSS).toContain("height: 1.375rem");
     expect(GLOBALS_CSS).toContain("html[data-native] .axis-assistant-nav-btn");
-    expect(GLOBALS_CSS).toContain("height: 1.5rem");
-    expect(GLOBALS_CSS).toContain("width: 1.5rem");
+    expect(GLOBALS_CSS).toMatch(/html\[data-native\] \.axis-assistant-nav-btn[\s\S]*height: 1\.375rem/);
   });
 
   it("hides Next.js dev issue badge on native", () => {

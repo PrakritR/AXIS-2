@@ -19,7 +19,6 @@ export const IN_APP_PATH_PREFIXES = [
   "/pro/",
   "/rent/",
   "/partner/",
-  "/onboard/",
   "/billing/",
 ] as const;
 

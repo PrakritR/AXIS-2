@@ -27,7 +27,6 @@ export const FREE_SUBSCRIPTION_SECTIONS = new Set([
   "payments",
   "calendar",
   "profile",
-  "plan",
   "bugs-feedback",
 ]);
 

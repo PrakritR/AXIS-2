@@ -19,7 +19,7 @@ export type PortalMoreNavItem = {
 
 function MoreGridIcon() {
   return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className="h-5 w-5 [html[data-native]_&]:h-[22px] [html[data-native]_&]:w-[22px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <circle cx="5" cy="5" r="1.75" />
       <circle cx="12" cy="5" r="1.75" />
       <circle cx="19" cy="5" r="1.75" />
@@ -40,8 +40,6 @@ type PortalNativeMoreSheetProps = {
   activeSection: string;
   showNavIcons: boolean;
 };
-
-const SETTINGS_SECTION = "profile";
 
 function MoreNavRow({
   item,
@@ -92,8 +90,6 @@ export function PortalNativeMoreSheet({
   activeSection,
   showNavIcons,
 }: PortalNativeMoreSheetProps) {
-  const settingsItem = items.find((item) => item.section === SETTINGS_SECTION);
-  const mainItems = items.filter((item) => item.section !== SETTINGS_SECTION);
   const closeSheet = () => onOpenChange(false);
 
   return (
@@ -102,13 +98,16 @@ export function PortalNativeMoreSheet({
         side="bottom"
         className="portal-native-more-sheet flex max-h-[min(85dvh,720px)] flex-col rounded-t-[1.35rem] border-border px-0 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-0"
       >
-        <SheetTitle className="sr-only">Portal sections</SheetTitle>
+        <div className="shrink-0 px-4 pb-1 pt-3">
+          <div className="mx-auto h-1 w-10 rounded-full bg-border" aria-hidden />
+          <SheetTitle className="sr-only">Portal sections</SheetTitle>
+        </div>
         <nav
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 pt-12"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 pt-1"
           aria-label="Portal sections"
         >
           <ul className="space-y-1">
-            {mainItems.map((item) => (
+            {items.map((item) => (
               <li key={item.section}>
                 <MoreNavRow
                   item={item}
@@ -120,16 +119,6 @@ export function PortalNativeMoreSheet({
             ))}
           </ul>
         </nav>
-        {settingsItem ? (
-          <div className="shrink-0 border-t border-border px-3 py-2">
-            <MoreNavRow
-              item={settingsItem}
-              active={activeSection === settingsItem.section}
-              showNavIcons={showNavIcons}
-              onNavigate={closeSheet}
-            />
-          </div>
-        ) : null}
       </SheetContent>
     </Sheet>
   );
@@ -146,7 +135,7 @@ export function PortalNativeMoreNavButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full min-w-0 flex-col items-center justify-end gap-0 px-0.5 pt-0 pb-0 text-[9px] font-semibold leading-none transition ${
+      className={`flex w-full min-w-0 items-center justify-center px-1 pt-0 pb-0 transition ${
         active ? "text-primary" : "text-muted"
       }`}
       aria-label="More portal sections"
@@ -154,7 +143,6 @@ export function PortalNativeMoreNavButton({
       <span className="shrink-0" aria-hidden>
         <MoreGridIcon />
       </span>
-      <span className="max-w-full truncate">More</span>
     </button>
   );
 }

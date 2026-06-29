@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
-import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -435,58 +435,40 @@ export function ResidentPaymentsPanel() {
     <ManagerPortalPageShell
       title="Payments"
       filterRow={
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <ManagerPortalStatusPills
-              tabs={[...tabs]}
-              activeId={tab}
-              onChange={(id) => {
-                setTab(id as PayTab);
-                setExpandedId(null);
-                setCheckout(null);
-              }}
-            />
-            <div className="glass-card rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted">
-              Unpaid balance: <span className="tabular-nums text-foreground">${(pendingTotal / 100).toFixed(2)}</span>
-            </div>
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills
+            tabs={[...tabs]}
+            activeId={tab}
+            onChange={(id) => {
+              setTab(id as PayTab);
+              setExpandedId(null);
+              setCheckout(null);
+            }}
+          />
+          <div className="inline-flex shrink-0 items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted">
+            Unpaid: <span className="ms-1 tabular-nums text-foreground">${(pendingTotal / 100).toFixed(2)}</span>
           </div>
           {tab === "pending" && unpaidAchCharges.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={selectAllUnpaidAch}>
-                Select all bank-payable
+            <>
+              <Button type="button" variant="outline" className={`shrink-0 rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`} onClick={selectAllUnpaidAch}>
+                Select all
               </Button>
               {selectedIds.size > 0 ? (
                 <Button
                   type="button"
                   variant="primary"
-                  className="rounded-full text-xs"
+                  className={`shrink-0 rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`}
                   onClick={() => {
                     setExpandedId(null);
                     void loadCheckout([...selectedIds], paymentMethod);
                   }}
                 >
-                  Pay {selectedIds.size} selected ({formatUsd(selectedTotal)})
+                  Pay {selectedIds.size}
                 </Button>
               ) : null}
-              {unpaidAchCharges.length > 1 ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="rounded-full text-xs"
-                  onClick={() => {
-                    const ids = unpaidAchCharges.map((c) => c.id);
-                    setSelectedIds(new Set(ids));
-                    setExpandedId(null);
-                    void loadCheckout(ids, paymentMethod);
-                  }}
-                >
-                  Pay all unpaid (
-                  {formatUsd(unpaidAchCharges.reduce((sum, c) => sum + centsFromLabel(c.balanceLabel), 0))})
-                </Button>
-              ) : null}
-            </div>
+            </>
           ) : null}
-        </div>
+        </ManagerPortalFilterRow>
       }
     >
       {!email ? (

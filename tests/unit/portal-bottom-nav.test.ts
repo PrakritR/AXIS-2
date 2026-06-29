@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER,
+  NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
   orderNativeBottomNavItems,
   pickNativeBottomNavItems,
   splitNativeBottomNavItems,
@@ -11,52 +13,25 @@ import {
   RESIDENT_LIMITED_PORTAL_SECTIONS,
 } from "@/lib/portals/resident-sections";
 
+function sectionIds(sections: { section: string }[]): string[] {
+  return sections.map((s) => s.section);
+}
+
 describe("orderNativeBottomNavItems", () => {
-  it("preserves input order when Settings is already last", () => {
-    const items = [
-      { section: "dashboard", label: "Dashboard" },
-      { section: "applications", label: "Applications" },
-      { section: "payments", label: "Payments" },
-      { section: "inbox", label: "Inbox" },
-      { section: "documents", label: "Documents" },
-      { section: "profile", label: "Settings" },
-    ];
-    expect(orderNativeBottomNavItems(items, "resident").map((item) => item.section)).toEqual([
-      "dashboard",
-      "applications",
-      "payments",
-      "inbox",
-      "documents",
-      "profile",
-    ]);
-  });
-
-  it("splits primary strip and overflow for the More sheet", () => {
-    const items = [
-      { section: "dashboard", label: "Dashboard" },
-      { section: "applications", label: "Applications" },
-      { section: "payments", label: "Payments" },
-      { section: "inbox", label: "Inbox" },
-      { section: "documents", label: "Documents" },
-      { section: "profile", label: "Settings" },
-    ];
-    const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
-    expect(primary.map((item) => item.section)).toEqual([
-      "dashboard",
-      "applications",
-      "payments",
-      "inbox",
-      "documents",
-    ]);
-    expect(overflow.map((item) => item.section)).toEqual(["profile"]);
-  });
-
-  it("overflows manager sections beyond the primary limit", () => {
+  it("preserves pro registry order with feedback after co-managers", () => {
     const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
-    const { primary, overflow } = splitNativeBottomNavItems(items, "pro");
-    expect(primary.length).toBe(5);
-    expect(overflow.length).toBeGreaterThan(0);
-    expect(overflow.some((item) => item.section === "profile")).toBe(true);
+    const ordered = orderNativeBottomNavItems(items, "pro").map((item) => item.section);
+    expect(ordered).toEqual(sectionIds(proPortal.sections));
+    expect(ordered.indexOf("relationships")).toBeLessThan(ordered.indexOf("bugs-feedback"));
+    expect(ordered.at(-1)).toBe("profile");
+  });
+
+  it("matches exported pro manager tab order through feedback", () => {
+    const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
+    const ordered = orderNativeBottomNavItems(items, "pro").map((item) => item.section);
+    expect(ordered.slice(0, NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER.length)).toEqual([
+      ...NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER,
+    ]);
   });
 
   it("pins Settings to the end when it is not already last", () => {
@@ -72,31 +47,57 @@ describe("orderNativeBottomNavItems", () => {
     ]);
   });
 
-  it("matches pro portal registry order", () => {
-    const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
-    expect(orderNativeBottomNavItems(items, "pro").map((item) => item.section)).toEqual(
-      proPortal.sections.map((s) => s.section),
-    );
-  });
-
-  it("matches admin portal registry order", () => {
-    const items = adminPortal.sections.map((s) => ({ section: s.section, label: s.label }));
-    expect(orderNativeBottomNavItems(items, "admin").map((item) => item.section)).toEqual(
-      adminPortal.sections.map((s) => s.section),
-    );
-  });
-
-  it("matches resident limited registry order", () => {
-    const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
-    expect(orderNativeBottomNavItems(items, "resident").map((item) => item.section)).toEqual(
-      RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => s.section),
-    );
-  });
-
-  it("matches resident approved registry order", () => {
+  it("preserves resident approved registry order (property-management pattern)", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
-    expect(orderNativeBottomNavItems(items, "resident").map((item) => item.section)).toEqual(
-      RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => s.section),
-    );
+    const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
+    expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
+    expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("services"));
+    expect(ordered.slice(0, NATIVE_BOTTOM_NAV_RESIDENT_ORDER.length)).toEqual([
+      ...NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
+    ]);
+  });
+
+  it("preserves resident limited registry order", () => {
+    const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
+    const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
+    expect(ordered).toEqual(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS));
+  });
+
+  it("preserves admin registry order", () => {
+    const items = adminPortal.sections.map((s) => ({ section: s.section, label: s.label }));
+    const ordered = orderNativeBottomNavItems(items, "admin").map((item) => item.section);
+    expect(ordered).toEqual(sectionIds(adminPortal.sections));
+    expect(ordered.at(-1)).toBe("profile");
+  });
+});
+
+describe("splitNativeBottomNavItems", () => {
+  it("returns every section in the scrollable bar with no overflow bucket", () => {
+    const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
+    const { primary, overflow } = splitNativeBottomNavItems(items, "pro");
+    expect(overflow).toEqual([]);
+    expect(primary.map((item) => item.section)).toEqual(orderNativeBottomNavItems(items, "pro").map((item) => item.section));
+    expect(primary.at(-1)?.section).toBe("profile");
+  });
+
+  it("includes all resident limited sections in the scroll strip", () => {
+    const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
+    const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
+    expect(overflow).toEqual([]);
+    expect(new Set(primary.map((item) => item.section))).toEqual(new Set(items.map((item) => item.section)));
+  });
+
+  it("includes all resident approved sections in the scroll strip", () => {
+    const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
+    const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
+    expect(overflow).toEqual([]);
+    expect(primary.map((item) => item.section)).toContain("services");
+  });
+
+  it("includes every admin section in the scroll strip", () => {
+    const items = adminPortal.sections.map((s) => ({ section: s.section, label: s.label }));
+    const { primary, overflow } = splitNativeBottomNavItems(items, "admin");
+    expect(overflow).toEqual([]);
+    expect(primary.at(-1)?.section).toBe("profile");
   });
 });

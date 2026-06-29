@@ -11,12 +11,12 @@ const route = createJsonRecordRoute({
     };
     if (user.role === "admin") return query;
     return q.or(
-      `manager_user_id.eq.${user.id},id.like.axis_mgr_avail_slots_v2_${user.id}%,id.eq.axis_admin_partner_inquiries_v1,id.eq.axis_admin_planned_events_v1`,
+      `manager_user_id.eq.${user.id},id.like.axis_mgr_avail_slots_v2_${user.id}%,id.like.axis_calendar_share_avail_${user.id}_prop_%,id.eq.axis_admin_partner_inquiries_v1,id.eq.axis_admin_planned_events_v1`,
     );
   },
   buildUpsert: (row, user) => {
     const recordType = String(row.recordType ?? row.record_type ?? "event");
-    const managerScoped = recordType === "manager_availability" || recordType === "manager_property_availability";
+    const managerScoped = recordType === "manager_availability" || recordType === "manager_property_availability" || recordType === "calendar_share_settings";
     return {
       id: row.id,
       manager_user_id: managerScoped && user.role !== "admin" ? user.id : row.managerUserId ?? row.manager_user_id ?? null,
@@ -31,7 +31,7 @@ const route = createJsonRecordRoute({
   assignOwnership: (record, user) => {
     if (user.role === "admin") return record;
     const recordType = String(record.record_type ?? "");
-    const managerScoped = recordType === "manager_availability" || recordType === "manager_property_availability";
+    const managerScoped = recordType === "manager_availability" || recordType === "manager_property_availability" || recordType === "calendar_share_settings";
     // Only stamp ownership on manager-scoped types; shared singleton records
     // (partner inquiries, planned events) keep their existing owner handling.
     return managerScoped ? { ...record, manager_user_id: user.id } : record;

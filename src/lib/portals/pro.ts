@@ -9,13 +9,8 @@ export const proPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "calendar", label: "Tours", tabs: [] },
+    { section: "calendar", label: "Calendar", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
-    {
-      section: "payments",
-      label: "Payments",
-      tabs: [],
-    },
     {
       section: "residents",
       label: "Residents",
@@ -27,6 +22,11 @@ export const proPortal: PortalDefinition = {
     {
       section: "leases",
       label: "Leases",
+      tabs: [],
+    },
+    {
+      section: "payments",
+      label: "Payments",
       tabs: [],
     },
     {
@@ -72,7 +72,6 @@ export const proPortal: PortalDefinition = {
       label: "Co-managers",
       tabs: [],
     },
-    { section: "plan", label: "Plan", tabs: [] },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Settings", tabs: [] },
   ],
@@ -82,7 +81,7 @@ export const proPortal: PortalDefinition = {
 export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: "/portal/dashboard" },
   { label: "Properties", path: "/portal/properties" },
-  { label: "Tours", path: "/portal/calendar" },
+  { label: "Calendar", path: "/portal/calendar" },
   { label: "Applications", path: "/portal/applications" },
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Leases", path: "/portal/leases" },
@@ -92,7 +91,6 @@ export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Documents", path: "/portal/documents/income-documents" },
   { label: "Finances", path: "/portal/financials/income" },
   { label: "Co-managers", path: "/portal/relationships" },
-  { label: "Plan", path: "/portal/plan" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
   { label: "Settings", path: "/portal/profile" },
 ] as const;

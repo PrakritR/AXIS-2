@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import {
+  PortalDashboardCompactRow,
+  PortalDashboardPreviewList,
+  PORTAL_DASHBOARD_SECTION_CARD,
+  PORTAL_DASHBOARD_STACK,
+  formatCompactPlacementLine,
+} from "@/components/portal/portal-metrics";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { readInboxMessages, syncInboxMessagesFromServer } from "@/lib/demo-admin-partner-inbox";
 import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
@@ -232,8 +239,8 @@ export function AdminDashboard() {
     pendingProps > 0 || leasesInAdminReview > 0 || inboxUnread > 0 || pendingMeetingCount > 0 || openFeedbackCount > 0;
 
   return (
-    <div className={`${PORTAL_SECTION_SURFACE} space-y-5`}>
-      <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-foreground">Dashboard</h1>
+    <div className={`${PORTAL_SECTION_SURFACE} ${PORTAL_DASHBOARD_STACK}`}>
+      <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-foreground [html[data-native]_&]:text-[1.2rem]">Dashboard</h1>
 
       {hasBanners && (
         <div className="space-y-2">
@@ -313,120 +320,110 @@ export function AdminDashboard() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
+      <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
           <SectionHeader title="Properties pending review" href="/admin/properties" linkLabel="Properties →" />
-          {pendingPropertyRows.length === 0 ? (
-            <p className="mt-4 text-sm text-muted">No properties waiting for admin review.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {pendingPropertyRows.map((row) => (
-                <li key={row.adminRefId} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      {row.buildingName || row.unitLabel || "Listing"}
-                    </p>
-                    <p className="truncate text-xs text-muted">{row.address || row.neighborhood || "Pending submission"}</p>
-                  </div>
-                  <span className="portal-badge-pending shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
-                    Review
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <PortalDashboardPreviewList
+            items={pendingPropertyRows}
+            href="/admin/properties"
+            emptyMessage="No properties waiting for admin review."
+            keyForItem={(row) => row.adminRefId}
+            renderRow={(row) => (
+              <PortalDashboardCompactRow
+                title={row.buildingName || row.unitLabel || "Listing"}
+                subtitle={row.address || row.neighborhood || "Pending submission"}
+                badge={
+                  <span className="portal-badge-pending rounded-full px-2 py-0.5 text-[10px] font-semibold">Review</span>
+                }
+              />
+            )}
+          />
         </div>
 
-        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
+        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
           <SectionHeader title="Leases in admin review" href="/admin/leases" linkLabel="Leases →" />
-          {adminReviewLeases.length === 0 ? (
-            <p className="mt-4 text-sm text-muted">No leases waiting for admin review.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {adminReviewLeases.map((row) => (
-                <li key={row.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{row.residentName || row.residentEmail}</p>
-                    <p className="truncate text-xs text-muted">
-                      {row.unit || row.stageLabel || "Unit pending"} · {row.signedRentLabel || "Rent pending"}
-                    </p>
-                  </div>
-                  <span className="portal-badge-info shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
-                    Admin review
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <PortalDashboardPreviewList
+            items={adminReviewLeases}
+            href="/admin/leases"
+            emptyMessage="No leases waiting for admin review."
+            keyForItem={(row) => row.id}
+            renderRow={(row) => (
+              <PortalDashboardCompactRow
+                title={row.residentName || row.residentEmail}
+                subtitle={formatCompactPlacementLine(row.unit || row.stageLabel || "Unit pending", row.signedRentLabel || "Rent pending")}
+                badge={
+                  <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Admin review</span>
+                }
+              />
+            )}
+          />
         </div>
 
-        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
+        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
           <SectionHeader title="Inbox" href="/admin/inbox/unopened" linkLabel="Inbox →" />
-          {inboxUnread === 0 ? (
-            <p className="mt-4 text-sm text-muted">No unread messages — inbox is clear.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {inboxPreview.map((message) => (
-                <li key={message.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{message.name || message.email}</p>
-                    <p className="truncate text-xs text-muted">{message.topic || message.body.slice(0, 80)}</p>
-                  </div>
-                  <span className="portal-badge-info shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
-                    Unread
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <PortalDashboardPreviewList
+            items={inboxPreview}
+            href="/admin/inbox/unopened"
+            emptyMessage="No unread messages — inbox is clear."
+            keyForItem={(message) => message.id}
+            renderRow={(message) => (
+              <PortalDashboardCompactRow
+                title={message.name || message.email}
+                subtitle={message.topic || message.body.slice(0, 80)}
+                badge={
+                  <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Unread</span>
+                }
+              />
+            )}
+          />
         </div>
 
-        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
+        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
           <SectionHeader title="Feedback" href="/admin/bugs-feedback" linkLabel="Feedback →" />
-          {openFeedback.length === 0 ? (
-            <p className="mt-4 text-sm text-muted">
-              No open feedback — {feedbackTotal} submission{feedbackTotal === 1 ? "" : "s"} on file.
-            </p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {openFeedback.map((row) => (
-                <li key={row.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{row.title || "Untitled report"}</p>
-                    <p className="truncate text-xs text-muted">
-                      {row.reporterName || row.reporterEmail} · {row.type === "bug" ? "Bug" : "Feedback"}
-                    </p>
-                  </div>
-                  <span className="portal-badge-danger shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold">
+          <PortalDashboardPreviewList
+            items={openFeedback}
+            href="/admin/bugs-feedback"
+            emptyMessage={`No open feedback — ${feedbackTotal} submission${feedbackTotal === 1 ? "" : "s"} on file.`}
+            keyForItem={(row) => row.id}
+            renderRow={(row) => (
+              <PortalDashboardCompactRow
+                title={row.title || "Untitled report"}
+                subtitle={`${row.reporterName || row.reporterEmail} · ${row.type === "bug" ? "Bug" : "Feedback"}`}
+                badge={
+                  <span className="portal-badge-pending rounded-full px-2 py-0.5 text-[10px] font-semibold">
                     {row.status === "reviewing" ? "Reviewing" : "Open"}
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
+                }
+              />
+            )}
+          />
         </div>
       </div>
 
       {upcomingMeetings.length > 0 && (
-        <div className="surface-panel rounded-2xl border border-border p-5 shadow-[var(--shadow-sm)]">
+        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
           <SectionHeader title="Upcoming meetings" href="/admin/events" linkLabel="Meetings →" />
-          <ul className="mt-3 space-y-2">
-            {upcomingMeetings.slice(0, 6).map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-foreground">{m.label}</p>
-                  <p className="text-xs text-muted">{fmt(m.start)}</p>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                    m.kind === "pending" ? "portal-badge-pending" : "portal-badge-success"
-                  }`}
-                >
-                  {m.kind === "pending" ? "Pending" : "Confirmed"}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <PortalDashboardPreviewList
+            items={upcomingMeetings}
+            href="/admin/events"
+            emptyMessage="No upcoming meetings."
+            keyForItem={(m) => m.id}
+            renderRow={(m) => (
+              <PortalDashboardCompactRow
+                title={m.label}
+                subtitle={fmt(m.start)}
+                badge={
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      m.kind === "pending" ? "portal-badge-pending" : "portal-badge-success"
+                    }`}
+                  >
+                    {m.kind === "pending" ? "Pending" : "Confirmed"}
+                  </span>
+                }
+              />
+            )}
+          />
         </div>
       )}
     </div>

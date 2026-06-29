@@ -23,57 +23,66 @@ function expectContiguousBlock(sections: string[], block: string[], anchorAfter:
 }
 
 describe("portal nav order parity (web registry = native bottom bar)", () => {
-  it("pro native order matches pro registry", () => {
+  it("pro native order matches web registry through feedback after co-managers", () => {
     const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
-    expect(sectionIds(orderNativeBottomNavItems(items, "pro"))).toEqual(sectionIds(proPortal.sections));
+    const ordered = orderNativeBottomNavItems(items, "pro").map((item) => item.section);
+    expect(ordered).toEqual(sectionIds(proPortal.sections));
+    expect(ordered.indexOf("relationships")).toBeLessThan(ordered.indexOf("bugs-feedback"));
+    expect(ordered.at(-1)).toBe("profile");
   });
 
-  it("admin native order matches admin registry", () => {
+  it("admin native order matches web registry with settings last", () => {
     const items = adminPortal.sections.map((s) => ({ section: s.section, label: s.label }));
-    expect(sectionIds(orderNativeBottomNavItems(items, "admin"))).toEqual(sectionIds(adminPortal.sections));
+    const ordered = orderNativeBottomNavItems(items, "admin").map((item) => item.section);
+    expect(ordered).toEqual(sectionIds(adminPortal.sections));
+    expect(ordered.at(-1)).toBe("profile");
   });
 
-  it("resident limited native order matches registry", () => {
+  it("resident limited native order matches web registry", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
-    expect(sectionIds(orderNativeBottomNavItems(items, "resident"))).toEqual(
-      sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS),
-    );
+    const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
+    expect(ordered).toEqual(sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS));
+    expect(ordered.at(-1)).toBe("profile");
   });
 
-  it("resident approved native order matches registry", () => {
+  it("resident approved native order matches property-management pattern", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
-    expect(sectionIds(orderNativeBottomNavItems(items, "resident"))).toEqual(
-      sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS),
-    );
+    const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
+    expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
+    expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("services"));
+    expect(ordered.indexOf("services")).toBeLessThan(ordered.indexOf("inbox"));
+    expect(ordered.indexOf("financials")).toBeLessThan(ordered.indexOf("bugs-feedback"));
   });
 });
 
-describe("pro portal nav grouping (free → paid block → account → settings)", () => {
+describe("pro portal nav grouping (free → resident block → paid workspace → account → settings)", () => {
   const sections = sectionIds(proPortal.sections);
-  const paidBlock = [
-    "residents",
-    "leases",
-    "services",
-    "inbox",
-    "documents",
-    "financials",
-    "relationships",
-  ];
+  const residentBlock = ["residents", "leases", "payments"];
+  const paidBlock = ["services", "inbox", "documents", "financials", "relationships"];
 
-  it("places payments before the paid block", () => {
-    expect(sections.indexOf("payments")).toBeLessThan(sections.indexOf("residents"));
+  it("places residents and leases before payments", () => {
+    expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("leases"));
+    expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("payments"));
   });
 
-  it("groups paid sections contiguously between payments and plan", () => {
-    expectContiguousBlock(sections, paidBlock, "payments", "plan");
+  it("groups resident block contiguously after applications", () => {
+    expectContiguousBlock(sections, residentBlock, "applications", "services");
   });
 
-  it("ends with plan, feedback, and settings", () => {
-    expect(sections.slice(-3)).toEqual(["plan", "bugs-feedback", "profile"]);
+  it("groups paid sections contiguously between payments and feedback", () => {
+    expectContiguousBlock(sections, paidBlock, "payments", "bugs-feedback");
   });
 
-  it("free operational sections precede the paid block", () => {
-    expect(sections.slice(0, 5)).toEqual(["dashboard", "properties", "calendar", "applications", "payments"]);
+  it("places feedback after co-managers and before settings", () => {
+    expect(sections.slice(-3)).toEqual(["relationships", "bugs-feedback", "profile"]);
+  });
+
+  it("does not expose plan as a top-level nav section", () => {
+    expect(sections).not.toContain("plan");
+  });
+
+  it("free operational sections precede the resident block", () => {
+    expect(sections.slice(0, 5)).toEqual(["dashboard", "properties", "calendar", "applications", "residents"]);
   });
 });
 
@@ -88,9 +97,15 @@ describe("resident portal nav grouping", () => {
     }
   });
 
-  it("approved: groups locked sections between move-in and feedback", () => {
+  it("approved: follows property-management block order after move-in", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
     expectContiguousBlock(sections, ["services", "inbox", "documents", "financials"], "move-in", "bugs-feedback");
+  });
+
+  it("approved: mirrors pro free block then paid workspace pattern", () => {
+    const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
+    expect(sections.slice(0, 4)).toEqual(["dashboard", "applications", "payments", "move-in"]);
+    expect(sections.slice(-2)).toEqual(["bugs-feedback", "profile"]);
   });
 });
 

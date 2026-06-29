@@ -2,6 +2,10 @@
 
 export type PlanTierId = "free" | "pro" | "business";
 
+export function isPlanTierId(tier: string): tier is PlanTierId {
+  return tier === "free" || tier === "pro" || tier === "business";
+}
+
 export type PlanPriceBlock = {
   headline: string;
   period: string | null;

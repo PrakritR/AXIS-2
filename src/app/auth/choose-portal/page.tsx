@@ -1,26 +1,32 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { AuthFooterLink, AuthPageHeader, AuthRoleTabs } from "@/components/auth/auth-mobile-primitives";
+import { AuthBackLink, AuthPageHeader, AuthRoleStack } from "@/components/auth/auth-mobile-primitives";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import type { AuthRoleIconName } from "@/components/auth/auth-role-icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
-const ROLE_META: Record<AuthRole, { label: string; icon: AuthRoleIconName; tone: "blue" | "steel" }> = {
+const ROLE_META: Record<
+  AuthRole,
+  { label: string; hint: string; icon: AuthRoleIconName; tone: "blue" | "steel" }
+> = {
   admin: {
     label: "Admin",
+    hint: "Platform administration",
     icon: "admin",
     tone: "steel",
   },
   manager: {
     label: "Property",
+    hint: "Manage properties & tenants",
     icon: "manager",
     tone: "blue",
   },
   resident: {
     label: "Resident",
+    hint: "Rent, pay & apply",
     icon: "resident",
     tone: "blue",
   },
@@ -58,11 +64,12 @@ function ChoosePortalForm() {
     };
   }, []);
 
-  const tabOptions = useMemo(
+  const stackOptions = useMemo(
     () =>
       (roles ?? []).map((role) => ({
         id: role,
         label: ROLE_META[role].label,
+        hint: ROLE_META[role].hint,
         icon: ROLE_META[role].icon,
         tone: ROLE_META[role].tone,
       })),
@@ -103,32 +110,24 @@ function ChoosePortalForm() {
 
   return (
     <AuthCard>
-      <AuthPageHeader title="Choose a portal" accent={false} />
+      <AuthPageHeader showLogo title="Choose a portal" accent={false} />
 
       {error ? <p className="mt-4 text-center text-sm text-rose-600">{error}</p> : null}
 
       {roles === null ? (
-        <p className="auth-role-tabs mt-5 text-center text-sm text-muted">Loading…</p>
+        <p className="auth-role-stack text-center text-sm text-muted">Loading…</p>
       ) : roles.length === 0 ? (
-        <p className="auth-role-tabs mt-5 text-center text-sm text-muted">No portal roles found.</p>
+        <p className="auth-role-stack text-center text-sm text-muted">No portal roles found.</p>
       ) : (
-        <AuthRoleTabs
-          options={tabOptions}
+        <AuthRoleStack
+          options={stackOptions}
           onSelect={(id) => void choose(id as AuthRole)}
           disabled={busy !== null}
           busyId={busy}
         />
       )}
 
-      <button
-        type="button"
-        className="auth-back-link mt-5 block w-full text-center text-[13px] font-semibold text-muted hover:text-foreground sm:mt-6 sm:text-sm"
-        onClick={() => void signOut()}
-      >
-        Sign out
-      </button>
-
-      <AuthFooterLink href="/auth/sign-in">Back to sign-in</AuthFooterLink>
+      <AuthBackLink onClick={() => void signOut()}>Sign out</AuthBackLink>
     </AuthCard>
   );
 }

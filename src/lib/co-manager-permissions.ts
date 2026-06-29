@@ -139,7 +139,6 @@ export function countCoManagerPermissions(permissions: CoManagerPermissions | un
 export const CO_MANAGER_ALWAYS_ALLOWED_SECTIONS = new Set([
   "dashboard",
   "profile",
-  "plan",
   "bugs-feedback",
 ]);
 

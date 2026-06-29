@@ -248,6 +248,7 @@ function SignInForm() {
       <div className="mt-5 sm:mt-6">
         <GoogleSignInButton
           nextPath={oauthNext}
+          intent={intent}
           viaContinue={!usesDirectOAuthReturn(oauthNext)}
           disabled={busy}
         />

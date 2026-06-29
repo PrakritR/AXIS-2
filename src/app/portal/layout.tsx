@@ -14,6 +14,7 @@ import {
   PORTAL_SHELL_ROOT_CLASS,
 } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
+import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
   const [nav, { profile }] = await Promise.all([buildProPortalDefinition(), getServerSessionProfile()]);
@@ -27,7 +28,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
         <AccountLinksSync />
         <div className="shrink-0">
           <PortalTopBanners
-            planHref="/portal/plan"
+            planHref={MANAGER_PLAN_PORTAL_URL}
             showPreviewBanner={nav.showPreviewBanner}
             previewLabel={nav.previewLabel}
             showPlanBanner={nav.showPlanBanner}

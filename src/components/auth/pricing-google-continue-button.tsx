@@ -3,19 +3,18 @@
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { managerPricingOauthPath } from "@/lib/auth/manager-pricing-oauth-path";
 import { persistManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import { persistOAuthSignInContext } from "@/lib/auth/oauth-next-cookie";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
 
 export function PricingGoogleContinueButton({
   tier,
   billing,
-  discountPercent,
   promo,
   disabled = false,
   returnSurface = "partner-pricing",
 }: {
   tier: PlanTierId;
   billing: "monthly" | "annual";
-  discountPercent?: number | null;
   promo?: string;
   disabled?: boolean;
   returnSurface?: "mobile-plan" | "partner-pricing";
@@ -23,15 +22,14 @@ export function PricingGoogleContinueButton({
   const nextPath = managerPricingOauthPath({
     tier,
     billing,
-    discountPercent,
     promo,
   });
 
   const onBeforeOAuth = () => {
+    persistOAuthSignInContext({ intent: "manager", nextPath: nextPath });
     persistManagerPricingOffer({
       tier,
       billing,
-      discountPercent: discountPercent ?? undefined,
       promo,
       returnSurface,
     });

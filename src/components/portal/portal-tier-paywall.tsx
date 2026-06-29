@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 
 const primaryCta =
   "inline-flex min-h-[44px] items-center justify-center rounded-full bg-primary px-8 text-sm font-semibold text-primary-foreground shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:brightness-[1.04]";
@@ -35,7 +36,7 @@ export function PortalTierPaywall({
             <span className="font-semibold text-foreground">Business</span> to unlock residents, leases, documents,
             finances, services, inbox, and co-managers. Free includes properties, applications, tours, and payments.
           </p>
-          <Link href={`${basePath}/plan`} className={primaryCta}>
+          <Link href={MANAGER_PLAN_PORTAL_URL} className={primaryCta}>
             View plans &amp; upgrade
           </Link>
           <p className="text-xs text-muted">

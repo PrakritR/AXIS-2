@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
+  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   PORTAL_SECTION_SURFACE,
@@ -464,23 +465,26 @@ export function ManagerFinancesPanel({
   })();
 
   return (
-    <ManagerPortalPageShell title="Finances">
-      <div className="mb-4 flex flex-wrap gap-2">
-        {FINANCE_TABS.map((tab) => (
-          <Link
-            key={tab.id}
-            href={`${basePath}/financials/${tab.id}`}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-              tabId === tab.id
-                ? "bg-foreground text-background"
-                : "border border-border bg-card text-foreground/80 hover:bg-accent/40"
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
-
+    <ManagerPortalPageShell
+      title="Finances"
+      filterRow={
+        <ManagerPortalFilterRow>
+          {FINANCE_TABS.map((tab) => (
+            <Link
+              key={tab.id}
+              href={`${basePath}/financials/${tab.id}`}
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
+                tabId === tab.id
+                  ? "bg-foreground text-background"
+                  : "border border-border bg-card text-foreground/80 hover:bg-accent/40"
+              }`}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </ManagerPortalFilterRow>
+      }
+    >
       <div className={`${PORTAL_SECTION_SURFACE} space-y-5 p-4 sm:p-5`}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <ReportFilterBar

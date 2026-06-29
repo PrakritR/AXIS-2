@@ -9,6 +9,7 @@ import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -16,6 +17,7 @@ import {
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  PortalResponsiveDataView,
   PortalTableDetailActions,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -191,7 +193,137 @@ export function PortalInboxMessageTable({
   const { showToast } = useAppUi();
   const [replyDraftById, setReplyDraftById] = useState<Record<string, string>>({});
   const [replyBusyId, setReplyBusyId] = useState<string | null>(null);
-  return (
+
+  const renderExpandedContent = (row: PortalInboxTableRow, detailText: string | undefined, extra: ReactNode) => {
+    const hasMarkRead = Boolean(!row.read && onMarkRead);
+    return (
+      <>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Conversation</p>
+        <div className="mt-2 space-y-3">
+          {(getThreadMessages?.(row) ?? [
+            {
+              id: `${row.id}-root`,
+              from: row.name,
+              body: (detailText ?? "").trim() || "—",
+              at: row.whenLabel,
+            },
+          ]).map((msg) => (
+            <div key={msg.id} className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
+              <p className="text-[11px] font-semibold text-foreground">{msg.from}</p>
+              <p className="text-[10px] text-muted">{msg.at}</p>
+              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-muted">{msg.body}</p>
+            </div>
+          ))}
+        </div>
+        {onReply ? (
+          <div className="mt-4">
+            <Textarea
+              rows={3}
+              placeholder="Write a reply…"
+              value={replyDraftById[row.id] ?? ""}
+              onChange={(e) => setReplyDraftById((prev) => ({ ...prev, [row.id]: e.target.value }))}
+              className="text-sm"
+            />
+          </div>
+        ) : null}
+        <PortalTableDetailActions>
+          {hasMarkRead ? (
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onMarkRead?.(row.id)}>
+              Mark read
+            </Button>
+          ) : null}
+          {extra}
+          {onReply ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              disabled={replyBusyId === row.id || !(replyDraftById[row.id] ?? "").trim()}
+              onClick={() => {
+                const text = (replyDraftById[row.id] ?? "").trim();
+                if (!text) return;
+                setReplyBusyId(row.id);
+                void Promise.resolve(onReply(row, text))
+                  .then(() => {
+                    setReplyDraftById((prev) => ({ ...prev, [row.id]: "" }));
+                    showToast("Reply sent.");
+                  })
+                  .catch(() => showToast("Could not send reply."))
+                  .finally(() => setReplyBusyId(null));
+              }}
+            >
+              {replyBusyId === row.id ? "Sending…" : "Send reply"}
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply sent.")}>
+              Reply
+            </Button>
+          )}
+        </PortalTableDetailActions>
+      </>
+    );
+  };
+
+  const mobileCards = (
+    <>
+      {rows.map((row) => {
+        const detailText = getDetailBody?.(row);
+        const rowExpandable = Boolean(onToggleExpand);
+        const isExpanded = expandedId === row.id && rowExpandable;
+        const hasMarkRead = Boolean(!row.read && onMarkRead);
+        const extra = renderExtraActions?.(row);
+
+        return (
+          <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+            <button
+              type="button"
+              className="w-full text-left"
+              onClick={() => (rowExpandable ? onToggleExpand?.(row.id) : undefined)}
+              disabled={!rowExpandable}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className={`truncate font-semibold text-foreground ${!row.read ? "" : "text-foreground/90"}`}>
+                    {!row.read ? "● " : ""}
+                    {row.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs font-medium text-foreground">{row.topic}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-muted">{row.preview}</p>
+                </div>
+                <p className="shrink-0 text-[11px] text-muted">{row.whenLabel}</p>
+              </div>
+            </button>
+            {!rowExpandable && (hasMarkRead || extra) ? (
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                {hasMarkRead ? (
+                  <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onMarkRead?.(row.id)}>
+                    Mark read
+                  </Button>
+                ) : null}
+                {extra}
+              </div>
+            ) : null}
+            {isExpanded ? (
+              <div className="mt-3 border-t border-border pt-3">{renderExpandedContent(row, detailText, extra)}</div>
+            ) : rowExpandable ? (
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => onToggleExpand?.(row.id)}
+                >
+                  {isExpanded ? "Less" : "Open"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </>
+  );
+
+  const desktopTable = (
     <div className={PORTAL_INBOX_TABLE_WRAP}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left text-sm">
@@ -261,73 +393,7 @@ export function PortalInboxMessageTable({
                   {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
                       <td colSpan={detailColSpan} className={`${PORTAL_TABLE_DETAIL_CELL} text-left`}>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Conversation</p>
-                        <div className="mt-2 space-y-3">
-                          {(getThreadMessages?.(row) ?? [
-                            {
-                              id: `${row.id}-root`,
-                              from: row.name,
-                              body: (detailText ?? "").trim() || "—",
-                              at: row.whenLabel,
-                            },
-                          ]).map((msg) => (
-                            <div key={msg.id} className="rounded-xl border border-border bg-accent/20 px-3 py-2.5">
-                              <p className="text-[11px] font-semibold text-foreground">{msg.from}</p>
-                              <p className="text-[10px] text-muted">{msg.at}</p>
-                              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-muted">{msg.body}</p>
-                            </div>
-                          ))}
-                        </div>
-                        {onReply ? (
-                          <div className="mt-4">
-                            <Textarea
-                              rows={3}
-                              placeholder="Write a reply…"
-                              value={replyDraftById[row.id] ?? ""}
-                              onChange={(e) => setReplyDraftById((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                              className="text-sm"
-                            />
-                          </div>
-                        ) : null}
-                        <PortalTableDetailActions>
-                          {hasMarkRead ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => onMarkRead?.(row.id)}
-                            >
-                              Mark read
-                            </Button>
-                          ) : null}
-                          {extra}
-                          {onReply ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              disabled={replyBusyId === row.id || !(replyDraftById[row.id] ?? "").trim()}
-                              onClick={() => {
-                                const text = (replyDraftById[row.id] ?? "").trim();
-                                if (!text) return;
-                                setReplyBusyId(row.id);
-                                void Promise.resolve(onReply(row, text))
-                                  .then(() => {
-                                    setReplyDraftById((prev) => ({ ...prev, [row.id]: "" }));
-                                    showToast("Reply sent.");
-                                  })
-                                  .catch(() => showToast("Could not send reply."))
-                                  .finally(() => setReplyBusyId(null));
-                              }}
-                            >
-                              {replyBusyId === row.id ? "Sending…" : "Send reply"}
-                            </Button>
-                          ) : (
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply sent.")}>
-                              Reply
-                            </Button>
-                          )}
-                        </PortalTableDetailActions>
+                        {renderExpandedContent(row, detailText, extra)}
                       </td>
                     </tr>
                   ) : null}
@@ -339,4 +405,6 @@ export function PortalInboxMessageTable({
       </div>
     </div>
   );
+
+  return <PortalResponsiveDataView mobile={mobileCards} desktop={desktopTable} />;
 }

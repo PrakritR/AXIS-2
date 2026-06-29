@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 
-/** Shown for Free-tier property portal users — links to Plan where they can choose Pro or Business. */
-export function ManagerPlanBanner({ planHref = "/portal/plan" }: { planHref?: string }) {
+/** Shown for Free-tier property portal users — links to Billing in Settings. */
+export function ManagerPlanBanner({ planHref = MANAGER_PLAN_PORTAL_URL }: { planHref?: string }) {
   return (
     <div className="shrink-0 border-b border-amber-300 bg-[#fffbeb] px-[max(1rem,env(safe-area-inset-left,0px))] py-2.5 pe-[max(1rem,env(safe-area-inset-right,0px))] text-center text-xs leading-snug text-amber-950 sm:text-sm lg:px-8">
       <p className="font-medium">

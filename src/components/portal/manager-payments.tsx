@@ -7,7 +7,9 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
+  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
@@ -34,7 +36,8 @@ import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import {
-  PaymentAutomationSettingsPanel,
+  ChargeRemindersModal,
+  ReminderSettingsModal,
   ScheduledMessageEditModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
@@ -75,6 +78,7 @@ export function ManagerPayments() {
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
+  const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
 
@@ -282,6 +286,24 @@ export function ManagerPayments() {
   const filterRow = (
     <ManagerPortalFilterRow>
       <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
+      <PortalStripeConnectPanel basePath="/portal" variant="inline" />
+      <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
+        <PortalPropertyFilterPill
+          propertyOptions={propertyOptions}
+          propertyValue={propertyFilter}
+          onPropertyChange={(nextProperty) => {
+            setPropertyFilter(nextProperty);
+            setResidentFilter("");
+          }}
+          residents={true}
+          residentOptions={residentOptions}
+          residentValue={activeResidentFilter}
+          onResidentChange={setResidentFilter}
+        />
+        <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setReminderSettingsOpen(true)}>
+          Reminders
+        </Button>
+      </div>
     </ManagerPortalFilterRow>
   );
 
@@ -290,18 +312,23 @@ export function ManagerPayments() {
       title="Payments"
       titleAside={
         <>
-          <PortalPropertyFilterPill
-            propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={(nextProperty) => {
-              setPropertyFilter(nextProperty);
-              setResidentFilter("");
-            }}
-            residents={true}
-            residentOptions={residentOptions}
-            residentValue={activeResidentFilter}
-            onResidentChange={setResidentFilter}
-          />
+          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={(nextProperty) => {
+                setPropertyFilter(nextProperty);
+                setResidentFilter("");
+              }}
+              residents={true}
+              residentOptions={residentOptions}
+              residentValue={activeResidentFilter}
+              onResidentChange={setResidentFilter}
+            />
+            <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setReminderSettingsOpen(true)}>
+              Auto reminders
+            </Button>
+          </div>
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
             Add payment
           </Button>
@@ -309,33 +336,24 @@ export function ManagerPayments() {
       }
       filterRow={filterRow}
     >
-      <div className="mb-8">
-        <PortalStripeConnectPanel basePath="/portal" variant="embedded" />
-      </div>
-      {reminderSettings ? (
-        <div id="payment-reminder-settings" className="mb-6">
-          <PaymentAutomationSettingsPanel
-            variant="payments"
-            settings={reminderSettings}
-            onSaved={(next) => {
-              setReminderSettings(next);
-              void reloadSchedule();
-            }}
-          />
-        </div>
-      ) : null}
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}
         activeBucket={bucket}
         scheduledMessages={scheduledMessages}
-        schedulePortalBase={portalBase}
         onScheduleEdit={setScheduleEdit}
-        onReminderSettings={() => {
-          document.getElementById("payment-reminder-settings")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }}
+        onOpenReminderSettings={() => setReminderSettingsOpen(true)}
         onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
+      />
+      <ReminderSettingsModal
+        open={reminderSettingsOpen}
+        onClose={() => setReminderSettingsOpen(false)}
+        settings={reminderSettings}
+        onSaved={(next) => {
+          setReminderSettings(next);
+          void reloadSchedule();
+        }}
       />
       <ScheduledMessageEditModal
         open={Boolean(scheduleEdit)}

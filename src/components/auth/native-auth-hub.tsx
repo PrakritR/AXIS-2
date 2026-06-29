@@ -341,7 +341,7 @@ function NativeAuthHubInner() {
   if (checkoutClientSecret) {
     return (
       <AuthCard wide>
-        <AuthBrandHeader title="Axis" subtitle="Add payment method" />
+        <AuthBrandHeader subtitle="Add payment method" />
         <p className="mt-2 text-center text-xs text-muted">
           {selectedTier.label} · {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then {selectedPrice.headline}
           {selectedPrice.period ?? ""}
@@ -369,19 +369,19 @@ function NativeAuthHubInner() {
   return (
     <AuthCard wide={isCreate}>
       <div className="native-auth-hub">
-        <AuthBrandHeader
-          title="Axis"
-          subtitle={mode === "create" && role === "manager" ? "Create your account" : undefined}
-        />
+        <AuthBrandHeader />
 
-        <div className="mt-4">
+        <div className="native-auth-hub-toggle-row mt-3">
           <AuthModeToggle mode={mode} onChange={setMode} disabled={locked} />
         </div>
 
         {mode === "sign-in" ? (
           <>
+            <div className="native-auth-hub-toggle-row mt-3">
+              <RoleToggle role={role} onChange={setRole} disabled={locked} />
+            </div>
             <div className="mt-4">
-              <GoogleSignInButton nextPath="" disabled={locked} />
+              <GoogleSignInButton nextPath="" intent={role} disabled={locked} />
             </div>
             <div className="my-4">
               <AuthDivider label="or email" />

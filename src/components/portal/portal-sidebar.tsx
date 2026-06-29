@@ -4,7 +4,6 @@ import { AxisAssistantNavButton, useHasAxisAssistant } from "@/components/portal
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import {
-  PortalNativeMoreNavButton,
   PortalNativeMoreSheet,
   type PortalMoreNavItem,
 } from "@/components/portal/portal-native-more-sheet";
@@ -13,7 +12,8 @@ import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
-import { orderNativeBottomNavItems, splitNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import { shouldOpenNativeSectionsSheet } from "@/lib/native/open-portal-sections-sheet";
+import { orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
 import { observeNativeBottomNavInset } from "@/lib/native/sync-portal-bottom-nav-inset";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
 import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
@@ -213,19 +213,20 @@ export function PortalSidebar({
     return false;
   };
 
-  const nativeBottomNavItems = useMemo(
+  const nativeBottomNavAllItems = useMemo(
     () => (showNativeChrome ? orderNativeBottomNavItems(navItems, definition.kind) : []),
     [definition.kind, navItems, showNativeChrome],
   );
-  const { primary: nativePrimaryNavItems, overflow: nativeOverflowNavItems } = useMemo(
-    () => (showNativeChrome ? splitNativeBottomNavItems(navItems, definition.kind) : { primary: [], overflow: [] }),
-    [definition.kind, navItems, showNativeChrome],
+
+  const nativeBottomNavItems = useMemo(
+    () => nativeBottomNavAllItems.filter((item) => !isSectionLocked(item.section)),
+    [nativeBottomNavAllItems, showManagerTierLocks, showResidentTierLocks, subscriptionTier],
   );
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
   const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);
   const bottomNavScrollRef = useRef<HTMLDivElement>(null);
   const topNavScrollRef = useRef<HTMLDivElement>(null);
-  const moreActive = nativeOverflowNavItems.some((item) => item.section === activeSection);
+  const bottomNavTouchRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     return observeNativeBottomNavInset(bottomNavEl, showNativeChrome);
@@ -237,7 +238,7 @@ export function PortalSidebar({
     if (!strip) return;
     const activeEl = strip.querySelector<HTMLElement>(`[data-native-nav-section="${activeSection}"]`);
     activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [activeSection, nativePrimaryNavItems, showNativeChrome]);
+  }, [activeSection, nativeBottomNavItems, showNativeChrome]);
 
   useEffect(() => {
     if (showNativeChrome) return;
@@ -249,14 +250,14 @@ export function PortalSidebar({
 
   const moreSheetItems: PortalMoreNavItem[] = useMemo(
     () =>
-      nativeBottomNavItems.map((item) => ({
+      nativeBottomNavAllItems.map((item) => ({
         section: item.section,
         label: item.label,
         href: item.href,
         locked: isSectionLocked(item.section),
         count: navCounts[item.section] ?? 0,
       })),
-    [nativeBottomNavItems, navCounts, showManagerTierLocks, showResidentTierLocks, subscriptionTier],
+    [nativeBottomNavAllItems, navCounts, showManagerTierLocks, showResidentTierLocks, subscriptionTier],
   );
 
   const renderMobileNavLink = (
@@ -279,7 +280,7 @@ export function PortalSidebar({
               ? portalNavClick(router, s.href, { preferFullNavigation: true })
               : portalNavClick(router, s.href)
           }
-          className={`flex w-[3.5rem] shrink-0 snap-center flex-col items-center justify-end gap-0 px-0.5 pt-0 pb-0 text-[9px] font-semibold leading-none transition sm:w-[3.65rem] ${
+          className={`flex w-[2.75rem] shrink-0 snap-center flex-col items-center justify-end px-1 pt-0 pb-0 transition sm:w-[2.85rem] ${
             active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
           }`}
           aria-label={
@@ -291,12 +292,15 @@ export function PortalSidebar({
           }
         >
           {showNavIcons ? (
-            <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-100"}`} aria-hidden>
+            <span className={`relative shrink-0 ${locked ? "opacity-60" : "opacity-100"}`} aria-hidden>
               <PortalNavIcon section={s.section} />
+              {!locked && count > 0 ? (
+                <span className="absolute -top-1 -right-1.5">
+                  <PortalNavCountBadge count={count} />
+                </span>
+              ) : null}
             </span>
           ) : null}
-          <span className="max-w-full truncate">{s.label}</span>
-          {!locked && count > 0 ? <PortalNavCountBadge count={count} /> : null}
         </Link>
       );
     }
@@ -409,36 +413,63 @@ export function PortalSidebar({
       </div>
 
       <PortalNativeMoreSheet
-        open={moreOpen}
-        onOpenChange={setMoreOpen}
+        open={sectionsSheetOpen}
+        onOpenChange={setSectionsSheetOpen}
         items={moreSheetItems}
         activeSection={activeSection}
         showNavIcons={showNavIcons}
       />
 
-      {showNativeChrome && nativePrimaryNavItems.length > 0 && isClient
+      {showNativeChrome && nativeBottomNavItems.length > 0 && isClient
         ? createPortal(
             <nav
               ref={setBottomNavEl}
-              className={`${PORTAL_NATIVE_BOTTOM_NAV_CLASS} flex items-stretch`}
+              className={`${PORTAL_NATIVE_BOTTOM_NAV_CLASS} flex flex-col`}
               aria-label="Portal sections"
             >
-              <div
-                ref={bottomNavScrollRef}
-                className="portal-native-bottom-nav-scroll flex min-w-0 flex-1 snap-x snap-mandatory gap-0 px-1.5 pt-0"
+              <button
+                type="button"
+                className="portal-native-bottom-nav-pull flex w-full shrink-0 items-center justify-center border-0 bg-transparent px-3 pb-0.5 pt-1"
+                aria-label="Show all sections"
+                onClick={() => setSectionsSheetOpen(true)}
+                onTouchStart={(e) => {
+                  const touch = e.touches[0];
+                  if (!touch) return;
+                  bottomNavTouchRef.current = { x: touch.clientX, y: touch.clientY };
+                }}
+                onTouchEnd={(e) => {
+                  const start = bottomNavTouchRef.current;
+                  bottomNavTouchRef.current = null;
+                  const touch = e.changedTouches[0];
+                  if (!start || !touch) return;
+                  if (
+                    shouldOpenNativeSectionsSheet({
+                      startX: start.x,
+                      startY: start.y,
+                      endX: touch.clientX,
+                      endY: touch.clientY,
+                    })
+                  ) {
+                    setSectionsSheetOpen(true);
+                  }
+                }}
               >
-                {nativePrimaryNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
-                {nativeOverflowNavItems.length > 0 ? (
-                  <div className="flex w-[3.5rem] shrink-0 snap-center sm:w-[3.65rem]">
-                    <PortalNativeMoreNavButton active={moreActive} onClick={() => setMoreOpen(true)} />
+                <span className="portal-native-bottom-nav-pull-handle" aria-hidden />
+              </button>
+              <div className="flex min-w-0 w-full items-stretch">
+                <div
+                  ref={bottomNavScrollRef}
+                  className="portal-native-bottom-nav-scroll flex min-w-0 w-0 flex-1 flex-nowrap snap-x snap-mandatory gap-0 overflow-x-auto overscroll-x-contain px-1.5 pt-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  aria-label="Scroll portal sections"
+                >
+                  {nativeBottomNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
+                </div>
+                {hasAssistant ? (
+                  <div className="portal-native-bottom-nav-assistant shrink-0 self-stretch border-l border-border">
+                    <AxisAssistantNavButton />
                   </div>
                 ) : null}
               </div>
-              {hasAssistant ? (
-                <div className="portal-native-bottom-nav-assistant shrink-0 self-stretch border-l border-border">
-                  <AxisAssistantNavButton />
-                </div>
-              ) : null}
             </nav>,
             document.body,
           )

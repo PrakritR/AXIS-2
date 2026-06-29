@@ -10,10 +10,12 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   MANAGER_TABLE_TH,
+  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  ManagerPortalFilterRow,
+  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -22,6 +24,7 @@ import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_DETAIL_BTN_PRIMARY,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -30,9 +33,10 @@ import {
   PortalTableDetailActions,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
+import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
-import { ManagerScreeningSettingsPanel } from "@/components/portal/manager-screening-settings";
+import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import { ManagerCosignerReadonlyReview } from "@/components/portal/manager-cosigner-readonly-review";
 import { fetchCosignerSubmissionsForSignerAppId, type CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
@@ -623,6 +627,7 @@ export function ManagerApplications() {
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   useEffect(() => {
     if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
@@ -904,11 +909,14 @@ export function ManagerApplications() {
       title="Applications"
       titleAside={
         <>
-          <PortalPropertyFilterPill
-            propertyOptions={propertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={(id) => setPropertyFilter(id)}
-          />
+          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={(id) => setPropertyFilter(id)}
+            />
+            <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
+          </div>
           <Button
             type="button"
             variant="outline"
@@ -924,12 +932,18 @@ export function ManagerApplications() {
       filterRow={
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+          <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={(id) => setPropertyFilter(id)}
+            />
+            <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
+          </div>
         </ManagerPortalFilterRow>
       }
     >
-      <div className="mb-4">
-        <ManagerScreeningSettingsPanel />
-      </div>
+      <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
       {!authReady && rows.length === 0 ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
@@ -946,7 +960,43 @@ export function ManagerApplications() {
           }
         />
       ) : (
-      <div className={PORTAL_DATA_TABLE_WRAP}>
+      <>
+      <div className="space-y-2 lg:hidden">
+        {rowsForBucket.map((row) => {
+          const expanded = expandedId === row.id;
+          return (
+            <div key={row.id} id={`portal-application-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+              >
+                <p className="truncate font-semibold text-foreground">{row.name}</p>
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
+                </p>
+                {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
+              </button>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {row.bucket === "pending" ? (
+                  <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
+                    Approve
+                  </Button>
+                ) : null}
+                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}>
+                  {expanded ? "Less" : "Review"}
+                </Button>
+              </div>
+              {expanded ? (
+                <div className="mt-3 border-t border-border pt-3 text-xs text-muted">
+                  Application ID {row.id}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className="w-full min-w-[640px] border-collapse text-left text-sm">
             <thead>
@@ -1090,6 +1140,7 @@ export function ManagerApplications() {
           </table>
         </div>
       </div>
+      </>
       )}
     </ManagerPortalPageShell>
       <PortalNotificationPreviewModal

@@ -43,9 +43,14 @@ import {
 } from "@/lib/portal-inbox-storage";
 import {
   ManagerPortalPageShell,
+  PortalDashboardCompactRow,
+  PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
   PortalDashboardTile,
   PORTAL_DASHBOARD_SECTION_CARD,
+  PORTAL_DASHBOARD_STACK,
+  formatCompactChargeLine,
+  formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
@@ -75,7 +80,9 @@ function NotifBanner({
     rose: "portal-banner-danger",
   }[tone];
   return (
-    <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
+    <div
+      className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls} [html[data-native]_&]:min-w-[min(100%,17rem)] [html[data-native]_&]:shrink-0`}
+    >
       {children}
     </div>
   );
@@ -218,8 +225,8 @@ export function ManagerDashboard() {
   const nextTour = tours.find((t) => t.status === "confirmed") ?? null;
 
   return (
-    <ManagerPortalPageShell title="Dashboard">
-      <div className="space-y-5">
+    <ManagerPortalPageShell title="Dashboard" hideTitleOnNative>
+      <div className={PORTAL_DASHBOARD_STACK}>
 
         {/* ── Action-required banners ── */}
         {(pendingApps.length > 0 ||
@@ -229,14 +236,14 @@ export function ManagerDashboard() {
           nextTour ||
           pendingProperties > 0 ||
           overdueCharges.length > 0) && (
-          <div className="space-y-2">
+          <div className="space-y-2 [html[data-native]_&]:flex [html[data-native]_&]:gap-2 [html[data-native]_&]:overflow-x-auto [html[data-native]_&]:space-y-0 [html[data-native]_&]:pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [html[data-native]_&]:[&::-webkit-scrollbar]:hidden">
             {pendingTours.length > 0 && (
               <NotifBanner tone="amber">
                 <span>
                   <span className="font-semibold">{pendingTours.length}</span> pending tour request{pendingTours.length === 1 ? "" : "s"} awaiting your approval
                 </span>
                 <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Tours →
+                  Calendar →
                 </Link>
               </NotifBanner>
             )}
@@ -276,7 +283,7 @@ export function ManagerDashboard() {
                   Next confirmed tour{tours.filter((t) => t.status === "confirmed").length > 1 ? ` (${tours.filter((t) => t.status === "confirmed").length} total)` : ""}: <span className="font-semibold">{nextTour.label}</span>{nextTour.propertyTitle ? ` · ${nextTour.propertyTitle}` : ""} at <span className="font-semibold">{fmt(nextTour.start)}</span>
                 </span>
                 <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Tours →
+                  Calendar →
                 </Link>
               </NotifBanner>
             )}
@@ -321,33 +328,33 @@ export function ManagerDashboard() {
           />
         </div>
 
-        {/* ── Tours & applications ── */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        {/* ── Calendar & applications ── */}
+        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
 
           {/* Pending tours */}
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader
               title="Pending tour requests"
               href={`${BASE}/calendar`}
-              linkLabel="Tours →"
+              linkLabel="Calendar →"
             />
-            {pendingTours.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">No pending tour requests right now.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {pendingTours.slice(0, 5).map((tour) => (
-                  <li key={tour.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{tour.label}</p>
-                      <p className="truncate text-xs text-muted">{tour.propertyTitle || "—"} · {fmt(tour.start)}</p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+            <PortalDashboardPreviewList
+              items={pendingTours}
+              href={`${BASE}/calendar`}
+              emptyMessage="No pending tour requests right now."
+              keyForItem={(tour) => tour.id}
+              renderRow={(tour) => (
+                <PortalDashboardCompactRow
+                  title={tour.label}
+                  subtitle={[tour.propertyTitle || "—", fmt(tour.start)].filter(Boolean).join(" · ")}
+                  badge={
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                       Pending
                     </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  }
+                />
+              )}
+            />
           </div>
 
           {/* Pending applications */}
@@ -357,49 +364,47 @@ export function ManagerDashboard() {
               href={`${BASE}/applications`}
               linkLabel="Applications →"
             />
-            {pendingApps.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">No pending applications — you&apos;re all caught up.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {pendingApps.slice(0, 5).map((app: DemoApplicantRow) => (
-                  <li key={app.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{app.name || app.email || "Unknown"}</p>
-                      <p className="truncate text-xs text-muted">{app.property || "—"}</p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+            <PortalDashboardPreviewList
+              items={pendingApps}
+              href={`${BASE}/applications`}
+              emptyMessage="No pending applications — you're all caught up."
+              keyForItem={(app) => app.id}
+              renderRow={(app: DemoApplicantRow) => (
+                <PortalDashboardCompactRow
+                  title={app.name || app.email || "Unknown"}
+                  subtitle={app.property || "—"}
+                  badge={
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                       {app.stage || "Pending"}
                     </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  }
+                />
+              )}
+            />
           </div>
 
         </div>
 
         {/* ── Leases & payments ── */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader
               title="Leases pending signature"
               href={`${BASE}/leases`}
               linkLabel="Leases →"
             />
-            {pendingLeaseRows.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">No leases waiting for a signature.</p>
-            ) : (
-              <ul className="portal-desktop-scroll-panel mt-3 space-y-2 overscroll-contain pr-1">
-                {pendingLeaseRows.map((lease: LeasePipelineRow) => (
-                  <li key={lease.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{lease.residentName || lease.residentEmail}</p>
-                      <p className="truncate text-xs text-muted">
-                        {lease.unit || "—"}{lease.signedRentLabel ? ` · ${lease.signedRentLabel}` : ""}
-                      </p>
-                    </div>
+            <PortalDashboardPreviewList
+              items={pendingLeaseRows}
+              href={`${BASE}/leases`}
+              emptyMessage="No leases waiting for a signature."
+              keyForItem={(lease) => lease.id}
+              renderRow={(lease: LeasePipelineRow) => (
+                <PortalDashboardCompactRow
+                  title={lease.residentName || lease.residentEmail}
+                  subtitle={formatCompactPlacementLine(lease.unit || "—", lease.signedRentLabel)}
+                  badge={
                     <span
-                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                         lease.status === "Manager Signature Pending"
                           ? "bg-blue-100 text-blue-800"
                           : "bg-amber-100 text-amber-800"
@@ -407,10 +412,10 @@ export function ManagerDashboard() {
                     >
                       {lease.status === "Manager Signature Pending" ? "Your signature" : "Resident signing"}
                     </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  }
+                />
+              )}
+            />
           </div>
 
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
@@ -419,32 +424,34 @@ export function ManagerDashboard() {
               href={`${BASE}/payments`}
               linkLabel="Payments →"
             />
-            {pendingCharges.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">No pending or overdue payments right now.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {pendingCharges.slice(0, 5).map((charge) => {
-                  const overdue = isHouseholdChargeOverdue(charge);
-                  return (
-                    <li key={charge.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{charge.residentName || charge.residentEmail}</p>
-                        <p className="truncate text-xs text-muted">
-                          {charge.title || "Charge"} · {charge.balanceLabel} · {chargeDueLabel(charge)}
-                        </p>
-                      </div>
+            <PortalDashboardPreviewList
+              items={pendingCharges}
+              href={`${BASE}/payments`}
+              emptyMessage="No pending or overdue payments right now."
+              keyForItem={(charge) => charge.id}
+              renderRow={(charge) => {
+                const overdue = isHouseholdChargeOverdue(charge);
+                return (
+                  <PortalDashboardCompactRow
+                    title={charge.residentName || charge.residentEmail}
+                    subtitle={formatCompactChargeLine(
+                      charge.title || "Charge",
+                      charge.balanceLabel,
+                      chargeDueLabel(charge),
+                    )}
+                    badge={
                       <span
-                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
                         }`}
                       >
                         {overdue ? "Overdue" : "Pending"}
                       </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                    }
+                  />
+                );
+              }}
+            />
           </div>
         </div>
 
@@ -455,23 +462,23 @@ export function ManagerDashboard() {
             href={`${BASE}/inbox/unopened`}
             linkLabel="Inbox →"
           />
-          {inbox === 0 ? (
-            <p className="mt-4 text-sm text-muted">No unread messages — inbox is clear.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {inboxThreads.map((thread) => (
-                <li key={thread.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{thread.from || "Unknown sender"}</p>
-                    <p className="truncate text-xs text-muted">{thread.subject || thread.preview || "—"}</p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">
+          <PortalDashboardPreviewList
+            items={inboxThreads}
+            href={`${BASE}/inbox/unopened`}
+            emptyMessage="No unread messages — inbox is clear."
+            keyForItem={(thread) => thread.id}
+            renderRow={(thread) => (
+              <PortalDashboardCompactRow
+                title={thread.from || "Unknown sender"}
+                subtitle={thread.subject || thread.preview || "—"}
+                badge={
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
                     Unread
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
+                }
+              />
+            )}
+          />
         </div>
       </div>
     </ManagerPortalPageShell>

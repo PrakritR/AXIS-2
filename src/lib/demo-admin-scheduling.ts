@@ -130,6 +130,14 @@ function scheduleRecordScope(key: string): { managerUserId: string | null; prope
       recordType: "manager_property_availability",
     };
   }
+  const shareScoped = key.match(/^axis_calendar_share_avail_(.+)_prop_(.+)$/);
+  if (shareScoped) {
+    return {
+      managerUserId: shareScoped[1] ?? null,
+      propertyId: shareScoped[2] ?? null,
+      recordType: "calendar_share_settings",
+    };
+  }
   const managerScoped = key.match(/^axis_mgr_avail_slots_v2_(.+)$/);
   if (managerScoped) {
     return {
@@ -310,6 +318,25 @@ export function managerAvailabilityStorageKey(userId: string): string {
 export function managerPropertyAvailabilityStorageKey(userId: string, propertyId: string): string {
   const safe = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
   return `axis_mgr_avail_slots_v2_${userId}_prop_${safe}`;
+}
+
+/** Per-property opt-in for co-managers to see this manager's tour availability. */
+export function calendarShareAvailabilityStorageKey(userId: string, propertyId: string): string {
+  const safe = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+  return `axis_calendar_share_avail_${userId}_prop_${safe}`;
+}
+
+export function readCalendarShareAvailability(userId: string, propertyId: string): boolean {
+  if (!isBrowser() || !userId.trim() || !propertyId.trim()) return false;
+  const key = calendarShareAvailabilityStorageKey(userId, propertyId);
+  const raw = readJson<{ shareAvailability?: boolean } | null>(key, null);
+  return raw?.shareAvailability === true;
+}
+
+export function writeCalendarShareAvailability(userId: string, propertyId: string, share: boolean): void {
+  if (!isBrowser() || !userId.trim() || !propertyId.trim()) return;
+  const key = calendarShareAvailabilityStorageKey(userId, propertyId);
+  writeJson(key, { shareAvailability: share });
 }
 
 /** Per-admin partner meeting availability. Legacy ADMIN_AVAILABILITY_STORAGE_KEY is still read as a shared fallback. */

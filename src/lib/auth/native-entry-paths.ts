@@ -16,7 +16,6 @@ const NATIVE_APP_ALLOWED_PREFIXES = [
   "/resident",
   "/admin",
   "/pro",
-  "/onboard",
   "/billing",
 ] as const;
 

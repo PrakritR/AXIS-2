@@ -11,9 +11,16 @@ export function nativeOAuthCallbackUrl(fixedCallbackPath?: string): string {
   return `${NATIVE_OAUTH_SCHEME}://${path}`;
 }
 
+/** True when OAuth should return via the app custom URL scheme (Capacitor or tagged WebView). */
+export function isNativeOAuthShell(): boolean {
+  if (typeof window === "undefined") return false;
+  if (detectNativePlatformSync()) return true;
+  return document.documentElement.hasAttribute("data-native");
+}
+
 /** Supabase OAuth redirectTo — custom scheme in native shell, https callback on web. */
 export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
-  if (detectNativePlatformSync()) {
+  if (isNativeOAuthShell()) {
     return nativeOAuthCallbackUrl(fixedCallbackPath);
   }
   if (fixedCallbackPath?.startsWith("/")) {

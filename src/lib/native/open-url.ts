@@ -4,14 +4,13 @@ import {
   resolveNativeOAuthCallbackTarget,
 } from "@/lib/auth/complete-native-oauth";
 import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
-import { webPathFromNativeOAuthUrl } from "@/lib/auth/native-oauth-callback";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { webPathFromNativeOAuthUrl, isNativeOAuthShell } from "@/lib/auth/native-oauth-callback";
 
 export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
 
 /** Open a URL in the WebView on web; native uses the system in-app browser when needed. */
 export function isNativeAppShell(): boolean {
-  return Boolean(detectNativePlatformSync());
+  return isNativeOAuthShell();
 }
 
 /** Stripe Connect onboarding — popups fail in mobile WebViews; navigate in-place. */
@@ -158,6 +157,21 @@ export async function openOAuthUrl(url: string): Promise<void> {
           cleanups.forEach((fn) => fn());
           await Browser.close().catch(() => {});
           clearNativeOAuthInProgress();
+          try {
+            const accessRes = await fetch("/api/auth/oauth-portal-access?next=%2Fauth%2Fcontinue", {
+              credentials: "include",
+              cache: "no-store",
+            });
+            if (accessRes.ok) {
+              const body = (await accessRes.json()) as { redirectTo?: string };
+              if (body.redirectTo?.startsWith("/")) {
+                window.location.href = body.redirectTo;
+                return;
+              }
+            }
+          } catch {
+            /* fall through */
+          }
           window.location.href = "/auth/continue";
           return;
         }
