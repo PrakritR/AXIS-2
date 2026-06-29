@@ -10,9 +10,9 @@ describe("native-auth-entry", () => {
     expect(nativeAuthEntryPathForHost("192.168.5.121")).toBe("/auth/welcome");
   });
 
-  it("uses sign-in on production until welcome is deployed", () => {
-    expect(nativeAuthEntryPathForHost("www.axis-seattle-housing.com")).toBe("/auth/sign-in");
-    expect(nativeAuthEntryPathFromServerBase("https://www.axis-seattle-housing.com")).toBe("/auth/sign-in");
+  it("uses welcome on production hosts", () => {
+    expect(nativeAuthEntryPathForHost("www.axis-seattle-housing.com")).toBe("/auth/welcome");
+    expect(nativeAuthEntryPathFromServerBase("https://www.axis-seattle-housing.com")).toBe("/auth/welcome");
   });
 
   it("honors CAP_NATIVE_ENTRY override", () => {

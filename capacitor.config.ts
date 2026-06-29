@@ -8,12 +8,9 @@ import { nativeAuthEntryPathFromServerBase } from "./src/lib/auth/native-auth-en
  * production and Capacitor injects its bridge so push, camera, status bar, etc.
  * work natively.
  *
- * Local development against a dev server:
- *   CAP_SERVER_URL=http://<your-LAN-ip>:3000 npx cap sync
- * Point the simulator/device at your machine instead of production.
- *
- * After /auth/welcome ships to production, set CAP_NATIVE_ENTRY=/auth/welcome
- * (or NEXT_PUBLIC_NATIVE_AUTH_ENTRY on Vercel) and re-sync.
+ * Local development against a dev server (required to see unreleased mobile UI):
+ *   CAP_SERVER_URL=http://127.0.0.1:3000 npx cap sync
+ * On a physical device, use your LAN IP instead of 127.0.0.1.
  */
 const serverBase = (process.env.CAP_SERVER_URL ?? "https://www.axis-seattle-housing.com").replace(/\/$/, "");
 const nativeEntryPath = nativeAuthEntryPathFromServerBase(serverBase);

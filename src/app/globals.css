@@ -1089,6 +1089,16 @@ html[data-native] .auth-layout {
   padding-bottom: var(--native-safe-bottom);
   padding-left: var(--native-safe-left);
   padding-right: var(--native-safe-right);
+  background: var(--background);
+}
+
+html[data-native] .auth-layout .chrome-substrate-full,
+html[data-native] .auth-layout .chrome-substrate-quiet-glow {
+  display: none;
+}
+
+html[data-native] .auth-card-shell > div:first-child {
+  display: none;
 }
 
 html[data-native] .auth-layout-main {
@@ -1137,8 +1147,8 @@ html[data-native] .auth-plan-picker .auth-footer-link {
   margin-top: 0.875rem;
 }
 
-html[data-native] .auth-card-shell > div:first-child {
-  border-radius: 1.05rem;
+html[data-native] .auth-page-header p:first-child {
+  display: none;
 }
 
 @keyframes auth-spin {
@@ -1197,24 +1207,18 @@ html[data-native] .axis-page-frame > footer {
   display: none;
 }
 
-html[data-native] .axis-assistant-fab {
-  bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
-  right: max(1.25rem, env(safe-area-inset-right, 0px));
+html[data-native] .axis-assistant-fab,
+html[data-native] .axis-assistant-panel {
+  display: none !important;
 }
 
-html[data-native] .axis-assistant-panel {
-  bottom: max(5rem, calc(env(safe-area-inset-bottom, 0px) + 3.5rem));
-  right: max(1.25rem, env(safe-area-inset-right, 0px));
-  max-height: min(34rem, calc(100dvh - env(safe-area-inset-top, 0px) - 7rem));
-  width: min(23rem, calc(100vw - 2.5rem));
+html[data-native] .portal-top-banner-strip,
+html[data-native] .portal-mobile-chrome {
+  display: none !important;
 }
 
 html[data-native] #axis-public-navbar {
   display: none;
-}
-
-html[data-native] .portal-shell:has(.portal-top-banner-strip) .portal-mobile-chrome {
-  padding-top: 0.5rem;
 }
 
 @media (max-width: 1023px) {

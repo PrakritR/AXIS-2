@@ -35,6 +35,11 @@ export default function RootLayout({
             __html: `(function(){try{var t=localStorage.getItem('axis:theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t||'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var c=window.Capacitor;if(c&&c.isNativePlatform&&c.isNativePlatform()){var p=c.getPlatform&&c.getPlatform();document.documentElement.setAttribute('data-native',p==='android'?'android':'ios');}}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className="min-h-full overflow-x-clip bg-background text-foreground">
         <ThemeProvider defaultTheme="dark">

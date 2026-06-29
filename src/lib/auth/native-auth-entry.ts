@@ -1,4 +1,5 @@
 export const NATIVE_AUTH_WELCOME_PATH = "/auth/welcome";
+/** Generic web portal sign-in — not the native onboarding entry. */
 export const NATIVE_AUTH_LEGACY_ENTRY_PATH = "/auth/sign-in";
 
 export function isProductionAxisHost(hostname: string): boolean {
@@ -7,18 +8,14 @@ export function isProductionAxisHost(hostname: string): boolean {
 }
 
 /**
- * Where the native shell should land when signed out.
- * Production may not have shipped /auth/welcome yet — sign-in is always live.
- * Override with NEXT_PUBLIC_NATIVE_AUTH_ENTRY or CAP_NATIVE_ENTRY after deploy.
+ * Where the native shell should land when signed out (role picker → resident/manager).
+ * Override with NEXT_PUBLIC_NATIVE_AUTH_ENTRY or CAP_NATIVE_ENTRY if needed.
  */
-export function nativeAuthEntryPathForHost(hostname: string): string {
+export function nativeAuthEntryPathForHost(_hostname: string): string {
   const fromEnv =
     process.env.NEXT_PUBLIC_NATIVE_AUTH_ENTRY?.trim() || process.env.CAP_NATIVE_ENTRY?.trim();
   if (fromEnv) {
     return fromEnv.startsWith("/") ? fromEnv : `/${fromEnv}`;
-  }
-  if (isProductionAxisHost(hostname)) {
-    return NATIVE_AUTH_LEGACY_ENTRY_PATH;
   }
   return NATIVE_AUTH_WELCOME_PATH;
 }
@@ -37,9 +34,6 @@ export function nativeAuthEntryPathClient(): string {
   const fromEnv = process.env.NEXT_PUBLIC_NATIVE_AUTH_ENTRY?.trim();
   if (fromEnv) {
     return fromEnv.startsWith("/") ? fromEnv : `/${fromEnv}`;
-  }
-  if (isProductionAxisHost(window.location.hostname)) {
-    return NATIVE_AUTH_LEGACY_ENTRY_PATH;
   }
   return NATIVE_AUTH_WELCOME_PATH;
 }

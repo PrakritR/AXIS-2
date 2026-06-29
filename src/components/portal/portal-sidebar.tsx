@@ -3,13 +3,15 @@
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { pickNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
 import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
-import { PORTAL_MOBILE_CHROME_CLASS } from "@/lib/portal-layout-classes";
+import { PORTAL_MOBILE_CHROME_CLASS, PORTAL_NATIVE_BOTTOM_NAV_CLASS } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import type { PortalDefinition } from "@/lib/portal-types";
 import Link from "next/link";
@@ -151,6 +153,8 @@ export function PortalSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { isNative } = useIsNativeApp();
+  const showNativeChrome = isNative === true || Boolean(detectNativePlatformSync());
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
   const navCounts = usePortalNavCounts(definition.kind);
@@ -195,6 +199,81 @@ export function PortalSidebar({
       return managerSectionLockedForTier(section, subscriptionTier);
     }
     return false;
+  };
+
+  const nativeBottomItems = useMemo(
+    () => (showNativeChrome ? pickNativeBottomNavItems(navItems, definition.kind) : []),
+    [definition.kind, navItems, showNativeChrome],
+  );
+
+  const renderMobileNavLink = (
+    s: (typeof navItems)[number],
+    variant: "top" | "bottom",
+  ) => {
+    const active = activeSection === s.section;
+    const locked = isSectionLocked(s.section);
+    const count = navCounts[s.section] ?? 0;
+
+    if (variant === "bottom") {
+      return (
+        <Link
+          key={s.section}
+          href={s.href}
+          prefetch={portalMobileLinkPrefetchEnabled()}
+          onClick={portalNavClick(router, s.href)}
+          className={`flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 text-[10px] font-semibold leading-tight transition ${
+            active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
+          }`}
+          aria-label={
+            locked
+              ? definition.kind === "resident"
+                ? `${s.label} — unavailable on your property's Free plan`
+                : `${s.label} — locked on Pro or Business`
+              : s.label
+          }
+        >
+          {showNavIcons ? (
+            <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-100"}`} aria-hidden>
+              <PortalNavIcon section={s.section} />
+            </span>
+          ) : null}
+          <span className="max-w-full truncate">{s.label}</span>
+          {!locked && count > 0 ? <PortalNavCountBadge count={count} /> : null}
+        </Link>
+      );
+    }
+
+    return (
+      <Link
+        key={s.section}
+        href={s.href}
+        prefetch={portalMobileLinkPrefetchEnabled()}
+        onClick={portalNavClick(router, s.href)}
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
+          active
+            ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
+            : locked
+              ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
+              : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
+        }`}
+        aria-label={
+          locked
+            ? definition.kind === "resident"
+              ? `${s.label} — unavailable on your property's Free plan`
+              : `${s.label} — locked on Pro or Business`
+            : s.label
+        }
+      >
+        {showNavIcons ? (
+          <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
+            <PortalNavIcon section={s.section} />
+          </span>
+        ) : null}
+        {s.label}
+        {!locked ? <PortalNavCountBadge count={count} /> : null}
+        {locked ? <NavLockIcon className="h-3 w-3 text-muted" /> : null}
+      </Link>
+    );
   };
 
   const desktopAside = (
@@ -258,51 +337,26 @@ export function PortalSidebar({
     <>
       {desktopAside}
 
-      <div className="shrink-0 lg:hidden">
-        <div className={PORTAL_MOBILE_CHROME_CLASS}>
-          <nav
-            className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
-            aria-label="Portal sections"
-          >
-            {navItems.map((s) => {
-              const active = activeSection === s.section;
-              const locked = isSectionLocked(s.section);
-              const count = navCounts[s.section] ?? 0;
-              return (
-                <Link
-                  key={s.section}
-                  href={s.href}
-                  prefetch={portalMobileLinkPrefetchEnabled()}
-                  onClick={portalNavClick(router, s.href)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
-                    active
-                      ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-                      : locked
-                        ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
-                        : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
-                  }`}
-                  aria-label={
-                    locked
-                      ? definition.kind === "resident"
-                        ? `${s.label} — unavailable on your property's Free plan`
-                        : `${s.label} — locked on Pro or Business`
-                      : s.label
-                  }
-                >
-                  {showNavIcons ? (
-                    <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
-                      <PortalNavIcon section={s.section} />
-                    </span>
-                  ) : null}
-                  {s.label}
-                  {!locked ? <PortalNavCountBadge count={count} /> : null}
-                  {locked ? <NavLockIcon className="h-3 w-3 text-muted" /> : null}
-                </Link>
-              );
-            })}
-          </nav>
+      {!showNativeChrome ? (
+        <div className="shrink-0 lg:hidden">
+          <div className={PORTAL_MOBILE_CHROME_CLASS}>
+            <nav
+              className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
+              aria-label="Portal sections"
+            >
+              {navItems.map((s) => renderMobileNavLink(s, "top"))}
+            </nav>
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {showNativeChrome && nativeBottomItems.length > 0 ? (
+        <nav className={PORTAL_NATIVE_BOTTOM_NAV_CLASS} aria-label="Portal sections">
+          <div className="mx-auto flex max-w-lg items-stretch justify-between gap-0.5 px-1 pt-1.5">
+            {nativeBottomItems.map((s) => renderMobileNavLink(s, "bottom"))}
+          </div>
+        </nav>
+      ) : null}
     </>
   );
 }
