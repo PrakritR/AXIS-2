@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { managerSignupFinishPhrase } from "@/lib/manager-access";
+import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import {
   BANNER_INFO_CLASS,
   BANNER_NEUTRAL_CLASS,
@@ -311,7 +312,7 @@ export default function CreateAccountClient() {
           return;
         }
         showToast("Account created. Choose your plan next.");
-        router.push(body.redirectTo?.startsWith("/") ? body.redirectTo : "/partner/pricing");
+        router.push(nativeAwarePath(body.redirectTo?.startsWith("/") ? body.redirectTo : "/partner/pricing"));
       } catch {
         showToast("Network error.");
       } finally {
@@ -426,7 +427,7 @@ export default function CreateAccountClient() {
         ) : (
           <>
             Create your manager login below, then choose Free, Pro, or Business on{" "}
-            <Link className="font-semibold text-primary hover:opacity-90" href="/partner/pricing">
+            <Link className="font-semibold text-primary hover:opacity-90" href={nativeAwarePath("/partner/pricing")}>
               Partner pricing
             </Link>
             . Free goes straight to your portal; Pro and Business open secure Stripe checkout.
@@ -441,7 +442,7 @@ export default function CreateAccountClient() {
       {role === "manager" && sessionIdFromUrl && effectivePreviewError ? (
         <div className={`mt-6 ${BANNER_WARNING_CLASS}`}>
           <p>{effectivePreviewError}</p>
-          <Link className="mt-3 inline-block font-semibold text-primary hover:underline" href="/partner/pricing">
+          <Link className="mt-3 inline-block font-semibold text-primary hover:underline" href={nativeAwarePath("/partner/pricing")}>
             Back to Partner pricing
           </Link>
         </div>
@@ -543,7 +544,7 @@ export default function CreateAccountClient() {
                 />
                 <div className="mt-6 flex justify-center">
                   <Link
-                    href="/partner/pricing"
+                    href={nativeAwarePath("/partner/pricing")}
                     className="btn-cobalt inline-flex rounded-full px-6 py-3 text-sm font-semibold"
                   >
                     Continue to Partner pricing

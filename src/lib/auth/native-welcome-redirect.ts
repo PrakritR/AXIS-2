@@ -19,8 +19,11 @@ export async function redirectNativeFromMarketing(
   const entry = nativeAuthEntryPathClient();
 
   if (shouldNativeRedirectFromSignIn(window.location.pathname, window.location.search)) {
-    window.location.replace(entry);
-    return true;
+    if (entry !== window.location.pathname) {
+      window.location.replace(entry);
+      return true;
+    }
+    return false;
   }
 
   if (!shouldNativeRedirectToWelcome(window.location.pathname)) return false;

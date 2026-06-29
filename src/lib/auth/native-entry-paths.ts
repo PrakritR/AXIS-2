@@ -6,29 +6,30 @@
 
 import { isInAppPath, isNativeDeepLinkPath as parityIsNativeDeepLinkPath } from "@/lib/platform/parity";
 
-/** Public paths where the native app should offer auth onboarding when signed out. */
-
-const NATIVE_MARKETING_PREFIXES = ["/", "/partner", "/pricing"];
-
 /** Paths under /rent that residents need in the native app (application wizard). */
 const NATIVE_RENT_ALLOW_PREFIXES = ["/rent/apply"];
 
-export function shouldNativeRedirectToWelcome(pathname: string): boolean {
+/** Auth, portals, checkout flows — everything else redirects in the native shell. */
+const NATIVE_APP_ALLOWED_PREFIXES = [
+  "/auth",
+  "/portal",
+  "/resident",
+  "/admin",
+  "/pro",
+  "/onboard",
+  "/billing",
+] as const;
+
+export function isNativeAppAllowedPath(pathname: string): boolean {
   if (!pathname.startsWith("/")) return false;
-  if (pathname.startsWith("/auth")) return false;
-  if (NATIVE_RENT_ALLOW_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-    return false;
+  if (NATIVE_APP_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return true;
   }
-  if (
-    pathname.startsWith("/portal") ||
-    pathname.startsWith("/resident") ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/pro")
-  ) {
-    return false;
-  }
-  return NATIVE_MARKETING_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
-    || pathname.startsWith("/rent");
+  return NATIVE_RENT_ALLOW_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+export function shouldNativeRedirectToWelcome(pathname: string): boolean {
+  return pathname.startsWith("/") && !isNativeAppAllowedPath(pathname);
 }
 
 /** In-app paths opened from universal links / custom URL schemes. */

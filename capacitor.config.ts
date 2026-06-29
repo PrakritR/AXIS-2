@@ -1,19 +1,12 @@
 import type { CapacitorConfig } from "@capacitor/cli";
-import { nativeAuthEntryPathFromServerBase } from "./src/lib/auth/native-auth-entry";
+import { nativeShellEntryPath } from "./src/lib/auth/native-shell-entry";
 
 /**
- * Axis ships as a native shell (Capacitor) that loads the live, server-rendered
- * site. The app relies on auth middleware, Stripe, and Supabase SSR, so it
- * cannot be statically exported — instead the native WebView points at
- * production and Capacitor injects its bridge so push, camera, status bar, etc.
- * work natively.
- *
- * Local development against a dev server (required to see unreleased mobile UI):
- *   CAP_SERVER_URL=http://localhost:3000 npx cap sync
- * On a physical device, use your LAN IP instead of 127.0.0.1.
+ * Capacitor native shell — loads the deployed site but opens /auth/welcome (not
+ * the web sign-in). Local dev: npm run cap:dev (LAN IP for physical iPhone).
  */
 const serverBase = (process.env.CAP_SERVER_URL ?? "https://www.axis-seattle-housing.com").replace(/\/$/, "");
-const nativeEntryPath = nativeAuthEntryPathFromServerBase(serverBase);
+const nativeEntryPath = nativeShellEntryPath();
 const nativeAppUrl = `${serverBase}${nativeEntryPath}`;
 
 function allowNavigationHosts(): string[] {
@@ -58,8 +51,8 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
-      launchAutoHide: true,
+      launchShowDuration: 0,
+      launchAutoHide: false,
       backgroundColor: "#080b14",
       showSpinner: false,
     },

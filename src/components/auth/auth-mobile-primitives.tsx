@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AuthRoleIcon, type AuthRoleIconName } from "@/components/auth/auth-role-icons";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
 type AuthPageHeaderProps = {
   eyebrow?: string;
@@ -174,6 +175,7 @@ export function AuthBackLink({ children, onClick }: { children: ReactNode; onCli
 }
 
 export function AuthFooterLink({ href, children }: { href: string; children: ReactNode }) {
+  if (detectNativePlatformSync()) return null;
   return (
     <p className="auth-footer-link mt-5 text-center text-[13px] text-muted sm:mt-6 sm:text-sm">
       <Link href={href} className="font-semibold text-primary hover:opacity-90">

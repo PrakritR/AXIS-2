@@ -1,7 +1,7 @@
 import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
 import { PublicFooter } from "@/components/layout/public-footer";
 import { PublicNavbar } from "@/components/layout/public-navbar";
-import { NativeMarketingBlocker } from "@/components/native/native-marketing-blocker";
+import { HideOnNative } from "@/components/native/hide-on-native";
 import { PublicMainTransition } from "@/components/motion/public-main-transition";
 
 export default function PublicLayout({
@@ -10,15 +10,17 @@ export default function PublicLayout({
   children: React.ReactNode;
 }) {
   return (
-    <NativeMarketingBlocker>
-      <div className="axis-page-frame relative flex min-h-screen flex-col">
+    <div className="axis-page-frame relative flex min-h-screen flex-col">
+      <HideOnNative>
         <ChromeSubstrate variant="quiet" />
         <PublicNavbar />
-        <PublicMainTransition>
-          <main className="flex-1">{children}</main>
-        </PublicMainTransition>
+      </HideOnNative>
+      <PublicMainTransition>
+        <main className="flex-1">{children}</main>
+      </PublicMainTransition>
+      <HideOnNative>
         <PublicFooter />
-      </div>
-    </NativeMarketingBlocker>
+      </HideOnNative>
+    </div>
   );
 }

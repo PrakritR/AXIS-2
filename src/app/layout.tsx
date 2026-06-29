@@ -1,6 +1,7 @@
 import { AppUiProvider } from "@/components/providers/app-ui-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { AuthOAuthErrorHandler } from "@/components/auth/auth-oauth-error-handler";
+import { NativeAppGate } from "@/components/native/native-app-gate";
 import { NativeBridge } from "@/components/native/native-bridge";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
@@ -37,7 +38,7 @@ export default function RootLayout({
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var c=window.Capacitor;if(c&&c.isNativePlatform&&c.isNativePlatform()){var p=c.getPlatform&&c.getPlatform();document.documentElement.setAttribute('data-native',p==='android'?'android':'ios');}}catch(e){}})();`,
+            __html: `(function(){try{var c=window.Capacitor;if(c&&c.isNativePlatform&&c.isNativePlatform()){var p=c.getPlatform&&c.getPlatform();document.documentElement.setAttribute('data-native',p==='android'?'android':'ios');var hide=function(){try{var m=c.Plugins&&c.Plugins.SplashScreen;if(m&&m.hide)m.hide();}catch(e){}};hide();window.addEventListener('load',hide);setTimeout(hide,2500);}}catch(e){}})();`,
           }}
         />
       </head>
@@ -46,7 +47,7 @@ export default function RootLayout({
           <AppUiProvider>
             <AuthOAuthErrorHandler />
             <NativeBridge />
-            {children}
+            <NativeAppGate>{children}</NativeAppGate>
           </AppUiProvider>
         </ThemeProvider>
       </body>

@@ -40,18 +40,24 @@ server**, not production.
 
 ```bash
 npm run dev              # terminal 1 — keep running
-npm run cap:dev          # points iOS at http://127.0.0.1:3000/auth/welcome
+npm run cap:dev          # auto-detects Mac LAN IP for physical iPhone (simulator works too)
 npm run cap:ios          # open Xcode, then Run (⌘R)
 ```
 
 **In Xcode, pick a simulator** (e.g. iPhone 16) — **not** “Any iOS Device
 (arm64)”. Simulator builds do not need provisioning profiles.
 
-On a **physical iPhone**, use your Mac's LAN IP instead of `127.0.0.1`:
+`npm run cap:dev` writes your Mac's LAN IP into the iOS project (e.g.
+`http://192.168.1.50:3000/auth/welcome`). **Physical iPhones cannot use
+`localhost`** — phone and Mac must be on the same Wi‑Fi, and `npm run dev` must
+be running. Override with `CAP_SERVER_URL` if needed:
 
 ```bash
 CAP_SERVER_URL=http://192.168.1.50:3000 npm run cap:sync
 ```
+
+**TestFlight / App Store builds** use production (`npm run cap:prod`). The app opens
+`/auth/welcome` (role picker), not the web sign-in page.
 
 ---
 

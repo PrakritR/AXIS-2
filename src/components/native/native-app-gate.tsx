@@ -1,6 +1,6 @@
 "use client";
 
-import { shouldNativeRedirectToWelcome } from "@/lib/auth/native-entry-paths";
+import { isNativeAppAllowedPath } from "@/lib/auth/native-entry-paths";
 import { redirectNativeFromMarketing } from "@/lib/auth/native-welcome-redirect";
 import { detectNativePlatformSync, tagHtmlNativePlatform } from "@/lib/native/detect-native";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -8,14 +8,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 /**
- * Hides public marketing pages in the Capacitor shell and routes to auth/portals.
+ * Native shell: only auth, portals, and in-app flows. Marketing pages redirect away.
  */
-export function NativeMarketingBlocker({ children }: { children: ReactNode }) {
+export function NativeAppGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [blocked, setBlocked] = useState(() => {
     const platform = detectNativePlatformSync();
     if (platform) tagHtmlNativePlatform(platform);
-    return Boolean(platform && shouldNativeRedirectToWelcome(pathname));
+    return Boolean(platform && !isNativeAppAllowedPath(pathname));
   });
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function NativeMarketingBlocker({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!shouldNativeRedirectToWelcome(pathname)) {
+    if (isNativeAppAllowedPath(pathname)) {
       setBlocked(false);
       return;
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
+import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 
@@ -23,7 +24,9 @@ function FinishContent() {
           router.replace(`/auth/create-account?role=manager&message=${encodeURIComponent(body.error ?? "Could not create manager account.")}`);
           return;
         }
-        router.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : "/partner/pricing");
+        router.replace(
+          nativeAwarePath(body.redirectTo?.startsWith("/") ? body.redirectTo : "/partner/pricing"),
+        );
       } catch {
         router.replace("/auth/create-account?role=manager");
       }

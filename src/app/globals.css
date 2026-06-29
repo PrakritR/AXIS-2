@@ -1084,6 +1084,10 @@ html[data-native] .auth-layout-footer {
   display: none;
 }
 
+html[data-native] .auth-footer-link {
+  display: none;
+}
+
 html[data-native] .auth-layout {
   padding-top: var(--native-safe-top);
   padding-bottom: var(--native-safe-bottom);
