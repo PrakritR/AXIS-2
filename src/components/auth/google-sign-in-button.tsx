@@ -8,7 +8,7 @@ import {
   usesDirectOAuthReturn,
 } from "@/lib/auth/oauth-redirect";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
-import { openAppUrl } from "@/lib/native/open-url";
+import { openOAuthUrl } from "@/lib/native/open-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useState } from "react";
 
@@ -78,6 +78,7 @@ export function GoogleSignInButton({
         provider: "google",
         options: {
           redirectTo,
+          skipBrowserRedirect: true,
           queryParams: {
             prompt: "select_account",
           },
@@ -92,7 +93,7 @@ export function GoogleSignInButton({
         return;
       }
       if (data?.url) {
-        openAppUrl(data.url);
+        await openOAuthUrl(data.url);
         return;
       }
       showToast("Could not start Google sign-in.");

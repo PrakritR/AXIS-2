@@ -13,6 +13,7 @@ import {
 import { persistOAuthNextPath } from "@/lib/auth/oauth-next-cookie";
 import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
+import { openAppUrl, openOAuthUrl } from "@/lib/native/open-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
 import Link from "next/link";
@@ -45,12 +46,13 @@ async function restartGoogleForPricingOffer(offer: {
     provider: "google",
     options: {
       redirectTo,
+      skipBrowserRedirect: true,
       queryParams: { prompt: "select_account" },
     },
   });
   if (error) throw new Error(error.message);
   if (!data?.url) throw new Error("Could not start Google sign-in.");
-  window.location.assign(data.url);
+  await openOAuthUrl(data.url);
 }
 
 function ManagerPricingOauthContent() {
@@ -142,7 +144,7 @@ function ManagerPricingOauthContent() {
 
         if (body.action === "redirect" && body.url) {
           clearManagerPricingOffer();
-          window.location.assign(body.url);
+          await openAppUrl(body.url);
           return;
         }
 

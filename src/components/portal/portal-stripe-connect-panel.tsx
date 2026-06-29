@@ -143,7 +143,7 @@ export function PortalStripeConnectPanel({
       }
       if (body.url) {
         if (useInAppFlow) {
-          openAppUrl(body.url);
+          void openAppUrl(body.url);
           return;
         }
         popup!.location.href = body.url;
