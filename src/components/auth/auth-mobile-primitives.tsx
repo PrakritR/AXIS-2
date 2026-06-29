@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { AuthRoleIcon, type AuthRoleIconName } from "@/components/auth/auth-role-icons";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
@@ -8,14 +9,47 @@ type AuthPageHeaderProps = {
   title: string;
   subtitle?: string;
   accent?: boolean;
+  showLogo?: boolean;
 };
 
-export function AuthPageHeader({ eyebrow = "Axis", title, subtitle, accent = true }: AuthPageHeaderProps) {
+/** Welcome / entry — logo mark + title (fills vertical space on phone). */
+export function AuthBrandHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="auth-brand-header flex flex-col items-center text-center">
+      <AxisLogoMark
+        size="default"
+        className="auth-brand-logo shadow-[0_14px_44px_-14px_rgba(47,107,255,0.5)]"
+      />
+      <h1 className="auth-brand-title mt-4 text-[1.5rem] font-semibold tracking-tight text-gradient-accent sm:mt-5 sm:text-[1.625rem]">
+        {title}
+      </h1>
+      {subtitle ? (
+        <p className="auth-brand-subtitle mt-1.5 max-w-[17rem] text-[13px] leading-snug text-muted sm:text-sm">
+          {subtitle}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function AuthPageHeader({
+  eyebrow = "Axis",
+  title,
+  subtitle,
+  accent = true,
+  showLogo = false,
+}: AuthPageHeaderProps) {
   return (
     <header className="auth-page-header text-center">
-      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary/75 sm:text-[11px]">{eyebrow}</p>
+      {showLogo ? (
+        <AxisLogoMark size="compact" className="auth-page-logo mx-auto mb-3 sm:mb-3.5" />
+      ) : (
+        <p className="auth-page-eyebrow text-[10px] font-bold uppercase tracking-[0.22em] text-primary/75 sm:text-[11px]">
+          {eyebrow}
+        </p>
+      )}
       <h1
-        className={`mt-2 text-[1.35rem] font-semibold tracking-tight sm:text-[1.5rem] ${
+        className={`${showLogo ? "mt-0" : "mt-2"} text-[1.35rem] font-semibold tracking-tight sm:text-[1.5rem] ${
           accent ? "text-gradient-accent" : "text-foreground"
         }`}
       >
@@ -85,6 +119,36 @@ export function AuthRoleTabs({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** Full-width vertical role picker — preferred on phone and native app. */
+export function AuthRoleStack({
+  options,
+  onSelect,
+  disabled = false,
+  busyId = null,
+}: {
+  options: AuthRoleTabOption[];
+  onSelect: (id: string) => void;
+  disabled?: boolean;
+  busyId?: string | null;
+}) {
+  return (
+    <div className="auth-role-stack mt-4 flex w-full flex-col gap-2.5 sm:mt-5 sm:gap-3">
+      {options.map((option) => (
+        <AuthRoleCard
+          key={option.id}
+          label={option.label}
+          hint={option.hint}
+          icon={option.icon}
+          tone={option.tone}
+          busy={busyId === option.id}
+          disabled={disabled}
+          onClick={() => onSelect(option.id)}
+        />
+      ))}
     </div>
   );
 }

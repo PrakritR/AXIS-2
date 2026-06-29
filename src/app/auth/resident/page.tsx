@@ -8,12 +8,13 @@ import {
   AuthDivider,
   AuthFieldBlock,
   AuthPageHeader,
-  AuthRoleTabs,
+  AuthRoleStack,
 } from "@/components/auth/auth-mobile-primitives";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
+import { nativeAuthEntryPathClient } from "@/lib/auth/native-auth-entry";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -38,18 +39,23 @@ export default function ResidentAuthPage() {
   if (mode === "choose") {
     return (
       <AuthCard>
-        <AuthPageHeader eyebrow="Resident" title="Get started" subtitle="Sign in or apply with your manager's link" />
+        <AuthPageHeader
+          showLogo
+          eyebrow="Resident"
+          title="Get started"
+          subtitle="Sign in or apply with your manager's link"
+        />
 
-        <AuthRoleTabs
+        <AuthRoleStack
           options={[
             { id: "sign-in", label: "Sign in", hint: "Google or email", icon: "sign-in" },
-            { id: "apply", label: "Apply", hint: "Paste link", icon: "apply", tone: "steel" },
+            { id: "apply", label: "Apply", hint: "Paste your link", icon: "apply", tone: "steel" },
           ]}
           onSelect={(id) => setMode(id as ResidentMode)}
         />
 
         <p className="auth-footer-link mt-5 text-center text-[13px] text-muted sm:mt-6 sm:text-sm">
-          <Link className="font-semibold text-primary hover:opacity-90" href="/auth/welcome">
+          <Link className="font-semibold text-primary hover:opacity-90" href={nativeAuthEntryPathClient()}>
             Change role
           </Link>
         </p>
@@ -60,7 +66,7 @@ export default function ResidentAuthPage() {
   if (mode === "sign-in") {
     return (
       <AuthCard>
-        <AuthPageHeader eyebrow="Resident" title="Sign in" accent={false} />
+        <AuthPageHeader eyebrow="Resident" title="Sign in" accent={false} showLogo />
 
         <div className="mt-5">
           <GoogleSignInButton nextPath="/resident/dashboard" />
@@ -79,7 +85,13 @@ export default function ResidentAuthPage() {
 
   return (
     <AuthCard>
-      <AuthPageHeader eyebrow="Resident" title="Apply" subtitle="Paste the link from your manager" accent={false} />
+      <AuthPageHeader
+        eyebrow="Resident"
+        title="Apply"
+        subtitle="Paste the link from your manager"
+        accent={false}
+        showLogo
+      />
 
       <div className="mt-5 sm:mt-6">
         <AuthFieldBlock label="Application link">

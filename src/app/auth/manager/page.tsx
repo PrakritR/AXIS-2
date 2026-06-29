@@ -13,7 +13,13 @@ import Link from "next/link";
 export default function ManagerAuthPage() {
   return (
     <AuthCard>
-      <AuthPageHeader eyebrow="Manager" title="Sign in" subtitle="Or create a new account below" accent={false} />
+      <AuthPageHeader
+        showLogo
+        eyebrow="Manager"
+        title="Sign in"
+        subtitle="Or create a new account below"
+        accent={false}
+      />
 
       <div className="mt-5">
         <GoogleSignInButton nextPath="/portal/dashboard" />

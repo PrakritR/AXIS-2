@@ -4,6 +4,7 @@ import {
   NATIVE_AUTH_WEB_ENTRY_PATH,
   NATIVE_AUTH_WELCOME_PATH,
   NATIVE_MANAGER_PLAN_PATH,
+  NATIVE_SHELL_ENTRY_PATH,
   nativeShellEntryPath,
 } from "@/lib/auth/native-shell-entry";
 
@@ -12,6 +13,7 @@ export {
   NATIVE_AUTH_WEB_ENTRY_PATH,
   NATIVE_AUTH_WELCOME_PATH,
   NATIVE_MANAGER_PLAN_PATH,
+  NATIVE_SHELL_ENTRY_PATH,
   nativeShellEntryPath,
 };
 
@@ -26,13 +28,13 @@ export function nativeAuthEntryPathFromServerBase(_serverBase?: string): string 
 }
 
 /**
- * In-browser: native shell → welcome; website → sign-in.
+ * In-browser: native shell → /auth/sign-in (welcome UI); website → sign-in form.
  */
 export function nativeAuthEntryPathClient(): string {
-  if (typeof window === "undefined") return NATIVE_AUTH_WELCOME_PATH;
+  if (typeof window === "undefined") return NATIVE_SHELL_ENTRY_PATH;
   const override = process.env.NEXT_PUBLIC_NATIVE_AUTH_ENTRY?.trim();
   if (override) return override.startsWith("/") ? override : `/${override}`;
-  if (detectNativePlatformSync()) return NATIVE_AUTH_WELCOME_PATH;
+  if (detectNativePlatformSync()) return NATIVE_SHELL_ENTRY_PATH;
   return NATIVE_AUTH_WEB_ENTRY_PATH;
 }
 

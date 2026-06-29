@@ -57,7 +57,7 @@ CAP_SERVER_URL=http://192.168.1.50:3000 npm run cap:sync
 ```
 
 **TestFlight / App Store builds** use production (`npm run cap:prod`). The app opens
-`/auth/welcome` (role picker), not the web sign-in page.
+`/auth/sign-in`, which shows the native welcome role picker (Resident / Manager).
 
 ---
 

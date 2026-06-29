@@ -2,8 +2,8 @@ import type { CapacitorConfig } from "@capacitor/cli";
 import { nativeShellEntryPath } from "./src/lib/auth/native-shell-entry";
 
 /**
- * Capacitor native shell — loads the deployed site but opens /auth/welcome (not
- * the web sign-in). Local dev: npm run cap:dev (LAN IP for physical iPhone).
+ * Capacitor native shell — opens /auth/sign-in (welcome role picker on device).
+ * Local dev: npm run cap:dev (LAN IP for physical iPhone).
  */
 const serverBase = (process.env.CAP_SERVER_URL ?? "https://www.axis-seattle-housing.com").replace(/\/$/, "");
 const nativeEntryPath = nativeShellEntryPath();

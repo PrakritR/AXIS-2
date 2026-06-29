@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { AuthWelcomeScreen, shouldShowNativeWelcome } from "@/components/auth/auth-welcome-screen";
 import { AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
@@ -115,8 +116,19 @@ function SignInForm() {
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
   const intent = parseSignInIntent(searchParams.get("intent"));
-  const copy = signInCopy(intent);
   const authError = searchParams.get("error");
+
+  if (
+    shouldShowNativeWelcome({
+      intent: searchParams.get("intent"),
+      next: nextPath,
+      error: authError,
+    })
+  ) {
+    return <AuthWelcomeScreen />;
+  }
+
+  const copy = signInCopy(intent);
   const oauthMessage = searchParams.get("message");
 
   const [email, setEmail] = useState(readRememberedLoginEmail);
@@ -218,7 +230,7 @@ function SignInForm() {
 
   return (
     <AuthCard>
-      <AuthPageHeader title={copy.title} accent={!intent} />
+      <AuthPageHeader title={copy.title} accent={!intent} showLogo />
 
       <div className="mt-5 sm:mt-6">
         <GoogleSignInButton

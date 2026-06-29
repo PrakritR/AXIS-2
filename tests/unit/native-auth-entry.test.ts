@@ -7,15 +7,17 @@ import {
   nativeShellEntryPath,
   NATIVE_AUTH_WEB_ENTRY_PATH,
   NATIVE_AUTH_WELCOME_PATH,
+  NATIVE_SHELL_ENTRY_PATH,
 } from "@/lib/auth/native-auth-entry";
 
 describe("native-auth-entry", () => {
-  it("native shell always opens welcome at cap sync time", () => {
-    expect(nativeShellEntryPath()).toBe("/auth/welcome");
-    expect(nativeAuthEntryPathForHost("localhost")).toBe("/auth/welcome");
-    expect(nativeAuthEntryPathForHost("www.axis-seattle-housing.com")).toBe("/auth/welcome");
+  it("native shell opens /auth/sign-in (welcome UI renders there on device)", () => {
+    expect(nativeShellEntryPath()).toBe("/auth/sign-in");
+    expect(NATIVE_SHELL_ENTRY_PATH).toBe("/auth/sign-in");
+    expect(nativeAuthEntryPathForHost("localhost")).toBe("/auth/sign-in");
+    expect(nativeAuthEntryPathForHost("www.axis-seattle-housing.com")).toBe("/auth/sign-in");
     expect(nativeAuthEntryPathFromServerBase("https://www.axis-seattle-housing.com")).toBe(
-      "/auth/welcome",
+      "/auth/sign-in",
     );
   });
 
@@ -38,6 +40,6 @@ describe("native-auth-entry client defaults", () => {
   it("exports distinct web vs native entry constants", () => {
     expect(NATIVE_AUTH_WELCOME_PATH).toBe("/auth/welcome");
     expect(NATIVE_AUTH_WEB_ENTRY_PATH).toBe("/auth/sign-in");
-    expect(nativeAuthEntryPathClient()).toBe("/auth/welcome");
+    expect(nativeAuthEntryPathClient()).toBe("/auth/sign-in");
   });
 });
