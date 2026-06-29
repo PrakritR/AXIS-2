@@ -51,10 +51,10 @@ export async function openOAuthUrl(url: string): Promise<void> {
     try {
       const storedNext = readOAuthNextPathFromStorage();
       if (storedNext) {
-        const url = new URL(callbackUrl, window.location.origin);
-        if (!url.searchParams.get("next")) {
-          url.searchParams.set("next", storedNext);
-          target = url.toString();
+        const parsed = new URL(callbackUrl, window.location.origin);
+        if (!parsed.searchParams.get("next")) {
+          parsed.searchParams.set("next", storedNext);
+          target = parsed.toString();
         }
       }
     } catch {
@@ -64,12 +64,18 @@ export async function openOAuthUrl(url: string): Promise<void> {
     window.location.href = target;
   };
 
-  const pageLoaded = await Browser.addListener("browserPageLoaded", (event) => {
-    if (event.url && isAuthCallbackUrl(event.url)) {
-      void complete(event.url);
+  const { App } = await import("@capacitor/app");
+  const appUrlListener = await App.addListener("appUrlOpen", (event) => {
+    if (!event.url || !isAuthCallbackUrl(event.url)) return;
+    try {
+      const opened = new URL(event.url);
+      const path = `${opened.pathname}${opened.search}${opened.hash}`;
+      void complete(path.startsWith("http") ? path : `${window.location.origin}${path}`);
+    } catch {
+      /* ignore malformed callback URLs */
     }
   });
-  cleanups.push(() => void pageLoaded.remove());
+  cleanups.push(() => void appUrlListener.remove());
 
   const finished = await Browser.addListener("browserFinished", () => {
     if (settled) return;
