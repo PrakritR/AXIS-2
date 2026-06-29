@@ -1,6 +1,7 @@
 "use client";
 
 import { isNativeDeepLinkPath } from "@/lib/auth/native-entry-paths";
+import { webPathFromNativeOAuthUrl } from "@/lib/auth/native-oauth-callback";
 import { redirectNativeFromMarketing } from "@/lib/auth/native-welcome-redirect";
 import { detectNativePlatformSync, tagHtmlNativePlatform } from "@/lib/native/detect-native";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -76,6 +77,11 @@ export function NativeBridge() {
 
           const urlOpen = await App.addListener("appUrlOpen", (event) => {
             try {
+              const fromOAuth = event.url ? webPathFromNativeOAuthUrl(event.url, window.location.origin) : null;
+              if (fromOAuth) {
+                window.location.assign(fromOAuth);
+                return;
+              }
               const opened = new URL(event.url);
               if (!isNativeDeepLinkPath(opened.pathname)) return;
               const target = `${opened.pathname}${opened.search}${opened.hash}`;

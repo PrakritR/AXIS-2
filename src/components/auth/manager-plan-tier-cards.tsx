@@ -63,13 +63,51 @@ export function ManagerPlanTierCards({
   selectedTierId,
   onSelectTier,
   disabled,
+  compact = false,
 }: {
   tiers: ManagerPlanTierDefinition[];
   billing: "monthly" | "annual";
   selectedTierId: PlanTierId;
   onSelectTier: (tierId: PlanTierId) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <div className="grid grid-cols-3 gap-2">
+        {tiers.map((tier) => {
+          const price = billing === "monthly" ? tier.monthly : tier.annual;
+          const isSelected = selectedTierId === tier.id;
+          const isPro = tier.id === "pro";
+
+          return (
+            <button
+              key={tier.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelectTier(tier.id)}
+              className={`auth-plan-tier-card rounded-xl border p-2.5 text-center transition ${
+                isSelected
+                  ? "border-primary/50 bg-primary/[0.06] shadow-[0_0_0_1px_rgba(47,107,255,0.2)]"
+                  : "border-border bg-card/50 hover:border-primary/25"
+              }`}
+              aria-pressed={isSelected}
+            >
+              <div className="text-[11px] font-bold text-foreground">{tier.label}</div>
+              {isPro ? (
+                <div className="mt-0.5 text-[8px] font-bold uppercase tracking-wide text-primary">Popular</div>
+              ) : (
+                <div className="mt-0.5 h-[11px]" aria-hidden />
+              )}
+              <div className="mt-1 text-base font-black leading-none text-foreground">{price.headline}</div>
+              {price.period ? <div className="mt-0.5 text-[9px] font-medium text-muted">{price.period}</div> : null}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-3 sm:gap-4">
       {tiers.map((tier) => {

@@ -1,4 +1,6 @@
+import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import { portalDashboardPath } from "@/lib/auth/portal-roles";
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
 import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import {
@@ -22,10 +24,23 @@ function isBypassOAuthGatePath(path: string): boolean {
     path.startsWith("/auth/manager-") ||
     path.startsWith("/auth/resident-") ||
     path.startsWith("/partner/pricing") ||
+    path.startsWith(MANAGER_PRICING_ENTRY_PATH) ||
     path.startsWith("/auth/create-account") ||
     path.startsWith("/auth/callback/") ||
     path === "/auth/manager-register-oauth"
   );
+}
+
+function managerPortalDestination(safeIntended: string): string {
+  if (
+    safeIntended.startsWith("/auth/continue") ||
+    safeIntended.startsWith("/resident/") ||
+    safeIntended === "/partner/pricing" ||
+    safeIntended.startsWith("/partner/pricing")
+  ) {
+    return portalDashboardPath("manager");
+  }
+  return safeIntended;
 }
 
 function applicationBucket(rowData: unknown): string {
@@ -52,7 +67,7 @@ export async function resolveOAuthPortalRedirect(
 
   const email = user.email?.trim().toLowerCase() ?? "";
   if (!email) {
-    return "/partner/pricing";
+    return MANAGER_PRICING_ENTRY_PATH;
   }
 
   const { data: roleRows } = await supabase.from("profile_roles").select("role").eq("user_id", user.id);
@@ -60,7 +75,11 @@ export async function resolveOAuthPortalRedirect(
 
   const isManagerAccount = roles.includes("manager");
   if (isManagerAccount && (await managerNeedsPricingSelection(supabase, user.id, email))) {
-    return "/partner/pricing";
+    return MANAGER_PRICING_ENTRY_PATH;
+  }
+
+  if (isManagerAccount) {
+    return managerPortalDestination(safeIntended);
   }
 
   if (roles.length > 0) {
@@ -69,7 +88,10 @@ export async function resolveOAuthPortalRedirect(
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
   if (profile?.role === "manager" && (await managerNeedsPricingSelection(supabase, user.id, email))) {
-    return "/partner/pricing";
+    return MANAGER_PRICING_ENTRY_PATH;
+  }
+  if (profile?.role === "manager") {
+    return managerPortalDestination(safeIntended);
   }
   if (profile?.role && isAuthRole(profile.role)) {
     return safeIntended;
@@ -81,7 +103,7 @@ export async function resolveOAuthPortalRedirect(
 
   const linkedPurchase = await findManagerPurchaseForAccount(supabase, user.id, email);
   if (linkedPurchase && !isManagerOnboardingComplete(linkedPurchase)) {
-    return "/partner/pricing";
+    return MANAGER_PRICING_ENTRY_PATH;
   }
   if (linkedPurchase && isManagerOnboardingComplete(linkedPurchase)) {
     const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
@@ -145,5 +167,5 @@ export async function resolveOAuthPortalRedirect(
     return "/portal/dashboard";
   }
 
-  return "/partner/pricing";
+  return MANAGER_PRICING_ENTRY_PATH;
 }

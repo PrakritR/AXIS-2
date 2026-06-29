@@ -1,6 +1,5 @@
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
-import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
-import { provisionPendingManagerAccount } from "@/lib/auth/manager-onboarding";
+import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -13,10 +12,7 @@ type Body = {
   fullName?: string;
 };
 
-/**
- * Creates a new manager account (pending tier selection) for email/password signup.
- * User must pick Free / Pro / Business on the manager plan screen before portal access.
- */
+/** Simple resident account — no Axis ID field; links application by email when present. */
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
@@ -27,20 +23,16 @@ export async function POST(req: Request) {
     if (!email.includes("@")) {
       return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
     }
-    if (!fullName) {
-      return NextResponse.json({ error: "Enter your full name." }, { status: 400 });
-    }
     if (password.length < 8) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
     }
 
     const supabase = createSupabaseServiceRoleClient();
-
     const { data: created, error: createErr } = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { role: "manager", full_name: fullName },
+      user_metadata: { role: "resident", full_name: fullName || undefined },
     });
 
     let userId: string;
@@ -68,16 +60,23 @@ export async function POST(req: Request) {
       userId = created.user.id;
     }
 
-    const { managerId } = await provisionPendingManagerAccount(supabase, {
+    const provisioned = await provisionResidentAccountByEmail(supabase, {
       userId,
       email,
-      fullName,
+      fullName: fullName || null,
     });
+    if (!provisioned.ok) {
+      return NextResponse.json({ error: provisioned.error }, { status: provisioned.status });
+    }
 
-    return NextResponse.json({ ok: true, managerId, redirectTo: MANAGER_PRICING_ENTRY_PATH });
+    return NextResponse.json({
+      ok: true,
+      axisId: provisioned.axisId,
+      linkedApplication: provisioned.linkedApplication,
+      redirectTo: "/resident/dashboard",
+    });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Could not create manager account.";
-    const status = message.includes("already exists") ? 409 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const message = e instanceof Error ? e.message : "Could not create resident account.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

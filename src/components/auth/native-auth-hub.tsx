@@ -2,30 +2,43 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import {
-  AuthAccountFooterLink,
   AuthBrandHeader,
   AuthDivider,
   AuthFieldBlock,
   AuthLoadingCard,
 } from "@/components/auth/auth-mobile-primitives";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
-import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
+import { ManagerPlanBillingToggle, ManagerPlanTierCards } from "@/components/auth/manager-plan-tier-cards";
+import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
+import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
+import {
+  buildPricingOffer,
+  continuePartnerPricingWithOffer,
+  type ContinuePartnerPricingResult,
+} from "@/lib/auth/partner-pricing-google-flow";
+import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getNativeInfo } from "@/lib/native/push-client";
+import { loadManagerPlanTiers } from "@/lib/site-content";
+import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
+import { stripeLiveJsBlockedMessage } from "@/lib/stripe/stripe-js-client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 type AuthMode = "sign-in" | "create";
 type AccountRole = "resident" | "manager";
 
-const LOGIN_TIMEOUT_MS = 6000;
+function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
+  return tiers.find((t) => t.id === id) ?? tiers[0]!;
+}
 
 async function tryResidentAutoConfirm(email: string): Promise<boolean> {
   try {
@@ -92,7 +105,7 @@ function RoleToggle({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex gap-2">
+    <div className="native-auth-role-toggle flex rounded-full border border-border bg-card/40 p-1">
       {(
         [
           { id: "resident" as const, label: "Resident" },
@@ -104,10 +117,8 @@ function RoleToggle({
           type="button"
           disabled={disabled}
           onClick={() => onChange(opt.id)}
-          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-            role === opt.id
-              ? "border-primary/40 bg-primary/10 text-primary"
-              : "border-border text-muted hover:text-foreground"
+          className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold transition ${
+            role === opt.id ? "btn-cobalt shadow-sm" : "text-muted hover:text-foreground"
           }`}
         >
           {opt.label}
@@ -129,14 +140,43 @@ function NativeAuthHubInner() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AccountRole>(initialRole);
-  const [email, setEmail] = useState(readRememberedLoginEmail);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [axisId, setAxisId] = useState("");
   const [applicationLink, setApplicationLink] = useState("");
-  const [showApply, setShowApply] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [stripeCheckoutBlocked, setStripeCheckoutBlocked] = useState<string | null>(null);
+
+  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
+  const [selectedTierId, setSelectedTierId] = useState<PlanTierId>("free");
+  const [planTiers, setPlanTiers] = useState(MANAGER_PLAN_TIERS);
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
+
+  const selectedTier = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
+  const selectedPrice = billing === "monthly" ? selectedTier.monthly : selectedTier.annual;
+
+  useEffect(() => {
+    const remembered = readRememberedLoginEmail();
+    if (remembered) setEmail(remembered);
+    setStripeCheckoutBlocked(stripeLiveJsBlockedMessage());
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadManagerPlanTiers()
+      .then((tiers) => {
+        if (!cancelled) setPlanTiers(tiers);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setCheckoutClientSecret(null);
+  }, [selectedTierId, billing, role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,7 +200,28 @@ function NativeAuthHubInner() {
     };
   }, []);
 
-  const oauthNext = role === "manager" ? "/portal/dashboard" : "/resident/dashboard";
+  const applyPricingResult = useCallback(
+    (result: ContinuePartnerPricingResult) => {
+      if (result.status === "checkout") {
+        if (stripeLiveJsBlockedMessage()) {
+          showToast(stripeLiveJsBlockedMessage()!);
+          return;
+        }
+        setCheckoutClientSecret(result.clientSecret);
+        return;
+      }
+      if (result.status === "finish") {
+        router.push(partnerPricingFinishPath(result.sessionId));
+        return;
+      }
+      if (result.status === "portal") {
+        router.push("/portal/dashboard");
+        return;
+      }
+      if (result.status === "error") showToast(result.message);
+    },
+    [router, showToast],
+  );
 
   const signIn = async () => {
     if (!email.trim() || !password) {
@@ -194,45 +255,11 @@ function NativeAuthHubInner() {
       } catch {
         /* ignore */
       }
-      window.location.replace(`/auth/continue?next=${encodeURIComponent(oauthNext)}`);
+      window.location.replace("/auth/continue");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign-in failed";
       setErrorText(msg);
       showToast(msg);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const createResident = async () => {
-    if (!email.trim() || !axisId.trim() || password.length < 8) {
-      showToast("Enter email, Axis ID, and an 8+ character password.");
-      return;
-    }
-    setErrorText(null);
-    setBusy(true);
-    try {
-      const res = await fetch("/api/auth/register-resident", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, axisId: axisId.trim() }),
-      });
-      const body = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setErrorText(body.error ?? "Could not create account.");
-        showToast(body.error ?? "Could not create account.");
-        return;
-      }
-      const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (error) {
-        showToast("Account created. Sign in to continue.");
-        setMode("sign-in");
-        return;
-      }
-      window.location.replace("/auth/continue?next=/resident/dashboard");
-    } catch {
-      showToast("Network error.");
     } finally {
       setBusy(false);
     }
@@ -260,12 +287,13 @@ function NativeAuthHubInner() {
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) {
-        showToast("Account created. Sign in to pick your plan.");
+        showToast("Account created. Sign in to continue.");
         setMode("sign-in");
         setRole("manager");
         return;
       }
-      window.location.replace("/auth/continue?next=/portal/plan");
+      const offer = buildPricingOffer({ tier: selectedTierId, billing, returnSurface: "mobile-plan" });
+      applyPricingResult(await continuePartnerPricingWithOffer(offer));
     } catch {
       showToast("Network error.");
     } finally {
@@ -273,7 +301,7 @@ function NativeAuthHubInner() {
     }
   };
 
-  const continueApplyLink = () => {
+  const startResidentApplication = () => {
     const parsed = parseManagerApplicationLink(applicationLink);
     if (parsed.kind === "invalid") {
       showToast(parsed.reason);
@@ -291,139 +319,158 @@ function NativeAuthHubInner() {
   }
 
   const locked = busy;
+  const isCreate = mode === "create";
+  const managerCta =
+    selectedTierId === "free"
+      ? `Create account · ${selectedTier.label}`
+      : `Start ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day trial · ${selectedTier.label}`;
+
+  if (checkoutClientSecret) {
+    return (
+      <AuthCard wide>
+        <AuthBrandHeader title="Axis" subtitle="Add payment method" />
+        <p className="mt-2 text-center text-xs text-muted">
+          {selectedTier.label} · {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then {selectedPrice.headline}
+          {selectedPrice.period ?? ""}
+        </p>
+        <div className="mt-4 rounded-2xl border border-border bg-card/50 p-3">
+          <EmbeddedCheckoutMount
+            clientSecret={checkoutClientSecret}
+            onError={(message) => {
+              showToast(message);
+              setCheckoutClientSecret(null);
+            }}
+          />
+        </div>
+        <button
+          type="button"
+          className="mt-4 block w-full text-center text-[13px] font-semibold text-primary/90"
+          onClick={() => setCheckoutClientSecret(null)}
+        >
+          ← Change plan
+        </button>
+      </AuthCard>
+    );
+  }
 
   return (
-    <AuthCard>
+    <AuthCard wide={isCreate}>
       <div className="native-auth-hub">
         <AuthBrandHeader
           title="Axis"
-          subtitle={mode === "sign-in" ? "Welcome back" : "Set up your account in seconds"}
+          subtitle={
+            mode === "sign-in"
+              ? "Welcome back"
+              : role === "resident"
+                ? "Apply with your manager's link"
+                : "Create your account"
+          }
         />
 
-        <div className="mt-5">
+        <div className="mt-4">
           <AuthModeToggle mode={mode} onChange={setMode} disabled={locked} />
         </div>
 
-        <div className="mt-4">
-          <GoogleSignInButton nextPath={oauthNext} disabled={locked} />
-        </div>
-
-        <div className="my-4">
-          <AuthDivider label="or email" />
-        </div>
-
         {mode === "sign-in" ? (
-          <div className="space-y-3">
-            <Input
-              type="email"
-              autoComplete="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={locked}
-            />
-            <PasswordInput
-              autoComplete="current-password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={locked}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void signIn();
-              }}
-            />
-            {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
-            <Button
-              type="button"
-              className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-              disabled={locked}
-              onClick={() => void signIn()}
-            >
-              {busy ? "Signing in…" : "Sign in"}
-            </Button>
-            <p className="text-center text-[12px] text-muted">
-              <Link className="font-semibold text-primary hover:opacity-90" href="/auth/forgot-password">
-                Forgot password?
-              </Link>
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-muted">I am a</p>
-              <RoleToggle role={role} onChange={setRole} disabled={locked} />
+          <>
+            <div className="mt-4">
+              <GoogleSignInButton nextPath="" disabled={locked} />
             </div>
+            <div className="my-4">
+              <AuthDivider label="or email" />
+            </div>
+            <div className="space-y-3">
+              <Input
+                type="email"
+                autoComplete="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={locked}
+              />
+              <PasswordInput
+                autoComplete="current-password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={locked}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void signIn();
+                }}
+              />
+              {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
+              <Button
+                type="button"
+                className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+                disabled={locked}
+                onClick={() => void signIn()}
+              >
+                {busy ? "Signing in…" : "Sign in"}
+              </Button>
+              <p className="text-center text-[12px] text-muted">
+                <Link className="font-semibold text-primary hover:opacity-90" href="/auth/forgot-password">
+                  Forgot password?
+                </Link>
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <RoleToggle role={role} onChange={setRole} disabled={locked} />
 
             {role === "resident" ? (
               <>
-                <Input
-                  placeholder="Axis ID from your application"
-                  value={axisId}
-                  onChange={(e) => setAxisId(e.target.value)}
-                  autoComplete="off"
-                  disabled={locked}
-                />
-                <ResidentGoogleSignUpButton axisId={axisId} disabled={locked} />
-                <AuthDivider label="or" />
-                <Input
-                  type="email"
-                  autoComplete="email"
-                  placeholder="Email (same as application)"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={locked}
-                />
-                <PasswordInput
-                  autoComplete="new-password"
-                  placeholder="Password (8+ characters)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={locked}
-                />
+                <p className="text-center text-[13px] leading-relaxed text-muted">
+                  Paste the application link from your property manager. You&apos;ll create your account when you
+                  finish applying.
+                </p>
+                <AuthFieldBlock label="Application link">
+                  <Input
+                    className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                    placeholder="https://…/rent/apply?…"
+                    value={applicationLink}
+                    onChange={(e) => setApplicationLink(e.target.value)}
+                    autoComplete="off"
+                    inputMode="url"
+                    disabled={locked}
+                  />
+                </AuthFieldBlock>
                 <Button
                   type="button"
                   className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                  disabled={locked}
-                  onClick={() => void createResident()}
+                  disabled={locked || !applicationLink.trim()}
+                  onClick={startResidentApplication}
                 >
-                  {busy ? "Creating…" : "Create resident account"}
+                  Start an application
                 </Button>
-                <button
-                  type="button"
-                  className="w-full text-center text-[12px] font-semibold text-primary/90"
-                  onClick={() => setShowApply((v) => !v)}
-                >
-                  {showApply ? "Hide application link" : "Applying for the first time?"}
-                </button>
-                {showApply ? (
-                  <div className="space-y-2 rounded-xl border border-border bg-card/40 p-3">
-                    <AuthFieldBlock label="Manager application link">
-                      <Input
-                        className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                        placeholder="https://…/rent/apply?…"
-                        value={applicationLink}
-                        onChange={(e) => setApplicationLink(e.target.value)}
-                        inputMode="url"
-                        disabled={locked}
-                      />
-                    </AuthFieldBlock>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full rounded-full"
-                      disabled={locked || !applicationLink.trim()}
-                      onClick={continueApplyLink}
-                    >
-                      Open application
-                    </Button>
-                  </div>
-                ) : null}
               </>
             ) : (
               <>
-                <p className="text-xs leading-relaxed text-muted">
-                  Create your login first — you&apos;ll pick Free, Pro, or Business inside your portal.
-                </p>
+                <ManagerPlanBillingToggle billing={billing} onChange={setBilling} disabled={locked} />
+                <ManagerPlanTierCards
+                  tiers={planTiers}
+                  billing={billing}
+                  selectedTierId={selectedTierId}
+                  onSelectTier={setSelectedTierId}
+                  disabled={locked}
+                  compact
+                />
+                {selectedTierId !== "free" ? (
+                  <p className="text-center text-[11px] text-muted">
+                    {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then {selectedPrice.headline}
+                    {selectedPrice.period ?? ""}
+                  </p>
+                ) : null}
+                {stripeCheckoutBlocked && selectedTierId !== "free" ? (
+                  <p className="auth-stripe-dev-notice px-3 py-2 text-xs">{stripeCheckoutBlocked}</p>
+                ) : null}
+                <PricingGoogleContinueButton
+                  tier={selectedTierId}
+                  billing={billing}
+                  disabled={locked || Boolean(stripeCheckoutBlocked && selectedTierId !== "free")}
+                  returnSurface="mobile-plan"
+                />
+                <AuthDivider label="or email" />
                 <Input
                   placeholder="Full name"
                   autoComplete="name"
@@ -449,10 +496,10 @@ function NativeAuthHubInner() {
                 <Button
                   type="button"
                   className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                  disabled={locked}
+                  disabled={locked || Boolean(stripeCheckoutBlocked && selectedTierId !== "free")}
                   onClick={() => void createManager()}
                 >
-                  {busy ? "Creating…" : "Create manager account"}
+                  {busy ? "Creating…" : managerCta}
                 </Button>
               </>
             )}

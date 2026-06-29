@@ -2,6 +2,7 @@
 
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useSearchParams } from "next/navigation";
@@ -116,7 +117,7 @@ function ContinueContent() {
           if (redirectTo) {
             if (cancelled || didRedirectRef.current) return;
             didRedirectRef.current = true;
-            window.location.replace(redirectTo);
+            window.location.replace(nativeAwarePath(redirectTo));
             return;
           }
           if (cancelled || didRedirectRef.current) return;
@@ -138,7 +139,7 @@ function ContinueContent() {
         }
 
         const role = roles[0] ?? "manager";
-        window.location.replace(normalizePostAuthPath(nextPath, role));
+        window.location.replace(nativeAwarePath(normalizePostAuthPath(nextPath, role)));
       } catch {
         if (cancelled) return;
         setErrorText("Still loading your portal. If this keeps happening, go back and try sign-in again.");

@@ -2,8 +2,8 @@
 
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { persistOAuthNextPath } from "@/lib/auth/oauth-next-cookie";
+import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import {
-  bareAuthCallbackUrl,
   oauthContinuePath,
   usesDirectOAuthReturn,
 } from "@/lib/auth/oauth-redirect";
@@ -69,10 +69,10 @@ export function GoogleSignInButton({
       const origin = resolveOAuthBrowserOrigin();
       const redirectTo =
         fixedCallbackPath && fixedCallbackPath.startsWith("/")
-          ? `${origin.replace(/\/$/, "")}${fixedCallbackPath}`
+          ? resolveOAuthCallbackRedirectUrl(origin, fixedCallbackPath)
           : (() => {
               persistOAuthNextPath(afterAuth);
-              return bareAuthCallbackUrl(origin);
+              return resolveOAuthCallbackRedirectUrl(origin);
             })();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",

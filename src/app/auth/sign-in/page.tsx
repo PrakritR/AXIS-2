@@ -1,9 +1,8 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { AuthWelcomeScreen, shouldShowNativeWelcome } from "@/components/auth/auth-welcome-screen";
 import { NativeAuthHub } from "@/components/auth/native-auth-hub";
-import { AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import { AuthPageHeader, AuthLoadingCard } from "@/components/auth/auth-mobile-primitives";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -12,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { nativeAuthEntryPathClient } from "@/lib/auth/native-auth-entry";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -88,9 +87,11 @@ function parseSignInIntent(value: string | null): SignInIntent {
   return null;
 }
 
-function signInCopy(intent: SignInIntent): { title: string; createAccountHref: string; backHref: string | null } {
+function signInCopy(
+  intent: SignInIntent,
+  isNative: boolean,
+): { title: string; createAccountHref: string; backHref: string | null } {
   const entry = nativeAuthEntryPathClient();
-  const isNative = Boolean(detectNativePlatformSync());
   if (intent === "resident") {
     return {
       title: "Resident sign-in",
@@ -114,34 +115,27 @@ function signInCopy(intent: SignInIntent): { title: string; createAccountHref: s
 
 function SignInForm() {
   const { showToast } = useAppUi();
+  const { isNative } = useIsNativeApp();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
   const intent = parseSignInIntent(searchParams.get("intent"));
   const authError = searchParams.get("error");
-
-  if (detectNativePlatformSync()) {
-    return <NativeAuthHub />;
-  }
-
-  if (
-    shouldShowNativeWelcome({
-      intent: searchParams.get("intent"),
-      next: nextPath,
-      error: authError,
-    })
-  ) {
-    return <AuthWelcomeScreen />;
-  }
-
-  const copy = signInCopy(intent);
   const oauthMessage = searchParams.get("message");
 
-  const [email, setEmail] = useState(readRememberedLoginEmail);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberEmail, setRememberEmail] = useState(() => Boolean(readRememberedLoginEmail()));
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  useEffect(() => {
+    const remembered = readRememberedLoginEmail();
+    if (remembered) {
+      setEmail(remembered);
+      setRememberEmail(true);
+    }
+  }, []);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -154,6 +148,20 @@ function SignInForm() {
       }
     });
   }, [authError, oauthMessage]);
+
+  if (isNative === null) {
+    return (
+      <AuthCard>
+        <AuthLoadingCard />
+      </AuthCard>
+    );
+  }
+
+  if (isNative) {
+    return <NativeAuthHub />;
+  }
+
+  const copy = signInCopy(intent, false);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {
@@ -311,16 +319,14 @@ function SignInForm() {
       </Button>
       {isLoadingPortal ? <p className="mt-2 text-center text-[13px] text-muted sm:mt-3 sm:text-sm">Loading…</p> : null}
 
-      {!detectNativePlatformSync() || intent ? (
-        <p className="auth-footer-link mt-4 text-center text-[13px] text-muted sm:mt-5 sm:text-sm">
-          New here?{" "}
-          <Link className="font-semibold text-primary hover:opacity-90" href={copy.createAccountHref}>
-            {intent === "manager" ? "Create an account" : intent === "resident" ? "Resident setup" : "Get started"}
-          </Link>
-        </p>
-      ) : null}
+      <p className="auth-footer-link mt-4 text-center text-[13px] text-muted sm:mt-5 sm:text-sm">
+        New here?{" "}
+        <Link className="font-semibold text-primary hover:opacity-90" href={copy.createAccountHref}>
+          {intent === "manager" ? "Create an account" : intent === "resident" ? "Resident setup" : "Get started"}
+        </Link>
+      </p>
 
-      {!detectNativePlatformSync() && copy.backHref ? (
+      {copy.backHref ? (
         <p className="mt-3 text-center text-[13px] text-muted sm:mt-4 sm:text-sm">
           <Link className="font-semibold text-primary hover:opacity-90" href={copy.backHref}>
             Change role

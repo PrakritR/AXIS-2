@@ -2,6 +2,7 @@ import {
   clearOAuthNextPathStorage,
   readOAuthNextPathFromStorage,
 } from "@/lib/auth/oauth-next-cookie";
+import { webPathFromNativeOAuthUrl } from "@/lib/auth/native-oauth-callback";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
 /** Open a URL in the WebView on web; native uses the system in-app browser when needed. */
@@ -16,11 +17,26 @@ export function shouldUseInAppConnectFlow(): boolean {
 
 /** Supabase OAuth lands on /auth/callback or /auth/callback/... */
 export function isAuthCallbackUrl(url: string): boolean {
+  if (webPathFromNativeOAuthUrl(url, "https://local") !== null) return true;
   try {
     const parsed = new URL(url);
     return parsed.pathname === "/auth/callback" || parsed.pathname.startsWith("/auth/callback/");
   } catch {
     return /\/auth\/callback(\/|$|\?)/.test(url);
+  }
+}
+
+function resolveCallbackTarget(url: string): string | null {
+  const fromScheme = webPathFromNativeOAuthUrl(url, window.location.origin);
+  if (fromScheme) return fromScheme;
+  try {
+    const opened = new URL(url, window.location.origin);
+    if (!isAuthCallbackUrl(url) && opened.pathname !== "/auth/callback" && !opened.pathname.startsWith("/auth/callback/")) {
+      return null;
+    }
+    return `${opened.pathname}${opened.search}${opened.hash}`;
+  } catch {
+    return null;
   }
 }
 
@@ -66,21 +82,33 @@ export async function openOAuthUrl(url: string): Promise<void> {
 
   const { App } = await import("@capacitor/app");
   const appUrlListener = await App.addListener("appUrlOpen", (event) => {
-    if (!event.url || !isAuthCallbackUrl(event.url)) return;
-    try {
-      const opened = new URL(event.url);
-      const path = `${opened.pathname}${opened.search}${opened.hash}`;
-      void complete(path.startsWith("http") ? path : `${window.location.origin}${path}`);
-    } catch {
-      /* ignore malformed callback URLs */
-    }
+    if (!event.url) return;
+    const target = resolveCallbackTarget(event.url);
+    if (!target) return;
+    void complete(target.startsWith("http") ? target : `${window.location.origin}${target}`);
   });
   cleanups.push(() => void appUrlListener.remove());
 
   const finished = await Browser.addListener("browserFinished", () => {
     if (settled) return;
-    settled = true;
     cleanups.forEach((fn) => fn());
+    void (async () => {
+      try {
+        const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          settled = true;
+          await Browser.close().catch(() => {});
+          clearOAuthNextPathStorage();
+          window.location.href = "/auth/continue";
+        }
+      } catch {
+        settled = true;
+      }
+    })();
   });
   cleanups.push(() => void finished.remove());
 

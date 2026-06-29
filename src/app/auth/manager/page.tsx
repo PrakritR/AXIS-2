@@ -7,9 +7,10 @@ import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 import {
   AuthAccountFooterLink,
   AuthDivider,
+  AuthLoadingCard,
   AuthPageHeader,
 } from "@/components/auth/auth-mobile-primitives";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -44,14 +45,23 @@ function ManagerAuthWeb() {
 
 export default function ManagerAuthPage() {
   const router = useRouter();
+  const { isNative } = useIsNativeApp();
 
   useEffect(() => {
-    if (detectNativePlatformSync()) {
+    if (isNative) {
       router.replace("/auth/sign-in?mode=sign-in&role=manager");
     }
-  }, [router]);
+  }, [isNative, router]);
 
-  if (detectNativePlatformSync()) {
+  if (isNative === null) {
+    return (
+      <AuthCard>
+        <AuthLoadingCard />
+      </AuthCard>
+    );
+  }
+
+  if (isNative) {
     return <NativeAuthHub />;
   }
 

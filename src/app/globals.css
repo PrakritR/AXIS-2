@@ -1170,11 +1170,15 @@ html[data-native] .auth-plan-picker .auth-page-header {
 
 html[data-native] .native-auth-hub .auth-brand-subtitle {
   display: block;
-  max-width: 18rem;
+  max-width: none;
 }
 
 html[data-native] .native-auth-mode-toggle {
   margin-top: 0;
+}
+
+html[data-native] .native-auth-role-toggle {
+  width: 100%;
 }
 
 html[data-native] .auth-layout-main:has(.native-auth-hub) {
@@ -1276,8 +1280,53 @@ html[data-native] .application-finish-panel {
 }
 
 html[data-native] .rental-wizard {
-  padding-top: 0.5rem;
+  padding-top: max(0.5rem, var(--native-safe-top));
   padding-bottom: max(0.75rem, var(--native-safe-bottom));
+}
+
+html[data-native] .rental-wizard-exit-row {
+  margin-bottom: 0.25rem;
+}
+
+html[data-native] .rental-wizard-page-title {
+  display: none;
+}
+
+html[data-native] .rental-wizard-shell {
+  margin-top: 0;
+  padding: 0.875rem;
+  border-radius: 1rem;
+  box-shadow: none !important;
+}
+
+html[data-native] .rental-wizard-step-header {
+  padding-bottom: 0.75rem;
+}
+
+html[data-native] .rental-wizard-step-dots {
+  display: none;
+}
+
+html[data-native] .rental-wizard-step-title {
+  font-size: 1.125rem;
+  line-height: 1.3;
+}
+
+html[data-native] .rental-wizard-step-content {
+  padding-top: 1rem;
+}
+
+html[data-native] .rental-wizard-step-content h2 {
+  display: none;
+}
+
+html[data-native] .rental-wizard-subcard {
+  background: color-mix(in srgb, var(--card) 88%, var(--primary) 12%);
+}
+
+html[data-native] .rental-wizard-actions {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
 }
 
 html[data-native] .rental-wizard-form-hint {

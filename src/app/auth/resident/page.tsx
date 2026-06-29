@@ -8,6 +8,7 @@ import {
   AuthBackLink,
   AuthDivider,
   AuthFieldBlock,
+  AuthLoadingCard,
   AuthPageHeader,
   AuthRoleStack,
 } from "@/components/auth/auth-mobile-primitives";
@@ -16,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
 import { nativeAuthEntryPathClient } from "@/lib/auth/native-auth-entry";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -126,14 +127,23 @@ function ResidentAuthWeb() {
 /** Web keeps the step-by-step resident flow; native uses the unified auth hub. */
 export default function ResidentAuthPage() {
   const router = useRouter();
+  const { isNative } = useIsNativeApp();
 
   useEffect(() => {
-    if (detectNativePlatformSync()) {
+    if (isNative) {
       router.replace("/auth/sign-in?mode=create&role=resident");
     }
-  }, [router]);
+  }, [isNative, router]);
 
-  if (detectNativePlatformSync()) {
+  if (isNative === null) {
+    return (
+      <AuthCard>
+        <AuthLoadingCard />
+      </AuthCard>
+    );
+  }
+
+  if (isNative) {
     return <NativeAuthHub />;
   }
 

@@ -3,7 +3,6 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import { portalDashboardPath } from "@/components/auth/portal-switcher";
-import { clearResidentSignupAxisId, readResidentSignupAxisId } from "@/lib/auth/resident-oauth-storage";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
@@ -21,12 +20,6 @@ function ResidentOauthFinishContent() {
 
     void (async () => {
       try {
-        const axisId = readResidentSignupAxisId();
-        if (!axisId) {
-          setErrorText("Enter your Axis ID on Create account, then try Google again.");
-          return;
-        }
-
         const supabase = createSupabaseBrowserClient();
         const user = await waitForAuthUser(supabase);
         if (!user) {
@@ -46,15 +39,14 @@ function ResidentOauthFinishContent() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ axisId }),
+          body: JSON.stringify({}),
         });
         const body = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setErrorText(body.error ?? "Could not link your resident account.");
+          setErrorText(body.error ?? "Could not finish resident signup.");
           return;
         }
 
-        clearResidentSignupAxisId();
         window.location.replace(portalDashboardPath("resident"));
       } catch (e) {
         const message = e instanceof Error ? e.message : "Could not finish resident signup.";
@@ -68,7 +60,7 @@ function ResidentOauthFinishContent() {
       <AuthCard>
         <p className="text-center text-sm text-rose-600">{errorText}</p>
         <div className="mt-6 flex justify-center">
-          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/create-account?role=resident">
+          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/sign-in?mode=create&role=resident">
             Back to create account
           </Link>
         </div>
@@ -82,10 +74,10 @@ function ResidentOauthFinishContent() {
         <GoogleSignedInBanner
           email={googleEmail}
           fullName={googleName}
-          subtitle="Linking your resident portal to your Google account…"
+          subtitle="Setting up your resident account…"
         />
       ) : (
-        <p className="text-center text-sm text-muted">Linking your resident account…</p>
+        <p className="text-center text-sm text-muted">Setting up your resident account…</p>
       )}
     </AuthCard>
   );

@@ -3,16 +3,17 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthLoadingCard } from "@/components/auth/auth-mobile-primitives";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /** Native: plan selection lives in the portal — not on a giant auth signup screen. */
 export function NativeManagerPlanRedirect() {
   const router = useRouter();
+  const { isNative } = useIsNativeApp();
 
   useEffect(() => {
-    if (!detectNativePlatformSync()) return;
+    if (!isNative) return;
 
     void (async () => {
       const supabase = createSupabaseBrowserClient();
@@ -25,9 +26,15 @@ export function NativeManagerPlanRedirect() {
       }
       router.replace("/auth/sign-in?mode=create&role=manager");
     })();
-  }, [router]);
+  }, [isNative, router]);
 
-  if (!detectNativePlatformSync()) return null;
+  if (isNative === null || !isNative) {
+    return (
+      <AuthCard>
+        <AuthLoadingCard />
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard>

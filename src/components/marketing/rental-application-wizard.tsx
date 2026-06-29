@@ -28,6 +28,7 @@ import {
 } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
 import {
@@ -76,6 +77,34 @@ const STEP_META = [
   { n: 12, title: "Application fee" },
 ] as const;
 
+function rentalApplicationExitPath(): string {
+  if (typeof window !== "undefined" && detectNativePlatformSync()) {
+    return "/auth/sign-in?mode=create&role=resident";
+  }
+  return "/auth/sign-in";
+}
+
+function RentalWizardExitButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rental-wizard-exit inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15"
+    >
+      <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M15 18l-6-6 6-6"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      Back
+    </button>
+  );
+}
+
 export function RentalApplicationWizard({ showToast }: { showToast: (msg: string) => void }) {
   return (
     <Suspense
@@ -116,6 +145,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const router = useRouter();
+
+  const exitApplication = useCallback(() => {
+    router.push(rentalApplicationExitPath());
+  }, [router]);
 
   const listingPrefillKey = useMemo(() => {
     return [
@@ -646,7 +679,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   };
 
   const handleBack = () => {
-    if (step <= 1) return;
+    if (step <= 1) {
+      exitApplication();
+      return;
+    }
     if (step === 12) {
       setStep(11);
       setErrors({});
@@ -671,7 +707,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   return (
     <div className="rental-wizard mx-auto max-w-3xl px-4 py-5 sm:py-14">
-      <div className="text-center sm:text-left">
+      {applicationPath === "signer" && !postSubmit ? (
+        <div className="rental-wizard-exit-row mb-2 sm:mb-3">
+          <RentalWizardExitButton onClick={exitApplication} />
+        </div>
+      ) : null}
+
+      <div className="rental-wizard-page-title text-center sm:text-left">
         <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Rental application</h1>
       </div>
 
@@ -726,15 +768,17 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           />
         ) : (
           <div
-            className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11"
+            className="rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11"
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
-            <div className="border-b border-border pb-4 sm:pb-6">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70 sm:text-[11px]">
+            <div className="rental-wizard-step-header border-b border-border pb-4 sm:pb-6">
+              <p className="rental-wizard-step-eyebrow text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70 sm:text-[11px]">
                 Step {step} of {RENTAL_WIZARD_STEP_COUNT}
               </p>
-              <p className="mt-1 text-base font-bold tracking-tight text-foreground sm:text-xl">{meta.title}</p>
-              <div className="-mx-1 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+              <p className="rental-wizard-step-title mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+                {meta.title}
+              </p>
+              <div className="rental-wizard-step-dots -mx-1 mt-3 overflow-x-auto [-webkit-overflow-scrolling:touch] sm:mt-4">
                 <div className="flex min-w-max gap-1 px-1">
                   {STEP_META.map((s) => {
                     const reachable = canNavigateToWizardStep(s.n, maxStepReached);
@@ -762,7 +806,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                   })}
                 </div>
               </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
+              <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2">
                 <div
                   className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                   style={{ width: `${progressPct}%` }}
@@ -770,7 +814,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               </div>
             </div>
 
-            <div className="pt-8">
+            <div className="rental-wizard-step-content pt-5 sm:pt-8">
               <RentalWizardStepBody
                 step={step}
                 form={form}
@@ -793,9 +837,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               />
             </div>
 
-            <div className="mt-10 flex flex-col-reverse gap-3 border-t border-border pt-8 sm:flex-row sm:items-center sm:justify-between">
-              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
-                {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
+            <div className="rental-wizard-actions mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-8">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
+                onClick={handleBack}
+              >
+                {step <= 1 ? "Exit application" : reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
               </Button>
               <Button
                 type="button"
