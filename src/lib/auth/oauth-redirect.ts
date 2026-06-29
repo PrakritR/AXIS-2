@@ -1,7 +1,11 @@
+import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+
 /** Post-auth path used after OAuth callback exchanges the Supabase code. */
 export function oauthContinuePath(nextPath: string): string {
   if (!nextPath.startsWith("/")) return "/auth/continue";
-  return `/auth/continue?next=${encodeURIComponent(nextPath)}`;
+  const normalized = normalizePostAuthPath(nextPath);
+  if (normalized === "/auth/continue") return normalized;
+  return `/auth/continue?next=${encodeURIComponent(normalized)}`;
 }
 
 /** Manager signup/checkout routes must return directly after OAuth (not via /auth/continue). */
