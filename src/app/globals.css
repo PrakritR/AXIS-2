@@ -1025,7 +1025,7 @@ html[data-native] {
   --native-safe-left: env(safe-area-inset-left, 0px);
   --native-safe-right: env(safe-area-inset-right, 0px);
   /* Measured from `.portal-native-bottom-nav` when present; fallback until layout runs. */
-  --portal-native-bottom-nav-inset: max(2.5rem, calc(var(--native-safe-bottom) + 1.75rem));
+  --portal-native-bottom-nav-inset: max(2.75rem, calc(var(--native-safe-bottom) + 2rem));
   touch-action: pan-y;
   -webkit-text-size-adjust: 100%;
   overflow-x: clip;
@@ -1495,6 +1495,16 @@ html[data-axis-assistant-open] .axis-assistant-root {
   z-index: 2147483000;
 }
 
+/* Native: keep Next.js dev issue badge off the bottom tab bar. */
+html[data-native] nextjs-portal {
+  position: fixed !important;
+  top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem)) !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: max(0.75rem, var(--native-safe-left)) !important;
+  z-index: 2147483646;
+}
+
 html[data-axis-assistant-open] nextjs-portal {
   display: none !important;
 }
@@ -1513,8 +1523,7 @@ html[data-native] .portal-native-bottom-nav {
   position: fixed;
   left: 0;
   right: 0;
-  /* Layout viewport often stops above the home indicator — extend into that inset. */
-  bottom: calc(-1 * var(--native-safe-bottom));
+  bottom: 0;
   z-index: 50;
   display: flex;
   align-items: flex-end;
@@ -1523,7 +1532,7 @@ html[data-native] .portal-native-bottom-nav {
   -webkit-user-select: none;
   user-select: none;
   padding-top: 0;
-  padding-bottom: 2px;
+  padding-bottom: max(4px, calc(var(--native-safe-bottom) * 0.45));
 }
 
 html[data-native] .portal-native-bottom-nav-assistant {

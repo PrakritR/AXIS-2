@@ -2,7 +2,7 @@ export const PORTAL_NATIVE_BOTTOM_NAV_INSET_VAR = "--portal-native-bottom-nav-in
 
 /** CSS fallback until the fixed nav bar is measured in the WebView. */
 export const PORTAL_NATIVE_BOTTOM_NAV_INSET_FALLBACK =
-  "max(2.5rem, calc(var(--native-safe-bottom) + 1.75rem))";
+  "max(2.75rem, calc(var(--native-safe-bottom) + 2rem))";
 
 export function formatNativeBottomNavInset(px: number): string {
   return `${Math.max(0, Math.ceil(px))}px`;
