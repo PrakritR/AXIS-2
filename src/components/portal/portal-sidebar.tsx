@@ -1,14 +1,21 @@
 "use client";
 
+import { AxisAssistantNavButton, useHasAxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
+import {
+  PortalNativeMoreNavButton,
+  PortalNativeMoreSheet,
+  type PortalMoreNavItem,
+} from "@/components/portal/portal-native-more-sheet";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
-import { orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import { orderNativeBottomNavItems, splitNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import { observeNativeBottomNavInset } from "@/lib/native/sync-portal-bottom-nav-inset";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
 import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { PORTAL_MOBILE_CHROME_CLASS, PORTAL_NATIVE_BOTTOM_NAV_CLASS } from "@/lib/portal-layout-classes";
@@ -16,7 +23,9 @@ import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import type { PortalDefinition } from "@/lib/portal-types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useIsClient } from "@/hooks/use-is-client";
 
 function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
@@ -153,8 +162,10 @@ export function PortalSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isClient = useIsClient();
   const { isNative } = useIsNativeApp();
   const showNativeChrome = isNative === true || Boolean(detectNativePlatformSync());
+  const hasAssistant = useHasAxisAssistant();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
   const navCounts = usePortalNavCounts(definition.kind);
@@ -205,7 +216,19 @@ export function PortalSidebar({
     () => (showNativeChrome ? orderNativeBottomNavItems(navItems, definition.kind) : []),
     [definition.kind, navItems, showNativeChrome],
   );
+  const { primary: nativePrimaryNavItems, overflow: nativeOverflowNavItems } = useMemo(
+    () => (showNativeChrome ? splitNativeBottomNavItems(navItems, definition.kind) : { primary: [], overflow: [] }),
+    [definition.kind, navItems, showNativeChrome],
+  );
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);
   const bottomNavScrollRef = useRef<HTMLDivElement>(null);
+  const topNavScrollRef = useRef<HTMLDivElement>(null);
+  const moreActive = nativeOverflowNavItems.some((item) => item.section === activeSection);
+
+  useEffect(() => {
+    return observeNativeBottomNavInset(bottomNavEl, showNativeChrome);
+  }, [bottomNavEl, showNativeChrome]);
 
   useEffect(() => {
     if (!showNativeChrome) return;
@@ -213,7 +236,27 @@ export function PortalSidebar({
     if (!strip) return;
     const activeEl = strip.querySelector<HTMLElement>(`[data-native-nav-section="${activeSection}"]`);
     activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [activeSection, nativeBottomNavItems, showNativeChrome]);
+  }, [activeSection, nativePrimaryNavItems, showNativeChrome]);
+
+  useEffect(() => {
+    if (showNativeChrome) return;
+    const strip = topNavScrollRef.current;
+    if (!strip) return;
+    const activeEl = strip.querySelector<HTMLElement>(`[data-mobile-nav-section="${activeSection}"]`);
+    activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [activeSection, navItems, showNativeChrome]);
+
+  const moreSheetItems: PortalMoreNavItem[] = useMemo(
+    () =>
+      nativeBottomNavItems.map((item) => ({
+        section: item.section,
+        label: item.label,
+        href: item.href,
+        locked: isSectionLocked(item.section),
+        count: navCounts[item.section] ?? 0,
+      })),
+    [nativeBottomNavItems, navCounts, showManagerTierLocks, showResidentTierLocks, subscriptionTier],
+  );
 
   const renderMobileNavLink = (
     s: (typeof navItems)[number],
@@ -231,7 +274,7 @@ export function PortalSidebar({
           data-native-nav-section={s.section}
           prefetch={portalMobileLinkPrefetchEnabled()}
           onClick={portalNavClick(router, s.href)}
-          className={`flex w-[4.35rem] shrink-0 snap-center flex-col items-center gap-1 px-1 py-2 text-[10px] font-semibold leading-tight transition sm:w-[4.65rem] ${
+          className={`flex w-[3.5rem] shrink-0 snap-center flex-col items-center gap-0 px-0.5 py-0.5 text-[9px] font-semibold leading-tight transition sm:w-[3.65rem] ${
             active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
           }`}
           aria-label={
@@ -257,6 +300,7 @@ export function PortalSidebar({
       <Link
         key={s.section}
         href={s.href}
+        data-mobile-nav-section={s.section}
         prefetch={portalMobileLinkPrefetchEnabled()}
         onClick={portalNavClick(router, s.href)}
         className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
@@ -351,6 +395,7 @@ export function PortalSidebar({
         <div className="shrink-0 lg:hidden">
           <div className={PORTAL_MOBILE_CHROME_CLASS}>
             <nav
+              ref={topNavScrollRef}
               className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
               aria-label="Portal sections"
             >
@@ -360,16 +405,42 @@ export function PortalSidebar({
         </div>
       ) : null}
 
-      {showNativeChrome && nativeBottomNavItems.length > 0 ? (
-        <nav className={PORTAL_NATIVE_BOTTOM_NAV_CLASS} aria-label="Portal sections">
-          <div
-            ref={bottomNavScrollRef}
-            className="portal-native-bottom-nav-scroll flex snap-x snap-mandatory gap-0.5 px-2 pt-1.5"
-          >
-            {nativeBottomNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
-          </div>
-        </nav>
-      ) : null}
+      <PortalNativeMoreSheet
+        open={moreOpen}
+        onOpenChange={setMoreOpen}
+        items={moreSheetItems}
+        activeSection={activeSection}
+        showNavIcons={showNavIcons}
+        portalTitle={definition.title}
+      />
+
+      {showNativeChrome && nativePrimaryNavItems.length > 0 && isClient
+        ? createPortal(
+            <nav
+              ref={setBottomNavEl}
+              className={`${PORTAL_NATIVE_BOTTOM_NAV_CLASS} flex items-stretch`}
+              aria-label="Portal sections"
+            >
+              <div
+                ref={bottomNavScrollRef}
+                className="portal-native-bottom-nav-scroll flex min-w-0 flex-1 snap-x snap-mandatory gap-0 px-1.5 pt-0.5"
+              >
+                {nativePrimaryNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
+                {nativeOverflowNavItems.length > 0 ? (
+                  <div className="flex w-[3.5rem] shrink-0 snap-center sm:w-[3.65rem]">
+                    <PortalNativeMoreNavButton active={moreActive} onClick={() => setMoreOpen(true)} />
+                  </div>
+                ) : null}
+              </div>
+              {hasAssistant ? (
+                <div className="portal-native-bottom-nav-assistant flex shrink-0 items-center border-l border-border px-1.5 py-0.5">
+                  <AxisAssistantNavButton />
+                </div>
+              ) : null}
+            </nav>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

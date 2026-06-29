@@ -1006,7 +1006,7 @@ export function ManagerApplications() {
                           </PortalTableDetailActions>
 
                           {row.application ? (
-                            <div className="max-h-[min(72vh,600px)] overflow-y-auto overscroll-contain rounded-3xl border border-border bg-gradient-to-b from-white to-slate-50/50 p-5 shadow-[0_2px_20px_-12px_rgba(15,23,42,0.12)] sm:p-7">
+                            <div className="portal-desktop-scroll-panel overscroll-contain rounded-3xl border border-border bg-gradient-to-b from-white to-slate-50/50 p-5 shadow-[0_2px_20px_-12px_rgba(15,23,42,0.12)] sm:p-7">
                               <ManagerApplicationPlacementEditor
                                 key={[
                                   row.id,

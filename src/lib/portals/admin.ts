@@ -27,3 +27,16 @@ export const adminPortal: PortalDefinition = {
     { section: "profile", label: "Settings", tabs: [] },
   ],
 };
+
+/** Default smoke-test paths for web + native WebView (admin portal). */
+export const ADMIN_PORTAL_SMOKE_PATHS = [
+  { label: "Dashboard", path: "/admin/dashboard" },
+  { label: "Onboard", path: "/admin/onboard" },
+  { label: "Properties", path: "/admin/properties" },
+  { label: "Accounts", path: "/admin/axis-users" },
+  { label: "Leases", path: "/admin/leases" },
+  { label: "Meetings", path: "/admin/events" },
+  { label: "Inbox", path: "/admin/inbox/unopened" },
+  { label: "Feedback", path: "/admin/bugs-feedback" },
+  { label: "Settings", path: "/admin/profile" },
+] as const;

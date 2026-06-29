@@ -23,7 +23,9 @@ import {
   type ContinuePartnerPricingResult,
 } from "@/lib/auth/partner-pricing-google-flow";
 import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
+import { ResidentApplyPropertyPicker } from "@/components/auth/resident-apply-property-picker";
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getNativeInfo } from "@/lib/native/push-client";
 import { loadManagerPlanTiers } from "@/lib/site-content";
@@ -144,6 +146,7 @@ function NativeAuthHubInner() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [applicationLink, setApplicationLink] = useState("");
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [stripeCheckoutBlocked, setStripeCheckoutBlocked] = useState<string | null>(null);
@@ -302,6 +305,10 @@ function NativeAuthHubInner() {
   };
 
   const startResidentApplication = () => {
+    if (selectedPropertyId) {
+      router.push(buildRentalApplyHref({ propertyId: selectedPropertyId }));
+      return;
+    }
     const parsed = parseManagerApplicationLink(applicationLink);
     if (parsed.kind === "invalid") {
       showToast(parsed.reason);
@@ -309,6 +316,8 @@ function NativeAuthHubInner() {
     }
     router.push(parsed.href);
   };
+
+  const canStartResidentApplication = Boolean(selectedPropertyId || applicationLink.trim());
 
   if (checkingSession) {
     return (
@@ -420,29 +429,45 @@ function NativeAuthHubInner() {
 
             {role === "resident" ? (
               <>
-                <p className="text-center text-[13px] leading-relaxed text-muted">
-                  Paste the application link from your property manager. You&apos;ll create your account when you
-                  finish applying.
-                </p>
                 <AuthFieldBlock label="Application link">
                   <Input
                     className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                     placeholder="https://…/rent/apply?…"
                     value={applicationLink}
-                    onChange={(e) => setApplicationLink(e.target.value)}
+                    onChange={(e) => {
+                      setApplicationLink(e.target.value);
+                      if (e.target.value.trim()) setSelectedPropertyId(null);
+                    }}
                     autoComplete="off"
                     inputMode="url"
-                    disabled={locked}
+                    disabled={locked || Boolean(selectedPropertyId)}
                   />
                 </AuthFieldBlock>
+                <AuthDivider label="or select a house" />
+                <ResidentApplyPropertyPicker
+                  value={selectedPropertyId}
+                  onChange={(id) => {
+                    setSelectedPropertyId(id);
+                    if (id) setApplicationLink("");
+                  }}
+                  disabled={locked}
+                />
                 <Button
                   type="button"
                   className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                  disabled={locked || !applicationLink.trim()}
+                  disabled={locked || !canStartResidentApplication}
                   onClick={startResidentApplication}
                 >
                   Start an application
                 </Button>
+                <p className="text-center text-[12px] text-muted">
+                  <Link
+                    className="font-semibold text-primary hover:opacity-90"
+                    href="/rent/browse?from=auth"
+                  >
+                    Browse all properties
+                  </Link>
+                </p>
               </>
             ) : (
               <>

@@ -15,6 +15,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { submitBugFeedbackReport } from "@/lib/portal-bug-feedback";
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
+import { SubscriptionCheckoutHint } from "@/components/stripe/subscription-checkout-hint";
 
 type SubPayload = {
   tier: string | null;
@@ -806,6 +807,7 @@ export function ManagerPlan() {
               {" "}
               You&apos;ll stay on this page — billing is handled securely by Stripe.
             </p>
+            <SubscriptionCheckoutHint className="text-sm leading-6 text-muted" upgrade />
             <p className="text-sm font-medium text-foreground">
               {planPriceLabel(planTiers, planModal.tier, planModal.billing)}
             </p>

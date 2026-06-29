@@ -6,6 +6,7 @@ import { AuthAccountFooterLink, AuthDivider, AuthPageHeader } from "@/components
 import { ManagerPlanBillingToggle, ManagerPlanTierCards } from "@/components/auth/manager-plan-tier-cards";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
+import { SubscriptionCheckoutHint } from "@/components/stripe/subscription-checkout-hint";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -251,9 +252,7 @@ function ManagerPlanPickerInner() {
           subtitle={`${selected.label} · ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then ${price.headline}${price.period ?? ""}`}
           accent={false}
         />
-        <p className="mt-2 text-center text-xs leading-relaxed text-muted">
-          Secure checkout with card or Apple Pay. You won&apos;t be charged until your trial ends.
-        </p>
+        <SubscriptionCheckoutHint className="mt-2 text-center text-xs leading-relaxed text-muted" />
         <div className="mt-4 rounded-2xl border border-border bg-card/50 p-3">
           <EmbeddedCheckoutMount clientSecret={checkoutClientSecret} onError={onEmbeddedError} />
         </div>

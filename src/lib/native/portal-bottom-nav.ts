@@ -1,63 +1,60 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/** Preferred tab order in the native bottom bar (all sections are shown; bar scrolls horizontally). */
-const NATIVE_BOTTOM_NAV_ORDER: Partial<Record<PortalDefinition["kind"], string[]>> = {
-  resident: ["dashboard", "applications", "payments", "inbox", "documents", "profile"],
-  pro: ["dashboard", "properties", "applications", "inbox", "leases", "calendar", "documents", "profile"],
-  manager: ["dashboard", "properties", "applications", "inbox", "leases", "calendar", "documents", "profile"],
-  admin: [
-    "dashboard",
-    "onboard",
-    "properties",
-    "axis-users",
-    "leases",
-    "events",
-    "inbox",
-    "bugs-feedback",
-    "profile",
-  ],
-};
+/** Settings tab — always pinned to the end of the native bottom bar when shown in primary strip. */
+const SETTINGS_SECTION = "profile";
 
-/** @deprecated Primary slot limit — native bar now shows all tabs in a horizontal scroll strip. */
-export const NATIVE_BOTTOM_NAV_SLOT_LIMIT = 4;
+/** Max tabs in the native bottom strip before overflow moves to the More sheet. */
+export const NATIVE_BOTTOM_NAV_PRIMARY_LIMIT = 5;
 
-/** All nav items in portal-preferred order for the native bottom scroll strip. */
+/** @deprecated Use {@link NATIVE_BOTTOM_NAV_PRIMARY_LIMIT}. */
+export const NATIVE_BOTTOM_NAV_SLOT_LIMIT = NATIVE_BOTTOM_NAV_PRIMARY_LIMIT;
+
+/**
+ * Native bottom bar order — mirrors portal registry order (same as web sidebar).
+ * Only safety-pins Settings to the end when it is not already last.
+ */
 export function orderNativeBottomNavItems<T extends { section: string }>(
   items: T[],
-  kind: PortalDefinition["kind"],
+  _kind?: PortalDefinition["kind"],
 ): T[] {
-  const preferred = NATIVE_BOTTOM_NAV_ORDER[kind] ?? [];
-  const ordered: T[] = [];
-  const used = new Set<string>();
+  if (items.length === 0) return [];
 
-  for (const id of preferred) {
-    const item = items.find((entry) => entry.section === id);
-    if (item) {
-      ordered.push(item);
-      used.add(item.section);
+  const last = items[items.length - 1];
+  if (last?.section === SETTINGS_SECTION) return [...items];
+
+  const settings = items.find((entry) => entry.section === SETTINGS_SECTION);
+  if (!settings) return [...items];
+
+  return [...items.filter((entry) => entry.section !== SETTINGS_SECTION), settings];
+}
+
+/** Primary strip tabs + overflow for the More sheet. Settings stays in primary when possible. */
+export function splitNativeBottomNavItems<T extends { section: string }>(
+  items: T[],
+  kind?: PortalDefinition["kind"],
+): { primary: T[]; overflow: T[] } {
+  const ordered = orderNativeBottomNavItems(items, kind);
+  const settings = ordered.find((entry) => entry.section === SETTINGS_SECTION);
+  const withoutSettings = ordered.filter((entry) => entry.section !== SETTINGS_SECTION);
+
+  const primaryBody = withoutSettings.slice(0, NATIVE_BOTTOM_NAV_PRIMARY_LIMIT);
+  const overflow = withoutSettings.slice(NATIVE_BOTTOM_NAV_PRIMARY_LIMIT);
+
+  if (settings) {
+    if (primaryBody.length < NATIVE_BOTTOM_NAV_PRIMARY_LIMIT) {
+      primaryBody.push(settings);
+    } else {
+      overflow.push(settings);
     }
   }
 
-  for (const item of items) {
-    if (!used.has(item.section)) ordered.push(item);
-  }
-
-  return ordered;
+  return { primary: primaryBody, overflow };
 }
 
-/** @deprecated Use orderNativeBottomNavItems — kept for tests and gradual migration. */
-export function splitNativeBottomNavItems<T extends { section: string }>(
-  items: T[],
-  kind: PortalDefinition["kind"],
-): { primary: T[]; overflow: T[] } {
-  const ordered = orderNativeBottomNavItems(items, kind);
-  return { primary: ordered, overflow: [] };
-}
-
-/** @deprecated Use orderNativeBottomNavItems — kept for tests. */
+/** @deprecated Use splitNativeBottomNavItems — kept for tests. */
 export function pickNativeBottomNavItems<T extends { section: string }>(
   items: T[],
-  kind: PortalDefinition["kind"],
+  kind?: PortalDefinition["kind"],
 ): T[] {
   return orderNativeBottomNavItems(items, kind);
 }

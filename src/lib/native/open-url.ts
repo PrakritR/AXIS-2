@@ -1,9 +1,13 @@
 import {
-  clearOAuthNextPathStorage,
-  readOAuthNextPathFromStorage,
-} from "@/lib/auth/oauth-next-cookie";
+  buildNativeOAuthNavigationUrl,
+  nativeOAuthSignInFailureUrl,
+  resolveNativeOAuthCallbackTarget,
+} from "@/lib/auth/complete-native-oauth";
+import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
 import { webPathFromNativeOAuthUrl } from "@/lib/auth/native-oauth-callback";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+
+export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
 
 /** Open a URL in the WebView on web; native uses the system in-app browser when needed. */
 export function isNativeAppShell(): boolean {
@@ -26,24 +30,60 @@ export function isAuthCallbackUrl(url: string): boolean {
   }
 }
 
-function resolveCallbackTarget(url: string): string | null {
-  const fromScheme = webPathFromNativeOAuthUrl(url, window.location.origin);
-  if (fromScheme) return fromScheme;
+function markNativeOAuthInProgress(): void {
   try {
-    const opened = new URL(url, window.location.origin);
-    if (!isAuthCallbackUrl(url) && opened.pathname !== "/auth/callback" && !opened.pathname.startsWith("/auth/callback/")) {
-      return null;
-    }
-    return `${opened.pathname}${opened.search}${opened.hash}`;
+    sessionStorage.setItem(NATIVE_OAUTH_IN_PROGRESS_KEY, "1");
   } catch {
-    return null;
+    /* ignore */
+  }
+}
+
+export function clearNativeOAuthInProgress(): void {
+  try {
+    sessionStorage.removeItem(NATIVE_OAUTH_IN_PROGRESS_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isNativeOAuthInProgress(): boolean {
+  try {
+    return sessionStorage.getItem(NATIVE_OAUTH_IN_PROGRESS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function navigateToNativeOAuthCallback(pathAndQuery: string): void {
+  const destination = buildNativeOAuthNavigationUrl(pathAndQuery, window.location.origin);
+  clearNativeOAuthInProgress();
+  window.location.href = destination;
+}
+
+function navigateToNativeOAuthFailure(message: string): void {
+  clearNativeOAuthInProgress();
+  window.location.href = nativeOAuthSignInFailureUrl(message, window.location.origin);
+}
+
+async function tryLaunchUrlOAuthComplete(
+  getLaunchUrl: () => Promise<{ url: string } | undefined>,
+): Promise<boolean> {
+  try {
+    const launch = await getLaunchUrl();
+    if (!launch?.url) return false;
+    const pathAndQuery = resolveNativeOAuthCallbackTarget(launch.url, window.location.origin);
+    if (!pathAndQuery) return false;
+    navigateToNativeOAuthCallback(pathAndQuery);
+    return true;
+  } catch {
+    return false;
   }
 }
 
 /**
  * Google OAuth in the native shell — WKWebView is blocked (403 disallowed_useragent).
  * Opens SFSafariViewController / Chrome Custom Tab, then returns to the main WebView
- * when Supabase redirects to /auth/callback.
+ * via custom URL scheme or universal link when Supabase redirects to /auth/callback.
  */
 export async function openOAuthUrl(url: string): Promise<void> {
   if (!url) return;
@@ -52,47 +92,61 @@ export async function openOAuthUrl(url: string): Promise<void> {
     return;
   }
 
+  markNativeOAuthInProgress();
   const { Browser } = await import("@capacitor/browser");
+  const { App } = await import("@capacitor/app");
 
   let settled = false;
   const cleanups: Array<() => void> = [];
 
-  const complete = async (callbackUrl: string) => {
-    if (settled) return;
+  const completeFromRawUrl = (rawUrl: string): boolean => {
+    const pathAndQuery = resolveNativeOAuthCallbackTarget(rawUrl, window.location.origin);
+    if (!pathAndQuery) return false;
+    if (settled) return true;
     settled = true;
     cleanups.forEach((fn) => fn());
-    await Browser.close().catch(() => {});
+    void Browser.close().catch(() => {});
 
-    let target = callbackUrl;
-    try {
-      const storedNext = readOAuthNextPathFromStorage();
-      if (storedNext) {
-        const parsed = new URL(callbackUrl, window.location.origin);
-        if (!parsed.searchParams.get("next")) {
-          parsed.searchParams.set("next", storedNext);
-          target = parsed.toString();
-        }
-      }
-    } catch {
-      /* use callbackUrl as-is */
+    const parsed = new URL(pathAndQuery, window.location.origin);
+    if (parsed.searchParams.get("error")) {
+      const message =
+        parsed.searchParams.get("error_description")?.replace(/\+/g, " ").trim() ||
+        "Google sign-in could not be completed.";
+      navigateToNativeOAuthFailure(message);
+      return true;
     }
-    clearOAuthNextPathStorage();
-    window.location.href = target;
+
+    navigateToNativeOAuthCallback(pathAndQuery);
+    return true;
   };
 
-  const { App } = await import("@capacitor/app");
   const appUrlListener = await App.addListener("appUrlOpen", (event) => {
     if (!event.url) return;
-    const target = resolveCallbackTarget(event.url);
-    if (!target) return;
-    void complete(target.startsWith("http") ? target : `${window.location.origin}${target}`);
+    completeFromRawUrl(event.url);
   });
   cleanups.push(() => void appUrlListener.remove());
 
+  const resumeListener = await App.addListener("resume", () => {
+    if (settled) return;
+    void tryLaunchUrlOAuthComplete(() => App.getLaunchUrl()).then((handled) => {
+      if (handled) {
+        settled = true;
+        cleanups.forEach((fn) => fn());
+      }
+    });
+  });
+  cleanups.push(() => void resumeListener.remove());
+
   const finished = await Browser.addListener("browserFinished", () => {
     if (settled) return;
-    cleanups.forEach((fn) => fn());
     void (async () => {
+      if (await tryLaunchUrlOAuthComplete(() => App.getLaunchUrl())) {
+        settled = true;
+        cleanups.forEach((fn) => fn());
+        await Browser.close().catch(() => {});
+        return;
+      }
+
       try {
         const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
         const supabase = createSupabaseBrowserClient();
@@ -101,18 +155,49 @@ export async function openOAuthUrl(url: string): Promise<void> {
         } = await supabase.auth.getSession();
         if (session) {
           settled = true;
+          cleanups.forEach((fn) => fn());
           await Browser.close().catch(() => {});
-          clearOAuthNextPathStorage();
+          clearNativeOAuthInProgress();
           window.location.href = "/auth/continue";
+          return;
         }
       } catch {
-        settled = true;
+        /* fall through */
       }
+
+      if (settled) return;
+      settled = true;
+      cleanups.forEach((fn) => fn());
+      navigateToNativeOAuthFailure(
+        `Google sign-in did not return to the app. ${nativeOAuthSetupHint()}`,
+      );
     })();
   });
   cleanups.push(() => void finished.remove());
 
   await Browser.open({ url, presentationStyle: "fullscreen" });
+}
+
+/** Handle OAuth/universal-link return when the app is already running. */
+export async function handleNativeOAuthReturnUrl(rawUrl: string): Promise<boolean> {
+  if (!isNativeAppShell() || !rawUrl) return false;
+  const pathAndQuery = resolveNativeOAuthCallbackTarget(rawUrl, window.location.origin);
+  if (!pathAndQuery) return false;
+
+  const { Browser } = await import("@capacitor/browser");
+  await Browser.close().catch(() => {});
+
+  const parsed = new URL(pathAndQuery, window.location.origin);
+  if (parsed.searchParams.get("error")) {
+    const message =
+      parsed.searchParams.get("error_description")?.replace(/\+/g, " ").trim() ||
+      "Google sign-in could not be completed.";
+    navigateToNativeOAuthFailure(message);
+    return true;
+  }
+
+  navigateToNativeOAuthCallback(pathAndQuery);
+  return true;
 }
 
 /** External https links on native (Stripe Connect, etc.) — in-app browser, not WKWebView. */

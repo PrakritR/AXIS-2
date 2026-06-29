@@ -19,29 +19,30 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
   const [nav, { profile }] = await Promise.all([buildProPortalDefinition(), getServerSessionProfile()]);
 
   return (
-    <div className={PORTAL_SHELL_ROOT_CLASS}>
-      <SurfaceThemeDefault theme="light" />
-      <PublicHomePrefetch />
-      <PortalDataPrefetch kind="pro" />
-      <AccountLinksSync />
-      <div className="shrink-0">
-        <PortalTopBanners
-          planHref="/portal/plan"
-          showPreviewBanner={nav.showPreviewBanner}
-          previewLabel={nav.previewLabel}
-          showPlanBanner={nav.showPlanBanner}
-        />
-      </div>
-      <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
-        <PortalSkipLink />
-        <PortalSidebar definition={nav.definition} subscriptionTier={nav.subscriptionTier} />
-        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
-            <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>{children}</div>
-          </main>
+    <AxisAssistant managerName={profile?.full_name ?? null}>
+      <div className={PORTAL_SHELL_ROOT_CLASS}>
+        <SurfaceThemeDefault theme="light" />
+        <PublicHomePrefetch />
+        <PortalDataPrefetch kind="pro" />
+        <AccountLinksSync />
+        <div className="shrink-0">
+          <PortalTopBanners
+            planHref="/portal/plan"
+            showPreviewBanner={nav.showPreviewBanner}
+            previewLabel={nav.previewLabel}
+            showPlanBanner={nav.showPlanBanner}
+          />
+        </div>
+        <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
+          <PortalSkipLink />
+          <PortalSidebar definition={nav.definition} subscriptionTier={nav.subscriptionTier} />
+          <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
+              <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>{children}</div>
+            </main>
+          </div>
         </div>
       </div>
-      <AxisAssistant managerName={profile?.full_name ?? null} />
-    </div>
+    </AxisAssistant>
   );
 }

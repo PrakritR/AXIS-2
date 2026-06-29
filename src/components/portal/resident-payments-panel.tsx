@@ -22,6 +22,7 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { useNativePlatform } from "@/hooks/use-native-platform";
 import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
@@ -39,6 +40,8 @@ import {
   residentProcessingFeeDisplayLabel,
   type ResidentAxisPaymentMethod,
 } from "@/lib/payment-policy";
+import { nativePlatformRequestHeaders } from "@/lib/platform/native-client";
+import { residentPaymentMethodsForSurface } from "@/lib/platform/resident-payments";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
 type PayTab = "pending" | "paid";
@@ -102,6 +105,16 @@ export function ResidentPaymentsPanel() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const session = usePortalSession();
+  const nativePlatform = useNativePlatform();
+  const isNativeApp = nativePlatform !== null;
+  const availablePaymentMethods = useMemo(
+    () => residentPaymentMethodsForSurface(isNativeApp),
+    [isNativeApp],
+  );
+  const paymentMethodOptions = useMemo(
+    () => PAYMENT_METHOD_OPTIONS.filter((option) => availablePaymentMethods.includes(option.id)),
+    [availablePaymentMethods],
+  );
   const [tab, setTab] = useState<PayTab>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -110,6 +123,13 @@ export function ResidentPaymentsPanel() {
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
   const email = session.email?.trim() ?? null;
   const userId = session.userId;
+
+  useEffect(() => {
+    if (!availablePaymentMethods.includes(paymentMethod)) {
+      setPaymentMethod(availablePaymentMethods[0] ?? "ach");
+      setCheckout(null);
+    }
+  }, [availablePaymentMethods, paymentMethod]);
 
   const refresh = useCallback(() => {
     setTick((n) => n + 1);
@@ -234,7 +254,10 @@ export function ResidentPaymentsPanel() {
       try {
         const res = await fetch("/api/stripe/household-charge-checkout", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...nativePlatformRequestHeaders(nativePlatform),
+          },
           body: JSON.stringify({ chargeIds: ids, embedded: true, paymentMethod: method }),
         });
         const payload = (await res.json().catch(() => ({}))) as {
@@ -286,7 +309,7 @@ export function ResidentPaymentsPanel() {
         });
       }
     },
-    [],
+    [nativePlatform],
   );
 
   useEffect(() => {
@@ -332,9 +355,25 @@ export function ResidentPaymentsPanel() {
     checkout && checkout.chargeIds.length > 1 && !showCheckoutInExpandedRow,
   );
 
-  const renderPaymentMethodPicker = () => (
+  const renderPaymentMethodPicker = () => {
+    if (paymentMethodOptions.length <= 1) {
+      const sole = paymentMethodOptions[0];
+      if (!sole) return null;
+      return (
+        <div className="rounded-xl border border-border bg-card/50 px-3 py-3">
+          <p className="text-sm font-semibold text-foreground">{sole.title}</p>
+          <p className="mt-1 text-xs text-muted">{sole.description}</p>
+          <p className="mt-2 text-xs font-medium text-foreground">{residentProcessingFeeDisplayLabel(sole.id)}</p>
+          {isNativeApp ? (
+            <p className="mt-2 text-xs text-muted">In the Axis app, rent is paid by bank transfer (ACH) through Stripe.</p>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
     <div className="grid gap-2 sm:grid-cols-3">
-      {PAYMENT_METHOD_OPTIONS.map((option) => {
+      {paymentMethodOptions.map((option) => {
         const selected = paymentMethod === option.id;
         return (
           <button
@@ -357,7 +396,8 @@ export function ResidentPaymentsPanel() {
         );
       })}
     </div>
-  );
+    );
+  };
 
   const renderCheckoutBlock = (label: string) => {
     if (!checkout) return null;

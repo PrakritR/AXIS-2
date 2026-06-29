@@ -6,8 +6,8 @@
 
 import { isInAppPath, isNativeDeepLinkPath as parityIsNativeDeepLinkPath } from "@/lib/platform/parity";
 
-/** Paths under /rent that residents need in the native app (application wizard). */
-const NATIVE_RENT_ALLOW_PREFIXES = ["/rent/apply"];
+/** Paths under /rent that residents need in the native app (browse, listing detail, application wizard). */
+const NATIVE_RENT_ALLOW_PREFIXES = ["/rent/apply", "/rent/browse", "/rent/listings"];
 
 /** Auth, portals, checkout flows — everything else redirects in the native shell. */
 const NATIVE_APP_ALLOWED_PREFIXES = [

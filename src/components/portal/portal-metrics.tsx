@@ -7,7 +7,7 @@ export const PORTAL_DASHBOARD_TILE_LINK =
 
 /** Outer card wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
-  "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6";
+  "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6 [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3.5";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
 export const PORTAL_CALENDAR_FRAME =
@@ -211,7 +211,7 @@ export function ManagerPortalStatusPills({
 }) {
   const isPrimary = activeTone === "primary";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
+    <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:rounded-full [&::-webkit-scrollbar]:hidden">
       {tabs.map((tab) => {
         const active = activeId === tab.id;
         return (
@@ -219,7 +219,7 @@ export function ManagerPortalStatusPills({
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className={`flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+            className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
               active
                 ? isPrimary
                   ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
@@ -316,17 +316,21 @@ export function ManagerPortalPageShell({
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
-      <div className="flex items-center justify-between gap-3 sm:gap-6">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="min-w-0">
           <h1 className="text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">{title}</h1>
           {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
         </div>
         {titleAside ? (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{titleAside}</div>
+          <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">{titleAside}</div>
         ) : null}
       </div>
-      {filterRow ? <div className="mt-6 border-b border-border pb-6">{filterRow}</div> : null}
-      <div className="mt-6">{children}</div>
+      {filterRow ? (
+        <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-3 [html[data-native]_&]:pb-3">
+          {filterRow}
+        </div>
+      ) : null}
+      <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-3">{children}</div>
     </div>
   );
 }
@@ -392,7 +396,11 @@ export function PortalToolbarSortSelect<T extends string>({
 
 /** Standard filter row wrapper (status pills + optional sort). */
 export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap items-center gap-3">{children}</div>;
+  return (
+    <div className="flex max-w-full flex-wrap items-center gap-3 max-lg:overflow-x-auto max-lg:flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {children}
+    </div>
+  );
 }
 
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */

@@ -1,9 +1,12 @@
 "use client";
 
 import { isNativeDeepLinkPath } from "@/lib/auth/native-entry-paths";
-import { webPathFromNativeOAuthUrl } from "@/lib/auth/native-oauth-callback";
 import { redirectNativeFromMarketing } from "@/lib/auth/native-welcome-redirect";
+import { loadPublicExtraListingsFromServer } from "@/lib/demo-property-pipeline";
 import { detectNativePlatformSync, tagHtmlNativePlatform } from "@/lib/native/detect-native";
+import { installNativeZoomLock } from "@/lib/native/disable-native-zoom";
+import { handleNativeOAuthReturnUrl, isNativeOAuthInProgress } from "@/lib/native/open-url";
+import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getNativeInfo, registerPushIfGranted, resendCachedToken } from "@/lib/native/push-client";
 import { useEffect } from "react";
@@ -18,16 +21,20 @@ async function redirectNativeFromMarketingPage(): Promise<void> {
   });
 }
 
+async function recoverFromMarketingDuringOAuth(): Promise<void> {
+  if (!isNativeOAuthInProgress()) return;
+  const { pathname } = window.location;
+  if (pathname !== "/" && pathname !== "") return;
+  window.location.replace(
+    `/auth/sign-in?error=oauth&message=${encodeURIComponent(
+      `Google sign-in opened the marketing site instead of the portal. ${nativeOAuthSetupHint()}`,
+    )}`,
+  );
+}
+
 /**
  * Runs only inside the Capacitor native shell (the iOS/Android app). On the web
  * it renders nothing and does no work — Capacitor modules are imported lazily.
- *
- * On native it:
- *  - tags <html data-native="ios|android"> so web CSS/components can adapt;
- *  - hides the splash once the web app has mounted and styles the status bar;
- *  - registers push only if already granted (the resident "Enable
- *    notifications" toggle drives first-time opt-in — no launch nag);
- *  - re-sends the token on resume (covers "registered before sign-in").
  */
 export function NativeBridge() {
   useEffect(() => {
@@ -43,6 +50,9 @@ export function NativeBridge() {
         if (disposed || !isNative) return;
 
         tagHtmlNativePlatform(platform);
+        void loadPublicExtraListingsFromServer().catch(() => {});
+        const removeZoomLock = installNativeZoomLock();
+        cleanups.push(removeZoomLock);
 
         try {
           const { SplashScreen } = await import("@capacitor/splash-screen");
@@ -69,32 +79,41 @@ export function NativeBridge() {
 
         try {
           const { App } = await import("@capacitor/app");
+          const launch = await App.getLaunchUrl();
+          if (launch?.url) {
+            const handled = await handleNativeOAuthReturnUrl(launch.url);
+            if (handled) return;
+          }
+
           const resume = await App.addListener("resume", () => {
             void resendCachedToken().catch(() => {});
             void redirectNativeFromMarketingPage().catch(() => {});
+            void recoverFromMarketingDuringOAuth().catch(() => {});
           });
           cleanups.push(() => void resume.remove());
 
           const urlOpen = await App.addListener("appUrlOpen", (event) => {
-            try {
-              const fromOAuth = event.url ? webPathFromNativeOAuthUrl(event.url, window.location.origin) : null;
-              if (fromOAuth) {
-                window.location.assign(fromOAuth);
-                return;
+            if (!event.url) return;
+            void (async () => {
+              const handled = await handleNativeOAuthReturnUrl(event.url);
+              if (handled) return;
+
+              try {
+                const opened = new URL(event.url);
+                if (!isNativeDeepLinkPath(opened.pathname)) return;
+                const target = `${opened.pathname}${opened.search}${opened.hash}`;
+                window.location.assign(target);
+              } catch {
+                /* ignore malformed deep links */
               }
-              const opened = new URL(event.url);
-              if (!isNativeDeepLinkPath(opened.pathname)) return;
-              const target = `${opened.pathname}${opened.search}${opened.hash}`;
-              window.location.assign(target);
-            } catch {
-              /* ignore malformed deep links */
-            }
+            })();
           });
           cleanups.push(() => void urlOpen.remove());
         } catch {
           /* app plugin unavailable — non-fatal */
         }
 
+        await recoverFromMarketingDuringOAuth();
         await redirectNativeFromMarketingPage();
       } catch {
         /* native bridge init is best-effort */
