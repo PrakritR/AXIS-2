@@ -22,7 +22,7 @@ import type { MockProperty } from "@/data/types";
 import { DEFAULT_LISTING_HOUSE_RULES_FALLBACK, type ListingRichContent } from "@/data/listing-rich-content";
 
 const sectionScroll =
-  "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+8.75rem))]";
+  "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+9.5rem))]";
 
 function ListingHeroPhotoGrid({
   urls,
@@ -230,8 +230,8 @@ export function ListingDetailSections({
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
   const heroUrls = rich.heroHousePhotoUrls ?? [];
   return (
-    <div className="bg-background" data-listing-sections-root>
-      <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10"}`}>
+    <div className="bg-background text-foreground" data-listing-sections-root>
+      <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>
         {previewModal ? <ListingStickySubnav mode="modal" /> : null}
         <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
 
@@ -368,7 +368,7 @@ export function ListingDetailSections({
               </section>
 
               <section id="bundles" className={sectionScroll}>
-                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-[rgba(255,255,255,0.05)] sm:p-8">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">

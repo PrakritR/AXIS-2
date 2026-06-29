@@ -28,4 +28,16 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain("padding-bottom: var(--portal-native-bottom-nav-inset)");
     expect(GLOBALS_CSS).toContain("scroll-padding-bottom: var(--portal-native-bottom-nav-inset)");
   });
+
+  it("uses native safe-area top padding on portal main content", () => {
+    expect(GLOBALS_CSS).toContain("html[data-native] #portal-main-content");
+    expect(GLOBALS_CSS).toContain("padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem))");
+    expect(GLOBALS_CSS).toContain("scroll-padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem))");
+  });
+
+  it("pins native bottom nav flush to screen bottom", () => {
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav");
+    expect(GLOBALS_CSS).toContain("align-items: flex-end");
+    expect(GLOBALS_CSS).toContain("padding-bottom: 0");
+  });
 });

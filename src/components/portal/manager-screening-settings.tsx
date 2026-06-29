@@ -5,10 +5,10 @@ import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ManagerScreeningSettings, ScreeningMode } from "@/lib/screening/types";
 
-const MODE_OPTIONS: { value: ScreeningMode; label: string; description: string }[] = [
-  { value: "off", label: "Off", description: "Screening is off." },
-  { value: "manual", label: "Manual per applicant", description: "You run screening when you open an application." },
-  { value: "auto_on_submit", label: "Auto on submit", description: "Screen each new application automatically (billed per report)." },
+const MODE_OPTIONS: { value: ScreeningMode; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "manual", label: "Manual per applicant" },
+  { value: "auto_on_submit", label: "Auto on submit" },
 ];
 
 export function ManagerScreeningSettingsPanel() {
@@ -59,14 +59,11 @@ export function ManagerScreeningSettingsPanel() {
 
   if (!settings) return null;
 
-  const active = MODE_OPTIONS.find((option) => option.value === settings.mode) ?? MODE_OPTIONS[1]!;
-
   return (
     <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Applicant screening</p>
-          <p className="mt-1 text-sm text-muted">{active.description}</p>
         </div>
         <div className="min-w-[14rem]">
           <Select

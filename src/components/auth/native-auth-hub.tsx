@@ -218,7 +218,7 @@ function NativeAuthHubInner() {
         return;
       }
       if (result.status === "portal") {
-        router.push("/portal/dashboard");
+        window.location.replace("/portal/dashboard");
         return;
       }
       if (result.status === "error") showToast(result.message);
@@ -281,7 +281,7 @@ function NativeAuthHubInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
       });
-      const body = (await res.json()) as { error?: string };
+      const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
       if (!res.ok) {
         setErrorText(body.error ?? "Could not create account.");
         showToast(body.error ?? "Could not create account.");
@@ -293,6 +293,10 @@ function NativeAuthHubInner() {
         showToast("Account created. Sign in to continue.");
         setMode("sign-in");
         setRole("manager");
+        return;
+      }
+      if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
+        window.location.replace("/portal/dashboard");
         return;
       }
       const offer = buildPricingOffer({ tier: selectedTierId, billing, returnSurface: "mobile-plan" });
@@ -367,13 +371,7 @@ function NativeAuthHubInner() {
       <div className="native-auth-hub">
         <AuthBrandHeader
           title="Axis"
-          subtitle={
-            mode === "sign-in"
-              ? "Welcome back"
-              : role === "resident"
-                ? "Apply with your manager's link"
-                : "Create your account"
-          }
+          subtitle={mode === "create" && role === "manager" ? "Create your account" : undefined}
         />
 
         <div className="mt-4">

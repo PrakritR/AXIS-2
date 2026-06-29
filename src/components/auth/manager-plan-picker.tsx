@@ -137,7 +137,7 @@ function ManagerPlanPickerInner() {
         return;
       }
       if (result.status === "portal") {
-        router.push("/portal/dashboard");
+        window.location.replace("/portal/dashboard");
         return;
       }
       if (result.status === "error") showToast(result.message);
@@ -216,7 +216,7 @@ function ManagerPlanPickerInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
       });
-      const body = (await res.json()) as { error?: string };
+      const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
       if (!res.ok) {
         showToast(body.error ?? "Could not create account.");
         return;
@@ -230,6 +230,11 @@ function ManagerPlanPickerInner() {
       if (signInError) {
         showToast("Account created. Sign in to continue.");
         router.push("/auth/manager");
+        return;
+      }
+
+      if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
+        window.location.replace("/portal/dashboard");
         return;
       }
 

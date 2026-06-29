@@ -274,7 +274,7 @@ export function PortalSidebar({
           data-native-nav-section={s.section}
           prefetch={portalMobileLinkPrefetchEnabled()}
           onClick={portalNavClick(router, s.href)}
-          className={`flex w-[3.5rem] shrink-0 snap-center flex-col items-center gap-0 px-0.5 py-0.5 text-[9px] font-semibold leading-tight transition sm:w-[3.65rem] ${
+          className={`flex w-[3.5rem] shrink-0 snap-center flex-col items-center justify-end gap-0 px-0.5 pt-0 pb-0 text-[9px] font-semibold leading-none transition sm:w-[3.65rem] ${
             active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
           }`}
           aria-label={
@@ -411,7 +411,6 @@ export function PortalSidebar({
         items={moreSheetItems}
         activeSection={activeSection}
         showNavIcons={showNavIcons}
-        portalTitle={definition.title}
       />
 
       {showNativeChrome && nativePrimaryNavItems.length > 0 && isClient
@@ -423,7 +422,7 @@ export function PortalSidebar({
             >
               <div
                 ref={bottomNavScrollRef}
-                className="portal-native-bottom-nav-scroll flex min-w-0 flex-1 snap-x snap-mandatory gap-0 px-1.5 pt-0.5"
+                className="portal-native-bottom-nav-scroll flex min-w-0 flex-1 snap-x snap-mandatory gap-0 px-1.5 pt-0"
               >
                 {nativePrimaryNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
                 {nativeOverflowNavItems.length > 0 ? (
@@ -433,7 +432,7 @@ export function PortalSidebar({
                 ) : null}
               </div>
               {hasAssistant ? (
-                <div className="portal-native-bottom-nav-assistant flex shrink-0 items-center border-l border-border px-1.5 py-0.5">
+                <div className="portal-native-bottom-nav-assistant flex shrink-0 items-end border-l border-border px-1.5 pt-0 pb-0">
                   <AxisAssistantNavButton />
                 </div>
               ) : null}
