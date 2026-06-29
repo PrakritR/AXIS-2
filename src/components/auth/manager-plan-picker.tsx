@@ -280,6 +280,7 @@ function ManagerPlanPickerInner() {
 
   return (
     <AuthCard>
+      <div className="auth-plan-picker">
       <AuthPageHeader
         eyebrow="Manager"
         title="Choose plan"
@@ -291,7 +292,7 @@ function ManagerPlanPickerInner() {
         accent={false}
       />
 
-      <div className="mt-5 flex flex-wrap justify-center gap-2">
+      <div className="auth-plan-tier-row mt-5 flex flex-wrap justify-center gap-2">
         {planTiers.map((t) => {
           const active = selectedTierId === t.id;
           return (
@@ -330,7 +331,7 @@ function ManagerPlanPickerInner() {
         </div>
       ) : null}
 
-      <p className="mt-4 text-center">
+      <p className="auth-plan-price-block mt-4 text-center">
         <span className="text-2xl font-bold tracking-tight text-foreground">{price.headline}</span>
         {price.period ? <span className="text-sm font-medium text-muted">{price.period}</span> : null}
       </p>
@@ -342,12 +343,12 @@ function ManagerPlanPickerInner() {
       ) : null}
 
       {stripeCheckoutBlocked && requiresPaymentSetup ? (
-        <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-950">
+        <p className="auth-stripe-dev-notice mt-4 px-4 py-3">
           {stripeCheckoutBlocked}
         </p>
       ) : null}
 
-      <div className="mt-5 space-y-3">
+      <div className="auth-plan-form-block mt-5 space-y-3">
         {sessionSignedIn && session?.email ? (
           <>
             <GoogleSignedInBanner
@@ -430,6 +431,7 @@ function ManagerPlanPickerInner() {
           ← Back to sign in
         </Link>
       </p>
+      </div>
     </AuthCard>
   );
 }

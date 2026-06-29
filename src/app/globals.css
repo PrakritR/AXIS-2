@@ -1050,10 +1050,12 @@ html[data-native="ios"] .portal-native-account-sheet {
   width: 100%;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior-y: contain;
+  scroll-padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+  scroll-padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
   padding: 0.75rem 1rem;
 }
 
@@ -1061,6 +1063,7 @@ html[data-native="ios"] .portal-native-account-sheet {
   width: 100%;
   max-width: 460px;
   margin-inline: auto;
+  margin-block: auto;
   flex: 0 0 auto;
 }
 
@@ -1089,6 +1092,8 @@ html[data-native] .auth-layout {
 }
 
 html[data-native] .auth-layout-main {
+  padding-top: max(0.5rem, var(--native-safe-top));
+  padding-bottom: max(0.75rem, var(--native-safe-bottom));
   padding-left: max(1rem, var(--native-safe-left));
   padding-right: max(1rem, var(--native-safe-right));
 }
@@ -1103,6 +1108,33 @@ html[data-native] .auth-card {
   box-shadow:
     0 12px 32px -16px rgba(8, 11, 20, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+html[data-native] .auth-plan-picker .auth-page-header {
+  margin-bottom: 0;
+}
+
+html[data-native] .auth-plan-picker .auth-plan-tier-row {
+  margin-top: 0.875rem;
+}
+
+html[data-native] .auth-plan-picker .auth-plan-price-block {
+  margin-top: 0.75rem;
+}
+
+html[data-native] .auth-plan-picker .auth-plan-form-block {
+  margin-top: 0.875rem;
+}
+
+html[data-native] .auth-plan-picker .auth-stripe-dev-notice {
+  margin-top: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+html[data-native] .auth-plan-picker .auth-footer-link {
+  margin-top: 0.875rem;
 }
 
 html[data-native] .auth-card-shell > div:first-child {
@@ -1219,5 +1251,20 @@ html[data-native] .portal-shell:has(.portal-top-banner-strip) .portal-mobile-chr
 
   .auth-form-stack {
     gap: 0.75rem;
+  }
+
+  .auth-stripe-dev-notice {
+    border-radius: 0.875rem;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    background: rgba(253, 236, 203, 0.92);
+    color: #78350f;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  [data-theme="dark"] .auth-stripe-dev-notice {
+    border-color: rgba(251, 191, 36, 0.28);
+    background: rgba(120, 53, 15, 0.35);
+    color: #fde68a;
   }
 }

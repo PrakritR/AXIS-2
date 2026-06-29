@@ -15,7 +15,7 @@ export function stripeLiveJsBlockedMessage(protocol?: string): string | null {
   if (resolvedProtocol !== "http:") return null;
   if (!isStripeLivePublishableKey()) return null;
   return (
-    "Live Stripe checkout requires HTTPS. For local testing, use pk_test_/sk_test_ keys in .env.local, " +
-    "or point the mobile app at https://www.axis-seattle-housing.com (CAP_SERVER_URL)."
+    "Live Stripe checkout needs HTTPS. Use pk_test_/sk_test_ keys for local dev, " +
+    "or run: CAP_SERVER_URL=https://www.axis-seattle-housing.com npm run cap:sync"
   );
 }
