@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { nativeAuthEntryPathClient } from "@/lib/auth/native-auth-entry";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -85,23 +86,24 @@ function parseSignInIntent(value: string | null): SignInIntent {
 }
 
 function signInCopy(intent: SignInIntent): { title: string; createAccountHref: string; backHref: string | null } {
+  const entry = nativeAuthEntryPathClient();
   if (intent === "resident") {
     return {
       title: "Resident sign-in",
-      createAccountHref: "/auth/resident",
-      backHref: "/auth/welcome",
+      createAccountHref: entry === "/auth/sign-in" ? "/auth/create-account" : "/auth/resident",
+      backHref: entry,
     };
   }
   if (intent === "manager") {
     return {
       title: "Manager sign-in",
-      createAccountHref: "/auth/manager/plan",
-      backHref: "/auth/welcome",
+      createAccountHref: entry === "/auth/sign-in" ? "/partner/pricing" : "/auth/manager/plan",
+      backHref: entry,
     };
   }
   return {
     title: "Portal sign-in",
-    createAccountHref: "/auth/welcome",
+    createAccountHref: entry,
     backHref: null,
   };
 }

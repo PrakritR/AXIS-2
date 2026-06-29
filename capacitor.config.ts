@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from "@capacitor/cli";
+import { nativeAuthEntryPathFromServerBase } from "./src/lib/auth/native-auth-entry";
 
 /**
  * Axis ships as a native shell (Capacitor) that loads the live, server-rendered
@@ -10,10 +11,13 @@ import type { CapacitorConfig } from "@capacitor/cli";
  * Local development against a dev server:
  *   CAP_SERVER_URL=http://<your-LAN-ip>:3000 npx cap sync
  * Point the simulator/device at your machine instead of production.
+ *
+ * After /auth/welcome ships to production, set CAP_NATIVE_ENTRY=/auth/welcome
+ * (or NEXT_PUBLIC_NATIVE_AUTH_ENTRY on Vercel) and re-sync.
  */
 const serverBase = (process.env.CAP_SERVER_URL ?? "https://www.axis-seattle-housing.com").replace(/\/$/, "");
-/** Native app opens here — not the marketing homepage. */
-const nativeAppUrl = `${serverBase}/auth/welcome`;
+const nativeEntryPath = nativeAuthEntryPathFromServerBase(serverBase);
+const nativeAppUrl = `${serverBase}${nativeEntryPath}`;
 
 function allowNavigationHosts(): string[] {
   const hosts = [

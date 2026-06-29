@@ -1,4 +1,5 @@
 import { shouldNativeRedirectToWelcome } from "@/lib/auth/native-entry-paths";
+import { nativeAuthEntryPathClient } from "@/lib/auth/native-auth-entry";
 
 /** Native app has no marketing site — send users to onboarding or their portal. */
 export async function redirectNativeFromMarketing(
@@ -7,12 +8,13 @@ export async function redirectNativeFromMarketing(
   if (typeof window === "undefined") return false;
   if (!shouldNativeRedirectToWelcome(window.location.pathname)) return false;
 
+  const entry = nativeAuthEntryPathClient();
   try {
     const { session } = await getSession();
-    window.location.replace(session ? "/auth/continue" : "/auth/welcome");
+    window.location.replace(session ? "/auth/continue" : entry);
     return true;
   } catch {
-    window.location.replace("/auth/welcome");
+    window.location.replace(entry);
     return true;
   }
 }
