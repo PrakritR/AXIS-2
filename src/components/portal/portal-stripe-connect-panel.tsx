@@ -177,9 +177,9 @@ export function PortalStripeConnectPanel({
     const statusLabel = ready ? "Bank linked" : status?.connected ? "Finish bank setup" : "Bank not linked";
 
     return (
-      <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card p-1">
+      <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
         <span
-          className={`max-w-[8.5rem] truncate px-2 text-[11px] font-semibold sm:max-w-none ${
+          className={`flex min-h-9 max-w-[8.5rem] shrink-0 items-center truncate px-3 text-sm font-semibold sm:max-w-none ${
             ready ? "text-emerald-700 dark:text-emerald-400" : blockingError ? "text-rose-700 dark:text-rose-400" : "text-muted"
           }`}
           title={blockingError ?? statusLabel}
@@ -189,7 +189,7 @@ export function PortalStripeConnectPanel({
         <Button
           type="button"
           variant={ready ? "outline" : "primary"}
-          className="h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+          className="min-h-9 shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold"
           disabled={busy}
           onClick={() => void startConnect()}
         >
