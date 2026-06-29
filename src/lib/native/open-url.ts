@@ -1,3 +1,7 @@
+import {
+  clearOAuthNextPathStorage,
+  readOAuthNextPathFromStorage,
+} from "@/lib/auth/oauth-next-cookie";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
 /** Open a URL in the WebView on web; native uses the system in-app browser when needed. */
@@ -42,7 +46,22 @@ export async function openOAuthUrl(url: string): Promise<void> {
     settled = true;
     cleanups.forEach((fn) => fn());
     await Browser.close().catch(() => {});
-    window.location.href = callbackUrl;
+
+    let target = callbackUrl;
+    try {
+      const storedNext = readOAuthNextPathFromStorage();
+      if (storedNext) {
+        const url = new URL(callbackUrl, window.location.origin);
+        if (!url.searchParams.get("next")) {
+          url.searchParams.set("next", storedNext);
+          target = url.toString();
+        }
+      }
+    } catch {
+      /* use callbackUrl as-is */
+    }
+    clearOAuthNextPathStorage();
+    window.location.href = target;
   };
 
   const pageLoaded = await Browser.addListener("browserPageLoaded", (event) => {

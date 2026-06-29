@@ -41,6 +41,7 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      { source: "/dashboard", destination: "/auth/continue", permanent: false },
       { source: "/admin/applications", destination: "/admin/dashboard", permanent: false },
       { source: "/admin/applications/:path*", destination: "/admin/dashboard", permanent: false },
       { source: "/admin/work-orders", destination: "/admin/dashboard", permanent: false },

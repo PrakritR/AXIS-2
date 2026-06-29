@@ -1080,6 +1080,20 @@ html[data-native="ios"] .portal-native-account-sheet {
 }
 
 /* Auth onboarding — lightweight on phone and in the native app */
+html[data-auth-welcome] .auth-layout-footer,
+html[data-auth-welcome] .auth-layout .chrome-substrate-full,
+html[data-auth-welcome] .auth-layout .chrome-substrate-quiet-glow {
+  display: none !important;
+}
+
+html[data-auth-welcome] .auth-layout {
+  background: var(--background);
+}
+
+html[data-auth-welcome] .auth-native-email-sign-in {
+  display: none;
+}
+
 html[data-native] .auth-layout-footer {
   display: none;
 }

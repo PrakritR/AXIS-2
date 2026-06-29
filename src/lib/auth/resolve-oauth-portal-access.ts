@@ -1,3 +1,4 @@
+import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
 import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import {
@@ -41,7 +42,9 @@ export async function resolveOAuthPortalRedirect(
   user: User,
   intendedPath: string,
 ): Promise<string> {
-  const safeIntended = intendedPath.startsWith("/") ? intendedPath : "/auth/continue";
+  const safeIntended = normalizePostAuthPath(
+    intendedPath.startsWith("/") ? intendedPath : "/auth/continue",
+  );
 
   if (isBypassOAuthGatePath(safeIntended)) {
     return safeIntended;

@@ -7,6 +7,7 @@ import {
   AuthLoadingCard,
   AuthRoleStack,
 } from "@/components/auth/auth-mobile-primitives";
+import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { getNativeInfo } from "@/lib/native/push-client";
@@ -52,6 +53,7 @@ type AuthWelcomeScreenProps = {
 export function AuthWelcomeScreen({ showWebSignInLink = false }: AuthWelcomeScreenProps) {
   const router = useRouter();
   const [checkingSession, setCheckingSession] = useState(true);
+  useAuthWelcomeChrome(true);
 
   useEffect(() => {
     let cancelled = false;

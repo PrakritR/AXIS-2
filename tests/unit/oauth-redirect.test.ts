@@ -4,6 +4,7 @@ import { authCallbackUrl, bareAuthCallbackUrl, oauthContinuePath, partnerPricing
 describe("oauth redirect helpers", () => {
   it("builds continue path with safe next route", () => {
     expect(oauthContinuePath("/portal/dashboard")).toBe("/auth/continue?next=%2Fportal%2Fdashboard");
+    expect(oauthContinuePath("/dashboard")).toBe("/auth/continue");
     expect(oauthContinuePath("")).toBe("/auth/continue");
   });
 
