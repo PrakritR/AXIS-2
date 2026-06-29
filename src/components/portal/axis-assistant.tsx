@@ -197,7 +197,7 @@ export function AxisAssistant({ managerName }: { managerName?: string | null }) 
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Close Axis Assistant" : "Open Axis Assistant"}
-        className="axis-assistant-fab fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_10px_24px_-10px_rgba(47,107,255,0.7)] outline-none ring-primary/0 transition-[transform,box-shadow,filter] duration-200 ease-out hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
+        className="axis-assistant-fab fixed z-50 flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_10px_24px_-10px_rgba(47,107,255,0.7)] outline-none ring-primary/0 transition-[transform,box-shadow,filter] duration-200 ease-out hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
         style={{ background: "var(--btn-primary)" }}
       >
         {open ? (
@@ -215,7 +215,7 @@ export function AxisAssistant({ managerName }: { managerName?: string | null }) 
       </button>
 
       {open && (
-        <div className="axis-assistant-panel glass-card fixed bottom-20 right-5 z-50 flex h-[34rem] max-h-[calc(100vh-7rem)] w-[23rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-[20px] shadow-[var(--shadow-card)] backdrop-blur-xl">
+        <div className="axis-assistant-panel glass-card fixed z-50 flex h-[34rem] flex-col overflow-hidden rounded-[20px] shadow-[var(--shadow-card)] backdrop-blur-xl">
           <div className="flex shrink-0 items-center justify-between border-b border-border/70 px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_18%,transparent)]" />

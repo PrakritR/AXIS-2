@@ -1,9 +1,17 @@
 import type { ReactNode } from "react";
 
 /** Portal auth card — frosted glass with accent edge; compact on phone and native shell. */
-export function AuthCard({ children }: { children: ReactNode }) {
+export function AuthCard({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+}) {
   return (
-    <div className="auth-card-shell relative mx-auto w-full max-w-[460px]">
+    <div
+      className={`auth-card-shell relative mx-auto w-full ${wide ? "max-w-[52rem]" : "max-w-[460px]"}`}
+    >
       <div
         className="pointer-events-none absolute -inset-px rounded-[21px] bg-[linear-gradient(145deg,rgba(47,107,255,0.35),rgba(143,180,255,0.12),rgba(47,107,255,0.2))] opacity-80 sm:rounded-[25px]"
         aria-hidden

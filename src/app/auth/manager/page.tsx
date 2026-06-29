@@ -4,11 +4,10 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { MobileEmailSignIn } from "@/components/auth/mobile-email-sign-in";
 import {
+  AuthAccountFooterLink,
   AuthDivider,
-  AuthFooterLink,
   AuthPageHeader,
 } from "@/components/auth/auth-mobile-primitives";
-import Link from "next/link";
 
 export default function ManagerAuthPage() {
   return (
@@ -17,7 +16,7 @@ export default function ManagerAuthPage() {
         showLogo
         eyebrow="Manager"
         title="Sign in"
-        subtitle="Or create a new account below"
+        subtitle="Property manager portal"
         accent={false}
       />
 
@@ -31,14 +30,8 @@ export default function ManagerAuthPage() {
 
       <MobileEmailSignIn nextPath="/portal/dashboard" />
 
-      <p className="auth-footer-link mt-5 text-center text-[13px] text-muted">
-        New here?{" "}
-        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/manager/plan">
-          Choose a plan
-        </Link>
-      </p>
-
-      <AuthFooterLink href="/auth/welcome">Change role</AuthFooterLink>
+      <AuthAccountFooterLink href="/auth/manager/plan">New here? Create an account</AuthAccountFooterLink>
+      <AuthAccountFooterLink href="/auth/sign-in">Change role</AuthAccountFooterLink>
     </AuthCard>
   );
 }

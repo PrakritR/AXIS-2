@@ -2,7 +2,8 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
-import { AuthDivider, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import { AuthAccountFooterLink, AuthDivider, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import { ManagerPlanBillingToggle, ManagerPlanTierCards } from "@/components/auth/manager-plan-tier-cards";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -30,7 +31,6 @@ import { loadManagerPlanTiers } from "@/lib/site-content";
 import { isManagerOnboardTier, parseOnboardOfferSearchParams } from "@/lib/manager-onboard-links";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { stripeLiveJsBlockedMessage } from "@/lib/stripe/stripe-js-client";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -244,7 +244,7 @@ function ManagerPlanPickerInner() {
 
   if (checkoutClientSecret) {
     return (
-      <AuthCard>
+      <AuthCard wide>
         <AuthPageHeader
           eyebrow="Manager"
           title="Add payment method"
@@ -279,76 +279,41 @@ function ManagerPlanPickerInner() {
           : "Continue";
 
   return (
-    <AuthCard>
-      <div className="auth-plan-picker">
-      <AuthPageHeader
-        eyebrow="Manager"
-        title="Choose plan"
-        subtitle={
-          sessionSignedIn
-            ? "Add a card or Apple Pay to start your free trial"
-            : "Pick a plan — first 2 weeks free with card or Apple Pay"
-        }
-        accent={false}
-      />
+    <AuthCard wide>
+      <div className="auth-plan-picker auth-plan-picker-wide">
+        <AuthPageHeader
+          eyebrow="Manager"
+          title="Create account"
+          subtitle="Choose Free, Pro, or Business — first 2 weeks free with card or Apple Pay on paid plans"
+          accent={false}
+        />
 
-      <div className="auth-plan-tier-row mt-5 flex flex-wrap justify-center gap-2">
-        {planTiers.map((t) => {
-          const active = selectedTierId === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setSelectedTierId(t.id)}
-              disabled={checkoutLocked}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                active ? "btn-cobalt shadow-sm" : "border border-border bg-card/60 text-muted"
-              }`}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {isPaidTier ? (
-        <div className="mt-3 flex justify-center">
-          <div className="inline-flex rounded-full border border-border bg-card/40 p-1">
-            {(["monthly", "annual"] as const).map((cycle) => (
-              <button
-                key={cycle}
-                type="button"
-                onClick={() => setBilling(cycle)}
-                disabled={checkoutLocked}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${
-                  billing === cycle ? "btn-cobalt" : "text-muted"
-                }`}
-              >
-                {cycle}
-              </button>
-            ))}
-          </div>
+        <div className="mt-4 sm:mt-5">
+          <ManagerPlanBillingToggle billing={billing} onChange={setBilling} disabled={checkoutLocked} />
         </div>
-      ) : null}
 
-      <p className="auth-plan-price-block mt-4 text-center">
-        <span className="text-2xl font-bold tracking-tight text-foreground">{price.headline}</span>
-        {price.period ? <span className="text-sm font-medium text-muted">{price.period}</span> : null}
-      </p>
-      {requiresPaymentSetup ? (
-        <p className="mt-1.5 text-center text-xs text-muted">
-          {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial
-          {isPaidTier ? `, then ${price.headline}${price.period ?? ""}` : " on Free — card required"}
-        </p>
-      ) : null}
+        <div className="auth-plan-tier-grid mt-4 sm:mt-5">
+          <ManagerPlanTierCards
+            tiers={planTiers}
+            billing={billing}
+            selectedTierId={selectedTierId}
+            onSelectTier={setSelectedTierId}
+            disabled={checkoutLocked}
+          />
+        </div>
 
-      {stripeCheckoutBlocked && requiresPaymentSetup ? (
-        <p className="auth-stripe-dev-notice mt-4 px-4 py-3">
-          {stripeCheckoutBlocked}
-        </p>
-      ) : null}
+        {requiresPaymentSetup ? (
+          <p className="auth-plan-price-block mt-4 text-center text-xs text-muted sm:mt-5">
+            {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial on {selected.label}
+            {isPaidTier ? `, then ${price.headline}${price.period ?? ""}` : " — card required to start"}
+          </p>
+        ) : null}
 
-      <div className="auth-plan-form-block mt-5 space-y-3">
+        {stripeCheckoutBlocked && requiresPaymentSetup ? (
+          <p className="auth-stripe-dev-notice mt-4 px-4 py-3">{stripeCheckoutBlocked}</p>
+        ) : null}
+
+        <div className="auth-plan-form-block mt-5 space-y-3 sm:mt-6">
         {sessionSignedIn && session?.email ? (
           <>
             <GoogleSignedInBanner
@@ -424,13 +389,10 @@ function ManagerPlanPickerInner() {
             </Button>
           </>
         )}
-      </div>
+        </div>
 
-      <p className="auth-footer-link mt-5 text-center text-[13px] text-muted">
-        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/manager">
-          ← Back to sign in
-        </Link>
-      </p>
+        <AuthAccountFooterLink href="/auth/manager">Already have an account? Sign in</AuthAccountFooterLink>
+        <AuthAccountFooterLink href="/auth/sign-in">Change role</AuthAccountFooterLink>
       </div>
     </AuthCard>
   );

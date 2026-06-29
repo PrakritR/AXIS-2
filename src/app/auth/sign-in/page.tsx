@@ -310,7 +310,7 @@ function SignInForm() {
         <p className="auth-footer-link mt-4 text-center text-[13px] text-muted sm:mt-5 sm:text-sm">
           New here?{" "}
           <Link className="font-semibold text-primary hover:opacity-90" href={copy.createAccountHref}>
-            {intent === "manager" ? "Choose a plan" : intent === "resident" ? "Resident setup" : "Get started"}
+            {intent === "manager" ? "Create an account" : intent === "resident" ? "Resident setup" : "Get started"}
           </Link>
         </p>
       ) : null}

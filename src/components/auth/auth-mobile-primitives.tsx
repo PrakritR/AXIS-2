@@ -240,6 +240,11 @@ export function AuthBackLink({ children, onClick }: { children: ReactNode; onCli
 
 export function AuthFooterLink({ href, children }: { href: string; children: ReactNode }) {
   if (detectNativePlatformSync()) return null;
+  return <AuthAccountFooterLink href={href}>{children}</AuthAccountFooterLink>;
+}
+
+/** Footer auth link — visible on web and in the native app shell. */
+export function AuthAccountFooterLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <p className="auth-footer-link mt-5 text-center text-[13px] text-muted sm:mt-6 sm:text-sm">
       <Link href={href} className="font-semibold text-primary hover:opacity-90">

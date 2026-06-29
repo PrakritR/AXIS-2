@@ -1168,6 +1168,20 @@ html[data-native] .auth-plan-picker .auth-page-header {
   margin-bottom: 0;
 }
 
+html[data-native] .auth-plan-picker-wide .auth-page-subtitle {
+  display: block;
+}
+
+html[data-native] .auth-plan-picker-wide .auth-plan-tier-card {
+  padding: 0.875rem;
+}
+
+html[data-native] .auth-layout-main:has(.auth-plan-picker-wide) {
+  justify-content: flex-start;
+  padding-top: max(0.5rem, var(--native-safe-top));
+  padding-bottom: max(0.75rem, var(--native-safe-bottom));
+}
+
 html[data-native] .auth-plan-picker .auth-plan-tier-row {
   margin-top: 0.875rem;
 }
@@ -1259,16 +1273,31 @@ html[data-native] .axis-page-frame > footer {
   display: none;
 }
 
+.axis-assistant-fab {
+  bottom: 1.25rem;
+  right: 1.25rem;
+}
+
+.axis-assistant-panel {
+  bottom: 5rem;
+  right: 1.25rem;
+  max-height: min(34rem, calc(100vh - 7rem));
+  width: min(23rem, calc(100vw - 2.5rem));
+}
+
 html[data-native] .axis-assistant-fab {
-  bottom: max(5.25rem, calc(var(--native-safe-bottom) + 4.75rem));
-  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: auto;
+  top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem));
+  right: max(0.75rem, var(--native-safe-right));
 }
 
 html[data-native] .axis-assistant-panel {
-  bottom: max(5.5rem, calc(var(--native-safe-bottom) + 5rem));
-  right: max(1rem, env(safe-area-inset-right, 0px));
-  max-height: min(34rem, calc(100dvh - var(--native-safe-top) - 6.5rem));
-  width: min(23rem, calc(100vw - 2rem));
+  top: max(3.75rem, calc(var(--native-safe-top) + 3rem));
+  bottom: max(5.75rem, calc(var(--native-safe-bottom) + 5.25rem));
+  right: max(0.75rem, var(--native-safe-right));
+  height: auto;
+  max-height: none;
+  width: min(23rem, calc(100vw - 1.5rem));
 }
 
 html[data-native] .portal-top-banner-strip,

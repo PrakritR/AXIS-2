@@ -24,7 +24,7 @@ export const AUTH_WELCOME_ROLE_OPTIONS = [
     tone: "blue" as const,
   },
   {
-    id: "/auth/manager",
+    id: "/auth/manager/plan",
     label: "Manager",
     hint: "List properties & lease",
     icon: "manager" as const,
