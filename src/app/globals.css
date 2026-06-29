@@ -1168,6 +1168,21 @@ html[data-native] .auth-plan-picker .auth-page-header {
   margin-bottom: 0;
 }
 
+html[data-native] .native-auth-hub .auth-brand-subtitle {
+  display: block;
+  max-width: 18rem;
+}
+
+html[data-native] .native-auth-mode-toggle {
+  margin-top: 0;
+}
+
+html[data-native] .auth-layout-main:has(.native-auth-hub) {
+  justify-content: flex-start;
+  padding-top: max(0.5rem, var(--native-safe-top));
+  padding-bottom: max(0.75rem, var(--native-safe-bottom));
+}
+
 html[data-native] .auth-plan-picker-wide .auth-page-subtitle {
   display: block;
 }

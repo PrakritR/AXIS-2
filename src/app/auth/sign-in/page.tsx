@@ -2,6 +2,7 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthWelcomeScreen, shouldShowNativeWelcome } from "@/components/auth/auth-welcome-screen";
+import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 import { AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
@@ -117,6 +118,10 @@ function SignInForm() {
   const nextPath = searchParams.get("next") ?? "";
   const intent = parseSignInIntent(searchParams.get("intent"));
   const authError = searchParams.get("error");
+
+  if (detectNativePlatformSync()) {
+    return <NativeAuthHub />;
+  }
 
   if (
     shouldShowNativeWelcome({

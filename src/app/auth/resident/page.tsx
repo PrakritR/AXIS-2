@@ -3,6 +3,7 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { MobileEmailSignIn } from "@/components/auth/mobile-email-sign-in";
+import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 import {
   AuthBackLink,
   AuthDivider,
@@ -15,13 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
 import { nativeAuthEntryPathClient } from "@/lib/auth/native-auth-entry";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type ResidentMode = "choose" | "sign-in" | "apply";
 
-export default function ResidentAuthPage() {
+function ResidentAuthWeb() {
   const router = useRouter();
   const { showToast } = useAppUi();
   const [mode, setMode] = useState<ResidentMode>("choose");
@@ -119,4 +121,21 @@ export default function ResidentAuthPage() {
       <AuthBackLink onClick={() => setMode("choose")}>← Back</AuthBackLink>
     </AuthCard>
   );
+}
+
+/** Web keeps the step-by-step resident flow; native uses the unified auth hub. */
+export default function ResidentAuthPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (detectNativePlatformSync()) {
+      router.replace("/auth/sign-in?mode=create&role=resident");
+    }
+  }, [router]);
+
+  if (detectNativePlatformSync()) {
+    return <NativeAuthHub />;
+  }
+
+  return <ResidentAuthWeb />;
 }
