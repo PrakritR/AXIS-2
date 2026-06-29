@@ -38,6 +38,7 @@ describe("portal mobile shell conventions", () => {
   it("pins native bottom nav flush to screen bottom", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav");
     expect(GLOBALS_CSS).toContain("align-items: flex-end");
-    expect(GLOBALS_CSS).toContain("padding-bottom: 0");
+    expect(GLOBALS_CSS).toContain("bottom: calc(-1 * var(--native-safe-bottom))");
+    expect(GLOBALS_CSS).toContain("padding-bottom: 2px");
   });
 });
