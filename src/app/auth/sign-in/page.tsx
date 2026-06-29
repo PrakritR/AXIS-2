@@ -117,18 +117,6 @@ function SignInForm() {
   const nextPath = searchParams.get("next") ?? "";
   const intent = parseSignInIntent(searchParams.get("intent"));
   const authError = searchParams.get("error");
-
-  if (
-    shouldShowNativeWelcome({
-      intent: searchParams.get("intent"),
-      next: nextPath,
-      error: authError,
-    })
-  ) {
-    return <AuthWelcomeScreen />;
-  }
-
-  const copy = signInCopy(intent);
   const oauthMessage = searchParams.get("message");
 
   const [email, setEmail] = useState(readRememberedLoginEmail);
@@ -149,6 +137,18 @@ function SignInForm() {
       }
     });
   }, [authError, oauthMessage]);
+
+  if (
+    shouldShowNativeWelcome({
+      intent: searchParams.get("intent"),
+      next: nextPath,
+      error: authError,
+    })
+  ) {
+    return <AuthWelcomeScreen />;
+  }
+
+  const copy = signInCopy(intent);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {

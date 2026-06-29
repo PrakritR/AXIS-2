@@ -19,26 +19,28 @@ export function NativeAppGate({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    const platform = detectNativePlatformSync();
-    if (platform) tagHtmlNativePlatform(platform);
+    void Promise.resolve().then(() => {
+      const platform = detectNativePlatformSync();
+      if (platform) tagHtmlNativePlatform(platform);
 
-    if (!platform) {
-      setBlocked(false);
-      return;
-    }
+      if (!platform) {
+        setBlocked(false);
+        return;
+      }
 
-    if (isNativeAppAllowedPath(pathname)) {
-      setBlocked(false);
-      return;
-    }
+      if (isNativeAppAllowedPath(pathname)) {
+        setBlocked(false);
+        return;
+      }
 
-    setBlocked(true);
-    const supabase = createSupabaseBrowserClient();
-    void redirectNativeFromMarketing(async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      return { session };
+      setBlocked(true);
+      const supabase = createSupabaseBrowserClient();
+      void redirectNativeFromMarketing(async () => {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        return { session };
+      });
     });
   }, [pathname]);
 

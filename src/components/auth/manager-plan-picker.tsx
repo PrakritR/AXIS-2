@@ -90,10 +90,12 @@ function ManagerPlanPickerInner() {
   }, []);
 
   useEffect(() => {
-    const tier = searchParams.get("tier");
-    if (tier && isManagerOnboardTier(tier)) setSelectedTierId(tier);
-    const offer = parseOnboardOfferSearchParams(searchParams);
-    if (offer.billing) setBilling(offer.billing);
+    void Promise.resolve().then(() => {
+      const tier = searchParams.get("tier");
+      if (tier && isManagerOnboardTier(tier)) setSelectedTierId(tier);
+      const offer = parseOnboardOfferSearchParams(searchParams);
+      if (offer.billing) setBilling(offer.billing);
+    });
   }, [searchParams]);
 
   useEffect(() => {
@@ -110,7 +112,9 @@ function ManagerPlanPickerInner() {
   }, [persistOffer]);
 
   useEffect(() => {
-    setCheckoutClientSecret(null);
+    void Promise.resolve().then(() => {
+      setCheckoutClientSecret(null);
+    });
   }, [selectedTierId, billing]);
 
   const onEmbeddedError = useCallback(
