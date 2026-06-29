@@ -29,7 +29,7 @@ export function RentalApplicationFinishPanel({
   useEffect(() => {
     const normalEmail = email.trim().toLowerCase();
     if (!normalEmail.includes("@")) {
-      setEmailStatusLoading(false);
+      void Promise.resolve().then(() => setEmailStatusLoading(false));
       return;
     }
 

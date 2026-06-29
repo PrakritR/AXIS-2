@@ -214,14 +214,16 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
   }, [onCancel, step]);
 
   useEffect(() => {
-    setForm({
-      ...createInitialRentalWizardState(),
-      ...(row.application ?? {}),
-      email: residentEmail,
+    void Promise.resolve().then(() => {
+      setForm({
+        ...createInitialRentalWizardState(),
+        ...(row.application ?? {}),
+        email: residentEmail,
+      });
+      setStep(1);
+      setMaxStepReached(EDIT_STEP_COUNT);
+      setErrors({});
     });
-    setStep(1);
-    setMaxStepReached(EDIT_STEP_COUNT);
-    setErrors({});
   }, [residentEmail, row]);
 
   const meta = EDIT_STEP_META[step - 1] ?? EDIT_STEP_META[0];

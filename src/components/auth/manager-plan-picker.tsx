@@ -110,7 +110,9 @@ function ManagerPlanPickerInner() {
   }, [persistOffer]);
 
   useEffect(() => {
-    setCheckoutClientSecret(null);
+    void Promise.resolve().then(() => {
+      setCheckoutClientSecret(null);
+    });
   }, [selectedTierId, billing]);
 
   const onEmbeddedError = useCallback(
