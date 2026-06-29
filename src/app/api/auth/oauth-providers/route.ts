@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { resolveShareableAppOrigin } from "@/lib/app-url";
 import { supabaseGoogleOAuthRedirectUri } from "@/lib/auth/google-oauth-redirect";
+import {
+  httpsOAuthCallbackUrls,
+  nativeOAuthSetupHint,
+  nativeSupabaseRedirectUrls,
+} from "@/lib/auth/native-oauth-redirect-urls";
 
 export const runtime = "nodejs";
 
@@ -43,14 +48,19 @@ export async function GET() {
     const googleEnabled = settings.external?.google === true;
     const appOrigin = resolveShareableAppOrigin();
     const googleRedirectUri = supabaseGoogleOAuthRedirectUri(supabaseUrl);
+    const httpsCallbacks = httpsOAuthCallbackUrls(appOrigin);
+    const nativeCallbacks = nativeSupabaseRedirectUrls();
     return NextResponse.json({
       googleEnabled,
       supabaseUrl,
       googleRedirectUri,
-      appCallbackUrl: `${appOrigin}/auth/callback`,
+      appCallbackUrl: httpsCallbacks[0],
+      httpsCallbackUrls: httpsCallbacks,
+      nativeCallbackUrls: nativeCallbacks,
       hint: googleEnabled
         ? null
-        : `After enabling Google, allowlist ${appOrigin}/auth/callback in Supabase URL configuration.`,
+        : `After enabling Google, allowlist ${httpsCallbacks[0]} in Supabase URL configuration.`,
+      nativeRedirectHint: nativeOAuthSetupHint(),
       googleRedirectHint: googleRedirectUri
         ? `If Google shows redirect_uri_mismatch, add this exact URI in Google Cloud → Credentials → OAuth client → Authorized redirect URIs: ${googleRedirectUri}`
         : null,

@@ -1,7 +1,7 @@
 import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
-import { clearOAuthNextCookie } from "@/lib/auth/oauth-next-cookie";
+import { clearOAuthNextCookie, readOAuthIntentFromRequest, readOAuthSurfaceFromRequest } from "@/lib/auth/oauth-next-cookie";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
@@ -101,7 +101,10 @@ export async function handleOAuthCallback(
       await ensureFreeManagerPortalAccess(service, user);
       const resolvedPath = options?.resolveRedirect
         ? await options.resolveRedirect(service, user, safePath)
-        : await resolveOAuthPortalRedirect(service, user, safePath);
+        : await resolveOAuthPortalRedirect(service, user, safePath, {
+            intent: readOAuthIntentFromRequest(request),
+            surface: readOAuthSurfaceFromRequest(request),
+          });
       if (resolvedPath !== safePath) {
         applyRedirect(new URL(resolvedPath, requestUrl.origin));
       }

@@ -15,6 +15,17 @@ for the checklist and registries that keep browser and app behavior aligned.
 
 ---
 
+## Payments (web vs native app)
+
+| Flow | Web | iOS / Android app |
+| --- | --- | --- |
+| **Manager subscription** (Pro / Business) | Stripe Checkout — card or Apple Pay | Same — choose **Apple Pay** or card in embedded checkout |
+| **Resident rent & fees** | Bank (ACH), Link, or card via Stripe | **Bank (ACH) only** via Stripe |
+
+Rent in the app always uses ACH (`src/lib/platform/resident-payments.ts`). Subscription Apple Pay setup: [`docs/stripe-apple-pay-subscriptions.md`](stripe-apple-pay-subscriptions.md).
+
+---
+
 ## What's already in the repo
 
 | Path | Purpose |
@@ -202,6 +213,42 @@ It looks up the user's active tokens, sends via FCM, and prunes dead tokens.
 Until `FCM_*` is set it returns `{ sent: 0, skipped: true }` and changes nothing.
 
 **Step-by-step Firebase setup:** see [`docs/firebase-push-setup.md`](firebase-push-setup.md).
+
+### Google sign-in (native app)
+
+Google OAuth opens in the **system in-app browser** (not the main WebView). After you pick an
+account, Supabase must redirect back into the Axis app — not the marketing homepage.
+
+**1. Supabase redirect URLs** (Authentication → URL configuration → Redirect URLs). **Required:**
+
+```
+https://www.axis-seattle-housing.com/auth/callback
+https://www.axis-seattle-housing.com/auth/callback/partner-pricing
+https://www.axis-seattle-housing.com/auth/callback/resident-signup
+```
+
+The native app uses these HTTPS callbacks (same as web). A small bridge page bounces back into the app via the custom URL scheme registered in Xcode/Android.
+
+**Optional** (direct scheme return without the bridge page):
+
+```
+com.axisseattlehousing.app://auth/callback
+com.axisseattlehousing.app://auth/callback/**
+```
+
+If the HTTPS callback is missing, Supabase falls back to the **Site URL** and Google sign-in opens the marketing homepage in the system browser instead of the portal.
+
+**2. Universal / app links (https fallback)** — committed in `public/.well-known/`:
+
+- `apple-app-site-association` — iOS opens `/auth/callback` in the app WebView
+- `assetlinks.json` — Android; replace `REPLACE_WITH_RELEASE_KEYSTORE_SHA256` with your
+  signing cert fingerprint (`keytool -list -v -keystore …`)
+
+Deploy the site (Vercel) so those files are live, then `npx cap sync` and rebuild the native
+app (Associated Domains entitlement is in `ios/App/App/App.entitlements`).
+
+**3. Verify** — `GET /api/auth/oauth-providers` returns `nativeCallbackUrls` and
+`nativeRedirectHint` for your environment.
 
 **Suggested wiring** (alongside the existing SMS sends — push complements, not
 replaces, Twilio): the rent/move-in reminder crons in

@@ -108,7 +108,7 @@ function LeasePipelineAdminDetail({
   };
 
   return (
-    <div className="max-h-[min(70vh,520px)] space-y-4 overflow-y-auto pr-1">
+    <div className="portal-desktop-scroll-panel space-y-4 pr-1">
       {(row.notes ?? "").trim() ? (
         <p className="text-sm text-muted">
           <span className="font-semibold text-foreground">Internal notes: </span>

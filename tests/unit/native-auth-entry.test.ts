@@ -31,7 +31,7 @@ describe("native-auth-entry", () => {
     }
   });
 
-  it("nativeAwarePath maps marketing URLs when native (no window in vitest — path passthrough)", () => {
+  it("nativeAwarePath leaves marketing URLs unchanged during SSR (no window in vitest)", () => {
     expect(nativeAwarePath("/partner/pricing")).toBe("/partner/pricing");
   });
 });

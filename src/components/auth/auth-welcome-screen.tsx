@@ -1,30 +1,18 @@
 "use client";
 
-import { AuthCard } from "@/components/auth/auth-card";
-import {
-  AuthBrandHeader,
-  AuthFooterLink,
-  AuthLoadingCard,
-  AuthRoleStack,
-} from "@/components/auth/auth-mobile-primitives";
-import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
-import { getNativeInfo } from "@/lib/native/push-client";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 
 export const AUTH_WELCOME_ROLE_OPTIONS = [
   {
-    id: "/auth/resident",
+    id: "/auth/sign-in?mode=create&role=resident",
     label: "Resident",
     hint: "Rent, pay & apply",
     icon: "resident" as const,
     tone: "blue" as const,
   },
   {
-    id: "/auth/manager",
+    id: "/auth/sign-in?mode=create&role=manager",
     label: "Manager",
     hint: "List properties & lease",
     icon: "manager" as const,
@@ -32,7 +20,7 @@ export const AUTH_WELCOME_ROLE_OPTIONS = [
   },
 ] as const;
 
-/** Native app lands on /auth/sign-in (always deployed) and shows welcome when no intent. */
+/** Native app lands on /auth/sign-in — unified hub handles welcome + sign-in. */
 export function shouldShowNativeWelcome(search: {
   intent: string | null;
   next: string | null;
@@ -46,63 +34,10 @@ export function shouldShowNativeWelcome(search: {
 }
 
 type AuthWelcomeScreenProps = {
-  /** Web /auth/welcome — link to email sign-in. Hidden when welcome is embedded in /auth/sign-in. */
   showWebSignInLink?: boolean;
 };
 
-export function AuthWelcomeScreen({ showWebSignInLink = false }: AuthWelcomeScreenProps) {
-  const router = useRouter();
-  const [checkingSession, setCheckingSession] = useState(true);
-  useAuthWelcomeChrome(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { isNative } = await getNativeInfo();
-        if (!isNative) return;
-        const supabase = createSupabaseBrowserClient();
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!cancelled && session) {
-          window.location.replace("/auth/continue");
-        }
-      } finally {
-        if (!cancelled) setCheckingSession(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (checkingSession) {
-    return (
-      <AuthCard>
-        <AuthLoadingCard />
-      </AuthCard>
-    );
-  }
-
-  return (
-    <AuthCard>
-      <AuthBrandHeader title="Welcome" subtitle="Choose how you'll use Axis" />
-
-      <AuthRoleStack
-        options={[...AUTH_WELCOME_ROLE_OPTIONS]}
-        onSelect={(href) => router.push(href)}
-      />
-
-      {showWebSignInLink ? (
-        <AuthFooterLink href="/auth/sign-in">Already have an account? Sign in</AuthFooterLink>
-      ) : (
-        <p className="auth-native-email-sign-in mt-4 text-center text-[13px] text-muted sm:mt-5">
-          <Link className="font-semibold text-primary hover:opacity-90" href="/auth/sign-in?intent=resident">
-            Sign in with email
-          </Link>
-        </p>
-      )}
-    </AuthCard>
-  );
+/** @deprecated Prefer NativeAuthHub — kept for /auth/welcome route. */
+export function AuthWelcomeScreen(_props: AuthWelcomeScreenProps = {}) {
+  return <NativeAuthHub />;
 }

@@ -77,7 +77,10 @@ describe("resolveOAuthPortalRedirect", () => {
     });
 
     const user = { id: "user-1", email: "new@test.com" } as User;
-    const path = await resolveOAuthPortalRedirect(mockSupabase() as never, user, "/portal/dashboard");
+    const path = await resolveOAuthPortalRedirect(mockSupabase() as never, user, "/auth/continue", {
+      intent: "manager",
+      surface: "native",
+    });
 
     expect(ensureFreeManagerPortalAccess).toHaveBeenCalled();
     expect(path).toBe("/portal/dashboard");

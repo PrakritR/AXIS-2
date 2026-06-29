@@ -4,9 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ManagerPortalPageShell,
+  PortalDashboardCompactRow,
+  PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
   PortalDashboardTile,
   PORTAL_DASHBOARD_SECTION_CARD,
+  PORTAL_DASHBOARD_STACK,
+  formatCompactChargeLine,
 } from "@/components/portal/portal-metrics";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -287,8 +291,8 @@ export function ResidentDashboard({
   const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
 
   return (
-    <ManagerPortalPageShell title={welcomeTitle} subtitle={propertySubtitle}>
-      <div className="space-y-5">
+    <ManagerPortalPageShell title={welcomeTitle} subtitle={propertySubtitle} hideTitleOnNative>
+      <div className={PORTAL_DASHBOARD_STACK}>
 
         <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>{statusCopy}</div>
 
@@ -355,26 +359,26 @@ export function ResidentDashboard({
               />
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
               <div className={PORTAL_DASHBOARD_SECTION_CARD}>
                 <PortalDashboardSectionHeader title="Payments" href={`${BASE}/payments`} linkLabel="Payments →" />
-                {pendingCharges.length === 0 ? (
-                  <p className="mt-4 text-sm text-muted">No outstanding charges.</p>
-                ) : (
-                  <ul className="mt-3 space-y-2">
-                    {pendingCharges.slice(0, 5).map((charge) => (
-                      <li key={charge.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-foreground">{charge.title || "Charge"}</p>
-                          <p className="truncate text-xs text-muted">{chargeDueLabel(charge)}</p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                <PortalDashboardPreviewList
+                  items={pendingCharges}
+                  href={`${BASE}/payments`}
+                  emptyMessage="No outstanding charges."
+                  keyForItem={(charge) => charge.id}
+                  renderRow={(charge) => (
+                    <PortalDashboardCompactRow
+                      title={charge.title || "Charge"}
+                      subtitle={formatCompactChargeLine(charge.title || "Charge", charge.balanceLabel, chargeDueLabel(charge))}
+                      badge={
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                           {charge.balanceLabel}
                         </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                      }
+                    />
+                  )}
+                />
               </div>
 
               <div className={PORTAL_DASHBOARD_SECTION_CARD}>
@@ -462,23 +466,23 @@ export function ResidentDashboard({
 
             <div className={PORTAL_DASHBOARD_SECTION_CARD}>
               <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
-              {inbox === 0 ? (
-                <p className="mt-4 text-sm text-muted">No unread messages — inbox is clear.</p>
-              ) : (
-                <ul className="mt-3 space-y-2">
-                  {inboxThreads.map((thread) => (
-                    <li key={thread.id} className="flex items-start justify-between gap-3 rounded-xl bg-accent/30 px-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{thread.from || "Unknown sender"}</p>
-                        <p className="truncate text-xs text-muted">{thread.subject || thread.preview || "—"}</p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">
+              <PortalDashboardPreviewList
+                items={inboxThreads}
+                href={`${BASE}/inbox/unopened`}
+                emptyMessage="No unread messages — inbox is clear."
+                keyForItem={(thread) => thread.id}
+                renderRow={(thread) => (
+                  <PortalDashboardCompactRow
+                    title={thread.from || "Unknown sender"}
+                    subtitle={thread.subject || thread.preview || "—"}
+                    badge={
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
                         Unread
                       </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                    }
+                  />
+                )}
+              />
             </div>
           </>
         ) : (

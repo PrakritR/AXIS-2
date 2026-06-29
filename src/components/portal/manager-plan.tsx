@@ -15,6 +15,13 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { submitBugFeedbackReport } from "@/lib/portal-bug-feedback";
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
+import { SubscriptionCheckoutHint } from "@/components/stripe/subscription-checkout-hint";
+import {
+  MANAGER_PLAN_CHECKOUT_CANCELLED_PATH,
+  MANAGER_PLAN_CHECKOUT_SUCCESS_PATH,
+  MANAGER_PLAN_PORTAL_PATH,
+  MANAGER_PLAN_PORTAL_SECTION_ID,
+} from "@/lib/portals/manager-plan-path";
 
 type SubPayload = {
   tier: string | null;
@@ -104,10 +111,11 @@ type PlanModalState =
       fromTier: ManagerSkuTier;
     };
 
-export function ManagerPlan() {
+export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const planBasePath = "/portal";
+  const planSettingsPath = MANAGER_PLAN_PORTAL_PATH;
   const { showToast } = useAppUi();
   const { userId, email } = useManagerUserId();
   const [sub, setSub] = useState<SubPayload | null>(null);
@@ -222,10 +230,10 @@ export function ManagerPlan() {
         reporterRole: "manager",
         title,
         description: reason,
-        pageUrl: typeof window !== "undefined" ? window.location.href : `${planBasePath}/plan`,
+        pageUrl: typeof window !== "undefined" ? window.location.href : planSettingsPath,
       });
     },
-    [email, planBasePath, userId],
+    [email, planSettingsPath, userId],
   );
 
   const closePlanModal = useCallback(() => {
@@ -268,7 +276,7 @@ export function ManagerPlan() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ returnPath: `${planBasePath}/plan` }),
+        body: JSON.stringify({ returnPath: planSettingsPath }),
       });
       const body = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !body.url) {
@@ -509,9 +517,20 @@ export function ManagerPlan() {
     return `Switch to ${tierLabel(tierId)}`;
   };
 
-  return (
-    <ManagerPortalPageShell title="Plan">
-      <div className="mx-auto max-w-5xl space-y-8">
+  useEffect(() => {
+    if (!embedded || typeof window === "undefined") return;
+    if (window.location.hash !== `#${MANAGER_PLAN_PORTAL_SECTION_ID}`) return;
+    const id = window.requestAnimationFrame(() => {
+      document.getElementById(MANAGER_PLAN_PORTAL_SECTION_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [embedded]);
+
+  const planBody = (
+    <div
+      className={embedded ? "space-y-6" : "mx-auto max-w-5xl space-y-8"}
+      id={embedded ? MANAGER_PLAN_PORTAL_SECTION_ID : undefined}
+    >
         {/* Current plan summary */}
         {!sub ? (
           <div className="h-36 animate-pulse rounded-2xl border border-border bg-accent/30" aria-hidden />
@@ -789,8 +808,10 @@ export function ManagerPlan() {
             Subscribe through the buttons above to manage billing in Stripe.
           </p>
         ) : null}
-      </div>
+    </div>
+  );
 
+  const planModals = (
       <Modal
         open={planModal !== null}
         title={planModalTitle}
@@ -806,6 +827,7 @@ export function ManagerPlan() {
               {" "}
               You&apos;ll stay on this page — billing is handled securely by Stripe.
             </p>
+            <SubscriptionCheckoutHint className="text-sm leading-6 text-muted" upgrade />
             <p className="text-sm font-medium text-foreground">
               {planPriceLabel(planTiers, planModal.tier, planModal.billing)}
             </p>
@@ -972,6 +994,21 @@ export function ManagerPlan() {
           </div>
         ) : null}
       </Modal>
+  );
+
+  if (embedded) {
+    return (
+      <>
+        {planBody}
+        {planModals}
+      </>
+    );
+  }
+
+  return (
+    <ManagerPortalPageShell title="Billing">
+      {planBody}
+      {planModals}
     </ManagerPortalPageShell>
   );
 }

@@ -2,10 +2,10 @@ import { AuthLayoutFooter, AuthLayoutSubstrate } from "@/components/auth/auth-la
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="auth-layout axis-page-frame relative flex min-h-[100dvh] flex-col overflow-x-hidden" data-auth-layout>
+    <div className="auth-layout axis-page-frame relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden" data-auth-layout>
       <AuthLayoutSubstrate />
       <main className="auth-layout-main">
-        <div className="auth-layout-panel w-full max-w-[460px]">{children}</div>
+        <div className="auth-layout-panel w-full max-w-[min(100%,52rem)]">{children}</div>
       </main>
       <AuthLayoutFooter />
     </div>

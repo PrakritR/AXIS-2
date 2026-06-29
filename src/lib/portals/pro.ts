@@ -9,7 +9,7 @@ export const proPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "calendar", label: "Tours", tabs: [] },
+    { section: "calendar", label: "Calendar", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
     {
       section: "residents",
@@ -72,8 +72,25 @@ export const proPortal: PortalDefinition = {
       label: "Co-managers",
       tabs: [],
     },
-    { section: "plan", label: "Plan", tabs: [] },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Settings", tabs: [] },
   ],
 };
+
+/** Default smoke-test paths for web + native WebView (manager/pro portal). */
+export const MANAGER_PORTAL_SMOKE_PATHS = [
+  { label: "Dashboard", path: "/portal/dashboard" },
+  { label: "Properties", path: "/portal/properties" },
+  { label: "Calendar", path: "/portal/calendar" },
+  { label: "Applications", path: "/portal/applications" },
+  { label: "Residents", path: "/portal/residents/current" },
+  { label: "Leases", path: "/portal/leases" },
+  { label: "Payments", path: "/portal/payments" },
+  { label: "Services", path: "/portal/services/requests" },
+  { label: "Inbox", path: "/portal/inbox/unopened" },
+  { label: "Documents", path: "/portal/documents/income-documents" },
+  { label: "Finances", path: "/portal/financials/income" },
+  { label: "Co-managers", path: "/portal/relationships" },
+  { label: "Feedback", path: "/portal/bugs-feedback" },
+  { label: "Settings", path: "/portal/profile" },
+] as const;

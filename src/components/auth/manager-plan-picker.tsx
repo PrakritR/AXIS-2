@@ -2,9 +2,11 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
-import { AuthDivider, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import { AuthAccountFooterLink, AuthDivider, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import { ManagerPlanBillingToggle, ManagerPlanTierCards } from "@/components/auth/manager-plan-tier-cards";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
+import { SubscriptionCheckoutHint } from "@/components/stripe/subscription-checkout-hint";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,12 +27,10 @@ import {
   readManagerPricingOffer,
 } from "@/lib/auth/manager-pricing-oauth-storage";
 import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
-import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
+import { MANAGER_PLAN_TIERS, isPlanTierId, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import { loadManagerPlanTiers } from "@/lib/site-content";
-import { isManagerOnboardTier, parseOnboardOfferSearchParams } from "@/lib/manager-onboard-links";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { stripeLiveJsBlockedMessage } from "@/lib/stripe/stripe-js-client";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -91,9 +91,9 @@ function ManagerPlanPickerInner() {
 
   useEffect(() => {
     const tier = searchParams.get("tier");
-    if (tier && isManagerOnboardTier(tier)) setSelectedTierId(tier);
-    const offer = parseOnboardOfferSearchParams(searchParams);
-    if (offer.billing) setBilling(offer.billing);
+    if (tier && isPlanTierId(tier)) setSelectedTierId(tier);
+    const billing = searchParams.get("billing");
+    if (billing === "monthly" || billing === "annual") setBilling(billing);
   }, [searchParams]);
 
   useEffect(() => {
@@ -136,7 +136,7 @@ function ManagerPlanPickerInner() {
         return;
       }
       if (result.status === "portal") {
-        router.push("/portal/dashboard");
+        window.location.replace("/portal/dashboard");
         return;
       }
       if (result.status === "error") showToast(result.message);
@@ -215,7 +215,7 @@ function ManagerPlanPickerInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
       });
-      const body = (await res.json()) as { error?: string };
+      const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
       if (!res.ok) {
         showToast(body.error ?? "Could not create account.");
         return;
@@ -232,6 +232,11 @@ function ManagerPlanPickerInner() {
         return;
       }
 
+      if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
+        window.location.replace("/portal/dashboard");
+        return;
+      }
+
       setSession(await fetchPartnerPricingSession());
       const offer = buildPricingOffer({ tier: selectedTierId, billing, returnSurface: "mobile-plan" });
       applyPricingResult(await continuePartnerPricingWithOffer(offer));
@@ -244,16 +249,14 @@ function ManagerPlanPickerInner() {
 
   if (checkoutClientSecret) {
     return (
-      <AuthCard>
+      <AuthCard wide>
         <AuthPageHeader
           eyebrow="Manager"
           title="Add payment method"
           subtitle={`${selected.label} · ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then ${price.headline}${price.period ?? ""}`}
           accent={false}
         />
-        <p className="mt-2 text-center text-xs leading-relaxed text-muted">
-          Secure checkout with card or Apple Pay. You won&apos;t be charged until your trial ends.
-        </p>
+        <SubscriptionCheckoutHint className="mt-2 text-center text-xs leading-relaxed text-muted" />
         <div className="mt-4 rounded-2xl border border-border bg-card/50 p-3">
           <EmbeddedCheckoutMount clientSecret={checkoutClientSecret} onError={onEmbeddedError} />
         </div>
@@ -279,76 +282,41 @@ function ManagerPlanPickerInner() {
           : "Continue";
 
   return (
-    <AuthCard>
-      <div className="auth-plan-picker">
-      <AuthPageHeader
-        eyebrow="Manager"
-        title="Choose plan"
-        subtitle={
-          sessionSignedIn
-            ? "Add a card or Apple Pay to start your free trial"
-            : "Pick a plan — first 2 weeks free with card or Apple Pay"
-        }
-        accent={false}
-      />
+    <AuthCard wide>
+      <div className="auth-plan-picker auth-plan-picker-wide">
+        <AuthPageHeader
+          eyebrow="Manager"
+          title="Create account"
+          subtitle="Choose Free, Pro, or Business — first 2 weeks free with card or Apple Pay on paid plans"
+          accent={false}
+        />
 
-      <div className="auth-plan-tier-row mt-5 flex flex-wrap justify-center gap-2">
-        {planTiers.map((t) => {
-          const active = selectedTierId === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setSelectedTierId(t.id)}
-              disabled={checkoutLocked}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                active ? "btn-cobalt shadow-sm" : "border border-border bg-card/60 text-muted"
-              }`}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {isPaidTier ? (
-        <div className="mt-3 flex justify-center">
-          <div className="inline-flex rounded-full border border-border bg-card/40 p-1">
-            {(["monthly", "annual"] as const).map((cycle) => (
-              <button
-                key={cycle}
-                type="button"
-                onClick={() => setBilling(cycle)}
-                disabled={checkoutLocked}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${
-                  billing === cycle ? "btn-cobalt" : "text-muted"
-                }`}
-              >
-                {cycle}
-              </button>
-            ))}
-          </div>
+        <div className="mt-4 sm:mt-5">
+          <ManagerPlanBillingToggle billing={billing} onChange={setBilling} disabled={checkoutLocked} />
         </div>
-      ) : null}
 
-      <p className="auth-plan-price-block mt-4 text-center">
-        <span className="text-2xl font-bold tracking-tight text-foreground">{price.headline}</span>
-        {price.period ? <span className="text-sm font-medium text-muted">{price.period}</span> : null}
-      </p>
-      {requiresPaymentSetup ? (
-        <p className="mt-1.5 text-center text-xs text-muted">
-          {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial
-          {isPaidTier ? `, then ${price.headline}${price.period ?? ""}` : " on Free — card required"}
-        </p>
-      ) : null}
+        <div className="auth-plan-tier-grid mt-4 sm:mt-5">
+          <ManagerPlanTierCards
+            tiers={planTiers}
+            billing={billing}
+            selectedTierId={selectedTierId}
+            onSelectTier={setSelectedTierId}
+            disabled={checkoutLocked}
+          />
+        </div>
 
-      {stripeCheckoutBlocked && requiresPaymentSetup ? (
-        <p className="auth-stripe-dev-notice mt-4 px-4 py-3">
-          {stripeCheckoutBlocked}
-        </p>
-      ) : null}
+        {requiresPaymentSetup ? (
+          <p className="auth-plan-price-block mt-4 text-center text-xs text-muted sm:mt-5">
+            {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial on {selected.label}
+            {isPaidTier ? `, then ${price.headline}${price.period ?? ""}` : " — card required to start"}
+          </p>
+        ) : null}
 
-      <div className="auth-plan-form-block mt-5 space-y-3">
+        {stripeCheckoutBlocked && requiresPaymentSetup ? (
+          <p className="auth-stripe-dev-notice mt-4 px-4 py-3">{stripeCheckoutBlocked}</p>
+        ) : null}
+
+        <div className="auth-plan-form-block mt-5 space-y-3 sm:mt-6">
         {sessionSignedIn && session?.email ? (
           <>
             <GoogleSignedInBanner
@@ -424,13 +392,10 @@ function ManagerPlanPickerInner() {
             </Button>
           </>
         )}
-      </div>
+        </div>
 
-      <p className="auth-footer-link mt-5 text-center text-[13px] text-muted">
-        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/manager">
-          ← Back to sign in
-        </Link>
-      </p>
+        <AuthAccountFooterLink href="/auth/manager">Already have an account? Sign in</AuthAccountFooterLink>
+        <AuthAccountFooterLink href="/auth/sign-in">Change role</AuthAccountFooterLink>
       </div>
     </AuthCard>
   );

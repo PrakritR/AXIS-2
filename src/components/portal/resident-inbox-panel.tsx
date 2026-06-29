@@ -5,7 +5,7 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
-import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDateTime } from "@/lib/pacific-time";
@@ -433,29 +433,41 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     <ManagerPortalPageShell
       title="Inbox"
       titleAside={
-        <>
-          <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setComposeOpen(true)}>
+        <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
             New message
           </Button>
           {tabId === "trash" && counts.trash > 0 ? (
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 rounded-full text-[var(--status-overdue-fg)]"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} text-[var(--status-overdue-fg)]`}
               onClick={emptyTrash}
             >
               Empty trash
             </Button>
           ) : null}
-        </>
+        </div>
       }
       filterRow={
-        <ManagerPortalStatusPills
-          activeTone="primary"
-          tabs={tabs}
-          activeId={tabId}
-          onChange={(id) => navigate(`/resident/inbox/${id}`)}
-        />
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills
+            activeTone="primary"
+            tabs={tabs}
+            activeId={tabId}
+            onChange={(id) => navigate(`/resident/inbox/${id}`)}
+          />
+          <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
+            <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setComposeOpen(true)}>
+              New
+            </Button>
+            {tabId === "trash" && counts.trash > 0 ? (
+              <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={emptyTrash}>
+                Empty
+              </Button>
+            ) : null}
+          </div>
+        </ManagerPortalFilterRow>
       }
     >
       <ScopedInboxComposeModal

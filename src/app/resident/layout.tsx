@@ -1,5 +1,6 @@
 import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
+import { PortalMobileBackBar } from "@/components/portal/portal-mobile-back-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
@@ -50,7 +51,10 @@ export default async function ResidentLayout({ children }: { children: React.Rea
         <PortalSidebar definition={residentPortal} subscriptionTier={managerSubscriptionTier} />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
-            <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>{children}</div>
+            <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
+              <PortalMobileBackBar definition={residentPortal} />
+              {children}
+            </div>
           </main>
         </div>
       </div>

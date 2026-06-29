@@ -35,7 +35,7 @@ export function PortalStripeConnectPanel({
   variant = "page",
 }: {
   basePath: string;
-  variant?: "page" | "embedded";
+  variant?: "page" | "embedded" | "inline";
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
@@ -171,6 +171,34 @@ export function PortalStripeConnectPanel({
 
   const blockingError = actionError ?? status?.stripeError ?? null;
 
+  if (variant === "inline") {
+    if (status?.demo) return null;
+
+    const statusLabel = ready ? "Bank linked" : status?.connected ? "Finish bank setup" : "Bank not linked";
+
+    return (
+      <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card p-1">
+        <span
+          className={`max-w-[8.5rem] truncate px-2 text-[11px] font-semibold sm:max-w-none ${
+            ready ? "text-emerald-700 dark:text-emerald-400" : blockingError ? "text-rose-700 dark:text-rose-400" : "text-muted"
+          }`}
+          title={blockingError ?? statusLabel}
+        >
+          {blockingError ? "Bank error" : statusLabel}
+        </span>
+        <Button
+          type="button"
+          variant={ready ? "outline" : "primary"}
+          className="h-8 shrink-0 rounded-full px-3 text-xs font-semibold"
+          disabled={busy}
+          onClick={() => void startConnect()}
+        >
+          {busy ? "Opening…" : ready ? "Update" : "Link"}
+        </Button>
+      </div>
+    );
+  }
+
   const liveOnLocalHttp =
     typeof window !== "undefined" &&
     window.location.protocol === "http:" &&
@@ -182,36 +210,44 @@ export function PortalStripeConnectPanel({
 
   const body = (
     <div className={`space-y-3 text-sm text-muted ${variant === "embedded" ? "" : "max-w-2xl"}`}>
-      {status?.demo ? (
-        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
-          {status.message ?? "Add Stripe keys to enable bank linking."}
-        </p>
-      ) : null}
+      {variant !== "embedded" ? (
+        <>
+          {status?.demo ? (
+            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
+              {status.message ?? "Add Stripe keys to enable bank linking."}
+            </p>
+          ) : null}
 
-      {stripeTestMode && !status?.demo ? (
-        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
-          Stripe test mode is active — onboarding uses sandbox test banks (e.g. code <span className="font-mono">000000</span>).
-          Set live keys (<span className="font-mono">sk_live_</span> / <span className="font-mono">pk_live_</span>) in production to link a real account.
-        </p>
-      ) : null}
+          {stripeTestMode && !status?.demo ? (
+            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending [html[data-native]_&]:hidden">
+              Stripe test mode is active — onboarding uses sandbox test banks (e.g. code <span className="font-mono">000000</span>).
+              Set live keys (<span className="font-mono">sk_live_</span> / <span className="font-mono">pk_live_</span>) in production to link a real account.
+            </p>
+          ) : null}
 
-      {liveOnLocalHttp && !blockingError ? (
-        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
-          You are using live Stripe keys on http://localhost. Bank linking requires HTTPS. Use test keys locally, or deploy
-          to your https production URL.
-        </p>
-      ) : null}
+          {liveOnLocalHttp && !blockingError ? (
+            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending [html[data-native]_&]:hidden">
+              You are using live Stripe keys on http://localhost. Bank linking requires HTTPS. Use test keys locally, or deploy
+              to your https production URL.
+            </p>
+          ) : null}
 
-      {blockingError ? (
-        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">
-          {blockingError}
-        </p>
+          {blockingError ? (
+            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">{blockingError}</p>
+          ) : null}
+        </>
       ) : null}
 
       {!status?.demo ? (
-        <div className="rounded-2xl border border-border bg-card px-4 py-5">
+        <div
+          className={
+            variant === "embedded"
+              ? "flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card px-3 py-2.5"
+              : "rounded-2xl border border-border bg-card px-4 py-5"
+          }
+        >
           {ready ? (
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex w-full flex-wrap items-center justify-between gap-3">
               <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold portal-badge-success">
                 Bank linked
               </span>
@@ -226,24 +262,19 @@ export function PortalStripeConnectPanel({
               </Button>
             </div>
           ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-foreground">
-                Link your bank through Stripe so resident payments deposit to your account.
-              </p>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="inline-flex items-center rounded-full border border-border bg-accent/30 px-3 py-1 text-xs font-semibold text-muted">
-                  {status?.connected ? "Finish setup" : "Not connected"}
-                </span>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="rounded-full"
-                  disabled={busy}
-                  onClick={() => void startConnect()}
-                >
-                  {busy ? "Opening…" : "Link bank account"}
-                </Button>
-              </div>
+            <div className="flex w-full flex-wrap items-center justify-between gap-3">
+              <span className="inline-flex items-center rounded-full border border-border bg-accent/30 px-3 py-1 text-xs font-semibold text-muted">
+                {status?.connected ? "Finish setup" : "Not connected"}
+              </span>
+              <Button
+                type="button"
+                variant="primary"
+                className="rounded-full"
+                disabled={busy}
+                onClick={() => void startConnect()}
+              >
+                {busy ? "Opening…" : "Link bank account"}
+              </Button>
             </div>
           )}
         </div>

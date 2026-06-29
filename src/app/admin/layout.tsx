@@ -20,22 +20,23 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   await assertAdminPortalAccess();
   const { profile } = await getServerSessionProfile();
   return (
-    <div className={PORTAL_SHELL_ROOT_CLASS} data-surface="admin">
-      <SurfaceThemeDefault theme="dark" />
-      <PublicHomePrefetch />
-      <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
-        <PortalSkipLink />
-        <PortalSidebar definition={adminPortal} />
-        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
-            <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
-              <AdminNotificationBanners />
-              {children}
-            </div>
-          </main>
+    <AxisAssistant managerName={profile?.full_name ?? null}>
+      <div className={PORTAL_SHELL_ROOT_CLASS} data-surface="admin">
+        <SurfaceThemeDefault theme="dark" />
+        <PublicHomePrefetch />
+        <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
+          <PortalSkipLink />
+          <PortalSidebar definition={adminPortal} />
+          <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
+              <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
+                <AdminNotificationBanners />
+                {children}
+              </div>
+            </main>
+          </div>
         </div>
       </div>
-      <AxisAssistant managerName={profile?.full_name ?? null} />
-    </div>
+    </AxisAssistant>
   );
 }

@@ -44,12 +44,13 @@ describe("native entry paths", () => {
     expect(shouldNativeRedirectToWelcome("/")).toBe(true);
     expect(shouldNativeRedirectToWelcome("/partner")).toBe(true);
     expect(shouldNativeRedirectToWelcome("/privacy")).toBe(true);
-    expect(shouldNativeRedirectToWelcome("/rent/listings/abc")).toBe(true);
+    expect(shouldNativeRedirectToWelcome("/rent/listings/abc")).toBe(false);
+    expect(shouldNativeRedirectToWelcome("/rent/browse")).toBe(false);
     expect(shouldNativeRedirectToWelcome("/rent/apply")).toBe(false);
     expect(shouldNativeRedirectToWelcome("/rent/apply/cosigner")).toBe(false);
     expect(shouldNativeRedirectToWelcome("/auth/welcome")).toBe(false);
     expect(shouldNativeRedirectToWelcome("/resident/dashboard")).toBe(false);
-    expect(shouldNativeRedirectToWelcome("/onboard/pro")).toBe(false);
+    expect(shouldNativeRedirectToWelcome("/onboard/pro")).toBe(true);
     expect(shouldNativeRedirectToWelcome("/billing/success")).toBe(false);
   });
 

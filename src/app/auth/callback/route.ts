@@ -1,4 +1,5 @@
 import { handleOAuthCallback } from "@/lib/auth/oauth-callback-handler";
+import { maybeNativeOAuthBridgeResponse } from "@/lib/auth/native-oauth-bridge";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
 import { readOAuthNextPathFromRequest } from "@/lib/auth/oauth-next-cookie";
 import type { NextRequest } from "next/server";
@@ -16,5 +17,7 @@ function resolvePostAuthPath(request: NextRequest): string {
 
 export async function GET(request: NextRequest) {
   assertNonProdDatabase();
+  const bridge = maybeNativeOAuthBridgeResponse(request);
+  if (bridge) return bridge;
   return handleOAuthCallback(request, resolvePostAuthPath(request));
 }

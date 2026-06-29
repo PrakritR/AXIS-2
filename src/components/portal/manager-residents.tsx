@@ -11,15 +11,19 @@ import { PortalNotificationPreviewModal } from "@/components/portal/portal-notif
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
+  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  ManagerPortalFilterRow,
+  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
+  PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_HEAD_ROW,
@@ -1557,7 +1561,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       <ManagerPortalPageShell
         title="Residents"
         titleAside={
-          <>
+          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
             <PortalPropertyFilterPill
               propertyOptions={propertyOptions}
               propertyValue={propertyFilter}
@@ -1566,7 +1570,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
               + Add resident
             </Button>
-          </>
+          </div>
         }
         filterRow={
           <ManagerPortalFilterRow>
@@ -1582,6 +1586,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 navigate(`${portalBase}/residents/${next}`);
               }}
             />
+            <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
+              <PortalPropertyFilterPill
+                propertyOptions={propertyOptions}
+                propertyValue={propertyFilter}
+                onPropertyChange={setPropertyFilter}
+              />
+              <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setAddResidentOpen(true)}>
+                + Add
+              </Button>
+            </div>
           </ManagerPortalFilterRow>
         }
       >
@@ -1597,8 +1611,40 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           }
         />
       ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
+      <>
+      <div className="space-y-2 lg:hidden">
+        {filtered.map((res) => (
+          <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
+            <button
+              type="button"
+              className="w-full text-left"
+              onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
+            >
+              <p className="truncate font-semibold text-foreground">{res.name || "—"}</p>
+              <p className="mt-0.5 truncate text-xs text-muted">
+                {[res.roomLabel, res.signedMonthlyRent ? `$${res.signedMonthlyRent.toFixed(2)}/mo` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              {!propertyFilter && res.propertyLabel ? (
+                <p className="mt-0.5 truncate text-[11px] text-muted/90">{res.propertyLabel}</p>
+              ) : null}
+            </button>
+            <div className="mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
+              >
+                {selectedId === res.id ? "Less" : "Details"}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
             <table className="min-w-[680px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
@@ -2511,6 +2557,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             </table>
           </div>
         </div>
+      </>
       )}
 
       <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>

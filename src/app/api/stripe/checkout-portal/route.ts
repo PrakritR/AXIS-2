@@ -4,6 +4,10 @@ import { resolveStripePriceIdForPaidTier } from "@/lib/stripe/resolve-manager-pr
 import { buildManagerSubscriptionCheckoutBase } from "@/lib/stripe/subscription-checkout-session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
+import {
+  MANAGER_PLAN_CHECKOUT_CANCELLED_PATH,
+  MANAGER_PLAN_CHECKOUT_SUCCESS_PATH,
+} from "@/lib/portals/manager-plan-path";
 
 export const runtime = "nodejs";
 
@@ -63,7 +67,7 @@ export async function POST(req: Request) {
 
     void baseRaw;
     const basePath = "/portal";
-    const returnUrl = `${appUrl}${basePath}/plan?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+    const returnUrl = `${appUrl}${MANAGER_PLAN_CHECKOUT_SUCCESS_PATH}`;
 
     const { data: profile, error: profileErr } = await supabaseAuth
       .from("profiles")
@@ -121,7 +125,7 @@ export async function POST(req: Request) {
       ui_mode: "hosted_page",
       ...sessionBase,
       success_url: returnUrl,
-      cancel_url: `${appUrl}${basePath}/plan?checkout=cancelled`,
+      cancel_url: `${appUrl}${MANAGER_PLAN_CHECKOUT_CANCELLED_PATH}`,
     } as Parameters<typeof stripe.checkout.sessions.create>[0]);
 
     if (!session.url) {

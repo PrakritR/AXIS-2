@@ -8,11 +8,10 @@ export const adminPortal: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
-    { section: "onboard", label: "Onboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "axis-users", label: "Accounts", tabs: [] },
     { section: "leases", label: "Leases", tabs: [] },
     { section: "events", label: "Meetings", tabs: [] },
+    { section: "bugs-feedback", label: "Feedback", tabs: [] },
     {
       section: "inbox",
       label: "Inbox",
@@ -23,7 +22,19 @@ export const adminPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
-    { section: "bugs-feedback", label: "Feedback", tabs: [] },
+    { section: "axis-users", label: "Accounts", tabs: [] },
     { section: "profile", label: "Settings", tabs: [] },
   ],
 };
+
+/** Default smoke-test paths for web + native WebView (admin portal). */
+export const ADMIN_PORTAL_SMOKE_PATHS = [
+  { label: "Dashboard", path: "/admin/dashboard" },
+  { label: "Properties", path: "/admin/properties" },
+  { label: "Leases", path: "/admin/leases" },
+  { label: "Meetings", path: "/admin/events" },
+  { label: "Feedback", path: "/admin/bugs-feedback" },
+  { label: "Inbox", path: "/admin/inbox/unopened" },
+  { label: "Accounts", path: "/admin/axis-users" },
+  { label: "Settings", path: "/admin/profile" },
+] as const;

@@ -6,14 +6,17 @@ import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  PortalResponsiveDataView,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
 import { ScheduleInboxComposeModal } from "@/components/portal/schedule-inbox-compose-modal";
 import {
-  PaymentAutomationSettingsPanel,
+  ChargeReminderList,
+  ReminderSettingsModal,
   ScheduledMessageEditModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
@@ -28,7 +31,6 @@ import {
 } from "@/lib/scheduled-inbox-messages";
 import {
   inboxScheduleTypeLabel,
-  scheduledReminderShortLabel,
   type ScheduledPaymentMessage,
 } from "@/lib/scheduled-payment-messages";
 
@@ -299,56 +301,5 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
   );
 }
 
-export function ChargeReminderList({
-  messages,
-  onEdit,
-  onToggleCancel,
-}: {
-  messages: ScheduledPaymentMessage[];
-  onEdit?: (message: ScheduledPaymentMessage) => void;
-  onToggleCancel?: (message: ScheduledPaymentMessage, cancelled: boolean) => void | Promise<void>;
-}) {
-  if (!messages.length) return null;
-  return (
-    <div className="mt-1.5 flex flex-wrap gap-1.5">
-      {messages.map((m) => {
-        const cancelled = m.status === "cancelled";
-        const label = scheduledReminderShortLabel(m.kind, m.daysBeforeDue);
-        return (
-          <span
-            key={m.id}
-            className={`inline-flex max-w-full items-stretch overflow-hidden rounded-full border text-[11px] leading-none ${
-              cancelled
-                ? "border-border bg-accent/20 text-muted"
-                : "border-primary/20 bg-primary/5 text-foreground"
-            }`}
-          >
-            <button
-              type="button"
-              className={`px-2 py-1 text-left hover:bg-accent/40 ${cancelled ? "line-through" : ""}`}
-              title={`Edit · sends ${formatSendDate(m.sendAt)}`}
-              onClick={() => onEdit?.(m)}
-            >
-              <span className="font-medium">{label}</span>
-              <span className="ml-1 text-muted">· {formatSendDate(m.sendAt)}</span>
-            </button>
-            {onToggleCancel ? (
-              <button
-                type="button"
-                className="border-l border-border px-1.5 py-1 text-muted hover:bg-accent/50 hover:text-foreground"
-                title={cancelled ? "Restore send" : "Cancel send"}
-                aria-label={cancelled ? `Restore ${label}` : `Cancel ${label}`}
-                onClick={() => void onToggleCancel(m, !cancelled)}
-              >
-                {cancelled ? "↺" : "×"}
-              </button>
-            ) : null}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-/** @deprecated Use ChargeReminderList */
-export const ScheduledReminderChips = ChargeReminderList;
+/** @deprecated Import from payment-schedule-ui */
+export { ChargeReminderList, ChargeReminderList as ScheduledReminderChips } from "@/components/portal/payment-schedule-ui";

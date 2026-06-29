@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   deleteAmenityOffer,
   readAmenityOffersForProperty,
@@ -111,27 +111,30 @@ export function ManagerServicesPanel() {
       <ManagerPortalPageShell
         title="Services catalog"
         titleAside={
-          <Button type="button" className="shrink-0 rounded-full" onClick={openCreate}>
+          <Button type="button" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={openCreate}>
             Add request
           </Button>
         }
-        filterRow={null}
-      >
-        <div className="mt-1">
-            {propertyOptions.length > 1 && (
-              <div className="mb-4 flex items-center gap-2">
-                <label className="text-xs font-semibold text-muted">Property</label>
+        filterRow={
+          propertyOptions.length > 1 ? (
+            <ManagerPortalFilterRow>
+              <label className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs">
+                <span className="font-semibold text-muted">Property</span>
                 <select
                   value={resolvedPropertyId}
                   onChange={(e) => setSelectedPropertyId(e.target.value)}
-                  className="rounded-xl border border-border bg-card px-3 py-1.5 text-sm text-foreground outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  className="rounded-lg border-0 bg-transparent text-sm text-foreground outline-none"
                 >
                   {propertyOptions.map((p) => (
                     <option key={p.id} value={p.id}>{p.label}</option>
                   ))}
                 </select>
-              </div>
-            )}
+              </label>
+            </ManagerPortalFilterRow>
+          ) : null
+        }
+      >
+        <div className="mt-1">
             {!resolvedPropertyId ? (
               <p className="py-8 text-center text-sm text-muted">Select a property to manage its request options.</p>
             ) : offers.length === 0 ? (

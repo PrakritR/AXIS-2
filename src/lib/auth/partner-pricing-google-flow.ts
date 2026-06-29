@@ -65,7 +65,6 @@ function offerToRequestBody(offer: ManagerPricingOffer) {
     tier: offer.tier,
     billing: offer.billing,
     promo: offer.promo,
-    discountPercent: offer.discountPercent,
   };
 }
 
@@ -141,7 +140,6 @@ export function buildPricingOffer(opts: {
   tier: PlanTierId;
   billing: "monthly" | "annual";
   promo?: string;
-  discountPercent?: number | null;
   returnSurface?: "mobile-plan" | "partner-pricing";
 }): ManagerPricingOffer {
   const stored = readManagerPricingOffer();
@@ -149,7 +147,6 @@ export function buildPricingOffer(opts: {
     tier: opts.tier,
     billing: opts.billing,
     promo: opts.promo ?? stored?.promo,
-    discountPercent: opts.discountPercent ?? stored?.discountPercent,
     returnSurface: opts.returnSurface ?? stored?.returnSurface,
   };
 }

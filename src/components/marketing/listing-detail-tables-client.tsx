@@ -79,7 +79,7 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary sm:min-h-0 ${className}`}
+      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary [html[data-theme=dark]_&]:border-white/18 [html[data-theme=dark]_&]:bg-white/10 sm:min-h-0 ${className}`}
     >
       Details
     </button>
@@ -943,7 +943,7 @@ function BundleRoomPreview({ row }: { row: BundleCard }) {
       {preview.map((line) => (
         <span
           key={line}
-          className="inline-flex max-w-full items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted"
+          className="inline-flex max-w-full items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/[0.06]"
         >
           <span className="truncate">{line}</span>
         </span>
@@ -966,7 +966,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
         {rows.map((c) => (
           <div
             key={c.id}
-            className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-white via-white to-slate-50/90 p-4 shadow-sm ring-1 ring-slate-900/[0.04] transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/15 sm:p-5"
+            className="group relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm ring-1 ring-border/70 transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/20 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-[rgba(255,255,255,0.06)] [html[data-theme=dark]_&]:ring-white/10 sm:p-5"
           >
             <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
             <div className="relative pl-2">
@@ -978,7 +978,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
                 </div>
                 {c.promo ? <AvailabilityPill text={c.promo} /> : null}
               </div>
-              <div className="mt-4 rounded-xl border border-border bg-card p-3">
+              <div className="mt-4 rounded-xl border border-border bg-accent/25 p-3 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/[0.04]">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly</p>
                 <div className="mt-1 flex flex-wrap items-baseline gap-2">
                   {c.strikethrough ? <span className="text-sm text-muted line-through">{c.strikethrough}</span> : null}
@@ -990,7 +990,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
                   {c.summaryItems.slice(0, 3).map((item) => (
                     <span
                       key={`${c.id}-${item.label}`}
-                      className="inline-flex items-center rounded-full border border-border bg-accent/30 px-2.5 py-1 text-[10px] font-semibold text-muted"
+                      className="inline-flex items-center rounded-full border border-border bg-accent/30 px-2.5 py-1 text-[10px] font-semibold text-muted [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/[0.06]"
                     >
                       <span className="text-muted">{item.label}:</span>
                       <span className="ml-1 text-foreground">{item.value}</span>

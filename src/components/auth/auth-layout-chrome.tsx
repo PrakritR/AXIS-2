@@ -35,7 +35,7 @@ export function AuthLayoutFooter() {
   if (hidden) return null;
   return (
     <div className="auth-layout-footer">
-      <PublicFooter />
+      <PublicFooter compact />
     </div>
   );
 }

@@ -1,63 +1,80 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/** Preferred tab order in the native bottom bar (all sections are shown; bar scrolls horizontally). */
-const NATIVE_BOTTOM_NAV_ORDER: Partial<Record<PortalDefinition["kind"], string[]>> = {
-  resident: ["dashboard", "applications", "payments", "inbox", "documents", "profile"],
-  pro: ["dashboard", "properties", "applications", "inbox", "leases", "calendar", "documents", "profile"],
-  manager: ["dashboard", "properties", "applications", "inbox", "leases", "calendar", "documents", "profile"],
-  admin: [
-    "dashboard",
-    "onboard",
-    "properties",
-    "axis-users",
-    "leases",
-    "events",
-    "inbox",
-    "bugs-feedback",
-    "profile",
-  ],
-};
+/** Settings tab — always pinned to the end of the native bottom bar. */
+const SETTINGS_SECTION = "profile";
 
-/** @deprecated Primary slot limit — native bar now shows all tabs in a horizontal scroll strip. */
-export const NATIVE_BOTTOM_NAV_SLOT_LIMIT = 4;
+/** @deprecated All sections scroll in the native bar; kept for compatibility. */
+export const NATIVE_BOTTOM_NAV_PRIMARY_LIMIT = 7;
 
-/** All nav items in portal-preferred order for the native bottom scroll strip. */
+/** @deprecated Use {@link NATIVE_BOTTOM_NAV_PRIMARY_LIMIT}. */
+export const NATIVE_BOTTOM_NAV_SLOT_LIMIT = NATIVE_BOTTOM_NAV_PRIMARY_LIMIT;
+
+/**
+ * Manager / pro footer order — mirrors `proPortal.sections` (Settings omitted; pinned last in the bar).
+ * Keep in sync with `src/lib/portals/pro.ts`.
+ */
+export const NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER = [
+  "dashboard",
+  "properties",
+  "calendar",
+  "applications",
+  "residents",
+  "leases",
+  "payments",
+  "services",
+  "inbox",
+  "documents",
+  "financials",
+  "relationships",
+  "bugs-feedback",
+] as const;
+
+/**
+ * Resident footer order — mirrors resident portal registries (Settings omitted; pinned last).
+ * Keep in sync with `src/lib/portals/resident-sections.ts`.
+ */
+export const NATIVE_BOTTOM_NAV_RESIDENT_ORDER = [
+  "dashboard",
+  "applications",
+  "payments",
+  "move-in",
+  "services",
+  "inbox",
+  "documents",
+  "financials",
+  "bugs-feedback",
+] as const;
+
+/**
+ * Native bottom bar order — preserves portal registry order (web sidebar = native bar).
+ * Settings is always appended last when present.
+ */
 export function orderNativeBottomNavItems<T extends { section: string }>(
   items: T[],
-  kind: PortalDefinition["kind"],
+  _kind?: PortalDefinition["kind"],
 ): T[] {
-  const preferred = NATIVE_BOTTOM_NAV_ORDER[kind] ?? [];
-  const ordered: T[] = [];
-  const used = new Set<string>();
+  if (items.length === 0) return [];
 
-  for (const id of preferred) {
-    const item = items.find((entry) => entry.section === id);
-    if (item) {
-      ordered.push(item);
-      used.add(item.section);
-    }
-  }
+  const settings = items.find((item) => item.section === SETTINGS_SECTION);
+  const rest = items.filter((item) => item.section !== SETTINGS_SECTION);
 
-  for (const item of items) {
-    if (!used.has(item.section)) ordered.push(item);
-  }
-
-  return ordered;
+  if (settings) return [...rest, settings];
+  return [...items];
 }
 
-/** @deprecated Use orderNativeBottomNavItems — kept for tests and gradual migration. */
+/** All sections in the scrollable native bar (no More overflow). */
 export function splitNativeBottomNavItems<T extends { section: string }>(
   items: T[],
-  kind: PortalDefinition["kind"],
+  kind?: PortalDefinition["kind"],
 ): { primary: T[]; overflow: T[] } {
   const ordered = orderNativeBottomNavItems(items, kind);
   return { primary: ordered, overflow: [] };
 }
 
-/** @deprecated Use orderNativeBottomNavItems — kept for tests. */
+/** @deprecated Use splitNativeBottomNavItems — kept for tests. */
 export function pickNativeBottomNavItems<T extends { section: string }>(
   items: T[],
-  kind: PortalDefinition["kind"],
+  kind?: PortalDefinition["kind"],
 ): T[] {
   return orderNativeBottomNavItems(items, kind);
 }
