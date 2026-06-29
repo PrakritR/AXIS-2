@@ -27,11 +27,31 @@ for the checklist and registries that keep browser and app behavior aligned.
 | `src/lib/push-notifications.server.ts` | `sendPushToUser()` — delivers via Firebase Cloud Messaging. No-ops until `FCM_*` env is set. |
 | `src/lib/native/use-native-camera.ts` | `useNativeCamera()` — native camera/library picker, web file-input fallback. |
 
-> npm convenience scripts were intentionally kept out of `package.json` (a repo
-> hook guards it), so use the `npx cap …` commands below directly.
-
 Apply the migration with your normal flow (e.g. `npm run db:apply-sql`) before
 testing push.
+
+---
+
+## Local development (simulator — mobile UI)
+
+Unreleased mobile UI (`/auth/welcome`, native chrome, bottom tabs) only appears
+when the WebView loads a server that has that code — usually **your local dev
+server**, not production.
+
+```bash
+npm run dev              # terminal 1 — keep running
+npm run cap:dev          # points iOS at http://127.0.0.1:3000/auth/welcome
+npm run cap:ios          # open Xcode, then Run (⌘R)
+```
+
+**In Xcode, pick a simulator** (e.g. iPhone 16) — **not** “Any iOS Device
+(arm64)”. Simulator builds do not need provisioning profiles.
+
+On a **physical iPhone**, use your Mac's LAN IP instead of `127.0.0.1`:
+
+```bash
+CAP_SERVER_URL=http://192.168.1.50:3000 npm run cap:sync
+```
 
 ---
 
@@ -80,21 +100,54 @@ npx @capacitor/assets generate --iconBackgroundColor '#ffffff' --splashBackgroun
 ## Day-to-day workflow
 
 ```bash
-npx cap sync        # copy web shell + install native deps (run after adding plugins)
-npx cap open ios    # opens Xcode  -> Run on a simulator/device
-npx cap open android# opens Android Studio -> Run
+npm run cap:sync     # after plugin / native config changes
+npm run cap:ios      # Xcode → Run on a simulator
+npm run cap:android  # Android Studio → Run
 ```
 
-You normally **don't** need to rebuild the app while iterating on the website —
-the WebView loads production. Re-`sync` only when you change native config,
-plugins, or icons.
+See **Local development (simulator — mobile UI)** above for unreleased branch
+testing. Production WebView changes ship via Vercel deploy — no app rebuild.
 
-**Pointing at a local dev server** (instead of production) while testing native
-features:
-```bash
-# Use your machine's LAN IP so the simulator/device can reach it
-CAP_SERVER_URL=http://192.168.1.50:3000 npx cap sync
-```
+---
+
+## Troubleshooting Xcode builds
+
+### “Build Failed” with destination **Any iOS Device (arm64)**
+
+That target is for **physical devices / App Store archives**. It requires a
+**Development Team** and provisioning profile. The repo sets team
+`8FH3GVHCZ9` in `ios/App/App.xcodeproj/project.pbxproj`.
+
+**For daily UI work:** switch the run destination to an **iPhone Simulator**
+(e.g. iPhone 16 Pro). Simulator builds use “Sign to Run Locally” and skip
+provisioning.
+
+### “Signing requires a development team” / Personal Team warnings
+
+1. **Xcode → Settings → Accounts** — sign in with your paid Apple Developer ID.
+2. **App target → Signing & Capabilities** — Team = **Prakrit Ramachandran**
+   (paid, `8FH3GVHCZ9`), **not** “(Personal Team)”.
+3. Keep **Automatically manage signing** enabled → **Try Again**.
+
+`npx cap sync` can strip `DEVELOPMENT_TEAM` from `project.pbxproj`. If signing
+breaks after sync, restore the team in Xcode or re-commit the pbxproj lines.
+
+### Emulator shows the **website** (navbar, “Portal sign-in”) instead of mobile UI
+
+The WebView loads whatever URL is in `ios/App/App/capacitor.config.json`:
+
+| `server.url` | What you see |
+| --- | --- |
+| `https://www.axis-seattle-housing.com/...` | Production website (old UI until deployed) |
+| `http://127.0.0.1:3000/auth/welcome` | Local mobile welcome (Resident / Manager) |
+
+Run `npm run cap:dev` with `npm run dev` running, then rebuild in Xcode.
+
+### Xcode Cloud: “branch is not associated with the workflow”
+
+**Product → Xcode Cloud → Manage Workflows** → edit start conditions → add
+`feat/mobile-app-shell` (or `feat/*`). Xcode Cloud builds the native shell only;
+it does not run your local `npm run dev`.
 
 ---
 
