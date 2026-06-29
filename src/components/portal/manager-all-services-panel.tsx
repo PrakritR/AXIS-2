@@ -7,6 +7,7 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalStatusPills,
   PORTAL_PAGE_ACTIONS_DESKTOP,
+  PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -220,6 +221,16 @@ export function ManagerAllServicesPanel({
             propertyValue={propertyFilter}
             onPropertyChange={setPropertyFilter}
           />
+          {typeFilter === "vendors" ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => vendorsPanelRef.current?.openAdd()}
+            >
+              Add vendor
+            </Button>
+          ) : null}
         </div>
       }
       filterRow={
@@ -232,11 +243,6 @@ export function ManagerAllServicesPanel({
               { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors` },
             ]}
           />
-          {typeFilter === "vendors" ? (
-            <Button type="button" className="shrink-0 rounded-full text-xs" onClick={() => vendorsPanelRef.current?.openAdd()}>
-              Add vendor
-            </Button>
-          ) : null}
         </ManagerPortalFilterRow>
       }
     >
