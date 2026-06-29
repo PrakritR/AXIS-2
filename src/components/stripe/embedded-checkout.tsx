@@ -1,5 +1,6 @@
 "use client";
 
+import { stripeLiveJsBlockedMessage, stripePublishableKey } from "@/lib/stripe/stripe-js-client";
 import { loadStripe } from "@stripe/stripe-js";
 import { useEffect, useRef, useState } from "react";
 
@@ -17,6 +18,7 @@ export function EmbeddedCheckoutMount({ clientSecret, onError }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const checkoutRef = useRef<EmbeddedApi | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -25,9 +27,18 @@ export function EmbeddedCheckoutMount({ clientSecret, onError }: Props) {
     let cancelled = false;
 
     (async () => {
-      const pk = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-      if (!pk?.trim()) {
-        onError("Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.");
+      const blocked = stripeLiveJsBlockedMessage();
+      if (blocked) {
+        setErrorMessage(blocked);
+        setStatus("error");
+        return;
+      }
+
+      const pk = stripePublishableKey();
+      if (!pk) {
+        const message = "Missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.";
+        setErrorMessage(message);
+        onError(message);
         setStatus("error");
         return;
       }
@@ -59,6 +70,7 @@ export function EmbeddedCheckoutMount({ clientSecret, onError }: Props) {
         setStatus("ready");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Could not load checkout.";
+        setErrorMessage(msg);
         onError(msg);
         setStatus("error");
       }
@@ -76,7 +88,12 @@ export function EmbeddedCheckoutMount({ clientSecret, onError }: Props) {
       {status === "loading" ? (
         <p className="text-center text-sm text-slate-500">Loading secure checkout…</p>
       ) : null}
-      <div ref={containerRef} className="min-h-[420px] w-full" />
+      {errorMessage ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-950">
+          {errorMessage}
+        </p>
+      ) : null}
+      {status !== "error" ? <div ref={containerRef} className="min-h-[420px] w-full" /> : null}
     </div>
   );
 }

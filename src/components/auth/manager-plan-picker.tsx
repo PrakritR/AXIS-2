@@ -29,6 +29,7 @@ import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } f
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import { isManagerOnboardTier, parseOnboardOfferSearchParams } from "@/lib/manager-onboard-links";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
+import { stripeLiveJsBlockedMessage } from "@/lib/stripe/stripe-js-client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -63,6 +64,8 @@ function ManagerPlanPickerInner() {
   const pricingComplete = sessionSignedIn && session != null && !session.needsPricing;
   const isPaidTier = selectedTierId !== "free";
   const requiresPaymentSetup = !pricingComplete;
+  const stripeCheckoutBlocked =
+    typeof window !== "undefined" ? stripeLiveJsBlockedMessage() : null;
   const checkoutLocked = checkoutBusy || googleCheckoutBusy || emailSignupBusy || Boolean(checkoutClientSecret);
 
   const selected = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
@@ -121,6 +124,10 @@ function ManagerPlanPickerInner() {
   const applyPricingResult = useCallback(
     (result: ContinuePartnerPricingResult) => {
       if (result.status === "checkout") {
+        if (stripeLiveJsBlockedMessage()) {
+          showToast(stripeLiveJsBlockedMessage()!);
+          return;
+        }
         setCheckoutClientSecret(result.clientSecret);
         return;
       }
@@ -334,6 +341,12 @@ function ManagerPlanPickerInner() {
         </p>
       ) : null}
 
+      {stripeCheckoutBlocked && requiresPaymentSetup ? (
+        <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-950">
+          {stripeCheckoutBlocked}
+        </p>
+      ) : null}
+
       <div className="mt-5 space-y-3">
         {sessionSignedIn && session?.email ? (
           <>
@@ -350,7 +363,7 @@ function ManagerPlanPickerInner() {
             <Button
               type="button"
               className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-              disabled={checkoutLocked}
+              disabled={checkoutLocked || Boolean(stripeCheckoutBlocked && requiresPaymentSetup)}
               onClick={() => {
                 if (pricingComplete) {
                   router.push("/portal/dashboard");
@@ -367,7 +380,7 @@ function ManagerPlanPickerInner() {
             <PricingGoogleContinueButton
               tier={selectedTierId}
               billing={billing}
-              disabled={checkoutLocked || sessionLoading}
+              disabled={checkoutLocked || sessionLoading || Boolean(stripeCheckoutBlocked && requiresPaymentSetup)}
               returnSurface="mobile-plan"
             />
 
@@ -401,7 +414,9 @@ function ManagerPlanPickerInner() {
             <Button
               type="button"
               className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-              disabled={checkoutLocked || sessionLoading}
+              disabled={
+                checkoutLocked || sessionLoading || Boolean(stripeCheckoutBlocked && requiresPaymentSetup)
+              }
               onClick={() => void submitEmailSignup()}
             >
               {ctaLabel}
