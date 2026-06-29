@@ -1522,16 +1522,22 @@ html[data-native] .portal-native-bottom-nav {
   z-index: 50;
   display: flex;
   align-items: flex-end;
-  overflow: hidden;
+  overflow: visible;
   touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
   padding-top: 0;
   padding-bottom: max(4px, calc(var(--native-safe-bottom) * 0.45));
+  padding-right: max(0.375rem, var(--native-safe-right));
 }
 
 html[data-native] .portal-native-bottom-nav-assistant {
   touch-action: manipulation;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 html[data-native] .portal-native-bottom-nav-scroll {

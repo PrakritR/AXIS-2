@@ -39,7 +39,7 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav");
     expect(GLOBALS_CSS).toContain("align-items: flex-end");
     expect(GLOBALS_CSS).toContain("bottom: 0");
-    expect(GLOBALS_CSS).toContain("padding-bottom: max(4px, calc(var(--native-safe-bottom) * 0.45))");
+    expect(GLOBALS_CSS).toContain("padding-right: max(0.375rem, var(--native-safe-right))");
   });
 
   it("hides Next.js dev issue badge on native", () => {

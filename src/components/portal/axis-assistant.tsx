@@ -58,10 +58,10 @@ export function AxisAssistantNavButton() {
       onClick={ctx.openAssistant}
       aria-label="Open Axis Assistant"
       aria-expanded={ctx.open}
-      className="axis-assistant-nav-btn group flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white shadow-[0_8px_20px_-10px_rgba(47,107,255,0.7)] outline-none transition-[transform,filter] duration-200 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
+      className="axis-assistant-nav-btn group flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white shadow-[0_8px_20px_-10px_rgba(47,107,255,0.7)] outline-none transition-[transform,filter] duration-200 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 [html[data-native]_&]:h-8 [html[data-native]_&]:w-8 [html[data-native]_&]:shadow-[0_4px_10px_-6px_rgba(47,107,255,0.75)]"
       style={{ background: "var(--btn-primary)" }}
     >
-      <AxisAssistantSparkleIcon className="h-4 w-4" />
+      <AxisAssistantSparkleIcon className="h-4 w-4 [html[data-native]_&]:h-3.5 [html[data-native]_&]:w-3.5" />
     </button>
   );
 }

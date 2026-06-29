@@ -435,7 +435,7 @@ export function PortalSidebar({
                 ) : null}
               </div>
               {hasAssistant ? (
-                <div className="portal-native-bottom-nav-assistant flex shrink-0 items-end border-l border-border px-1.5 pt-0 pb-0">
+                <div className="portal-native-bottom-nav-assistant flex w-[2.75rem] shrink-0 items-center justify-center self-stretch border-l border-border sm:w-[3rem]">
                   <AxisAssistantNavButton />
                 </div>
               ) : null}
