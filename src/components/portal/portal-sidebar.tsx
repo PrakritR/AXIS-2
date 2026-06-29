@@ -13,7 +13,6 @@ import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { orderNativeBottomNavItems, splitNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
 import { observeNativeBottomNavInset } from "@/lib/native/sync-portal-bottom-nav-inset";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
@@ -60,21 +59,24 @@ function PortalBrandLogoTile() {
   );
 }
 
-function portalBrandHref(definition: PortalDefinition): string {
-  if (detectNativePlatformSync()) {
-    const dashboard = definition.sections.find((s) => s.section === "dashboard");
-    if (dashboard) return `${definition.basePath}/dashboard`;
-    return definition.basePath;
-  }
-  return "/";
+function sidebarBrandHref(definition: PortalDefinition, nativeChrome: boolean): string {
+  if (!nativeChrome) return "/";
+  const dashboard = definition.sections.find((s) => s.section === "dashboard");
+  if (dashboard) return `${definition.basePath}/dashboard`;
+  return definition.basePath;
 }
 
-function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
+function SidebarBrandHeader({
+  definition,
+  brandHref,
+}: {
+  definition: PortalDefinition;
+  brandHref: string;
+}) {
   const router = useRouter();
   const isAdmin = definition.kind === "admin";
   const isResident = definition.kind === "resident";
   const brandTitle = definition.title.trim().toLowerCase() === "axis" ? "Axis" : definition.title;
-  const brandHref = portalBrandHref(definition);
 
   return (
     <div className="relative overflow-hidden px-5 py-5">
@@ -164,7 +166,12 @@ export function PortalSidebar({
   const router = useRouter();
   const isClient = useIsClient();
   const { isNative } = useIsNativeApp();
-  const showNativeChrome = isNative === true || Boolean(detectNativePlatformSync());
+  /** Wait for useIsNativeApp — sync Capacitor detection during hydration breaks SSR/client markup. */
+  const showNativeChrome = isNative === true;
+  const brandHref = useMemo(
+    () => sidebarBrandHref(definition, showNativeChrome),
+    [definition, showNativeChrome],
+  );
   const hasAssistant = useHasAxisAssistant();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
@@ -332,7 +339,7 @@ export function PortalSidebar({
 
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[16.625rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex">
-      <SidebarBrandHeader definition={definition} />
+      <SidebarBrandHeader definition={definition} brandHref={brandHref} />
       <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
           {navItems.map((s) => {

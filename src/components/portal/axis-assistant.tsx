@@ -18,7 +18,6 @@ import { useIsClient } from "@/hooks/use-is-client";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { useVisualViewportBottomInset } from "@/hooks/use-visual-viewport-bottom-inset";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { cn } from "@/lib/utils";
 
 type AxisAssistantContextValue = {
@@ -70,7 +69,7 @@ export function AxisAssistantNavButton() {
 function AxisAssistantFixedTrigger() {
   const ctx = useAxisAssistant();
   const { isNative } = useIsNativeApp();
-  const showNativeChrome = isNative === true || Boolean(detectNativePlatformSync());
+  const showNativeChrome = isNative === true;
   if (!ctx || showNativeChrome || ctx.open) return null;
 
   return (
@@ -186,7 +185,7 @@ export function AxisAssistant({
 }) {
   const isClient = useIsClient();
   const { isNative } = useIsNativeApp();
-  const showNativeChrome = isNative === true || Boolean(detectNativePlatformSync());
+  const showNativeChrome = isNative === true;
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
