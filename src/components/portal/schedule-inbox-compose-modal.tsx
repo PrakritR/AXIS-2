@@ -5,8 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import {
+  axisAdminScheduleContact,
+  residentsForProperty,
+} from "@/lib/manager-inbox-contacts";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import type { ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
+import {
+  ScheduleInboxRecipientPicker,
+  type ScheduleRecipientKey,
+} from "@/components/portal/schedule-inbox-recipient-picker";
 
 function defaultSendAtLocal(): string {
   const d = new Date();
@@ -21,6 +29,29 @@ function toLocalInputValue(iso: string): string {
   if (Number.isNaN(d.getTime())) return defaultSendAtLocal();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function defaultRecipientKey(contacts: InboxScopedContact[]): ScheduleRecipientKey {
+  if (contacts.some((c) => c.role === "manager")) {
+    const first = contacts.find((c) => c.role === "manager");
+    return first ? `id:${first.id}` : "broadcast:management";
+  }
+  const firstResident = contacts.find((c) => c.role === "resident");
+  if (firstResident) return `id:${firstResident.id}`;
+  return "admin";
+}
+
+async function postScheduledMessage(payload: Record<string, unknown>): Promise<void> {
+  const res = await fetch("/api/portal/scheduled-inbox-messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = (await res.json()) as { error?: string };
+    throw new Error(data.error ?? "Could not schedule message.");
+  }
 }
 
 export function ScheduleInboxComposeModal({
@@ -42,14 +73,9 @@ export function ScheduleInboxComposeModal({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sendAtLocal, setSendAtLocal] = useState(defaultSendAtLocal());
-  const [recipientKey, setRecipientKey] = useState<string>("");
+  const [recipientKey, setRecipientKey] = useState<ScheduleRecipientKey>("admin");
   const [deliverViaEmail, setDeliverViaEmail] = useState(true);
   const [busy, setBusy] = useState(false);
-
-  const sortedContacts = useMemo(
-    () => [...contacts].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
-    [contacts],
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -61,16 +87,21 @@ export function ScheduleInboxComposeModal({
         setDeliverViaEmail(editMessage.deliverViaEmail);
         if (editMessage.broadcastCategories?.includes("resident")) setRecipientKey("broadcast:resident");
         else if (editMessage.broadcastCategories?.includes("management")) setRecipientKey("broadcast:management");
-        else setRecipientKey(editMessage.recipientUserId ? `id:${editMessage.recipientUserId}` : `email:${editMessage.recipientEmail}`);
+        else if (editMessage.recipientUserId) setRecipientKey(`id:${editMessage.recipientUserId}`);
+        else if (editMessage.recipientEmail === axisAdminScheduleContact().email) setRecipientKey("admin");
+        else {
+          const match = contacts.find((c) => c.email.toLowerCase() === editMessage.recipientEmail.toLowerCase());
+          setRecipientKey(match ? `id:${match.id}` : "admin");
+        }
         return;
       }
       setSubject("");
       setBody("");
       setSendAtLocal(defaultSendAtLocal());
-      setRecipientKey(sortedContacts[0] ? `id:${sortedContacts[0].id}` : "");
+      setRecipientKey(defaultRecipientKey(contacts));
       setDeliverViaEmail(true);
     });
-  }, [open, editMessage, sortedContacts]);
+  }, [open, editMessage, contacts]);
 
   const submit = async () => {
     const subjectTrim = subject.trim();
@@ -109,44 +140,55 @@ export function ScheduleInboxComposeModal({
         }
         showToast("Scheduled message updated.");
       } else {
-        let payload: Record<string, unknown> = {
+        const base = {
           subject: subjectTrim,
           body: bodyTrim,
           sendAt: sendAt.toISOString(),
           deliverViaEmail,
         };
-        if (recipientKey.startsWith("broadcast:")) {
-          const category = recipientKey.replace("broadcast:", "");
-          if (category !== "resident" && category !== "management") {
-            showToast("Choose a recipient.");
+
+        if (recipientKey === "admin") {
+          const admin = axisAdminScheduleContact();
+          await postScheduledMessage({
+            ...base,
+            recipientEmail: admin.email,
+            recipientName: admin.name,
+          });
+        } else if (recipientKey === "broadcast:management" || recipientKey === "broadcast:resident") {
+          await postScheduledMessage({
+            ...base,
+            broadcastCategories: [recipientKey.replace("broadcast:", "")],
+          });
+        } else if (recipientKey.startsWith("property:")) {
+          const propertyId = recipientKey.slice("property:".length);
+          const targets = residentsForProperty(contacts, propertyId);
+          if (targets.length === 0) {
+            showToast("No residents at that property.");
             return;
           }
-          payload = { ...payload, broadcastCategories: [category] };
-        } else {
-          const contact =
-            recipientKey.startsWith("id:")
-              ? sortedContacts.find((c) => c.id === recipientKey.slice(3))
-              : sortedContacts.find((c) => c.email.toLowerCase() === recipientKey.replace("email:", ""));
+          await Promise.all(
+            targets.map((contact) =>
+              postScheduledMessage({
+                ...base,
+                recipientEmail: contact.email,
+                recipientName: contact.name,
+              }),
+            ),
+          );
+        } else if (recipientKey.startsWith("id:")) {
+          const contact = contacts.find((c) => c.id === recipientKey.slice(3));
           if (!contact) {
             showToast("Choose a recipient.");
             return;
           }
-          payload = {
-            ...payload,
+          await postScheduledMessage({
+            ...base,
             recipientEmail: contact.email,
             recipientName: contact.name,
-          };
-        }
-
-        const res = await fetch("/api/portal/scheduled-inbox-messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const data = (await res.json()) as { error?: string };
-          throw new Error(data.error ?? "Could not schedule message.");
+          });
+        } else {
+          showToast("Choose a recipient.");
+          return;
         }
         showToast("Message scheduled.");
       }
@@ -169,21 +211,14 @@ export function ScheduleInboxComposeModal({
         {!editMessage ? (
           <div>
             <label className="text-xs font-semibold text-muted">Recipient</label>
-            <select
-              className="mt-1 h-10 w-full rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary"
-              value={recipientKey}
-              onChange={(e) => setRecipientKey(e.target.value)}
-              disabled={busy}
-            >
-              <option value="broadcast:resident">All residents</option>
-              <option value="broadcast:management">All management</option>
-              {sortedContacts.length > 0 ? <option disabled value="">—— Individuals ——</option> : null}
-              {sortedContacts.map((c) => (
-                <option key={c.id} value={`id:${c.id}`}>
-                  {c.name} · {c.email}
-                </option>
-              ))}
-            </select>
+            <div className="mt-2">
+              <ScheduleInboxRecipientPicker
+                contacts={contacts}
+                value={recipientKey}
+                onChange={setRecipientKey}
+                disabled={busy}
+              />
+            </div>
           </div>
         ) : (
           <p className="rounded-xl border border-border bg-accent/20 px-3 py-2 text-sm text-muted">

@@ -6,26 +6,26 @@ import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
-  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PortalResponsiveDataView,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
 import { ScheduleInboxComposeModal } from "@/components/portal/schedule-inbox-compose-modal";
 import {
-  ChargeReminderList,
-  PaymentAutomationSettingsPanel,
-  ReminderSettingsModal,
   ScheduledMessageEditModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
-import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
-import { readProRelationships } from "@/lib/pro-relationships";
+import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import { buildManagerInboxLiveContacts } from "@/lib/manager-inbox-contacts";
+import {
+  INBOX_SCHEDULE_HORIZON_OPTIONS,
+  inboxScheduleHorizonDays,
+  sendAtWithinScheduleHorizon,
+  type InboxScheduleHorizonId,
+} from "@/lib/inbox-schedule-horizon";
 import {
   isUpcomingScheduledInboxMessage,
   type ScheduledInboxMessageRecord,
@@ -61,10 +61,14 @@ function rowId(row: ScheduleRow): string {
 }
 
 export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }) {
+  void portalBase;
   const { showToast } = useAppUi();
   const { userId } = useManagerUserId();
-  const { settings, messages: automationMessages, loading: automationLoading, reload: reloadAutomation, setSettings } =
-    useScheduledPaymentMessages({ includeHidden: false });
+  const [horizonId, setHorizonId] = useState<InboxScheduleHorizonId>("14");
+  const horizonDays = inboxScheduleHorizonDays(horizonId);
+
+  const { messages: automationMessages, loading: automationLoading, reload: reloadAutomation } =
+    useScheduledPaymentMessages({ includeHidden: true });
 
   const [manualMessages, setManualMessages] = useState<ScheduledInboxMessageRecord[]>([]);
   const [manualLoading, setManualLoading] = useState(true);
@@ -72,7 +76,6 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
   const [composeOpen, setComposeOpen] = useState(false);
   const [editAutomation, setEditAutomation] = useState<ScheduledPaymentMessage | null>(null);
   const [editManual, setEditManual] = useState<ScheduledInboxMessageRecord | null>(null);
-  const [showAutomationSettings, setShowAutomationSettings] = useState(false);
 
   const reloadManual = useCallback(async () => {
     setManualLoading(true);
@@ -100,26 +103,9 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
     };
   }, []);
 
-  const liveContacts = useMemo((): InboxScopedContact[] => {
+  const liveContacts = useMemo(() => {
     void contactTick;
-    const out: InboxScopedContact[] = [];
-    const seen = new Set<string>();
-    for (const row of readManagerApplicationRows()) {
-      if (row.bucket !== "approved" || !row.email?.trim()) continue;
-      const email = row.email.trim().toLowerCase();
-      if (seen.has(email)) continue;
-      seen.add(email);
-      out.push({ id: `res-${row.id}`, name: row.name || email, email: row.email.trim(), role: "resident" });
-    }
-    if (userId) {
-      for (const rel of readProRelationships(userId)) {
-        const email = rel.linkedAxisId.trim();
-        if (!email || seen.has(email.toLowerCase())) continue;
-        seen.add(email.toLowerCase());
-        out.push({ id: `rel-${rel.id}`, name: rel.linkedDisplayName || rel.linkedAxisId, email: rel.linkedAxisId, role: "manager" });
-      }
-    }
-    return out;
+    return buildManagerInboxLiveContacts(userId);
   }, [userId, contactTick]);
 
   const rows = useMemo((): ScheduleRow[] => {
@@ -127,12 +113,10 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
       .filter((message) => isUpcomingScheduledInboxMessage(message.sendAt, message.status))
       .map((message) => ({ kind: "manual", message }));
     const automation: ScheduleRow[] = automationMessages.map((message) => ({ kind: "automation", message }));
-    return [...manual, ...automation].sort((a, b) => {
-      const aAt = a.kind === "manual" ? a.message.sendAt : a.message.sendAt;
-      const bAt = b.kind === "manual" ? b.message.sendAt : b.message.sendAt;
-      return aAt.localeCompare(bAt);
-    });
-  }, [manualMessages, automationMessages]);
+    return [...manual, ...automation]
+      .filter((row) => sendAtWithinScheduleHorizon(row.message.sendAt, horizonDays))
+      .sort((a, b) => a.message.sendAt.localeCompare(b.message.sendAt));
+  }, [manualMessages, automationMessages, horizonDays]);
 
   const scheduledCount = useMemo(
     () => rows.filter((row) => row.message.status === "scheduled").length,
@@ -167,37 +151,39 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
     else setEditAutomation(row.message);
   };
 
+  const horizonLabel = INBOX_SCHEDULE_HORIZON_OPTIONS.find((opt) => opt.id === horizonId)?.label ?? "Show upcoming";
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted">
-          {scheduledCount} upcoming scheduled message{scheduledCount === 1 ? "" : "s"}
+          {scheduledCount} scheduled in view · {horizonLabel.toLowerCase()}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setShowAutomationSettings((v) => !v)}>
-            {showAutomationSettings ? "Hide automation settings" : "Automation settings"}
-          </Button>
+          <label className="inline-flex items-center gap-2 text-xs font-medium text-muted">
+            <span className="sr-only">Show messages scheduled within</span>
+            <select
+              className="h-9 rounded-full border border-border bg-card px-3 text-xs font-semibold text-foreground outline-none focus:border-primary"
+              value={horizonId}
+              onChange={(e) => setHorizonId(e.target.value as InboxScheduleHorizonId)}
+            >
+              {INBOX_SCHEDULE_HORIZON_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <Button type="button" variant="primary" className={`rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
             Schedule message
           </Button>
         </div>
       </div>
 
-      {showAutomationSettings && settings ? (
-        <PaymentAutomationSettingsPanel
-          variant="inbox"
-          settings={settings}
-          onSaved={(next) => {
-            setSettings(next);
-            reloadAll();
-          }}
-        />
-      ) : null}
-
       {loading ? (
         <p className="text-sm text-muted">Loading schedule…</p>
       ) : rows.length === 0 ? (
-        <PortalInboxEmptyState title="No scheduled messages yet." />
+        <PortalInboxEmptyState title="No scheduled messages in this window." />
       ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>

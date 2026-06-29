@@ -29,12 +29,12 @@ import {
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
-import { readManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import { buildManagerInboxLiveContacts } from "@/lib/manager-inbox-contacts";
 import {
   isUpcomingScheduledInboxMessage,
   type ScheduledInboxMessageRecord,
 } from "@/lib/scheduled-inbox-messages";
-import { readProRelationships } from "@/lib/pro-relationships";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 
@@ -136,26 +136,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   const liveContacts = useMemo((): InboxScopedContact[] => {
     void contactTick;
-    const out: InboxScopedContact[] = [];
-    const seen = new Set<string>();
-    // Approved residents
-    for (const row of readManagerApplicationRows()) {
-      if (row.bucket !== "approved" || !row.email?.trim()) continue;
-      const email = row.email.trim().toLowerCase();
-      if (seen.has(email)) continue;
-      seen.add(email);
-      out.push({ id: `res-${row.id}`, name: row.name || email, email: row.email.trim(), role: "resident" });
-    }
-    // Linked accounts
-    if (userId) {
-      for (const rel of readProRelationships(userId)) {
-        const email = rel.linkedAxisId.trim();
-        if (!email || seen.has(email.toLowerCase())) continue;
-        seen.add(email.toLowerCase());
-        out.push({ id: `rel-${rel.id}`, name: rel.linkedDisplayName || rel.linkedAxisId, email: rel.linkedAxisId, role: "manager" });
-      }
-    }
-    return out;
+    return buildManagerInboxLiveContacts(userId);
   }, [userId, contactTick]);
 
   useEffect(() => {
