@@ -1,5 +1,20 @@
-import { describe, expect, it } from "vitest";
-import { normalizeProRelationshipRecord } from "@/lib/pro-relationships";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  normalizeProRelationshipRecord,
+  writeProRelationships,
+  type ProRelationshipRecord,
+} from "@/lib/pro-relationships";
+
+function makeRow(id: string): ProRelationshipRecord {
+  return {
+    id,
+    linkedAxisId: `${id}@example.com`,
+    perspective: "manager_tab",
+    payoutPercentForManager: 15,
+    assignedPropertyIds: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+}
 
 describe("pro-relationships", () => {
   it("normalizes co-manager link rows with permissions", () => {
@@ -38,5 +53,42 @@ describe("pro-relationships", () => {
   it("rejects invalid records", () => {
     expect(normalizeProRelationshipRecord(null)).toBeNull();
     expect(normalizeProRelationshipRecord({ id: "only-id" })).toBeNull();
+  });
+});
+
+describe("writeProRelationships no-op guard", () => {
+  // The infinite-render-loop guard: an unchanged write must not dispatch the
+  // "axis-pro-relationships" event or POST, since that event re-enters the
+  // render effects that called it.
+  let dispatchEvent: ReturnType<typeof vi.fn>;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    dispatchEvent = vi.fn();
+    fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: async () => ({}) }));
+    vi.stubGlobal("window", { dispatchEvent });
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("dispatches and POSTs on a real change, then stays silent on an identical write", () => {
+    const userId = `user-${Math.random().toString(36).slice(2)}`;
+
+    writeProRelationships(userId, [makeRow("a")]);
+    expect(dispatchEvent).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Identical content (fresh array reference) must be a no-op.
+    writeProRelationships(userId, [makeRow("a")]);
+    expect(dispatchEvent).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A genuine change resumes dispatching.
+    writeProRelationships(userId, [makeRow("a"), makeRow("b")]);
+    expect(dispatchEvent).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
