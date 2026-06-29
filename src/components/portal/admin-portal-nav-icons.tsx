@@ -122,10 +122,11 @@ export function PortalNavIcon({ section }: { section: string }) {
         </svg>
       );
     case "profile":
+    case "settings":
       return (
         <svg className={cls} aria-hidden {...svgProps}>
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
         </svg>
       );
     case "plan":

@@ -45,7 +45,7 @@ export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "documents", label: "Documents", tabs: [{ id: "receipts", label: "Rent receipts" }] },
   { section: "financials", label: "Finances", tabs: [...FINANCES_TABS] },
   { section: "bugs-feedback", label: "Feedback", tabs: [] },
-  { section: "profile", label: "Profile", tabs: [] },
+  { section: "profile", label: "Settings", tabs: [] },
 ];
 
 /** Full resident workspace after lease approval. */
@@ -66,7 +66,7 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   },
   { section: "financials", label: "Finances", tabs: [...FINANCES_TABS] },
   { section: "bugs-feedback", label: "Feedback", tabs: [] },
-  { section: "profile", label: "Profile", tabs: [] },
+  { section: "profile", label: "Settings", tabs: [] },
 ];
 
 /** Every resident nav section id (union of limited + approved definitions). */

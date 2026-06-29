@@ -16,7 +16,7 @@ const PAID_MANAGER_NAV = [
   { label: "Feedback", path: "/portal/bugs-feedback" },
   { label: "Co-managers", path: "/portal/relationships" },
   { label: "Plan", path: "/portal/plan" },
-  { label: "Profile", path: "/portal/profile" },
+  { label: "Settings", path: "/portal/profile" },
 ] as const;
 
 test.describe("Manager portal", () => {

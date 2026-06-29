@@ -9,6 +9,7 @@ import {
   PORTAL_MAIN_CONTENT_ID,
   PORTAL_MAIN_CONTENT_INNER_CLASS,
   PORTAL_SHELL_ROOT_CLASS,
+  PORTAL_TOP_BANNER_STRIP_CLASS,
 } from "@/lib/portal-layout-classes";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
@@ -39,7 +40,11 @@ export default async function ResidentLayout({ children }: { children: React.Rea
       <SurfaceThemeDefault theme="light" />
       <PublicHomePrefetch />
       <PortalDataPrefetch kind="resident" />
-      {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
+      {showPreviewBanner ? (
+        <div className={`${PORTAL_TOP_BANNER_STRIP_CLASS} shrink-0`}>
+          <AdminPreviewBanner label={previewLabel} />
+        </div>
+      ) : null}
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSkipLink />
         <PortalSidebar definition={residentPortal} subscriptionTier={managerSubscriptionTier} />

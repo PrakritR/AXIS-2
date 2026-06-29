@@ -6,8 +6,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
+import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import type { PortalKind } from "@/lib/portal-types";
 
 function dashToEmpty(v: string) {
   return v === "—" ? "" : v;
@@ -43,6 +45,7 @@ function ProfileReadonlyField({
 
 export function PortalProfileClient({
   variant,
+  portalKind,
   initialFullName,
   initialEmail,
   initialPhone,
@@ -50,6 +53,7 @@ export function PortalProfileClient({
   idValue,
 }: {
   variant: "admin" | "manager";
+  portalKind: PortalKind;
   initialFullName: string;
   initialEmail: string;
   initialPhone: string;
@@ -183,7 +187,7 @@ export function PortalProfileClient({
   if (variant === "manager") {
     return (
       <ManagerPortalPageShell
-        title="Profile"
+        title="Settings"
         titleAside={
           <div className="flex flex-wrap gap-2">
             {headerActions.map((a) => (
@@ -208,6 +212,7 @@ export function PortalProfileClient({
             accountEmail={dashToEmpty(initialEmail) || initialEmail}
             accountLabel="your property portal account"
           />
+          <PortalSettingsExtras currentKind={portalKind} />
         </div>
       </ManagerPortalPageShell>
     );
@@ -216,7 +221,7 @@ export function PortalProfileClient({
   return (
     <div className={PORTAL_SECTION_SURFACE}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className={PORTAL_PAGE_TITLE}>Profile</h1>
+        <h1 className={PORTAL_PAGE_TITLE}>Settings</h1>
         <div className="flex flex-wrap gap-2">
           {headerActions.map((a) => (
             <Button
@@ -241,6 +246,9 @@ export function PortalProfileClient({
           accountEmail={dashToEmpty(initialEmail) || initialEmail}
           accountLabel="your admin account"
         />
+      </div>
+      <div className="mt-6">
+        <PortalSettingsExtras currentKind={portalKind} />
       </div>
     </div>
   );

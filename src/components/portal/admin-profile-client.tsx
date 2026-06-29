@@ -14,6 +14,7 @@ export function AdminProfileClient({
   return (
     <PortalProfileClient
       variant="admin"
+      portalKind="admin"
       initialFullName={fullName}
       initialEmail={email}
       initialPhone={phone}

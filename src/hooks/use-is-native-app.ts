@@ -16,9 +16,13 @@ export function useIsNativeApp(): { isNative: boolean | null; platform: NativePl
 
   useEffect(() => {
     let active = true;
-    void getNativeInfo().then((info) => {
-      if (active) setState({ isNative: info.isNative, platform: info.platform });
-    });
+    void getNativeInfo()
+      .then((info) => {
+        if (active) setState({ isNative: info.isNative, platform: info.platform });
+      })
+      .catch(() => {
+        if (active) setState({ isNative: false, platform: "web" });
+      });
     return () => {
       active = false;
     };

@@ -74,6 +74,6 @@ export const proPortal: PortalDefinition = {
     },
     { section: "plan", label: "Plan", tabs: [] },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
-    { section: "profile", label: "Profile", tabs: [] },
+    { section: "profile", label: "Settings", tabs: [] },
   ],
 };

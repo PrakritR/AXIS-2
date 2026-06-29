@@ -1,10 +1,7 @@
 "use client";
 
-import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
-import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
-import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -17,7 +14,7 @@ import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import type { PortalDefinition } from "@/lib/portal-types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 
 function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
@@ -157,7 +154,6 @@ export function PortalSidebar({
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
   const navCounts = usePortalNavCounts(definition.kind);
-  const [accountOpen, setAccountOpen] = useState(false);
   const navItems = useMemo(
     () =>
       visibleSections.map((section) => ({
@@ -181,26 +177,11 @@ export function PortalSidebar({
     return parts[1] ?? "dashboard";
   }, [pathname]);
 
-  const hasSignOut =
-    definition.kind === "resident" ||
-    definition.kind === "manager" ||
-    definition.kind === "admin" ||
-    definition.kind === "pro";
-
   const showNavIcons =
     definition.kind === "admin" ||
     definition.kind === "pro" ||
     definition.kind === "resident" ||
     definition.kind === "manager";
-
-  useEffect(() => {
-    if (!accountOpen || typeof document === "undefined") return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [accountOpen]);
 
   const showManagerTierLocks =
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
@@ -269,15 +250,6 @@ export function PortalSidebar({
             );
           })}
         </div>
-        {hasSignOut ? (
-          <div className="mt-auto space-y-0.5 border-t border-border pt-3">
-            <PortalRoleSwitcher currentKind={definition.kind} />
-            <div className="flex items-center gap-2">
-              <PortalSignOutButton className="min-w-0 flex-1 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium text-muted transition hover:bg-accent/70 hover:text-foreground disabled:opacity-60" />
-              <ThemeToggle className="shrink-0" />
-            </div>
-          </div>
-        ) : null}
       </nav>
     </aside>
   );
@@ -328,46 +300,8 @@ export function PortalSidebar({
                 </Link>
               );
             })}
-            {hasSignOut ? (
-              <button
-                type="button"
-                className={`inline-flex shrink-0 items-center rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
-                  accountOpen
-                    ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-                    : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
-                }`}
-                onClick={() => setAccountOpen(true)}
-              >
-                Account
-              </button>
-            ) : null}
           </nav>
         </div>
-
-        {accountOpen && hasSignOut ? (
-          <>
-            <button
-              type="button"
-              className="fixed inset-0 z-[90] bg-foreground/45 backdrop-blur-[1px] lg:hidden"
-              aria-label="Close account menu"
-              onClick={() => setAccountOpen(false)}
-            />
-            <div className="portal-native-account-sheet fixed right-0 bottom-0 left-0 z-[100] max-h-[min(70vh,28rem)] overflow-y-auto rounded-t-[1.35rem] border border-border bg-background px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] shadow-[0_-24px_48px_-20px_rgba(15,23,42,0.28)] lg:hidden">
-              <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
-              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Account</p>
-              <div className="mt-3 space-y-1 border-t border-border pt-3">
-                <PortalRoleSwitcher currentKind={definition.kind} />
-                <div className="flex items-center gap-2">
-                  <PortalSignOutButton
-                    className="min-w-0 flex-1 rounded-[14px] px-3 py-3 text-center text-sm font-semibold text-foreground ring-1 ring-border transition hover:bg-accent/70 disabled:opacity-60"
-                    onSignedOut={() => setAccountOpen(false)}
-                  />
-                  <ThemeToggle className="shrink-0" />
-                </div>
-              </div>
-            </div>
-          </>
-        ) : null}
       </div>
     </>
   );

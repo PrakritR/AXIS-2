@@ -41,9 +41,13 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
         syncLeasePipelineFromServer(null),
       ]).then(() => bump());
     } else if (kind === "manager" || kind === "pro") {
-      void prefetchPortalData(kind, userId ?? undefined).then(() => bump());
+      void prefetchPortalData(kind, userId ?? undefined)
+        .then(() => bump())
+        .catch(() => {});
     } else if (kind === "resident") {
-      void prefetchPortalData(kind).then(() => bump());
+      void prefetchPortalData(kind)
+        .then(() => bump())
+        .catch(() => {});
     }
 
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);

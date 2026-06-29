@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
 import { ManagerPlanBanner } from "@/components/portal/manager-plan-banner";
+import { PORTAL_TOP_BANNER_STRIP_CLASS } from "@/lib/portal-layout-classes";
 
 /**
  * Portal chrome below the marketing navbar. Hides the upgrade strip on the Plan page
@@ -21,15 +22,18 @@ export function PortalTopBanners({
 }) {
   const pathname = usePathname();
   const onPlanPage = pathname === planHref;
+  const hasBanner = showPreviewBanner || (showPlanBanner && !onPlanPage);
+
+  if (!hasBanner) return null;
 
   return (
-    <>
+    <div className={`${PORTAL_TOP_BANNER_STRIP_CLASS} shrink-0`}>
       {showPreviewBanner ? <AdminPreviewBanner label={previewLabel} /> : null}
       {showPlanBanner && !onPlanPage ? (
-        <div className="shrink-0 border-b border-[rgba(160,107,21,0.28)] bg-[rgba(253,236,203,0.42)] backdrop-blur-xl [&>div]:border-0 [&>div]:bg-transparent">
+        <div className="border-b border-[rgba(160,107,21,0.28)] bg-[rgba(253,236,203,0.42)] backdrop-blur-xl [&>div]:border-0 [&>div]:bg-transparent">
           <ManagerPlanBanner planHref={planHref} />
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

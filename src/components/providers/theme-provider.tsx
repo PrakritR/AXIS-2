@@ -83,7 +83,7 @@ export function SurfaceThemeDefault({ theme: surfaceDefault }: { theme: Theme })
       applyTheme(surfaceDefault);
       ctx.setTheme(surfaceDefault);
     }
-  }, [surfaceDefault, ctx]);
+  }, [surfaceDefault, ctx?.mounted, ctx?.setTheme]);
 
   return null;
 }

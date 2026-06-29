@@ -15,7 +15,11 @@ export function portalNavClick(router: ReturnType<typeof useRouter>, href: strin
 
 export function prefetchPortalHref(router: ReturnType<typeof useRouter>, href: string) {
   if (!portalBackgroundPrefetchEnabled()) return;
-  router.prefetch(href);
+  try {
+    router.prefetch(href);
+  } catch {
+    /* prefetch is best-effort */
+  }
 }
 
 export function usePortalNavigate() {

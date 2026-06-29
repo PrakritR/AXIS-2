@@ -14,11 +14,15 @@ let cachedToken: { value: string; platform: string } | null = null;
 
 export async function getNativeInfo(): Promise<{ isNative: boolean; platform: NativePlatform }> {
   if (typeof window === "undefined") return { isNative: false, platform: "web" };
-  const { Capacitor } = await import("@capacitor/core");
-  return {
-    isNative: Capacitor.isNativePlatform(),
-    platform: Capacitor.getPlatform() as NativePlatform,
-  };
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    return {
+      isNative: Capacitor.isNativePlatform(),
+      platform: Capacitor.getPlatform() as NativePlatform,
+    };
+  } catch {
+    return { isNative: false, platform: "web" };
+  }
 }
 
 async function saveToken(token: string, platform: string): Promise<void> {
@@ -51,13 +55,17 @@ async function attachListeners(platform: string): Promise<void> {
 }
 
 export async function getPushPermission(): Promise<PushPermission> {
-  const { isNative } = await getNativeInfo();
-  if (!isNative) return "unsupported";
-  const { PushNotifications } = await import("@capacitor/push-notifications");
-  const { receive } = await PushNotifications.checkPermissions();
-  if (receive === "granted") return "granted";
-  if (receive === "denied") return "denied";
-  return "prompt";
+  try {
+    const { isNative } = await getNativeInfo();
+    if (!isNative) return "unsupported";
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const { receive } = await PushNotifications.checkPermissions();
+    if (receive === "granted") return "granted";
+    if (receive === "denied") return "denied";
+    return "prompt";
+  } catch {
+    return "unsupported";
+  }
 }
 
 /**

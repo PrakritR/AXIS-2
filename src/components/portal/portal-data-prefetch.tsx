@@ -12,11 +12,15 @@ export function PortalDataPrefetch({ kind }: { kind: PortalKind }) {
 
   useEffect(() => {
     if (!session.ready) return;
-    void prefetchPortalData(kind, userId ?? session.userId).then(() => {
-      if (kind === "manager" || kind === "pro") {
-        notifyManagerApplicationsSynced();
-      }
-    });
+    void prefetchPortalData(kind, userId ?? session.userId)
+      .then(() => {
+        if (kind === "manager" || kind === "pro") {
+          notifyManagerApplicationsSynced();
+        }
+      })
+      .catch(() => {
+        /* prefetch is best-effort */
+      });
   }, [kind, session.ready, session.userId, userId]);
 
   return null;

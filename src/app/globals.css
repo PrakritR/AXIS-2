@@ -1181,6 +1181,10 @@ html[data-native] #axis-public-navbar {
   display: none;
 }
 
+html[data-native] .portal-shell:has(.portal-top-banner-strip) .portal-mobile-chrome {
+  padding-top: 0.5rem;
+}
+
 @media (max-width: 1023px) {
   .portal-main-inner > * {
     flex: 0 0 auto;

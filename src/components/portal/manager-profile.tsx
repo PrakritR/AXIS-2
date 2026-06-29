@@ -12,6 +12,7 @@ export async function ManagerProfile() {
   return (
     <PortalProfileClient
       variant="manager"
+      portalKind="pro"
       initialFullName={dash(profile?.full_name)}
       initialEmail={dash(profile?.email ?? user?.email)}
       initialPhone={dash(profile?.phone)}

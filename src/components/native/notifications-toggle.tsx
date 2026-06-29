@@ -16,7 +16,13 @@ export function NotificationsToggle() {
 
   useEffect(() => {
     let active = true;
-    void getPushPermission().then((p) => active && setPermission(p));
+    void getPushPermission()
+      .then((p) => {
+        if (active) setPermission(p);
+      })
+      .catch(() => {
+        if (active) setPermission("unsupported");
+      });
     return () => {
       active = false;
     };
