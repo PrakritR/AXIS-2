@@ -33,7 +33,7 @@ test.describe("Stripe payments (mocked)", () => {
     });
 
     test("plan tab loads with tier information", async ({ page }) => {
-      await page.goto("/portal/plan");
+      await page.goto("/portal/profile");
       await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
       // Should show current plan tier
       const tierText = page.getByText(/free|pro|business/i).first();
@@ -41,7 +41,7 @@ test.describe("Stripe payments (mocked)", () => {
     });
 
     test("plan tab has upgrade or manage subscription controls", async ({ page }) => {
-      await page.goto("/portal/plan");
+      await page.goto("/portal/profile");
       await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
       // Either an upgrade button or a billing portal button should be present
       const actionBtn = page

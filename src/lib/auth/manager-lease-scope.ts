@@ -93,6 +93,20 @@ export async function managerHasCoManagerPermissionForProperty(
   return hasCoManagerPermissionForProperty(perms, propertyId, permission);
 }
 
+/** Primary owner or co-manager with calendar (or legacy properties) access on a property. */
+export async function managerHasCalendarAccessForProperty(
+  db: ServiceClient,
+  userId: string,
+  propertyId: string,
+): Promise<boolean> {
+  if (
+    await managerHasCoManagerPermissionForProperty(db, userId, propertyId, "calendar")
+  ) {
+    return true;
+  }
+  return managerHasCoManagerPermissionForProperty(db, userId, propertyId, "properties");
+}
+
 export function leaseRecordVisibleToManager(
   record: Pick<LeaseScopeRecord, "manager_user_id" | "property_id">,
   userId: string,

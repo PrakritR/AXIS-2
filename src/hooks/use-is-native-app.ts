@@ -30,3 +30,9 @@ export function useIsNativeApp(): { isNative: boolean | null; platform: NativePl
 
   return state;
 }
+
+/** True only after mount when running in the Capacitor shell — safe for layout branching. */
+export function useNativeChrome(): boolean {
+  const { isNative } = useIsNativeApp();
+  return isNative === true;
+}

@@ -16,12 +16,12 @@ Most features — including new resident portal tabs like **Applications** — o
 
 Use this checklist (also in `src/lib/platform/parity.ts` as `PLATFORM_CHANGE_CHECKLIST`):
 
-1. **Portal section / nav** — Update `src/lib/portals/*-sections.ts` (or portal definition), `render-portal-section.tsx`, and tier gating in `manager-access.ts` if needed.
+1. **Portal section / nav** — Update `src/lib/portals/*-sections.ts` (or portal definition), `render-portal-section.tsx`, and tier gating in `manager-access.ts` if needed. **Nav order is defined only in those registries** — web sidebar, web mobile chrome, and the native bottom bar all use the same order (see [Nav order](#nav-order) below).
 2. **In-app route** — If the path is new (e.g. `/billing/...`), add its prefix to `IN_APP_PATH_PREFIXES` in `src/lib/platform/parity.ts` so deep links and push taps work in the app.
 3. **Push notification** — Use `sendPushToUser` with an in-app `url`. Register the path in `REGISTERED_PUSH_DEEP_LINKS`; `assertInAppPushPath` validates at send time.
 4. **Photo upload** — Use `useNativeCamera()` so the app gets the native picker and the web keeps `<input type="file">`.
 5. **Layout on notched phones** — Use `portal-layout-classes.ts` and `html[data-native]` CSS (set by `NativeBridge`).
-6. **Tests** — Run `npm run test:unit` — `tests/unit/platform-parity.test.ts` fails if registries drift.
+6. **Tests** — Run `npm run test:unit` — `tests/unit/platform-parity.test.ts` and `tests/unit/portal-nav-order.test.ts` guard registries and web/native nav parity.
 7. **Native shell only** — Plugins, icons, `Info.plist` permissions: `npx cap sync` and rebuild in Xcode / Android Studio.
 
 ---
@@ -31,9 +31,33 @@ Use this checklist (also in `src/lib/platform/parity.ts` as `PLATFORM_CHANGE_CHE
 | File | Purpose |
 | --- | --- |
 | `src/lib/platform/parity.ts` | In-app path prefixes, push deep links, validation helpers |
+| `src/lib/portals/pro.ts` | Pro/manager nav section order |
+| `src/lib/portals/admin.ts` | Admin nav section order |
 | `src/lib/portals/resident-sections.ts` | Resident nav sections, free-tier ids, smoke-test paths |
+| `src/lib/native/portal-bottom-nav.ts` | Native bottom bar — passthrough registry order (pins Settings last) |
 | `src/lib/auth/native-entry-paths.ts` | Re-exports deep-link helpers from parity |
 | `tests/unit/platform-parity.test.ts` | CI guard — sections, tier gating, push paths |
+| `tests/unit/portal-nav-order.test.ts` | CI guard — web/native nav order parity and free/paid grouping |
+
+---
+
+## Nav order
+
+Portal navigation order has **one source of truth**: the section arrays in `pro.ts`, `admin.ts`, and `resident-sections.ts`.
+
+| Surface | How order is applied |
+| --- | --- |
+| Web desktop sidebar | Registry array order |
+| Web mobile top chrome | Same `navItems` as sidebar |
+| Native bottom bar | `orderNativeBottomNavItems()` preserves registry order (Settings pinned last) |
+
+Do **not** add a second preferred-order list for native. When reordering tabs, update the registry only.
+
+**Pro/manager (Free tier UX):** free operational sections first (`dashboard` … `payments`), then a contiguous paid block (`residents` … `relationships`), then account items (`plan`, `bugs-feedback`), then `profile` (Settings).
+
+**Resident:** free sections first (`dashboard` … `move-in`), then locked sections (`inbox`, `documents`, `financials`, and `services` when approved), then `bugs-feedback` and `profile`.
+
+Tier locking (`manager-access.ts`) does not reorder nav — lock icons render inline at registry positions.
 
 ---
 

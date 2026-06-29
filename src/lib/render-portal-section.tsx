@@ -1,12 +1,10 @@
 import { AdminDashboard } from "@/components/portal/admin-dashboard";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
-import { ManagerPlan } from "@/components/portal/manager-plan";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerPayments } from "@/components/portal/manager-payments";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
-import { AdminOnboardClient } from "@/components/portal/admin-onboard-client";
 import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
 import { AdminAxisUsersClient } from "@/components/portal/admin-axis-users-client";
 import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
@@ -48,6 +46,7 @@ import { managerSectionAllowedForTier, residentSectionAllowedForManagerTier } fr
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import { loadResidentPortalAccessState, loadResidentLeaseSignedStatus, residentHasFullPortalAccess } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
+import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
 import type { PortalKind } from "@/lib/portal-types";
@@ -209,7 +208,11 @@ export async function renderPortalSection(
   }
 
   if ((kind === "manager" || kind === "pro") && section === "upgrade") {
-    redirect(`${def.basePath}/plan`);
+    redirect(MANAGER_PLAN_PORTAL_URL);
+  }
+
+  if ((kind === "manager" || kind === "pro") && section === "plan") {
+    redirect(MANAGER_PLAN_PORTAL_URL);
   }
 
   if (kind === "manager" || kind === "pro") {
@@ -277,11 +280,6 @@ export async function renderPortalSection(
   if (kind === "admin" && section === "create-manager") {
     if (tabParts?.length) notFound();
     return <AdminCreateManagerClient />;
-  }
-
-  if (kind === "admin" && section === "onboard") {
-    if (tabParts?.length) notFound();
-    return <AdminOnboardClient />;
   }
 
   if (kind === "admin" && section === "create-resident") {
@@ -468,9 +466,6 @@ export async function renderPortalSection(
         "calendar",
         managerOwnerSubscriptionTier,
       );
-    }
-    if (section === "plan") {
-      return subscriptionGated(<ManagerPlan />, kind, "plan", managerOwnerSubscriptionTier);
     }
     if (section === "bugs-feedback") {
       return subscriptionGated(

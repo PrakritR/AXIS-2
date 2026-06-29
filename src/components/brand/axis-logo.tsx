@@ -113,15 +113,17 @@ export function AxisLogoLink({
   href = "/",
   variant = "default",
   size = "default",
+  showWordmark = true,
 }: {
   href?: string;
   variant?: AxisLogoVariant;
   size?: AxisLogoSize;
+  showWordmark?: boolean;
 }) {
   return (
-    <Link href={href} className={`flex items-center ${size === "compact" ? "gap-2" : "gap-3"}`}>
+    <Link href={href} className={`flex items-center ${showWordmark && (size === "compact" ? "gap-2" : "gap-3")}`}>
       <AxisLogoMark variant={variant} size={size} />
-      <AxisLogoWordmark size={size} />
+      {showWordmark ? <AxisLogoWordmark size={size} /> : null}
     </Link>
   );
 }

@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "8FH3GVHCZ9.com.axisseattlehousing.app",
+        "paths": ["/auth/callback", "/auth/callback/*"]
+      }
+    ]
+  }
+}

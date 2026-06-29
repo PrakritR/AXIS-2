@@ -38,7 +38,7 @@ export default function RootLayout({
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var c=window.Capacitor;if(c&&c.isNativePlatform&&c.isNativePlatform()){var p=c.getPlatform&&c.getPlatform();document.documentElement.setAttribute('data-native',p==='android'?'android':'ios');var hide=function(){try{var m=c.Plugins&&c.Plugins.SplashScreen;if(m&&m.hide)m.hide();}catch(e){}};hide();window.addEventListener('load',hide);setTimeout(hide,2500);}}catch(e){}})();`,
+            __html: `(function(){try{var c=window.Capacitor;if(c&&c.isNativePlatform&&c.isNativePlatform()){var p=c.getPlatform&&c.getPlatform();document.documentElement.setAttribute('data-native',p==='android'?'android':'ios');var vp=document.querySelector('meta[name="viewport"]');if(vp)vp.setAttribute('content','width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');var hide=function(){try{var m=c.Plugins&&c.Plugins.SplashScreen;if(m&&m.hide)m.hide();}catch(e){}};hide();window.addEventListener('load',hide);setTimeout(hide,2500);var u=new URL(location.href);if((u.pathname==='/'||u.pathname==='')&&(u.searchParams.get('code')||u.searchParams.get('error'))){u.pathname='/auth/callback';location.replace(u.pathname+u.search+u.hash);}}}catch(e){}})();`,
           }}
         />
       </head>

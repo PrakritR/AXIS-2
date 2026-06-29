@@ -7,6 +7,8 @@ export type PropertySearchOption = {
   title: string;
   subtitle?: string;
   tags?: string[];
+  /** Optional listing hero thumbnail for browse / picker cards. */
+  imageUrl?: string;
   /** Extra text included when filtering (address, neighborhood, etc.). */
   searchText?: string;
 };

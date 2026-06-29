@@ -12,7 +12,7 @@ function isVercelDeploymentHost(hostname: string): boolean {
 }
 
 /**
- * Origin for shareable links (onboarding, invites). Prefers a canonical custom domain
+ * Origin for shareable links (invites). Prefers a canonical custom domain
  * over the default *.vercel.app deployment URL.
  */
 export function resolveShareableAppOrigin(browserOrigin?: string): string {

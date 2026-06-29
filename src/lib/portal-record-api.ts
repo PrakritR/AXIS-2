@@ -19,6 +19,8 @@ type RecordConfig = {
    * whose writes are already gated by `scope`.
    */
   assignOwnership?: (record: Record<string, unknown>, user: RecordUser) => Record<string, unknown>;
+  /** Reject INSERT when the record id is not owned by the caller (returns error message). */
+  assertInsertAllowed?: (record: Record<string, unknown>, user: RecordUser) => string | null;
 };
 
 async function sessionUser() {
@@ -134,6 +136,10 @@ export function createJsonRecordRoute(config: RecordConfig) {
           // On INSERT, stamp server-trusted ownership so client-supplied owner
           // ids cannot be used to write rows under another tenant.
           const finalRecord = !recordExists && config.assignOwnership ? config.assignOwnership(record, ctx.user) : record;
+          if (!recordExists && config.assertInsertAllowed) {
+            const insertError = config.assertInsertAllowed(finalRecord, ctx.user);
+            if (insertError) return NextResponse.json({ error: insertError }, { status: 403 });
+          }
           const { error } = await ctx.db.from(config.table).upsert(finalRecord, { onConflict: "id" });
           if (error) return NextResponse.json({ error: error.message }, { status: 500 });
         }

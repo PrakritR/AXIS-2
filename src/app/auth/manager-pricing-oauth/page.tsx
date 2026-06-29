@@ -10,8 +10,8 @@ import {
   persistManagerPricingOffer,
   readManagerPricingOffer,
 } from "@/lib/auth/manager-pricing-oauth-storage";
+import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { persistOAuthNextPath } from "@/lib/auth/oauth-next-cookie";
-import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
 import { openAppUrl, openOAuthUrl } from "@/lib/native/open-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -34,14 +34,16 @@ import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 async function restartGoogleForPricingOffer(offer: {
   tier: PlanTierId;
   billing: "monthly" | "annual";
-  discountPercent?: number;
   promo?: string;
 }) {
   persistManagerPricingOffer(offer);
   const supabase = createSupabaseBrowserClient();
   const nextPath = managerPricingOauthPath(offer);
   persistOAuthNextPath(nextPath);
-  const redirectTo = bareAuthCallbackUrl(resolveOAuthBrowserOrigin());
+  const redirectTo = resolveOAuthCallbackRedirectUrl(
+    resolveOAuthBrowserOrigin(),
+    "/auth/callback/partner-pricing",
+  );
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
@@ -60,11 +62,6 @@ function ManagerPricingOauthContent() {
   const storedOffer = useMemo(() => readManagerPricingOffer(), []);
   const tier = parseTier(searchParams.get("tier"), storedOffer?.tier ?? null);
   const billing = parseBilling(searchParams.get("billing"), storedOffer?.billing ?? "monthly");
-  const discountRaw = searchParams.get("d");
-  const discountPercent =
-    discountRaw != null && discountRaw !== ""
-      ? Number.parseInt(discountRaw, 10)
-      : storedOffer?.discountPercent;
   const promo = searchParams.get("promo")?.trim() || storedOffer?.promo || "";
 
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -79,7 +76,6 @@ function ManagerPricingOauthContent() {
     const offer = {
       tier,
       billing,
-      discountPercent: Number.isFinite(discountPercent) ? discountPercent : undefined,
       promo: promo || undefined,
     };
     persistManagerPricingOffer(offer);
@@ -107,7 +103,6 @@ function ManagerPricingOauthContent() {
             tier,
             billing,
             promo: promo || undefined,
-            discountPercent: Number.isFinite(discountPercent) ? discountPercent : undefined,
           }),
         });
 
@@ -159,7 +154,7 @@ function ManagerPricingOauthContent() {
         setErrorText(message);
       }
     })();
-  }, [billing, discountPercent, promo, tier]);
+  }, [billing, promo, tier]);
 
   if (checkoutClientSecret) {
     return (

@@ -19,7 +19,6 @@ export const IN_APP_PATH_PREFIXES = [
   "/pro/",
   "/rent/",
   "/partner/",
-  "/onboard/",
   "/billing/",
 ] as const;
 
@@ -74,6 +73,7 @@ export function assertInAppPushPath(pathname: string, context = "push notificati
 /** Checklist referenced by AGENTS.md and docs/web-and-native-parity.md */
 export const PLATFORM_CHANGE_CHECKLIST = [
   "Portal/nav change: update src/lib/portals/* section registry and render-portal-section.tsx",
+  "Nav order: registries (pro.ts, admin.ts, resident-sections.ts) are canonical — native bottom bar uses portal-bottom-nav.ts passthrough only",
   "Free-tier gating: update RESIDENT_FREE_TIER_SECTION_IDS or manager-access tier sets",
   "New in-app route: add prefix to IN_APP_PATH_PREFIXES if outside existing portals",
   "Push notification: use assertInAppPushPath and add path to REGISTERED_PUSH_DEEP_LINKS",

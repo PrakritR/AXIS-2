@@ -1,10 +1,6 @@
 import { resolveAppOrigin } from "@/lib/app-url";
 import { generateManagerId } from "@/lib/manager-id";
 import { normalizeProMonthlyPromoInput, PRO_MONTHLY_FIRST_FREE_PROMO_CODE } from "@/lib/stripe-promos";
-import {
-  normalizeOnboardDiscountPercent,
-  stripeCouponIdForOnboardDiscount,
-} from "@/lib/stripe-onboard-discount";
 import { resolveStripePriceIdForManagerTier } from "@/lib/stripe/resolve-manager-price";
 import type { ManagerSubscriptionTier, StripeBilling } from "@/lib/stripe-price-ids";
 import {
@@ -24,7 +20,6 @@ export type ManagerCheckoutInput = {
   /** Reuse Axis ID from a pending manager signup instead of generating a new one. */
   managerId?: string;
   promo?: string;
-  discountPercent?: number;
   embedded?: boolean;
   req: Request;
 };
@@ -55,16 +50,6 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
   const userId = typeof input.userId === "string" ? input.userId.trim() : "";
   const promoRaw = typeof input.promo === "string" ? normalizeProMonthlyPromoInput(input.promo) : "";
   const promoUpper = promoRaw.toUpperCase();
-  const onboardDiscount = normalizeOnboardDiscountPercent(input.discountPercent);
-
-  if (onboardDiscount === 100) {
-    return {
-      ok: false,
-      status: 400,
-      error: "100% onboard discount must use free signup (no Stripe checkout).",
-      code: "REQUIRES_SIGNUP_INTENT",
-    };
-  }
 
   const isProMonthly = tier === "pro" && billing === "monthly";
   if (promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && !isProMonthly) {
@@ -87,25 +72,18 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
   if (phone) metadata.phone = phone;
   if (userId) metadata.userId = userId;
   if (promoRaw) metadata.promo = promoRaw;
-  if (onboardDiscount != null) metadata.onboard_discount_percent = String(onboardDiscount);
 
   const promoCodeId = process.env.STRIPE_PROMOTION_CODE_ID_FIRST_MONTH_FREE?.trim();
   const autoFirstMonthFree =
     isProMonthly && promoUpper === PRO_MONTHLY_FIRST_FREE_PROMO_CODE && Boolean(promoCodeId);
 
-  const allowPromotionCodes = isProMonthly && !autoFirstMonthFree && onboardDiscount == null;
-
-  let onboardCouponId: string | null = null;
-  if (onboardDiscount != null) {
-    onboardCouponId = await stripeCouponIdForOnboardDiscount(onboardDiscount, "once");
-  }
+  const allowPromotionCodes = isProMonthly && !autoFirstMonthFree;
 
   const sessionBase = buildManagerSubscriptionCheckoutBase({
     priceId: price,
     metadata,
     ...(email ? { customerEmail: email } : {}),
     ...(autoFirstMonthFree && promoCodeId ? { discounts: [{ promotion_code: promoCodeId }] } : {}),
-    ...(onboardCouponId ? { discounts: [{ coupon: onboardCouponId }] } : {}),
     allowPromotionCodes,
     trialPeriodDays: MANAGER_SUBSCRIPTION_TRIAL_DAYS,
   });

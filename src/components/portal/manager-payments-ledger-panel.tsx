@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
-  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_DETAIL_BTN_PRIMARY,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -18,15 +18,15 @@ import {
   PortalTableDetailActions,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
+import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
-import { ChargeReminderList } from "@/components/portal/manager-inbox-schedule-panel";
+import { ChargeRemindersModal, patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
-import { manageableRemindersForCharge, upcomingScheduledForCharge } from "@/lib/scheduled-payment-messages";
-import { patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
+import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 
 function statusTone(label: string) {
   const l = label.toLowerCase();
@@ -41,9 +41,8 @@ export function ManagerPaymentsLedgerPanel({
   managerUserId,
   activeBucket,
   scheduledMessages = [],
-  schedulePortalBase = "/portal",
   onScheduleEdit,
-  onReminderSettings,
+  onOpenReminderSettings,
   onRowsChanged,
   onScheduleChanged,
 }: {
@@ -51,9 +50,8 @@ export function ManagerPaymentsLedgerPanel({
   managerUserId: string | null;
   activeBucket: ManagerPaymentBucket;
   scheduledMessages?: ScheduledPaymentMessage[];
-  schedulePortalBase?: string;
   onScheduleEdit?: (message: ScheduledPaymentMessage) => void;
-  onReminderSettings?: () => void;
+  onOpenReminderSettings?: () => void;
   onRowsChanged?: () => void;
   onScheduleChanged?: () => void;
 }) {
@@ -63,6 +61,7 @@ export function ManagerPaymentsLedgerPanel({
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [reminderPreview, setReminderPreview] = useState<{ row: DemoManagerPaymentLedgerRow; subject: string; body: string } | null>(null);
+  const [chargeRemindersRow, setChargeRemindersRow] = useState<DemoManagerPaymentLedgerRow | null>(null);
 
   const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
     const email = row.residentEmail?.trim();
@@ -192,6 +191,94 @@ export function ManagerPaymentsLedgerPanel({
     onRowsChanged?.();
   };
 
+  const renderDetailActions = (row: DemoManagerPaymentLedgerRow) => (
+    <PortalTableDetailActions>
+      {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
+        <>
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => recordPaid(row, "Marked as paid.")}>
+            Mark as paid
+          </Button>
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Zelle.")}>
+            Paid with Zelle
+          </Button>
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Venmo.")}>
+            Paid with Venmo
+          </Button>
+        </>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_DETAIL_BTN}
+        disabled={sendingReminderId === row.id}
+        onClick={() => openReminderPreview(row)}
+      >
+        {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+      </Button>
+      {row.householdChargeId ? (
+        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
+          Auto reminders
+        </Button>
+      ) : null}
+      {activeBucket !== "pending" ? (
+        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
+          Move to pending
+        </Button>
+      ) : null}
+      {row.householdChargeId && row.statusLabel !== "Paid" ? (
+        editingAmountId === row.id ? (
+          <span className="flex items-center gap-1.5">
+            <span className="text-xs text-muted">$</span>
+            <Input
+              className="h-7 w-24 rounded-lg px-2 py-1 text-xs"
+              inputMode="decimal"
+              value={editAmountDraft}
+              onChange={(e) => setEditAmountDraft(e.target.value)}
+              autoFocus
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN_PRIMARY}
+              onClick={() => {
+                const amt = parseFloat(editAmountDraft.replace(/[^\d.]/g, ""));
+                if (!Number.isFinite(amt) || amt < 0) {
+                  showToast("Enter a valid amount.");
+                  return;
+                }
+                if (updateHouseholdChargeAmount(row.householdChargeId!, amt, managerUserId)) {
+                  showToast("Amount updated.");
+                  onRowsChanged?.();
+                }
+                setEditingAmountId(null);
+              }}
+            >
+              Save
+            </Button>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setEditingAmountId(null)}>
+              Cancel
+            </Button>
+          </span>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            onClick={() => {
+              setEditAmountDraft(row.balanceDue.replace(/[^\d.]/g, ""));
+              setEditingAmountId(row.id);
+            }}
+          >
+            Edit amount
+          </Button>
+        )
+      ) : null}
+      <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => removePayment(row)}>
+        Delete
+      </Button>
+    </PortalTableDetailActions>
+  );
+
   return (
     <>
     {reminderPreview && (
@@ -209,8 +296,78 @@ export function ManagerPaymentsLedgerPanel({
         onConfirm={(skipMessage) => void doSendReminder(skipMessage)}
       />
     )}
-    <div className={PORTAL_DATA_TABLE_WRAP}>
-      <div className={PORTAL_DATA_TABLE_SCROLL}>
+    <div className="space-y-2 lg:hidden">
+      {rows.map((row) => {
+        const reminders = row.householdChargeId
+          ? manageableRemindersForCharge(scheduledMessages, row.householdChargeId)
+          : [];
+        const expanded = expandedId === row.id;
+        const propertyShort = stripPropertyRoomCountSuffix(row.propertyName || "");
+        return (
+          <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                >
+                  <p className="truncate font-semibold text-foreground">{row.residentName}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {row.chargeTitle}
+                    {row.roomNumber ? ` · Room ${row.roomNumber}` : ""}
+                  </p>
+                  {propertyShort ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{propertyShort}</p> : null}
+                  <p className="mt-0.5 text-xs text-muted">Due {row.dueDate}</p>
+                </button>
+                {reminders.length ? (
+                  <button
+                    type="button"
+                    className="mt-1 text-[11px] font-semibold text-primary"
+                    onClick={() => setChargeRemindersRow(row)}
+                  >
+                    Auto · {reminders.length}
+                  </button>
+                ) : null}
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-base font-bold tabular-nums text-foreground">{row.balanceDue}</p>
+                <span
+                  className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}
+                >
+                  {row.statusLabel}
+                </span>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN_PRIMARY}
+                  onClick={() => recordPaid(row, "Marked as paid.")}
+                >
+                  Mark as paid
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}>
+                {expanded ? "Less" : "More"}
+              </Button>
+            </div>
+            {expanded ? (
+              <div className="mt-3 border-t border-border pt-3">
+                <p className="mb-3 text-sm text-muted">
+                  <span className="font-medium text-foreground">{row.residentName}</span> · {row.notes}
+                </p>
+                {renderDetailActions(row)}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+    <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+      <div className="relative z-0 max-w-full overflow-x-auto">
         <table className="min-w-[880px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
@@ -243,21 +400,22 @@ export function ManagerPaymentsLedgerPanel({
                   <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground`}>{row.balanceDue}</td>
                   <td className={`${PORTAL_TABLE_TD} text-muted`}>
                     <div>{row.dueDate}</div>
-                    {row.householdChargeId ? (
-                      <ChargeReminderList
-                        messages={manageableRemindersForCharge(scheduledMessages, row.householdChargeId)}
-                        onEdit={onScheduleEdit}
-                        onToggleCancel={async (msg, cancelled) => {
-                          try {
-                            await patchScheduledMessage(msg.id, { cancelled });
-                            showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
-                            onScheduleChanged?.();
-                          } catch (e) {
-                            showToast(e instanceof Error ? e.message : "Could not update reminder.");
-                          }
-                        }}
-                      />
-                    ) : null}
+                    {row.householdChargeId ? (() => {
+                      const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
+                      if (!reminders.length) return null;
+                      return (
+                        <button
+                          type="button"
+                          className="mt-1 text-[11px] font-semibold text-primary hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setChargeRemindersRow(row);
+                          }}
+                        >
+                          Auto · {reminders.length}
+                        </button>
+                      );
+                    })() : null}
                   </td>
                   <td className={PORTAL_TABLE_TD}>
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}>
@@ -283,90 +441,7 @@ export function ManagerPaymentsLedgerPanel({
                       <p className="text-sm leading-relaxed text-muted">
                         <span className="font-medium text-foreground">{row.residentName}</span> · {row.notes}
                       </p>
-                      <PortalTableDetailActions>
-                        {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
-                          <>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => recordPaid(row, "Marked as paid.")}>
-                              Mark as paid
-                            </Button>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Zelle.")}>
-                              Paid with Zelle
-                            </Button>
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Venmo.")}>
-                              Paid with Venmo
-                            </Button>
-                          </>
-                        ) : null}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={PORTAL_DETAIL_BTN}
-                          disabled={sendingReminderId === row.id}
-                          onClick={() => openReminderPreview(row)}
-                        >
-                          {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
-                        </Button>
-                        {row.householdChargeId && upcomingScheduledForCharge(scheduledMessages, row.householdChargeId)[0] ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={PORTAL_DETAIL_BTN}
-                            onClick={() => onScheduleEdit?.(upcomingScheduledForCharge(scheduledMessages, row.householdChargeId!)[0]!)}
-                          >
-                            Edit schedule
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={PORTAL_DETAIL_BTN}
-                            onClick={() => (onReminderSettings ? onReminderSettings() : window.location.assign(`${schedulePortalBase}/inbox/schedule`))}
-                          >
-                            Reminder settings
-                          </Button>
-                        )}
-                        {activeBucket !== "pending" ? (
-                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
-                            Move to pending
-                          </Button>
-                        ) : null}
-                                        {row.householdChargeId && row.statusLabel !== "Paid" ? (
-                          editingAmountId === row.id ? (
-                            <span className="flex items-center gap-1.5">
-                              <span className="text-xs text-muted">$</span>
-                              <Input
-                                className="h-7 w-24 rounded-lg px-2 py-1 text-xs"
-                                inputMode="decimal"
-                                value={editAmountDraft}
-                                onChange={(e) => setEditAmountDraft(e.target.value)}
-                                autoFocus
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN_PRIMARY}
-                                onClick={() => {
-                                  const amt = parseFloat(editAmountDraft.replace(/[^\d.]/g, ""));
-                                  if (!Number.isFinite(amt) || amt < 0) { showToast("Enter a valid amount."); return; }
-                                  if (updateHouseholdChargeAmount(row.householdChargeId!, amt, managerUserId)) {
-                                    showToast("Amount updated.");
-                                    onRowsChanged?.();
-                                  }
-                                  setEditingAmountId(null);
-                                }}
-                              >Save</Button>
-                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setEditingAmountId(null)}>Cancel</Button>
-                            </span>
-                          ) : (
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => { setEditAmountDraft(row.balanceDue.replace(/[^\d.]/g, "")); setEditingAmountId(row.id); }}>
-                              Edit amount
-                            </Button>
-                          )
-                        ) : null}
-                        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => removePayment(row)}>
-                          Delete
-                        </Button>
-                      </PortalTableDetailActions>
+                      {renderDetailActions(row)}
                     </td>
                   </tr>
                 ) : null}
@@ -376,6 +451,37 @@ export function ManagerPaymentsLedgerPanel({
         </table>
       </div>
     </div>
+    {chargeRemindersRow?.householdChargeId ? (
+      <ChargeRemindersModal
+        open
+        onClose={() => setChargeRemindersRow(null)}
+        residentName={chargeRemindersRow.residentName}
+        chargeTitle={chargeRemindersRow.chargeTitle}
+        dueDate={chargeRemindersRow.dueDate}
+        messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersRow.householdChargeId)}
+        onEdit={(message) => {
+          setChargeRemindersRow(null);
+          onScheduleEdit?.(message);
+        }}
+        onToggleCancel={async (msg, cancelled) => {
+          try {
+            await patchScheduledMessage(msg.id, { cancelled });
+            showToast(cancelled ? "Reminder skipped." : "Reminder restored.");
+            onScheduleChanged?.();
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "Could not update reminder.");
+          }
+        }}
+        onOpenSettings={
+          onOpenReminderSettings
+            ? () => {
+                setChargeRemindersRow(null);
+                onOpenReminderSettings();
+              }
+            : undefined
+        }
+      />
+    ) : null}
     </>
   );
 }

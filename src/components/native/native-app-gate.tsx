@@ -12,11 +12,7 @@ import { useEffect, useState, type ReactNode } from "react";
  */
 export function NativeAppGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [blocked, setBlocked] = useState(() => {
-    const platform = detectNativePlatformSync();
-    if (platform) tagHtmlNativePlatform(platform);
-    return Boolean(platform && !isNativeAppAllowedPath(pathname));
-  });
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     void Promise.resolve().then(() => {

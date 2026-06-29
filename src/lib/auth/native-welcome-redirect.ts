@@ -1,4 +1,5 @@
 import { shouldNativeRedirectToWelcome } from "@/lib/auth/native-entry-paths";
+import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { nativeAuthEntryPathClient } from "@/lib/auth/native-auth-entry";
 
 /** Generic /auth/sign-in is the web portal — native uses the welcome role picker. */
@@ -17,16 +18,22 @@ export async function redirectNativeFromMarketing(
   if (typeof window === "undefined") return false;
 
   const entry = nativeAuthEntryPathClient();
+  const { pathname, search } = window.location;
 
-  if (shouldNativeRedirectFromSignIn(window.location.pathname, window.location.search)) {
-    if (entry !== window.location.pathname) {
+  if (pathname === "/partner/pricing" || pathname === "/pricing") {
+    window.location.replace(MANAGER_PRICING_ENTRY_PATH + search);
+    return true;
+  }
+
+  if (shouldNativeRedirectFromSignIn(pathname, search)) {
+    if (entry !== pathname) {
       window.location.replace(entry);
       return true;
     }
     return false;
   }
 
-  if (!shouldNativeRedirectToWelcome(window.location.pathname)) return false;
+  if (!shouldNativeRedirectToWelcome(pathname)) return false;
   try {
     const { session } = await getSession();
     window.location.replace(session ? "/auth/continue" : entry);

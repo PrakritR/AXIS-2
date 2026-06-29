@@ -1,5 +1,12 @@
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
-import { provisionPendingManagerAccount } from "@/lib/auth/manager-onboarding";
+import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
+import {
+  findManagerPurchaseForAccount,
+  isManagerOnboardingComplete,
+  provisionPendingManagerAccount,
+} from "@/lib/auth/manager-onboarding";
+import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
+import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -14,7 +21,7 @@ type Body = {
 
 /**
  * Creates a new manager account (pending tier selection) for email/password signup.
- * User must pick Free / Pro / Business on /partner/pricing before portal access.
+ * User must pick Free / Pro / Business on the manager plan screen before portal access.
  */
 export async function POST(req: Request) {
   try {
@@ -67,13 +74,45 @@ export async function POST(req: Request) {
       userId = created.user.id;
     }
 
+    const existingPurchase = await findManagerPurchaseForAccount(supabase, userId, email);
+    if (existingPurchase && isManagerOnboardingComplete(existingPurchase)) {
+      const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+      const { error: linkProfileErr } = await supabase.from("profiles").upsert(
+        {
+          id: userId,
+          email,
+          role: primaryRoleWhenAddingManager(existingProfile?.role as string | undefined),
+          manager_id: existingProfile?.manager_id?.trim() || existingPurchase.manager_id,
+          full_name: fullName || existingProfile?.full_name || existingPurchase.full_name || null,
+          application_approved: existingProfile?.application_approved ?? true,
+        },
+        { onConflict: "id" },
+      );
+      if (linkProfileErr) {
+        return NextResponse.json({ error: linkProfileErr.message }, { status: 500 });
+      }
+      await ensureProfileRoleRow(supabase, userId, "manager");
+      if (!existingPurchase.user_id) {
+        await supabase
+          .from("manager_purchases")
+          .update({ user_id: userId })
+          .eq("id", existingPurchase.id);
+      }
+      return NextResponse.json({
+        ok: true,
+        managerId: existingPurchase.manager_id,
+        redirectTo: "/portal/dashboard",
+        existingAccount: true,
+      });
+    }
+
     const { managerId } = await provisionPendingManagerAccount(supabase, {
       userId,
       email,
       fullName,
     });
 
-    return NextResponse.json({ ok: true, managerId, redirectTo: "/partner/pricing" });
+    return NextResponse.json({ ok: true, managerId, redirectTo: MANAGER_PRICING_ENTRY_PATH });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not create manager account.";
     const status = message.includes("already exists") ? 409 : 500;

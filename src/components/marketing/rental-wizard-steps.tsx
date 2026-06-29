@@ -25,9 +25,14 @@ import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 import { wizardSectionErrorClass } from "@/lib/wizard-field-errors";
 
 const pillWrap = "flex flex-wrap gap-2 rounded-full border border-border bg-accent/30 p-1";
+const pillStack = "flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:rounded-full sm:border sm:border-border sm:bg-accent/30 sm:p-1";
 const pillActive = "rounded-full px-4 py-2.5 text-sm font-semibold bg-primary text-primary-foreground shadow-sm transition min-h-[44px] sm:min-h-0";
 const pillIdle =
   "rounded-full px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-card hover:text-foreground min-h-[44px] sm:min-h-0";
+const choiceActive =
+  "w-full rounded-xl border border-primary bg-primary/15 px-4 py-3.5 text-left text-sm font-semibold leading-snug text-foreground ring-1 ring-primary/25 transition sm:rounded-full sm:py-2.5 sm:text-center";
+const choiceIdle =
+  "w-full rounded-xl border border-border bg-card/80 px-4 py-3.5 text-left text-sm font-semibold leading-snug text-foreground transition hover:border-primary/30 sm:rounded-full sm:py-2.5 sm:text-center";
 
 function Label({
   children,
@@ -162,14 +167,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
 
   if (step === 1) {
     return (
-      <div className="space-y-8">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Group application</h2>
-          <StepIntro className="mt-3">
-            If you are applying with roommates, one person should submit first. Everyone else joins using the same Group ID
-            so your applications stay linked.
-          </StepIntro>
-        </div>
+      <div className="rental-wizard-step space-y-6">
+        <StepIntro>
+          Applying with roommates? One person submits first and shares a Group ID so everyone&apos;s applications stay
+          linked.
+        </StepIntro>
 
         <div className="space-y-2">
           <Label required>Are you applying as part of a group?</Label>
@@ -190,36 +192,29 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
 
         {form.applyingAsGroup === "yes" ? (
-          <div className="space-y-6 rounded-2xl border border-primary/15 bg-gradient-to-b from-primary/[0.08] to-white p-5 shadow-sm sm:p-6">
-            <p className="text-sm font-semibold text-primary">Group application</p>
-            <p className="text-sm leading-relaxed text-foreground">
-              You will either start the group and receive a Group ID to share, or paste the Group ID from the first applicant.
+          <div className="rental-wizard-subcard space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5">
+            <p className="text-sm leading-relaxed text-muted">
+              Start the group and share your Group ID, or paste the ID from whoever applied first.
             </p>
 
             <div className="space-y-2" data-wizard-field="groupRole">
               <Label required>What is your role in the group?</Label>
               <div
-                className={`grid gap-3 sm:grid-cols-2 ${errors.groupRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100" : ""}`}
+                className={`${pillStack} ${errors.groupRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100" : ""}`}
+                role="group"
+                aria-label="Group role"
               >
                 <button
                   type="button"
                   onClick={() => patch({ groupRole: "first", groupId: "" })}
-                  className={`rounded-2xl border-2 px-4 py-4 text-left text-sm font-semibold leading-snug transition ${
-                    form.groupRole === "first"
-                      ? "border-primary bg-card text-foreground shadow-md ring-2 ring-primary/15"
-                      : "border-border bg-card text-foreground hover:border-border"
-                  }`}
+                  className={form.groupRole === "first" ? choiceActive : choiceIdle}
                 >
                   I am the first person applying
                 </button>
                 <button
                   type="button"
                   onClick={() => patch({ groupRole: "joining", groupSize: "" })}
-                  className={`rounded-2xl border-2 px-4 py-4 text-left text-sm font-semibold leading-snug transition ${
-                    form.groupRole === "joining"
-                      ? "border-primary bg-card text-foreground shadow-md ring-2 ring-primary/15"
-                      : "border-border bg-card text-foreground hover:border-border"
-                  }`}
+                  className={form.groupRole === "joining" ? choiceActive : choiceIdle}
                 >
                   I am joining an existing group
                 </button>

@@ -15,6 +15,7 @@ import {
   readPendingManagerPropertiesForUser,
 } from "@/lib/demo-property-pipeline";
 import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
+import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import {
   BUSINESS_MAX_PROPERTIES,
   FREE_MAX_PROPERTIES,
@@ -121,24 +122,22 @@ export function ManagerProperties() {
     <ManagerPortalPageShell
       title="Properties"
       titleAside={
-        <>
-          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={tryOpenAdd}>
-            + Create listing
-          </Button>
-        </>
+        <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={tryOpenAdd}>
+          + Create listing
+        </Button>
       }
     >
       {atPropertyLimit && limitMax != null ? (
-        <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger">
+        <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
           You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.{" "}
-          <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={`${portalBase}/plan`}>
+          <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={MANAGER_PLAN_PORTAL_URL}>
             View plans
           </Link>{" "}
           to add more.
         </p>
       ) : null}
       {pendingCount > 0 ? (
-        <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-pending">
+        <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-pending [html[data-native]_&]:hidden lg:mb-4">
           <span className="font-semibold">{pendingCount}</span> propert{pendingCount === 1 ? "y" : "ies"} awaiting admin
           approval before they go live on Axis listings.
         </p>

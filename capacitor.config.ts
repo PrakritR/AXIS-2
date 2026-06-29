@@ -46,7 +46,8 @@ const config: CapacitorConfig = {
     allowNavigation: allowNavigationHosts(),
   },
   ios: {
-    contentInset: "always",
+    // Full-bleed WebView; safe areas come from viewport-fit=cover + CSS env(safe-area-inset-*).
+    contentInset: "never",
     backgroundColor: "#080b14",
   },
   plugins: {

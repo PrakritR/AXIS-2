@@ -200,6 +200,58 @@ describe("ACH checkout routes", () => {
       expect(data.clientSecret).toBe("cs_ach_secret");
       expect(data.sessionId).toBe("cs_ach_session");
     });
+
+    it("forces ACH when native app header is present", async () => {
+      vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+        from: vi.fn().mockImplementation((table: string) => {
+          if (table === "portal_household_charge_records") {
+            return {
+              select: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: "charge_1",
+                      status: "due",
+                      manager_user_id: "mgr_1",
+                      row_data: {
+                        id: "charge_1",
+                        kind: "rent",
+                        status: "due",
+                        amountCents: 250000,
+                        residentEmail: "resident@example.com",
+                        residentUserId: "res_1",
+                        propertyId: "prop_1",
+                      },
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            };
+          }
+          if (table === "manager_property_records") {
+            return {
+              select: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+                }),
+              }),
+            };
+          }
+          return { select: vi.fn().mockReturnThis() };
+        }),
+      } as never);
+
+      const req = jsonRequest("http://localhost/api/stripe/household-charge-checkout", {
+        method: "POST",
+        headers: { "x-axis-native-platform": "ios" },
+        body: { chargeId: "charge_1", embedded: true, paymentMethod: "card" },
+      });
+      const res = await householdChargeCheckout(req);
+      expect(res.status).toBe(200);
+      const call = vi.mocked(createAxisAchCheckoutSession).mock.calls[0];
+      expect(call?.[1]).toMatchObject({ paymentMethod: "ach" });
+    });
   });
 
   describe("GET /api/stripe/household-charge-verify", () => {

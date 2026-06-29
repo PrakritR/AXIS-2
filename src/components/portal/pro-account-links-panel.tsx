@@ -16,6 +16,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
+import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import {
   CO_MANAGER_PERMISSION_OPTIONS,
   EMPTY_CO_MANAGER_PERMISSIONS,
@@ -865,8 +866,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                   </span>
                 ) : null}
               </div>
-              <Link href={`${planBase}/plan`} className="text-sm font-semibold text-primary underline-offset-2 hover:underline">
-                Plan
+              <Link href={MANAGER_PLAN_PORTAL_URL} className="text-sm font-semibold text-primary underline-offset-2 hover:underline">
+                Billing
               </Link>
             </div>
           ) : null}

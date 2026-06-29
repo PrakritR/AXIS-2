@@ -3,21 +3,25 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { MobileEmailSignIn } from "@/components/auth/mobile-email-sign-in";
+import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 import {
+  AuthAccountFooterLink,
   AuthDivider,
-  AuthFooterLink,
+  AuthLoadingCard,
   AuthPageHeader,
 } from "@/components/auth/auth-mobile-primitives";
-import Link from "next/link";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
-export default function ManagerAuthPage() {
+function ManagerAuthWeb() {
   return (
     <AuthCard>
       <AuthPageHeader
         showLogo
         eyebrow="Manager"
         title="Sign in"
-        subtitle="Or create a new account below"
+        subtitle="Property manager portal"
         accent={false}
       />
 
@@ -31,14 +35,35 @@ export default function ManagerAuthPage() {
 
       <MobileEmailSignIn nextPath="/portal/dashboard" />
 
-      <p className="auth-footer-link mt-5 text-center text-[13px] text-muted">
-        New here?{" "}
-        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/manager/plan">
-          Choose a plan
-        </Link>
-      </p>
-
-      <AuthFooterLink href="/auth/welcome">Change role</AuthFooterLink>
+      <AuthAccountFooterLink href="/auth/sign-in?mode=create&role=manager">
+        New here? Create an account
+      </AuthAccountFooterLink>
+      <AuthAccountFooterLink href="/auth/sign-in">Change role</AuthAccountFooterLink>
     </AuthCard>
   );
+}
+
+export default function ManagerAuthPage() {
+  const router = useRouter();
+  const { isNative } = useIsNativeApp();
+
+  useEffect(() => {
+    if (isNative) {
+      router.replace("/auth/sign-in?mode=sign-in&role=manager");
+    }
+  }, [isNative, router]);
+
+  if (isNative === null) {
+    return (
+      <AuthCard>
+        <AuthLoadingCard />
+      </AuthCard>
+    );
+  }
+
+  if (isNative) {
+    return <NativeAuthHub />;
+  }
+
+  return <ManagerAuthWeb />;
 }

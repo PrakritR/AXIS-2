@@ -11,6 +11,7 @@ import { Input, Select } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { managerSignupFinishPhrase } from "@/lib/manager-access";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
+import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import {
   BANNER_INFO_CLASS,
   BANNER_NEUTRAL_CLASS,
@@ -296,7 +297,7 @@ export default function CreateAccountClient() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
         });
-        const body = (await res.json()) as { error?: string; redirectTo?: string };
+        const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
         if (!res.ok) {
           showToast(body.error ?? "Could not create manager account.");
           return;
@@ -311,8 +312,12 @@ export default function CreateAccountClient() {
           router.push("/auth/sign-in");
           return;
         }
+        if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
+          window.location.replace("/portal/dashboard");
+          return;
+        }
         showToast("Account created. Choose your plan next.");
-        router.push(nativeAwarePath(body.redirectTo?.startsWith("/") ? body.redirectTo : "/partner/pricing"));
+        router.push(nativeAwarePath(body.redirectTo?.startsWith("/") ? body.redirectTo : MANAGER_PRICING_ENTRY_PATH));
       } catch {
         showToast("Network error.");
       } finally {

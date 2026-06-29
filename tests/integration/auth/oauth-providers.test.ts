@@ -53,6 +53,8 @@ describe("GET /api/auth/oauth-providers", () => {
       googleEnabled: boolean;
       supabaseUrl: string;
       googleRedirectUri: string;
+      nativeCallbackUrls: string[];
+      nativeRedirectHint: string;
       hint: string | null;
       googleRedirectHint: string | null;
     }>(res);
@@ -62,6 +64,8 @@ describe("GET /api/auth/oauth-providers", () => {
     expect(data.supabaseUrl).toBe("https://example.supabase.co");
     expect(data.googleRedirectUri).toBe("https://example.supabase.co/auth/v1/callback");
     expect(data.hint).toContain("https://axis.example/auth/callback");
+    expect(data.nativeCallbackUrls[0]).toContain("com.axisseattlehousing.app://auth/callback");
+    expect(data.nativeRedirectHint).toContain("Redirect URLs");
     expect(data.googleRedirectHint).toContain("redirect_uri_mismatch");
   });
 

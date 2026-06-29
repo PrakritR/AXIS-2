@@ -44,7 +44,7 @@ function syncListingScrollStack(mode: "page" | "modal", subnavEl: HTMLElement | 
     return stack;
   }
   const navEl = document.getElementById(NAVBAR_ID);
-  const navH = navEl?.getBoundingClientRect().height ?? 64;
+  const navH = navEl?.getBoundingClientRect().height ?? 0;
   const stack = navH + subnavEl.offsetHeight + 12;
   document.documentElement.style.setProperty("--listing-sticky-stack", `${stack}px`);
   const listingRoot = getListingSectionsRoot(subnavEl);
@@ -102,9 +102,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
     }
 
     const navEl = document.getElementById(NAVBAR_ID);
-    if (!navEl) return;
-
-    const navH = navEl.getBoundingClientRect().height;
+    const navH = navEl?.getBoundingClientRect().height ?? 0;
     setStickyTopPx(navH);
     syncListingScrollStack(mode, subEl);
 
@@ -176,7 +174,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
       }
       const navEl = document.getElementById(NAVBAR_ID);
       if (!navEl) {
-        requestAnimationFrame(tryAttach);
+        cleanup = attachPageListeners(document.body);
         return;
       }
       cleanup = attachPageListeners(navEl);
@@ -215,13 +213,18 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
   return (
     <nav
       ref={rootRef}
-      data-surface="light"
-      className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:-mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 ${
+      data-listing-subnav
+      className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 [html[data-native]_&]:-mx-0 [html[data-native]_&]:px-3 [html[data-native]_&]:pt-[max(0.5rem,env(safe-area-inset-top))] ${
         pageScrolled
-          ? "border-border bg-card shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_12px_40px_-20px_rgba(15,23,42,0.1)] supports-[backdrop-filter]:bg-card"
-          : "border-border bg-[#f4f7fb]/95"
+          ? "border-border bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)] [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-background/92 [html[data-theme=dark]_&]:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.45)]"
+          : "border-border bg-background/90 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-background/88"
       }`}
-      style={{ top: mode === "modal" ? 0 : `${stickyTopPx}px` }}
+      style={{
+        top:
+          mode === "modal"
+            ? 0
+            : `max(${stickyTopPx}px, env(safe-area-inset-top, 0px))`,
+      }}
       aria-label="Listing sections"
     >
       <ul className="-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]">
@@ -238,7 +241,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
                 className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-transparent text-muted hover:bg-card/80 hover:text-foreground"
+                    : "bg-transparent text-muted hover:bg-accent/40 hover:text-foreground [html[data-theme=dark]_&]:hover:bg-white/10"
                 }`}
                 onClick={() => {
                   setActiveId(item.id);

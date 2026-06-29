@@ -3,12 +3,13 @@ import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
+import { MANAGER_PLAN_PORTAL_PATH } from "@/lib/portals/manager-plan-path";
 
 export const runtime = "nodejs";
 
-function allowedReturnPath(path: string | undefined): "/portal/plan" {
+function allowedReturnPath(path: string | undefined): typeof MANAGER_PLAN_PORTAL_PATH {
   void path;
-  return "/portal/plan";
+  return MANAGER_PLAN_PORTAL_PATH;
 }
 
 export async function POST(req: Request) {

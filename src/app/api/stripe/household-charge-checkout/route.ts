@@ -11,6 +11,8 @@ import {
 import { normalizeManagerSkuTier } from "@/lib/manager-access";
 import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { axisPaymentsEnabledOnListing, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
+import { coerceResidentPaymentMethodForSurface } from "@/lib/platform/resident-payments";
+import { readNativePlatformHeader } from "@/lib/platform/native-client";
 import { householdChargeAmountCents, HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE } from "@/lib/stripe-household-charge";
 import { createAxisAchCheckoutSession, stripeNotConfiguredError } from "@/lib/stripe-axis-ach-checkout";
 import {
@@ -34,9 +36,10 @@ type Body = {
   paymentMethod?: ResidentAxisPaymentMethod;
 };
 
-function normalizePaymentMethod(raw: unknown): ResidentAxisPaymentMethod {
-  if (raw === "card" || raw === "link") return raw;
-  return "ach";
+function normalizePaymentMethod(raw: unknown, isNativeApp: boolean): ResidentAxisPaymentMethod {
+  const method: ResidentAxisPaymentMethod =
+    raw === "card" || raw === "link" ? raw : "ach";
+  return coerceResidentPaymentMethodForSurface(method, isNativeApp);
 }
 
 function chargeOwnedByUser(charge: HouseholdCharge, userId: string, email: string): boolean {
@@ -60,7 +63,8 @@ export async function POST(req: Request) {
 
     const body = (await req.json()) as Body;
     const useEmbedded = body.embedded !== false;
-    const paymentMethod = normalizePaymentMethod(body.paymentMethod);
+    const isNativeApp = readNativePlatformHeader(req) !== null;
+    const paymentMethod = normalizePaymentMethod(body.paymentMethod, isNativeApp);
     const requestedIds = [
       ...(Array.isArray(body.chargeIds) ? body.chargeIds : []),
       ...(typeof body.chargeId === "string" ? [body.chargeId] : []),

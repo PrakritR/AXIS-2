@@ -14,7 +14,7 @@ import {
 } from "@/lib/auth/partner-pricing-google-flow";
 import { clearManagerPricingOffer, persistManagerPricingOffer, readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
-import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
+import { MANAGER_PLAN_TIERS, isPlanTierId, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import {
   normalizeProMonthlyPromoInput,
   PRO_MONTHLY_FIRST_FREE_PROMO_CODE,
@@ -24,7 +24,6 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isManagerOnboardTier, parseOnboardOfferSearchParams } from "@/lib/manager-onboard-links";
 
 function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
   return tiers.find((t) => t.id === id) ?? tiers[0]!;
@@ -51,7 +50,6 @@ export default function PartnerPricingPage() {
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [googleCheckoutBusy, setGoogleCheckoutBusy] = useState(false);
-  const [onboardOffer, setOnboardOffer] = useState<ReturnType<typeof parseOnboardOfferSearchParams>>({});
   const [googleSession, setGoogleSession] = useState<PartnerPricingSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
 
@@ -75,14 +73,17 @@ export default function PartnerPricingPage() {
     void Promise.resolve().then(() => {
       const params = new URLSearchParams(window.location.search);
       const tier = params.get("tier");
-      if (tier && isManagerOnboardTier(tier)) {
+      if (tier && isPlanTierId(tier)) {
         setSelectedTierId(tier);
       }
 
-      const offer = parseOnboardOfferSearchParams(params);
-      setOnboardOffer(offer);
-      if (offer.billing) setBilling(offer.billing);
-      if (offer.promo) setCode(offer.promo);
+      const billing = params.get("billing");
+      if (billing === "monthly" || billing === "annual") {
+        setBilling(billing);
+      }
+
+      const promo = params.get("promo")?.trim();
+      if (promo) setCode(promo);
     });
   }, []);
 
@@ -98,20 +99,11 @@ export default function PartnerPricingPage() {
     [showToast],
   );
 
-  const onboardDiscountPercent = onboardOffer.discountPercent ?? null;
-  const onboardIsFree = onboardDiscountPercent === 100;
-  const showOnboardDiscountNote =
-    onboardDiscountPercent != null &&
-    onboardDiscountPercent > 0 &&
-    selectedTierId !== "free" &&
-    (onboardIsFree || onboardDiscountPercent < 100);
-
   const startManagerSignupIntent = useCallback(
     async (opts: {
       tier: PlanTierId;
       billing: "monthly" | "annual";
       promo?: string;
-      discountPercent?: number;
     }): Promise<"redirected" | "needs-checkout" | "error"> => {
       setCheckoutBusy(true);
       try {
@@ -126,7 +118,6 @@ export default function PartnerPricingPage() {
             fullName: typeof fullName === "string" ? fullName.trim() : "",
             phone: typeof phone === "string" ? phone.trim() : "",
             promo: opts.promo,
-            discountPercent: opts.discountPercent,
           }),
         });
         let payload: { sessionId?: string; action?: string; error?: string; code?: string };
@@ -184,16 +175,15 @@ export default function PartnerPricingPage() {
         tier: selectedTierId,
         billing,
         promo: code.trim() || undefined,
-        discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
       }),
     );
-  }, [selectedTierId, billing, code, onboardIsFree, onboardDiscountPercent]);
+  }, [selectedTierId, billing, code]);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
       setCheckoutClientSecret(null);
     });
-  }, [selectedTierId, billing, code, onboardIsFree, onboardDiscountPercent]);
+  }, [selectedTierId, billing, code]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -233,7 +223,6 @@ export default function PartnerPricingPage() {
             tier: selectedTierId,
             billing,
             promo: code.trim() || undefined,
-            discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
           });
 
         const pricingResult = await continuePartnerPricingWithOffer(offer);
@@ -264,7 +253,7 @@ export default function PartnerPricingPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, showToast, selectedTierId, billing, code, onboardIsFree, onboardDiscountPercent]);
+  }, [router, showToast, selectedTierId, billing, code]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -286,7 +275,6 @@ export default function PartnerPricingPage() {
         tier: selectedTierId,
         billing,
         promo: code.trim() || undefined,
-        discountPercent: onboardIsFree ? 100 : onboardDiscountPercent,
       });
       const result = await continuePartnerPricingWithOffer(offer);
       if (result.status === "checkout") {
@@ -310,8 +298,6 @@ export default function PartnerPricingPage() {
   }, [
     billing,
     code,
-    onboardDiscountPercent,
-    onboardIsFree,
     router,
     selectedTierId,
     showToast,
@@ -328,14 +314,6 @@ export default function PartnerPricingPage() {
           Choose a tier and sign in with Google to create your account instantly. Free starts right away; Pro and
           Business upgrade through secure checkout when you are ready.
         </p>
-
-        {showOnboardDiscountNote ? (
-          <p className="mx-auto mt-4 max-w-2xl rounded-2xl border border-[var(--status-confirmed-fg)]/25 bg-[var(--status-confirmed-bg)] px-4 py-3 text-sm font-medium text-[var(--status-confirmed-fg)]">
-            {onboardIsFree
-              ? "This invite link includes free signup — no payment required."
-              : `This invite link includes ${onboardDiscountPercent}% off your first payment (applied automatically at checkout).`}
-          </p>
-        ) : null}
 
         <div className="glass-card mt-8 inline-flex items-center gap-1 rounded-full p-1">
           <button
@@ -509,13 +487,12 @@ export default function PartnerPricingPage() {
                   tier={selectedTierId}
                   billing={billing}
                   promo={code.trim() || undefined}
-                  discountPercent={onboardIsFree ? 100 : onboardDiscountPercent}
                   disabled={checkoutLocked || sessionLoading}
                 />
                 <p className="mt-2 text-center text-xs text-muted sm:text-left">
                   {googleCheckoutBusy
                     ? "Creating your account…"
-                    : `Sign in with Google to create your account instantly${selectedTierId === "free" || onboardIsFree ? "" : ", then pay for your selected plan"} — no form required.`}
+                    : `Sign in with Google to create your account instantly${selectedTierId === "free" ? "" : ", then pay for your selected plan"} — no form required.`}
                 </p>
               </>
             )}
@@ -663,11 +640,10 @@ export default function PartnerPricingPage() {
                       return;
                     }
 
-                    if (selectedTierId === "free" || onboardIsFree) {
+                    if (selectedTierId === "free") {
                       await startManagerSignupIntent({
                         tier: selectedTierId,
                         billing,
-                        ...(onboardIsFree ? { discountPercent: 100 } : {}),
                       });
                       return;
                     }
@@ -680,9 +656,6 @@ export default function PartnerPricingPage() {
                         tier: selectedTierId,
                         billing,
                         promo: codeSafe.trim(),
-                        ...(onboardDiscountPercent != null && onboardDiscountPercent < 100
-                          ? { discountPercent: onboardDiscountPercent }
-                          : {}),
                       });
                       if (outcome !== "needs-checkout") {
                         return;
@@ -703,11 +676,6 @@ export default function PartnerPricingPage() {
                           phone: typeof phone === "string" ? phone.trim() : "",
                           embedded: true,
                           ...(isProMonthly && codeSafe.trim() ? { promo: normalizedPromo } : {}),
-                          ...(onboardDiscountPercent != null &&
-                          onboardDiscountPercent > 0 &&
-                          onboardDiscountPercent < 100
-                            ? { discountPercent: onboardDiscountPercent }
-                            : {}),
                         }),
                       });
                       const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string; alreadyComplete?: boolean; redirectTo?: string };
@@ -748,10 +716,10 @@ export default function PartnerPricingPage() {
                   : pricingAccountComplete
                     ? "Go to portal"
                     : showGoogleAccountPanel
-                      ? selectedTierId === "free" || onboardIsFree
+                      ? selectedTierId === "free"
                         ? "Open free portal"
                         : `Pay for ${selected.label}`
-                    : selectedTierId === "free" || onboardIsFree
+                    : selectedTierId === "free"
                       ? "Create free account"
                       : `Continue with ${selected.label}`}
             </button>
