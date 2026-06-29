@@ -1028,6 +1028,8 @@ html[data-native] {
 
 html[data-native] body {
   overscroll-behavior-y: none;
+  overflow-x: clip;
+  max-width: 100vw;
 }
 
 html[data-native="ios"] .portal-native-account-sheet {
@@ -1258,15 +1260,15 @@ html[data-native] .axis-page-frame > footer {
 }
 
 html[data-native] .axis-assistant-fab {
-  bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
-  right: max(1.25rem, env(safe-area-inset-right, 0px));
+  bottom: max(5.25rem, calc(var(--native-safe-bottom) + 4.75rem));
+  right: max(1rem, env(safe-area-inset-right, 0px));
 }
 
 html[data-native] .axis-assistant-panel {
-  bottom: max(5rem, calc(env(safe-area-inset-bottom, 0px) + 3.5rem));
-  right: max(1.25rem, env(safe-area-inset-right, 0px));
-  max-height: min(34rem, calc(100dvh - env(safe-area-inset-top, 0px) - 7rem));
-  width: min(23rem, calc(100vw - 2.5rem));
+  bottom: max(5.5rem, calc(var(--native-safe-bottom) + 5rem));
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  max-height: min(34rem, calc(100dvh - var(--native-safe-top) - 6.5rem));
+  width: min(23rem, calc(100vw - 2rem));
 }
 
 html[data-native] .portal-top-banner-strip,
@@ -1276,6 +1278,34 @@ html[data-native] .portal-mobile-chrome {
 
 html[data-native] .portal-native-more-sheet {
   padding-bottom: max(1rem, var(--native-safe-bottom));
+}
+
+/* Fixed bottom bar; horizontal scroll strip for all portal tabs (no page sideways scroll). */
+html[data-native] .portal-native-bottom-nav {
+  overflow: hidden;
+  touch-action: none;
+}
+
+html[data-native] .portal-native-bottom-nav-scroll {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html[data-native] .portal-native-bottom-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-native] .portal-shell,
+html[data-native] #portal-main-content,
+html[data-native] .portal-main-inner {
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 html[data-native] [class*="PORTAL_SECTION_SURFACE"],

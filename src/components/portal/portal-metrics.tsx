@@ -316,12 +316,14 @@ export function ManagerPortalPageShell({
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <div className="flex items-center justify-between gap-3 sm:gap-6">
         <div className="min-w-0">
           <h1 className="text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">{title}</h1>
           {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
         </div>
-        {titleAside ? <div className="flex flex-wrap items-center gap-2.5 sm:justify-end sm:pt-0.5">{titleAside}</div> : null}
+        {titleAside ? (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{titleAside}</div>
+        ) : null}
       </div>
       {filterRow ? <div className="mt-6 border-b border-border pb-6">{filterRow}</div> : null}
       <div className="mt-6">{children}</div>

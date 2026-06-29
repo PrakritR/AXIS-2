@@ -1,9 +1,11 @@
 import { AdminNotificationBanners } from "@/components/portal/admin-notification-banners";
+import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
 import { assertAdminPortalAccess } from "@/lib/auth/portal-access";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import {
   PORTAL_MAIN_CONTENT_CLASS,
   PORTAL_MAIN_CONTENT_ID,
@@ -16,6 +18,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await assertAdminPortalAccess();
+  const { profile } = await getServerSessionProfile();
   return (
     <div className={PORTAL_SHELL_ROOT_CLASS} data-surface="admin">
       <SurfaceThemeDefault theme="dark" />
@@ -32,6 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </main>
         </div>
       </div>
+      <AxisAssistant managerName={profile?.full_name ?? null} />
     </div>
   );
 }

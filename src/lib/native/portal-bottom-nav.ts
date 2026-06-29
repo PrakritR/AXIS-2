@@ -1,44 +1,63 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/** Primary tabs in the native bottom bar — everything else lives in More. */
+/** Preferred tab order in the native bottom bar (all sections are shown; bar scrolls horizontally). */
 const NATIVE_BOTTOM_NAV_ORDER: Partial<Record<PortalDefinition["kind"], string[]>> = {
-  resident: ["dashboard", "applications", "payments", "inbox"],
-  pro: ["dashboard", "properties", "applications", "inbox"],
-  manager: ["dashboard", "properties", "applications", "inbox"],
-  admin: ["dashboard", "leases", "residents", "inbox"],
+  resident: ["dashboard", "applications", "payments", "inbox", "documents", "profile"],
+  pro: ["dashboard", "properties", "applications", "inbox", "leases", "calendar", "documents", "profile"],
+  manager: ["dashboard", "properties", "applications", "inbox", "leases", "calendar", "documents", "profile"],
+  admin: [
+    "dashboard",
+    "onboard",
+    "properties",
+    "axis-users",
+    "leases",
+    "events",
+    "inbox",
+    "bugs-feedback",
+    "profile",
+  ],
 };
 
+/** @deprecated Primary slot limit — native bar now shows all tabs in a horizontal scroll strip. */
 export const NATIVE_BOTTOM_NAV_SLOT_LIMIT = 4;
 
+/** All nav items in portal-preferred order for the native bottom scroll strip. */
+export function orderNativeBottomNavItems<T extends { section: string }>(
+  items: T[],
+  kind: PortalDefinition["kind"],
+): T[] {
+  const preferred = NATIVE_BOTTOM_NAV_ORDER[kind] ?? [];
+  const ordered: T[] = [];
+  const used = new Set<string>();
+
+  for (const id of preferred) {
+    const item = items.find((entry) => entry.section === id);
+    if (item) {
+      ordered.push(item);
+      used.add(item.section);
+    }
+  }
+
+  for (const item of items) {
+    if (!used.has(item.section)) ordered.push(item);
+  }
+
+  return ordered;
+}
+
+/** @deprecated Use orderNativeBottomNavItems — kept for tests and gradual migration. */
 export function splitNativeBottomNavItems<T extends { section: string }>(
   items: T[],
   kind: PortalDefinition["kind"],
 ): { primary: T[]; overflow: T[] } {
-  const preferred = NATIVE_BOTTOM_NAV_ORDER[kind] ?? [];
-  const picked: T[] = [];
-
-  for (const id of preferred) {
-    const item = items.find((entry) => entry.section === id);
-    if (item) picked.push(item);
-  }
-
-  for (const item of items) {
-    if (picked.length >= NATIVE_BOTTOM_NAV_SLOT_LIMIT) break;
-    if (picked.some((entry) => entry.section === item.section)) continue;
-    picked.push(item);
-  }
-
-  const primary = picked.slice(0, NATIVE_BOTTOM_NAV_SLOT_LIMIT);
-  const primaryIds = new Set(primary.map((entry) => entry.section));
-  const overflow = items.filter((entry) => !primaryIds.has(entry.section));
-
-  return { primary, overflow };
+  const ordered = orderNativeBottomNavItems(items, kind);
+  return { primary: ordered, overflow: [] };
 }
 
-/** @deprecated Use splitNativeBottomNavItems — kept for tests. */
+/** @deprecated Use orderNativeBottomNavItems — kept for tests. */
 export function pickNativeBottomNavItems<T extends { section: string }>(
   items: T[],
   kind: PortalDefinition["kind"],
 ): T[] {
-  return splitNativeBottomNavItems(items, kind).primary;
+  return orderNativeBottomNavItems(items, kind);
 }
