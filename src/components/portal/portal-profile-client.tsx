@@ -9,6 +9,7 @@ import { PortalChangePasswordPanel } from "@/components/portal/portal-change-pas
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import type { PortalKind } from "@/lib/portal-types";
 
 function dashToEmpty(v: string) {
@@ -24,11 +25,28 @@ function ProfileReadonlyField({
   label,
   value,
   mono,
+  compact,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <div className="flex items-start justify-between gap-4 border-b border-border/80 py-3 last:border-0">
+        <p className="shrink-0 text-[13px] font-medium text-muted">{label}</p>
+        <p
+          className={`min-w-0 text-right text-[15px] font-medium text-foreground ${
+            mono ? "break-all font-mono text-xs leading-relaxed" : ""
+          }`}
+        >
+          {value}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-muted">{label}</p>
@@ -123,6 +141,8 @@ export function PortalProfileClient({
     setEditing(false);
   }, [initialFullName, initialPhone]);
 
+  const compactNative = Boolean(detectNativePlatformSync());
+
   const headerActions = editing
     ? [
         {
@@ -147,17 +167,23 @@ export function PortalProfileClient({
 
   const inner = (
     <>
-      <div className={`grid grid-cols-1 gap-x-10 gap-y-8 md:grid-cols-2 ${variant === "admin" ? "mt-8" : ""}`}>
+      <div
+        className={
+          compactNative
+            ? "divide-y divide-border/80 rounded-2xl border border-border bg-card/50 px-4 py-1"
+            : `grid grid-cols-1 gap-x-10 gap-y-8 md:grid-cols-2 ${variant === "admin" ? "mt-8" : ""}`
+        }
+      >
         {editing ? (
           <>
-            <div className="space-y-2">
+            <div className={compactNative ? "py-3" : "space-y-2"}>
               <label className="text-sm font-semibold text-foreground" htmlFor="pf-name">
                 Full name
               </label>
-              <Input id="pf-name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="rounded-xl" autoComplete="name" />
+              <Input id="pf-name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-2 rounded-xl" autoComplete="name" />
             </div>
-            <ProfileReadonlyField label="Email" value={initialEmail} />
-            <div className="space-y-2">
+            <ProfileReadonlyField label="Email" value={initialEmail} compact={compactNative} />
+            <div className={compactNative ? "py-3" : "space-y-2"}>
               <label className="text-sm font-semibold text-foreground" htmlFor="pf-phone">
                 Phone
               </label>
@@ -165,19 +191,19 @@ export function PortalProfileClient({
                 id="pf-phone"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="rounded-xl"
+                className="mt-2 rounded-xl"
                 inputMode="tel"
                 autoComplete="tel"
               />
             </div>
-            <ProfileReadonlyField label={idLabel} value={idValue} mono />
+            <ProfileReadonlyField label={idLabel} value={idValue} mono compact={compactNative} />
           </>
         ) : (
           <>
-            <ProfileReadonlyField label="Full name" value={emptyToDash(fullName)} />
-            <ProfileReadonlyField label="Email" value={initialEmail} />
-            <ProfileReadonlyField label="Phone" value={emptyToDash(phone)} />
-            <ProfileReadonlyField label={idLabel} value={idValue} mono />
+            <ProfileReadonlyField label="Full name" value={emptyToDash(fullName)} compact={compactNative} />
+            <ProfileReadonlyField label="Email" value={initialEmail} compact={compactNative} />
+            <ProfileReadonlyField label="Phone" value={emptyToDash(phone)} compact={compactNative} />
+            <ProfileReadonlyField label={idLabel} value={idValue} mono compact={compactNative} />
           </>
         )}
       </div>
@@ -205,8 +231,8 @@ export function PortalProfileClient({
           </div>
         }
       >
-        <div className="space-y-4">
-          <Card className="rounded-3xl border border-border p-6 sm:p-8">{inner}</Card>
+        <div className="space-y-3 [html[data-native]_&]:space-y-2.5">
+          <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">{inner}</Card>
           <NotificationsToggle />
           <PortalChangePasswordPanel
             accountEmail={dashToEmpty(initialEmail) || initialEmail}

@@ -1274,6 +1274,19 @@ html[data-native] .portal-mobile-chrome {
   display: none !important;
 }
 
+html[data-native] .portal-native-more-sheet {
+  padding-bottom: max(1rem, var(--native-safe-bottom));
+}
+
+html[data-native] [class*="PORTAL_SECTION_SURFACE"],
+html[data-native] .portal-section-surface {
+  --portal-shell-gap: 1rem;
+}
+
+html[data-native] h1.text-\[1\.35rem\] {
+  font-size: 1.25rem;
+}
+
 html[data-native] #axis-public-navbar {
   display: none;
 }

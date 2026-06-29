@@ -2,13 +2,17 @@
 
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
+import {
+  PortalNativeMoreNavButton,
+  PortalNativeMoreSheet,
+} from "@/components/portal/portal-native-more-sheet";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
-import { pickNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import { splitNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
 import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { PORTAL_MOBILE_CHROME_CLASS, PORTAL_NATIVE_BOTTOM_NAV_CLASS } from "@/lib/portal-layout-classes";
@@ -16,7 +20,7 @@ import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import type { PortalDefinition } from "@/lib/portal-types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
@@ -202,9 +206,22 @@ export function PortalSidebar({
   };
 
   const nativeBottomItems = useMemo(
-    () => (showNativeChrome ? pickNativeBottomNavItems(navItems, definition.kind) : []),
+    () => (showNativeChrome ? splitNativeBottomNavItems(navItems, definition.kind) : { primary: [], overflow: [] }),
     [definition.kind, navItems, showNativeChrome],
   );
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreNavItems = useMemo(() => {
+    return nativeBottomItems.overflow.map((s) => ({
+      section: s.section,
+      label: s.label,
+      href: s.href,
+      locked: isSectionLocked(s.section),
+      count: navCounts[s.section] ?? 0,
+    }));
+  }, [nativeBottomItems.overflow, navCounts, showManagerTierLocks, showResidentTierLocks, subscriptionTier]);
+  const moreTabActive =
+    moreNavItems.some((item) => item.section === activeSection) ||
+    (moreOpen && moreNavItems.length > 0);
 
   const renderMobileNavLink = (
     s: (typeof navItems)[number],
@@ -350,12 +367,27 @@ export function PortalSidebar({
         </div>
       ) : null}
 
-      {showNativeChrome && nativeBottomItems.length > 0 ? (
-        <nav className={PORTAL_NATIVE_BOTTOM_NAV_CLASS} aria-label="Portal sections">
-          <div className="mx-auto flex max-w-lg items-stretch justify-between gap-0.5 px-1 pt-1.5">
-            {nativeBottomItems.map((s) => renderMobileNavLink(s, "bottom"))}
-          </div>
-        </nav>
+      {showNativeChrome && nativeBottomItems.primary.length > 0 ? (
+        <>
+          <nav className={PORTAL_NATIVE_BOTTOM_NAV_CLASS} aria-label="Portal sections">
+            <div className="mx-auto flex max-w-lg items-stretch justify-between gap-0.5 px-1 pt-1.5">
+              {nativeBottomItems.primary.map((s) => renderMobileNavLink(s, "bottom"))}
+              {moreNavItems.length > 0 ? (
+                <PortalNativeMoreNavButton active={moreTabActive} onClick={() => setMoreOpen(true)} />
+              ) : null}
+            </div>
+          </nav>
+          {moreNavItems.length > 0 ? (
+            <PortalNativeMoreSheet
+              open={moreOpen}
+              onOpenChange={setMoreOpen}
+              items={moreNavItems}
+              activeSection={activeSection}
+              showNavIcons={showNavIcons}
+              portalTitle={definition.title}
+            />
+          ) : null}
+        </>
       ) : null}
     </>
   );

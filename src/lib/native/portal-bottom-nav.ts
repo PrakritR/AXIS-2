@@ -1,17 +1,19 @@
 import type { PortalDefinition } from "@/lib/portal-types";
 
-/** Primary tabs shown in the native app bottom bar (replaces the top section hotbar). */
+/** Primary tabs in the native bottom bar — everything else lives in More. */
 const NATIVE_BOTTOM_NAV_ORDER: Partial<Record<PortalDefinition["kind"], string[]>> = {
-  resident: ["dashboard", "applications", "payments", "inbox", "profile"],
-  pro: ["dashboard", "properties", "applications", "leases", "profile"],
-  manager: ["dashboard", "properties", "applications", "leases", "profile"],
-  admin: ["dashboard", "leases", "residents", "inbox", "profile"],
+  resident: ["dashboard", "applications", "payments", "inbox"],
+  pro: ["dashboard", "properties", "applications", "inbox"],
+  manager: ["dashboard", "properties", "applications", "inbox"],
+  admin: ["dashboard", "leases", "residents", "inbox"],
 };
 
-export function pickNativeBottomNavItems<T extends { section: string }>(
+export const NATIVE_BOTTOM_NAV_SLOT_LIMIT = 4;
+
+export function splitNativeBottomNavItems<T extends { section: string }>(
   items: T[],
   kind: PortalDefinition["kind"],
-): T[] {
+): { primary: T[]; overflow: T[] } {
   const preferred = NATIVE_BOTTOM_NAV_ORDER[kind] ?? [];
   const picked: T[] = [];
 
@@ -20,13 +22,23 @@ export function pickNativeBottomNavItems<T extends { section: string }>(
     if (item) picked.push(item);
   }
 
-  if (picked.length >= 4) return picked.slice(0, 5);
-
   for (const item of items) {
+    if (picked.length >= NATIVE_BOTTOM_NAV_SLOT_LIMIT) break;
     if (picked.some((entry) => entry.section === item.section)) continue;
     picked.push(item);
-    if (picked.length >= 5) break;
   }
 
-  return picked;
+  const primary = picked.slice(0, NATIVE_BOTTOM_NAV_SLOT_LIMIT);
+  const primaryIds = new Set(primary.map((entry) => entry.section));
+  const overflow = items.filter((entry) => !primaryIds.has(entry.section));
+
+  return { primary, overflow };
+}
+
+/** @deprecated Use splitNativeBottomNavItems — kept for tests. */
+export function pickNativeBottomNavItems<T extends { section: string }>(
+  items: T[],
+  kind: PortalDefinition["kind"],
+): T[] {
+  return splitNativeBottomNavItems(items, kind).primary;
 }

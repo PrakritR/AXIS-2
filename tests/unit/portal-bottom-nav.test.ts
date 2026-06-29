@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import { pickNativeBottomNavItems, splitNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
 
 describe("pickNativeBottomNavItems", () => {
   const items = [
@@ -11,15 +11,25 @@ describe("pickNativeBottomNavItems", () => {
     { section: "profile", label: "Settings" },
   ];
 
-  it("prefers resident primary tabs", () => {
+  it("prefers resident primary tabs (4 slots)", () => {
     const picked = pickNativeBottomNavItems(items, "resident");
     expect(picked.map((item) => item.section)).toEqual([
       "dashboard",
       "applications",
       "payments",
       "inbox",
-      "profile",
     ]);
+  });
+
+  it("puts remaining sections in overflow for More menu", () => {
+    const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
+    expect(primary.map((item) => item.section)).toEqual([
+      "dashboard",
+      "applications",
+      "payments",
+      "inbox",
+    ]);
+    expect(overflow.map((item) => item.section)).toEqual(["documents", "profile"]);
   });
 
   it("fills from visible items when preferred tabs are missing", () => {
