@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
 import type { WorkOrderCategory } from "@/lib/reports/categories";
@@ -65,6 +66,7 @@ export async function POST(req: Request) {
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    track("work_order_completed", auth.userId, { work_order_id: workOrder.id, property_id: workOrder.propertyId ?? "", category: body.category ?? "" });
     return NextResponse.json({ ok: true, workOrder: updated, expenseEntryIds });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed.";

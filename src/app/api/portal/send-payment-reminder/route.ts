@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
@@ -96,6 +97,7 @@ export async function POST(req: Request) {
       }
     }
 
+    track("payment_reminder_sent", user.id, { email_sent: emailSent });
     return NextResponse.json({ ok: true, emailSent });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

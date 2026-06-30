@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { AuthCard } from "@/components/auth/auth-card";
 import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 import { AuthPageHeader, AuthLoadingCard } from "@/components/auth/auth-mobile-primitives";
@@ -122,20 +123,12 @@ function SignInForm() {
   const authError = searchParams.get("error");
   const oauthMessage = searchParams.get("message");
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => readRememberedLoginEmail());
   const [password, setPassword] = useState("");
-  const [rememberEmail, setRememberEmail] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(() => Boolean(readRememberedLoginEmail()));
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
-
-  useEffect(() => {
-    const remembered = readRememberedLoginEmail();
-    if (remembered) {
-      setEmail(remembered);
-      setRememberEmail(true);
-    }
-  }, []);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -213,6 +206,7 @@ function SignInForm() {
       if (!user) {
         throw new Error("No active session.");
       }
+      posthog.identify(user.id, { email: email.trim() });
       if (rememberEmail) {
         window.localStorage.setItem("axis:remembered-login-email", email.trim());
       } else {

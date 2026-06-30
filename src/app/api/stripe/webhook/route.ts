@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
+import { track } from "@/lib/analytics/posthog";
 import { getStripe } from "@/lib/stripe";
 import {
   applyScheduledDowngradeAfterInvoicePaid,
@@ -77,6 +78,8 @@ export async function POST(req: Request) {
         try {
           const db = createSupabaseServiceRoleClient();
           await markApplicationFeePaidFromStripeSession(db, session);
+          const distinctId = session.client_reference_id ?? session.id;
+          track("application_fee_paid", distinctId, { session_id: session.id });
         } catch (e) {
           console.error("[stripe webhook] rental_application_fee checkout", e);
         }
@@ -84,6 +87,8 @@ export async function POST(req: Request) {
         try {
           const db = createSupabaseServiceRoleClient();
           await markHouseholdChargePaidFromStripeSession(db, session);
+          const distinctId = session.client_reference_id ?? session.id;
+          track("household_charge_paid", distinctId, { session_id: session.id });
         } catch (e) {
           console.error("[stripe webhook] household_charge checkout", e);
         }
@@ -92,6 +97,10 @@ export async function POST(req: Request) {
           await recordPaidManagerCheckoutSession(session);
           const uid = session.metadata?.userId?.trim();
           if (uid) {
+            const tier = session.metadata?.tier ?? "";
+            const billing = session.metadata?.billing ?? "";
+            const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? "";
+            track("manager_subscription_purchased", uid, { tier, billing, subscription_id: subscriptionId });
             try {
               await reconcileManagerPurchaseWithStripe(uid);
             } catch (reconcileErr) {

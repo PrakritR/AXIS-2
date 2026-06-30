@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -406,6 +407,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         }
       }
 
+      posthog.capture("rental_application_submitted", {
+        axis_id: axisId,
+        property_id: pid || undefined,
+        property_title: propertyTitle,
+        synced_to_server: sync.ok,
+        email_sent: emailSent,
+      });
       clearRentalWizardDraft();
       setForm(createInitialRentalWizardState());
       setStep(1);

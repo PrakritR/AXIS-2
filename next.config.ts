@@ -30,6 +30,23 @@ function capacitorDevOrigins(): string[] {
 const nextConfig: NextConfig = {
   // Lets the iOS/Android WebView load from your Mac's LAN IP during `npm run dev`.
   allowedDevOrigins: capacitorDevOrigins(),
+  skipTrailingSlashRedirect: true,
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/array/:path*",
+        destination: "https://us-assets.i.posthog.com/array/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://us.i.posthog.com/:path*",
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       // Supabase Storage (all hosted projects)
