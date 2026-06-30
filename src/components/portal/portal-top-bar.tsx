@@ -1,0 +1,85 @@
+"use client";
+
+import { ChevronDown, User } from "lucide-react";
+import Link from "next/link";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
+import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { PortalKind } from "@/lib/portal-types";
+
+function initials(name: string | null, email: string | null): string {
+  const src = (name ?? "").trim() || (email ?? "").trim();
+  if (!src) return "?";
+  const parts = src.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+  return src.slice(0, 2).toUpperCase();
+}
+
+/**
+ * Slim desktop top bar holding the account menu in the top-right — the standard
+ * SaaS location. Hidden below lg, where the existing mobile section strip and
+ * native bottom nav already surface Settings.
+ */
+export function PortalTopBar({
+  kind,
+  basePath,
+  name,
+  email,
+}: {
+  kind: PortalKind;
+  basePath: string;
+  name: string | null;
+  email: string | null;
+}) {
+  const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
+
+  return (
+    <header className="hidden h-14 shrink-0 items-center justify-end border-b border-border bg-background px-5 lg:flex">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className="flex items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-2.5 text-foreground outline-none transition hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-primary/40"
+          aria-label="Account menu"
+        >
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--cobalt-deep,#16233f)] text-[12px] font-bold text-white">
+            {initials(name, email)}
+          </span>
+          <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent>
+          <div className="border-b border-border px-3 pb-2.5 pt-1.5">
+            <p className="truncate text-[13.5px] font-semibold text-foreground">{displayName}</p>
+            {email ? <p className="truncate text-[12px] text-muted">{email}</p> : null}
+          </div>
+
+          <DropdownMenuItem asChild>
+            <Link href={`${basePath}/profile`}>
+              <User aria-hidden />
+              Profile &amp; settings
+            </Link>
+          </DropdownMenuItem>
+
+          <div className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="text-[13.5px] font-medium text-foreground">Appearance</span>
+            <ThemeToggle />
+          </div>
+
+          <div className="px-1">
+            <PortalRoleSwitcher currentKind={kind} />
+          </div>
+
+          <DropdownMenuSeparator />
+
+          <PortalSignOutButton className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium text-red-600 transition hover:bg-accent/70 disabled:opacity-60" />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </header>
+  );
+}

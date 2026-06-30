@@ -1,0 +1,72 @@
+import { describe, expect, it } from "vitest";
+import { adminPortal } from "@/lib/portals/admin";
+import { proPortal } from "@/lib/portals/pro";
+import {
+  PORTAL_NAV_GROUPS,
+  SIDEBAR_EXCLUDED_SECTIONS,
+  groupNavItems,
+} from "@/lib/portals/nav-groups";
+import {
+  RESIDENT_APPROVED_PORTAL_SECTIONS,
+  RESIDENT_LIMITED_PORTAL_SECTIONS,
+} from "@/lib/portals/resident-sections";
+
+const CASES = [
+  { kind: "pro" as const, sections: proPortal.sections.map((s) => s.section) },
+  { kind: "admin" as const, sections: adminPortal.sections.map((s) => s.section) },
+  {
+    kind: "resident" as const,
+    sections: [
+      ...new Set([
+        ...RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => s.section),
+        ...RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => s.section),
+      ]),
+    ],
+  },
+];
+
+describe("portal nav groups cover the registry exactly", () => {
+  for (const { kind, sections } of CASES) {
+    const groups = PORTAL_NAV_GROUPS[kind];
+    const grouped = groups.flatMap((g) => g.sections);
+
+    it(`${kind}: every registry section (except excluded) maps to exactly one group`, () => {
+      const expected = sections.filter((s) => !SIDEBAR_EXCLUDED_SECTIONS.has(s)).sort();
+      expect([...grouped].sort()).toEqual(expected);
+    });
+
+    it(`${kind}: no section appears in two groups`, () => {
+      expect(grouped.length).toBe(new Set(grouped).size);
+    });
+
+    it(`${kind}: group config references no unknown section ids`, () => {
+      const known = new Set(sections);
+      for (const id of grouped) expect(known.has(id)).toBe(true);
+    });
+
+    it(`${kind}: profile is excluded from the sidebar`, () => {
+      expect(grouped).not.toContain("profile");
+    });
+  }
+});
+
+describe("groupNavItems", () => {
+  it("buckets items in config order and drops empty groups", () => {
+    const items = proPortal.sections
+      .filter((s) => s.section !== "profile")
+      .map((s) => ({ section: s.section }));
+    const result = groupNavItems("pro", items);
+
+    expect(result[0]).toEqual({ id: "home", label: null, items: [{ section: "dashboard" }] });
+    const financials = result.find((g) => g.id === "financials");
+    expect(financials?.items.map((i) => i.section)).toEqual(["payments", "financials", "documents"]);
+    // profile is never rendered even if present in input
+    expect(result.flatMap((g) => g.items).map((i) => i.section)).not.toContain("profile");
+  });
+
+  it("sends unknown sections to a trailing unlabeled group instead of dropping them", () => {
+    const result = groupNavItems("pro", [{ section: "dashboard" }, { section: "mystery" }]);
+    const last = result.at(-1);
+    expect(last?.items.some((i) => i.section === "mystery")).toBe(true);
+  });
+});
