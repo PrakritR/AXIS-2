@@ -31,6 +31,51 @@ export const getOverdueChargesTool = defineTool({
   },
 });
 
+/** Safe projection of a charge for listing (no internal/user-id fields). */
+function summarizeCharge(c: HouseholdCharge) {
+  return {
+    id: c.id,
+    residentName: c.residentName || null,
+    residentEmail: (c.residentEmail || "").trim().toLowerCase() || null,
+    property: c.propertyLabel || null,
+    kind: c.kind || null,
+    title: c.title || null,
+    amount: c.amountLabel || null,
+    balance: c.balanceLabel || null,
+    status: c.status || null,
+    dueDate: c.dueDateLabel || null,
+  };
+}
+
+export const listChargesTool = defineTool({
+  name: "list_charges",
+  description:
+    "List the current landlord's household charges (rent, deposits, fees, and other charges), optionally filtered by status or resident. Returns each charge's id, resident, property, kind, amount, balance, status, and due date. Use for questions like 'what charges does this tenant have' or 'show all unpaid deposits'. For who is *late*, prefer get_overdue_charges.",
+  kind: "read",
+  inputSchema: z
+    .object({
+      status: z
+        .string()
+        .optional()
+        .describe("Optional case-insensitive filter on charge status, e.g. 'paid' or 'pending'."),
+      residentEmail: z
+        .string()
+        .optional()
+        .describe("Optional case-insensitive filter to a single resident's email."),
+    })
+    .strict(),
+  handler: async (ctx, input) => {
+    const wantStatus = input.status?.trim().toLowerCase();
+    const wantEmail = input.residentEmail?.trim().toLowerCase();
+    const filtered = (await loadManagerCharges(ctx)).filter((c) => {
+      if (wantStatus && String(c.status ?? "").toLowerCase() !== wantStatus) return false;
+      if (wantEmail && String(c.residentEmail ?? "").trim().toLowerCase() !== wantEmail) return false;
+      return true;
+    });
+    return { count: filtered.length, charges: filtered.map(summarizeCharge) };
+  },
+});
+
 /** Builds the reminder email/inbox body from authoritative server data. */
 function buildReminderBody(p: RentReminderPreview): string {
   const lines = [`Hi ${p.residentName},`, "", `This is a reminder that your ${p.chargeTitle} payment is outstanding.`];
