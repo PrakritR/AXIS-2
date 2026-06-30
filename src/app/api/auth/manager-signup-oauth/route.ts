@@ -1,3 +1,4 @@
+import { track } from "@/lib/analytics/posthog";
 import { completeManagerSignupFromOAuth } from "@/lib/auth/complete-manager-signup";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -26,6 +27,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
+    track("manager_signup_oauth_completed", user.id, { manager_id: result.managerId ?? "" });
     return NextResponse.json({ ok: true, managerId: result.managerId });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Signup failed";

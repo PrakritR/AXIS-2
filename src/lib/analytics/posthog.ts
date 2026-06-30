@@ -11,9 +11,9 @@ let initialized = false;
 function getClient(): PostHog | null {
   if (initialized) return client;
   initialized = true;
-  const key = process.env.POSTHOG_KEY?.trim();
+  const key = (process.env.POSTHOG_KEY ?? process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN)?.trim();
   if (!key) return (client = null);
-  const host = process.env.POSTHOG_HOST?.trim() || "https://us.i.posthog.com";
+  const host = (process.env.POSTHOG_HOST ?? process.env.NEXT_PUBLIC_POSTHOG_HOST)?.trim() || "https://us.i.posthog.com";
   client = new PostHog(key, { host, flushAt: 1, flushInterval: 0 });
   return client;
 }
@@ -23,6 +23,24 @@ export function track(
   event: string,
   distinctId: string,
   properties: Record<string, string | number | boolean> = {},
+): void {
+  try {
+    const ph = getClient();
+    if (!ph) return;
+    ph.capture({ distinctId, event, properties });
+  } catch {
+    /* analytics must never break a request */
+  }
+}
+
+/**
+ * Emit an event with arbitrary properties (e.g. PostHog AI Observability events
+ * whose properties include arrays). Callers are responsible for keeping props non-PII.
+ */
+export function capture(
+  event: string,
+  distinctId: string,
+  properties: Record<string, unknown> = {},
 ): void {
   try {
     const ph = getClient();

@@ -9,6 +9,7 @@ import { loadAllManagerRows } from "@/lib/tools/domains/load-manager-rows";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
+import { captureAiTurn } from "@/lib/observability/posthog-ai";
 
 export const runtime = "nodejs";
 
@@ -67,8 +68,10 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await traceAgentTurn(ctx, messages as ChatMessage[], () =>
-      runAgentTurn({ ctx, registry: agentRegistry, messages }),
+    const result = await captureAiTurn(ctx, () =>
+      traceAgentTurn(ctx, messages as ChatMessage[], () =>
+        runAgentTurn({ ctx, registry: agentRegistry, messages }),
+      ),
     );
     track("assistant_message_sent", ctx.userId, {
       tools: result.toolTrace.length,

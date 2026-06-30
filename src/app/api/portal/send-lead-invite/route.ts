@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
 import {
   buildLeadInviteEmailBody,
   buildLeadInviteEmailHtml,
@@ -147,6 +148,7 @@ export async function POST(req: Request) {
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: payload.message ?? res.statusText, mailtoHref }, { status: 502 });
     }
+    track("lead_invite_sent", user.id, { kind, property_id: propertyId });
     return NextResponse.json({ ok: true, id: payload.id ?? null, linkUrl });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to send invite." }, { status: 500 });

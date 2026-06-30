@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
@@ -98,6 +99,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: linkErr.message }, { status: 500 });
       }
 
+      track("manager_account_created", userId, { manager_id: purchase.manager_id, signup_method: "axis_intent" });
       return NextResponse.json({ ok: true, managerId: purchase.manager_id });
     }
 
@@ -188,6 +190,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: linkErr.message }, { status: 500 });
     }
 
+    track("manager_account_created", userId, { manager_id: purchase.manager_id, signup_method: "stripe" });
     return NextResponse.json({ ok: true, managerId: purchase.manager_id });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Signup failed";
