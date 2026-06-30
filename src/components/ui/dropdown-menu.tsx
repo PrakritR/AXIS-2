@@ -11,21 +11,34 @@ export function DropdownMenuContent({
   className,
   sideOffset = 8,
   align = "end",
+  backdrop = false,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content> & {
+  backdrop?: boolean;
+}) {
   return (
-    <DropdownMenuPrimitive.Portal>
-      <DropdownMenuPrimitive.Content
-        sideOffset={sideOffset}
-        align={align}
-        className={cn(
-          "z-50 min-w-[14rem] overflow-hidden rounded-xl border border-border bg-card p-1.5 text-foreground shadow-[var(--shadow-lg,0_12px_32px_-8px_rgba(20,28,48,0.22))]",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
-          className,
-        )}
-        {...props}
-      />
-    </DropdownMenuPrimitive.Portal>
+    <>
+      {backdrop && (
+        <DropdownMenuPrimitive.Portal>
+          <div
+            className="fixed inset-0 z-40 animate-in bg-background/30 fade-in-0 backdrop-blur-[2px] pointer-events-none"
+            aria-hidden
+          />
+        </DropdownMenuPrimitive.Portal>
+      )}
+      <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPrimitive.Content
+          sideOffset={sideOffset}
+          align={align}
+          className={cn(
+            "z-50 min-w-[14rem] overflow-hidden rounded-xl border border-border bg-card p-1.5 text-foreground shadow-[var(--shadow-lg,0_12px_32px_-8px_rgba(20,28,48,0.22))]",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+            className,
+          )}
+          {...props}
+        />
+      </DropdownMenuPrimitive.Portal>
+    </>
   );
 }
 
