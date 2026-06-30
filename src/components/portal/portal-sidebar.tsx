@@ -19,7 +19,7 @@ import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
 import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { PORTAL_MOBILE_CHROME_CLASS, PORTAL_NATIVE_BOTTOM_NAV_CLASS } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
-import type { PortalDefinition } from "@/lib/portal-types";
+import type { PortalDefinition, PortalKind } from "@/lib/portal-types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -65,8 +65,39 @@ function sidebarBrandHref(definition: PortalDefinition): string {
   return definition.basePath;
 }
 
-function SidebarBrandHeader({ brandHref }: { brandHref: string }) {
+function portalBrandCopy(kind: PortalKind): { title: string; subtitle: string; ariaLabel: string } {
+  switch (kind) {
+    case "resident":
+      return {
+        title: "Axis",
+        subtitle: "Resident Portal",
+        ariaLabel: "Axis Resident Portal home",
+      };
+    case "admin":
+      return {
+        title: "Axis",
+        subtitle: "Admin Portal",
+        ariaLabel: "Axis Admin Portal home",
+      };
+    default:
+      return {
+        title: "Axis",
+        subtitle: "Manager Portal",
+        ariaLabel: "Axis Manager Portal home",
+      };
+  }
+}
+
+function SidebarBrandHeader({
+  definition,
+  brandHref,
+}: {
+  definition: PortalDefinition;
+  brandHref: string;
+}) {
   const router = useRouter();
+  const brand = portalBrandCopy(definition.kind);
+  const showAdminBadge = definition.kind === "admin";
 
   return (
     <div className="relative overflow-hidden px-5 py-5">
@@ -81,11 +112,24 @@ function SidebarBrandHeader({ brandHref }: { brandHref: string }) {
       <Link
         href={brandHref}
         prefetch
-        aria-label="Axis home"
-        className="relative inline-flex items-center transition-opacity hover:opacity-90"
+        aria-label={brand.ariaLabel}
+        className="relative flex items-start gap-3 transition-opacity hover:opacity-90"
         onClick={portalNavClick(router, brandHref)}
       >
         <PortalBrandLogoTile />
+        <div className="min-w-0 pt-0.5">
+          <p className="text-lg font-semibold tracking-[-0.02em] leading-snug text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
+            {brand.title}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72 [html[data-theme=light]_&]:text-primary/80">
+            {brand.subtitle}
+          </p>
+          {showAdminBadge ? (
+            <span className="mt-1.5 inline-block rounded-full border border-white/25 bg-card/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 [html[data-theme=light]_&]:border-primary/25 [html[data-theme=light]_&]:bg-primary/10 [html[data-theme=light]_&]:text-primary">
+              Admin
+            </span>
+          ) : null}
+        </div>
       </Link>
     </div>
   );
@@ -307,7 +351,7 @@ export function PortalSidebar({
 
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[16.625rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex">
-      <SidebarBrandHeader brandHref={brandHref} />
+      <SidebarBrandHeader definition={definition} brandHref={brandHref} />
       <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
           {navItems.map((s) => {

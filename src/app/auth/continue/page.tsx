@@ -75,10 +75,9 @@ function ContinueContent() {
     void (async () => {
       try {
         const supabase = createSupabaseBrowserClient();
-        const user = await waitForOAuthUser(supabase);
+        const user = await waitForOAuthUser(supabase, { attempts: 20, delayMs: 300 });
 
         if (!user) {
-          await supabase.auth.signOut().catch(() => undefined);
           window.location.replace(nextPath ? `/auth/sign-in?next=${encodeURIComponent(nextPath)}` : "/auth/sign-in");
           return;
         }

@@ -15,9 +15,9 @@ async function redirectNativeFromMarketingPage(): Promise<void> {
   const supabase = createSupabaseBrowserClient();
   await redirectNativeFromMarketing(async () => {
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return { session };
+      data: { user },
+    } = await supabase.auth.getUser();
+    return { session: user ? { user } : null };
   });
 }
 

@@ -126,6 +126,9 @@ export function clearOAuthNextPathStorage(): void {
 }
 
 export function readOAuthNextPathFromRequest(request: NextRequest): string | null {
+  const fromQuery = request.nextUrl.searchParams.get("next");
+  if (fromQuery?.startsWith("/")) return normalizePostAuthPath(fromQuery);
+
   const raw = request.cookies.get(OAUTH_NEXT_COOKIE)?.value;
   if (!raw) return null;
   try {
@@ -137,6 +140,9 @@ export function readOAuthNextPathFromRequest(request: NextRequest): string | nul
 }
 
 export function readOAuthIntentFromRequest(request: NextRequest): OAuthSignInIntent | null {
+  const fromQuery = parseOAuthSignInIntent(request.nextUrl.searchParams.get("oauth_intent"));
+  if (fromQuery) return fromQuery;
+
   const raw = request.cookies.get(OAUTH_INTENT_COOKIE)?.value;
   if (!raw) return null;
   try {
@@ -147,6 +153,9 @@ export function readOAuthIntentFromRequest(request: NextRequest): OAuthSignInInt
 }
 
 export function readOAuthSurfaceFromRequest(request: NextRequest): OAuthSurface | null {
+  const fromQuery = parseOAuthSurface(request.nextUrl.searchParams.get("oauth_surface"));
+  if (fromQuery) return fromQuery;
+
   const raw = request.cookies.get(OAUTH_SURFACE_COOKIE)?.value;
   if (!raw) return null;
   try {

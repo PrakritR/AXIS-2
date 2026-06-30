@@ -28,6 +28,7 @@ import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
+import { isNativeOAuthInProgress } from "@/lib/native/open-url";
 import { getNativeInfo } from "@/lib/native/push-client";
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
@@ -188,8 +189,11 @@ function NativeAuthHubInner() {
       try {
         const { isNative } = await getNativeInfo();
         if (!isNative || cancelled) return;
+        if (isNativeOAuthInProgress()) {
+          return;
+        }
         const supabase = createSupabaseBrowserClient();
-        const user = await waitForOAuthUser(supabase, { attempts: 3, delayMs: 150 });
+        const user = await waitForOAuthUser(supabase, { attempts: 4, delayMs: 200 });
         if (!cancelled && user) {
           window.location.replace("/auth/continue");
         }

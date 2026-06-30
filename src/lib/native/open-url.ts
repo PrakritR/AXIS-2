@@ -3,6 +3,10 @@ import {
   nativeOAuthSignInFailureUrl,
   resolveNativeOAuthCallbackTarget,
 } from "@/lib/auth/complete-native-oauth";
+import {
+  appendOAuthContextToCallbackPath,
+  completeNativeOAuthInWebView,
+} from "@/lib/auth/complete-native-oauth-client";
 import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
 import { webPathFromNativeOAuthUrl, isNativeOAuthShell } from "@/lib/auth/native-oauth-callback";
 
@@ -68,9 +72,26 @@ function navigateToNativeOAuthCallback(pathAndQuery: string): void {
   } catch {
     /* ignore */
   }
-  const destination = buildNativeOAuthNavigationUrl(pathAndQuery, window.location.origin);
-  clearNativeOAuthInProgress();
-  window.location.href = destination;
+
+  void (async () => {
+    const result = await completeNativeOAuthInWebView(pathAndQuery);
+    clearNativeOAuthInProgress();
+    if (result.ok) {
+      window.location.replace(result.redirectTo);
+      return;
+    }
+
+    if (result.fallbackPath) {
+      const destination = buildNativeOAuthNavigationUrl(
+        appendOAuthContextToCallbackPath(result.fallbackPath, window.location.origin),
+        window.location.origin,
+      );
+      window.location.href = destination;
+      return;
+    }
+
+    navigateToNativeOAuthFailure(result.error);
+  })();
 }
 
 function navigateToNativeOAuthFailure(message: string): void {
@@ -160,23 +181,23 @@ export async function openOAuthUrl(url: string): Promise<void> {
         return;
       }
 
-      // appUrlOpen may still be exchanging the code in the WebView — wait before failing.
-      for (let attempt = 0; attempt < 20; attempt++) {
+      // appUrlOpen / client exchange may still be running — wait before failing.
+      for (let attempt = 0; attempt < 30; attempt++) {
         if (settled) return;
-        await new Promise((resolve) => window.setTimeout(resolve, 200));
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
         const path = window.location.pathname;
         if (
-          path.startsWith("/auth/continue") ||
           path.startsWith("/portal") ||
           path.startsWith("/resident") ||
-          path.startsWith("/admin")
+          path.startsWith("/admin") ||
+          path.startsWith("/auth/choose-portal")
         ) {
           settled = true;
           cleanups.forEach((fn) => fn());
           clearNativeOAuthInProgress();
           return;
         }
-        if (path.startsWith("/auth/callback")) {
+        if (path.startsWith("/auth/callback") || path.startsWith("/auth/continue")) {
           continue;
         }
         try {
@@ -188,7 +209,6 @@ export async function openOAuthUrl(url: string): Promise<void> {
             settled = true;
             cleanups.forEach((fn) => fn());
             clearNativeOAuthInProgress();
-            window.location.href = "/auth/continue";
             return;
           }
         } catch {

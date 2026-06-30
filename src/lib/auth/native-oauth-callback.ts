@@ -20,12 +20,25 @@ export function isNativeOAuthShell(): boolean {
 }
 
 /**
+ * Dev native shells load over http:// (LAN IP / localhost) and have no associated-domains
+ * / Universal Links, so there is nothing to bounce an HTTPS callback through. Returning
+ * straight to the app scheme keeps OAuth working without per-IP Supabase allowlisting.
+ */
+function isDevNativeOrigin(origin: string): boolean {
+  return origin.trim().toLowerCase().startsWith("http://");
+}
+
+/**
  * Supabase OAuth redirectTo.
- * Native: HTTPS callback with a bridge flag (allowlisted like web) → HTML bounce → custom scheme → app WebView.
+ * Native (prod): HTTPS callback with a bridge flag (allowlisted like web) → HTML bounce → custom scheme → app WebView.
+ * Native (dev): custom scheme directly — Supabase 302s into the app, no LAN dev server in the return path.
  * Web: same-origin /auth/callback.
  */
 export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
   if (isNativeOAuthShell()) {
+    if (isDevNativeOrigin(origin)) {
+      return nativeOAuthCallbackUrl(fixedCallbackPath);
+    }
     const base = fixedCallbackPath?.startsWith("/")
       ? `${origin.replace(/\/$/, "")}${fixedCallbackPath}`
       : bareAuthCallbackUrl(origin);

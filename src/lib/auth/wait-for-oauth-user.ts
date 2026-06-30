@@ -18,7 +18,7 @@ export async function waitForOAuthUser(
       /* retry */
     }
     if (i < attempts - 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, delayMs + i * 50));
+      await new Promise((resolve) => globalThis.setTimeout(resolve, delayMs + i * 50));
     }
   }
   return null;

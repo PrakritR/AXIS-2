@@ -1,4 +1,3 @@
-import { readOAuthNextPathFromStorage, clearOAuthNextPathStorage } from "@/lib/auth/oauth-next-cookie";
 import { webPathFromNativeOAuthUrl } from "@/lib/auth/native-oauth-callback";
 import { isAuthCallbackUrl } from "@/lib/native/open-url";
 
@@ -29,18 +28,6 @@ export function resolveNativeOAuthCallbackTarget(url: string, origin: string): s
 export function buildNativeOAuthNavigationUrl(pathAndQuery: string, origin: string): string {
   const base = origin.replace(/\/$/, "");
   const url = new URL(pathAndQuery, base);
-
-  const oauthError = url.searchParams.get("error");
-  if (oauthError) {
-    return `${base}${url.pathname}${url.search}${url.hash}`;
-  }
-
-  const storedNext = readOAuthNextPathFromStorage();
-  clearOAuthNextPathStorage();
-  if (storedNext && !url.searchParams.get("next")) {
-    url.searchParams.set("next", storedNext);
-  }
-
   return `${base}${url.pathname}${url.search}${url.hash}`;
 }
 
