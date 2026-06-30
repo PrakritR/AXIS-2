@@ -8,12 +8,19 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { AgentContext } from "@/lib/tools/context";
 import { type ToolRegistry, toAnthropicTools, runReadTool } from "@/lib/tools/registry";
 import { SYSTEM_PROMPT } from "./system-prompt";
-import { AGENT_MODEL } from "./model";
+import { selectModel, type ModelTier } from "./model";
 
 const MAX_ITERATIONS = 6;
 
 export type ToolTraceEntry = { tool: string; ok: boolean };
-export type AgentTurnResult = { reply: string; toolTrace: ToolTraceEntry[] };
+export type TurnUsage = { inputTokens: number; outputTokens: number };
+export type AgentTurnResult = {
+  reply: string;
+  toolTrace: ToolTraceEntry[];
+  model: string;
+  tier: ModelTier;
+  usage: TurnUsage;
+};
 
 export async function runAgentTurn(opts: {
   ctx: AgentContext;
@@ -25,14 +32,23 @@ export async function runAgentTurn(opts: {
   const messages: Anthropic.MessageParam[] = [...opts.messages];
   const toolTrace: ToolTraceEntry[] = [];
 
+  // Route the turn once, up front, based on its complexity, and use that model
+  // for every iteration of the loop (switching models mid-turn would thrash the
+  // prompt cache). Token usage accumulates across iterations for cost tracing.
+  const { model, tier } = selectModel(opts.messages);
+  const usage: TurnUsage = { inputTokens: 0, outputTokens: 0 };
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const response = await client.messages.create({
-      model: AGENT_MODEL,
+      model,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools: tools as unknown as Anthropic.Tool[],
       messages,
     });
+
+    usage.inputTokens += response.usage?.input_tokens ?? 0;
+    usage.outputTokens += response.usage?.output_tokens ?? 0;
 
     if (response.stop_reason === "pause_turn") {
       messages.push({ role: "assistant", content: response.content });
@@ -49,7 +65,7 @@ export async function runAgentTurn(opts: {
         .map((b) => b.text)
         .join("")
         .trim();
-      return { reply: reply || "I couldn't find an answer to that.", toolTrace };
+      return { reply: reply || "I couldn't find an answer to that.", toolTrace, model, tier, usage };
     }
 
     messages.push({ role: "assistant", content: response.content });
@@ -71,5 +87,8 @@ export async function runAgentTurn(opts: {
   return {
     reply: "I reached the maximum number of steps without finishing. Please try a more specific question.",
     toolTrace,
+    model,
+    tier,
+    usage,
   };
 }
