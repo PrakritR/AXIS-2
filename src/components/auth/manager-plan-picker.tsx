@@ -91,6 +91,7 @@ function ManagerPlanPickerInner() {
 
   useEffect(() => {
     const tier = searchParams.get("tier");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync selection from URL search params
     if (tier && isPlanTierId(tier)) setSelectedTierId(tier);
     const billing = searchParams.get("billing");
     if (billing === "monthly" || billing === "annual") setBilling(billing);

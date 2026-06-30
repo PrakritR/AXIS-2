@@ -132,6 +132,7 @@ function SignInForm() {
   useEffect(() => {
     const remembered = readRememberedLoginEmail();
     if (remembered) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from stored login on mount
       setEmail(remembered);
       setRememberEmail(true);
     }

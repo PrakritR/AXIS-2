@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -85,17 +85,16 @@ export function ManagerScreeningSettingsModal({
 }) {
   const [settings, setSettings] = useState<ManagerScreeningSettings | null>(null);
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/screening/settings", { credentials: "include" });
-    if (!res.ok) return;
-    const body = (await res.json()) as { settings?: ManagerScreeningSettings };
-    if (body.settings) setSettings(body.settings);
-  }, []);
-
   useEffect(() => {
     if (!open) return;
-    void load();
-  }, [load, open]);
+    // Fetch then set settings asynchronously (after awaits) when the modal opens.
+    void (async () => {
+      const res = await fetch("/api/screening/settings", { credentials: "include" });
+      if (!res.ok) return;
+      const body = (await res.json()) as { settings?: ManagerScreeningSettings };
+      if (body.settings) setSettings(body.settings);
+    })();
+  }, [open]);
 
   return (
     <Modal open={open} onClose={onClose} title="Applicant screening">

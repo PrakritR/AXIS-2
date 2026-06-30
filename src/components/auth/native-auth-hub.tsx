@@ -163,6 +163,7 @@ function NativeAuthHubInner() {
 
   useEffect(() => {
     const remembered = readRememberedLoginEmail();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from stored login on mount
     if (remembered) setEmail(remembered);
     setStripeCheckoutBlocked(stripeLiveJsBlockedMessage());
   }, []);
@@ -180,6 +181,7 @@ function NativeAuthHubInner() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset checkout when selection changes
     setCheckoutClientSecret(null);
   }, [selectedTierId, billing, role]);
 
