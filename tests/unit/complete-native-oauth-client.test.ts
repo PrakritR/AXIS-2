@@ -74,4 +74,35 @@ describe("completeNativeOAuthInWebView", () => {
     }
     expect(sessionStorage.getItem("axis_oauth_intent")).toBeNull();
   });
+
+  it("retries portal access when session cookies are not ready yet", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ redirectTo: "/portal/dashboard" }),
+      });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.doMock("@/lib/supabase/browser", () => ({
+      createSupabaseBrowserClient: () => ({
+        auth: {
+          exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
+          getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } }),
+        },
+      }),
+    }));
+
+    const { completeNativeOAuthInWebView } = await import("@/lib/auth/complete-native-oauth-client");
+    const result = await completeNativeOAuthInWebView("/auth/callback?code=abc123");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.redirectTo).toBe("/portal/dashboard");
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });

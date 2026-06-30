@@ -6,6 +6,7 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   ManagerPortalStatusPills,
+  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_PAGE_ACTIONS_DESKTOP,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
@@ -243,6 +244,18 @@ export function ManagerAllServicesPanel({
               { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors` },
             ]}
           />
+          {typeFilter === "vendors" ? (
+            <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
+              <Button
+                type="button"
+                variant="primary"
+                className={PORTAL_HEADER_ACTION_BTN}
+                onClick={() => vendorsPanelRef.current?.openAdd()}
+              >
+                Add vendor
+              </Button>
+            </div>
+          ) : null}
         </ManagerPortalFilterRow>
       }
     >

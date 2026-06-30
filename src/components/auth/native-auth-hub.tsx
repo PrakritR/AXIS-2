@@ -206,6 +206,24 @@ function NativeAuthHubInner() {
     };
   }, []);
 
+  useEffect(() => {
+    if (checkingSession) return;
+
+    const redirectAfterOAuth = async () => {
+      if (!isNativeOAuthInProgress()) return;
+      const supabase = createSupabaseBrowserClient();
+      const user = await waitForOAuthUser(supabase, { attempts: 6, delayMs: 200 });
+      if (user) window.location.replace("/auth/continue");
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void redirectAfterOAuth();
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [checkingSession]);
+
   const applyPricingResult = useCallback(
     (result: ContinuePartnerPricingResult) => {
       if (result.status === "checkout") {

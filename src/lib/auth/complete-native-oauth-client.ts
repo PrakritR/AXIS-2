@@ -40,10 +40,22 @@ async function resolvePortalRedirect(next: string, context: { intent: string | n
   if (context.intent) accessUrl.searchParams.set("oauth_intent", context.intent);
   if (context.surface) accessUrl.searchParams.set("oauth_surface", context.surface);
 
-  const res = await fetch(accessUrl.toString(), { credentials: "include", cache: "no-store" });
-  if (!res.ok) return next;
-  const body = (await res.json()) as { redirectTo?: string };
-  return body.redirectTo?.startsWith("/") ? body.redirectTo : next;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = await fetch(accessUrl.toString(), { credentials: "include", cache: "no-store" });
+    if (res.ok) {
+      const body = (await res.json()) as { redirectTo?: string };
+      return body.redirectTo?.startsWith("/") ? body.redirectTo : next;
+    }
+    // Session cookies can land a tick after the client-side code exchange on first sign-in.
+    if (res.status === 401 && attempt < 5) {
+      await new Promise((resolve) => window.setTimeout(resolve, 150 + attempt * 200));
+      continue;
+    }
+    break;
+  }
+
+  if (next === "/auth/continue") return "/auth/continue";
+  return `/auth/continue?next=${encodeURIComponent(next)}`;
 }
 
 /**
@@ -76,29 +88,22 @@ export async function completeNativeOAuthInWebView(pathAndQuery: string): Promis
   };
 
   const supabase = createSupabaseBrowserClient();
-  let user = await waitForOAuthUser(supabase, { attempts: 2, delayMs: 100 });
+  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  if (exchangeError) {
+    return {
+      ok: false,
+      error: exchangeError.message || "Google sign-in session could not be established.",
+      fallbackPath: enriched,
+    };
+  }
 
+  const user = await waitForOAuthUser(supabase, { attempts: 10, delayMs: 250 });
   if (!user) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      user = await waitForOAuthUser(supabase, { attempts: 10, delayMs: 250 });
-      if (!user) {
-        return {
-          ok: false,
-          error: error.message || "Google sign-in session could not be established.",
-          fallbackPath: enriched,
-        };
-      }
-    } else {
-      user = await waitForOAuthUser(supabase, { attempts: 10, delayMs: 250 });
-      if (!user) {
-        return {
-          ok: false,
-          error: "Google sign-in session could not be established.",
-          fallbackPath: enriched,
-        };
-      }
-    }
+    return {
+      ok: false,
+      error: "Google sign-in session could not be established.",
+      fallbackPath: enriched,
+    };
   }
 
   void user;

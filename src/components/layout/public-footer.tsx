@@ -27,6 +27,9 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
               <Link href="/tos" className="transition-colors hover:text-primary">
                 Terms of Service
               </Link>
+              <Link href="/support" className="transition-colors hover:text-primary">
+                Support
+              </Link>
               <span className="text-muted">Axis</span>
             </div>
           </div>
@@ -115,6 +118,9 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
             </Link>
             <Link href="/tos" className="transition-colors hover:text-primary">
               Terms of Service
+            </Link>
+            <Link href="/support" className="transition-colors hover:text-primary">
+              Support
             </Link>
             <span className="text-muted">Axis</span>
           </div>

@@ -13,6 +13,26 @@ import { webPathFromNativeOAuthUrl, isNativeOAuthShell } from "@/lib/auth/native
 export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
 const NATIVE_OAUTH_CALLBACK_CODE_KEY = "axis_oauth_callback_code";
 
+const PORTAL_PATH_PREFIXES = ["/portal", "/resident", "/admin", "/auth/choose-portal"] as const;
+
+function isPortalDestinationPath(pathname: string): boolean {
+  return PORTAL_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+async function redirectSignedInUserToContinue(): Promise<boolean> {
+  try {
+    const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+    const { waitForOAuthUser } = await import("@/lib/auth/wait-for-oauth-user");
+    const supabase = createSupabaseBrowserClient();
+    const user = await waitForOAuthUser(supabase, { attempts: 5, delayMs: 120 });
+    if (!user) return false;
+    window.location.replace("/auth/continue");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Open a URL in the WebView on web; native uses the system in-app browser when needed. */
 export function isNativeAppShell(): boolean {
   return isNativeOAuthShell();
@@ -66,7 +86,12 @@ function navigateToNativeOAuthCallback(pathAndQuery: string): void {
     const code = parsed.searchParams.get("code");
     if (code) {
       const seen = sessionStorage.getItem(NATIVE_OAUTH_CALLBACK_CODE_KEY);
-      if (seen === code) return;
+      if (seen === code) {
+        const path = window.location.pathname;
+        if (isPortalDestinationPath(path) || path.startsWith("/auth/continue")) return;
+        void redirectSignedInUserToContinue();
+        return;
+      }
       sessionStorage.setItem(NATIVE_OAUTH_CALLBACK_CODE_KEY, code);
     }
   } catch {
@@ -186,12 +211,7 @@ export async function openOAuthUrl(url: string): Promise<void> {
         if (settled) return;
         await new Promise((resolve) => window.setTimeout(resolve, 300));
         const path = window.location.pathname;
-        if (
-          path.startsWith("/portal") ||
-          path.startsWith("/resident") ||
-          path.startsWith("/admin") ||
-          path.startsWith("/auth/choose-portal")
-        ) {
+        if (isPortalDestinationPath(path)) {
           settled = true;
           cleanups.forEach((fn) => fn());
           clearNativeOAuthInProgress();
@@ -206,9 +226,15 @@ export async function openOAuthUrl(url: string): Promise<void> {
           const supabase = createSupabaseBrowserClient();
           const user = await waitForOAuthUser(supabase, { attempts: 1, delayMs: 0 });
           if (user) {
+            const oauthCode = sessionStorage.getItem(NATIVE_OAUTH_CALLBACK_CODE_KEY);
+            if (oauthCode) {
+              // appUrlOpen started the callback exchange — wait for it to route.
+              continue;
+            }
             settled = true;
             cleanups.forEach((fn) => fn());
             clearNativeOAuthInProgress();
+            window.location.replace("/auth/continue");
             return;
           }
         } catch {
@@ -219,6 +245,13 @@ export async function openOAuthUrl(url: string): Promise<void> {
       if (settled) return;
       const path = window.location.pathname;
       if (path.startsWith("/auth/callback") || path.startsWith("/auth/continue")) {
+        clearNativeOAuthInProgress();
+        return;
+      }
+
+      if (await redirectSignedInUserToContinue()) {
+        settled = true;
+        cleanups.forEach((fn) => fn());
         clearNativeOAuthInProgress();
         return;
       }
