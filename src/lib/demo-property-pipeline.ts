@@ -33,6 +33,11 @@ const SESSION_CACHE_PREFIX = "axis_property_pipeline_cache_v1:";
 const PROPERTY_PIPELINE_SYNC_META_KEY = `${SESSION_CACHE_PREFIX}__synced_at`;
 const PROPERTY_PIPELINE_SYNC_TTL_MS = 15_000;
 let propertyPipelineSyncPromise: Promise<boolean> | null = null;
+// Signature of the last snapshot we broadcast. The PROPERTY_PIPELINE_EVENT re-enters
+// listeners that can force another sync (e.g. manager-properties' refreshPortfolio),
+// so dispatching on every sync — even an unchanged one — is an infinite refetch loop.
+// Mirrors the change-guard in pro-relationships.ts.
+let lastPipelineSnapshotSig: string | null = null;
 
 export type ManagerPendingPropertyRow = {
   id: string;
@@ -237,6 +242,9 @@ export async function syncPropertyPipelineFromServer(opts?: { force?: boolean })
       const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
       const body = (await res.json()) as { snapshot?: PropertyPipelineSnapshot };
       if (!res.ok || !body.snapshot) return false;
+      const sig = JSON.stringify(body.snapshot);
+      const changed = sig !== lastPipelineSnapshotSig;
+      lastPipelineSnapshotSig = sig;
       memoryStore.set(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
       writeSessionJson(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
       memoryStore.set(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
@@ -249,7 +257,9 @@ export async function syncPropertyPipelineFromServer(opts?: { force?: boolean })
         writeSessionJson(key, side);
       }
       writePropertyPipelineSyncedAt(Date.now());
-      window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+      // Only notify listeners when the snapshot actually changed — an unconditional
+      // dispatch here loops with force-syncing listeners (see lastPipelineSnapshotSig).
+      if (changed) window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
       return true;
     })();
     return await propertyPipelineSyncPromise;
