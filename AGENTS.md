@@ -80,6 +80,46 @@ When changing portal nav, routes, push notifications, or uploads:
 
 See **`docs/web-and-native-parity.md`** and `.cursor/rules/web-native-parity.mdc`.
 
+# Branching & deployment (Vercel)
+
+The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the
+**Production Branch is `production`**, not `main`. Two branches, two roles:
+
+- **`production` — the live site.** Every push here triggers a **production
+  deploy** to the real domains: `axis-seattle-housing.com`,
+  `www.axis-seattle-housing.com`, and `axis-2.vercel.app`. Only ship-ready code
+  reaches this branch. Never commit straight to it.
+- **`main` — integration / staging.** Day-to-day work merges here. Every push
+  produces a **preview deploy**, and Vercel keeps a stable staging alias that
+  always points at the latest `main` build:
+  `axis-2-git-main-prakritramachandran-6082s-projects.vercel.app`. Use this to
+  validate a release before promoting. Feature branches also get their own
+  preview URLs.
+
+**Promote `main` → `production` to ship.** When `main` is verified on staging and
+you want it live:
+
+```
+git checkout production
+git pull
+git merge --ff-only main   # production should stay a fast-forward of main
+git push origin production  # Vercel auto-deploys this to the live domains
+git checkout main
+```
+
+Keep `production` a strict fast-forward of `main` (never commit unique work to
+`production`); this keeps history linear and makes rollbacks obvious. To roll
+back, point `production` at the previous known-good commit and push, or use
+Vercel's **Instant Rollback** in the dashboard.
+
+Yes, deploying `main` as a staging step is standard practice on Vercel: `main`'s
+preview/branch alias is your staging environment, and `production` is the gated
+promotion target. Don't add a separate Vercel project for staging — the branch
+model above already gives you prod + staging from one project.
+
+The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
+Git**. Don't change it back to `main`.
+
 # Working in a git worktree
 
 Worktrees (e.g. created by `treehouse`) only contain *tracked* files. Gitignored
