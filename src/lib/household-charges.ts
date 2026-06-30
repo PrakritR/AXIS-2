@@ -24,7 +24,8 @@ let memoryCharges: HouseholdCharge[] = [];
 let memoryRentProfiles: RecurringRentProfile[] = [];
 const HOUSEHOLD_CHARGES_SYNC_TTL_MS = 15_000;
 let householdChargesLastSyncedAt = 0;
-let householdChargesSyncPromise: Promise<{ charges: HouseholdCharge[]; rentProfiles: RecurringRentProfile[] }> | null = null;
+type HouseholdChargesSyncResult = { charges: HouseholdCharge[]; rentProfiles: RecurringRentProfile[] };
+let householdChargesSyncPromise: Promise<HouseholdChargesSyncResult> | null = null;
 export const HOUSEHOLD_CHARGES_SESSION_KEY = "axis:household-charges:v1";
 const HOUSEHOLD_RENT_PROFILES_SESSION_KEY = "axis:household-rent-profiles:v1";
 
@@ -244,16 +245,13 @@ function mirrorRentProfiles(rows: RecurringRentProfile[]) {
 export async function syncHouseholdChargesFromServer(
   force = false,
   { skipReconcile = false }: { skipReconcile?: boolean } = {},
-): Promise<{
-  charges: HouseholdCharge[];
-  rentProfiles: RecurringRentProfile[];
-}> {
+): Promise<HouseholdChargesSyncResult> {
   if (!isBrowser()) return { charges: [], rentProfiles: [] };
-  if (householdChargesSyncPromise) return householdChargesSyncPromise;
+  if (!force && householdChargesSyncPromise) return householdChargesSyncPromise;
   if (!force && householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
     return { charges: readAll(), rentProfiles: readRentProfiles() };
   }
-  householdChargesSyncPromise = fetch("/api/portal-household-charges")
+  const syncPromise = fetch("/api/portal-household-charges")
     .then(async (res) => {
       const body = res.ok ? (await res.json() as { charges?: HouseholdCharge[]; rentProfiles?: RecurringRentProfile[] }) : {};
       const serverCharges = Array.isArray(body.charges) ? body.charges : [];
@@ -295,9 +293,12 @@ export async function syncHouseholdChargesFromServer(
       }
       return { charges: readAll(), rentProfiles: readRentProfiles() };
     });
-  const result = await householdChargesSyncPromise;
+  householdChargesSyncPromise = syncPromise;
+  const result = await syncPromise;
   householdChargesLastSyncedAt = Date.now();
-  householdChargesSyncPromise = null;
+  if (householdChargesSyncPromise === syncPromise) {
+    householdChargesSyncPromise = null;
+  }
   return result;
 }
 
@@ -1552,17 +1553,24 @@ export function chargeVisibleToManager(charge: HouseholdCharge, managerUserId: s
 export function readChargesForManagerResident(email: string, managerUserId: string | null): HouseholdCharge[] {
   const e = email.trim().toLowerCase();
   if (!e) return [];
-  return dedupeCharges(readAll())
+  const all = dedupeCharges(readAll());
+  const profileById = new Map(readRentProfiles().map((p) => [p.id, p]));
+  const scoped = all
     .filter((r) => r.residentEmail.trim().toLowerCase() === e)
-    .filter((r) => chargeVisibleToManager(r, managerUserId))
-    .filter((charge) => shouldDisplayChargeInPayments(charge));
+    .filter((r) => chargeVisibleToManager(r, managerUserId));
+  return scoped
+    .filter((charge) => shouldDisplayChargeInPayments(charge))
+    .filter((charge) => charge.status === "paid" || !isStaleRecurringHouseholdCharge(charge, profileById, scoped));
 }
 
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
-  return dedupeCharges(readAll())
+  const all = dedupeCharges(readAll());
+  const profileById = new Map(readRentProfiles().map((p) => [p.id, p]));
+  return all
     .filter((r) => r.managerUserId === scope)
-    .filter((charge) => shouldDisplayChargeInPayments(charge));
+    .filter((charge) => shouldDisplayChargeInPayments(charge))
+    .filter((charge) => charge.status === "paid" || !isStaleRecurringHouseholdCharge(charge, profileById, all));
 }
 
 export function deleteHouseholdCharge(chargeId: string, managerUserId: string | null): boolean {

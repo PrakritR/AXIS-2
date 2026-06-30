@@ -89,19 +89,39 @@ function NotifBanner({
 }
 
 export function ManagerDashboard() {
-  const { userId } = useManagerUserId();
+  const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
+  const [chargesSyncedUserId, setChargesSyncedUserId] = useState<string | null>(null);
   const bump = () => setTick((n) => n + 1);
   const [nowMs] = useState(() => Date.now());
+  const chargesSynced = chargesSyncedUserId === userId;
 
   useEffect(() => {
+    let cancelled = false;
+    if (!authReady || !userId) {
+      queueMicrotask(() => {
+        if (!cancelled) setChargesSyncedUserId(null);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    queueMicrotask(() => {
+      if (!cancelled) setChargesSyncedUserId(null);
+    });
     void Promise.allSettled([
       syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
-      syncHouseholdChargesFromServer(),
+      syncHouseholdChargesFromServer(true),
       syncScheduleRecordsFromServer(),
-    ]).then(bump);
+    ])
+      .then(() => {
+        if (!cancelled) bump();
+      })
+      .finally(() => {
+        if (!cancelled) setChargesSyncedUserId(userId);
+      });
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, bump);
@@ -110,6 +130,7 @@ export function ManagerDashboard() {
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
+      cancelled = true;
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
       window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, bump);
@@ -118,8 +139,7 @@ export function ManagerDashboard() {
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
-   
-  }, [userId]);
+  }, [userId, authReady]);
 
   const data = useMemo(() => {
     void tick;
@@ -223,6 +243,7 @@ export function ManagerDashboard() {
 
   const pendingTours = tours.filter((t) => t.status === "pending");
   const nextTour = tours.find((t) => t.status === "confirmed") ?? null;
+  const visiblePendingCharges = chargesSynced ? pendingCharges : [];
 
   return (
     <ManagerPortalPageShell title="Dashboard" hideTitleOnNative>
@@ -235,7 +256,7 @@ export function ManagerDashboard() {
           pendingTours.length > 0 ||
           nextTour ||
           pendingProperties > 0 ||
-          overdueCharges.length > 0) && (
+          (chargesSynced && overdueCharges.length > 0)) && (
           <div className="space-y-2 [html[data-native]_&]:flex [html[data-native]_&]:gap-2 [html[data-native]_&]:overflow-x-auto [html[data-native]_&]:space-y-0 [html[data-native]_&]:pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [html[data-native]_&]:[&::-webkit-scrollbar]:hidden">
             {pendingTours.length > 0 && (
               <NotifBanner tone="amber">
@@ -297,7 +318,7 @@ export function ManagerDashboard() {
                 </Link>
               </NotifBanner>
             )}
-            {overdueCharges.length > 0 && (
+            {chargesSynced && overdueCharges.length > 0 && (
               <NotifBanner tone="rose">
                 <span>
                   <span className="font-semibold">{overdueCharges.length}</span> overdue charge{overdueCharges.length === 1 ? "" : "s"} totalling <span className="font-semibold">{dollars(overdueTotal)}</span> across residents
@@ -425,7 +446,7 @@ export function ManagerDashboard() {
               linkLabel="Payments →"
             />
             <PortalDashboardPreviewList
-              items={pendingCharges}
+              items={visiblePendingCharges}
               href={`${BASE}/payments`}
               emptyMessage="No pending or overdue payments right now."
               keyForItem={(charge) => charge.id}

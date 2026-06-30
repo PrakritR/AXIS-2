@@ -126,6 +126,7 @@ export function ResidentPaymentsPanel() {
 
   useEffect(() => {
     if (!availablePaymentMethods.includes(paymentMethod)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fall back to a valid payment method when the list changes
       setPaymentMethod(availablePaymentMethods[0] ?? "ach");
       setCheckout(null);
     }

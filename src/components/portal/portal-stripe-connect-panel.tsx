@@ -41,6 +41,7 @@ export function PortalStripeConnectPanel({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectStatus | null>(null);
+  const [statusLoaded, setStatusLoaded] = useState(false);
   const handledConnectParam = useRef(false);
 
   const loadStatus = useCallback(async () => {
@@ -54,6 +55,8 @@ export function PortalStripeConnectPanel({
       setStatus(body);
     } catch {
       setStatus(null);
+    } finally {
+      setStatusLoaded(true);
     }
   }, []);
 
@@ -174,27 +177,43 @@ export function PortalStripeConnectPanel({
   if (variant === "inline") {
     if (status?.demo) return null;
 
+    if (!statusLoaded) {
+      return (
+        <div
+          className="inline-flex h-9 min-w-[11.5rem] shrink-0 rounded-full border border-border bg-accent/30"
+          aria-hidden
+        />
+      );
+    }
+
     const statusLabel = ready ? "Bank linked" : status?.connected ? "Finish bank setup" : "Bank not linked";
 
     return (
-      <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
+      <div className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
         <span
-          className={`flex min-h-9 max-w-[8.5rem] shrink-0 items-center truncate px-3 text-sm font-semibold sm:max-w-none ${
-            ready ? "text-emerald-700 dark:text-emerald-400" : blockingError ? "text-rose-700 dark:text-rose-400" : "text-muted"
+          className={`flex min-h-9 min-w-[7.5rem] shrink-0 items-center truncate rounded-full px-4 py-1.5 text-sm font-semibold ${
+            ready
+              ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+              : blockingError
+                ? "text-rose-700 dark:text-rose-400"
+                : "text-muted"
           }`}
           title={blockingError ?? statusLabel}
         >
           {blockingError ? "Bank error" : statusLabel}
         </span>
-        <Button
+        <button
           type="button"
-          variant={ready ? "outline" : "primary"}
-          className="min-h-9 shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold"
+          className={`flex min-h-9 shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 disabled:opacity-60 ${
+            ready
+              ? "border border-border bg-card/80 text-foreground shadow-[var(--shadow-sm)] hover:border-primary/30"
+              : "bg-[var(--btn-primary)] text-white hover:opacity-90"
+          }`}
           disabled={busy}
           onClick={() => void startConnect()}
         >
           {busy ? "Opening…" : ready ? "Update" : "Link"}
-        </Button>
+        </button>
       </div>
     );
   }

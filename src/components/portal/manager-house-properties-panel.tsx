@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
@@ -11,10 +9,10 @@ import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
 import { ManagerPropertySubmissionSummary } from "@/components/portal/manager-property-submission-summary";
-import { ShareLeadLinkModal } from "@/components/portal/share-lead-link-modal";
-import { MANAGER_TABLE_TH, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
@@ -53,7 +51,6 @@ import {
 import {
   buildManagerApplyUrl,
   buildManagerListingUrl,
-  buildManagerShareablePropertyOptions,
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
@@ -115,37 +112,20 @@ const MANAGER_STAGES = [
   { key: "rejected", label: "Rejected", buckets: [4] as AdminPropertyBucketIndex[] },
 ] as const;
 
-type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
+export type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
 
-const EMPTY_COPY: Record<ManagerStageKey, string> = {
+export const MANAGER_PROPERTY_EMPTY_COPY: Record<ManagerStageKey, string> = {
   pending: "Nothing awaiting review.",
   listed: "No listed properties.",
   unlisted: "No unlisted properties.",
   rejected: "No rejected properties.",
 };
 
-function managerStageFromParam(raw: string | null): ManagerStageKey {
+export function managerStageFromParam(raw: string | null): ManagerStageKey {
   return MANAGER_STAGES.some((stage) => stage.key === raw) ? (raw as ManagerStageKey) : "pending";
 }
 
-function HouseIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M3 10.5 12 3l9 7.5" />
-      <path d="M5 10v10h14V10" />
-      <path d="M10 20v-6h4v6" />
-    </svg>
-  );
-}
+export { MANAGER_STAGES };
 
 function ManagerPropertyInlineDetails({
   bucket,
@@ -229,8 +209,10 @@ function ManagerPropertyInlineDetails({
   if (!row || !mock || !managerSubmission) return null;
   const publicHref = publicListingHrefForPropertyRow(row);
 
+  const actionBtnClass = "w-full rounded-full";
+
   const footer = (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       {bucket === 1 && row.editRequestNote?.trim() ? (
         <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Requested changes</p>
@@ -247,11 +229,11 @@ function ManagerPropertyInlineDetails({
               ? "This listing was edited and is pending admin re-approval. Edit sections below."
               : `Listing approval is handled by ${PRIMARY_AXIS_ADMIN_LABEL}. Edit sections below while your submission is reviewed.`}
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline"
+              className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
               onClick={() => {
                 if (row.adminRefId.startsWith("mgr-")) {
                   if (!window.confirm("Permanently delete this listing from your catalog?")) return;
@@ -271,14 +253,11 @@ function ManagerPropertyInlineDetails({
       ) : null}
 
       {bucket === 1 ? (
-        <>
-          <p className="text-xs text-muted">
-            Return this to your pending queue to edit and resubmit — it will appear under Pending again.
-          </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Button
             type="button"
             variant="outline"
-            className="rounded-full"
+            className={actionBtnClass}
             onClick={() =>
               deferCatalogMutation(() =>
                 run("Returned to pending — you can edit and resubmit.", returnRequestChangeToPending(row.adminRefId, managerUserId)),
@@ -287,53 +266,51 @@ function ManagerPropertyInlineDetails({
           >
             Move to pending & revise
           </Button>
-        </>
+        </div>
       ) : null}
 
       {bucket === 2 && listingId ? (
-        <>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              onClick={() => onSendToProspect?.(listingId)}
-            >
-              Send to prospect
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => {
-                void (async () => {
-                  const url = buildManagerApplyUrl(window.location.origin, { propertyId: listingId });
-                  const ok = await copyTextToClipboard(url);
-                  showToast(ok ? "Apply link copied." : "Could not copy link.");
-                })();
-              }}
-            >
-              Copy apply link
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => {
-                void (async () => {
-                  const url = buildManagerTourUrl(window.location.origin, listingId);
-                  const ok = await copyTextToClipboard(url);
-                  showToast(ok ? "Tour link copied." : "Could not copy link.");
-                })();
-              }}
-            >
-              Copy tour link
-            </Button>
-          </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Button
             type="button"
             variant="outline"
-            className="rounded-full"
+            className={actionBtnClass}
+            onClick={() => onSendToProspect?.(listingId)}
+          >
+            Send to prospect
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionBtnClass}
+            onClick={() => {
+              void (async () => {
+                const url = buildManagerApplyUrl(window.location.origin, { propertyId: listingId });
+                const ok = await copyTextToClipboard(url);
+                showToast(ok ? "Apply link copied." : "Could not copy link.");
+              })();
+            }}
+          >
+            Copy apply link
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionBtnClass}
+            onClick={() => {
+              void (async () => {
+                const url = buildManagerTourUrl(window.location.origin, listingId);
+                const ok = await copyTextToClipboard(url);
+                showToast(ok ? "Tour link copied." : "Could not copy link.");
+              })();
+            }}
+          >
+            Copy tour link
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionBtnClass}
             onClick={() =>
               deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)))
             }
@@ -343,7 +320,7 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline"
+            className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
             onClick={() => {
               if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
               deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId)));
@@ -351,15 +328,15 @@ function ManagerPropertyInlineDetails({
           >
             Delete listing
           </Button>
-        </>
+        </div>
       ) : null}
 
       {bucket === 3 ? (
-        <>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Button
             type="button"
             variant="outline"
-            className="rounded-full"
+            className={actionBtnClass}
             onClick={() => {
               deferCatalogMutation(() => {
                 const id = listAdminRow(row, managerUserId);
@@ -377,7 +354,7 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline"
+            className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
             onClick={() => {
               if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
               deferCatalogMutation(() =>
@@ -387,15 +364,15 @@ function ManagerPropertyInlineDetails({
           >
             Delete from queue
           </Button>
-        </>
+        </div>
       ) : null}
 
       {bucket === 4 ? (
-        <>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Button
             type="button"
             variant="outline"
-            className="rounded-full"
+            className={actionBtnClass}
             onClick={() =>
               deferCatalogMutation(() =>
                 run("Restored to pending approval.", restoreRejectedToPending(row.adminRefId, managerUserId)),
@@ -407,20 +384,22 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline"
+            className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
             onClick={() =>
               deferCatalogMutation(() => run("Property removed.", removeRejectedProperty(row.adminRefId, managerUserId)))
             }
           >
             Delete property
           </Button>
-        </>
+        </div>
       ) : null}
 
       {displaySub && portalSub ? (
-        <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditorOpen(true)}>
-          Edit listing
-        </Button>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
+            Edit listing
+          </Button>
+        </div>
       ) : null}
     </div>
   );
@@ -431,17 +410,8 @@ function ManagerPropertyInlineDetails({
         <ManagerPropertySubmissionSummary sub={managerSubmission} listingId={listingId} />
       </div>
 
-      <ManagerPropertyHouseDetailsPanel
-        noteKey={noteKey}
-        sub={managerSubmission}
-        saveTarget={houseSaveTarget}
-        managerUserId={managerUserId}
-        onUpdated={onUpdated}
-        showToast={showToast}
-      />
-
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Rent with Axis preview</p>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Preview</p>
         {publicHref ? (
           <Link
             href={publicHref}
@@ -464,6 +434,16 @@ function ManagerPropertyInlineDetails({
           <ListingDetailSections property={mock} rich={rich} previewModal />
         </div>
       ) : null}
+
+      <ManagerPropertyHouseDetailsPanel
+        noteKey={noteKey}
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+      />
+
       <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">{footer}</div>
 
       {editorOpen && portalSub ? (
@@ -487,24 +467,20 @@ function ManagerPropertyInlineDetails({
   );
 }
 
-export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: string) => void }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export function ManagerHousePropertiesPanel({
+  showToast,
+  activeStage,
+  onStageChange,
+  onSendToProspect,
+}: {
+  showToast: (m: string) => void;
+  activeStage: ManagerStageKey;
+  onStageChange: (stage: ManagerStageKey) => void;
+  onSendToProspect?: (listingId: string) => void;
+}) {
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
-  const [shareListingOpen, setShareListingOpen] = useState(false);
-  const [shareListingPropertyId, setShareListingPropertyId] = useState<string | undefined>();
-  const activeStage = managerStageFromParam(searchParams.get("status"));
-
-  const setActiveStage = useCallback((stage: ManagerStageKey) => {
-    const next = new URLSearchParams(searchParams.toString());
-    if (stage === "pending") next.delete("status");
-    else next.set("status", stage);
-    const query = next.toString();
-    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }, [pathname, router, searchParams]);
 
   useEffect(() => {
     if (!managerUserId) return;
@@ -548,17 +524,12 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
     );
   }, [tick, managerUserId, activeStage]);
 
-  const shareableProperties = useMemo(() => {
-    void tick;
-    return buildManagerShareablePropertyOptions(managerUserId);
-  }, [managerUserId, tick]);
-
   useEffect(() => {
     if (activeStage !== "pending") return;
     if ((stageCounts.pending ?? 0) === 0 && (stageCounts.listed ?? 0) > 0) {
-      setActiveStage("listed");
+      onStageChange("listed");
     }
-  }, [activeStage, stageCounts, setActiveStage]);
+  }, [activeStage, stageCounts, onStageChange]);
 
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;
@@ -569,28 +540,10 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
 
   return (
     <>
-      <ManagerPortalStatusPills
-        tabs={MANAGER_STAGES.map((stage) => ({
-          id: stage.key,
-          label: stage.label,
-          count: stageCounts[stage.key],
-        }))}
-        activeId={activeStage}
-        onChange={(id) => {
-          setActiveStage(id as ManagerStageKey);
-          setExpandedRowKey(null);
-        }}
-      />
-
-      <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
-        {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center bg-accent/30/20 px-4 py-14 text-center sm:py-16">
-            <AxisHeaderMarkTile>
-              <HouseIcon className="h-[26px] w-[26px]" />
-            </AxisHeaderMarkTile>
-            <p className="mt-4 max-w-sm text-sm font-medium text-muted">{EMPTY_COPY[activeStage]}</p>
-          </div>
-        ) : (
+      {rows.length === 0 ? (
+        <PortalDataTableEmpty message={MANAGER_PROPERTY_EMPTY_COPY[activeStage]} icon="default" />
+      ) : (
+        <div className={`${PORTAL_DATA_TABLE_WRAP}`}>
           <div className="overflow-x-auto">
             <table className="min-w-[640px] w-full border-collapse text-left text-sm">
               <thead>
@@ -640,10 +593,7 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
                               onUpdated={() => setTick((t) => t + 1)}
                               showToast={showToast}
                               managerUserId={managerUserId}
-                              onSendToProspect={(listingId) => {
-                                setShareListingPropertyId(listingId);
-                                setShareListingOpen(true);
-                              }}
+                              onSendToProspect={onSendToProspect}
                             />
                           </td>
                         </tr>
@@ -654,16 +604,8 @@ export function ManagerHousePropertiesPanel({ showToast }: { showToast: (m: stri
               </tbody>
             </table>
           </div>
-        )}
-      </div>
-
-      <ShareLeadLinkModal
-        open={shareListingOpen}
-        onClose={() => setShareListingOpen(false)}
-        kind="listing"
-        properties={shareableProperties}
-        preselectedPropertyId={shareListingPropertyId}
-      />
+        </div>
+      )}
     </>
   );
 }

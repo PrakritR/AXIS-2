@@ -65,7 +65,7 @@ export function ShareLeadLinkModal({
   }, [properties, propertyId]);
 
   const roomOptions = useMemo(() => {
-    if (kind !== "apply" || !propertyId) return [];
+    if ((kind !== "apply" && kind !== "listing") || !propertyId) return [];
     return getRoomOptionsForProperty(propertyId, { includeUnavailable: true }).filter((o) => o.value);
   }, [kind, propertyId]);
 
@@ -86,8 +86,11 @@ export function ShareLeadLinkModal({
   const listingSummary = useMemo(() => {
     if (kind !== "listing" || !propertyId) return null;
     const property = getPropertyById(propertyId);
-    return property ? buildListingShareSummary(property) : null;
-  }, [kind, propertyId]);
+    if (!property) return null;
+    const { listingRoomId } = roomChoice ? parseRoomChoiceValue(roomChoice) : { listingRoomId: undefined };
+    const roomName = roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
+    return buildListingShareSummary(property, { roomChoice: roomName, roomId: listingRoomId });
+  }, [kind, propertyId, roomChoice, roomOptions]);
 
   const invitePreviewBody = useMemo(() => {
     if (!linkUrl) return "";
@@ -203,7 +206,7 @@ export function ShareLeadLinkModal({
                 </Select>
               </div>
 
-              {kind === "apply" && roomOptions.length > 0 ? (
+              {(kind === "apply" || kind === "listing") && roomOptions.length > 0 ? (
                 <div>
                   <label htmlFor="share-lead-room" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
                     Room (optional)
@@ -240,9 +243,6 @@ export function ShareLeadLinkModal({
                       </Button>
                     </div>
                   ) : null}
-                  <p className="mt-2 text-xs text-muted">
-                    The email includes this listing link plus apply and tour links.
-                  </p>
                 </div>
               ) : null}
 
@@ -260,11 +260,11 @@ export function ShareLeadLinkModal({
 
               <div className="border-t border-border pt-4">
                 <p className="text-sm font-semibold text-foreground">Send to prospect</p>
+                {kind !== "listing" ? (
                 <p className="mt-1 text-xs text-muted">
-                  {kind === "listing"
-                    ? "Email a concise listing summary with apply and tour links."
-                    : "Email an invite with the link above. You can add an optional note."}
+                  Email an invite with the link above. You can add an optional note.
                 </p>
+                ) : null}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
                     <label htmlFor="share-lead-name" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">

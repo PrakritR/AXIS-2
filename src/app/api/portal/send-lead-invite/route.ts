@@ -97,7 +97,10 @@ export async function POST(req: Request) {
     const tourUrl = buildManagerTourUrl(origin, propertyId);
     const listingPageUrl = buildManagerListingUrl(origin, propertyId);
     const linkUrl = kind === "tour" ? tourUrl : applyUrl;
-    const listingSummary = kind === "listing" && listing ? buildListingShareSummary(listing) : undefined;
+    const listingSummary =
+      kind === "listing" && listing
+        ? buildListingShareSummary(listing, { roomChoice: roomName || undefined, roomId: listingRoomId || undefined })
+        : undefined;
 
     const subject = leadInviteSubject(kind, propertyTitle);
     const text = buildLeadInviteEmailBody({
