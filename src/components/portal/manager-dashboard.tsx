@@ -91,15 +91,20 @@ function NotifBanner({
 export function ManagerDashboard() {
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
-  const [chargesSynced, setChargesSynced] = useState(false);
+  const [chargesSyncedUserId, setChargesSyncedUserId] = useState<string | null>(null);
   const bump = () => setTick((n) => n + 1);
   const [nowMs] = useState(() => Date.now());
+  const chargesSynced = chargesSyncedUserId === userId;
 
   useEffect(() => {
     if (!authReady || !userId) {
-      setChargesSynced(false);
+      queueMicrotask(() => setChargesSyncedUserId(null));
       return;
     }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setChargesSyncedUserId(null);
+    });
     void Promise.allSettled([
       syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
@@ -107,8 +112,12 @@ export function ManagerDashboard() {
       syncHouseholdChargesFromServer(true),
       syncScheduleRecordsFromServer(),
     ])
-      .then(bump)
-      .finally(() => setChargesSynced(true));
+      .then(() => {
+        if (!cancelled) bump();
+      })
+      .finally(() => {
+        if (!cancelled) setChargesSyncedUserId(userId);
+      });
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, bump);
@@ -117,6 +126,7 @@ export function ManagerDashboard() {
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
+      cancelled = true;
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
       window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, bump);

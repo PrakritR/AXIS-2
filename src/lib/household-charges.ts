@@ -1552,10 +1552,14 @@ export function chargeVisibleToManager(charge: HouseholdCharge, managerUserId: s
 export function readChargesForManagerResident(email: string, managerUserId: string | null): HouseholdCharge[] {
   const e = email.trim().toLowerCase();
   if (!e) return [];
-  return dedupeCharges(readAll())
+  const all = dedupeCharges(readAll());
+  const profileById = new Map(readRentProfiles().map((p) => [p.id, p]));
+  const scoped = all
     .filter((r) => r.residentEmail.trim().toLowerCase() === e)
-    .filter((r) => chargeVisibleToManager(r, managerUserId))
-    .filter((charge) => shouldDisplayChargeInPayments(charge));
+    .filter((r) => chargeVisibleToManager(r, managerUserId));
+  return scoped
+    .filter((charge) => shouldDisplayChargeInPayments(charge))
+    .filter((charge) => charge.status === "paid" || !isStaleRecurringHouseholdCharge(charge, profileById, scoped));
 }
 
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
