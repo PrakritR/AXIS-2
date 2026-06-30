@@ -9,7 +9,15 @@ describe("supabaseGoogleOAuthRedirectUri", () => {
   });
 
   it("returns null when URL missing", () => {
-    expect(supabaseGoogleOAuthRedirectUri(null)).toBeNull();
-    expect(supabaseGoogleOAuthRedirectUri("")).toBeNull();
+    // Isolate the env fallback so the "missing" case is deterministic regardless of
+    // a local .env.test that sets NEXT_PUBLIC_SUPABASE_URL.
+    const saved = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    try {
+      expect(supabaseGoogleOAuthRedirectUri(null)).toBeNull();
+      expect(supabaseGoogleOAuthRedirectUri("")).toBeNull();
+    } finally {
+      if (saved !== undefined) process.env.NEXT_PUBLIC_SUPABASE_URL = saved;
+    }
   });
 });
