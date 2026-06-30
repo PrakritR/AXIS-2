@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
+import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -21,16 +22,18 @@ export async function GET(req: NextRequest) {
     }
 
     const url = new URL(req.url);
-    const next = url.searchParams.get("next")?.trim() ?? "/auth/continue";
-    const intendedPath = next.startsWith("/") ? next : "/auth/continue";
+    const rawNext = url.searchParams.get("next")?.trim() ?? "/auth/continue";
+    const intendedPath = normalizePostAuthPath(rawNext.startsWith("/") ? rawNext : "/auth/continue");
 
     const service = createSupabaseServiceRoleClient();
     await reconcileAuthAccountsByEmail(service, user);
     await ensureFreeManagerPortalAccess(service, user);
-    const redirectTo = await resolveOAuthPortalRedirect(service, user, intendedPath, {
-      intent: readOAuthIntentFromRequest(req),
-      surface: readOAuthSurfaceFromRequest(req),
-    });
+    const redirectTo = normalizePostAuthPath(
+      await resolveOAuthPortalRedirect(service, user, intendedPath, {
+        intent: readOAuthIntentFromRequest(req),
+        surface: readOAuthSurfaceFromRequest(req),
+      }),
+    );
 
     return NextResponse.json({ redirectTo });
   } catch (e) {

@@ -105,4 +105,57 @@ describe("completeNativeOAuthInWebView", () => {
     }
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it("fails closed to /auth/continue when portal access never succeeds", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 500 }),
+    );
+
+    vi.doMock("@/lib/supabase/browser", () => ({
+      createSupabaseBrowserClient: () => ({
+        auth: {
+          exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
+          getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } }),
+        },
+      }),
+    }));
+
+    sessionStorage.setItem("axis_oauth_next", "/portal/dashboard");
+
+    const { completeNativeOAuthInWebView } = await import("@/lib/auth/complete-native-oauth-client");
+    const result = await completeNativeOAuthInWebView("/auth/callback?code=abc123");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.redirectTo).toBe("/auth/continue?next=%2Fportal%2Fdashboard");
+    }
+  });
+
+  it("sanitizes unsafe redirectTo values from the portal access API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ redirectTo: "//evil.com" }),
+      }),
+    );
+
+    vi.doMock("@/lib/supabase/browser", () => ({
+      createSupabaseBrowserClient: () => ({
+        auth: {
+          exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
+          getUser: vi.fn().mockResolvedValue({ data: { user: { id: "u1" } } }),
+        },
+      }),
+    }));
+
+    const { completeNativeOAuthInWebView } = await import("@/lib/auth/complete-native-oauth-client");
+    const result = await completeNativeOAuthInWebView("/auth/callback?code=abc123");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.redirectTo).toBe("/auth/continue");
+    }
+  });
 });

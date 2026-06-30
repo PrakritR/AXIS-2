@@ -102,7 +102,8 @@ function ContinueContent() {
               );
               if (!accessRes.ok) return null;
               const body = (await accessRes.json()) as { redirectTo?: string };
-              return body.redirectTo?.startsWith("/") ? body.redirectTo : null;
+              const candidate = body.redirectTo?.startsWith("/") ? normalizePostAuthPath(body.redirectTo) : null;
+              return candidate === "/auth/continue" ? null : candidate;
             } catch {
               return null;
             }

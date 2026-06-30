@@ -1,5 +1,8 @@
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
-import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import {
+  failClosedOAuthContinuePath,
+  normalizePostAuthPath,
+} from "@/lib/auth/normalize-post-auth-path";
 import {
   clearOAuthNextPathStorage,
   readOAuthIntentFromStorage,
@@ -44,7 +47,8 @@ async function resolvePortalRedirect(next: string, context: { intent: string | n
     const res = await fetch(accessUrl.toString(), { credentials: "include", cache: "no-store" });
     if (res.ok) {
       const body = (await res.json()) as { redirectTo?: string };
-      return body.redirectTo?.startsWith("/") ? body.redirectTo : next;
+      const candidate = body.redirectTo?.startsWith("/") ? normalizePostAuthPath(body.redirectTo) : next;
+      return candidate;
     }
     // Session cookies can land a tick after the client-side code exchange on first sign-in.
     if (res.status === 401 && attempt < 5) {
@@ -54,8 +58,7 @@ async function resolvePortalRedirect(next: string, context: { intent: string | n
     break;
   }
 
-  if (next === "/auth/continue") return "/auth/continue";
-  return `/auth/continue?next=${encodeURIComponent(next)}`;
+  return failClosedOAuthContinuePath(next);
 }
 
 /**
@@ -107,11 +110,11 @@ export async function completeNativeOAuthInWebView(pathAndQuery: string): Promis
   }
 
   void user;
-  let redirectTo = next;
+  let redirectTo: string;
   try {
     redirectTo = await resolvePortalRedirect(next, context);
   } catch {
-    /* use next */
+    redirectTo = failClosedOAuthContinuePath(next);
   }
 
   clearOAuthNextPathStorage();
