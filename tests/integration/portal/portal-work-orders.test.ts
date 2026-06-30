@@ -10,8 +10,9 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { GET, POST } from "@/app/api/portal-work-orders/route";
 
 type Rec = { id: string; manager_user_id: string | null; resident_email: string | null; row_data: unknown };
+type AppRec = { id: string; manager_user_id: string; resident_email: string };
 
-function mockDb(seed: Rec[], profile: { email: string; role: string } | null) {
+function mockDb(seed: Rec[], profile: { email: string; role: string } | null, appSeed: AppRec[] = []) {
   const store = new Map(seed.map((r) => [r.id, r]));
   const upserts: Rec[] = [];
   const deletes: string[] = [];
@@ -38,6 +39,23 @@ function mockDb(seed: Rec[], profile: { email: string; role: string } | null) {
           eq: vi.fn().mockReturnThis(),
           maybeSingle: vi.fn().mockResolvedValue({ data: profile }),
         };
+      }
+      if (table === "manager_application_records") {
+        const filters: Record<string, string> = {};
+        const builder: Record<string, unknown> = {
+          select: () => builder,
+          eq: (col: string, val: string) => {
+            filters[col] = val;
+            return builder;
+          },
+          limit: async () => {
+            const rows = appSeed.filter(
+              (a) => a.manager_user_id === filters.manager_user_id && a.resident_email === filters.resident_email,
+            );
+            return { data: rows.map((a) => ({ id: a.id })), error: null };
+          },
+        };
+        return builder;
       }
       // portal_work_order_records — GET uses select/order/limit/(or|eq); POST uses select/eq/maybeSingle, upsert, delete/eq.
       const chain: Record<string, unknown> = {
@@ -138,6 +156,44 @@ describe("/api/portal-work-orders security", () => {
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(200);
     expect(upserts[0]!.manager_user_id).toBe("mgr-a");
+  });
+
+  it("rejects a resident filing a work order into an unrelated manager's queue (injection)", async () => {
+    asUser("res-b", "res@b.com");
+    // res@b.com belongs to mgr-b; they try to inject into mgr-a's queue.
+    const { client, upserts } = mockDb([], { email: "res@b.com", role: "resident" }, [
+      { id: "APP-1", manager_user_id: "mgr-b", resident_email: "res@b.com" },
+    ]);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const res = await POST(
+      jsonRequest("http://t", {
+        method: "POST",
+        body: { row: { id: "WO-evil", managerUserId: "mgr-a", residentEmail: "res@b.com" } },
+      }),
+    );
+    const { status } = await parseJsonResponse(res);
+    expect(status).toBe(403);
+    expect(upserts).toHaveLength(0);
+  });
+
+  it("lets a resident file a work order with their real manager", async () => {
+    asUser("res-b", "res@b.com");
+    const { client, upserts } = mockDb([], { email: "res@b.com", role: "resident" }, [
+      { id: "APP-1", manager_user_id: "mgr-b", resident_email: "res@b.com" },
+    ]);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const res = await POST(
+      jsonRequest("http://t", {
+        method: "POST",
+        body: { row: { id: "WO-ok", managerUserId: "mgr-b", residentEmail: "res@b.com" } },
+      }),
+    );
+    const { status } = await parseJsonResponse(res);
+    expect(status).toBe(200);
+    expect(upserts[0]!.manager_user_id).toBe("mgr-b");
+    expect(upserts[0]!.resident_email).toBe("res@b.com");
   });
 
   it("lets a manager claim a legacy unassigned work order but not overwrite a foreign one", async () => {

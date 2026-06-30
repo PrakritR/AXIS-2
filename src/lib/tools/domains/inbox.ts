@@ -3,6 +3,8 @@ import { defineTool } from "../registry";
 import type { PersistedInboxThread } from "@/lib/portal-inbox-storage";
 import { MANAGER_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
 
+const PAGE_SIZE = 1000;
+
 /**
  * Inbox threads are scoped by the manager inbox `scope` string AND the owning
  * user, so a tool must filter on both — `manager_user_id`-style scoping does not
@@ -38,14 +40,21 @@ export const listInboxThreadsTool = defineTool({
     })
     .strict(),
   handler: async (ctx, input) => {
-    const { data, error } = await ctx.db
-      .from("portal_inbox_thread_records")
-      .select("row_data")
-      .eq("scope", MANAGER_INBOX_SCOPE)
-      .eq("owner_user_id", ctx.userId)
-      .limit(1000);
-    if (error) throw new Error(error.message);
-    const threads = ((data ?? []) as { row_data: unknown }[])
+    const all: { row_data: unknown }[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data, error } = await ctx.db
+        .from("portal_inbox_thread_records")
+        .select("row_data")
+        .eq("scope", MANAGER_INBOX_SCOPE)
+        .eq("owner_user_id", ctx.userId)
+        .order("id", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw new Error(error.message);
+      const page = (data ?? []) as { row_data: unknown }[];
+      all.push(...page);
+      if (page.length < PAGE_SIZE) break;
+    }
+    const threads = all
       .map((r) => r.row_data as PersistedInboxThread)
       .filter(Boolean)
       .filter((t) => {

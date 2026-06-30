@@ -3,6 +3,7 @@ import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { residentBelongsToManager } from "@/lib/resident-manager-scope";
 
 export const runtime = "nodejs";
 
@@ -130,11 +131,22 @@ export async function POST(req: Request) {
       return data == null || actorOwnsRecord(actor, data);
     };
 
+    // A resident may only file against a manager that actually has them as a
+    // resident; never trust a client-supplied manager_user_id to route a row
+    // into an arbitrary manager's queue.
+    const residentMayTargetRowManager = async (row: DemoManagerWorkOrderRow): Promise<boolean> => {
+      if (actor.admin || actor.role !== "resident") return true;
+      const claimedManager = row?.managerUserId?.trim() || "";
+      if (!claimedManager) return false;
+      return residentBelongsToManager(db, { residentEmail: actor.email, managerUserId: claimedManager });
+    };
+
     if (body.action === "replace") {
       const rows = Array.isArray(body.rows) ? body.rows : [];
       for (const row of rows) {
         if (!row?.id) continue;
         if (!(await ownsExisting(row.id))) continue;
+        if (!(await residentMayTargetRowManager(row))) continue;
         await db.from("portal_work_order_records").upsert(recordForActor(actor, row), { onConflict: "id" });
       }
       return NextResponse.json({ ok: true });
@@ -159,6 +171,9 @@ export async function POST(req: Request) {
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
     if (!(await ownsExisting(body.row.id))) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+    if (!(await residentMayTargetRowManager(body.row))) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
     const { error } = await db

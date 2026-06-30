@@ -44,10 +44,20 @@ export const MODEL_PRICING: Record<string, { inputPerMTok: number; outputPerMTok
   "claude-opus-4-8": { inputPerMTok: 5, outputPerMTok: 25 },
 };
 
+const warnedUnpricedModels = new Set<string>();
+
 /** Estimated USD cost of a turn from accumulated token usage. 0 if unpriced. */
 export function estimateCostUsd(model: string, usage: { inputTokens: number; outputTokens: number }): number {
   const price = MODEL_PRICING[model];
-  if (!price) return 0;
+  if (!price) {
+    if (!warnedUnpricedModels.has(model)) {
+      warnedUnpricedModels.add(model);
+      console.warn(
+        `[agent/model] No pricing for model "${model}"; cost traces for this model will report $0. Add it to MODEL_PRICING.`,
+      );
+    }
+    return 0;
+  }
   return (
     (usage.inputTokens / 1_000_000) * price.inputPerMTok +
     (usage.outputTokens / 1_000_000) * price.outputPerMTok
