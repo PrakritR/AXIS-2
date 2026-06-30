@@ -65,17 +65,8 @@ function sidebarBrandHref(definition: PortalDefinition): string {
   return definition.basePath;
 }
 
-function SidebarBrandHeader({
-  definition,
-  brandHref,
-}: {
-  definition: PortalDefinition;
-  brandHref: string;
-}) {
+function SidebarBrandHeader({ brandHref }: { brandHref: string }) {
   const router = useRouter();
-  const isAdmin = definition.kind === "admin";
-  const isResident = definition.kind === "resident";
-  const brandTitle = definition.title.trim().toLowerCase() === "axis" ? "Axis" : definition.title;
 
   return (
     <div className="relative overflow-hidden px-5 py-5">
@@ -91,35 +82,10 @@ function SidebarBrandHeader({
         href={brandHref}
         prefetch
         aria-label="Axis home"
-        className={`relative flex gap-3 transition-opacity hover:opacity-90 ${isAdmin || isResident ? "items-start" : "items-center"}`}
+        className="relative inline-flex items-center transition-opacity hover:opacity-90"
         onClick={portalNavClick(router, brandHref)}
       >
         <PortalBrandLogoTile />
-        <div className={`min-w-0 ${isAdmin || isResident ? "pt-0.5" : ""}`}>
-          {isAdmin ? (
-            <>
-              <p className="text-sm font-semibold tracking-[-0.02em] text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
-                Axis · Admin
-              </p>
-              <span className="mt-1.5 inline-block rounded-full border border-white/25 bg-card/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 [html[data-theme=light]_&]:border-primary/25 [html[data-theme=light]_&]:bg-primary/10 [html[data-theme=light]_&]:text-primary">
-                ADMIN
-              </span>
-            </>
-          ) : isResident ? (
-            <>
-              <p className="text-lg font-semibold tracking-[-0.02em] leading-snug text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
-                Axis
-              </p>
-              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72 [html[data-theme=light]_&]:text-primary/80">
-                Resident portal
-              </p>
-            </>
-          ) : (
-            <p className="text-lg font-semibold tracking-[-0.02em] leading-none text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
-              {brandTitle}
-            </p>
-          )}
-        </div>
       </Link>
     </div>
   );
@@ -341,7 +307,7 @@ export function PortalSidebar({
 
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[16.625rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex">
-      <SidebarBrandHeader definition={definition} brandHref={brandHref} />
+      <SidebarBrandHeader brandHref={brandHref} />
       <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
           {navItems.map((s) => {

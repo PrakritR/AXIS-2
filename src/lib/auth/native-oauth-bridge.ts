@@ -39,7 +39,6 @@ export function nativeOAuthBridgeResponse(callbackUrl: URL): NextResponse {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="0;url=${encodeURI(schemeUrl)}" />
   <title>Returning to Axis</title>
   <style>
     body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #080b14; color: #e2e8f0; }

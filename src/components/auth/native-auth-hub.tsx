@@ -27,6 +27,7 @@ import { ResidentApplyPropertyPicker } from "@/components/auth/resident-apply-pr
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { getNativeInfo } from "@/lib/native/push-client";
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
@@ -186,12 +187,10 @@ function NativeAuthHubInner() {
     void (async () => {
       try {
         const { isNative } = await getNativeInfo();
-        if (!isNative) return;
+        if (!isNative || cancelled) return;
         const supabase = createSupabaseBrowserClient();
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!cancelled && session) {
+        const user = await waitForOAuthUser(supabase, { attempts: 3, delayMs: 150 });
+        if (!cancelled && user) {
           window.location.replace("/auth/continue");
         }
       } finally {

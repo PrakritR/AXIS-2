@@ -7,6 +7,7 @@ import { nativeOAuthSetupHint } from "@/lib/auth/native-oauth-redirect-urls";
 import { webPathFromNativeOAuthUrl, isNativeOAuthShell } from "@/lib/auth/native-oauth-callback";
 
 export const NATIVE_OAUTH_IN_PROGRESS_KEY = "axis_oauth_in_progress";
+const NATIVE_OAUTH_CALLBACK_CODE_KEY = "axis_oauth_callback_code";
 
 /** Open a URL in the WebView on web; native uses the system in-app browser when needed. */
 export function isNativeAppShell(): boolean {
@@ -32,6 +33,7 @@ export function isAuthCallbackUrl(url: string): boolean {
 function markNativeOAuthInProgress(): void {
   try {
     sessionStorage.setItem(NATIVE_OAUTH_IN_PROGRESS_KEY, "1");
+    sessionStorage.removeItem(NATIVE_OAUTH_CALLBACK_CODE_KEY);
   } catch {
     /* ignore */
   }
@@ -40,6 +42,7 @@ function markNativeOAuthInProgress(): void {
 export function clearNativeOAuthInProgress(): void {
   try {
     sessionStorage.removeItem(NATIVE_OAUTH_IN_PROGRESS_KEY);
+    sessionStorage.removeItem(NATIVE_OAUTH_CALLBACK_CODE_KEY);
   } catch {
     /* ignore */
   }
@@ -54,6 +57,17 @@ export function isNativeOAuthInProgress(): boolean {
 }
 
 function navigateToNativeOAuthCallback(pathAndQuery: string): void {
+  try {
+    const parsed = new URL(pathAndQuery, window.location.origin);
+    const code = parsed.searchParams.get("code");
+    if (code) {
+      const seen = sessionStorage.getItem(NATIVE_OAUTH_CALLBACK_CODE_KEY);
+      if (seen === code) return;
+      sessionStorage.setItem(NATIVE_OAUTH_CALLBACK_CODE_KEY, code);
+    }
+  } catch {
+    /* ignore */
+  }
   const destination = buildNativeOAuthNavigationUrl(pathAndQuery, window.location.origin);
   clearNativeOAuthInProgress();
   window.location.href = destination;
@@ -146,40 +160,49 @@ export async function openOAuthUrl(url: string): Promise<void> {
         return;
       }
 
-      try {
-        const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
-        const supabase = createSupabaseBrowserClient();
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (session) {
+      // appUrlOpen may still be exchanging the code in the WebView — wait before failing.
+      for (let attempt = 0; attempt < 20; attempt++) {
+        if (settled) return;
+        await new Promise((resolve) => window.setTimeout(resolve, 200));
+        const path = window.location.pathname;
+        if (
+          path.startsWith("/auth/continue") ||
+          path.startsWith("/portal") ||
+          path.startsWith("/resident") ||
+          path.startsWith("/admin")
+        ) {
           settled = true;
           cleanups.forEach((fn) => fn());
-          await Browser.close().catch(() => {});
           clearNativeOAuthInProgress();
-          try {
-            const accessRes = await fetch("/api/auth/oauth-portal-access?next=%2Fauth%2Fcontinue", {
-              credentials: "include",
-              cache: "no-store",
-            });
-            if (accessRes.ok) {
-              const body = (await accessRes.json()) as { redirectTo?: string };
-              if (body.redirectTo?.startsWith("/")) {
-                window.location.href = body.redirectTo;
-                return;
-              }
-            }
-          } catch {
-            /* fall through */
-          }
-          window.location.href = "/auth/continue";
           return;
         }
-      } catch {
-        /* fall through */
+        if (path.startsWith("/auth/callback")) {
+          continue;
+        }
+        try {
+          const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
+          const { waitForOAuthUser } = await import("@/lib/auth/wait-for-oauth-user");
+          const supabase = createSupabaseBrowserClient();
+          const user = await waitForOAuthUser(supabase, { attempts: 1, delayMs: 0 });
+          if (user) {
+            settled = true;
+            cleanups.forEach((fn) => fn());
+            clearNativeOAuthInProgress();
+            window.location.href = "/auth/continue";
+            return;
+          }
+        } catch {
+          /* retry */
+        }
       }
 
       if (settled) return;
+      const path = window.location.pathname;
+      if (path.startsWith("/auth/callback") || path.startsWith("/auth/continue")) {
+        clearNativeOAuthInProgress();
+        return;
+      }
+
       settled = true;
       cleanups.forEach((fn) => fn());
       navigateToNativeOAuthFailure(

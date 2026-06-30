@@ -11,7 +11,7 @@ import { defaultOAuthNextPath, type OAuthSignInIntent } from "@/lib/auth/post-oa
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
 import { openOAuthUrl } from "@/lib/native/open-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function GoogleGlyph() {
   return (
@@ -59,6 +59,17 @@ export function GoogleSignInButton({
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    if (!busy) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        window.setTimeout(() => setBusy(false), 400);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [busy]);
+
   const signInWithGoogle = async () => {
     setBusy(true);
     try {
@@ -99,6 +110,7 @@ export function GoogleSignInButton({
       }
       if (data?.url) {
         await openOAuthUrl(data.url);
+        window.setTimeout(() => setBusy(false), 90_000);
         return;
       }
       showToast("Could not start Google sign-in.");

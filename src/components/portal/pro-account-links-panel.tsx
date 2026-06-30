@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ManagerPortalPageShell, MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalFilterRow, ManagerPortalPageShell, MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -44,9 +44,14 @@ import {
   type ProRelationshipRecord,
 } from "@/lib/pro-relationships";
 import { maxAccountLinksForTier, normalizeManagerSkuTier } from "@/lib/manager-access";
-import { BADGE_SUCCESS_CLASS } from "@/lib/ui-styles";
 import Link from "next/link";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
+
+const CO_MANAGER_ROLE_BADGE =
+  "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+
+const OWNER_ROLE_BADGE =
+  "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 
 type InviteDraft = {
   assignedPropertyIds: string[];
@@ -820,145 +825,148 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     .map(([k]) => k);
 
   return (
-    <ManagerPortalPageShell title="Co-managers">
-      <div className="mx-auto max-w-5xl space-y-8">
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm [html[data-theme=dark]_&]:portal-surface-muted">
-          <div className="flex gap-3 sm:items-end">
-            <label className="block min-w-0 flex-1 text-xs font-semibold text-muted">
-              {AXIS_ID_LABEL}
-              <input
-                type="text"
-                value={axisInput}
-                onChange={(e) => setAxisInput(e.target.value)}
-                placeholder="e.g. AXIS-1A2B3C4D"
-                className="mt-1 h-10 w-full rounded-full border border-border bg-card px-4 font-mono text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-              />
-            </label>
-            <Button
-              type="button"
-              className={PORTAL_HEADER_ACTION_BTN}
-              disabled={lookupBusy || atLinkCap}
-              onClick={() => void lookup()}
-              title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
-            >
-              {lookupBusy ? "Checking…" : "Link account"}
+    <ManagerPortalPageShell
+      title="Co-managers"
+      filterRow={
+        <ManagerPortalFilterRow>
+          <label className="block min-w-0 flex-1 text-xs font-semibold text-muted sm:min-w-[16rem] sm:max-w-md">
+            {AXIS_ID_LABEL}
+            <input
+              type="text"
+              value={axisInput}
+              onChange={(e) => setAxisInput(e.target.value)}
+              placeholder="e.g. AXIS-1A2B3C4D"
+              className={`mt-1 h-10 w-full font-mono text-sm ${PORTAL_TOOLBAR_SELECT}`}
+            />
+          </label>
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_HEADER_ACTION_BTN}
+            disabled={lookupBusy || atLinkCap}
+            onClick={() => void lookup()}
+            title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
+          >
+            {lookupBusy ? "Checking…" : "Link account"}
+          </Button>
+        </ManagerPortalFilterRow>
+      }
+    >
+      <div className="space-y-6">
+        {linkCap != null ? (
+          <div
+            className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${
+              atLinkCap ? "portal-banner-danger" : "border-border bg-accent/30"
+            }`}
+          >
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span
+                className={`font-semibold tabular-nums ${atLinkCap ? "text-[var(--status-overdue-fg)]" : "text-foreground"}`}
+              >
+                {linksUsed}/{linkCap}
+              </span>
+              <span className="text-muted">links in use</span>
+              {tierShort ? (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-card/80 text-[var(--status-overdue-fg)]" : "bg-card text-muted"}`}
+                >
+                  {tierShort}
+                </span>
+              ) : null}
+            </div>
+            <Link href={MANAGER_PLAN_PORTAL_URL} className="text-sm font-semibold text-primary underline-offset-2 hover:underline">
+              Billing
+            </Link>
+          </div>
+        ) : null}
+
+        {atLinkCap ? (
+          <p className="text-xs font-medium text-[var(--status-overdue-fg)]">At limit — remove a link or change plan.</p>
+        ) : null}
+        {inviteeAtCap ? (
+          <p className="text-xs font-medium text-[var(--status-overdue-fg)]">
+            That account is already at its link limit and cannot accept new links.
+          </p>
+        ) : null}
+
+        {draftAxisId ? (
+          <div className="space-y-5 border-t border-border pt-6">
+            <p className="text-sm text-muted">
+              Verified <span className="font-semibold text-foreground">{draftName}</span>{" "}
+              <span className="font-mono text-xs text-muted">({draftAxisId})</span>
+            </p>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assigned properties</p>
+              <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-border bg-accent/30 p-3">
+                {propertyOptions.length === 0 ? (
+                  <li className="text-sm text-muted">No properties yet — add listings under Properties first.</li>
+                ) : (
+                  propertyOptions.map((p) => (
+                    <li key={p.id}>
+                      <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-accent/30">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedProps[p.id])}
+                          onChange={() => toggleProp(p.id)}
+                          className="mt-1 h-4 w-4 rounded border-border text-primary"
+                        />
+                        <span className="text-sm text-foreground">{p.label}</span>
+                      </label>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+
+            {selectedPropIds.length > 0 ? (
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Per-property permissions</p>
+                {selectedPropIds.map((pid) => (
+                  <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
+                    <p className="text-sm font-semibold text-foreground">{resolvePropertyLabel(pid, pid)}</p>
+                    <div className="mt-3">
+                      <CoManagerPermissionsEditor
+                        value={normalizeCoManagerPermissions(propertyPermissionsDraft[pid])}
+                        onChange={(next) =>
+                          setPropertyPermissionsDraft((prev) => ({ ...prev, [pid]: next }))
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <Button type="button" className={`${PORTAL_HEADER_ACTION_BTN} rounded-full`} onClick={() => void saveNewLink()}>
+              {useRemote ? "Send invite" : "Save link (local)"}
             </Button>
           </div>
-
-          {linkCap != null ? (
-            <div
-              className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
-                atLinkCap ? "portal-banner-danger" : "border-border bg-accent/30"
-              }`}
-            >
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span
-                  className={`font-semibold tabular-nums ${atLinkCap ? "text-[var(--status-overdue-fg)]" : "text-foreground"}`}
-                >
-                  {linksUsed}/{linkCap}
-                </span>
-                <span className="text-muted">links in use</span>
-                {tierShort ? (
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-card/80 text-[var(--status-overdue-fg)]" : "bg-card text-muted"}`}
-                  >
-                    {tierShort}
-                  </span>
-                ) : null}
-              </div>
-              <Link href={MANAGER_PLAN_PORTAL_URL} className="text-sm font-semibold text-primary underline-offset-2 hover:underline">
-                Billing
-              </Link>
-            </div>
-          ) : null}
-
-          {atLinkCap ? (
-            <p className="mt-3 text-xs font-medium text-[var(--status-overdue-fg)]">At limit — remove a link or change plan.</p>
-          ) : null}
-          {inviteeAtCap ? (
-            <p className="mt-3 text-xs font-medium text-[var(--status-overdue-fg)]">
-              That account is already at its link limit and cannot accept new links.
-            </p>
-          ) : null}
-
-          {draftAxisId ? (
-            <div className="mt-6 space-y-5 border-t border-border pt-6">
-              <p className="text-sm text-muted">
-                Verified <span className="font-semibold text-foreground">{draftName}</span>{" "}
-                <span className="font-mono text-xs text-muted">({draftAxisId})</span>
-              </p>
-
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assigned properties</p>
-                <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-border bg-card p-3">
-                  {propertyOptions.length === 0 ? (
-                    <li className="text-sm text-muted">No properties yet — add listings under Properties first.</li>
-                  ) : (
-                    propertyOptions.map((p) => (
-                      <li key={p.id}>
-                        <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-accent/30">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(selectedProps[p.id])}
-                            onChange={() => toggleProp(p.id)}
-                            className="mt-1 h-4 w-4 rounded border-border text-primary"
-                          />
-                          <span className="text-sm text-foreground">{p.label}</span>
-                        </label>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-
-              {selectedPropIds.length > 0 ? (
-                <div className="space-y-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Per-property permissions</p>
-                  {selectedPropIds.map((pid) => (
-                    <div key={pid} className="rounded-xl border border-border bg-card p-4">
-                      <p className="text-sm font-semibold text-foreground">{resolvePropertyLabel(pid, pid)}</p>
-                      <div className="mt-3">
-                        <CoManagerPermissionsEditor
-                          value={normalizeCoManagerPermissions(propertyPermissionsDraft[pid])}
-                          onChange={(next) =>
-                            setPropertyPermissionsDraft((prev) => ({ ...prev, [pid]: next }))
-                          }
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              <Button type="button" className="rounded-full" onClick={() => void saveNewLink()}>
-                {useRemote ? "Send invite" : "Save link (local)"}
-              </Button>
-            </div>
-          ) : null}
-        </div>
+        ) : null}
 
         {useRemote && incomingPending.length > 0 ? (
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground">Pending approvals (incoming)</p>
-            <ul className="space-y-3">
+            <ul className="space-y-2">
               {incomingPending.map((inv) => (
-                <li key={inv.id} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
-                      <p className="font-mono text-xs text-muted">{inv.linkedAxisId}</p>
-                      <p className="mt-2 text-xs text-muted">
-                        {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "accept")}>
-                        Approve
-                      </Button>
-                      <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "reject")}>
-                        Decline
-                      </Button>
-                    </div>
+                <li
+                  key={inv.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3"
+                >
+                  <div>
+                    <p className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
+                    <p className="font-mono text-xs text-muted">{inv.linkedAxisId}</p>
+                    <p className="mt-2 text-xs text-muted">
+                      {inv.assignedPropertyIds.length} propert{inv.assignedPropertyIds.length === 1 ? "y" : "ies"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "accept")}>
+                      Approve
+                    </Button>
+                    <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => void respondInvite(inv.id, "reject")}>
+                      Decline
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -969,11 +977,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         {useRemote && outgoingPending.length > 0 ? (
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground">Waiting on them</p>
-            <ul className="space-y-3">
+            <ul className="space-y-2">
               {outgoingPending.map((inv) => (
                 <li
                   key={inv.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-accent/30 px-5 py-4 text-sm text-muted"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted"
                 >
                   <div>
                     <span className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</span>
@@ -988,15 +996,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </div>
         ) : null}
 
-        <div className="space-y-4">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Your team</p>
-          </div>
-
-          {activeCards.length === 0 && ownedProperties.length === 0 ? (
-            <PortalDataTableEmpty message="No team members yet." icon="team" />
-          ) : (
-            <div className={PORTAL_DATA_TABLE_WRAP}>
+        {activeCards.length === 0 && ownedProperties.length === 0 ? (
+          <PortalDataTableEmpty message="No team members yet." icon="team" />
+        ) : (
+          <div className={PORTAL_DATA_TABLE_WRAP}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
                 <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                   <thead>
@@ -1021,7 +1024,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             <p className="mt-0.5 text-xs text-muted">Main manager</p>
                           </td>
                           <td className={PORTAL_TABLE_TD}>
-                            <span className={`${BADGE_SUCCESS_CLASS} px-2.5 py-0.5`}>Owner</span>
+                            <span className={OWNER_ROLE_BADGE}>Owner</span>
                           </td>
                           <td className={PORTAL_TABLE_TD}>
                             <span className="tabular-nums">{ownedProperties.length}</span>
@@ -1090,7 +1093,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                   <p className="mt-0.5 font-mono text-xs text-muted">{inv.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
-                                  <span className="rounded-full border border-border bg-accent/40 px-2.5 py-0.5 text-xs font-medium text-foreground">
+                                  <span className={CO_MANAGER_ROLE_BADGE}>
                                     {readOnly ? "Linked to you" : "Co-manager"}
                                   </span>
                                 </td>
@@ -1203,9 +1206,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                   <p className="mt-0.5 font-mono text-xs text-muted">{r.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
-                                  <span className="rounded-full border border-border bg-accent/40 px-2.5 py-0.5 text-xs font-medium text-foreground">
-                                    Co-manager
-                                  </span>
+                                  <span className={CO_MANAGER_ROLE_BADGE}>Co-manager</span>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
                                   <span className="tabular-nums">{r.assignedPropertyIds.length}</span>
@@ -1304,7 +1305,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
               </div>
             </div>
           )}
-        </div>
 
         {transferPropertyId ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 [html[data-theme=dark]_&]:bg-black/65">

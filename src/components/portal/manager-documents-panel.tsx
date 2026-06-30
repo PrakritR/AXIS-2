@@ -1,11 +1,19 @@
 "use client";
 
 import { Fragment } from "react";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { TabNav } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, MANAGER_TABLE_TH, PORTAL_KPI_LABEL, PORTAL_KPI_VALUE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalFilterRow,
+  ManagerPortalPageShell,
+  MANAGER_TABLE_TH,
+  PORTAL_FILTER_ACTIONS_MOBILE,
+  PORTAL_KPI_LABEL,
+  PORTAL_KPI_VALUE,
+  PORTAL_PAGE_ACTIONS_DESKTOP,
+} from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
@@ -218,25 +226,54 @@ export function ManagerDocumentsPanel({
   const showProperty = tabId === "tax-summary" || tabId === "occupancy";
   const showTaxYear = tabId === "1099";
 
-  return (
-    <ManagerPortalPageShell title="Documents">
-      <div className="mb-4 flex flex-wrap gap-2">
-        {DOCUMENT_TABS.map((tab) => (
-          <Link
-            key={tab.id}
-            href={`${basePath}/documents/${tab.id}`}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-              tabId === tab.id
-                ? "bg-foreground text-background"
-                : "border border-border bg-card text-foreground/80 hover:bg-accent/40"
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
+  const documentTabItems = useMemo(
+    () => DOCUMENT_TABS.map((tab) => ({ ...tab, href: `${basePath}/documents/${tab.id}` })),
+    [basePath],
+  );
 
-      <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
+  const exportActions = (
+    <>
+      {tabId === "1099" ? (
+        <a
+          href={`/api/reports/1099-nec/export?taxYear=${filters.taxYear}&all=1`}
+          className="inline-flex h-10 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
+        >
+          Download all 1099s
+        </a>
+      ) : null}
+      {tabId === "expense-documents" && generated ? (
+        <ReportExportButtons reportId="expenses" query={expenseExportQuery} />
+      ) : null}
+      {incomeReceiptExportHref && generated ? (
+        <a
+          href={incomeReceiptExportHref}
+          className="inline-flex h-10 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
+        >
+          Download PDF
+        </a>
+      ) : null}
+    </>
+  );
+
+  const hasExportActions =
+    tabId === "1099" ||
+    (tabId === "expense-documents" && generated) ||
+    Boolean(incomeReceiptExportHref && generated);
+
+  return (
+    <ManagerPortalPageShell
+      title="Documents"
+      titleAside={
+        hasExportActions ? <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div> : undefined
+      }
+      filterRow={
+        <ManagerPortalFilterRow>
+          <TabNav activeId={tabId} items={documentTabItems} />
+          {hasExportActions ? <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} gap-2`}>{exportActions}</div> : null}
+        </ManagerPortalFilterRow>
+      }
+    >
+      <div className="space-y-4">
         {tabId === "income-documents" || tabId === "expense-documents" ? (
           <FormalDocumentScopeBar
             filters={scopeFilters}
@@ -244,40 +281,17 @@ export function ManagerDocumentsPanel({
           />
         ) : null}
 
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <ReportFilterBar
-            showProperty={showProperty}
-            showDateRange={showDateRange}
-            showDaysAhead={false}
-            showTaxYear={showTaxYear}
-            propertyOptions={propertyOptions}
-            filters={filters}
-            onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
-            onRun={() => void runReport()}
-            loading={loading}
-          />
-          <div className="flex flex-wrap gap-2">
-            {tabId === "1099" ? (
-              <a
-                href={`/api/reports/1099-nec/export?taxYear=${filters.taxYear}&all=1`}
-                className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
-              >
-                Download all 1099s
-              </a>
-            ) : null}
-            {tabId === "expense-documents" && generated ? (
-              <ReportExportButtons reportId="expenses" query={expenseExportQuery} />
-            ) : null}
-            {incomeReceiptExportHref && generated ? (
-              <a
-                href={incomeReceiptExportHref}
-                className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
-              >
-                Download PDF
-              </a>
-            ) : null}
-          </div>
-        </div>
+        <ReportFilterBar
+          showProperty={showProperty}
+          showDateRange={showDateRange}
+          showDaysAhead={false}
+          showTaxYear={showTaxYear}
+          propertyOptions={propertyOptions}
+          filters={filters}
+          onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
+          onRun={() => void runReport()}
+          loading={loading}
+        />
 
         {tabId === "tax-summary" && generated ? <TaxSummaryCards report={report} /> : null}
 
@@ -324,7 +338,7 @@ export function ManagerDocumentsPanel({
                               <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{String(row.vendorName)}</td>
                               <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{String(row.totalPaid)}</td>
                               <td className={PORTAL_TABLE_TD}>
-                                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${w9StatusTone(w9Status)}`}>
+                                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${w9StatusTone(w9Status)}`}>
                                   {w9Status || "Unknown"}
                                 </span>
                               </td>

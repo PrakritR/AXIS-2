@@ -1,6 +1,6 @@
 # UI Review Issue Matrix
 
-Structured audit of all five Blue Steel surfaces against [`design.md`](design.md) and the canonical portal list-section pattern in [`portal-list-section.tsx`](../src/components/portal/portal-list-section.tsx).
+Structured audit of all five Blue Steel surfaces against [`design.md`](design.md) and the canonical portal list-section pattern in [`portal-list-section-layout.md`](portal-list-section-layout.md) / [`portal-list-section.tsx`](../src/components/portal/portal-list-section.tsx).
 
 **Severity:** P0 = breaks spec or accessibility; P1 = visible inconsistency; P2 = maintainability / naming drift.
 
@@ -24,6 +24,30 @@ Structured audit of all five Blue Steel surfaces against [`design.md`](design.md
 | All portals | Modals | Accessibility | P1 | ~~No focus trap~~ | `useFocusTrap` in `Modal` | `ui/modal.tsx` | **Done** (Wave 3) |
 | All portals | Mobile `<lg` | Responsive | P2 | ~~Mobile nav unlabeled~~ | `aria-label="Portal sections"` | `portal-sidebar.tsx` | **Done** (Wave 3) |
 | Pro portal | Naming | Maintainability | P2 | `manager-*` components at `/portal` route | Incremental rename to `pro-*` | `components/portal/manager-*.tsx` | Wave 4 |
+
+## Portal layout conformance (pro portal)
+
+Audit against [`portal-list-section-layout.md`](portal-list-section-layout.md). **Canonical:** Inbox, Residents, Services, Leases.
+
+| Section | Component | Status | Notes |
+|---------|-----------|--------|-------|
+| Dashboard | `manager-dashboard.tsx` | Exception | KPI tile grid — not a list section |
+| Properties | `manager-properties.tsx` | OK | Header CTA only; divider via always-on shell rule |
+| Calendar | `portal-calendar.tsx` | Exception | Week/month grid |
+| Applications | `manager-applications.tsx` | OK | `filterRow` + table pattern |
+| Residents | `manager-residents.tsx` | **Canonical** | Reference implementation |
+| Leases | `manager-leases.tsx` | **Canonical** | Reference implementation |
+| Payments | `manager-payments.tsx` | OK | `filterRow` + table pattern |
+| Services | `manager-all-services-panel.tsx` | **Canonical** | `TabNav` + conditional header CTA |
+| Inbox | `manager-inbox.tsx` | **Canonical** | Reference implementation |
+| Documents | `manager-documents-panel.tsx` | **Fixed** | Was nested surface + tabs in body; now `TabNav` + flat toolbar |
+| Finances | `manager-finances-panel.tsx` | **Fixed** | Was nested surface; now `TabNav` + `titleAside` actions |
+| Co-managers | `pro-account-links-panel.tsx` | **Fixed** | Was multi-card layout; now `filterRow` link form + table body |
+| Feedback | `portal-bug-feedback-panel.tsx` | **Fixed** | Divider via shell; badge sizing aligned |
+| Settings | `portal-profile-client.tsx` | Exception | Form sections, not data table |
+
+| Pro portal | List-section layout | Portal patterns | P1 | ~~Documents / Finances / Co-managers / Feedback off-pattern~~ | Match Inbox / Residents shell | `manager-documents-panel.tsx`, `manager-finances-panel.tsx`, `pro-account-links-panel.tsx`, `portal-bug-feedback-panel.tsx` | **Done** |
+| Pro portal | Shell divider | Portal patterns | P1 | ~~Missing header rule when no filterRow~~ | Always-on `border-b` in `ManagerPortalPageShell` | `portal-metrics.tsx` | **Done** |
 
 ## Cross-cutting inventory (legacy vs canonical)
 

@@ -108,7 +108,7 @@ function signInCopy(
   }
   return {
     title: isNative ? "Sign in" : "Portal sign-in",
-    createAccountHref: isNative ? entry : entry,
+    createAccountHref: isNative ? "/auth/manager/plan" : "/partner/pricing",
     backHref: null,
   };
 }

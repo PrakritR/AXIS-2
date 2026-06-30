@@ -402,11 +402,9 @@ export function ManagerPortalPageShell({
           <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">{titleAside}</div>
         ) : null}
       </div>
-      {filterRow ? (
-        <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5">
-          {filterRow}
-        </div>
-      ) : null}
+      <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5">
+        {filterRow ?? null}
+      </div>
       <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5">{children}</div>
     </div>
   );

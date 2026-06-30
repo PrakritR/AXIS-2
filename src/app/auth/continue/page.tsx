@@ -2,6 +2,7 @@
 
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -74,11 +75,10 @@ function ContinueContent() {
     void (async () => {
       try {
         const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const user = await waitForOAuthUser(supabase);
 
         if (!user) {
+          await supabase.auth.signOut().catch(() => undefined);
           window.location.replace(nextPath ? `/auth/sign-in?next=${encodeURIComponent(nextPath)}` : "/auth/sign-in");
           return;
         }
