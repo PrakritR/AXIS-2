@@ -11,7 +11,9 @@ import {
 } from "@/lib/manager-applications-storage";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { Button } from "@/components/ui/button";
+import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 export function ResidentProfilePanel() {
@@ -134,7 +136,7 @@ export function ResidentProfilePanel() {
 
   return (
     <ManagerPortalPageShell
-      title="Profile"
+      title="Settings"
       titleAside={
         <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => void saveProfile()}>
           Save
@@ -168,7 +170,11 @@ export function ResidentProfilePanel() {
           </div>
         </div>
 
+        <NotificationsToggle />
+
         <PortalChangePasswordPanel accountEmail={email} accountLabel="this resident account" />
+
+        <PortalSettingsExtras currentKind="resident" />
       </div>
     </ManagerPortalPageShell>
   );

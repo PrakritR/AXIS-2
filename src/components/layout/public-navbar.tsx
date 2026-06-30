@@ -3,6 +3,7 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { Session } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
@@ -27,6 +28,8 @@ function persistSignedIn(value: boolean) {
 
 export function PublicNavbar() {
   const pathname = usePathname();
+  const { isNative } = useIsNativeApp();
+  const hideOnNative = isNative === true;
   // Always false on server and first client paint so SSR markup matches hydration.
   // Auth state is applied in useEffect after mount (localStorage + Supabase session).
   const [signedIn, setSignedIn] = useState(false);
@@ -65,13 +68,15 @@ export function PublicNavbar() {
     [partnerActive, pricingActive],
   );
 
+  if (hideOnNative) return null;
+
   return (
     <div
       id="axis-public-navbar"
       className="sticky top-0 z-50 border-b border-border bg-background pt-[env(safe-area-inset-top,0px)]"
     >
       <Navbar1
-        logoSlot={<AxisLogoLink href="/" size="compact" />}
+        logoSlot={<AxisLogoLink href="/" size="compact" showWordmark={false} />}
         menu={menu}
         auth={{
           login: { text: "Log in", url: "/auth/sign-in" },

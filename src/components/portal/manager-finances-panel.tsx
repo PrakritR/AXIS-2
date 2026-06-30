@@ -1,16 +1,20 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { TabNav } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
+  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
-  PORTAL_SECTION_SURFACE,
+  PORTAL_FILTER_ACTIONS_MOBILE,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
+import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import {
   ReportExportButtons,
   ReportFilterBar,
@@ -463,62 +467,71 @@ export function ManagerFinancesPanel({
     return params.toString();
   })();
 
-  return (
-    <ManagerPortalPageShell title="Finances">
-      <div className="mb-4 flex flex-wrap gap-2">
-        {FINANCE_TABS.map((tab) => (
-          <Link
-            key={tab.id}
-            href={`${basePath}/financials/${tab.id}`}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-              tabId === tab.id
-                ? "bg-foreground text-background"
-                : "border border-border bg-card text-foreground/80 hover:bg-accent/40"
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
+  const financeTabItems = useMemo(
+    () => FINANCE_TABS.map((tab) => ({ ...tab, href: `${basePath}/financials/${tab.id}` })),
+    [basePath],
+  );
 
-      <div className={`${PORTAL_SECTION_SURFACE} space-y-5 p-4 sm:p-5`}>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <ReportFilterBar
-            showProperty
-            showDateRange
-            showDaysAhead={false}
-            showTaxYear={false}
-            propertyOptions={propertyOptions}
-            filters={filters}
-            onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
-            onRun={() => void loadTable()}
-            loading={loading}
-            showRunButton={false}
-          />
-          <div className="flex flex-wrap gap-2">
-            {tabId === "expenses" ? (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setExpenseDraft({
-                    categoryCode: "maintenance",
-                    amount: "",
-                    expenseDate: new Date().toISOString().slice(0, 10),
-                    memo: "",
-                    vendorId: "",
-                    propertyId: filters.propertyId,
-                  });
-                  setExpenseModal(true);
-                }}
-              >
-                Add expense
-              </Button>
-            ) : null}
-            {report && report.rows.length > 0 ? (
-              <ReportExportButtons reportId={reportId} query={query} formats={["csv"]} />
-            ) : null}
-          </div>
-        </div>
+  function openAddExpense() {
+    setExpenseDraft({
+      categoryCode: "maintenance",
+      amount: "",
+      expenseDate: new Date().toISOString().slice(0, 10),
+      memo: "",
+      vendorId: "",
+      propertyId: filters.propertyId,
+    });
+    setExpenseModal(true);
+  }
+
+  const headerActions = (
+    <>
+      {tabId === "expenses" ? (
+        <PortalSectionPrimaryButton onClick={openAddExpense}>Add expense</PortalSectionPrimaryButton>
+      ) : null}
+      {report && report.rows.length > 0 ? (
+        <ReportExportButtons reportId={reportId} query={query} formats={["csv"]} />
+      ) : null}
+    </>
+  );
+
+  const hasHeaderActions = tabId === "expenses" || Boolean(report && report.rows.length > 0);
+
+  return (
+    <ManagerPortalPageShell
+      title="Finances"
+      titleAside={hasHeaderActions ? <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{headerActions}</div> : undefined}
+      filterRow={
+        <ManagerPortalFilterRow>
+          <TabNav activeId={tabId} items={financeTabItems} />
+          {hasHeaderActions ? (
+            <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} gap-2`}>
+              {tabId === "expenses" ? (
+                <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={openAddExpense}>
+                  Add expense
+                </Button>
+              ) : null}
+              {report && report.rows.length > 0 ? (
+                <ReportExportButtons reportId={reportId} query={query} formats={["csv"]} />
+              ) : null}
+            </div>
+          ) : null}
+        </ManagerPortalFilterRow>
+      }
+    >
+      <div className="space-y-5">
+        <ReportFilterBar
+          showProperty
+          showDateRange
+          showDaysAhead={false}
+          showTaxYear={false}
+          propertyOptions={propertyOptions}
+          filters={filters}
+          onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
+          onRun={() => void loadTable()}
+          loading={loading}
+          showRunButton={false}
+        />
 
         <FinancesRowFilters
           tabId={tabId}

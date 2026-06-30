@@ -299,10 +299,18 @@ export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
 export async function loadPublicExtraListingsFromServer(): Promise<MockProperty[]> {
   try {
     const res = await fetch("/api/property-records/public", { cache: "no-store" });
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!res.ok || !contentType.includes("application/json")) {
+      return readExtraListingsPublic();
+    }
     const body = (await res.json()) as { listings?: MockProperty[] };
-    if (!res.ok) return readExtraListingsPublic();
-    const listings = body.listings ?? [];
+    const listings = (body.listings ?? []).map((listing) =>
+      listing.adminPublishLive === true ? listing : { ...listing, adminPublishLive: true as const },
+    );
     cachePublicExtraListings(listings, { silent: true });
+    if (isBrowser()) {
+      window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+    }
     return listings;
   } catch {
     return readExtraListingsPublic();

@@ -6,7 +6,7 @@ const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 const PAID_MANAGER_NAV = [
   { label: "Dashboard", path: "/portal/dashboard" },
   { label: "Properties", path: "/portal/properties" },
-  { label: "Tours", path: "/portal/calendar" },
+  { label: "Calendar", path: "/portal/calendar" },
   { label: "Applications", path: "/portal/applications" },
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Leases", path: "/portal/leases" },
@@ -15,8 +15,7 @@ const PAID_MANAGER_NAV = [
   { label: "Inbox", path: "/portal/inbox/unopened" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
   { label: "Co-managers", path: "/portal/relationships" },
-  { label: "Plan", path: "/portal/plan" },
-  { label: "Profile", path: "/portal/profile" },
+  { label: "Settings", path: "/portal/profile" },
 ] as const;
 
 test.describe("Manager portal", () => {
@@ -106,12 +105,16 @@ test.describe("Manager portal", () => {
     await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
-  test("plan tab shows current tier", async ({ page }) => {
-    await page.goto("/portal/plan");
-    await expect(page.getByRole("heading").first()).toBeVisible();
-    // Should show plan tier label (Free / Pro / Business)
+  test("settings shows plan tier", async ({ page }) => {
+    await page.goto("/portal/profile");
+    await expect(page.getByRole("heading", { name: /settings/i })).toBeVisible();
     const tierLabel = page.getByText(/free|pro|business/i).first();
     await expect(tierLabel).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("legacy plan path redirects to settings", async ({ page }) => {
+    await page.goto("/portal/plan");
+    await expect(page).toHaveURL(/\/portal\/profile/, { timeout: 15_000 });
   });
 
   test("co-managers (relationships) tab loads", async ({ page }) => {

@@ -1,5 +1,8 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
+import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/portal/portal-data-table";
+import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 
 /** Dashboard / KPI link tiles (manager, resident, admin). */
 export const PORTAL_DASHBOARD_TILE_LINK =
@@ -7,7 +10,7 @@ export const PORTAL_DASHBOARD_TILE_LINK =
 
 /** Outer card wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
-  "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6";
+  "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6 [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3.5";
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
 export const PORTAL_CALENDAR_FRAME =
@@ -211,7 +214,7 @@ export function ManagerPortalStatusPills({
 }) {
   const isPrimary = activeTone === "primary";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
+    <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:rounded-full [&::-webkit-scrollbar]:hidden">
       {tabs.map((tab) => {
         const active = activeId === tab.id;
         return (
@@ -219,7 +222,7 @@ export function ManagerPortalStatusPills({
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className={`flex min-h-9 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+            className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
               active
                 ? isPrimary
                   ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
@@ -263,13 +266,13 @@ export function PortalDashboardTile({
   return (
     <Link
       href={href}
-      className={`surface-panel group flex min-h-[88px] flex-col justify-center gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] ${
+      className={`surface-panel group flex min-h-[88px] flex-col justify-center gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] [html[data-native]_&]:min-h-[4.25rem] [html[data-native]_&]:gap-0.5 [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-3.5 ${
         urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
       }`}
     >
-      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground">{value}</p>
-      <p className="text-sm font-medium text-muted">{label}</p>
-      {sub ? <p className="text-xs text-muted">{sub}</p> : null}
+      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground [html[data-native]_&]:text-[1.5rem]">{value}</p>
+      <p className="text-sm font-medium text-muted [html[data-native]_&]:text-xs">{label}</p>
+      {sub ? <p className="text-xs text-muted [html[data-native]_&]:text-[11px]">{sub}</p> : null}
     </Link>
   );
 }
@@ -298,7 +301,68 @@ export function PortalDashboardSectionHeader({
 
 /** Inner card shell for dashboard section panels. */
 export const PORTAL_DASHBOARD_SECTION_CARD =
-  "rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)]";
+  "rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_rgba(15,23,42,0.05)] [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-3";
+
+/** Vertical stack spacing for dashboard sections — tighter on native. */
+export const PORTAL_DASHBOARD_STACK = "space-y-5 [html[data-native]_&]:space-y-3";
+
+/** Compact list row used in dashboard section previews. */
+export function PortalDashboardCompactRow({
+  title,
+  subtitle,
+  badge,
+}: {
+  title: string;
+  subtitle?: string;
+  badge?: ReactNode;
+}) {
+  return (
+    <li className="flex items-start justify-between gap-2.5 rounded-xl bg-accent/30 px-3 py-2 [html[data-native]_&]:gap-2 [html[data-native]_&]:px-2.5 [html[data-native]_&]:py-1.5">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px]">{title}</p>
+        {subtitle ? (
+          <p className="truncate text-xs text-muted [html[data-native]_&]:text-[11px]">{subtitle}</p>
+        ) : null}
+      </div>
+      {badge ? <div className="shrink-0">{badge}</div> : null}
+    </li>
+  );
+}
+
+/** Dashboard section list with native/mobile preview limits and optional overflow link. */
+export function PortalDashboardPreviewList<T>({
+  items,
+  href,
+  emptyMessage,
+  keyForItem,
+  renderRow,
+}: {
+  items: T[];
+  href: string;
+  emptyMessage: string;
+  keyForItem?: (item: T) => string | number;
+  renderRow: (item: T) => ReactNode;
+}) {
+  const { visible, overflow } = usePortalPreviewSlice(items);
+  const { isNative } = useIsNativeApp();
+
+  if (items.length === 0) {
+    return <p className="mt-3 text-sm text-muted [html[data-native]_&]:mt-2 [html[data-native]_&]:text-xs">{emptyMessage}</p>;
+  }
+
+  return (
+    <>
+      <ul className="mt-3 space-y-1.5 [html[data-native]_&]:mt-2 [html[data-native]_&]:space-y-1">
+        {visible.map((item, index) => (
+          <Fragment key={keyForItem?.(item) ?? index}>{renderRow(item)}</Fragment>
+        ))}
+      </ul>
+      <PortalPreviewOverflowLink overflow={overflow} href={href} label={isNative ? `View all (${items.length}) →` : undefined} />
+    </>
+  );
+}
+
+export { formatCompactChargeLine, formatCompactPlacementLine };
 
 /** Manager sections aligned with admin portal leases / managers shell. */
 export function ManagerPortalPageShell({
@@ -307,24 +371,41 @@ export function ManagerPortalPageShell({
   titleAside,
   filterRow,
   children,
+  hideTitleOnNative = false,
 }: {
   title: string;
   subtitle?: string;
   titleAside?: ReactNode;
   filterRow?: ReactNode;
   children: ReactNode;
+  /** Visually hide the page title in the native app (bottom nav shows the section). */
+  hideTitleOnNative?: boolean;
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <div className="min-w-0">
-          <h1 className="text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem]">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0 shrink-0">
+          <h1
+            className={`text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem] [html[data-native]_&]:text-[1.2rem] ${
+              hideTitleOnNative ? "[html[data-native]_&]:sr-only" : ""
+            }`}
+          >
+            {title}
+          </h1>
+          {subtitle ? (
+            <p className="mt-1 line-clamp-2 text-sm text-muted [html[data-native]_&]:mt-0.5 [html[data-native]_&]:text-xs">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
-        {titleAside ? <div className="flex flex-wrap items-center gap-2.5 sm:justify-end sm:pt-0.5">{titleAside}</div> : null}
+        {titleAside ? (
+          <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">{titleAside}</div>
+        ) : null}
       </div>
-      {filterRow ? <div className="mt-6 border-b border-border pb-6">{filterRow}</div> : null}
-      <div className="mt-6">{children}</div>
+      <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5">
+        {filterRow ?? null}
+      </div>
+      <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5">{children}</div>
     </div>
   );
 }
@@ -353,7 +434,14 @@ export const PORTAL_TOOLBAR_SELECT =
   "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring";
 
 /** Shared action button sizing for page header controls. */
-export const PORTAL_HEADER_ACTION_BTN = "h-10 rounded-full px-5 text-sm font-semibold";
+export const PORTAL_HEADER_ACTION_BTN =
+  "h-10 rounded-full px-5 text-sm font-semibold [html[data-native]_&]:h-9 [html[data-native]_&]:px-3.5 [html[data-native]_&]:text-xs";
+
+/** Desktop-only page actions — pair with {@link PORTAL_FILTER_ACTIONS_MOBILE} in filter rows. */
+export const PORTAL_PAGE_ACTIONS_DESKTOP = "hidden shrink-0 flex-wrap items-center justify-end gap-2 lg:flex";
+
+/** Mobile page actions — place inside {@link ManagerPortalFilterRow}. */
+export const PORTAL_FILTER_ACTIONS_MOBILE = "flex shrink-0 items-center gap-2 lg:hidden";
 
 /** Shared sort dropdown shell for portal section toolbars. */
 export function PortalToolbarSortSelect<T extends string>({
@@ -390,7 +478,11 @@ export function PortalToolbarSortSelect<T extends string>({
 
 /** Standard filter row wrapper (status pills + optional sort). */
 export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap items-center gap-3">{children}</div>;
+  return (
+    <div className="flex max-w-full flex-wrap items-center gap-3 max-lg:overflow-x-auto max-lg:flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {children}
+    </div>
+  );
 }
 
 /** Shared inactive / active chip styles for toolbar toggles (e.g. Events calendar KPI row). */

@@ -179,7 +179,7 @@ export function ManagerSectionShell({
   const [activeKpi, setActiveKpi] = useState(activeKpiIndexProp);
 
   return (
-    <div className={`${PORTAL_SECTION_SURFACE} flex min-h-0 w-full max-w-full flex-1 flex-col`}>
+    <div className={`${PORTAL_SECTION_SURFACE} flex min-h-0 w-full max-w-full flex-1 flex-col max-lg:flex-none`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <h1 className={PORTAL_PAGE_TITLE}>{title}</h1>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">

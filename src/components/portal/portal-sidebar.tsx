@@ -1,20 +1,30 @@
 "use client";
 
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { AxisAssistantNavButton, useHasAxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
-import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
-import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
+import {
+  PortalNativeMoreSheet,
+  type PortalMoreNavItem,
+} from "@/components/portal/portal-native-more-sheet";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
+import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
+import { shouldOpenNativeSectionsSheet } from "@/lib/native/open-portal-sections-sheet";
+import { orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import { observeNativeBottomNavInset } from "@/lib/native/sync-portal-bottom-nav-inset";
 import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
+import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
+import { PORTAL_MOBILE_CHROME_CLASS, PORTAL_NATIVE_BOTTOM_NAV_CLASS } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
-import type { PortalDefinition } from "@/lib/portal-types";
+import type { PortalDefinition, PortalKind } from "@/lib/portal-types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useIsClient } from "@/hooks/use-is-client";
 
 function hrefForSection(def: PortalDefinition, section: string) {
   const meta = def.sections.find((s) => s.section === section);
@@ -49,11 +59,45 @@ function PortalBrandLogoTile() {
   );
 }
 
-function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
+function sidebarBrandHref(definition: PortalDefinition): string {
+  const dashboard = definition.sections.find((s) => s.section === "dashboard");
+  if (dashboard) return `${definition.basePath}/dashboard`;
+  return definition.basePath;
+}
+
+function portalBrandCopy(kind: PortalKind): { title: string; subtitle: string; ariaLabel: string } {
+  switch (kind) {
+    case "resident":
+      return {
+        title: "Axis",
+        subtitle: "Resident Portal",
+        ariaLabel: "Axis Resident Portal home",
+      };
+    case "admin":
+      return {
+        title: "Axis",
+        subtitle: "Admin Portal",
+        ariaLabel: "Axis Admin Portal home",
+      };
+    default:
+      return {
+        title: "Axis",
+        subtitle: "Manager Portal",
+        ariaLabel: "Axis Manager Portal home",
+      };
+  }
+}
+
+function SidebarBrandHeader({
+  definition,
+  brandHref,
+}: {
+  definition: PortalDefinition;
+  brandHref: string;
+}) {
   const router = useRouter();
-  const isAdmin = definition.kind === "admin";
-  const isResident = definition.kind === "resident";
-  const brandTitle = definition.title.trim().toLowerCase() === "axis" ? "Axis" : definition.title;
+  const brand = portalBrandCopy(definition.kind);
+  const showAdminBadge = definition.kind === "admin";
 
   return (
     <div className="relative overflow-hidden px-5 py-5">
@@ -66,37 +110,25 @@ function SidebarBrandHeader({ definition }: { definition: PortalDefinition }) {
         aria-hidden
       />
       <Link
-        href="/"
+        href={brandHref}
         prefetch
-        aria-label="Axis home"
-        className={`relative flex gap-3 transition-opacity hover:opacity-90 ${isAdmin || isResident ? "items-start" : "items-center"}`}
-        onClick={portalNavClick(router, "/")}
+        aria-label={brand.ariaLabel}
+        className="relative flex items-start gap-3 transition-opacity hover:opacity-90"
+        onClick={portalNavClick(router, brandHref)}
       >
         <PortalBrandLogoTile />
-        <div className={`min-w-0 ${isAdmin || isResident ? "pt-0.5" : ""}`}>
-          {isAdmin ? (
-            <>
-              <p className="text-sm font-semibold tracking-[-0.02em] text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
-                Axis · Admin
-              </p>
-              <span className="mt-1.5 inline-block rounded-full border border-white/25 bg-card/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 [html[data-theme=light]_&]:border-primary/25 [html[data-theme=light]_&]:bg-primary/10 [html[data-theme=light]_&]:text-primary">
-                ADMIN
-              </span>
-            </>
-          ) : isResident ? (
-            <>
-              <p className="text-lg font-semibold tracking-[-0.02em] leading-snug text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
-                Axis
-              </p>
-              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72 [html[data-theme=light]_&]:text-primary/80">
-                Resident portal
-              </p>
-            </>
-          ) : (
-            <p className="text-lg font-semibold tracking-[-0.02em] leading-none text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
-              {brandTitle}
-            </p>
-          )}
+        <div className="min-w-0 pt-0.5">
+          <p className="text-lg font-semibold tracking-[-0.02em] leading-snug text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
+            {brand.title}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72 [html[data-theme=light]_&]:text-primary/80">
+            {brand.subtitle}
+          </p>
+          {showAdminBadge ? (
+            <span className="mt-1.5 inline-block rounded-full border border-white/25 bg-card/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 [html[data-theme=light]_&]:border-primary/25 [html[data-theme=light]_&]:bg-primary/10 [html[data-theme=light]_&]:text-primary">
+              Admin
+            </span>
+          ) : null}
         </div>
       </Link>
     </div>
@@ -141,10 +173,13 @@ export function PortalSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isClient = useIsClient();
+  const showNativeChrome = useNativeChrome();
+  const brandHref = useMemo(() => sidebarBrandHref(definition), [definition]);
+  const hasAssistant = useHasAxisAssistant();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
   const navCounts = usePortalNavCounts(definition.kind);
-  const [accountOpen, setAccountOpen] = useState(false);
   const navItems = useMemo(
     () =>
       visibleSections.map((section) => ({
@@ -159,6 +194,7 @@ export function PortalSidebar({
   );
 
   useEffect(() => {
+    if (!portalBackgroundPrefetchEnabled()) return;
     prefetchPortalPanelChunks();
   }, []);
 
@@ -167,35 +203,11 @@ export function PortalSidebar({
     return parts[1] ?? "dashboard";
   }, [pathname]);
 
-  const hasSignOut =
-    definition.kind === "resident" ||
-    definition.kind === "manager" ||
-    definition.kind === "admin" ||
-    definition.kind === "pro";
-
   const showNavIcons =
     definition.kind === "admin" ||
     definition.kind === "pro" ||
     definition.kind === "resident" ||
     definition.kind === "manager";
-
-  useEffect(() => {
-    if (!accountOpen || typeof document === "undefined") return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [accountOpen]);
-
-  const mobileBrandTitle =
-    definition.kind === "admin"
-      ? "Axis · Admin"
-      : definition.kind === "resident"
-        ? "Resident portal"
-        : definition.title.trim().toLowerCase() === "axis"
-          ? "Axis"
-          : definition.title;
 
   const showManagerTierLocks =
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
@@ -211,9 +223,135 @@ export function PortalSidebar({
     return false;
   };
 
+  const nativeBottomNavAllItems = useMemo(
+    () => (showNativeChrome ? orderNativeBottomNavItems(navItems, definition.kind) : []),
+    [definition.kind, navItems, showNativeChrome],
+  );
+
+  const nativeBottomNavItems = useMemo(
+    () => nativeBottomNavAllItems.filter((item) => !isSectionLocked(item.section)),
+    [nativeBottomNavAllItems, showManagerTierLocks, showResidentTierLocks, subscriptionTier],
+  );
+  const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
+  const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);
+  const bottomNavScrollRef = useRef<HTMLDivElement>(null);
+  const topNavScrollRef = useRef<HTMLDivElement>(null);
+  const bottomNavTouchRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    return observeNativeBottomNavInset(bottomNavEl, showNativeChrome);
+  }, [bottomNavEl, showNativeChrome]);
+
+  useEffect(() => {
+    if (!showNativeChrome) return;
+    const strip = bottomNavScrollRef.current;
+    if (!strip) return;
+    const activeEl = strip.querySelector<HTMLElement>(`[data-native-nav-section="${activeSection}"]`);
+    activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [activeSection, nativeBottomNavItems, showNativeChrome]);
+
+  useEffect(() => {
+    if (showNativeChrome) return;
+    const strip = topNavScrollRef.current;
+    if (!strip) return;
+    const activeEl = strip.querySelector<HTMLElement>(`[data-mobile-nav-section="${activeSection}"]`);
+    activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [activeSection, navItems, showNativeChrome]);
+
+  const moreSheetItems: PortalMoreNavItem[] = useMemo(
+    () =>
+      nativeBottomNavAllItems.map((item) => ({
+        section: item.section,
+        label: item.label,
+        href: item.href,
+        locked: isSectionLocked(item.section),
+        count: navCounts[item.section] ?? 0,
+      })),
+    [nativeBottomNavAllItems, navCounts, showManagerTierLocks, showResidentTierLocks, subscriptionTier],
+  );
+
+  const renderMobileNavLink = (
+    s: (typeof navItems)[number],
+    variant: "top" | "bottom",
+  ) => {
+    const active = activeSection === s.section;
+    const locked = isSectionLocked(s.section);
+    const count = navCounts[s.section] ?? 0;
+
+    if (variant === "bottom") {
+      return (
+        <Link
+          key={s.section}
+          href={s.href}
+          data-native-nav-section={s.section}
+          prefetch={portalMobileLinkPrefetchEnabled()}
+          onClick={
+            showNativeChrome
+              ? portalNavClick(router, s.href, { preferFullNavigation: true })
+              : portalNavClick(router, s.href)
+          }
+          className={`flex w-[2.75rem] shrink-0 snap-center flex-col items-center justify-end px-1 pt-0 pb-0 transition sm:w-[2.85rem] ${
+            active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
+          }`}
+          aria-label={
+            locked
+              ? definition.kind === "resident"
+                ? `${s.label} — unavailable on your property's Free plan`
+                : `${s.label} — locked on Pro or Business`
+              : s.label
+          }
+        >
+          {showNavIcons ? (
+            <span className={`relative shrink-0 ${locked ? "opacity-60" : "opacity-100"}`} aria-hidden>
+              <PortalNavIcon section={s.section} />
+              {!locked && count > 0 ? (
+                <span className="absolute -top-1 -right-1.5">
+                  <PortalNavCountBadge count={count} />
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </Link>
+      );
+    }
+
+    return (
+      <Link
+        key={s.section}
+        href={s.href}
+        data-mobile-nav-section={s.section}
+        prefetch={portalMobileLinkPrefetchEnabled()}
+        onClick={portalNavClick(router, s.href)}
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
+          active
+            ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
+            : locked
+              ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
+              : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
+        }`}
+        aria-label={
+          locked
+            ? definition.kind === "resident"
+              ? `${s.label} — unavailable on your property's Free plan`
+              : `${s.label} — locked on Pro or Business`
+            : s.label
+        }
+      >
+        {showNavIcons ? (
+          <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
+            <PortalNavIcon section={s.section} />
+          </span>
+        ) : null}
+        {s.label}
+        {!locked ? <PortalNavCountBadge count={count} /> : null}
+        {locked ? <NavLockIcon className="h-3 w-3 text-muted" /> : null}
+      </Link>
+    );
+  };
+
   const desktopAside = (
     <aside className="relative z-40 hidden h-full min-h-0 w-[16.625rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex">
-      <SidebarBrandHeader definition={definition} />
+      <SidebarBrandHeader definition={definition} brandHref={brandHref} />
       <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
           {navItems.map((s) => {
@@ -224,11 +362,15 @@ export function PortalSidebar({
               <Link
                 key={s.section}
                 href={s.href}
-                prefetch
-                onMouseEnter={() => {
-                  prefetchPortalHref(router, s.href);
-                  for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
-                }}
+                prefetch={portalBackgroundPrefetchEnabled()}
+                onMouseEnter={
+                  portalBackgroundPrefetchEnabled()
+                    ? () => {
+                        prefetchPortalHref(router, s.href);
+                        for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
+                      }
+                    : undefined
+                }
                 className={navLinkClass(active, locked)}
                 aria-label={
                   locked
@@ -260,15 +402,6 @@ export function PortalSidebar({
             );
           })}
         </div>
-        {hasSignOut ? (
-          <div className="mt-auto space-y-0.5 border-t border-border pt-3">
-            <PortalRoleSwitcher currentKind={definition.kind} />
-            <div className="flex items-center gap-2">
-              <PortalSignOutButton className="min-w-0 flex-1 rounded-[14px] px-3 py-2.5 text-left text-sm font-medium text-muted transition hover:bg-accent/70 hover:text-foreground disabled:opacity-60" />
-              <ThemeToggle className="shrink-0" />
-            </div>
-          </div>
-        ) : null}
       </nav>
     </aside>
   );
@@ -278,97 +411,79 @@ export function PortalSidebar({
       {desktopAside}
 
       <div className="shrink-0 lg:hidden">
-        <div className="border-b border-border bg-background lg:hidden">
-          <div className="flex items-center gap-2.5 px-3 pt-2 sm:px-4">
-            <div className="h-11 w-1 shrink-0 rounded-full bg-primary shadow-[0_0_10px_rgba(47,107,255,0.45)]" aria-hidden />
-            <div className="min-w-0 flex-1 py-1">
-              {mobileBrandTitle === "Axis" ? (
-                <p className="truncate text-sm font-semibold leading-snug text-foreground">Axis</p>
-              ) : (
-                <>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Axis</p>
-                  <p className="truncate text-sm font-semibold leading-snug text-foreground">{mobileBrandTitle}</p>
-                </>
-              )}
-            </div>
-            {hasSignOut ? (
-              <button
-                type="button"
-                className="min-h-11 shrink-0 rounded-full border border-border bg-card px-3.5 text-sm font-semibold text-foreground shadow-[var(--shadow-sm)]"
-                onClick={() => setAccountOpen(true)}
-              >
-                Account
-              </button>
-            ) : null}
-          </div>
-          <nav className="mt-1.5 flex gap-1.5 overflow-x-auto px-3 pb-2 pt-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden" aria-label="Portal sections">
-            {navItems.map((s) => {
-              const active = activeSection === s.section;
-              const locked = isSectionLocked(s.section);
-              const count = navCounts[s.section] ?? 0;
-              return (
-                <Link
-                  key={s.section}
-                  href={s.href}
-                  prefetch
-                  onMouseEnter={() => {
-                    prefetchPortalHref(router, s.href);
-                    for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
-                  }}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition sm:text-[13px] ${
-                    active
-                      ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-primary/20 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
-                      : locked
-                        ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
-                        : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
-                  }`}
-                  aria-label={
-                    locked
-                      ? definition.kind === "resident"
-                        ? `${s.label} — unavailable on your property's Free plan`
-                        : `${s.label} — locked on Pro or Business`
-                      : s.label
-                  }
-                >
-                  {showNavIcons ? (
-                    <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
-                      <PortalNavIcon section={s.section} />
-                    </span>
-                  ) : null}
-                  {s.label}
-                  {!locked ? <PortalNavCountBadge count={count} /> : null}
-                  {locked ? <NavLockIcon className="h-3 w-3 text-muted" /> : null}
-                </Link>
-              );
-            })}
+        <div className={PORTAL_MOBILE_CHROME_CLASS}>
+          <nav
+            ref={topNavScrollRef}
+            className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
+            aria-label="Portal sections"
+          >
+            {navItems.map((s) => renderMobileNavLink(s, "top"))}
           </nav>
         </div>
-
-        {accountOpen && hasSignOut ? (
-          <>
-            <button
-              type="button"
-              className="fixed inset-0 z-[90] bg-foreground/45 backdrop-blur-[1px] lg:hidden"
-              aria-label="Close account menu"
-              onClick={() => setAccountOpen(false)}
-            />
-            <div className="fixed right-0 bottom-0 left-0 z-[100] max-h-[min(70vh,28rem)] overflow-y-auto rounded-t-[1.35rem] border border-border bg-background px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] shadow-[0_-24px_48px_-20px_rgba(15,23,42,0.28)] lg:hidden">
-              <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
-              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Account</p>
-              <div className="mt-3 space-y-1 border-t border-border pt-3">
-                <PortalRoleSwitcher currentKind={definition.kind} />
-                <div className="flex items-center gap-2">
-                  <PortalSignOutButton
-                    className="min-w-0 flex-1 rounded-[14px] px-3 py-3 text-center text-sm font-semibold text-foreground ring-1 ring-border transition hover:bg-accent/70 disabled:opacity-60"
-                    onSignedOut={() => setAccountOpen(false)}
-                  />
-                  <ThemeToggle className="shrink-0" />
-                </div>
-              </div>
-            </div>
-          </>
-        ) : null}
       </div>
+
+      <PortalNativeMoreSheet
+        open={sectionsSheetOpen}
+        onOpenChange={setSectionsSheetOpen}
+        items={moreSheetItems}
+        activeSection={activeSection}
+        showNavIcons={showNavIcons}
+      />
+
+      {showNativeChrome && nativeBottomNavItems.length > 0 && isClient
+        ? createPortal(
+            <nav
+              ref={setBottomNavEl}
+              className={`${PORTAL_NATIVE_BOTTOM_NAV_CLASS} flex flex-col`}
+              aria-label="Portal sections"
+            >
+              <button
+                type="button"
+                className="portal-native-bottom-nav-pull flex w-full shrink-0 items-center justify-center border-0 bg-transparent px-3 pb-0.5 pt-1"
+                aria-label="Show all sections"
+                onClick={() => setSectionsSheetOpen(true)}
+                onTouchStart={(e) => {
+                  const touch = e.touches[0];
+                  if (!touch) return;
+                  bottomNavTouchRef.current = { x: touch.clientX, y: touch.clientY };
+                }}
+                onTouchEnd={(e) => {
+                  const start = bottomNavTouchRef.current;
+                  bottomNavTouchRef.current = null;
+                  const touch = e.changedTouches[0];
+                  if (!start || !touch) return;
+                  if (
+                    shouldOpenNativeSectionsSheet({
+                      startX: start.x,
+                      startY: start.y,
+                      endX: touch.clientX,
+                      endY: touch.clientY,
+                    })
+                  ) {
+                    setSectionsSheetOpen(true);
+                  }
+                }}
+              >
+                <span className="portal-native-bottom-nav-pull-handle" aria-hidden />
+              </button>
+              <div className="flex min-w-0 w-full items-stretch">
+                <div
+                  ref={bottomNavScrollRef}
+                  className="portal-native-bottom-nav-scroll flex min-w-0 w-0 flex-1 flex-nowrap snap-x snap-mandatory gap-0 overflow-x-auto overscroll-x-contain px-1.5 pt-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  aria-label="Scroll portal sections"
+                >
+                  {nativeBottomNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
+                </div>
+                {hasAssistant ? (
+                  <div className="portal-native-bottom-nav-assistant shrink-0 self-stretch border-l border-border">
+                    <AxisAssistantNavButton />
+                  </div>
+                ) : null}
+              </div>
+            </nav>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

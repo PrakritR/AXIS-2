@@ -2,9 +2,13 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   ManagerPortalStatusPills,
+  PORTAL_FILTER_ACTIONS_MOBILE,
+  PORTAL_PAGE_ACTIONS_DESKTOP,
+  PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -204,7 +208,7 @@ export function ManagerAllServicesPanel({
     <ManagerPortalPageShell
       title="Services"
       titleAside={
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap items-center justify-end gap-2`}>
           {pendingCount > 0 && (
             <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-300/60">
               {pendingCount} awaiting approval
@@ -220,12 +224,20 @@ export function ManagerAllServicesPanel({
             propertyValue={propertyFilter}
             onPropertyChange={setPropertyFilter}
           />
+          {typeFilter === "vendors" ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => vendorsPanelRef.current?.openAdd()}
+            >
+              Add vendor
+            </Button>
+          ) : null}
         </div>
       }
-      filterRow={null}
-    >
-      <div className="mt-1">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      filterRow={
+        <ManagerPortalFilterRow>
           <TabNav
             activeId={typeFilter}
             items={[
@@ -235,12 +247,21 @@ export function ManagerAllServicesPanel({
             ]}
           />
           {typeFilter === "vendors" ? (
-            <Button type="button" onClick={() => vendorsPanelRef.current?.openAdd()}>
-              Add vendor
-            </Button>
+            <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
+              <Button
+                type="button"
+                variant="primary"
+                className={PORTAL_HEADER_ACTION_BTN}
+                onClick={() => vendorsPanelRef.current?.openAdd()}
+              >
+                Add vendor
+              </Button>
+            </div>
           ) : null}
-        </div>
-
+        </ManagerPortalFilterRow>
+      }
+    >
+      <div className="mt-1">
         {typeFilter === "vendors" ? (
           <ManagerVendorsPanel ref={vendorsPanelRef} embedded />
         ) : typeFilter === "work-orders" ? (

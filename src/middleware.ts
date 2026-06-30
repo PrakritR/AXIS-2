@@ -6,6 +6,11 @@ const PROTECTED_PREFIXES = ["/portal", "/pro", "/manager", "/owner", "/resident"
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  if (path === "/dashboard" || path === "/dashboard/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/continue";
+    return NextResponse.redirect(url);
+  }
   if (path === "/portal/resident" || path === "/portal/resident/") {
     const url = request.nextUrl.clone();
     url.pathname = "/resident/dashboard";
@@ -59,5 +64,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/portal/:path*", "/pro/:path*", "/manager/:path*", "/owner/:path*", "/resident/:path*", "/admin/:path*"],
+  matcher: ["/dashboard", "/dashboard/", "/portal/:path*", "/pro/:path*", "/manager/:path*", "/owner/:path*", "/resident/:path*", "/admin/:path*"],
 };

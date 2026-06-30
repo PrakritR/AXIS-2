@@ -1,19 +1,35 @@
 "use client";
 
+import { portalBackgroundPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { useRouter } from "next/navigation";
 import { startTransition, useCallback, type MouseEvent } from "react";
 
 /** Smooth client navigation — keeps modified clicks (new tab, etc.) on the native link. */
-export function portalNavClick(router: ReturnType<typeof useRouter>, href: string) {
+export function portalNavClick(
+  router: ReturnType<typeof useRouter>,
+  href: string,
+  options?: { preferFullNavigation?: boolean },
+) {
   return (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
     event.preventDefault();
-    startTransition(() => router.push(href));
+    if (options?.preferFullNavigation) {
+      window.location.assign(href);
+      return;
+    }
+    startTransition(() => {
+      router.push(href);
+    });
   };
 }
 
 export function prefetchPortalHref(router: ReturnType<typeof useRouter>, href: string) {
-  router.prefetch(href);
+  if (!portalBackgroundPrefetchEnabled()) return;
+  try {
+    router.prefetch(href);
+  } catch {
+    /* prefetch is best-effort */
+  }
 }
 
 export function usePortalNavigate() {

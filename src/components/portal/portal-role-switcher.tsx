@@ -12,7 +12,7 @@ export function PortalRoleSwitcher({ currentKind }: { currentKind: PortalKind })
   const [busyRole, setBusyRole] = useState<AuthRole | null>(null);
 
   useEffect(() => {
-    void fetch("/api/auth/portal-roles")
+    void fetch("/api/auth/portal-roles", { credentials: "include" })
       .then(async (res) => {
         if (!res.ok) return;
         const body = (await res.json()) as { roles?: AuthRole[] };

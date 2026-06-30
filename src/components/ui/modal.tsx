@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { MODAL_PANEL_CLASS } from "@/components/ui/modal-styles";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,11 @@ export function Modal({
   const isClient = useIsClient();
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(open, panelRef);
+
+  useEffect(() => {
+    if (!open) return;
+    return lockPortalScroll();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

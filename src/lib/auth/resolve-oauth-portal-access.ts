@@ -1,3 +1,14 @@
+import type { AuthRole } from "@/components/auth/portal-switcher";
+import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
+import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import { portalDashboardPath } from "@/lib/auth/portal-roles";
+import {
+  applyOAuthSurfaceToPath,
+  defaultOAuthNextPath,
+  resolvePostOAuthPathFromRoles,
+  type OAuthSignInIntent,
+  type OAuthSurface,
+} from "@/lib/auth/post-oauth-routing";
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
 import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import {
@@ -9,7 +20,6 @@ import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
-import type { AuthRole } from "@/components/auth/portal-switcher";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 function isAuthRole(value: string): value is AuthRole {
@@ -21,10 +31,23 @@ function isBypassOAuthGatePath(path: string): boolean {
     path.startsWith("/auth/manager-") ||
     path.startsWith("/auth/resident-") ||
     path.startsWith("/partner/pricing") ||
+    path.startsWith(MANAGER_PRICING_ENTRY_PATH) ||
     path.startsWith("/auth/create-account") ||
     path.startsWith("/auth/callback/") ||
     path === "/auth/manager-register-oauth"
   );
+}
+
+function managerPortalDestination(safeIntended: string): string {
+  if (
+    safeIntended.startsWith("/auth/continue") ||
+    safeIntended.startsWith("/resident/") ||
+    safeIntended === "/partner/pricing" ||
+    safeIntended.startsWith("/partner/pricing")
+  ) {
+    return portalDashboardPath("manager");
+  }
+  return safeIntended;
 }
 
 function applicationBucket(rowData: unknown): string {
@@ -34,51 +57,77 @@ function applicationBucket(rowData: unknown): string {
 
 /**
  * After Google OAuth, decide where the user may go.
- * Unknown accounts → partner pricing. Residents need an application. Managers need payment.
+ * Unknown accounts → free manager portal. Residents need an application. Managers use their tier.
  */
 export async function resolveOAuthPortalRedirect(
   supabase: SupabaseClient,
   user: User,
   intendedPath: string,
+  options?: {
+    intent?: OAuthSignInIntent | null;
+    surface?: OAuthSurface | null;
+  },
 ): Promise<string> {
-  const safeIntended = intendedPath.startsWith("/") ? intendedPath : "/auth/continue";
+  const intent = options?.intent ?? null;
+  const surface = options?.surface ?? null;
+  const safeIntended = normalizePostAuthPath(
+    intendedPath.startsWith("/") ? intendedPath : defaultOAuthNextPath(intent),
+  );
+
+  function finish(path: string): string {
+    return applyOAuthSurfaceToPath(path, surface);
+  }
 
   if (isBypassOAuthGatePath(safeIntended)) {
-    return safeIntended;
+    return finish(safeIntended);
   }
 
   const email = user.email?.trim().toLowerCase() ?? "";
   if (!email) {
-    return "/partner/pricing";
+    return finish(MANAGER_PRICING_ENTRY_PATH);
   }
 
   const { data: roleRows } = await supabase.from("profile_roles").select("role").eq("user_id", user.id);
   const roles = (roleRows ?? []).map((row) => row.role).filter((role): role is AuthRole => isAuthRole(role));
 
+  if (roles.includes("resident") && !roles.includes("manager") && !roles.includes("admin")) {
+    return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
+  }
+
   const isManagerAccount = roles.includes("manager");
   if (isManagerAccount && (await managerNeedsPricingSelection(supabase, user.id, email))) {
-    return "/partner/pricing";
+    return finish(MANAGER_PRICING_ENTRY_PATH);
+  }
+
+  if (isManagerAccount) {
+    return finish(managerPortalDestination(safeIntended));
   }
 
   if (roles.length > 0) {
-    return safeIntended;
+    return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
   if (profile?.role === "manager" && (await managerNeedsPricingSelection(supabase, user.id, email))) {
-    return "/partner/pricing";
+    return finish(MANAGER_PRICING_ENTRY_PATH);
+  }
+  if (profile?.role === "manager") {
+    return finish(managerPortalDestination(safeIntended));
+  }
+  if (profile?.role === "resident") {
+    return finish(resolvePostOAuthPathFromRoles(["resident"], safeIntended));
   }
   if (profile?.role && isAuthRole(profile.role)) {
-    return safeIntended;
+    return finish(resolvePostOAuthPathFromRoles([profile.role], safeIntended));
   }
 
   if (isPrimaryAdminEmail(email)) {
-    return safeIntended;
+    return finish(safeIntended);
   }
 
   const linkedPurchase = await findManagerPurchaseForAccount(supabase, user.id, email);
   if (linkedPurchase && !isManagerOnboardingComplete(linkedPurchase)) {
-    return "/partner/pricing";
+    return finish(MANAGER_PRICING_ENTRY_PATH);
   }
   if (linkedPurchase && isManagerOnboardingComplete(linkedPurchase)) {
     const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
@@ -95,9 +144,9 @@ export async function resolveOAuthPortalRedirect(
     );
     await ensureProfileRoleRow(supabase, user.id, "manager");
     if (safeIntended.startsWith("/auth/continue")) {
-      return "/portal/dashboard";
+      return finish("/portal/dashboard");
     }
-    return safeIntended;
+    return finish(safeIntended);
   }
 
   const { data: pendingPurchases } = await supabase
@@ -110,7 +159,33 @@ export async function resolveOAuthPortalRedirect(
 
   const pendingPurchase = pendingPurchases?.[0];
   if (pendingPurchase?.stripe_checkout_session_id && pendingPurchase.paid_at) {
-    return managerOauthFinishPath(pendingPurchase.stripe_checkout_session_id);
+    return finish(managerOauthFinishPath(pendingPurchase.stripe_checkout_session_id));
+  }
+
+  if (intent === "resident") {
+    const { data: applicationRows } = await supabase
+      .from("manager_application_records")
+      .select("id, resident_email, row_data")
+      .eq("resident_email", email);
+
+    const approvedApplication = (applicationRows ?? []).find((row) => applicationBucket(row.row_data) === "approved");
+    if (approvedApplication) {
+      const linked = await completeResidentSignupFromOAuth(supabase, user.id, email, approvedApplication.id);
+      if (linked.ok) {
+        return finish("/resident/dashboard");
+      }
+      const params = new URLSearchParams({
+        role: "resident",
+        message: "resident_signup_failed",
+      });
+      if (linked.error) params.set("error", linked.error);
+      return finish(`/auth/create-account?${params.toString()}`);
+    }
+
+    const hasUnapprovedApplication = (applicationRows ?? []).some((row) => applicationBucket(row.row_data) !== "approved");
+    if (hasUnapprovedApplication) {
+      return finish("/auth/create-account?role=resident&message=application_pending");
+    }
   }
 
   const { data: applicationRows } = await supabase
@@ -122,25 +197,29 @@ export async function resolveOAuthPortalRedirect(
   if (approvedApplication) {
     const linked = await completeResidentSignupFromOAuth(supabase, user.id, email, approvedApplication.id);
     if (linked.ok) {
-      return "/resident/dashboard";
+      return finish("/resident/dashboard");
     }
     const params = new URLSearchParams({
       role: "resident",
       message: "resident_signup_failed",
     });
     if (linked.error) params.set("error", linked.error);
-    return `/auth/create-account?${params.toString()}`;
+    return finish(`/auth/create-account?${params.toString()}`);
   }
 
   const hasUnapprovedApplication = (applicationRows ?? []).some((row) => applicationBucket(row.row_data) !== "approved");
   if (hasUnapprovedApplication) {
-    return "/auth/create-account?role=resident&message=application_pending";
+    return finish("/auth/create-account?role=resident&message=application_pending");
   }
 
   const freeProvision = await ensureFreeManagerPortalAccess(supabase, user);
   if (freeProvision.status === "portal_ready") {
-    return "/portal/dashboard";
+    return finish("/portal/dashboard");
   }
 
-  return "/partner/pricing";
+  if (intent === "resident") {
+    return finish("/auth/create-account?role=resident&message=resident_signup_failed");
+  }
+
+  return finish(MANAGER_PRICING_ENTRY_PATH);
 }

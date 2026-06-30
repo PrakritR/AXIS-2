@@ -10,9 +10,10 @@ import {
   persistManagerPricingOffer,
   readManagerPricingOffer,
 } from "@/lib/auth/manager-pricing-oauth-storage";
+import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { persistOAuthNextPath } from "@/lib/auth/oauth-next-cookie";
-import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
+import { openAppUrl, openOAuthUrl } from "@/lib/native/open-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
 import Link from "next/link";
@@ -33,24 +34,27 @@ import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 async function restartGoogleForPricingOffer(offer: {
   tier: PlanTierId;
   billing: "monthly" | "annual";
-  discountPercent?: number;
   promo?: string;
 }) {
   persistManagerPricingOffer(offer);
   const supabase = createSupabaseBrowserClient();
   const nextPath = managerPricingOauthPath(offer);
   persistOAuthNextPath(nextPath);
-  const redirectTo = bareAuthCallbackUrl(resolveOAuthBrowserOrigin());
+  const redirectTo = resolveOAuthCallbackRedirectUrl(
+    resolveOAuthBrowserOrigin(),
+    "/auth/callback/partner-pricing",
+  );
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
       redirectTo,
+      skipBrowserRedirect: true,
       queryParams: { prompt: "select_account" },
     },
   });
   if (error) throw new Error(error.message);
   if (!data?.url) throw new Error("Could not start Google sign-in.");
-  window.location.assign(data.url);
+  await openOAuthUrl(data.url);
 }
 
 function ManagerPricingOauthContent() {
@@ -58,11 +62,6 @@ function ManagerPricingOauthContent() {
   const storedOffer = useMemo(() => readManagerPricingOffer(), []);
   const tier = parseTier(searchParams.get("tier"), storedOffer?.tier ?? null);
   const billing = parseBilling(searchParams.get("billing"), storedOffer?.billing ?? "monthly");
-  const discountRaw = searchParams.get("d");
-  const discountPercent =
-    discountRaw != null && discountRaw !== ""
-      ? Number.parseInt(discountRaw, 10)
-      : storedOffer?.discountPercent;
   const promo = searchParams.get("promo")?.trim() || storedOffer?.promo || "";
 
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -77,7 +76,6 @@ function ManagerPricingOauthContent() {
     const offer = {
       tier,
       billing,
-      discountPercent: Number.isFinite(discountPercent) ? discountPercent : undefined,
       promo: promo || undefined,
     };
     persistManagerPricingOffer(offer);
@@ -105,7 +103,6 @@ function ManagerPricingOauthContent() {
             tier,
             billing,
             promo: promo || undefined,
-            discountPercent: Number.isFinite(discountPercent) ? discountPercent : undefined,
           }),
         });
 
@@ -142,7 +139,7 @@ function ManagerPricingOauthContent() {
 
         if (body.action === "redirect" && body.url) {
           clearManagerPricingOffer();
-          window.location.assign(body.url);
+          await openAppUrl(body.url);
           return;
         }
 
@@ -157,7 +154,7 @@ function ManagerPricingOauthContent() {
         setErrorText(message);
       }
     })();
-  }, [billing, discountPercent, promo, tier]);
+  }, [billing, promo, tier]);
 
   if (checkoutClientSecret) {
     return (
@@ -182,8 +179,8 @@ function ManagerPricingOauthContent() {
       <AuthCard>
         <p className="text-center text-sm text-rose-600">{errorText}</p>
         <div className="mt-6 flex justify-center gap-4">
-          <Link className="text-sm font-semibold text-primary hover:underline" href="/partner/pricing">
-            Partner pricing
+          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/manager/plan">
+            Choose plan
           </Link>
           <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/sign-in">
             Sign in

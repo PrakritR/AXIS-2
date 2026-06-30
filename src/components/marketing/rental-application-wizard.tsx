@@ -28,6 +28,7 @@ import {
 } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
 import {
@@ -49,6 +50,7 @@ import {
 } from "@/lib/manager-applications-storage";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
 import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
+import { RentalApplicationFinishPanel } from "@/components/marketing/rental-application-finish-panel";
 import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
 
 const processedApplicationFeeSessions = new Set<string>();
@@ -74,6 +76,34 @@ const STEP_META = [
   { n: 11, title: "Review" },
   { n: 12, title: "Application fee" },
 ] as const;
+
+function rentalApplicationExitPath(): string {
+  if (typeof window !== "undefined" && detectNativePlatformSync()) {
+    return "/auth/sign-in?mode=create&role=resident";
+  }
+  return "/auth/sign-in";
+}
+
+function RentalWizardExitButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rental-wizard-exit inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15"
+    >
+      <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M15 18l-6-6 6-6"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      Back
+    </button>
+  );
+}
 
 export function RentalApplicationWizard({ showToast }: { showToast: (msg: string) => void }) {
   return (
@@ -115,6 +145,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const router = useRouter();
+
+  const exitApplication = useCallback(() => {
+    router.push(rentalApplicationExitPath());
+  }, [router]);
 
   const listingPrefillKey = useMemo(() => {
     return [
@@ -645,7 +679,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   };
 
   const handleBack = () => {
-    if (step <= 1) return;
+    if (step <= 1) {
+      exitApplication();
+      return;
+    }
     if (step === 12) {
       setStep(11);
       setErrors({});
@@ -669,14 +706,21 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const progressPct = Math.round((step / RENTAL_WIZARD_STEP_COUNT) * 100);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
-      <div className="text-center sm:text-left">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Residential rental application</h1>
+    <div className="rental-wizard mx-auto max-w-3xl px-4 py-5 sm:py-14">
+      {applicationPath === "signer" && !postSubmit ? (
+        <div className="rental-wizard-exit-row mb-2 sm:mb-3">
+          <RentalWizardExitButton onClick={exitApplication} />
+        </div>
+      ) : null}
+
+      <div className="rental-wizard-page-title text-center sm:text-left">
+        <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Rental application</h1>
       </div>
 
-      <div className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:p-6">
+      {!linkedPropertyId ? (
+      <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:mt-6 sm:rounded-3xl sm:p-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">Choose your form</p>
-        <div className="mt-4">
+        <div className="mt-3 sm:mt-4">
           <SegmentedTwo
             value={applicationPath}
             onChange={setApplicationPath}
@@ -685,21 +729,22 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             className="max-w-md"
           />
         </div>
-        <p className="mt-4 text-sm leading-relaxed text-muted">
+        <p className="rental-wizard-form-hint mt-3 text-sm leading-relaxed text-muted sm:mt-4">
           {applicationPath === "signer"
             ? "Use the signer form if you are the main applicant for the lease."
             : "Filing as a co-signer on someone else's application? Open the co-signer form."}
         </p>
         {applicationPath === "cosigner" ? (
-          <div className="mt-5">
+          <div className="mt-4 sm:mt-5">
             <Link href="/rent/apply/cosigner" className="inline-flex">
-              <Button type="button" className="min-h-[48px] px-6">
-                Open the co-signer form
+              <Button type="button" className="min-h-[44px] px-5 sm:min-h-[48px] sm:px-6">
+                Open co-signer form
               </Button>
             </Link>
           </div>
         ) : null}
       </div>
+      ) : null}
 
       {applicationPath === "signer" ? (
         !linkedPropertyId || !linkedProperty ? (
@@ -714,67 +759,26 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             />
           </div>
         ) : postSubmit ? (
-          <div
-            className="mt-8 rounded-3xl border p-6 portal-banner-success shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
-            style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
-          >
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800/80">Application received</p>
-            <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Save your application ID</h2>
-            <p className="mt-3 text-sm leading-relaxed text-foreground">
-              Use this application ID when you create your resident account (open signup below with it filled in), and
-              use the same email address from this application. Share it with a co-signer if they apply separately.
-              This ID only grants resident account creation. Until you create that resident account, your application
-              will not show up inside the resident portal. After signup, your account stays limited to <strong>Dashboard</strong>,
-              <strong>Payments</strong>, <strong>Profile</strong>, and <strong>Inbox</strong> until the manager confirms your
-              application fee and approves your application. Stripe payments are marked paid automatically after checkout.
-            </p>
-            <div className="mt-6 rounded-2xl border border-border bg-card px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Application ID</p>
-              <p className="mt-2 font-mono text-xl font-bold tracking-tight text-foreground sm:text-2xl">{postSubmit.axisId}</p>
-            </div>
-            {postSubmit.syncError ? (
-              <p className="mt-4 text-sm text-amber-800">
-                We could not confirm your application on our server ({postSubmit.syncError}). Save your Application ID
-                above and try creating your account — if that fails, contact the property manager.
-              </p>
-            ) : null}
-            {postSubmit.email ? (
-              postSubmit.emailSent ? (
-                <p className="mt-4 text-sm text-muted">
-                  We also emailed these instructions to{" "}
-                  <span className="font-medium text-foreground">{postSubmit.email}</span>.
-                </p>
-              ) : (
-                <p className="mt-4 text-sm text-muted">
-                  We could not send a confirmation email to{" "}
-                  <span className="font-medium text-foreground">{postSubmit.email}</span>. Use the button below with the
-                  same email address.
-                </p>
-              )
-            ) : null}
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              <Link
-                href={`/auth/create-account?role=resident&axis_id=${encodeURIComponent(postSubmit.axisId)}${postSubmit.email ? `&email=${encodeURIComponent(postSubmit.email)}` : ""}`}
-                className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-black/[0.1] bg-card px-8 text-[14px] font-semibold text-[#1d1d1f] shadow-sm transition hover:-translate-y-0.5 hover:bg-card hover:shadow-md active:translate-y-px"
-              >
-                Create resident account
-              </Link>
-              <Button type="button" variant="outline" className="min-h-[48px] px-8" onClick={() => setPostSubmit(null)}>
-                Done
-              </Button>
-            </div>
-          </div>
+          <RentalApplicationFinishPanel
+            axisId={postSubmit.axisId}
+            email={postSubmit.email}
+            emailSent={postSubmit.emailSent}
+            syncError={postSubmit.syncError}
+            onDone={() => setPostSubmit(null)}
+          />
         ) : (
           <div
-            className="mt-8 rounded-3xl border border-border bg-card p-6 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:p-9 md:p-11"
+            className="rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11"
             style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
           >
-            <div className="border-b border-border pb-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">
+            <div className="rental-wizard-step-header border-b border-border pb-4 sm:pb-6">
+              <p className="rental-wizard-step-eyebrow text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70 sm:text-[11px]">
                 Step {step} of {RENTAL_WIZARD_STEP_COUNT}
               </p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">{meta.title}</p>
-              <div className="-mx-1 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
+              <p className="rental-wizard-step-title mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+                {meta.title}
+              </p>
+              <div className="rental-wizard-step-dots -mx-1 mt-3 overflow-x-auto [-webkit-overflow-scrolling:touch] sm:mt-4">
                 <div className="flex min-w-max gap-1 px-1">
                   {STEP_META.map((s) => {
                     const reachable = canNavigateToWizardStep(s.n, maxStepReached);
@@ -802,7 +806,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                   })}
                 </div>
               </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
+              <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2">
                 <div
                   className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                   style={{ width: `${progressPct}%` }}
@@ -810,7 +814,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               </div>
             </div>
 
-            <div className="pt-8">
+            <div className="rental-wizard-step-content pt-5 sm:pt-8">
               <RentalWizardStepBody
                 step={step}
                 form={form}
@@ -833,9 +837,14 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
               />
             </div>
 
-            <div className="mt-10 flex flex-col-reverse gap-3 border-t border-border pt-8 sm:flex-row sm:items-center sm:justify-between">
-              <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={handleBack} disabled={step <= 1}>
-                {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
+            <div className="rental-wizard-actions mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-8">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
+                onClick={handleBack}
+              >
+                {step <= 1 ? "Exit application" : reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
               </Button>
               <Button
                 type="button"

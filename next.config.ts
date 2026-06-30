@@ -1,6 +1,35 @@
 import type { NextConfig } from "next";
+import { networkInterfaces } from "os";
+
+function localLanHosts(): string[] {
+  const hosts = new Set<string>();
+  for (const iface of Object.values(networkInterfaces())) {
+    for (const addr of iface ?? []) {
+      if (addr.family === "IPv4" && !addr.internal) hosts.add(addr.address);
+    }
+  }
+  return [...hosts];
+}
+
+function capacitorDevOrigins(): string[] {
+  const origins = new Set<string>(["127.0.0.1", "localhost"]);
+  if (process.env.NODE_ENV === "development") {
+    for (const host of localLanHosts()) origins.add(host);
+  }
+  const capServer = process.env.CAP_SERVER_URL?.trim();
+  if (capServer) {
+    try {
+      origins.add(new URL(capServer).hostname);
+    } catch {
+      /* ignore */
+    }
+  }
+  return [...origins];
+}
 
 const nextConfig: NextConfig = {
+  // Lets the iOS/Android WebView load from your Mac's LAN IP during `npm run dev`.
+  allowedDevOrigins: capacitorDevOrigins(),
   images: {
     remotePatterns: [
       // Supabase Storage (all hosted projects)
@@ -12,6 +41,7 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      { source: "/dashboard", destination: "/auth/continue", permanent: false },
       { source: "/admin/applications", destination: "/admin/dashboard", permanent: false },
       { source: "/admin/applications/:path*", destination: "/admin/dashboard", permanent: false },
       { source: "/admin/work-orders", destination: "/admin/dashboard", permanent: false },
@@ -43,6 +73,10 @@ const nextConfig: NextConfig = {
       { source: "/resident/announcements/:path*", destination: "/resident/dashboard", permanent: false },
       { source: "/resident/settings", destination: "/resident/profile", permanent: false },
       { source: "/resident/settings/:path*", destination: "/resident/profile", permanent: false },
+      { source: "/portal/settings", destination: "/portal/profile", permanent: false },
+      { source: "/portal/settings/:path*", destination: "/portal/profile", permanent: false },
+      { source: "/admin/settings", destination: "/admin/profile", permanent: false },
+      { source: "/admin/settings/:path*", destination: "/admin/profile", permanent: false },
       { source: "/resident/support", destination: "/resident/dashboard", permanent: false },
       { source: "/resident/support/:path*", destination: "/resident/dashboard", permanent: false },
       { source: "/portal/services/work-done", destination: "/portal/financials/expenses", permanent: false },

@@ -17,6 +17,13 @@ const WRITE_ENV = process.argv.includes("--write-env");
 
 const PLAN_CATALOG = [
   {
+    productName: "Axis Free",
+    productKey: "axis_free",
+    envMonthly: "STRIPE_PRICE_FREE_MONTHLY",
+    monthlyUsd: 0,
+    freeOnly: true,
+  },
+  {
     productName: "Axis Pro",
     productKey: "axis_pro",
     envMonthly: "STRIPE_PRICE_PRO_MONTHLY",
@@ -135,6 +142,32 @@ async function main() {
 
   for (const plan of PLAN_CATALOG) {
     console.log(plan.productName);
+
+    if (plan.freeOnly) {
+      let freeId = await verifyExistingPrice(
+        stripe,
+        process.env[plan.envMonthly]?.trim(),
+        plan.monthlyUsd,
+        "month",
+        plan.envMonthly,
+      );
+      if (!freeId) {
+        const product = await ensureProduct(stripe, plan.productName, plan.productKey);
+        const price = await ensurePrice(
+          stripe,
+          product.id,
+          plan.monthlyUsd,
+          "month",
+          "axis_manager_free_monthly",
+        );
+        freeId = price.id;
+        console.log(`  + created ${plan.envMonthly}: ${freeId}`);
+      }
+      envOut[plan.envMonthly] = freeId;
+      await ensureLookupKey(stripe, freeId, "axis_manager_free_monthly", plan.envMonthly);
+      console.log("");
+      continue;
+    }
 
     let monthlyId = await verifyExistingPrice(
       stripe,

@@ -13,7 +13,31 @@ const sectionHeading =
 const footerLinkClass =
   "block text-end text-[15px] font-normal text-muted transition-[color,opacity] duration-200 hover:text-primary hover:opacity-95";
 
-export function PublicFooter() {
+export function PublicFooter({ compact = false }: { compact?: boolean }) {
+  if (compact) {
+    return (
+      <footer className="glass-nav border-t border-border bg-[var(--glass-fill)]">
+        <div className="px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-6">
+          <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1 text-center text-[12px] font-normal text-muted sm:flex-row sm:items-center sm:justify-between sm:text-left">
+            <span>© 2026 Axis. All rights reserved.</span>
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 sm:justify-end">
+              <Link href="/privacy" className="transition-colors hover:text-primary">
+                Privacy Policy
+              </Link>
+              <Link href="/tos" className="transition-colors hover:text-primary">
+                Terms of Service
+              </Link>
+              <Link href="/support" className="transition-colors hover:text-primary">
+                Support
+              </Link>
+              <span className="text-muted">Axis</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="glass-nav border-t border-border bg-[var(--glass-fill)]">
       <div className="mx-auto max-w-6xl rounded-t-2xl px-6 pb-6 pt-10 sm:px-5">
@@ -88,7 +112,18 @@ export function PublicFooter() {
       <div className="glass-nav border-t border-border bg-[var(--glass-fill)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1.5 text-center text-[13px] font-normal text-muted sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <span>© 2026 Axis. All rights reserved.</span>
-          <span className="text-muted">Axis Housing</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:justify-end">
+            <Link href="/privacy" className="transition-colors hover:text-primary">
+              Privacy Policy
+            </Link>
+            <Link href="/tos" className="transition-colors hover:text-primary">
+              Terms of Service
+            </Link>
+            <Link href="/support" className="transition-colors hover:text-primary">
+              Support
+            </Link>
+            <span className="text-muted">Axis</span>
+          </div>
         </div>
       </div>
     </footer>

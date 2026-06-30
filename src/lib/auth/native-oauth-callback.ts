@@ -1,0 +1,64 @@
+import { appendNativeOAuthBridgeParam } from "@/lib/auth/native-oauth-bridge";
+import { bareAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
+
+/** Custom URL scheme registered in iOS/Android for OAuth return to the Capacitor shell. */
+export const NATIVE_OAUTH_SCHEME = "com.axisseattlehousing.app";
+
+export const NATIVE_OAUTH_CALLBACK_URL = `${NATIVE_OAUTH_SCHEME}://auth/callback`;
+
+export function nativeOAuthCallbackUrl(fixedCallbackPath?: string): string {
+  const path = fixedCallbackPath?.startsWith("/") ? fixedCallbackPath.replace(/^\//, "") : "auth/callback";
+  return `${NATIVE_OAUTH_SCHEME}://${path}`;
+}
+
+/** True when OAuth should return via the app custom URL scheme (Capacitor or tagged WebView). */
+export function isNativeOAuthShell(): boolean {
+  if (typeof window === "undefined") return false;
+  if (detectNativePlatformSync()) return true;
+  return document.documentElement.hasAttribute("data-native");
+}
+
+/**
+ * Dev native shells load over http:// (LAN IP / localhost) and have no associated-domains
+ * / Universal Links, so there is nothing to bounce an HTTPS callback through. Returning
+ * straight to the app scheme keeps OAuth working without per-IP Supabase allowlisting.
+ */
+function isDevNativeOrigin(origin: string): boolean {
+  return origin.trim().toLowerCase().startsWith("http://");
+}
+
+/**
+ * Supabase OAuth redirectTo.
+ * Native (prod): HTTPS callback with a bridge flag (allowlisted like web) → HTML bounce → custom scheme → app WebView.
+ * Native (dev): custom scheme directly — Supabase 302s into the app, no LAN dev server in the return path.
+ * Web: same-origin /auth/callback.
+ */
+export function resolveOAuthCallbackRedirectUrl(origin: string, fixedCallbackPath?: string): string {
+  if (isNativeOAuthShell()) {
+    if (isDevNativeOrigin(origin)) {
+      return nativeOAuthCallbackUrl(fixedCallbackPath);
+    }
+    const base = fixedCallbackPath?.startsWith("/")
+      ? `${origin.replace(/\/$/, "")}${fixedCallbackPath}`
+      : bareAuthCallbackUrl(origin);
+    return appendNativeOAuthBridgeParam(base);
+  }
+  if (fixedCallbackPath?.startsWith("/")) {
+    return `${origin.replace(/\/$/, "")}${fixedCallbackPath}`;
+  }
+  return bareAuthCallbackUrl(origin);
+}
+
+/** Map app deep link (custom scheme) back to a same-origin path in the WebView. */
+export function webPathFromNativeOAuthUrl(url: string, origin: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== `${NATIVE_OAUTH_SCHEME}:`) return null;
+    const segments = [parsed.host, parsed.pathname.replace(/^\//, "")].filter(Boolean);
+    const path = `/${segments.join("/")}`;
+    return `${origin.replace(/\/$/, "")}${path}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}

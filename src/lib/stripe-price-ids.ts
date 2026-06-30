@@ -1,6 +1,7 @@
 import type { ManagerSkuTier } from "@/lib/manager-access";
 
 export type PaidTier = "pro" | "business";
+export type ManagerSubscriptionTier = "free" | PaidTier;
 export type StripeBilling = "monthly" | "annual";
 
 /** Stripe Price IDs from env — shared by Checkout and subscription updates. Ignores non-`price_` values. */

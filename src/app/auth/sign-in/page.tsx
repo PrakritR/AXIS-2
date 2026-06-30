@@ -1,6 +1,8 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { NativeAuthHub } from "@/components/auth/native-auth-hub";
+import { AuthPageHeader, AuthLoadingCard } from "@/components/auth/auth-mobile-primitives";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -8,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { nativeAuthEntryPathClient } from "@/lib/auth/native-auth-entry";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -76,19 +80,62 @@ function readRememberedLoginEmail(): string {
   }
 }
 
+type SignInIntent = "resident" | "manager" | null;
+
+function parseSignInIntent(value: string | null): SignInIntent {
+  if (value === "resident" || value === "manager") return value;
+  return null;
+}
+
+function signInCopy(
+  intent: SignInIntent,
+  isNative: boolean,
+): { title: string; createAccountHref: string; backHref: string | null } {
+  const entry = nativeAuthEntryPathClient();
+  if (intent === "resident") {
+    return {
+      title: "Resident sign-in",
+      createAccountHref: isNative ? "/auth/resident" : "/auth/create-account",
+      backHref: isNative ? entry : null,
+    };
+  }
+  if (intent === "manager") {
+    return {
+      title: "Manager sign-in",
+      createAccountHref: isNative ? "/auth/manager/plan" : "/partner/pricing",
+      backHref: isNative ? entry : null,
+    };
+  }
+  return {
+    title: isNative ? "Sign in" : "Portal sign-in",
+    createAccountHref: isNative ? "/auth/manager/plan" : "/partner/pricing",
+    backHref: null,
+  };
+}
+
 function SignInForm() {
   const { showToast } = useAppUi();
+  const { isNative } = useIsNativeApp();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "";
+  const intent = parseSignInIntent(searchParams.get("intent"));
   const authError = searchParams.get("error");
   const oauthMessage = searchParams.get("message");
 
-  const [email, setEmail] = useState(readRememberedLoginEmail);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberEmail, setRememberEmail] = useState(() => Boolean(readRememberedLoginEmail()));
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  useEffect(() => {
+    const remembered = readRememberedLoginEmail();
+    if (remembered) {
+      setEmail(remembered);
+      setRememberEmail(true);
+    }
+  }, []);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -101,6 +148,20 @@ function SignInForm() {
       }
     });
   }, [authError, oauthMessage]);
+
+  if (isNative === null) {
+    return (
+      <AuthCard>
+        <AuthLoadingCard />
+      </AuthCard>
+    );
+  }
+
+  if (isNative) {
+    return <NativeAuthHub />;
+  }
+
+  const copy = signInCopy(intent, false);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) {
@@ -158,7 +219,7 @@ function SignInForm() {
         window.localStorage.removeItem("axis:remembered-login-email");
       }
       didRedirect = true;
-      window.location.replace(continueHref(nextPath));
+      window.location.replace(continueHref(oauthNext));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign-in failed";
       const message = msg.includes("NEXT_PUBLIC_SUPABASE")
@@ -176,25 +237,30 @@ function SignInForm() {
 
   const busy = isSigningIn || isLoadingPortal;
 
+  const defaultNext =
+    intent === "resident" ? "/resident/dashboard" : intent === "manager" ? "/portal/dashboard" : "";
+  const oauthNext = nextPath || defaultNext;
+
   return (
     <AuthCard>
-      <h1 className="text-center text-[22px] font-semibold tracking-tight text-foreground">Portal sign-in</h1>
+      <AuthPageHeader title={copy.title} accent={!intent} showLogo />
 
-      <div className="mt-8">
+      <div className="mt-5 sm:mt-6">
         <GoogleSignInButton
-          nextPath={nextPath}
-          viaContinue={!usesDirectOAuthReturn(nextPath)}
+          nextPath={oauthNext}
+          intent={intent}
+          viaContinue={!usesDirectOAuthReturn(oauthNext)}
           disabled={busy}
         />
       </div>
 
-      <div className="my-6 flex items-center gap-3">
+      <div className="auth-divider my-4 flex items-center gap-3 sm:my-5">
         <div className="h-px flex-1 bg-border" aria-hidden />
-        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:text-xs">or</span>
         <div className="h-px flex-1 bg-border" aria-hidden />
       </div>
 
-      <div className="space-y-4">
+      <div className="auth-form-stack space-y-3 sm:space-y-4">
         <div>
           <label className="text-xs font-semibold text-muted" htmlFor="email">
             Email
@@ -221,7 +287,7 @@ function SignInForm() {
             disabled={busy}
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="auth-remember-row hidden items-center gap-2 sm:flex">
           <input
             type="checkbox"
             id="remember-email"
@@ -231,12 +297,12 @@ function SignInForm() {
             className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
           />
           <label htmlFor="remember-email" className="text-sm text-muted">
-            Remember my email for next time
+            Remember email
           </label>
         </div>
       </div>
 
-      <div className="mt-5 text-sm">
+      <div className="mt-3 text-sm sm:mt-4">
         <Link className="font-semibold text-primary hover:opacity-90" href="/auth/forgot-password">
           Forgot password
         </Link>
@@ -246,20 +312,28 @@ function SignInForm() {
 
       <Button
         type="button"
-        className="mt-6 w-full rounded-full py-3 text-base font-semibold"
+        className="mt-4 w-full rounded-full py-2.5 text-[15px] font-semibold sm:mt-5 sm:py-3 sm:text-base"
         onClick={() => void handleSignIn()}
         disabled={busy}
       >
         {isSigningIn ? "Signing in…" : "Sign in"}
       </Button>
-      {isLoadingPortal ? <p className="mt-3 text-center text-sm text-muted">Loading your portal...</p> : null}
+      {isLoadingPortal ? <p className="mt-2 text-center text-[13px] text-muted sm:mt-3 sm:text-sm">Loading…</p> : null}
 
-      <p className="mt-8 text-center text-sm text-muted">
+      <p className="auth-footer-link mt-4 text-center text-[13px] text-muted sm:mt-5 sm:text-sm">
         New here?{" "}
-        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/create-account">
-          Create account
+        <Link className="font-semibold text-primary hover:opacity-90" href={copy.createAccountHref}>
+          {intent === "manager" ? "Create an account" : intent === "resident" ? "Resident setup" : "Get started"}
         </Link>
       </p>
+
+      {copy.backHref ? (
+        <p className="mt-3 text-center text-[13px] text-muted sm:mt-4 sm:text-sm">
+          <Link className="font-semibold text-primary hover:opacity-90" href={copy.backHref}>
+            Change role
+          </Link>
+        </p>
+      ) : null}
     </AuthCard>
   );
 }

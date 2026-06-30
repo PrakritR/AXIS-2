@@ -34,6 +34,12 @@ import {
   toLocalDateStr,
   writeAvailabilityDateSetForStorageKeyToServer,
 } from "@/lib/demo-admin-scheduling";
+import {
+  plannedTourVisibleToViewer,
+  tourInquiryVisibleToViewer,
+  type CoManagerAvailabilityOverlay,
+  type ScheduledTourFilter,
+} from "@/lib/co-manager-calendar";
 
 type CalendarMode = "day" | "week" | "month";
 type RecurrenceCadence = "once" | "weekly" | "biweekly" | "monthly";
@@ -78,8 +84,12 @@ const CALENDAR_EMPTY_SLOT =
   "bg-card text-transparent hover:bg-primary/[0.07] hover:text-primary [html[data-theme=dark]_&]:portal-calendar-empty-slot";
 const CALENDAR_INACTIVE_SLOT =
   "border-border bg-accent/30 text-muted hover:border-primary/20 hover:bg-primary/[0.06] [html[data-theme=dark]_&]:portal-calendar-inactive-slot";
+const CALENDAR_CO_MANAGER_SLOT =
+  "border-violet-300 bg-violet-100 text-violet-950 ring-1 ring-inset ring-violet-300/80 [html[data-theme=dark]_&]:border-violet-400/40 [html[data-theme=dark]_&]:bg-violet-500/15 [html[data-theme=dark]_&]:text-violet-100";
 const MEETING_CONFIRMED_COLOR =
   "border-sky-300 bg-sky-100 text-sky-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
+const MEETING_PEER_COLOR =
+  "border-indigo-300 bg-indigo-100 text-indigo-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
 const MEETING_PENDING_COLOR =
   "border-amber-300 bg-amber-100 text-amber-950 [html[data-theme=dark]_&]:portal-calendar-meeting-pending";
 
@@ -154,6 +164,8 @@ type DemoMeeting = {
   roomLabel?: string;
   instructions?: string;
   kind?: "partner" | "tour";
+  hostLabel?: string;
+  isPeerTour?: boolean;
 };
 
 type CalendarBlockSelection =
@@ -177,15 +189,6 @@ function localIsoForSlot(dateStr: string, slotIndex: number): string {
   return d.toISOString();
 }
 
-function safePropertyId(propertyId: string | null | undefined): string {
-  return String(propertyId ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
-}
-
-function samePropertyId(a: string | null | undefined, b: string | null | undefined): boolean {
-  if (!a || !b) return false;
-  return a === b || safePropertyId(a) === safePropertyId(b);
-}
-
 function weekdayLabelList(days: number[]) {
   return WEEKDAY_OPTIONS.filter((option) => days.includes(option.value))
     .map((option) => option.label)
@@ -203,6 +206,7 @@ export function PortalCalendarPanels({
   otherProperties,
   onCopyWeekToHouses,
   scheduledTourFilter,
+  coManagerAvailabilityOverlays,
   scheduleOwnerLabel,
   availabilityHeading = "Availability",
 }: {
@@ -215,7 +219,8 @@ export function PortalCalendarPanels({
   compactAvailability?: boolean;
   otherProperties?: { id: string; name: string }[];
   onCopyWeekToHouses?: (propertyIds: string[], weekDateStrs: string[]) => void;
-  scheduledTourFilter?: { managerUserId: string | null; propertyId: string | null };
+  scheduledTourFilter?: ScheduledTourFilter;
+  coManagerAvailabilityOverlays?: CoManagerAvailabilityOverlay[];
   scheduleOwnerLabel?: string | null;
   availabilityHeading?: string;
 }) {
@@ -280,21 +285,23 @@ export function PortalCalendarPanels({
     void meetingRefresh;
     const showAdminMeetings =
       storageKey === ADMIN_AVAILABILITY_STORAGE_KEY || Boolean(storageKey?.startsWith("axis_admin_avail_slots_v2_admin_"));
-    const showManagerTours = Boolean(scheduledTourFilter?.managerUserId);
+    const showManagerTours = Boolean(scheduledTourFilter?.viewerUserId);
 
     const planned = (showAdminMeetings || showManagerTours) ? readPlannedEvents()
       .filter((event) => {
         if (showAdminMeetings) return event.kind !== "tour";
-        return (
-          event.kind === "tour" &&
-          event.managerUserId === scheduledTourFilter?.managerUserId &&
-          (!scheduledTourFilter?.propertyId || samePropertyId(event.propertyId, scheduledTourFilter.propertyId))
-        );
+        if (!scheduledTourFilter) return false;
+        return plannedTourVisibleToViewer(event, scheduledTourFilter);
       })
       .map((event) => {
       const start = new Date(event.start);
       const end = new Date(event.end);
       const mins = Math.max(30, end.getTime() - start.getTime());
+      const isPeerTour =
+        event.kind === "tour" &&
+        Boolean(scheduledTourFilter) &&
+        event.managerUserId !== scheduledTourFilter?.viewerUserId;
+      const hostPeer = scheduledTourFilter?.peers.find((peer) => peer.userId === event.managerUserId);
       return {
         id: `planned-${event.id}`,
         source: "planned",
@@ -305,8 +312,8 @@ export function PortalCalendarPanels({
         startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
         span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
         title: event.title,
-        color: MEETING_CONFIRMED_COLOR,
-        statusLabel: "Confirmed",
+        color: isPeerTour ? MEETING_PEER_COLOR : MEETING_CONFIRMED_COLOR,
+        statusLabel: isPeerTour ? "Co-manager tour" : "Confirmed",
         name: event.attendeeName,
         email: event.attendeeEmail,
         phone: event.attendeePhone,
@@ -316,6 +323,8 @@ export function PortalCalendarPanels({
         roomLabel: event.roomLabel,
         instructions: event.instructions,
         kind: event.kind,
+        hostLabel: hostPeer?.label,
+        isPeerTour,
       } satisfies DemoMeeting;
     }) : [];
 
@@ -323,12 +332,8 @@ export function PortalCalendarPanels({
       .filter((row) => row.status === "pending")
       .filter((row) => {
         if (showAdminMeetings) return row.kind !== "tour";
-        if (!showManagerTours) return false;
-        return (
-          row.kind === "tour" &&
-          row.managerUserId === scheduledTourFilter?.managerUserId &&
-          (!scheduledTourFilter?.propertyId || samePropertyId(row.propertyId, scheduledTourFilter.propertyId))
-        );
+        if (!showManagerTours || !scheduledTourFilter) return false;
+        return tourInquiryVisibleToViewer(row, scheduledTourFilter);
       })
       .flatMap((row) =>
         getPartnerInquiryWindows(row).map((window, index) => {
@@ -563,6 +568,16 @@ export function PortalCalendarPanels({
     return map;
   }, [meetings]);
 
+  const coManagerOverlayBySlotKey = useMemo(() => {
+    const map = new Map<string, CoManagerAvailabilityOverlay>();
+    for (const overlay of coManagerAvailabilityOverlays ?? []) {
+      for (const slotKey of overlay.slots) {
+        if (!map.has(slotKey)) map.set(slotKey, overlay);
+      }
+    }
+    return map;
+  }, [coManagerAvailabilityOverlays]);
+
   const upcomingMeetingSummary = useMemo(() => {
     const now = today.getTime() - 30 * 60 * 1000;
     const sorted = meetings
@@ -579,7 +594,7 @@ export function PortalCalendarPanels({
     };
   }, [meetings, today]);
 
-  const isPropertyTourCalendar = Boolean(scheduledTourFilter?.managerUserId);
+  const isPropertyTourCalendar = Boolean(scheduledTourFilter?.viewerUserId);
   const eventSummaryKind =
     isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting";
 
@@ -870,10 +885,18 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
+          {selectedBlock.meeting.isPeerTour ? (
+            <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">
+              Hosted by {selectedBlock.meeting.hostLabel ?? "your co-manager"}. You can view this tour because you were also available when it was booked.
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
+            {!selectedBlock.meeting.isPeerTour ? (
+              <>
             <Button
               type="button"
               variant="outline"
@@ -892,6 +915,8 @@ export function PortalCalendarPanels({
                   Approve
                 </Button>
               )
+            ) : null}
+              </>
             ) : null}
           </div>
         </div>
@@ -1060,6 +1085,8 @@ export function PortalCalendarPanels({
                     {fullWeekDateStrs.map((ds) => {
                       const key = dateSlotKey(ds, slotIdx);
                       const active = activeSlots.has(key);
+                      const coManagerOverlay = coManagerOverlayBySlotKey.get(key);
+                      const coManagerOpen = Boolean(coManagerOverlay && !active && !meetingBySlotKey.get(key));
                       const selected = isSlotInDragSelection(ds, slotIdx);
                       const meeting = meetingBySlotKey.get(key);
                       const isMeetingStart = meeting?.startSlot === slotIdx;
@@ -1068,15 +1095,15 @@ export function PortalCalendarPanels({
                           key={key}
                           type="button"
                           onMouseDown={() => {
-                            if (meeting || active) return;
+                            if (meeting || active || coManagerOpen) return;
                             startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx);
                           }}
                           onMouseEnter={() => {
-                            if (meeting || active) return;
+                            if (meeting || active || coManagerOpen) return;
                             extendDragSelection(ds, slotIdx);
                           }}
                           onMouseUp={() => {
-                            if (meeting || active) return;
+                            if (meeting || active || coManagerOpen) return;
                             finishDragSelection();
                           }}
                           onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
@@ -1087,14 +1114,17 @@ export function PortalCalendarPanels({
                                 ? "bg-primary/[0.14] text-primary ring-2 ring-inset ring-primary/35"
                               : active
                                 ? CALENDAR_OPEN_SLOT
+                                : coManagerOpen
+                                  ? CALENDAR_CO_MANAGER_SLOT
                                 : CALENDAR_EMPTY_SLOT
                           }`}
-                          aria-label={`${meeting || active ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
+                          aria-label={`${meeting || active || coManagerOpen ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
                         >
                           {meeting ? (
                             isMeetingStart ? (
                               <span className="block truncate">
                                 {meeting.statusLabel}: {meeting.title}
+                                {meeting.hostLabel ? ` · ${meeting.hostLabel}` : ""}
                               </span>
                             ) : (
                               <span className="block truncate opacity-70">{meeting.statusLabel}</span>
@@ -1103,6 +1133,8 @@ export function PortalCalendarPanels({
                             "Selected"
                           ) : active ? (
                             "Open"
+                          ) : coManagerOpen ? (
+                            `${coManagerOverlay!.label}`
                           ) : (
                             "Add"
                           )}

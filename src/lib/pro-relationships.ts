@@ -44,17 +44,14 @@ function relationshipsChanged(a: ProRelationshipRecord[], b: ProRelationshipReco
   return JSON.stringify(a) !== JSON.stringify(b);
 }
 
-function migrateLegacyPerspective(p: string): ProRelationshipPerspective {
-  return "manager_tab";
-}
-
 export function normalizeProRelationshipRecord(raw: unknown): ProRelationshipRecord | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const id = r.id;
   const linkedAxisId = r.linkedAxisId;
   if (typeof id !== "string" || typeof linkedAxisId !== "string") return null;
-  const perspective = migrateLegacyPerspective(String(r.perspective ?? ""));
+  // Legacy owner/manager perspectives were collapsed; all links are co-manager links.
+  const perspective: ProRelationshipPerspective = "manager_tab";
   const payout = Number(r.payoutPercentForManager);
   const assigned = Array.isArray(r.assignedPropertyIds)
     ? (r.assignedPropertyIds as unknown[]).filter((x) => typeof x === "string")
@@ -146,7 +143,7 @@ export function readProRelationships(userId: string): ProRelationshipRecord[] {
 export function writeProRelationships(userId: string, rows: ProRelationshipRecord[]): void {
   if (typeof window === "undefined") return;
   // Skip the dispatch + network write when nothing actually changed. The
-  // "axis-pro-relationships" event re-enters render effects that can call back
+  // "axis-pro-relationships" event re-enters the render effects that call back
   // into writeProRelationships, so an unconditional dispatch here turns any
   // stray re-render into an event/refetch loop. The no-op guard makes that
   // impossible regardless of caller render behavior.

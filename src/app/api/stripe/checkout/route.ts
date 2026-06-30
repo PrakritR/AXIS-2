@@ -17,7 +17,6 @@ type Body = {
   phone?: string;
   userId?: string;
   promo?: string;
-  discountPercent?: number;
   embedded?: boolean;
 };
 
@@ -80,7 +79,6 @@ export async function POST(req: Request) {
       userId: userId || undefined,
       managerId,
       promo: body.promo,
-      discountPercent: body.discountPercent,
       embedded: body.embedded,
       req,
     });

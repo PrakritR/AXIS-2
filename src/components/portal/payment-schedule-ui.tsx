@@ -12,7 +12,151 @@ import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import {
   filterScheduledPaymentMessagesForUnpaidCharges,
   filterScheduledPaymentMessagesForVisibility,
+  scheduledReminderShortLabel,
 } from "@/lib/scheduled-payment-messages";
+
+function formatSendDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+/** One-line summary for automation settings buttons. */
+export function formatAutomationScheduleSummary(settings: ManagerAutomationSettings): string {
+  const parts: string[] = [];
+  const days = [...settings.preDueReminderDays].sort((a, b) => b - a);
+  if (days.length) parts.push(days.map((d) => `${d}d`).join(", "));
+  if (settings.sameDayReminderEnabled) parts.push("due date");
+  if (settings.overdueDailyEnabled) parts.push("overdue");
+  return parts.length ? parts.join(" · ") : "Off";
+}
+
+export function ChargeReminderList({
+  messages,
+  onEdit,
+  onToggleCancel,
+}: {
+  messages: ScheduledPaymentMessage[];
+  onEdit?: (message: ScheduledPaymentMessage) => void;
+  onToggleCancel?: (message: ScheduledPaymentMessage, cancelled: boolean) => void | Promise<void>;
+}) {
+  if (!messages.length) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {messages.map((m) => {
+        const cancelled = m.status === "cancelled";
+        const label = scheduledReminderShortLabel(m.kind, m.daysBeforeDue);
+        return (
+          <span
+            key={m.id}
+            className={`inline-flex max-w-full items-stretch overflow-hidden rounded-full border text-[11px] leading-none ${
+              cancelled
+                ? "border-border bg-accent/20 text-muted"
+                : "border-primary/20 bg-primary/5 text-foreground"
+            }`}
+          >
+            <button
+              type="button"
+              className={`px-2 py-1 text-left hover:bg-accent/40 ${cancelled ? "line-through" : ""}`}
+              title={`Edit · sends ${formatSendDate(m.sendAt)}`}
+              onClick={() => onEdit?.(m)}
+            >
+              <span className="font-medium">{label}</span>
+              <span className="ml-1 text-muted">· {formatSendDate(m.sendAt)}</span>
+            </button>
+            {onToggleCancel ? (
+              <button
+                type="button"
+                className="border-l border-border px-1.5 py-1 text-muted hover:bg-accent/50 hover:text-foreground"
+                title={cancelled ? "Restore send" : "Cancel send"}
+                aria-label={cancelled ? `Restore ${label}` : `Cancel ${label}`}
+                onClick={() => void onToggleCancel(m, !cancelled)}
+              >
+                {cancelled ? "↺" : "×"}
+              </button>
+            ) : null}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ChargeRemindersModal({
+  open,
+  onClose,
+  residentName,
+  chargeTitle,
+  dueDate,
+  messages,
+  onEdit,
+  onToggleCancel,
+  onOpenSettings,
+}: {
+  open: boolean;
+  onClose: () => void;
+  residentName: string;
+  chargeTitle: string;
+  dueDate: string;
+  messages: ScheduledPaymentMessage[];
+  onEdit: (message: ScheduledPaymentMessage) => void;
+  onToggleCancel: (message: ScheduledPaymentMessage, cancelled: boolean) => void | Promise<void>;
+  onOpenSettings?: () => void;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} title="Automated reminders">
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          <span className="font-medium text-foreground">{residentName}</span> · {chargeTitle} · due {dueDate}
+        </p>
+        {messages.length === 0 ? (
+          <p className="text-sm text-muted">No upcoming reminders for this charge.</p>
+        ) : (
+          <ul className="space-y-2">
+            {messages.map((m) => {
+              const cancelled = m.status === "cancelled";
+              const label = scheduledReminderShortLabel(m.kind, m.daysBeforeDue);
+              return (
+                <li
+                  key={m.id}
+                  className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 ${
+                    cancelled ? "border-border bg-accent/15 text-muted" : "border-border bg-card"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className={`min-w-0 flex-1 text-left text-sm ${cancelled ? "line-through" : ""}`}
+                    onClick={() => onEdit(m)}
+                  >
+                    <span className="font-medium text-foreground">{label}</span>
+                    <span className="mt-0.5 block text-xs text-muted">Sends {formatSendDate(m.sendAt)}</span>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => onEdit(m)}>
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 rounded-full px-2.5 text-xs"
+                      onClick={() => void onToggleCancel(m, !cancelled)}
+                    >
+                      {cancelled ? "Restore" : "Skip"}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {onOpenSettings ? (
+          <Button type="button" variant="outline" className="w-full rounded-full" onClick={onOpenSettings}>
+            Default schedule for all payments
+          </Button>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
 
 function ScheduledMessageEditForm({
   message,
@@ -166,14 +310,14 @@ const SCHEDULE_SETTINGS_COPY: Record<
     saveLabel: "Save schedule settings",
   },
   payments: {
-    savedToast: "Payment reminder settings saved.",
-    title: "Automated payment reminders",
-    description: "Choose when reminders are sent for unpaid charges. Residents receive these automatically; you can edit individual messages from the ledger or Inbox → Schedule.",
-    daysBeforeLabel: "Remind before due date",
-    sameDayLabel: "Due-date reminder (day payment is due)",
-    followUpLabel: "Overdue reminder every day",
+    savedToast: "Reminder schedule saved.",
+    title: "Automated reminders",
+    description: "",
+    daysBeforeLabel: "Days before due",
+    sameDayLabel: "Due date",
+    followUpLabel: "Daily when overdue",
     templateLabel: "Default pre-due message template",
-    saveLabel: "Save reminder schedule",
+    saveLabel: "Save",
   },
 };
 
@@ -181,10 +325,12 @@ function PaymentAutomationSettingsForm({
   initialSettings,
   onSaved,
   variant = "payments",
+  layout = "card",
 }: {
   initialSettings: ManagerAutomationSettings;
   onSaved: (next: ManagerAutomationSettings) => void;
   variant?: ScheduleSettingsVariant;
+  layout?: "card" | "modal";
 }) {
   const { showToast } = useAppUi();
   const copy = SCHEDULE_SETTINGS_COPY[variant];
@@ -246,18 +392,19 @@ function PaymentAutomationSettingsForm({
     setCustomDay("");
   };
 
+  const compact = layout === "modal" && variant === "payments";
+
   return (
-    <div className="rounded-2xl border border-border bg-accent/20 p-4 space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">{copy.title}</h3>
-        {copy.description ? <p className="mt-1 text-xs text-muted">{copy.description}</p> : null}
-      </div>
+    <div className={layout === "card" ? "rounded-2xl border border-border bg-accent/20 p-4 space-y-4" : "space-y-5"}>
+      {layout === "card" ? (
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{copy.title}</h3>
+          {copy.description ? <p className="mt-1 text-xs text-muted">{copy.description}</p> : null}
+        </div>
+      ) : null}
 
       <div>
         <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
-        {variant === "payments" ? (
-          <p className="mt-0.5 text-[11px] text-muted">Tap to turn each reminder on or off. Add a custom number of days if needed.</p>
-        ) : null}
         <div className="mt-2 flex flex-wrap gap-2">
           {[7, 5, 3, 2, 1].map((day) => (
             <Button
@@ -268,34 +415,42 @@ function PaymentAutomationSettingsForm({
               onClick={() => toggleDay(day)}
               disabled={busy}
             >
-              {day} day{day === 1 ? "" : "s"} before
+              {day}d
             </Button>
           ))}
-          <div className="flex items-center gap-1">
-            <Input className="h-8 w-16 text-xs" placeholder="N" value={customDay} onChange={(e) => setCustomDay(e.target.value)} disabled={busy} />
-            <Button type="button" variant="outline" className="rounded-full px-2 py-1 text-xs" onClick={addCustomDay} disabled={busy}>
-              Add day
-            </Button>
-          </div>
+          {!compact ? (
+            <div className="flex items-center gap-1">
+              <Input className="h-8 w-16 text-xs" placeholder="N" value={customDay} onChange={(e) => setCustomDay(e.target.value)} disabled={busy} />
+              <Button type="button" variant="outline" className="rounded-full px-2 py-1 text-xs" onClick={addCustomDay} disabled={busy}>
+                Add day
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex items-center gap-2 text-sm">
+      <div className={compact ? "flex flex-wrap gap-2" : "grid gap-3 sm:grid-cols-2"}>
+        <label
+          className={`flex items-center gap-2 text-sm ${compact ? "rounded-full border border-border bg-card px-3 py-2" : ""}`}
+        >
           <input type="checkbox" checked={draft.sameDayReminderEnabled} onChange={(e) => setDraft({ ...draft, sameDayReminderEnabled: e.target.checked })} disabled={busy} />
           {copy.sameDayLabel}
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label
+          className={`flex items-center gap-2 text-sm ${compact ? "rounded-full border border-border bg-card px-3 py-2" : ""}`}
+        >
           <input type="checkbox" checked={draft.overdueDailyEnabled} onChange={(e) => setDraft({ ...draft, overdueDailyEnabled: e.target.checked })} disabled={busy} />
           {copy.followUpLabel}
         </label>
-        <label className="flex items-center gap-2 text-sm sm:col-span-2">
-          <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
-          Late fee notices
-        </label>
+        {!compact ? (
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" checked={draft.lateFeeNoticeEnabled} onChange={(e) => setDraft({ ...draft, lateFeeNoticeEnabled: e.target.checked })} disabled={busy} />
+            Late fee notices
+          </label>
+        ) : null}
       </div>
 
-      {draft.overdueDailyEnabled ? (
+      {!compact && draft.overdueDailyEnabled ? (
         <label className="block text-xs font-semibold text-muted">
           Start daily overdue reminders after
           <div className="mt-1 flex items-center gap-2">
@@ -316,6 +471,7 @@ function PaymentAutomationSettingsForm({
         </label>
       ) : null}
 
+      {variant === "inbox" ? (
       <div>
         <p className="text-xs font-semibold text-muted">Inbox schedule visibility</p>
         <p className="mt-0.5 text-[11px] text-muted">
@@ -354,8 +510,9 @@ function PaymentAutomationSettingsForm({
           </div>
         </div>
       </div>
+      ) : null}
 
-      {variant === "payments" ? (
+      {variant === "inbox" ? (
       <div>
         <p className="text-xs font-semibold text-muted">{copy.templateLabel}</p>
         <Input
@@ -397,17 +554,20 @@ export function PaymentAutomationSettingsPanel({
   settings,
   onSaved,
   variant = "payments",
+  layout = "card",
 }: {
   settings: ManagerAutomationSettings;
   onSaved: (next: ManagerAutomationSettings) => void;
   variant?: ScheduleSettingsVariant;
+  layout?: "card" | "modal";
 }) {
   return (
     <PaymentAutomationSettingsForm
-      key={`${variant}:${JSON.stringify(settings)}`}
+      key={`${variant}:${layout}:${JSON.stringify(settings)}`}
       initialSettings={settings}
       onSaved={onSaved}
       variant={variant}
+      layout={layout}
     />
   );
 }
@@ -448,19 +608,19 @@ export function ReminderSettingsModal({
 }) {
   if (!settings) return null;
 
-  const copy = SCHEDULE_SETTINGS_COPY[variant];
-
   return (
-    <Modal open={open} onClose={onClose} title={variant === "inbox" ? "Schedule settings" : "Payment reminder settings"}>
-      {copy.description ? <p className="mb-4 text-sm text-muted">{copy.description}</p> : null}
-      <PaymentAutomationSettingsPanel
-        settings={settings}
-        variant={variant}
-        onSaved={(next) => {
-          onSaved(next);
-          onClose();
-        }}
-      />
+    <Modal open={open} onClose={onClose} title={variant === "inbox" ? "Schedule settings" : "Auto reminders"}>
+      {settings ? (
+        <PaymentAutomationSettingsPanel
+          settings={settings}
+          variant={variant}
+          layout={variant === "payments" ? "modal" : "card"}
+          onSaved={(next) => {
+            onSaved(next);
+            onClose();
+          }}
+        />
+      ) : null}
     </Modal>
   );
 }

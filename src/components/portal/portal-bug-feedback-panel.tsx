@@ -142,7 +142,7 @@ export function PortalBugFeedbackPanel({
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
                           <td className={PORTAL_TABLE_TD}>
                             <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
                             >
                               {row.status}
                             </span>

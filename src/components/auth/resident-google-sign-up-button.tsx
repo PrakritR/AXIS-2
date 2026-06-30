@@ -25,10 +25,10 @@ export function ResidentGoogleSignUpButton({
         }}
       />
       {!canUseGoogle ? (
-        <p className="mt-2 text-center text-xs text-muted">Enter your Axis ID above to enable Google signup.</p>
+        <p className="auth-choice-hint mt-1.5 text-center text-[11px] text-muted sm:mt-2 sm:text-xs">Enter Axis ID first</p>
       ) : (
-        <p className="mt-2 text-center text-xs text-muted">
-          Use the same Google account email as your rental application.
+        <p className="auth-choice-hint mt-1.5 text-center text-[11px] text-muted sm:mt-2 sm:text-xs">
+          Same email as your application
         </p>
       )}
     </>

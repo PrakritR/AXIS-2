@@ -79,7 +79,7 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary sm:min-h-0 ${className}`}
+      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary [html[data-theme=dark]_&]:border-white/18 [html[data-theme=dark]_&]:bg-white/10 sm:min-h-0 ${className}`}
     >
       Details
     </button>
@@ -695,29 +695,43 @@ function ListingDetailModal({
   return createPortal(panel, document.body);
 }
 
+function FloorPlanSummaryBar({ floor }: { floor: ListingFloorCard }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{floor.floorLabel}</p>
+        <p className="mt-0.5 text-xl font-bold tracking-tight text-foreground sm:text-2xl">{floor.fromPrice}</p>
+        {floor.remainingNote ? (
+          <p className="mt-1.5 flex items-center gap-2 text-xs text-sky-800 sm:text-sm [html[data-theme=dark]_&]:text-sky-200">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" aria-hidden />
+            {floor.remainingNote}
+          </p>
+        ) : null}
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</p>
+        <p className="text-xl font-bold text-foreground sm:text-2xl">{floor.roomCount}</p>
+      </div>
+    </div>
+  );
+}
+
+const FLOOR_PLAN_SUMMARY_STICKY_TOP =
+  "var(--listing-sticky-stack, calc(env(safe-area-inset-top, 0px) + 3.5rem))";
+
 export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: ListingFloorCard; listingPropertyId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
     <>
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3 sm:pb-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{floor.floorLabel}</p>
-            <p className="mt-0.5 text-xl font-bold tracking-tight text-foreground sm:text-2xl">{floor.fromPrice}</p>
-            {floor.remainingNote ? (
-              <p className="mt-1.5 flex items-center gap-2 text-xs text-sky-800 sm:text-sm">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" aria-hidden />
-                {floor.remainingNote}
-              </p>
-            ) : null}
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</p>
-            <p className="text-xl font-bold text-foreground sm:text-2xl">{floor.roomCount}</p>
-          </div>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm md:p-5">
+        <div
+          className="sticky z-30 border-b border-border bg-card/95 px-4 py-3 backdrop-blur-md md:static md:border-b md:bg-card md:px-0 md:py-0 md:pb-3 md:backdrop-blur-none [html[data-theme=dark]_&]:bg-card/90"
+          style={{ top: FLOOR_PLAN_SUMMARY_STICKY_TOP }}
+        >
+          <FloorPlanSummaryBar floor={floor} />
         </div>
-        <div className="mt-3 md:overflow-x-auto sm:mt-4">
+        <div className="px-4 pt-3 md:mt-4 md:overflow-x-auto md:px-0 sm:pt-4">
           <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
         </div>
       </div>
@@ -943,7 +957,7 @@ function BundleRoomPreview({ row }: { row: BundleCard }) {
       {preview.map((line) => (
         <span
           key={line}
-          className="inline-flex max-w-full items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted"
+          className="inline-flex max-w-full items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/[0.06]"
         >
           <span className="truncate">{line}</span>
         </span>
@@ -966,7 +980,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
         {rows.map((c) => (
           <div
             key={c.id}
-            className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-white via-white to-slate-50/90 p-4 shadow-sm ring-1 ring-slate-900/[0.04] transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/15 sm:p-5"
+            className="group relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm ring-1 ring-border/70 transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/20 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-[rgba(255,255,255,0.06)] [html[data-theme=dark]_&]:ring-white/10 sm:p-5"
           >
             <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
             <div className="relative pl-2">
@@ -978,7 +992,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
                 </div>
                 {c.promo ? <AvailabilityPill text={c.promo} /> : null}
               </div>
-              <div className="mt-4 rounded-xl border border-border bg-card p-3">
+              <div className="mt-4 rounded-xl border border-border bg-accent/25 p-3 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/[0.04]">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly</p>
                 <div className="mt-1 flex flex-wrap items-baseline gap-2">
                   {c.strikethrough ? <span className="text-sm text-muted line-through">{c.strikethrough}</span> : null}
@@ -990,7 +1004,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
                   {c.summaryItems.slice(0, 3).map((item) => (
                     <span
                       key={`${c.id}-${item.label}`}
-                      className="inline-flex items-center rounded-full border border-border bg-accent/30 px-2.5 py-1 text-[10px] font-semibold text-muted"
+                      className="inline-flex items-center rounded-full border border-border bg-accent/30 px-2.5 py-1 text-[10px] font-semibold text-muted [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/[0.06]"
                     >
                       <span className="text-muted">{item.label}:</span>
                       <span className="ml-1 text-foreground">{item.value}</span>

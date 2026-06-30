@@ -5,13 +5,11 @@ const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 
 const ADMIN_SECTIONS = [
   { label: "Dashboard", path: "/admin/dashboard" },
-  { label: "Onboard", path: "/admin/onboard" },
   { label: "Properties", path: "/admin/properties" },
-  { label: "Axis users", path: "/admin/axis-users" },
   { label: "Leases", path: "/admin/leases" },
   { label: "Events", path: "/admin/events" },
+  { label: "Feedback", path: "/admin/bugs-feedback" },
   { label: "Inbox", path: "/admin/inbox/unopened" },
-  { label: "Bugs & Feedback", path: "/admin/bugs-feedback" },
 ] as const;
 
 test.describe("Admin portal", () => {
@@ -39,11 +37,6 @@ test.describe("Admin portal", () => {
       await expect(page).toHaveURL(new RegExp(path.replace(/\//g, "\\/")));
       await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
     }
-  });
-
-  test("onboard section loads with heading", async ({ page }) => {
-    await page.goto("/admin/onboard");
-    await expect(page.getByRole("heading").first()).toBeVisible();
   });
 
   test("admin inbox loads and shows compose button", async ({ page }) => {

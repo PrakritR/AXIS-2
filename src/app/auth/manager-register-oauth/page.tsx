@@ -1,6 +1,8 @@
 "use client";
 
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
+import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
+import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 
@@ -18,12 +20,20 @@ function FinishContent() {
           method: "POST",
           credentials: "include",
         });
-        const body = (await res.json()) as { error?: string; redirectTo?: string };
+        const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
         if (!res.ok) {
           router.replace(`/auth/create-account?role=manager&message=${encodeURIComponent(body.error ?? "Could not create manager account.")}`);
           return;
         }
-        router.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : "/partner/pricing");
+        router.replace(
+          nativeAwarePath(
+            body.redirectTo?.startsWith("/")
+              ? body.redirectTo
+              : body.existingAccount
+                ? "/portal/dashboard"
+                : MANAGER_PRICING_ENTRY_PATH,
+          ),
+        );
       } catch {
         router.replace("/auth/create-account?role=manager");
       }

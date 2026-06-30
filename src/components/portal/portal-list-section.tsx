@@ -4,6 +4,7 @@ import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/p
 
 /**
  * Standard portal list-section layout — use for new tabs and data tables.
+ * Full spec: docs/portal-list-section-layout.md
  *
  * 1. Shell — `PortalListSectionShell` (or `ManagerPortalPageShell`) with `title` and optional `primaryAction`.
  * 2. Filters — pick one control per job:

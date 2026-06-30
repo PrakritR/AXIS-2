@@ -92,66 +92,12 @@ describe("Stripe subscription billing", () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",
-        payment_method_types: ["card"],
         ui_mode: "embedded_page",
         line_items: [{ price: "price_pro_monthly_test", quantity: 1 }],
         metadata: expect.objectContaining({ tier: "pro", billing: "monthly" }),
       }),
     );
-  });
-
-  it("POST /api/stripe/checkout applies onboard discount coupon", async () => {
-    const retrieve = vi.fn().mockResolvedValue({ id: "AXIS_ONBOARD_20_ONCE", valid: true });
-    const createCoupon = vi.fn();
-    const createSession = vi.fn().mockResolvedValue({
-      id: "cs_test_discount",
-      client_secret: "cs_test_secret_discount",
-    });
-    vi.mocked(getStripe).mockReturnValue({
-      coupons: { retrieve, create: createCoupon },
-      checkout: { sessions: { create: createSession } },
-    } as never);
-
-    const req = jsonRequest("http://localhost/api/stripe/checkout", {
-      method: "POST",
-      body: {
-        tier: "pro",
-        billing: "monthly",
-        email: "mgr@example.com",
-        fullName: "Discount Manager",
-        embedded: true,
-        discountPercent: 20,
-      },
-    });
-    const res = await checkout(req);
-    const { status, data } = await parseJsonResponse<{ clientSecret?: string }>(res);
-
-    expect(status).toBe(200);
-    expect(data.clientSecret).toBe("cs_test_secret_discount");
-    expect(createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        discounts: [{ coupon: "AXIS_ONBOARD_20_ONCE" }],
-        metadata: expect.objectContaining({ onboard_discount_percent: "20" }),
-      }),
-    );
-    expect(createSession.mock.calls[0]?.[0]).not.toHaveProperty("allow_promotion_codes");
-  });
-
-  it("POST /api/stripe/checkout rejects 100% onboard discount", async () => {
-    const req = jsonRequest("http://localhost/api/stripe/checkout", {
-      method: "POST",
-      body: {
-        tier: "pro",
-        billing: "monthly",
-        email: "mgr@example.com",
-        fullName: "Free Manager",
-        discountPercent: 100,
-      },
-    });
-    const res = await checkout(req);
-    const { status, data } = await parseJsonResponse<{ code?: string }>(res);
-    expect(status).toBe(400);
-    expect(data.code).toBe("REQUIRES_SIGNUP_INTENT");
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty("payment_method_types");
   });
 
   it("POST /api/stripe/checkout rejects missing price env", async () => {
@@ -211,11 +157,11 @@ describe("Stripe subscription billing", () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "subscription",
-        payment_method_types: ["card"],
         line_items: [{ price: "price_business_annual_test", quantity: 1 }],
         metadata: expect.objectContaining({ userId: "user_1", tier: "business" }),
       }),
     );
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty("payment_method_types");
   });
 
   it("POST /api/stripe/billing-portal opens portal for Stripe customer", async () => {
@@ -234,7 +180,7 @@ describe("Stripe subscription billing", () => {
 
     const req = jsonRequest("http://localhost/api/stripe/billing-portal", {
       method: "POST",
-      body: { returnPath: "/portal/plan" },
+      body: { returnPath: "/portal/profile" },
     });
     const res = await billingPortal(req);
     const { status, data } = await parseJsonResponse<{ url?: string }>(res);
@@ -242,7 +188,7 @@ describe("Stripe subscription billing", () => {
     expect(status).toBe(200);
     expect(data.url).toContain("billing.stripe");
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ customer: "cus_test_123", return_url: expect.stringContaining("/portal/plan") }),
+      expect.objectContaining({ customer: "cus_test_123", return_url: expect.stringContaining("/portal/profile") }),
     );
   });
 

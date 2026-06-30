@@ -5,6 +5,8 @@ type Props = {
   fullName?: string | null;
   subtitle?: string;
   onSwitchAccount?: () => void;
+  /** Defaults to Google for backwards compatibility. */
+  provider?: "google" | "email";
 };
 
 function GoogleGlyph() {
@@ -30,19 +32,22 @@ function GoogleGlyph() {
   );
 }
 
-export function GoogleSignedInBanner({ email, fullName, subtitle, onSwitchAccount }: Props) {
+export function GoogleSignedInBanner({ email, fullName, subtitle, onSwitchAccount, provider = "google" }: Props) {
   const displayName = fullName?.trim() || email;
+  const signedInLabel = provider === "google" ? "Signed in with Google" : "Signed in";
 
   return (
     <div className="rounded-2xl border border-[var(--status-confirmed-fg)]/20 bg-[var(--status-confirmed-bg)] px-4 py-4 sm:px-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-card shadow-sm">
-            <GoogleGlyph />
-          </div>
+          {provider === "google" ? (
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-card shadow-sm">
+              <GoogleGlyph />
+            </div>
+          ) : null}
           <div className="min-w-0 text-left">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--status-confirmed-fg)]">
-              Signed in with Google
+              {signedInLabel}
             </p>
             <p className="mt-1 truncate text-sm font-semibold text-foreground">{displayName}</p>
             <p className="truncate text-xs text-muted">{email}</p>

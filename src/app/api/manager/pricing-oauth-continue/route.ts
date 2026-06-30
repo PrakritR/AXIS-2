@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { findManagerPurchaseForAccount } from "@/lib/auth/manager-onboarding";
 import { completeFreeManagerTierForUser, ensureProvisionedManagerForPricing } from "@/lib/auth/manager-pricing-selection";
 import { createManagerCheckoutSession } from "@/lib/stripe/manager-checkout";
-import { normalizeOnboardDiscountPercent } from "@/lib/stripe-onboard-discount";
 import { getStripe } from "@/lib/stripe";
 import { getPaymentWaiverCode } from "@/lib/server-env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -17,7 +16,6 @@ type Body = {
   tier?: string;
   billing?: string;
   promo?: string;
-  discountPercent?: number;
   phone?: string;
 };
 
@@ -55,7 +53,6 @@ export async function POST(req: Request) {
     const tierRaw = typeof body.tier === "string" ? body.tier.toLowerCase().trim() : "";
     const billingRaw = typeof body.billing === "string" ? body.billing.toLowerCase().trim() : "";
     const promo = typeof body.promo === "string" ? body.promo.trim().toUpperCase() : "";
-    const onboardDiscount = normalizeOnboardDiscountPercent(body.discountPercent);
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
 
     if (!tierRaw || !billingRaw || !isTier(tierRaw) || !isBilling(billingRaw)) {
@@ -88,28 +85,18 @@ export async function POST(req: Request) {
     }
 
     const waiverCode = getPaymentWaiverCode();
-    const skipStripeForFree = tierRaw === "free" && prepared.kind !== "complete";
     const skipStripeForPromo = waiverCode != null && promo === waiverCode.trim().toUpperCase();
-    const skipStripeForOnboardOffer = tierRaw !== "free" && onboardDiscount === 100;
 
-    if (skipStripeForFree || skipStripeForPromo || skipStripeForOnboardOffer) {
+    if (skipStripeForPromo) {
       const { managerId: finalizedId } = await completeFreeManagerTierForUser(supabase, {
         userId: user.id,
         email,
         fullName,
         tier: tierRaw,
         billing: billingRaw,
-        promo: skipStripeForPromo
-          ? promo
-          : skipStripeForOnboardOffer
-            ? `ONBOARD_FREE_${tierRaw.toUpperCase()}`
-            : null,
+        promo,
       });
       return NextResponse.json({ action: "portal", managerId: finalizedId });
-    }
-
-    if (tierRaw !== "pro" && tierRaw !== "business") {
-      return NextResponse.json({ error: "Checkout requires a paid tier." }, { status: 400 });
     }
 
     const checkout = await createManagerCheckoutSession({
@@ -121,7 +108,6 @@ export async function POST(req: Request) {
       userId: user.id,
       managerId,
       promo,
-      discountPercent: onboardDiscount ?? undefined,
       embedded: true,
       req,
     });

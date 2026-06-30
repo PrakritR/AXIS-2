@@ -8,6 +8,7 @@ import { FinancialReportDocumentView } from "@/components/portal/reports/formal-
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { ReportTable } from "@/components/portal/reports/report-table";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
+import { ResidentDocumentPhotos } from "@/components/portal/resident-document-photos";
 import type { ReportResult } from "@/lib/reports/types";
 
 function defaultReceiptRange() {
@@ -72,7 +73,12 @@ export function ResidentDocumentsPanel({
         ))}
       </div>
 
-      {tabId === "lease" ? <ResidentLeasePanel /> : null}
+      {tabId === "lease" ? (
+        <>
+          <ResidentLeasePanel />
+          <ResidentDocumentPhotos />
+        </>
+      ) : null}
 
       {tabId === "receipts" ? (
         <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>

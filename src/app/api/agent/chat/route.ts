@@ -4,6 +4,9 @@ import { resolveAgentContext } from "@/lib/tools/context";
 import { agentRegistry } from "@/lib/tools";
 import { runAgentTurn } from "@/lib/agent/loop";
 import { executeSendRentReminder } from "@/lib/tools/domains/payments";
+import { filterOverdueCharges, buildRentReminderPreview } from "@/lib/tools/domains/payments-logic";
+import { loadAllManagerRows } from "@/lib/tools/domains/load-manager-rows";
+import type { HouseholdCharge } from "@/lib/household-charges";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
 
@@ -72,6 +75,33 @@ export async function POST(req: Request) {
       model: result.model,
       tier: result.tier,
     });
+
+    const lastUserText = String(rawMessages.at(-1)?.content ?? "").toLowerCase();
+    const askedToSend = /\b(send|remind|reminder|notify)\b/.test(lastUserText);
+    const fetchedOverdue = result.toolTrace.some((t) => t.tool === "get_overdue_charges" && t.ok);
+
+    if (askedToSend && fetchedOverdue) {
+      const charges = await loadAllManagerRows(
+        ctx,
+        "portal_household_charge_records",
+        (rowData) => rowData as HouseholdCharge,
+      );
+      const overdue = filterOverdueCharges(charges);
+      if (overdue.length === 1) {
+        const preview = buildRentReminderPreview(overdue[0]!);
+        return NextResponse.json({
+          ...result,
+          pendingConfirm: {
+            type: "send_rent_reminder",
+            chargeId: preview.chargeId,
+            residentName: preview.residentName,
+            chargeTitle: preview.chargeTitle,
+            balanceDue: preview.balanceDue,
+          },
+        });
+      }
+    }
+
     return NextResponse.json(result);
   } catch (e) {
     console.error("[agent/chat] turn failed:", e);

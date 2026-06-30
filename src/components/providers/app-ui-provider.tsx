@@ -58,7 +58,7 @@ export function AppUiProvider({ children }: { children: ReactNode }) {
   return (
     <AppUiContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-4 left-4 z-[60] flex flex-col gap-2 sm:bottom-4 sm:left-auto sm:right-4">
         {toasts.map((t) => (
           <div
             key={t.id}

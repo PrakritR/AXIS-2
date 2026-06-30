@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
@@ -29,12 +29,12 @@ import {
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
-import { readManagerApplicationRows, MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
+import { buildManagerInboxLiveContacts } from "@/lib/manager-inbox-contacts";
 import {
   isUpcomingScheduledInboxMessage,
   type ScheduledInboxMessageRecord,
 } from "@/lib/scheduled-inbox-messages";
-import { readProRelationships } from "@/lib/pro-relationships";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 
@@ -136,26 +136,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   const liveContacts = useMemo((): InboxScopedContact[] => {
     void contactTick;
-    const out: InboxScopedContact[] = [];
-    const seen = new Set<string>();
-    // Approved residents
-    for (const row of readManagerApplicationRows()) {
-      if (row.bucket !== "approved" || !row.email?.trim()) continue;
-      const email = row.email.trim().toLowerCase();
-      if (seen.has(email)) continue;
-      seen.add(email);
-      out.push({ id: `res-${row.id}`, name: row.name || email, email: row.email.trim(), role: "resident" });
-    }
-    // Linked accounts
-    if (userId) {
-      for (const rel of readProRelationships(userId)) {
-        const email = rel.linkedAxisId.trim();
-        if (!email || seen.has(email.toLowerCase())) continue;
-        seen.add(email.toLowerCase());
-        out.push({ id: `rel-${rel.id}`, name: rel.linkedDisplayName || rel.linkedAxisId, email: rel.linkedAxisId, role: "manager" });
-      }
-    }
-    return out;
+    return buildManagerInboxLiveContacts(userId);
   }, [userId, contactTick]);
 
   useEffect(() => {
@@ -435,7 +416,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     <ManagerPortalPageShell
       title="Inbox"
       titleAside={
-        <>
+        <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
           {tabId === "trash" ? (
             <Button
               type="button"
@@ -449,7 +430,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
             New message
           </Button>
-        </>
+        </div>
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -458,6 +439,21 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             activeId={tabId}
             onChange={(id) => navigate(`${portalBase}/inbox/${id}`)}
           />
+          <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
+            {tabId === "trash" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_HEADER_ACTION_BTN}
+                onClick={deleteAllTrash}
+              >
+                Empty trash
+              </Button>
+            ) : null}
+            <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setComposeOpen(true)}>
+              New
+            </Button>
+          </div>
         </ManagerPortalFilterRow>
       }
     >

@@ -1,4 +1,5 @@
 import { chargeDueLabel, type HouseholdCharge } from "@/lib/household-charges";
+import { sendPushToUser } from "@/lib/push-notifications.server";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
 
@@ -158,6 +159,22 @@ export async function deliverPaymentReminder(input: {
     } catch {
       /* non-critical */
     }
+  }
+
+  try {
+    const { data: residentForPush } = await db.from("profiles").select("id").eq("email", residentLower).maybeSingle();
+    const residentUserId = String(residentForPush?.id ?? "").trim();
+    if (residentUserId) {
+      const pushBody = text.replace(/\s+/g, " ").trim().slice(0, 180);
+      await sendPushToUser(residentUserId, {
+        title: subject,
+        body: pushBody || `Payment reminder for ${charge.title}`,
+        url: "/resident/payments",
+        data: { chargeId: charge.id, slot: slotLabel },
+      });
+    }
+  } catch {
+    /* non-critical — no-ops when FCM is not configured */
   }
 
   return { sent: true };

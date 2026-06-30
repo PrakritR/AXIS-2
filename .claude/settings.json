@@ -68,7 +68,12 @@
       "Bash(ls -t screenshots/debug-compose-open-*.png)",
       "Bash(git rm *)",
       "Bash(timeout 180 npm run build)",
-      "Bash(git rev-list *)"
+      "Bash(git rev-list *)",
+      "Bash(npm run *)",
+      "Bash(vercel --version)",
+      "Bash(xargs cat -n)",
+      "Bash(npx next *)",
+      "Bash(git pull *)"
     ],
     "additionalDirectories": [
       "/tmp/npx-pw",

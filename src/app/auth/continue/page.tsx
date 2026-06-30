@@ -1,6 +1,9 @@
 "use client";
 
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
+import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
+import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useSearchParams } from "next/navigation";
@@ -11,7 +14,9 @@ function isAuthRole(value: unknown): value is AuthRole {
 }
 
 function safeNext(raw: string | null): string {
-  return raw && raw.startsWith("/") ? raw : "";
+  if (!raw?.startsWith("/")) return "";
+  const normalized = normalizePostAuthPath(raw);
+  return normalized === "/auth/continue" ? "" : normalized;
 }
 
 async function fetchPortalRolesFast(): Promise<AuthRole[] | null> {
@@ -70,9 +75,7 @@ function ContinueContent() {
     void (async () => {
       try {
         const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const user = await waitForOAuthUser(supabase, { attempts: 20, delayMs: 300 });
 
         if (!user) {
           window.location.replace(nextPath ? `/auth/sign-in?next=${encodeURIComponent(nextPath)}` : "/auth/sign-in");
@@ -99,7 +102,8 @@ function ContinueContent() {
               );
               if (!accessRes.ok) return null;
               const body = (await accessRes.json()) as { redirectTo?: string };
-              return body.redirectTo?.startsWith("/") ? body.redirectTo : null;
+              const candidate = body.redirectTo?.startsWith("/") ? normalizePostAuthPath(body.redirectTo) : null;
+              return candidate === "/auth/continue" ? null : candidate;
             } catch {
               return null;
             }
@@ -113,7 +117,7 @@ function ContinueContent() {
           if (redirectTo) {
             if (cancelled || didRedirectRef.current) return;
             didRedirectRef.current = true;
-            window.location.replace(redirectTo);
+            window.location.replace(nativeAwarePath(redirectTo));
             return;
           }
           if (cancelled || didRedirectRef.current) return;
@@ -135,7 +139,7 @@ function ContinueContent() {
         }
 
         const role = roles[0] ?? "manager";
-        window.location.replace(nextPath || portalDashboardPath(role));
+        window.location.replace(nativeAwarePath(normalizePostAuthPath(nextPath, role)));
       } catch {
         if (cancelled) return;
         setErrorText("Still loading your portal. If this keeps happening, go back and try sign-in again.");

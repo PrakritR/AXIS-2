@@ -1,15 +1,17 @@
 "use client";
 
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { persistOAuthNextPath } from "@/lib/auth/oauth-next-cookie";
+import { persistOAuthSignInContext } from "@/lib/auth/oauth-next-cookie";
+import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import {
-  bareAuthCallbackUrl,
   oauthContinuePath,
   usesDirectOAuthReturn,
 } from "@/lib/auth/oauth-redirect";
+import { defaultOAuthNextPath, type OAuthSignInIntent } from "@/lib/auth/post-oauth-routing";
 import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
+import { openOAuthUrl } from "@/lib/native/open-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function GoogleGlyph() {
   return (
@@ -42,6 +44,8 @@ export function GoogleSignInButton({
   viaContinue = true,
   /** Fixed callback path (e.g. /auth/callback/partner-pricing) — no ?next= in redirect URL. */
   fixedCallbackPath,
+  /** Sign-in intent — matches website manager/resident routing after Google OAuth. */
+  intent = null,
   onBeforeRedirect,
 }: {
   nextPath?: string;
@@ -49,34 +53,48 @@ export function GoogleSignInButton({
   label?: string;
   viaContinue?: boolean;
   fixedCallbackPath?: string;
+  intent?: OAuthSignInIntent | null;
   onBeforeRedirect?: () => void;
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!busy) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        window.setTimeout(() => setBusy(false), 400);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [busy]);
 
   const signInWithGoogle = async () => {
     setBusy(true);
     try {
       onBeforeRedirect?.();
       const supabase = createSupabaseBrowserClient();
-      const directReturn = !viaContinue || usesDirectOAuthReturn(nextPath);
+      const resolvedNext = nextPath.startsWith("/") ? nextPath : defaultOAuthNextPath(intent);
+      const directReturn = !viaContinue || usesDirectOAuthReturn(resolvedNext);
       const afterAuth = directReturn
-        ? nextPath.startsWith("/")
-          ? nextPath
+        ? resolvedNext.startsWith("/")
+          ? resolvedNext
           : "/auth/continue"
-        : oauthContinuePath(nextPath);
+        : oauthContinuePath(resolvedNext);
       const origin = resolveOAuthBrowserOrigin();
       const redirectTo =
         fixedCallbackPath && fixedCallbackPath.startsWith("/")
-          ? `${origin.replace(/\/$/, "")}${fixedCallbackPath}`
+          ? resolveOAuthCallbackRedirectUrl(origin, fixedCallbackPath)
           : (() => {
-              persistOAuthNextPath(afterAuth);
-              return bareAuthCallbackUrl(origin);
+              persistOAuthSignInContext({ nextPath: afterAuth, intent });
+              return resolveOAuthCallbackRedirectUrl(origin);
             })();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo,
+          skipBrowserRedirect: true,
           queryParams: {
             prompt: "select_account",
           },
@@ -91,7 +109,8 @@ export function GoogleSignInButton({
         return;
       }
       if (data?.url) {
-        window.location.assign(data.url);
+        await openOAuthUrl(data.url);
+        window.setTimeout(() => setBusy(false), 90_000);
         return;
       }
       showToast("Could not start Google sign-in.");
@@ -108,7 +127,7 @@ export function GoogleSignInButton({
       type="button"
       onClick={() => void signInWithGoogle()}
       disabled={disabled || busy}
-      className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-[var(--shadow-sm)] transition hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-60"
+      className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-card px-4 py-2.5 text-[15px] font-semibold text-foreground shadow-[var(--shadow-sm)] transition hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-60 sm:py-3 sm:text-sm"
     >
       <GoogleGlyph />
       {busy ? "Redirecting…" : label}

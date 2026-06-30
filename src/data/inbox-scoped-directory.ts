@@ -9,6 +9,9 @@ export type InboxScopedContact = {
   name: string;
   email: string;
   role: InboxContactRole;
+  /** Resident listing label for grouped compose / schedule pickers. */
+  propertyLabel?: string;
+  propertyId?: string;
 };
 
 import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";

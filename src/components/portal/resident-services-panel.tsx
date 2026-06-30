@@ -10,7 +10,11 @@ import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
+  ManagerPortalFilterRow,
   ManagerPortalPageShell,
+  PORTAL_FILTER_ACTIONS_MOBILE,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -661,11 +665,11 @@ export function ResidentServicesPanel({
     <ManagerPortalPageShell
       title="Services"
       titleAside={
-        <div className="flex shrink-0 gap-2">
+        <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} shrink-0 gap-2`}>
           <Button
             type="button"
             variant="outline"
-            className="rounded-full"
+            className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
             disabled={!servicesUnlocked}
             onClick={() => {
               if (!servicesUnlocked) {
@@ -679,7 +683,7 @@ export function ResidentServicesPanel({
           </Button>
           <Button
             type="button"
-            className="rounded-full"
+            className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
             disabled={!servicesUnlocked}
             onClick={() => {
               if (!servicesUnlocked) {
@@ -693,22 +697,54 @@ export function ResidentServicesPanel({
           </Button>
         </div>
       }
-      filterRow={null}
+      filterRow={
+        <ManagerPortalFilterRow>
+          <TabNav
+            activeId={activeTab}
+            items={[
+              { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
+              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
+            ]}
+          />
+          <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_HEADER_ACTION_BTN}
+              disabled={!servicesUnlocked}
+              onClick={() => {
+                if (!servicesUnlocked) {
+                  showToast("Services unlock after your lease is fully signed.");
+                  return;
+                }
+                setModalMode("maintenance");
+              }}
+            >
+              Maintenance
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_HEADER_ACTION_BTN}
+              disabled={!servicesUnlocked}
+              onClick={() => {
+                if (!servicesUnlocked) {
+                  showToast("Services unlock after your lease is fully signed.");
+                  return;
+                }
+                setModalMode("service");
+              }}
+            >
+              Request
+            </Button>
+          </div>
+        </ManagerPortalFilterRow>
+      }
     >
       <input ref={photoInputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void onPickPhotos(e.target.files); }} />
 
-      <div className="mb-4">
-        <TabNav
-          activeId={activeTab}
-          items={[
-            { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
-            { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
-          ]}
-        />
-      </div>
-
       {!servicesUnlocked ? (
-        <div className="glass-card mb-6 rounded-2xl px-4 py-4 text-sm text-muted">
+        <div className="glass-card mb-4 rounded-2xl px-4 py-4 text-sm text-muted [html[data-native]_&]:hidden">
           <p className="font-medium text-foreground">Services unlock after your lease is fully signed</p>
           <p className="mt-1">Maintenance and service requests become available once you and your manager have both signed.</p>
         </div>
