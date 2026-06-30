@@ -138,6 +138,8 @@ export type ManagerPurchaseRowRecord = {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   stripe_checkout_session_id: string | null;
+  /** Optional: only the access-resolution path selects/needs this. */
+  promo_code?: string | null;
   paid_at: string | null;
   user_id: string | null;
 };
@@ -161,12 +163,23 @@ export function pickBestManagerPurchaseRow(
 
 export type ManagerSubscriptionTier = "free" | "paid" | null;
 
+/**
+ * A non-empty `promo_code` marks a payment-waiver / coupon grant (e.g. FREE100,
+ * onboard 100%-off). It is only ever written by server-side flows that already
+ * validated the waiver, so it is a trustworthy authorization signal for paid
+ * access that is not backed by a Stripe subscription.
+ */
+export function isWaiverGrantedManagerPurchase(promoCode: string | null | undefined): boolean {
+  return Boolean(promoCode?.trim());
+}
+
 /** Resolve subscription access from a purchase row (synced tier state). */
 export function resolveManagerSubscriptionTierFromPurchase(input: {
   tier: string | null | undefined;
   billing?: string | null | undefined;
   stripeSubscriptionId?: string | null | undefined;
   stripeCheckoutSessionId?: string | null | undefined;
+  promoCode?: string | null | undefined;
   paidAt?: string | null | undefined;
   hasPurchaseRow: boolean;
   nowMs?: number;
@@ -180,9 +193,14 @@ export function resolveManagerSubscriptionTierFromPurchase(input: {
   const billing = input.billing?.toLowerCase().trim() ?? "";
   const isAdminGrant =
     billing === "admin" || isAdminManagedManagerPurchase(input.stripeCheckoutSessionId);
+  const isWaiverGrant = isWaiverGrantedManagerPurchase(input.promoCode);
 
   if (normalized === "pro" || normalized === "business") {
     if (hasStripe) return "paid";
+    // Coupon / payment-waiver grants are comp access; the `billing` field is the
+    // plan cadence chosen at signup, not a comp period, so it must not be run
+    // through the date-based expiry the way admin grants are.
+    if (isWaiverGrant) return "paid";
     if (isAdminGrant) {
       const effective = resolveEffectiveManagerTier(
         {

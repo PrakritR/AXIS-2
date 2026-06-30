@@ -1,4 +1,4 @@
-import { normalizeManagerSkuTier } from "@/lib/manager-access";
+import { isWaiverGrantedManagerPurchase, normalizeManagerSkuTier } from "@/lib/manager-access";
 import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
 import { isManagerPurchasePeriodExpired, resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
 import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
@@ -12,7 +12,7 @@ export async function revokeUnauthorizedManagerPaidTier(userId: string): Promise
   const supabase = createSupabaseServiceRoleClient();
   const { data } = await supabase
     .from("manager_purchases")
-    .select("id, tier, billing, stripe_subscription_id, stripe_checkout_session_id")
+    .select("id, tier, billing, stripe_subscription_id, stripe_checkout_session_id, promo_code")
     .eq("user_id", uid)
     .maybeSingle();
 
@@ -25,6 +25,9 @@ export async function revokeUnauthorizedManagerPaidTier(userId: string): Promise
   const billing = data.billing?.toLowerCase().trim() ?? "";
   const isAdminGrant = billing === "admin" || isAdminManagedManagerPurchase(data.stripe_checkout_session_id);
   if (isAdminGrant) return false;
+  // Payment-waiver / coupon grants (FREE100, onboard 100%-off) are authorized
+  // paid access without a Stripe subscription — never revoke them.
+  if (isWaiverGrantedManagerPurchase(data.promo_code)) return false;
 
   const { error } = await supabase
     .from("manager_purchases")
@@ -42,12 +45,15 @@ export async function applyExpiredManagerPurchaseDowngrade(userId: string): Prom
   const supabase = createSupabaseServiceRoleClient();
   const { data } = await supabase
     .from("manager_purchases")
-    .select("id, tier, billing, paid_at, stripe_subscription_id")
+    .select("id, tier, billing, paid_at, stripe_subscription_id, promo_code")
     .eq("user_id", uid)
     .maybeSingle();
 
   if (!data) return false;
   if (data.stripe_subscription_id?.trim()) return false;
+  // Coupon / payment-waiver grants are comp access, not a billing period that
+  // lapses — leave them in place.
+  if (isWaiverGrantedManagerPurchase(data.promo_code)) return false;
 
   const tier = normalizeManagerSkuTier(data.tier);
   if (!tier || tier === "free") return false;

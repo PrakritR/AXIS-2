@@ -23,7 +23,7 @@ async function loadManagerPurchaseRowsForUser(userId: string): Promise<ManagerPu
   const email = profile?.email?.trim().toLowerCase() ?? "";
 
   const select =
-    "id, tier, billing, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, paid_at, user_id";
+    "id, tier, billing, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, promo_code, paid_at, user_id";
   const [{ data: byUserId }, { data: byEmail }] = await Promise.all([
     supabase.from("manager_purchases").select(select).eq("user_id", userId),
     email
@@ -44,6 +44,7 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   stripeCheckoutSessionId: string | null;
+  promoCode: string | null;
   paidAt: string | null;
 }> => {
   const best = pickBestManagerPurchaseRow(await loadManagerPurchaseRowsForUser(userId), userId);
@@ -54,6 +55,7 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
       stripeCustomerId: null,
       stripeSubscriptionId: null,
       stripeCheckoutSessionId: null,
+      promoCode: null,
       paidAt: null,
     };
   }
@@ -71,6 +73,10 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
     stripeCheckoutSessionId:
       best.stripe_checkout_session_id != null && String(best.stripe_checkout_session_id).trim() !== ""
         ? String(best.stripe_checkout_session_id).trim()
+        : null,
+    promoCode:
+      best.promo_code != null && String(best.promo_code).trim() !== ""
+        ? String(best.promo_code).trim()
         : null,
     paidAt: best.paid_at != null ? String(best.paid_at) : null,
   };
@@ -91,6 +97,7 @@ const getManagerSubscriptionTierCached = cache(async (userId: string): Promise<M
       billing: purchase.billing,
       stripeSubscriptionId: purchase.stripeSubscriptionId,
       stripeCheckoutSessionId: purchase.stripeCheckoutSessionId,
+      promoCode: purchase.promoCode,
       paidAt: purchase.paidAt,
       hasPurchaseRow: rows.length > 0,
     });
@@ -111,7 +118,7 @@ const getManagerSubscriptionTierByManagerIdCached = cache(
       const supabase = createSupabaseServiceRoleClient();
       const { data } = await supabase
         .from("manager_purchases")
-        .select("user_id, tier, billing, stripe_subscription_id, stripe_checkout_session_id, paid_at")
+        .select("user_id, tier, billing, stripe_subscription_id, stripe_checkout_session_id, promo_code, paid_at")
         .eq("manager_id", normalized)
         .maybeSingle();
       if (!data) return null;
@@ -124,6 +131,7 @@ const getManagerSubscriptionTierByManagerIdCached = cache(
         billing: data.billing != null ? String(data.billing) : null,
         stripeSubscriptionId: data.stripe_subscription_id ?? null,
         stripeCheckoutSessionId: data.stripe_checkout_session_id ?? null,
+        promoCode: data.promo_code ?? null,
         paidAt: data.paid_at ?? null,
         hasPurchaseRow: true,
       });
