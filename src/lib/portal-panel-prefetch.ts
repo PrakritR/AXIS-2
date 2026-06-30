@@ -1,19 +1,25 @@
 /** Panel modules code-split in render-portal-section — warm gradually after portal mount. */
 
 import {
-  loadManagerAllServicesPanel,
-  loadManagerApplications,
-  loadManagerDocumentsPanel,
-  loadManagerFinancesPanel,
-  loadManagerInbox,
-  loadManagerProperties,
   loadManagerResidents,
+  loadManagerApplications,
+  loadManagerProperties,
   loadPortalCalendar,
+  loadManagerAllServicesPanel,
+  loadManagerInbox,
+  loadManagerFinancesPanel,
+  loadManagerDocumentsPanel,
   loadProAccountLinksPanel,
   loadResidentServicesPanel,
 } from "@/lib/portal-panel-imports";
 import { portalBackgroundPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 
+/**
+ * Each loader uses a static literal import so Turbopack can resolve the chunk.
+ * A dynamic `import(variable)` cannot be statically analyzed and fails at
+ * runtime with "Cannot find module", so we warm chunks through the same
+ * loaders the section renderer uses.
+ */
 const PANEL_LOADERS = [
   loadManagerResidents,
   loadManagerApplications,

@@ -143,7 +143,7 @@ export function readProRelationships(userId: string): ProRelationshipRecord[] {
 export function writeProRelationships(userId: string, rows: ProRelationshipRecord[]): void {
   if (typeof window === "undefined") return;
   // Skip the dispatch + network write when nothing actually changed. The
-  // "axis-pro-relationships" event re-enters the render effects that call back
+  // "axis-pro-relationships" event re-enters render effects that can call back
   // into writeProRelationships, so an unconditional dispatch here turns any
   // stray re-render into an event/refetch loop. The no-op guard makes that
   // impossible regardless of caller render behavior.

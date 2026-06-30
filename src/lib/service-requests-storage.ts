@@ -75,6 +75,48 @@ function writeAll(requests: ServiceRequest[]): void {
   window.dispatchEvent(new Event(SERVICE_REQUESTS_EVENT));
 }
 
+/**
+ * Server mirroring. Service requests persist to `portal_service_request_records`
+ * via the service-role API route so they survive across devices/browsers and so
+ * the AI agent (which runs server-side and cannot read localStorage) can see
+ * them. localStorage remains a fast local cache. Writes are fire-and-forget; the
+ * optimistic local update already drove the UI.
+ */
+function mirrorServiceRequestToServer(row: ServiceRequest): void {
+  if (typeof window === "undefined") return;
+  void fetch("/api/portal-service-requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "upsert", row }),
+  }).catch(() => undefined);
+}
+
+function deleteServiceRequestFromServer(id: string): void {
+  if (typeof window === "undefined") return;
+  void fetch("/api/portal-service-requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "delete", id }),
+  }).catch(() => undefined);
+}
+
+/** Pull the authoritative server set into the local cache and notify listeners. */
+export async function syncServiceRequestsFromServer(): Promise<ServiceRequest[]> {
+  if (typeof window === "undefined") return [];
+  try {
+    const res = await fetch("/api/portal-service-requests", { credentials: "include", cache: "no-store" });
+    if (!res.ok) return readAll();
+    const body = (await res.json()) as { rows?: ServiceRequest[] };
+    const rows = Array.isArray(body.rows) ? body.rows : [];
+    writeAll(rows);
+    return rows;
+  } catch {
+    return readAll();
+  }
+}
+
 export function createServiceRequest(
   req: Omit<ServiceRequest, "id" | "requestedAt" | "status" | "servicePaid" | "depositPaid">,
 ): ServiceRequest {
@@ -87,6 +129,7 @@ export function createServiceRequest(
     depositPaid: false,
   };
   writeAll([newReq, ...readAll()]);
+  mirrorServiceRequestToServer(newReq);
   return newReq;
 }
 
@@ -110,6 +153,7 @@ export function updateServiceRequest(id: string, updates: Partial<ServiceRequest
   if (idx === -1) return;
   all[idx] = { ...all[idx]!, ...updates };
   writeAll(all);
+  mirrorServiceRequestToServer(all[idx]!);
 }
 
 export function approveServiceRequest(id: string, managerNote?: string): void {
@@ -165,6 +209,7 @@ export function approveServiceRequest(id: string, managerNote?: string): void {
     depositChargeId,
   };
   writeAll(all);
+  mirrorServiceRequestToServer(all[idx]!);
 }
 
 export function denyServiceRequest(id: string, managerNote?: string): void {
@@ -178,6 +223,7 @@ export function denyServiceRequest(id: string, managerNote?: string): void {
     managerNote: managerNote?.trim() || all[idx]!.managerNote,
   };
   writeAll(all);
+  mirrorServiceRequestToServer(all[idx]!);
 }
 
 export function markServiceRequestServicePaid(id: string): void {
@@ -190,6 +236,7 @@ export function markServiceRequestServicePaid(id: string): void {
   }
   all[idx] = { ...row, servicePaid: true, servicePaidAt: new Date().toISOString() };
   writeAll(all);
+  mirrorServiceRequestToServer(all[idx]!);
 }
 
 export function markServiceRequestDepositPaid(id: string): void {
@@ -198,6 +245,7 @@ export function markServiceRequestDepositPaid(id: string): void {
   if (idx === -1) return;
   all[idx] = { ...all[idx]!, depositPaid: true, depositPaidAt: new Date().toISOString() };
   writeAll(all);
+  mirrorServiceRequestToServer(all[idx]!);
 }
 
 export function deleteServiceRequest(id: string): void {
@@ -212,15 +260,20 @@ export function deleteServiceRequest(id: string): void {
   const next = all.filter((r) => r.id !== id);
   if (next.length === all.length) return;
   writeAll(next);
+  deleteServiceRequestFromServer(id);
 }
 
 export function deleteServiceRequestsForResident(residentEmail: string): number {
   const email = residentEmail.trim().toLowerCase();
   if (!email) return 0;
   const all = readAll();
+  const removedRows = all.filter((r) => r.residentEmail.trim().toLowerCase() === email);
   const next = all.filter((r) => r.residentEmail.trim().toLowerCase() !== email);
   const removed = all.length - next.length;
-  if (removed > 0) writeAll(next);
+  if (removed > 0) {
+    writeAll(next);
+    for (const row of removedRows) deleteServiceRequestFromServer(row.id);
+  }
   return removed;
 }
 
@@ -235,6 +288,7 @@ export function submitReturnPhoto(id: string, photoDataUrl: string): void {
     returnedAt: new Date().toISOString(),
   };
   writeAll(all);
+  mirrorServiceRequestToServer(all[idx]!);
 }
 
 export function hasDeposit(deposit: string): boolean {

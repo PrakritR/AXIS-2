@@ -3,9 +3,32 @@
  * Add new site capabilities here as typed, permission-scoped ToolDefinitions.
  */
 import { buildRegistry } from "./registry";
-import { getOverdueChargesTool } from "./domains/payments";
+import { getOverdueChargesTool, listChargesTool } from "./domains/payments";
 import { listLeasesTool } from "./domains/leases";
+import { listWorkOrdersTool } from "./domains/work-orders";
+import { listVendorsTool } from "./domains/vendors";
+import { runFinancialReportTool } from "./domains/financials";
+import { listResidentsTool } from "./domains/residents";
+import { listApplicationsTool } from "./domains/applications";
+import { listPropertiesTool } from "./domains/properties";
+import { listInboxThreadsTool } from "./domains/inbox";
+import { listCalendarEventsTool, listScheduledMessagesTool } from "./domains/calendar";
+import { listServiceRequestsTool } from "./domains/services";
 
-export const agentRegistry = buildRegistry([getOverdueChargesTool, listLeasesTool]);
+export const agentRegistry = buildRegistry([
+  getOverdueChargesTool,
+  listChargesTool,
+  listLeasesTool,
+  listWorkOrdersTool,
+  listVendorsTool,
+  runFinancialReportTool,
+  listResidentsTool,
+  listApplicationsTool,
+  listPropertiesTool,
+  listInboxThreadsTool,
+  listCalendarEventsTool,
+  listScheduledMessagesTool,
+  listServiceRequestsTool,
+]);
 
 export { resolveAgentContext, type AgentContext } from "./context";

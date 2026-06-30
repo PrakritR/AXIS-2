@@ -5,6 +5,7 @@
  */
 import { Langfuse } from "langfuse";
 import type { AgentContext } from "@/lib/tools/context";
+import { estimateCostUsd } from "@/lib/agent/model";
 
 let client: Langfuse | null = null;
 let initialized = false;
@@ -29,12 +30,23 @@ function getClient(): Langfuse | null {
 
 type TurnInput = { role: string; content: string }[];
 
+type TurnUsage = { inputTokens: number; outputTokens: number };
+type TracedResult = {
+  reply: string;
+  toolTrace: { tool: string; ok: boolean }[];
+  model?: string;
+  tier?: string;
+  usage?: TurnUsage;
+};
+
 /**
  * Wrap an agent turn in a Langfuse trace. The trace records the input, the final
- * reply, and the tools that ran, attributed to landlordId + userId. Failures in
- * tracing are swallowed; the wrapped function's result is always returned.
+ * reply, the tools that ran, and — when the loop reports them — the chosen
+ * model, complexity tier, token counts, and estimated cost, all attributed to
+ * landlordId + the session/user id. Failures in tracing are swallowed; the
+ * wrapped function's result is always returned.
  */
-export async function traceAgentTurn<T extends { reply: string; toolTrace: { tool: string; ok: boolean }[] }>(
+export async function traceAgentTurn<T extends TracedResult>(
   ctx: AgentContext,
   messages: TurnInput,
   run: () => Promise<T>,
@@ -48,6 +60,7 @@ export async function traceAgentTurn<T extends { reply: string; toolTrace: { too
     trace = lf.trace({
       name: "axis-agent-turn",
       userId: ctx.userId,
+      sessionId: ctx.userId,
       metadata: { landlordId: ctx.landlordId },
       input: lastUser,
     });
@@ -58,10 +71,30 @@ export async function traceAgentTurn<T extends { reply: string; toolTrace: { too
   try {
     const result = await run();
     try {
+      const costUsd =
+        result.model && result.usage ? estimateCostUsd(result.model, result.usage) : undefined;
       trace?.update({
         output: result.reply,
-        metadata: { landlordId: ctx.landlordId, tools: result.toolTrace.map((t) => t.tool) },
+        metadata: {
+          landlordId: ctx.landlordId,
+          tools: result.toolTrace.map((t) => t.tool),
+          model: result.model,
+          tier: result.tier,
+          inputTokens: result.usage?.inputTokens,
+          outputTokens: result.usage?.outputTokens,
+          estimatedCostUsd: costUsd,
+        },
       });
+      // Record the model call as a generation so token counts and cost are
+      // first-class in Langfuse, not just trace metadata.
+      if (result.model && result.usage) {
+        trace?.generation({
+          name: "axis-agent-llm",
+          model: result.model,
+          usage: { input: result.usage.inputTokens, output: result.usage.outputTokens, unit: "TOKENS" },
+          metadata: { tier: result.tier, estimatedCostUsd: costUsd, landlordId: ctx.landlordId },
+        });
+      }
     } catch {
       /* ignore */
     }

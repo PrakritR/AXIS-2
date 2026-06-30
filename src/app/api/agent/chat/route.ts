@@ -70,7 +70,11 @@ export async function POST(req: Request) {
     const result = await traceAgentTurn(ctx, messages as ChatMessage[], () =>
       runAgentTurn({ ctx, registry: agentRegistry, messages }),
     );
-    track("assistant_message_sent", ctx.userId, { tools: result.toolTrace.length });
+    track("assistant_message_sent", ctx.userId, {
+      tools: result.toolTrace.length,
+      model: result.model,
+      tier: result.tier,
+    });
 
     const lastUserText = String(rawMessages.at(-1)?.content ?? "").toLowerCase();
     const askedToSend = /\b(send|remind|reminder|notify)\b/.test(lastUserText);

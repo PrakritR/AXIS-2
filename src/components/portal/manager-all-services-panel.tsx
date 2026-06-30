@@ -22,6 +22,7 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import {
   readServiceRequestsForManager,
+  syncServiceRequestsFromServer,
   approveServiceRequest,
   deleteServiceRequest,
   denyServiceRequest,
@@ -103,6 +104,7 @@ export function ManagerAllServicesPanel({
     if (!authReady || !userId) return;
     void syncPropertyPipelineFromServer().then(() => setPropertyTick((t) => t + 1));
     void syncManagerWorkOrdersFromServer();
+    void syncServiceRequestsFromServer();
     const onWo = () => setDataTick((t) => t + 1);
     const onSr = () => setDataTick((t) => t + 1);
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, onWo);

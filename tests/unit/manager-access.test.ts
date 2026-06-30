@@ -83,6 +83,27 @@ describe("manager-access", () => {
         hasPurchaseRow: true,
       }),
     ).toBe("free");
+    // Coupon / payment-waiver grant (FREE100): authorized paid access with no Stripe subscription.
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: "pro",
+        billing: "portal",
+        promoCode: "FREE100",
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("paid");
+    // Waiver grant is comp access, so a monthly cadence does not lapse it.
+    expect(
+      resolveManagerSubscriptionTierFromPurchase({
+        tier: "pro",
+        billing: "monthly",
+        promoCode: "FREE100",
+        paidAt: "2000-01-01T00:00:00.000Z",
+        stripeSubscriptionId: null,
+        hasPurchaseRow: true,
+      }),
+    ).toBe("paid");
     expect(
       resolveManagerSubscriptionTierFromPurchase({
         tier: "business",

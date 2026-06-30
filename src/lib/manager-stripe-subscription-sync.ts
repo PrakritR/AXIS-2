@@ -87,6 +87,19 @@ export async function reconcileManagerPurchaseByStripeSubscriptionId(subscriptio
 }
 
 /**
+ * True only when Stripe definitively reports the subscription does not exist for
+ * this account/mode (`resource_missing` / 404). Transient failures — network
+ * errors, rate limits, auth errors, API outages — must NOT be treated as a
+ * cancellation, or we would wipe a paying customer to free on a temporary blip.
+ */
+export function isDefinitiveStripeSubscriptionMissingError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: unknown; statusCode?: unknown; type?: unknown };
+  if (e.code === "resource_missing") return true;
+  return e.type === "StripeInvalidRequestError" && e.statusCode === 404;
+}
+
+/**
  * Aligns `manager_purchases` with the live Stripe Subscription when we have a stored
  * `stripe_subscription_id`. Fixes drift when webhooks lag or metadata was incomplete.
  */
@@ -107,11 +120,15 @@ export async function reconcileManagerPurchaseWithStripe(userId: string): Promis
   let sub: Stripe.Subscription;
   try {
     sub = await stripe.subscriptions.retrieve(sid, { expand: ["items.data.price"] });
-  } catch {
-    await supabase
-      .from("manager_purchases")
-      .update({ tier: "free", billing: "free", stripe_subscription_id: null })
-      .eq("user_id", userId);
+  } catch (err) {
+    // Only downgrade when Stripe confirms the subscription is gone. On any other
+    // (transient / non-authoritative) error, keep the last known DB state.
+    if (isDefinitiveStripeSubscriptionMissingError(err)) {
+      await supabase
+        .from("manager_purchases")
+        .update({ tier: "free", billing: "free", stripe_subscription_id: null })
+        .eq("user_id", userId);
+    }
     return;
   }
 
