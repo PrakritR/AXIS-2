@@ -49,6 +49,7 @@ import {
   createServiceRequest,
   deleteServiceRequest,
   readServiceRequestsForResident,
+  syncServiceRequestsFromServer,
   submitReturnPhoto,
   hasDeposit,
   type ServiceRequest,
@@ -404,6 +405,7 @@ export function ResidentServicesPanel({
 
   useEffect(() => {
     queueMicrotask(() => reloadServiceRequests());
+    void syncServiceRequestsFromServer();
     const onSr = () => setSrTick((t) => t + 1);
     window.addEventListener(SERVICE_REQUESTS_EVENT, onSr);
     return () => {

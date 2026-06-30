@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import type { ServiceRequest } from "@/lib/service-requests-storage";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -14,10 +14,15 @@ async function sessionUser() {
   return user;
 }
 
-function normalizeRow(row: DemoManagerWorkOrderRow): DemoManagerWorkOrderRow {
+function recordFromRow(row: ServiceRequest) {
   return {
-    ...row,
-    residentEmail: row.residentEmail?.trim().toLowerCase() || row.residentEmail,
+    id: row.id,
+    manager_user_id: row.managerUserId || null,
+    resident_email: row.residentEmail?.trim().toLowerCase() || null,
+    property_id: row.propertyId || null,
+    status: row.status || null,
+    row_data: { ...row, residentEmail: row.residentEmail?.trim().toLowerCase() || row.residentEmail },
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -33,68 +38,60 @@ export async function GET() {
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
 
     let query = db
-      .from("portal_work_order_records")
+      .from("portal_service_request_records")
       .select("row_data, updated_at")
       .order("updated_at", { ascending: false })
       .limit(500);
 
+    // Residents see only their own requests; managers/pro see the ones they own.
     if (!admin && role === "resident") {
       query = query.eq("resident_email", email);
     } else if (!admin) {
-      // Managers see only their own work orders (plus legacy unassigned rows),
-      // never other landlords'. This matches the manager panel's client filter.
-      query = query.or(`manager_user_id.eq.${user.id},manager_user_id.is.null`);
+      query = query.eq("manager_user_id", user.id);
     }
 
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const rows = (data ?? [])
-      .map((record) => record.row_data)
-      .filter(Boolean) as DemoManagerWorkOrderRow[];
+    const rows = (data ?? []).map((record) => record.row_data).filter(Boolean) as ServiceRequest[];
     return NextResponse.json({ rows });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to load work orders.";
+    const message = e instanceof Error ? e.message : "Failed to load service requests.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-type Actor = { userId: string; email: string; admin: boolean; role: string };
+type Actor = { userId: string; email: string; admin: boolean };
 
-type OwnerCols = { manager_user_id?: string | null; resident_email?: string | null };
-
-/** Whether the caller may write/delete a row. Managers own their own rows and
- * may also claim legacy rows with no owner; residents own rows addressed to
- * them; admins may act on any row. */
-function actorOwnsRecord(actor: Actor, rec: OwnerCols | null): boolean {
+/** A caller may write/delete a row only if they own it: the manager it belongs
+ * to, or the resident it is for. Admins may act on any row. */
+function actorOwnsRecord(
+  actor: Actor,
+  rec: { manager_user_id?: string | null; resident_email?: string | null } | null,
+): boolean {
   if (actor.admin) return true;
   if (!rec) return false;
   if (rec.manager_user_id && rec.manager_user_id === actor.userId) return true;
   if (rec.resident_email && actor.email && rec.resident_email.trim().toLowerCase() === actor.email) return true;
-  // Legacy unassigned rows are claimable by a manager (never a resident).
-  if (!rec.manager_user_id && actor.role !== "resident") return true;
   return false;
 }
 
-/** Build the persisted record, binding scope columns to the authenticated caller
- * so a client cannot spoof ownership. */
-function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow) {
-  const normalized = normalizeRow(row);
-  const base = {
-    id: normalized.id,
-    manager_user_id: normalized.managerUserId || null,
-    resident_email: normalized.residentEmail?.trim().toLowerCase() || null,
-    property_id: normalized.propertyId || null,
-    assigned_property_id: normalized.assignedPropertyId || null,
-    row_data: normalized,
-    updated_at: new Date().toISOString(),
-  };
-  if (actor.admin) return base;
-  if (actor.role === "resident") {
+/**
+ * Bind the scope columns to the authenticated caller so a client cannot spoof
+ * ownership: a manager's writes are pinned to their own id; a resident's writes
+ * are pinned to their own email. The opposite-party field is taken from the row
+ * (e.g. which manager a resident's request targets).
+ */
+function recordForActor(actor: Actor, role: string, row: ServiceRequest) {
+  const base = recordFromRow(row);
+  if (actor.admin) return base; // admins may act on behalf of any account
+  if (role === "resident") {
+    // The resident only owns the resident side; which manager they target stays
+    // from the row (their property's owner).
     return { ...base, resident_email: actor.email || base.resident_email };
   }
-  // Any other non-admin caller is the owning manager; never trust a
-  // client-supplied manager_user_id.
+  // Any other non-admin caller is treated as the owning manager — never trust a
+  // client-supplied manager_user_id for a non-resident.
   return { ...base, manager_user_id: actor.userId };
 }
 
@@ -106,27 +103,27 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
     const admin = await isAdminUser(user.id);
     const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
+    const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
     const actor: Actor = {
       userId: user.id,
       email: (profile?.email ?? user.email ?? "").trim().toLowerCase(),
       admin,
-      role: String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase(),
     };
 
     const body = (await req.json()) as {
       action?: "upsert" | "delete" | "replace";
       id?: string;
-      row?: DemoManagerWorkOrderRow;
-      rows?: DemoManagerWorkOrderRow[];
+      row?: ServiceRequest;
+      rows?: ServiceRequest[];
     };
 
     const ownsExisting = async (id: string): Promise<boolean> => {
       const { data } = await db
-        .from("portal_work_order_records")
+        .from("portal_service_request_records")
         .select("manager_user_id, resident_email")
         .eq("id", id)
         .maybeSingle();
-      // A brand-new id (no existing row) may be created.
+      // A brand-new id (no existing row) is allowed to be created.
       return data == null || actorOwnsRecord(actor, data);
     };
 
@@ -135,7 +132,7 @@ export async function POST(req: Request) {
       for (const row of rows) {
         if (!row?.id) continue;
         if (!(await ownsExisting(row.id))) continue;
-        await db.from("portal_work_order_records").upsert(recordForActor(actor, row), { onConflict: "id" });
+        await db.from("portal_service_request_records").upsert(recordForActor(actor, role, row), { onConflict: "id" });
       }
       return NextResponse.json({ ok: true });
     }
@@ -144,7 +141,7 @@ export async function POST(req: Request) {
       const id = body.id?.trim();
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
       const { data: existing } = await db
-        .from("portal_work_order_records")
+        .from("portal_service_request_records")
         .select("manager_user_id, resident_email")
         .eq("id", id)
         .maybeSingle();
@@ -152,7 +149,7 @@ export async function POST(req: Request) {
       if (!actorOwnsRecord(actor, existing)) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
-      const { error } = await db.from("portal_work_order_records").delete().eq("id", id);
+      const { error } = await db.from("portal_service_request_records").delete().eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });
     }
@@ -162,12 +159,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
     const { error } = await db
-      .from("portal_work_order_records")
-      .upsert(recordForActor(actor, body.row), { onConflict: "id" });
+      .from("portal_service_request_records")
+      .upsert(recordForActor(actor, role, body.row), { onConflict: "id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to save work order.";
+    const message = e instanceof Error ? e.message : "Failed to save service request.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
