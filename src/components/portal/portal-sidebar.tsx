@@ -19,10 +19,14 @@ import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
 import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { PORTAL_MOBILE_CHROME_CLASS, PORTAL_NATIVE_BOTTOM_NAV_CLASS } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
+import { SIDEBAR_COLLAPSED_COOKIE } from "@/lib/portal-sidebar-cookie";
+import { groupNavItems } from "@/lib/portals/nav-groups";
 import type { PortalDefinition, PortalKind } from "@/lib/portal-types";
+import { cn } from "@/lib/utils";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 
@@ -33,29 +37,14 @@ function hrefForSection(def: PortalDefinition, section: string) {
   return `${def.basePath}/${section}/${meta.tabs[0].id}`;
 }
 
-function PortalBrandLogoTile() {
+function SidebarBrandMark() {
   return (
-    <div
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-white/40 bg-[linear-gradient(150deg,rgba(255,255,255,0.45),rgba(255,255,255,0.08))] shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] [html[data-theme=light]_&]:border-border/80 [html[data-theme=light]_&]:bg-[linear-gradient(150deg,rgba(255,255,255,0.95),rgba(233,238,251,0.75))]"
+    <span
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[linear-gradient(150deg,var(--primary,#2f6bff),var(--cobalt-deep,#16233f))] text-[15px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
       aria-hidden
     >
-      <svg className="h-[22px] w-[38px]" viewBox="0 0 46 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45"
-          className="stroke-white [html[data-theme=light]_&]:stroke-foreground"
-          strokeWidth="2.55"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path d="M27 4L43 22" className="stroke-steel-light [html[data-theme=light]_&]:stroke-primary" strokeWidth="2.75" strokeLinecap="round" />
-        <path
-          d="M43 4L27 22"
-          className="stroke-white/80 [html[data-theme=light]_&]:stroke-cobalt-deep"
-          strokeWidth="2.55"
-          strokeLinecap="round"
-        />
-      </svg>
-    </div>
+      A
+    </span>
   );
 }
 
@@ -65,79 +54,20 @@ function sidebarBrandHref(definition: PortalDefinition): string {
   return definition.basePath;
 }
 
-function portalBrandCopy(kind: PortalKind): { title: string; subtitle: string; ariaLabel: string } {
+function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: string } {
   switch (kind) {
     case "resident":
-      return {
-        title: "Axis",
-        subtitle: "Resident Portal",
-        ariaLabel: "Axis Resident Portal home",
-      };
+      return { subtitle: "Resident", ariaLabel: "Axis Resident Portal home" };
     case "admin":
-      return {
-        title: "Axis",
-        subtitle: "Admin Portal",
-        ariaLabel: "Axis Admin Portal home",
-      };
+      return { subtitle: "Admin", ariaLabel: "Axis Admin Portal home" };
     default:
-      return {
-        title: "Axis",
-        subtitle: "Manager Portal",
-        ariaLabel: "Axis Manager Portal home",
-      };
+      return { subtitle: "Manager", ariaLabel: "Axis Manager Portal home" };
   }
-}
-
-function SidebarBrandHeader({
-  definition,
-  brandHref,
-}: {
-  definition: PortalDefinition;
-  brandHref: string;
-}) {
-  const router = useRouter();
-  const brand = portalBrandCopy(definition.kind);
-  const showAdminBadge = definition.kind === "admin";
-
-  return (
-    <div className="relative overflow-hidden px-5 py-5">
-      <div
-        className="absolute inset-0 bg-[linear-gradient(135deg,#2a3c5e,#16233f,#0e1830)] [html[data-theme=light]_&]:bg-[linear-gradient(135deg,#e9eefb,#d7e1f3)]"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_28%_18%,rgba(255,255,255,0.14),transparent_62%)] [html[data-theme=light]_&]:bg-[radial-gradient(ellipse_80%_60%_at_28%_18%,rgba(255,255,255,0.65),transparent_62%)]"
-        aria-hidden
-      />
-      <Link
-        href={brandHref}
-        prefetch
-        aria-label={brand.ariaLabel}
-        className="relative flex items-start gap-3 transition-opacity hover:opacity-90"
-        onClick={portalNavClick(router, brandHref)}
-      >
-        <PortalBrandLogoTile />
-        <div className="min-w-0 pt-0.5">
-          <p className="text-lg font-semibold tracking-[-0.02em] leading-snug text-white [html[data-theme=light]_&]:text-[var(--cobalt-deep)]">
-            {brand.title}
-          </p>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/72 [html[data-theme=light]_&]:text-primary/80">
-            {brand.subtitle}
-          </p>
-          {showAdminBadge ? (
-            <span className="mt-1.5 inline-block rounded-full border border-white/25 bg-card/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 [html[data-theme=light]_&]:border-primary/25 [html[data-theme=light]_&]:bg-primary/10 [html[data-theme=light]_&]:text-primary">
-              Admin
-            </span>
-          ) : null}
-        </div>
-      </Link>
-    </div>
-  );
 }
 
 function navLinkClass(active: boolean, locked?: boolean) {
   return [
-    "relative flex min-h-10 items-center justify-between gap-2 rounded-[14px] px-3 py-2.5 text-[14px] font-medium transition duration-200",
+    "relative flex min-h-9 items-center justify-between gap-2 rounded-[12px] px-2.5 py-[7px] text-[13px] font-medium transition duration-200",
     active
       ? "bg-[var(--glass-fill)] text-foreground shadow-[inset_0_0_0_1px_var(--glass-border)] ring-1 ring-border/60 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
       : locked
@@ -167,9 +97,14 @@ function NavLockIcon({ className }: { className?: string }) {
 export function PortalSidebar({
   definition,
   subscriptionTier,
+  subtitle,
+  initialCollapsed = false,
 }: {
   definition: PortalDefinition;
   subscriptionTier?: "free" | "paid" | null;
+  /** Header badge under "Axis": manager plan (Free/Pro/Business) or portal role. */
+  subtitle?: string;
+  initialCollapsed?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -180,6 +115,8 @@ export function PortalSidebar({
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
   const navCounts = usePortalNavCounts(definition.kind);
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
+
   const navItems = useMemo(
     () =>
       visibleSections.map((section) => ({
@@ -193,10 +130,24 @@ export function PortalSidebar({
     [definition, visibleSections],
   );
 
+  const navGroups = useMemo(() => groupNavItems(definition.kind, navItems), [definition.kind, navItems]);
+  const firstTrailingGroupIdx = useMemo(
+    () => navGroups.findIndex((g) => g.id === "account" || g.id === "more"),
+    [navGroups],
+  );
+
   useEffect(() => {
     if (!portalBackgroundPrefetchEnabled()) return;
     prefetchPortalPanelChunks();
   }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      document.cookie = `${SIDEBAR_COLLAPSED_COOKIE}=${next ? "1" : "0"}; path=/; max-age=31536000; samesite=lax`;
+      return next;
+    });
+  };
 
   const activeSection = useMemo(() => {
     const parts = pathname.split("/").filter(Boolean);
@@ -213,15 +164,18 @@ export function PortalSidebar({
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
   const showResidentTierLocks = definition.kind === "resident" && subscriptionTier === "free";
 
-  const isSectionLocked = (section: string) => {
-    if (showResidentTierLocks) {
-      return residentSectionLockedForManagerTier(section, subscriptionTier);
-    }
-    if (showManagerTierLocks) {
-      return managerSectionLockedForTier(section, subscriptionTier);
-    }
-    return false;
-  };
+  const isSectionLocked = useCallback(
+    (section: string) => {
+      if (showResidentTierLocks) {
+        return residentSectionLockedForManagerTier(section, subscriptionTier);
+      }
+      if (showManagerTierLocks) {
+        return managerSectionLockedForTier(section, subscriptionTier);
+      }
+      return false;
+    },
+    [showResidentTierLocks, showManagerTierLocks, subscriptionTier],
+  );
 
   const nativeBottomNavAllItems = useMemo(
     () => (showNativeChrome ? orderNativeBottomNavItems(navItems, definition.kind) : []),
@@ -230,7 +184,7 @@ export function PortalSidebar({
 
   const nativeBottomNavItems = useMemo(
     () => nativeBottomNavAllItems.filter((item) => !isSectionLocked(item.section)),
-    [nativeBottomNavAllItems, showManagerTierLocks, showResidentTierLocks, subscriptionTier],
+    [nativeBottomNavAllItems, isSectionLocked],
   );
   const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
   const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);
@@ -267,8 +221,15 @@ export function PortalSidebar({
         locked: isSectionLocked(item.section),
         count: navCounts[item.section] ?? 0,
       })),
-    [nativeBottomNavAllItems, navCounts, showManagerTierLocks, showResidentTierLocks, subscriptionTier],
+    [nativeBottomNavAllItems, navCounts, isSectionLocked],
   );
+
+  const lockAriaLabel = (label: string, locked: boolean) =>
+    locked
+      ? definition.kind === "resident"
+        ? `${label} — unavailable on your property's Free plan`
+        : `${label} — locked on Pro or Business`
+      : label;
 
   const renderMobileNavLink = (
     s: (typeof navItems)[number],
@@ -293,13 +254,7 @@ export function PortalSidebar({
           className={`flex w-[2.75rem] shrink-0 snap-center flex-col items-center justify-end px-1 pt-0 pb-0 transition sm:w-[2.85rem] ${
             active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
           }`}
-          aria-label={
-            locked
-              ? definition.kind === "resident"
-                ? `${s.label} — unavailable on your property's Free plan`
-                : `${s.label} — locked on Pro or Business`
-              : s.label
-          }
+          aria-label={lockAriaLabel(s.label, locked)}
         >
           {showNavIcons ? (
             <span className={`relative shrink-0 ${locked ? "opacity-60" : "opacity-100"}`} aria-hidden>
@@ -329,13 +284,7 @@ export function PortalSidebar({
               ? "bg-accent/35 text-muted ring-1 ring-transparent [html[data-theme=dark]_&]:text-white/55"
               : "bg-accent/50 text-muted ring-1 ring-transparent hover:bg-accent hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
         }`}
-        aria-label={
-          locked
-            ? definition.kind === "resident"
-              ? `${s.label} — unavailable on your property's Free plan`
-              : `${s.label} — locked on Pro or Business`
-            : s.label
-        }
+        aria-label={lockAriaLabel(s.label, locked)}
       >
         {showNavIcons ? (
           <span className={`shrink-0 ${locked ? "opacity-60" : "opacity-90"}`} aria-hidden>
@@ -349,60 +298,161 @@ export function PortalSidebar({
     );
   };
 
+  const renderDesktopLink = (s: (typeof navItems)[number]) => {
+    const active = activeSection === s.section;
+    const locked = isSectionLocked(s.section);
+    const count = navCounts[s.section] ?? 0;
+    return (
+      <Link
+        key={s.section}
+        href={s.href}
+        prefetch={portalBackgroundPrefetchEnabled()}
+        onMouseEnter={
+          portalBackgroundPrefetchEnabled()
+            ? () => {
+                prefetchPortalHref(router, s.href);
+                for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
+              }
+            : undefined
+        }
+        className={navLinkClass(active, locked)}
+        aria-label={lockAriaLabel(s.label, locked)}
+        aria-current={active ? "page" : undefined}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2.5">
+          {showNavIcons ? (
+            <span className={active ? "text-primary" : locked ? "opacity-60" : "opacity-80"} aria-hidden>
+              <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" />
+            </span>
+          ) : null}
+          <span className="min-w-0 truncate">{s.label}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {!locked ? <PortalNavCountBadge count={count} /> : null}
+          {locked ? <NavLockIcon className="h-3.5 w-3.5 text-muted" /> : null}
+        </span>
+      </Link>
+    );
+  };
+
+  const renderRailLink = (s: (typeof navItems)[number]) => {
+    const active = activeSection === s.section;
+    const locked = isSectionLocked(s.section);
+    const count = navCounts[s.section] ?? 0;
+    return (
+      <Link
+        key={s.section}
+        href={s.href}
+        prefetch={portalBackgroundPrefetchEnabled()}
+        onMouseEnter={
+          portalBackgroundPrefetchEnabled()
+            ? () => {
+                prefetchPortalHref(router, s.href);
+                for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
+              }
+            : undefined
+        }
+        title={s.label}
+        aria-label={lockAriaLabel(s.label, locked)}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "relative grid h-9 w-9 place-items-center rounded-[12px] transition",
+          active
+            ? "bg-[var(--glass-fill)] text-primary ring-1 ring-border/60 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
+            : locked
+              ? "text-muted/60 hover:bg-accent/50"
+              : "text-muted hover:bg-accent/70 hover:text-foreground",
+        )}
+      >
+        <PortalNavIcon section={s.section} className="h-[17px] w-[17px] shrink-0" />
+        {!locked && count > 0 ? (
+          <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+        ) : null}
+        {locked ? <NavLockIcon className="absolute right-0.5 top-0.5 h-2.5 w-2.5 text-muted" /> : null}
+      </Link>
+    );
+  };
+
+  const brand = portalBrandCopy(definition.kind);
+  const headerSubtitle = subtitle?.trim() || brand.subtitle;
+
   const desktopAside = (
-    <aside className="relative z-40 hidden h-full min-h-0 w-[16.625rem] shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex">
-      <SidebarBrandHeader definition={definition} brandHref={brandHref} />
-      <nav className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-4">
-        <div className="min-h-0 flex-1 overflow-y-auto space-y-1">
-          {navItems.map((s) => {
-            const active = activeSection === s.section;
-            const locked = isSectionLocked(s.section);
-            const count = navCounts[s.section] ?? 0;
-            return (
-              <Link
-                key={s.section}
-                href={s.href}
-                prefetch={portalBackgroundPrefetchEnabled()}
-                onMouseEnter={
-                  portalBackgroundPrefetchEnabled()
-                    ? () => {
-                        prefetchPortalHref(router, s.href);
-                        for (const href of s.prefetchHrefs) prefetchPortalHref(router, href);
-                      }
-                    : undefined
-                }
-                className={navLinkClass(active, locked)}
-                aria-label={
-                  locked
-                    ? definition.kind === "resident"
-                      ? `${s.label} — unavailable on your property's Free plan`
-                      : `${s.label} — locked on Pro or Business`
-                    : s.label
-                }
-              >
-                <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                  {active ? (
-                    <span
-                      className="absolute left-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_8px_rgba(47,107,255,0.55)]"
-                      aria-hidden
-                    />
-                  ) : null}
-                  {showNavIcons ? (
-                    <span className={`shrink-0 ${active ? "ml-2 opacity-100" : locked ? "ml-0 opacity-60" : "opacity-80"}`} aria-hidden>
-                      <PortalNavIcon section={s.section} />
-                    </span>
-                  ) : null}
-                  <span className={`min-w-0 truncate ${active && !showNavIcons ? "pl-2" : ""}`}>{s.label}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-1.5">
-                  {!locked ? <PortalNavCountBadge count={count} /> : null}
-                  {locked ? <NavLockIcon className="h-3.5 w-3.5 text-muted" /> : null}
-                </span>
-              </Link>
-            );
-          })}
+    <aside
+      className={cn(
+        "relative z-40 hidden h-full min-h-0 shrink-0 self-stretch flex-col overflow-hidden border-r border-border bg-background glass-nav lg:flex",
+        collapsed ? "w-[58px]" : "w-[224px]",
+      )}
+    >
+      {collapsed ? (
+        <div className="flex h-14 shrink-0 items-center justify-center border-b border-border">
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label="Expand sidebar"
+            aria-expanded={false}
+            className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-accent/70 hover:text-foreground"
+          >
+            <ChevronsRight className="h-4 w-4" aria-hidden />
+          </button>
         </div>
-      </nav>
+      ) : (
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-3">
+          <Link
+            href={brandHref}
+            prefetch
+            aria-label={brand.ariaLabel}
+            onClick={portalNavClick(router, brandHref)}
+            className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90"
+          >
+            <SidebarBrandMark />
+            <span className="min-w-0 leading-tight">
+              <span className="block text-[14px] font-semibold text-foreground">Axis</span>
+              <span className="mt-0.5 inline-block rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
+                {headerSubtitle}
+              </span>
+            </span>
+          </Link>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label="Collapse sidebar"
+            aria-expanded
+            className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-muted transition hover:bg-accent/70 hover:text-foreground"
+          >
+            <ChevronsLeft className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+      )}
+
+      {collapsed ? (
+        <nav className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto px-2 py-2.5" aria-label="Portal sections">
+          {navGroups.map((group, i) => (
+            <div
+              key={group.id}
+              className={cn("flex w-full flex-col items-center gap-1", i === firstTrailingGroupIdx && "mt-auto")}
+            >
+              {i > 0 ? <div className="my-1 h-px w-6 bg-border" aria-hidden /> : null}
+              {group.items.map((s) => renderRailLink(s))}
+            </div>
+          ))}
+        </nav>
+      ) : (
+        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2" aria-label="Portal sections">
+          {navGroups.map((group, i) => (
+            <div
+              key={group.id}
+              className={cn("flex flex-col gap-0.5", i === firstTrailingGroupIdx && "mt-auto pt-2")}
+            >
+              {group.label ? (
+                <p className="px-2.5 pb-1 pt-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted/70">
+                  {group.label}
+                </p>
+              ) : null}
+              {group.items.map((s) => renderDesktopLink(s))}
+            </div>
+          ))}
+        </nav>
+      )}
     </aside>
   );
 

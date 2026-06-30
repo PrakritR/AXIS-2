@@ -3,6 +3,7 @@ import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
+import { PortalTopBar } from "@/components/portal/portal-top-bar";
 import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
@@ -15,9 +16,14 @@ import {
 } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
+import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
-  const [nav, { profile }] = await Promise.all([buildProPortalDefinition(), getServerSessionProfile()]);
+  const [nav, { profile }, sidebarCollapsed] = await Promise.all([
+    buildProPortalDefinition(),
+    getServerSessionProfile(),
+    getSidebarCollapsed(),
+  ]);
 
   return (
     <AxisAssistant managerName={profile?.full_name ?? null}>
@@ -36,8 +42,19 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
         </div>
         <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
           <PortalSkipLink />
-          <PortalSidebar definition={nav.definition} subscriptionTier={nav.subscriptionTier} />
+          <PortalSidebar
+            definition={nav.definition}
+            subscriptionTier={nav.subscriptionTier}
+            subtitle={nav.planLabel}
+            initialCollapsed={sidebarCollapsed}
+          />
           <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <PortalTopBar
+              kind={nav.definition.kind}
+              basePath={nav.definition.basePath}
+              name={profile?.full_name ?? null}
+              email={profile?.email ?? null}
+            />
             <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
               <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>{children}</div>
             </main>

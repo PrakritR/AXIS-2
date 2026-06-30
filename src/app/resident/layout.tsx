@@ -3,6 +3,7 @@ import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileBackBar } from "@/components/portal/portal-mobile-back-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
+import { PortalTopBar } from "@/components/portal/portal-top-bar";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
 import {
@@ -18,6 +19,7 @@ import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
 import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
+import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
   await assertPortalLayoutRole("resident", "resident");
@@ -27,6 +29,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
   const managerSubscriptionTier = profile?.manager_id?.trim()
     ? await getManagerSubscriptionTierByManagerId(profile.manager_id.trim())
     : null;
+  const sidebarCollapsed = await getSidebarCollapsed();
 
   const ctx = await getPortalAccessContext();
   const preview = await getAdminPreviewFromCookies();
@@ -48,8 +51,19 @@ export default async function ResidentLayout({ children }: { children: React.Rea
       ) : null}
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSkipLink />
-        <PortalSidebar definition={residentPortal} subscriptionTier={managerSubscriptionTier} />
+        <PortalSidebar
+          definition={residentPortal}
+          subscriptionTier={managerSubscriptionTier}
+          subtitle="Resident"
+          initialCollapsed={sidebarCollapsed}
+        />
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <PortalTopBar
+            kind={residentPortal.kind}
+            basePath={residentPortal.basePath}
+            name={profile?.full_name ?? null}
+            email={profile?.email ?? null}
+          />
           <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
             <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
               <PortalMobileBackBar definition={residentPortal} />

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
-import { isManagerFreePlan, paidWorkspacePortalTitle } from "@/lib/manager-access";
+import { isManagerFreePlan, managerTierDisplayLabel, paidWorkspacePortalTitle } from "@/lib/manager-access";
 import { getManagerPurchaseSku, getManagerSubscriptionTier } from "@/lib/manager-access-server";
 import type { PortalDefinition } from "@/lib/portal-types";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -52,8 +52,11 @@ export const buildProPortalDefinition = cache(async (): Promise<{
   showPreviewBanner: boolean;
   previewLabel: string | null;
   subscriptionTier: "free" | "paid" | null;
+  /** Sidebar header badge: the manager's current plan (Free / Pro / Business). */
+  planLabel: string;
 }> => {
-  const { ctx, preview, portalTitle, isFree, subscriptionTier } = await getProPortalRenderContext();
+  const { ctx, preview, portalTitle, isFree, subscriptionTier, purchase } = await getProPortalRenderContext();
+  const planLabel = isFree ? "Free" : managerTierDisplayLabel(purchase.tier);
 
   const showPreviewBanner = hasAdminRole(ctx) && !!preview?.targetUserId;
 
@@ -74,5 +77,6 @@ export const buildProPortalDefinition = cache(async (): Promise<{
     showPreviewBanner,
     previewLabel,
     subscriptionTier,
+    planLabel,
   };
 });
