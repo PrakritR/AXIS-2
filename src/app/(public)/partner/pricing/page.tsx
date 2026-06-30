@@ -492,7 +492,9 @@ export default function PartnerPricingPage() {
                 <p className="mt-2 text-center text-xs text-muted sm:text-left">
                   {googleCheckoutBusy
                     ? "Creating your account…"
-                    : `Sign in with Google to create your account instantly${selectedTierId === "free" ? "" : ", then pay for your selected plan"} — no form required.`}
+                    : selectedTierId === "free"
+                      ? "Sign in with Google to create your account instantly — no form required."
+                      : "Choose your plan and complete checkout to get started."}
                 </p>
               </>
             )}

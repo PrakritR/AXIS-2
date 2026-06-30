@@ -9,7 +9,7 @@ export const RESIDENT_PORTAL_BASE_PATH = "/resident";
  */
 export const RESIDENT_FREE_TIER_SECTION_IDS = [
   "dashboard",
-  "applications",
+  "lease",
   "payments",
   "move-in",
   "profile",
@@ -25,25 +25,25 @@ const INBOX_TABS = [
   { id: "trash", label: "Trash" },
 ] as const;
 
-const FINANCES_TABS = [
-  { id: "summary", label: "Summary" },
-  { id: "statements", label: "Rent statements" },
-] as const;
-
 const SERVICES_TABS = [
   { id: "requests", label: "Requests" },
   { id: "work-orders", label: "Work orders" },
 ] as const;
 
+const DOCUMENTS_TABS = [
+  { id: "lease", label: "Lease" },
+  { id: "application", label: "Application" },
+  { id: "receipts", label: "Rent receipts" },
+] as const;
+
 /** Sections shown before lease access is fully unlocked. */
 export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
-  { section: "applications", label: "Applications", tabs: [] },
+  { section: "lease", label: "Lease", tabs: [] },
   { section: "payments", label: "Payments", tabs: [] },
   { section: "move-in", label: "Move-in", tabs: [] },
   { section: "inbox", label: "Inbox", tabs: [...INBOX_TABS] },
-  { section: "documents", label: "Documents", tabs: [{ id: "receipts", label: "Rent receipts" }] },
-  { section: "financials", label: "Finances", tabs: [...FINANCES_TABS] },
+  { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "bugs-feedback", label: "Feedback", tabs: [] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
@@ -51,20 +51,12 @@ export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
 /** Full resident workspace after lease approval. */
 export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
-  { section: "applications", label: "Applications", tabs: [] },
+  { section: "lease", label: "Lease", tabs: [] },
   { section: "payments", label: "Payments", tabs: [] },
   { section: "move-in", label: "Move-in", tabs: [] },
   { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
   { section: "inbox", label: "Inbox", tabs: [...INBOX_TABS] },
-  {
-    section: "documents",
-    label: "Documents",
-    tabs: [
-      { id: "lease", label: "Lease" },
-      { id: "receipts", label: "Rent receipts" },
-    ],
-  },
-  { section: "financials", label: "Finances", tabs: [...FINANCES_TABS] },
+  { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
   { section: "bugs-feedback", label: "Feedback", tabs: [] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
@@ -83,28 +75,29 @@ export const RESIDENT_PORTAL_SECTION_IDS = [
  */
 export const RESIDENT_RENDERED_SECTION_IDS = [
   "dashboard",
-  "applications",
+  "lease",
   "payments",
   "move-in",
   "inbox",
   "documents",
-  "financials",
   "bugs-feedback",
   "profile",
   "services",
-  "lease",
   "work-orders",
+  /** Legacy route — applications content lives under Documents */
+  "applications",
+  /** Legacy route — redirects to payments */
+  "financials",
 ] as const;
 
 /** Default smoke-test paths for web + native WebView (limited resident workspace). */
 export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: `${RESIDENT_PORTAL_BASE_PATH}/dashboard` },
-  { label: "Applications", path: `${RESIDENT_PORTAL_BASE_PATH}/applications` },
+  { label: "Lease", path: `${RESIDENT_PORTAL_BASE_PATH}/lease` },
   { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },
   { label: "Move-in", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
   { label: "Inbox", path: `${RESIDENT_PORTAL_BASE_PATH}/inbox/unopened` },
-  { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/receipts` },
-  { label: "Finances", path: `${RESIDENT_PORTAL_BASE_PATH}/financials/summary` },
+  { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/lease` },
 ] as const;
 
 export function residentSectionHref(section: string, tabId?: string): string {

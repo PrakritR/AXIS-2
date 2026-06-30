@@ -20,6 +20,7 @@ import { ResidentPaymentsPanel } from "@/components/portal/resident-payments-pan
 import { ResidentFinancialsPanel } from "@/components/portal/resident-financials-panel";
 import { ResidentDocumentsPanel } from "@/components/portal/resident-documents-panel";
 import { ResidentApplicationsPanel } from "@/components/portal/resident-applications-panel";
+import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
@@ -511,21 +512,11 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "applications") {
-    if (tabParts?.length) notFound();
-    return <ResidentApplicationsPanel />;
+    redirect(`${def.basePath}/documents/application`);
   }
 
   if (kind === "resident" && section === "financials") {
-    const tierGate = residentManagerTierGate("financials", residentManagerTier, meta.label);
-    if (tierGate) return tierGate;
-    const allowedTabs = meta.tabs.map((t) => t.id);
-    if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "summary"}`);
-    }
-    if (tabParts.length > 1) notFound();
-    const finTab = tabParts[0]!;
-    if (!allowedTabs.includes(finTab)) notFound();
-    return <ResidentFinancialsPanel tabId={finTab} basePath={def.basePath} tabs={meta.tabs} />;
+    redirect(`${def.basePath}/payments`);
   }
 
   if (kind === "resident" && section === "documents") {
@@ -545,7 +536,12 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "lease") {
-    redirect(`${def.basePath}/documents/lease`);
+    if (tabParts?.length) notFound();
+    return (
+      <ManagerPortalPageShell title="Lease">
+        <ResidentLeasePanel />
+      </ManagerPortalPageShell>
+    );
   }
 
   if (kind === "resident" && section === "move-in") {
@@ -554,10 +550,7 @@ export async function renderPortalSection(
     const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
     if (!leaseSigned) {
       return (
-        <ManagerPortalPageShell
-          title="Move-in"
-          subtitle="Your move-in details will appear here after your lease has been fully signed by you and your property manager. Head to the Lease tab to review and sign."
-        >
+        <ManagerPortalPageShell title="Move-in">
           <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
         </ManagerPortalPageShell>
       );

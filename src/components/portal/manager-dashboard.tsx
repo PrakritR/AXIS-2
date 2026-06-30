@@ -89,19 +89,26 @@ function NotifBanner({
 }
 
 export function ManagerDashboard() {
-  const { userId } = useManagerUserId();
+  const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
+  const [chargesSynced, setChargesSynced] = useState(false);
   const bump = () => setTick((n) => n + 1);
   const [nowMs] = useState(() => Date.now());
 
   useEffect(() => {
+    if (!authReady || !userId) {
+      setChargesSynced(false);
+      return;
+    }
     void Promise.allSettled([
       syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
-      syncHouseholdChargesFromServer(),
+      syncHouseholdChargesFromServer(true),
       syncScheduleRecordsFromServer(),
-    ]).then(bump);
+    ])
+      .then(bump)
+      .finally(() => setChargesSynced(true));
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, bump);
@@ -118,8 +125,7 @@ export function ManagerDashboard() {
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
-   
-  }, [userId]);
+  }, [userId, authReady]);
 
   const data = useMemo(() => {
     void tick;
@@ -297,7 +303,7 @@ export function ManagerDashboard() {
                 </Link>
               </NotifBanner>
             )}
-            {overdueCharges.length > 0 && (
+            {chargesSynced && overdueCharges.length > 0 && (
               <NotifBanner tone="rose">
                 <span>
                   <span className="font-semibold">{overdueCharges.length}</span> overdue charge{overdueCharges.length === 1 ? "" : "s"} totalling <span className="font-semibold">{dollars(overdueTotal)}</span> across residents

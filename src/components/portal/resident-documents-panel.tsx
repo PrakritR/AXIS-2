@@ -8,6 +8,7 @@ import { FinancialReportDocumentView } from "@/components/portal/reports/formal-
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { ReportTable } from "@/components/portal/reports/report-table";
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
+import { ResidentApplicationsPanel } from "@/components/portal/resident-applications-panel";
 import { ResidentDocumentPhotos } from "@/components/portal/resident-document-photos";
 import type { ReportResult } from "@/lib/reports/types";
 
@@ -79,6 +80,8 @@ export function ResidentDocumentsPanel({
           <ResidentDocumentPhotos />
         </>
       ) : null}
+
+      {tabId === "application" ? <ResidentApplicationsPanel /> : null}
 
       {tabId === "receipts" ? (
         <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>

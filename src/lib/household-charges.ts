@@ -1560,9 +1560,12 @@ export function readChargesForManagerResident(email: string, managerUserId: stri
 
 export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
-  return dedupeCharges(readAll())
+  const all = dedupeCharges(readAll());
+  const profileById = new Map(readRentProfiles().map((p) => [p.id, p]));
+  return all
     .filter((r) => r.managerUserId === scope)
-    .filter((charge) => shouldDisplayChargeInPayments(charge));
+    .filter((charge) => shouldDisplayChargeInPayments(charge))
+    .filter((charge) => charge.status === "paid" || !isStaleRecurringHouseholdCharge(charge, profileById, all));
 }
 
 export function deleteHouseholdCharge(chargeId: string, managerUserId: string | null): boolean {
