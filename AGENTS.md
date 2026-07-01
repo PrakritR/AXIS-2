@@ -53,6 +53,22 @@ and enums only — no emails, names, addresses, free text).
 - Failed or thumbs-down sessions feed our eval set — preserve enough
   context in each trace to turn it into a test case.
 
+## Performance & egress
+
+We are on the Supabase free plan; egress is a real constraint. Prefer caching
+over re-fetching. Public read routes should send CDN `Cache-Control` headers;
+immutable Storage objects (unique filenames) should be cached long; client sync
+loaders should reuse the shared TTL + in-flight guard pattern rather than
+fetching unconditionally.
+
+**Planned change (not yet done):** the portal calendar still polls
+`/api/portal-schedule-records` (visibility-gated, 60s) to stay fresh. When
+instant propagation becomes a product need or polling volume grows, replace the
+poll with Supabase Realtime used as an invalidation signal (a DB trigger
+broadcasts a tiny "changed" ping; the client refetches through the existing
+scoped route, so app-layer scoping and RLS are unchanged). Full design and code
+sketch: [`docs/realtime-schedule-invalidation.md`](docs/realtime-schedule-invalidation.md).
+
 ## AI Agent & Tool Layer (in development)
 
 We are building a native AI agent into the site: users ask in natural
