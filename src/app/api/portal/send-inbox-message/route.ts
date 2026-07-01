@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { managerOwnsResident } from "@/lib/auth/resident-relationship";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
@@ -404,6 +405,7 @@ export async function POST(req: Request) {
       }
     }
 
+    track("message_sent", user.id, { delivered: Boolean(emailResendId) });
     return NextResponse.json({ ok: true, id: emailResendId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

@@ -11,13 +11,36 @@ We run two monitoring systems. Instrument both when adding or changing
 relevant code — this is a build requirement, not optional cleanup.
 
 **PostHog — product & site analytics (current).**
-- Use for: user-facing events, feature usage, funnels, conversion, and
-  frontend error tracking on the core web app.
-- When you add a meaningful user action (signup, listing_created,
-  lease_signed, payment_initiated, etc.), emit a PostHog event using the
-  existing `object_action` naming convention. Reuse existing event names;
-  don't create parallel naming.
-- Never send PII or secrets as event properties.
+
+Coverage is layered. Lean on the lower (free) layers; only hand-write a named
+event when an action is worth a funnel or conversion metric.
+
+1. **Autocapture (automatic).** PostHog is initialized in
+   `instrumentation-client.ts` with autocapture on, so every click, pageview,
+   form submit, and frontend exception is already captured. Do NOT hand-roll a
+   "user clicked X" event — it already exists. This covers new features the
+   moment they ship, no code required.
+2. **`data-attr` naming (one attribute).** Add `data-attr="kebab-name"` to any
+   meaningful interactive element. Autocapture records it, so you can build a
+   clean named Action in PostHog without a capture call. Use this for the long
+   tail of buttons.
+3. **Named events (one line)** for funnel/conversion moments — signup,
+   listing_created, lease_signed, payment_initiated, etc.:
+   - **Client intent** (fire on interaction): `track(event, props)` from
+     `@/lib/analytics/track-client`, or the shared `Button`'s `event`/`eventProps`
+     props (`<Button event="charge_created" eventProps={{ kind }}>`).
+   - **Server-confirmed outcomes** (fire only after the route confirms success,
+     never on click — the action can fail): `track(event, userId, props)` from
+     `@/lib/analytics/posthog`. Add it next to the success `return`, like the
+     existing `work_order_completed` / `message_sent` events.
+   - Pair a client `*_started` with a server `*_completed`/`*_paid` to get a
+     conversion funnel (e.g. `subscription_checkout_started` →
+     `manager_subscription_purchased`).
+
+Rules: `object_action` naming; **reuse existing event names** — grep
+`src/lib/analytics` and existing `track(` call sites before inventing one; never
+create parallel naming. **Never send PII or secrets as event properties** (ids
+and enums only — no emails, names, addresses, free text).
 
 **Langfuse — AI agent observability (in development).**
 - Every agent session, LLM call, and tool call MUST be traced: the prompt,

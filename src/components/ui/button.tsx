@@ -1,6 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { track } from "@/lib/analytics/track-client";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline" | "metallic";
 
@@ -24,10 +25,17 @@ export function Button({
   variant = "primary",
   style,
   children,
+  event,
+  eventProps,
+  onClick,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
   children: ReactNode;
+  /** Optional named PostHog event fired on click (object_action, non-PII). */
+  event?: string;
+  /** Optional non-PII properties sent with `event`. */
+  eventProps?: Record<string, string | number | boolean | undefined>;
 }) {
   const isPrimary = variant === "primary";
   const isMetallic = variant === "metallic";
@@ -41,6 +49,10 @@ export function Button({
             ? { background: "var(--btn-metallic)", boxShadow: "0 6px 16px -6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.9)", ...style }
             : style
       }
+      onClick={(e) => {
+        if (event) track(event, eventProps);
+        onClick?.(e);
+      }}
       {...props}
     >
       {children}

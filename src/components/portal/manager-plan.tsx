@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { track } from "@/lib/analytics/track-client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -294,6 +295,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
   const startEmbeddedCheckout = async (tier: "pro" | "business", billingInterval: "monthly" | "annual") => {
     flushSync(() => setBusyTier(tier));
     setPlanModal({ kind: "checkout", tier, billing: billingInterval, clientSecret: null, loading: true });
+    track("subscription_checkout_started", { tier, billing: billingInterval });
     try {
       const res = await fetch("/api/stripe/checkout-portal", {
         method: "POST",

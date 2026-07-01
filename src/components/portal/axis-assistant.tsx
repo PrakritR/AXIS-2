@@ -15,6 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { track } from "@/lib/analytics/track-client";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useIsClient } from "@/hooks/use-is-client";
@@ -53,6 +54,7 @@ function AxisAssistantSparkleIcon({ className }: { className?: string }) {
 }
 
 function handleOpenAssistant() {
+  track("assistant_opened");
   startTransition(() => {
     openAxisAssistant();
   });
