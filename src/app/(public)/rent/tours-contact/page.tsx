@@ -220,7 +220,7 @@ function TourFlow({
         address: property.address,
       });
       setAvailabilityLoading(true);
-      void fetch(`/api/public/property-tour-availability?${params.toString()}`, { cache: "no-store" })
+      void fetch(`/api/public/property-tour-availability?${params.toString()}`)
       .then(async (res) => {
         const body = (await res.json()) as { slotHosts?: Record<string, PropertyManagerEntry[]> };
         if (!cancelled) setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});
@@ -500,7 +500,7 @@ function TourFlow({
                   address: property.address,
                 });
                 setAvailabilityLoading(true);
-                void fetch(`/api/public/property-tour-availability?${params.toString()}`, { cache: "no-store" })
+                void fetch(`/api/public/property-tour-availability?${params.toString()}`)
                   .then(async (res) => {
                     const body = (await res.json()) as { slotHosts?: Record<string, PropertyManagerEntry[]> };
                     setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});

@@ -308,7 +308,8 @@ export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
 
 export async function loadPublicExtraListingsFromServer(): Promise<MockProperty[]> {
   try {
-    const res = await fetch("/api/property-records/public", { cache: "no-store" });
+    // No cache override: response is CDN-cacheable (see route Cache-Control).
+    const res = await fetch("/api/property-records/public");
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok || !contentType.includes("application/json")) {
       return readExtraListingsPublic();
@@ -332,7 +333,7 @@ export async function loadPublicPropertyLeadFromServer(propertyId: string): Prom
   const id = propertyId.trim();
   if (!id || !isBrowser()) return null;
   try {
-    const res = await fetch(`/api/public/property-lead?propertyId=${encodeURIComponent(id)}`, { cache: "no-store" });
+    const res = await fetch(`/api/public/property-lead?propertyId=${encodeURIComponent(id)}`);
     const body = (await res.json()) as { property?: MockProperty };
     if (!res.ok || !body.property) return null;
     cachePublicExtraListings([body.property], { silent: true });

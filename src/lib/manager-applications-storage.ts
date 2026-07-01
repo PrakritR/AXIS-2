@@ -335,7 +335,7 @@ export async function syncPublicApprovedApplicationsFromServer(opts?: { force?: 
   }
   try {
     publicApprovedApplicationsSyncPromise = (async () => {
-      const res = await fetch("/api/public/approved-room-occupancy", { cache: "no-store" });
+      const res = await fetch("/api/public/approved-room-occupancy");
       if (!res.ok) return readManagerApplicationRows();
       const body = (await res.json()) as { rows?: DemoApplicantRow[] };
       const rows = mergeApplicationRows(memoryRows, Array.isArray(body.rows) ? body.rows : []);

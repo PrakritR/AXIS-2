@@ -24,11 +24,15 @@ export async function GET() {
     if (content.error) return NextResponse.json({ error: content.error.message }, { status: 500 });
     if (config.error) return NextResponse.json({ error: config.error.message }, { status: 500 });
     if (presets.error) return NextResponse.json({ error: presets.error.message }, { status: 500 });
-    return NextResponse.json({
-      content: content.data ?? [],
-      config: config.data ?? [],
-      presets: presets.data ?? [],
-    });
+    // Public CMS content, admin-updated only: CDN-cacheable, same for everyone.
+    return NextResponse.json(
+      {
+        content: content.data ?? [],
+        config: config.data ?? [],
+        presets: presets.data ?? [],
+      },
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" } },
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load site content.";
     return NextResponse.json({ error: message }, { status: 500 });

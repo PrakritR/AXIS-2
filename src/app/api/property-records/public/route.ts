@@ -36,7 +36,12 @@ export async function GET() {
     }
 
     const listings = [...byKey.values()].sort((a, b) => a.title.localeCompare(b.title));
-    return NextResponse.json({ listings });
+    // Public catalog, same for everyone: let the CDN serve repeats without
+    // re-querying Supabase. s-maxage bounds staleness after a manager publishes.
+    return NextResponse.json(
+      { listings },
+      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600" } },
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load public listings." },
