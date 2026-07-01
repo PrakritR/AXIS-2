@@ -12,7 +12,9 @@ async function resolveUser() {
 
 async function uploadToStorage(db: ReturnType<typeof createSupabaseServiceRoleClient>, userId: string, bytes: Buffer | Uint8Array, mime: string, ext: string) {
   const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const { error } = await db.storage.from("listing-photos").upload(path, bytes, { contentType: mime, upsert: false });
+  // Filenames are timestamp+random and never overwritten, so the object is
+  // immutable — cache for a year to avoid re-fetching media on every view.
+  const { error } = await db.storage.from("listing-photos").upload(path, bytes, { contentType: mime, cacheControl: "31536000", upsert: false });
   if (error) throw new Error(error.message);
   const { data } = db.storage.from("listing-photos").getPublicUrl(path);
   return data.publicUrl;

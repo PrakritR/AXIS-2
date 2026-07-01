@@ -555,7 +555,9 @@ async function uploadViaTus(file: File, path: string, mime: string, token: strin
     `bucketName ${b64("listing-photos")}`,
     `objectName ${b64(path)}`,
     `contentType ${b64(mime)}`,
-    `cacheControl ${b64("3600")}`,
+    // Filenames are timestamp+random and never overwritten, so the object is
+    // immutable — cache for a year to avoid re-fetching media on every view.
+    `cacheControl ${b64("31536000")}`,
   ].join(",");
 
   const createRes = await fetch(`${supabaseUrl}/storage/v1/upload/resumable`, {
@@ -633,6 +635,7 @@ async function uploadToBucket(input: File | string): Promise<string> {
 
   const { error } = await db.storage.from("listing-photos").upload(path, body, {
     contentType: mime,
+    cacheControl: "31536000", // immutable object (unique filename); cache 1 year
     upsert: false,
     duplex: "half",
   });
