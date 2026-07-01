@@ -317,7 +317,7 @@ export async function syncManagerApplicationsFromServer(opts?: {
       managerApplicationsLastSyncedAt = Date.now();
       if (changed) emit();
       return rows;
-    })();
+    })().catch(() => readManagerApplicationRows());
     return await managerApplicationsSyncPromise;
   } catch {
     return readManagerApplicationRows();
@@ -342,7 +342,7 @@ export async function syncPublicApprovedApplicationsFromServer(opts?: { force?: 
       memoryRows = rows;
       publicApprovedApplicationsLastSyncedAt = Date.now();
       return rows;
-    })();
+    })().catch(() => readManagerApplicationRows());
     return await publicApprovedApplicationsSyncPromise;
   } catch {
     return readManagerApplicationRows();
