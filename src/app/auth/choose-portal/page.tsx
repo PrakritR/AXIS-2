@@ -6,6 +6,7 @@ import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-swi
 import type { AuthRoleIconName } from "@/components/auth/auth-role-icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter, useSearchParams } from "next/navigation";
+import posthog from "posthog-js";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
 const ROLE_META: Record<
@@ -104,6 +105,11 @@ function ChoosePortalForm() {
   const signOut = async () => {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
+    try {
+      posthog.reset();
+    } catch {
+      /* ignore — analytics reset is best-effort */
+    }
     router.push("/auth/sign-in");
     router.refresh();
   };
