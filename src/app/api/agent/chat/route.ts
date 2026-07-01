@@ -67,8 +67,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await traceAgentTurn(ctx, messages as ChatMessage[], () =>
-      runAgentTurn({ ctx, registry: agentRegistry, messages }),
+    const result = await traceAgentTurn(ctx, messages as ChatMessage[], (observer) =>
+      runAgentTurn({ ctx, registry: agentRegistry, messages, observer }),
     );
     track("assistant_message_sent", ctx.userId, {
       tools: result.toolTrace.length,

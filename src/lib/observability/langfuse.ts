@@ -1,10 +1,14 @@
 /**
  * Langfuse agent tracing. One trace per agent turn, carrying landlordId and the
- * user id so sessions are replayable and attributable. Degrades to a no-op when
+ * user id so sessions are replayable and attributable. The loop emits per-LLM-call
+ * and per-tool-call events through an observer; we record them as nested
+ * generations/spans so the prompt, tools available, tool args, tool results,
+ * per-call token counts, and cost are all first-class. Degrades to a no-op when
  * Langfuse env is unset or the SDK misbehaves — tracing must never break a turn.
  */
 import { Langfuse } from "langfuse";
 import type { AgentContext } from "@/lib/tools/context";
+import type { AgentObserver } from "@/lib/agent/loop";
 import { estimateCostUsd } from "@/lib/agent/model";
 
 let client: Langfuse | null = null;
@@ -28,6 +32,71 @@ function getClient(): Langfuse | null {
   return client;
 }
 
+/** The subset of a Langfuse trace the observer uses; lets us unit-test the mapping. */
+export type TraceLike = {
+  update(args: Record<string, unknown>): void;
+  generation(args: Record<string, unknown>): void;
+  span(args: Record<string, unknown>): void;
+};
+
+/** Run a trace call, swallowing errors so tracing never breaks a turn. */
+function safe(fn: () => void) {
+  try {
+    fn();
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Map loop events onto a Langfuse trace: tools-available + system size up front,
+ * one generation per LLM call (with that call's tokens and cost), and one span
+ * per tool call carrying the full arguments and result. Pure over `trace` so it
+ * is testable with a fake.
+ */
+export function buildTraceObserver(trace: TraceLike, ctx: AgentContext): AgentObserver {
+  return {
+    onStart: (info) =>
+      safe(() =>
+        trace.update({
+          metadata: {
+            landlordId: ctx.landlordId,
+            toolsAvailable: info.toolsAvailable,
+            systemPromptChars: info.system.length,
+          },
+        }),
+      ),
+    onLlmCall: (e) =>
+      safe(() =>
+        trace.generation({
+          name: "axis-agent-llm",
+          model: e.model,
+          usage: { input: e.usage.inputTokens, output: e.usage.outputTokens, unit: "TOKENS" },
+          input: e.input,
+          output: e.assistantContent,
+          metadata: {
+            iteration: e.iteration,
+            stopReason: e.stopReason,
+            toolsChosen: e.toolsChosen,
+            estimatedCostUsd: estimateCostUsd(e.model, e.usage),
+            landlordId: ctx.landlordId,
+          },
+        }),
+      ),
+    onToolCall: (e) =>
+      // ponytail: tool args + results are sent to Langfuse uncapped (debug source
+      // of truth, per AGENTS.md). Add a size cap here if payloads get unwieldy.
+      safe(() =>
+        trace.span({
+          name: `tool:${e.name}`,
+          input: e.input,
+          output: e.output,
+          metadata: { ok: e.ok, iteration: e.iteration, landlordId: ctx.landlordId },
+        }),
+      ),
+  };
+}
+
 type TurnInput = { role: string; content: string }[];
 
 type TurnUsage = { inputTokens: number; outputTokens: number };
@@ -49,7 +118,7 @@ type TracedResult = {
 export async function traceAgentTurn<T extends TracedResult>(
   ctx: AgentContext,
   messages: TurnInput,
-  run: () => Promise<T>,
+  run: (observer?: AgentObserver) => Promise<T>,
 ): Promise<T> {
   const lf = getClient();
   if (!lf) return run();
@@ -68,9 +137,13 @@ export async function traceAgentTurn<T extends TracedResult>(
     trace = null;
   }
 
+  const observer = trace ? buildTraceObserver(trace, ctx) : undefined;
+
   try {
-    const result = await run();
+    const result = await run(observer);
     try {
+      // Per-call generations and per-tool spans are recorded live via the
+      // observer; here we only stamp the turn-level summary for quick scanning.
       const costUsd =
         result.model && result.usage ? estimateCostUsd(result.model, result.usage) : undefined;
       trace?.update({
@@ -85,16 +158,6 @@ export async function traceAgentTurn<T extends TracedResult>(
           estimatedCostUsd: costUsd,
         },
       });
-      // Record the model call as a generation so token counts and cost are
-      // first-class in Langfuse, not just trace metadata.
-      if (result.model && result.usage) {
-        trace?.generation({
-          name: "axis-agent-llm",
-          model: result.model,
-          usage: { input: result.usage.inputTokens, output: result.usage.outputTokens, unit: "TOKENS" },
-          metadata: { tier: result.tier, estimatedCostUsd: costUsd, landlordId: ctx.landlordId },
-        });
-      }
     } catch {
       /* ignore */
     }
