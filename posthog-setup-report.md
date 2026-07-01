@@ -29,34 +29,10 @@ We've built some insights and a dashboard for you to keep an eye on user behavio
 - [Manager subscription conversion funnel](https://us.posthog.com/project/492655/insights/PE9dRESM)
 - [Payment & charge activity](https://us.posthog.com/project/492655/insights/1rB832la)
 
-## LLM analytics
-
-PostHog AI Observability is now wired into the Axis AI agent. Every agent turn emits a `$ai_generation` event carrying the model name, input/output token counts, latency, total cost in USD, and the list of tools invoked — all safe, non-PII metadata. Input/output message content is intentionally omitted to comply with the platform's PII policy.
-
-**Implementation:**
-
-| File | Change |
-|---|---|
-| `src/lib/analytics/posthog.ts` | Added `capture()` helper accepting `Record<string, unknown>` for AI events with array-typed properties |
-| `src/lib/observability/posthog-ai.ts` | New module — `captureAiTurn()` wraps agent turns and emits `$ai_generation` on success or error |
-| `src/app/api/agent/chat/route.ts` | Added `captureAiTurn` as an outer wrapper around `traceAgentTurn` so PostHog and Langfuse both receive the turn result |
-
-The `$ai_generation` event includes:
-
-| Property | Source |
-|---|---|
-| `$ai_model` | Model ID selected by the routing heuristic in `model.ts` |
-| `$ai_provider` | `"anthropic"` (hardcoded — only provider in use) |
-| `$ai_input_tokens` | Accumulated across all loop iterations in `loop.ts` |
-| `$ai_output_tokens` | Accumulated across all loop iterations |
-| `$ai_latency` | Wall-clock seconds for the full turn |
-| `$ai_total_cost_usd` | Calculated from `MODEL_PRICING` in `model.ts` |
-| `$ai_input_token_price` / `$ai_output_token_price` | Per-token prices from `MODEL_PRICING` |
-| `$ai_tools` | Array of tool names called during the turn |
-| `landlord_id` | Manager scope key for filtering by account |
-| `model_tier` | `simple` / `standard` / `complex` routing tier |
-
-View AI generations in PostHog: [AI Observability → Generations](https://us.posthog.com/project/492655/ai-observability/generations)
+> **AI agent observability is handled by Langfuse, not PostHog.** The wizard's
+> original PostHog `$ai_generation` layer was removed as redundant (it only
+> re-emitted aggregate metrics Langfuse already records). PostHog here covers
+> **user product analytics only**.
 
 ## Verify before merging
 
@@ -65,7 +41,6 @@ View AI generations in PostHog: [AI Observability → Generations](https://us.po
 - [ ] Add `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST` to `.env.example` and any bootstrap scripts so collaborators know what to set.
 - [ ] Wire source-map upload (`posthog-cli sourcemap` or your bundler's upload step) into CI so production stack traces de-minify in PostHog Error Tracking.
 - [ ] Confirm the returning-visitor path also calls `identify` — the current sign-in handler identifies on fresh login, but sessions that resume via cookie without re-signing in will remain on anonymous distinct IDs until the next explicit login.
-- [ ] Trigger the AI agent chat path and confirm `$ai_generation` events appear in PostHog AI Observability (Traces and Generations tabs).
 
 ### Agent skill
 

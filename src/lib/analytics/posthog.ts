@@ -32,21 +32,3 @@ export function track(
     /* analytics must never break a request */
   }
 }
-
-/**
- * Emit an event with arbitrary properties (e.g. PostHog AI Observability events
- * whose properties include arrays). Callers are responsible for keeping props non-PII.
- */
-export function capture(
-  event: string,
-  distinctId: string,
-  properties: Record<string, unknown> = {},
-): void {
-  try {
-    const ph = getClient();
-    if (!ph) return;
-    ph.capture({ distinctId, event, properties });
-  } catch {
-    /* analytics must never break a request */
-  }
-}
