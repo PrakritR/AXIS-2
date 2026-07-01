@@ -15,6 +15,12 @@ export type UploadedOwnLease = {
 
 const memoryByEmail = new Map<string, UploadedOwnLease[]>();
 
+// TTL + in-flight guard, keyed by email, so remounts and overlapping readers
+// for the same resident collapse into one network fetch.
+const LEASE_UPLOADS_SYNC_TTL_MS = 15_000;
+const leaseUploadsLastSyncedAt = new Map<string, number>();
+const leaseUploadsSyncPromise = new Map<string, Promise<UploadedOwnLease[]>>();
+
 function sortUploads(rows: UploadedOwnLease[]) {
   return [...rows].sort((a, b) => {
     const aTs = Date.parse(a.uploadedAt || "");
@@ -39,19 +45,37 @@ function normalizeUpload(raw: unknown, fallbackEmail: string, fallbackIndex: num
   };
 }
 
-export async function syncUploadedOwnLeasesFromServer(email: string): Promise<UploadedOwnLease[]> {
+export async function syncUploadedOwnLeasesFromServer(email: string, opts?: { force?: boolean }): Promise<UploadedOwnLease[]> {
   const key = email.trim().toLowerCase();
   if (!canUseStorage() || !key) return [];
-  const res = await fetch("/api/portal-resident-lease-uploads", { credentials: "include", cache: "no-store" });
-  if (!res.ok) return memoryByEmail.get(key) ?? [];
-  const body = (await res.json()) as { rows?: Array<UploadedOwnLease & { email?: string; residentEmail?: string; row_data?: unknown }> };
-  const rows = (body.rows ?? []).filter((candidate) => {
-    const rowEmail = String(candidate.email ?? candidate.residentEmail ?? "").trim().toLowerCase();
-    return rowEmail === key;
-  }).map((candidate, index) => normalizeUpload(candidate, key, index)).filter((candidate): candidate is UploadedOwnLease => Boolean(candidate));
-  const sorted = sortUploads(rows);
-  memoryByEmail.set(key, sorted);
-  return sorted;
+  const force = opts?.force === true;
+  const inFlight = leaseUploadsSyncPromise.get(key);
+  if (!force && inFlight) return inFlight;
+  const lastSyncedAt = leaseUploadsLastSyncedAt.get(key) ?? 0;
+  if (!force && lastSyncedAt > 0 && Date.now() - lastSyncedAt < LEASE_UPLOADS_SYNC_TTL_MS) {
+    return memoryByEmail.get(key) ?? [];
+  }
+  const promise = (async () => {
+    const res = await fetch("/api/portal-resident-lease-uploads", { credentials: "include" });
+    if (!res.ok) return memoryByEmail.get(key) ?? [];
+    const body = (await res.json()) as { rows?: Array<UploadedOwnLease & { email?: string; residentEmail?: string; row_data?: unknown }> };
+    const rows = (body.rows ?? []).filter((candidate) => {
+      const rowEmail = String(candidate.email ?? candidate.residentEmail ?? "").trim().toLowerCase();
+      return rowEmail === key;
+    }).map((candidate, index) => normalizeUpload(candidate, key, index)).filter((candidate): candidate is UploadedOwnLease => Boolean(candidate));
+    const sorted = sortUploads(rows);
+    memoryByEmail.set(key, sorted);
+    leaseUploadsLastSyncedAt.set(key, Date.now());
+    return sorted;
+  })();
+  leaseUploadsSyncPromise.set(key, promise);
+  try {
+    return await promise;
+  } catch {
+    return memoryByEmail.get(key) ?? [];
+  } finally {
+    leaseUploadsSyncPromise.delete(key);
+  }
 }
 
 export async function syncUploadedOwnLeaseFromServer(email: string): Promise<UploadedOwnLease | null> {

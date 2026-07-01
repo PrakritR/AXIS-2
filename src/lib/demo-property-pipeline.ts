@@ -306,7 +306,22 @@ export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
   await Promise.allSettled(jobs);
 }
 
+// In-flight guards: collapse concurrent duplicate calls into one request.
+// No TTL needed — the routes are CDN-cached (see their Cache-Control).
+let publicListingsInFlight: Promise<MockProperty[]> | null = null;
+const publicLeadInFlight = new Map<string, Promise<MockProperty | null>>();
+
 export async function loadPublicExtraListingsFromServer(): Promise<MockProperty[]> {
+  if (publicListingsInFlight) return publicListingsInFlight;
+  publicListingsInFlight = fetchPublicExtraListings();
+  try {
+    return await publicListingsInFlight;
+  } finally {
+    publicListingsInFlight = null;
+  }
+}
+
+async function fetchPublicExtraListings(): Promise<MockProperty[]> {
   try {
     // No cache override: response is CDN-cacheable (see route Cache-Control).
     const res = await fetch("/api/property-records/public");
@@ -332,6 +347,18 @@ export async function loadPublicExtraListingsFromServer(): Promise<MockProperty[
 export async function loadPublicPropertyLeadFromServer(propertyId: string): Promise<MockProperty | null> {
   const id = propertyId.trim();
   if (!id || !isBrowser()) return null;
+  const inFlight = publicLeadInFlight.get(id);
+  if (inFlight) return inFlight;
+  const promise = fetchPublicPropertyLead(id);
+  publicLeadInFlight.set(id, promise);
+  try {
+    return await promise;
+  } finally {
+    publicLeadInFlight.delete(id);
+  }
+}
+
+async function fetchPublicPropertyLead(id: string): Promise<MockProperty | null> {
   try {
     const res = await fetch(`/api/public/property-lead?propertyId=${encodeURIComponent(id)}`);
     const body = (await res.json()) as { property?: MockProperty };

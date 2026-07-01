@@ -9,6 +9,12 @@ import { getPropertyById } from "@/lib/rental-application/data";
 export const SERVICE_REQUESTS_EVENT = "axis:service-requests";
 const KEY = "axis_service_requests_v1";
 
+// TTL + in-flight guard so remounts/overlapping callers collapse into one
+// network fetch, matching the other portal sync helpers.
+const SERVICE_REQUESTS_SYNC_TTL_MS = 15_000;
+let serviceRequestsLastSyncedAt = 0;
+let serviceRequestsSyncPromise: Promise<ServiceRequest[]> | null = null;
+
 export type ServiceRequestStatus = "pending" | "approved" | "denied" | "returned";
 
 export type ServiceRequest = {
@@ -103,17 +109,28 @@ function deleteServiceRequestFromServer(id: string): void {
 }
 
 /** Pull the authoritative server set into the local cache and notify listeners. */
-export async function syncServiceRequestsFromServer(): Promise<ServiceRequest[]> {
+export async function syncServiceRequestsFromServer(opts?: { force?: boolean }): Promise<ServiceRequest[]> {
   if (typeof window === "undefined") return [];
+  const force = opts?.force === true;
+  if (!force && serviceRequestsSyncPromise) return serviceRequestsSyncPromise;
+  if (!force && serviceRequestsLastSyncedAt > 0 && Date.now() - serviceRequestsLastSyncedAt < SERVICE_REQUESTS_SYNC_TTL_MS) {
+    return readAll();
+  }
   try {
-    const res = await fetch("/api/portal-service-requests", { credentials: "include", cache: "no-store" });
-    if (!res.ok) return readAll();
-    const body = (await res.json()) as { rows?: ServiceRequest[] };
-    const rows = Array.isArray(body.rows) ? body.rows : [];
-    writeAll(rows);
-    return rows;
+    serviceRequestsSyncPromise = (async () => {
+      const res = await fetch("/api/portal-service-requests", { credentials: "include" });
+      if (!res.ok) return readAll();
+      const body = (await res.json()) as { rows?: ServiceRequest[] };
+      const rows = Array.isArray(body.rows) ? body.rows : [];
+      writeAll(rows);
+      serviceRequestsLastSyncedAt = Date.now();
+      return rows;
+    })();
+    return await serviceRequestsSyncPromise;
   } catch {
     return readAll();
+  } finally {
+    serviceRequestsSyncPromise = null;
   }
 }
 
