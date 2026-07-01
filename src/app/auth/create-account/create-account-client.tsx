@@ -314,7 +314,7 @@ export default function CreateAccountClient() {
           return;
         }
         if (signInData?.user) {
-          posthog.identify(signInData.user.id, { email: email.trim(), role: "manager" });
+          posthog.identify(signInData.user.id);
         }
         if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
           window.location.replace("/portal/dashboard");
@@ -376,7 +376,7 @@ export default function CreateAccountClient() {
         return;
       }
       if (residentSignInData?.user) {
-        posthog.identify(residentSignInData.user.id, { email: email.trim(), role: "resident" });
+        posthog.identify(residentSignInData.user.id);
       }
       showToast(
         body.reusedExistingAuthUser

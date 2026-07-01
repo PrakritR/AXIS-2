@@ -206,7 +206,7 @@ function SignInForm() {
       if (!user) {
         throw new Error("No active session.");
       }
-      posthog.identify(user.id, { email: email.trim() });
+      posthog.identify(user.id);
       if (rememberEmail) {
         window.localStorage.setItem("axis:remembered-login-email", email.trim());
       } else {

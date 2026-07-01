@@ -3,6 +3,7 @@
  * is safe to call anywhere. Uses the `object_action` event convention. Never
  * pass PII or secrets as properties — identify by user id only.
  */
+import { after } from "next/server";
 import { PostHog } from "posthog-node";
 
 let client: PostHog | null = null;
@@ -28,6 +29,13 @@ export function track(
     const ph = getClient();
     if (!ph) return;
     ph.capture({ distinctId, event, properties });
+    after(async () => {
+      try {
+        await ph.flush();
+      } catch {
+        /* analytics must never break a request */
+      }
+    });
   } catch {
     /* analytics must never break a request */
   }
