@@ -410,7 +410,6 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       track("rental_application_submitted", {
         axis_id: axisId,
         property_id: pid || undefined,
-        property_title: propertyTitle,
         synced_to_server: sync.ok,
         email_sent: emailSent,
       });

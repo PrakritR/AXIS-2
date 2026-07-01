@@ -123,12 +123,20 @@ function SignInForm() {
   const authError = searchParams.get("error");
   const oauthMessage = searchParams.get("message");
 
-  const [email, setEmail] = useState(() => readRememberedLoginEmail());
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberEmail, setRememberEmail] = useState(() => Boolean(readRememberedLoginEmail()));
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  useEffect(() => {
+    const remembered = readRememberedLoginEmail();
+    if (remembered) {
+      setEmail(remembered);
+      setRememberEmail(true);
+    }
+  }, []);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
