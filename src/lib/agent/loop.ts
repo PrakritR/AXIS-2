@@ -22,10 +22,49 @@ export type AgentTurnResult = {
   usage: TurnUsage;
 };
 
+/**
+ * Per-call/per-tool events the loop emits as work happens. Kept Langfuse-agnostic
+ * so the loop has no observability coupling; the observability layer implements
+ * this to nest the trace. Every observer call is guarded — a throwing observer
+ * must never break a turn.
+ */
+export type LlmCallEvent = {
+  iteration: number;
+  model: string;
+  usage: TurnUsage; // THIS call only, not the turn accumulator
+  stopReason: string | null;
+  toolsChosen: string[];
+  input: Anthropic.MessageParam[]; // messages sent for this call
+  assistantContent: Anthropic.ContentBlock[]; // the response blocks
+};
+export type ToolCallEvent = {
+  iteration: number;
+  name: string;
+  input: unknown; // raw model-supplied args
+  ok: boolean;
+  output: unknown; // result.data on success, error string on failure
+};
+export type AgentObserver = {
+  onStart?(info: { system: string; toolsAvailable: string[]; model: string; tier: ModelTier }): void;
+  onLlmCall?(e: LlmCallEvent): void;
+  onToolCall?(e: ToolCallEvent): void;
+};
+
+/** Invoke an observer hook, swallowing any error so tracing can't break a turn. */
+function notify(fn: (() => void) | undefined) {
+  if (!fn) return;
+  try {
+    fn();
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function runAgentTurn(opts: {
   ctx: AgentContext;
   registry: ToolRegistry;
   messages: Anthropic.MessageParam[];
+  observer?: AgentObserver;
 }): Promise<AgentTurnResult> {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from env
   const tools = toAnthropicTools(opts.registry, { readOnly: true });
@@ -38,7 +77,16 @@ export async function runAgentTurn(opts: {
   const { model, tier } = selectModel(opts.messages);
   const usage: TurnUsage = { inputTokens: 0, outputTokens: 0 };
 
+  const observer = opts.observer;
+  notify(
+    observer?.onStart &&
+      (() => observer.onStart!({ system: SYSTEM_PROMPT, toolsAvailable: tools.map((t) => t.name), model, tier })),
+  );
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
+    // Snapshot the messages sent for this call before we mutate the array, so the
+    // trace records the exact prompt for replay.
+    const callInput = [...messages];
     const response = await client.messages.create({
       model,
       max_tokens: 4096,
@@ -47,17 +95,35 @@ export async function runAgentTurn(opts: {
       messages,
     });
 
-    usage.inputTokens += response.usage?.input_tokens ?? 0;
-    usage.outputTokens += response.usage?.output_tokens ?? 0;
+    const callUsage: TurnUsage = {
+      inputTokens: response.usage?.input_tokens ?? 0,
+      outputTokens: response.usage?.output_tokens ?? 0,
+    };
+    usage.inputTokens += callUsage.inputTokens;
+    usage.outputTokens += callUsage.outputTokens;
+
+    const toolUses = response.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+    );
+
+    notify(
+      observer?.onLlmCall &&
+        (() =>
+          observer.onLlmCall!({
+            iteration: i,
+            model,
+            usage: callUsage,
+            stopReason: response.stop_reason ?? null,
+            toolsChosen: toolUses.map((u) => u.name),
+            input: callInput,
+            assistantContent: response.content,
+          })),
+    );
 
     if (response.stop_reason === "pause_turn") {
       messages.push({ role: "assistant", content: response.content });
       continue;
     }
-
-    const toolUses = response.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-    );
 
     if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
       const reply = response.content
@@ -74,6 +140,17 @@ export async function runAgentTurn(opts: {
     for (const use of toolUses) {
       const result = await runReadTool(opts.registry, opts.ctx, use.name, use.input);
       toolTrace.push({ tool: use.name, ok: result.ok });
+      notify(
+        observer?.onToolCall &&
+          (() =>
+            observer.onToolCall!({
+              iteration: i,
+              name: use.name,
+              input: use.input,
+              ok: result.ok,
+              output: result.ok ? result.data : result.error,
+            })),
+      );
       results.push({
         type: "tool_result",
         tool_use_id: use.id,
