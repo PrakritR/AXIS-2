@@ -67,7 +67,7 @@ export async function syncUploadedOwnLeasesFromServer(email: string, opts?: { fo
     memoryByEmail.set(key, sorted);
     leaseUploadsLastSyncedAt.set(key, Date.now());
     return sorted;
-  })();
+  })().catch(() => memoryByEmail.get(key) ?? []);
   leaseUploadsSyncPromise.set(key, promise);
   try {
     return await promise;

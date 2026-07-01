@@ -125,7 +125,7 @@ export async function syncServiceRequestsFromServer(opts?: { force?: boolean }):
       writeAll(rows);
       serviceRequestsLastSyncedAt = Date.now();
       return rows;
-    })();
+    })().catch(() => readAll());
     return await serviceRequestsSyncPromise;
   } catch {
     return readAll();
