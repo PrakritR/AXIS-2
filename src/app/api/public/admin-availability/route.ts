@@ -150,7 +150,11 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ slotHosts });
+    // Public availability (time-aware): short CDN cache trims repeat load.
+    return NextResponse.json(
+      { slotHosts },
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } },
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load admin availability.";
     return NextResponse.json({ error: message }, { status: 500 });

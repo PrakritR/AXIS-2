@@ -267,13 +267,24 @@ export function PortalCalendarPanels({
     };
   }, [storageKey]);
 
-  // Poll every 30 s so approvals/cancellations from linked accounts propagate automatically.
+  // Poll every 60 s so approvals/cancellations from linked accounts propagate
+  // automatically. Skip while the tab is hidden to avoid egress from background
+  // tabs, and refresh once immediately when the tab becomes visible again.
   useEffect(() => {
     if (!storageKey) return;
+    const refresh = () => syncScheduleRecordsFromServer().then(() => setMeetingRefresh((n) => n + 1));
     const id = setInterval(() => {
-      void syncScheduleRecordsFromServer().then(() => setMeetingRefresh((n) => n + 1));
-    }, 30_000);
-    return () => clearInterval(id);
+      if (document.hidden) return;
+      void refresh();
+    }, 60_000);
+    const onVisible = () => {
+      if (!document.hidden) void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [storageKey]);
 
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);

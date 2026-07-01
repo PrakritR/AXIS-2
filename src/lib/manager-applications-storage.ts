@@ -317,7 +317,7 @@ export async function syncManagerApplicationsFromServer(opts?: {
       managerApplicationsLastSyncedAt = Date.now();
       if (changed) emit();
       return rows;
-    })();
+    })().catch(() => readManagerApplicationRows());
     return await managerApplicationsSyncPromise;
   } catch {
     return readManagerApplicationRows();
@@ -335,14 +335,14 @@ export async function syncPublicApprovedApplicationsFromServer(opts?: { force?: 
   }
   try {
     publicApprovedApplicationsSyncPromise = (async () => {
-      const res = await fetch("/api/public/approved-room-occupancy", { cache: "no-store" });
+      const res = await fetch("/api/public/approved-room-occupancy");
       if (!res.ok) return readManagerApplicationRows();
       const body = (await res.json()) as { rows?: DemoApplicantRow[] };
       const rows = mergeApplicationRows(memoryRows, Array.isArray(body.rows) ? body.rows : []);
       memoryRows = rows;
       publicApprovedApplicationsLastSyncedAt = Date.now();
       return rows;
-    })();
+    })().catch(() => readManagerApplicationRows());
     return await publicApprovedApplicationsSyncPromise;
   } catch {
     return readManagerApplicationRows();

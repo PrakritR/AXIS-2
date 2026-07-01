@@ -61,7 +61,11 @@ export async function GET() {
       if (row) byId.set(row.id, row);
     }
 
-    return NextResponse.json({ rows: [...byId.values()] });
+    // Public occupancy snapshot, changes only on approvals: CDN-cacheable.
+    return NextResponse.json(
+      { rows: [...byId.values()] },
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" } },
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load approved room occupancy.";
     return NextResponse.json({ error: message }, { status: 500 });

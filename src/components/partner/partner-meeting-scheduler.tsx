@@ -82,7 +82,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
   const loadAvailability = useCallback(async () => {
     setLoadingAvailability(true);
     try {
-      const res = await fetch("/api/public/admin-availability", { cache: "no-store" });
+      const res = await fetch("/api/public/admin-availability");
       const body = (await res.json()) as { slotHosts?: Record<string, AdminAvailabilityHost[]> };
       setSlotHosts(res.ok && body.slotHosts ? body.slotHosts : {});
     } catch {

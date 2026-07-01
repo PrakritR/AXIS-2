@@ -43,7 +43,8 @@ export async function POST(req: Request) {
     const ext = body.ext ?? (mime.split("/")[1] ?? "jpg");
     const path = `bug-feedback/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const db = createSupabaseServiceRoleClient();
-    const { error } = await db.storage.from("listing-photos").upload(path, bytes, { contentType: mime, upsert: false });
+    // Immutable object (unique filename); cache 1 year to avoid re-fetching.
+    const { error } = await db.storage.from("listing-photos").upload(path, bytes, { contentType: mime, cacheControl: "31536000", upsert: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const { data } = db.storage.from("listing-photos").getPublicUrl(path);

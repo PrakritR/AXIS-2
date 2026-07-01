@@ -87,7 +87,7 @@ function selectRows(value: unknown): { value: string; label: string }[] | null {
 }
 
 async function loadSiteContent(): Promise<SiteContentResponse> {
-  const res = await fetch("/api/site-content", { credentials: "include", cache: "no-store" });
+  const res = await fetch("/api/site-content");
   if (!res.ok) throw new Error("Unable to load site content.");
   return (await res.json()) as SiteContentResponse;
 }

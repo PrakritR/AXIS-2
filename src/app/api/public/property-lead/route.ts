@@ -35,7 +35,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Property is not active for apply or tour links." }, { status: 404 });
     }
 
-    return NextResponse.json({ property: { ...property, id: property.id || propertyId } });
+    // Public per-property detail: CDN-cacheable, same for everyone.
+    return NextResponse.json(
+      { property: { ...property, id: property.id || propertyId } },
+      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600" } },
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load property." },
