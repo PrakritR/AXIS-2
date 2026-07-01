@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import posthog from "posthog-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type PortalSignOutButtonProps = {
@@ -18,6 +19,11 @@ export function PortalSignOutButton({ className, onSignedOut }: PortalSignOutBut
     setBusy(true);
     try {
       await fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
+      try {
+        posthog.reset();
+      } catch {
+        /* ignore — analytics reset is best-effort */
+      }
       try {
         const supabase = createSupabaseBrowserClient();
         await supabase.auth.signOut({ scope: "local" });

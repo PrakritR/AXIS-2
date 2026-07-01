@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
+import { track } from "@/lib/analytics/track-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -220,15 +221,6 @@ export function ResidentPaymentsPanel() {
     [charges],
   );
 
-  const selectedTotal = useMemo(() => {
-    let total = 0;
-    for (const id of selectedIds) {
-      const charge = charges.find((c) => c.id === id);
-      if (charge) total += centsFromLabel(charge.balanceLabel);
-    }
-    return total;
-  }, [charges, selectedIds]);
-
   const counts = useMemo(() => {
     return {
       pending: charges.filter((c) => c.status === "pending").length,
@@ -251,6 +243,7 @@ export function ResidentPaymentsPanel() {
       if (ids.length === 0) return;
       const key = checkoutKey(ids, method);
       setCheckout({ key, chargeIds: ids, paymentMethod: method, clientSecret: null, loading: true, error: null });
+      track("household_charge_payment_started", { method, charge_count: ids.length });
       try {
         const res = await fetch("/api/stripe/household-charge-checkout", {
           method: "POST",

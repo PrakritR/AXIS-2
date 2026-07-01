@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
@@ -134,6 +135,7 @@ export async function POST(req: Request) {
 
     await ensureProfileRoleRow(supabase, userId, "resident");
 
+    track("resident_account_created", userId, { axis_id: profileAxisId, reused_existing_auth_user: reusedExistingAuthUser, application_approved: applicationApproved });
     return NextResponse.json({ ok: true, reusedExistingAuthUser, axisId: profileAxisId });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";

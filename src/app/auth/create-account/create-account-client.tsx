@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
@@ -303,7 +304,7 @@ export default function CreateAccountClient() {
           return;
         }
         const supabase = createSupabaseBrowserClient();
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
@@ -311,6 +312,9 @@ export default function CreateAccountClient() {
           showToast("Account created. Sign in to choose your plan.");
           router.push("/auth/sign-in");
           return;
+        }
+        if (signInData?.user) {
+          posthog.identify(signInData.user.id);
         }
         if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
           window.location.replace("/portal/dashboard");
@@ -358,7 +362,7 @@ export default function CreateAccountClient() {
         return;
       }
       const supabase = createSupabaseBrowserClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: residentSignInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -370,6 +374,9 @@ export default function CreateAccountClient() {
         );
         router.push("/auth/sign-in");
         return;
+      }
+      if (residentSignInData?.user) {
+        posthog.identify(residentSignInData.user.id);
       }
       showToast(
         body.reusedExistingAuthUser

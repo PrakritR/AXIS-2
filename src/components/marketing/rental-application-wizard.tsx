@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics/track-client";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -406,6 +407,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         }
       }
 
+      track("rental_application_submitted", {
+        axis_id: axisId,
+        property_id: pid || undefined,
+        synced_to_server: sync.ok,
+        email_sent: emailSent,
+      });
       clearRentalWizardDraft();
       setForm(createInitialRentalWizardState());
       setStep(1);
@@ -577,6 +584,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
           const amountCents = Math.round(amount * 100);
           setCheckoutBusy(true);
+          track("application_fee_payment_started", { property_id: pid || undefined });
           try {
             const res = await fetch("/api/stripe/application-fee-checkout", {
               method: "POST",
@@ -651,6 +659,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         scrollToFirstWizardFieldError(RENTAL_WIZARD_STEP_FIELD_ORDER[step] ?? [], e),
       );
       return;
+    }
+    if (step === 1 && maxStepReached < 2) {
+      track("rental_application_started", { property_id: form.propertyId || undefined });
     }
     if (step === 3) {
       const approvedConflict = form.roomChoice1

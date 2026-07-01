@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -70,6 +71,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    track("resident_approval_updated", user.id, { approved });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

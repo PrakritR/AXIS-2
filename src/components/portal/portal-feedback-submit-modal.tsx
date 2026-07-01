@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { track } from "@/lib/analytics/track-client";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
@@ -93,6 +94,7 @@ export function PortalFeedbackSubmitModal({
         description,
         attachmentUrls,
       });
+      track("feedback_submitted", { role: reporterRole });
       resetForm();
       await onSubmitted();
       onClose();

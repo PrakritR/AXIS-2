@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { AuthCard } from "@/components/auth/auth-card";
 import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 import { AuthPageHeader, AuthLoadingCard } from "@/components/auth/auth-mobile-primitives";
@@ -132,6 +133,9 @@ function SignInForm() {
   useEffect(() => {
     const remembered = readRememberedLoginEmail();
     if (remembered) {
+      // Read localStorage only after mount to avoid an SSR hydration mismatch;
+      // effect + setState is the sanctioned pattern for syncing external state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEmail(remembered);
       setRememberEmail(true);
     }
@@ -213,6 +217,7 @@ function SignInForm() {
       if (!user) {
         throw new Error("No active session.");
       }
+      posthog.identify(user.id);
       if (rememberEmail) {
         window.localStorage.setItem("axis:remembered-login-email", email.trim());
       } else {

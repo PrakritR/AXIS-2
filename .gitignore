@@ -68,3 +68,4 @@ playwright.config.ts
 # Claude Code local state (worktrees, jobs, plans, memory)
 .claude/
 .cursor/skills/
+.env.local

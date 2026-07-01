@@ -18,7 +18,8 @@ information when you use the Axis website and mobile apps (iOS and Android).
   you opt into; camera and photo access only when you choose to attach images to
   documents or work orders.
 - **Usage data:** standard logs (IP address, browser/device type, pages visited)
-  to operate and secure the service.
+  and product analytics (pages viewed, clicks, and feature usage, captured via
+  PostHog) to operate, secure, and improve the service.
 
 ## How we use information
 
@@ -33,8 +34,8 @@ information when you use the Axis website and mobile apps (iOS and Android).
 
 We share data with service providers who help us operate Axis, including
 Supabase (authentication and database), Stripe (payments), Twilio (SMS), Resend
-(email), and Firebase (push notifications). **We do not sell your personal
-information.**
+(email), Firebase (push notifications), and PostHog (product analytics). **We do
+not sell your personal information.**
 
 ## Your choices
 
