@@ -133,6 +133,9 @@ function SignInForm() {
   useEffect(() => {
     const remembered = readRememberedLoginEmail();
     if (remembered) {
+      // Read localStorage only after mount to avoid an SSR hydration mismatch;
+      // effect + setState is the sanctioned pattern for syncing external state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEmail(remembered);
       setRememberEmail(true);
     }

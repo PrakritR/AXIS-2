@@ -221,15 +221,6 @@ export function ResidentPaymentsPanel() {
     [charges],
   );
 
-  const selectedTotal = useMemo(() => {
-    let total = 0;
-    for (const id of selectedIds) {
-      const charge = charges.find((c) => c.id === id);
-      if (charge) total += centsFromLabel(charge.balanceLabel);
-    }
-    return total;
-  }, [charges, selectedIds]);
-
   const counts = useMemo(() => {
     return {
       pending: charges.filter((c) => c.status === "pending").length,

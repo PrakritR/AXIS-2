@@ -18,8 +18,6 @@ import { loadManagerPlanTiers } from "@/lib/site-content";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { SubscriptionCheckoutHint } from "@/components/stripe/subscription-checkout-hint";
 import {
-  MANAGER_PLAN_CHECKOUT_CANCELLED_PATH,
-  MANAGER_PLAN_CHECKOUT_SUCCESS_PATH,
   MANAGER_PLAN_PORTAL_PATH,
   MANAGER_PLAN_PORTAL_SECTION_ID,
 } from "@/lib/portals/manager-plan-path";
