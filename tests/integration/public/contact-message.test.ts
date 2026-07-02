@@ -76,7 +76,9 @@ describe("POST /api/public/contact-message", () => {
     expect(record.owner_user_id).toBeNull();
     // Full contact payload preserved for the admin inbox thread, including the
     // sender's reply-to email (lowercased server-side).
+    expect(record.participant_email).toBe("jane@company.com");
     expect(record.row_data.email).toBe("jane@company.com");
+    expect(record.row_data.participantEmail).toBe("jane@company.com");
     expect(record.row_data.name).toBe("Jane Smith");
     expect(record.row_data.topic).toBe("Support");
     expect(record.row_data.body).toBe("I have a question about Axis.");

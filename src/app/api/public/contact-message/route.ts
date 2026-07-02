@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       id: crypto.randomUUID(),
       name,
       email,
+      participantEmail: email,
       topic,
       body: message,
       createdAt: new Date().toISOString(),
