@@ -76,44 +76,72 @@ try {
     { onConflict: "manager_id" },
   );
 
-  const propertyId = `test-prop-${testRunId}`;
-  await supabase.from("manager_property_records").insert({
-    manager_id: managerId,
-    row_data: {
+  // Stable id + upsert so repeated e2e runs reuse ONE well-formed record for the
+  // shared demo manager instead of accumulating raw-id "Seed Property <ts>" rows.
+  // Fully scoped (manager_user_id + status + property_data) and cleanly named so
+  // every owner-scoped property picker shows a real name, never a seed id.
+  const propertyId = "test-prop-e2e";
+  const propertyName = "Test Property — E2E";
+  const propertyAddress = "123 Test St, San Francisco, CA 94105";
+  await supabase.from("manager_property_records").upsert(
+    {
       id: propertyId,
+      manager_id: managerId,
+      manager_user_id: managerUserId,
       status: "live",
-      name: `Seed Property ${testRunId}`,
-      address: "123 Test St, San Francisco, CA 94105",
-      testRunId,
+      property_data: {
+        id: propertyId,
+        title: propertyName,
+        buildingName: propertyName,
+        address: propertyAddress,
+        managerUserId,
+        adminPublishLive: true,
+      },
+      row_data: {
+        id: propertyId,
+        status: "live",
+        name: propertyName,
+        buildingName: propertyName,
+        address: propertyAddress,
+        testRunId,
+      },
     },
-  });
+    { onConflict: "id" },
+  );
 
   // ── Resident account ──────────────────────────────────────────────────────
   const residentUserId = await ensureUser(residentEmail, residentPassword, "resident");
 
-  // Approved application linking resident to manager
-  const applicationId = `test-app-${testRunId}`;
+  // Approved application linking resident to manager (idempotent: stable id + upsert).
+  const applicationId = "test-app-e2e";
   const residentAxisId = `AXIS-${testRunId.slice(0, 8).toUpperCase()}`;
 
-  await supabase.from("manager_application_records").insert({
-    id: applicationId,
-    manager_id: managerId,
-    manager_user_id: managerUserId,
-    resident_email: residentEmail,
-    row_data: {
+  await supabase.from("manager_application_records").upsert(
+    {
       id: applicationId,
-      bucket: "approved",
-      email: residentEmail,
-      name: "Test Resident",
-      axisId: residentAxisId,
-      managerUserId,
-      assignedPropertyId: propertyId,
-      leaseTerm: "12 months",
-      leaseStart: new Date().toISOString().slice(0, 10),
-      signedRent: 2500,
-      testRunId,
+      manager_id: managerId,
+      manager_user_id: managerUserId,
+      resident_email: residentEmail,
+      property_id: propertyId,
+      assigned_property_id: propertyId,
+      row_data: {
+        id: applicationId,
+        bucket: "approved",
+        email: residentEmail,
+        name: "Test Resident",
+        property: propertyName,
+        axisId: residentAxisId,
+        managerUserId,
+        propertyId,
+        assignedPropertyId: propertyId,
+        leaseTerm: "12 months",
+        leaseStart: new Date().toISOString().slice(0, 10),
+        signedRent: 2500,
+        testRunId,
+      },
     },
-  });
+    { onConflict: "id" },
+  );
 
   // Update resident profile with axis_id and mark application_approved
   await supabase.from("profiles").upsert({
@@ -124,46 +152,55 @@ try {
     application_approved: true,
   });
 
-  // Household charge for resident
-  const chargeId = `test-charge-${testRunId}`;
-  await supabase.from("portal_household_charge_records").insert({
-    id: chargeId,
-    manager_user_id: managerUserId,
-    resident_user_id: residentUserId,
-    resident_email: residentEmail,
-    scope: "household",
-    row_data: {
+  // Household charge for resident (idempotent: stable id + upsert).
+  const chargeId = "test-charge-e2e";
+  await supabase.from("portal_household_charge_records").upsert(
+    {
       id: chargeId,
-      kind: "rent",
-      status: "due",
-      label: "Rent – Test Month",
-      amountCents: 250000,
-      dueDateLabel: "1st of month",
-      residentEmail,
-      managerUserId,
-      testRunId,
+      manager_user_id: managerUserId,
+      resident_user_id: residentUserId,
+      resident_email: residentEmail,
+      property_id: propertyId,
+      scope: "household",
+      row_data: {
+        id: chargeId,
+        kind: "rent",
+        status: "due",
+        label: "Rent – Test Month",
+        amountCents: 250000,
+        dueDateLabel: "1st of month",
+        propertyId,
+        propertyLabel: propertyName,
+        residentEmail,
+        managerUserId,
+        testRunId,
+      },
     },
-  });
+    { onConflict: "id" },
+  );
 
-  // Tour / schedule record for manager
-  const tourId = `test-tour-${testRunId}`;
+  // Tour / schedule record for manager (idempotent: stable id + upsert).
+  const tourId = "test-tour-e2e";
   const tourStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const tourEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString();
-  await supabase.from("portal_schedule_records").insert({
-    id: tourId,
-    manager_user_id: managerUserId,
-    record_type: "event",
-    starts_at: tourStart,
-    ends_at: tourEnd,
-    row_data: {
+  await supabase.from("portal_schedule_records").upsert(
+    {
       id: tourId,
-      title: "Test Tour",
-      type: "tour",
-      propertyId,
-      managerUserId,
-      testRunId,
+      manager_user_id: managerUserId,
+      record_type: "event",
+      starts_at: tourStart,
+      ends_at: tourEnd,
+      row_data: {
+        id: tourId,
+        title: "Test Tour",
+        type: "tour",
+        propertyId,
+        managerUserId,
+        testRunId,
+      },
     },
-  });
+    { onConflict: "id" },
+  );
 
   console.log(
     JSON.stringify({

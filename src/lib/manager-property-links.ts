@@ -1,7 +1,7 @@
 import type { AdminPropertyRow } from "@/lib/demo-admin-property-inventory";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { readExtraListingsForUser } from "@/lib/demo-property-pipeline";
-import { readLinkedListingsForUser, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
+import { readLinkedListingsForUser, safePropertyOptionLabel, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 
 export type ManagerApplyLinkParams = {
   propertyId: string;
@@ -43,12 +43,12 @@ export function buildManagerShareablePropertyOptions(userId: string | null): Man
   const labelById = new Map<string, string>();
   for (const p of readExtraListingsForUser(userId)) {
     if (p.adminPublishLive !== true) continue;
-    labelById.set(p.id, (p.title || p.buildingName || p.address).trim() || p.id);
+    labelById.set(p.id, safePropertyOptionLabel([p.title, p.buildingName, p.address], p.id));
   }
   for (const { listing } of readLinkedListingsForUser(userId)) {
     if (listing.adminPublishLive !== true) continue;
     if (labelById.has(listing.id)) continue;
-    labelById.set(listing.id, (listing.title || listing.buildingName || listing.address).trim() || listing.id);
+    labelById.set(listing.id, safePropertyOptionLabel([listing.title, listing.buildingName, listing.address], listing.id));
   }
   return [...labelById.entries()]
     .map(([id, label]) => ({ id, label }))
