@@ -1,5 +1,6 @@
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { purgeOrphanedCoManagerLinks } from "@/lib/auth/purge-orphaned-co-manager-links";
+import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
@@ -96,9 +97,11 @@ function managerStillExists(
 
 /** Inbox threads can be owned by a manager or resident; participant_email is only a resident counterparty when owner is a manager. */
 export function isOrphanInboxThread(
-  record: { participant_email?: unknown; owner_user_id?: unknown },
+  record: { participant_email?: unknown; owner_user_id?: unknown; scope?: unknown },
   index: PortalAccountIndex,
 ): boolean {
+  if (record.scope === ADMIN_INBOX_SCOPE) return false;
+
   const ownerId = normalizeId(record.owner_user_id);
   const email = normalizeEmail(record.participant_email);
 
@@ -197,7 +200,7 @@ export async function purgeOrphanedPortalRecords(db: ServiceDb): Promise<{
 
   const { data: inboxRecords } = await db
     .from("portal_inbox_thread_records")
-    .select("id, participant_email, owner_user_id");
+    .select("id, participant_email, owner_user_id, scope");
   const orphanInboxIds = (inboxRecords ?? [])
     .filter((record) => {
       const email = normalizeEmail(record.participant_email);
