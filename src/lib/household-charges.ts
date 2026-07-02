@@ -488,7 +488,17 @@ function mergeHouseholdApplicationFeeRows(a: HouseholdCharge, b: HouseholdCharge
 
 function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
   const byKey = new Map<string, HouseholdCharge>();
-  for (const charge of rows) {
+  for (const raw of rows) {
+    // Rows hydrated from localStorage/server JSON (readAll → line ~137, server
+    // merge) are cast `as HouseholdCharge` without runtime validation, so string
+    // fields the type promises can actually be missing. Coerce residentEmail /
+    // residentName to "" here — the single chokepoint every read/write passes
+    // through — so keying below and every downstream consumer can safely call
+    // `.trim()` instead of crashing (e.g. the Payments tab error boundary).
+    const charge: HouseholdCharge =
+      typeof raw.residentEmail === "string" && typeof raw.residentName === "string"
+        ? raw
+        : { ...raw, residentEmail: raw.residentEmail ?? "", residentName: raw.residentName ?? "" };
     const key = chargeBusinessKey(charge);
     const existing = byKey.get(key);
     if (!existing) {

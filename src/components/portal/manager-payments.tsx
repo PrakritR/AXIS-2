@@ -52,7 +52,7 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
 const PAYMENT_ACCOUNT_EXCLUSIONS = ["sharad ramachandran", "sharad"] as const;
 
 function shouldExcludePaymentAccount(residentName: string, residentEmail?: string): boolean {
-  const name = residentName.trim().toLowerCase();
+  const name = (residentName ?? "").trim().toLowerCase();
   const email = (residentEmail ?? "").trim().toLowerCase();
   return PAYMENT_ACCOUNT_EXCLUSIONS.some((token) => name.includes(token) || email.includes(token));
 }
@@ -202,7 +202,7 @@ export function ManagerPayments() {
       })
       .map((charge) => {
         const ledgerRow = householdChargeToLedgerRow(charge);
-        const chargeEmail = charge.residentEmail.trim().toLowerCase();
+        const chargeEmail = charge.residentEmail?.trim().toLowerCase() ?? "";
         const application = applications.find((row) => {
           if (charge.applicationId && row.id === charge.applicationId) return true;
           const rowEmail = row.email?.trim().toLowerCase();
