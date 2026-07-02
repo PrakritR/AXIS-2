@@ -1,11 +1,17 @@
 "use client";
 
+import { PartnerMeetingScheduler } from "@/components/partner/partner-meeting-scheduler";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { useState } from "react";
+import { SegmentedTwo } from "@/components/ui/segmented-control";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
 const SUPPORT_EMAIL = "info@axis-seattle-housing.com";
 const SUPPORT_PHONE_DISPLAY = "(510) 309-8345";
 const SUPPORT_PHONE_TEL = "+15103098345";
+const ADDRESS_LINES = ["Axis Seattle Housing", "5259 Brooklyn Ave NE", "Seattle, WA 98105"];
+const MAPS_URL =
+  "https://www.google.com/maps/search/?api=1&query=5259+Brooklyn+Ave+NE%2C+Seattle%2C+WA+98105";
 
 const TOPICS = [
   "General question",
@@ -16,45 +22,106 @@ const TOPICS = [
 ];
 
 export default function ContactPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen px-4 py-16 sm:py-20">
+          <div className="glass-card mx-auto max-w-2xl rounded-3xl p-8">
+            <p className="text-center text-sm text-muted">Loading…</p>
+          </div>
+        </div>
+      }
+    >
+      <ContactInner />
+    </Suspense>
+  );
+}
+
+function ContactInner() {
   const { showToast } = useAppUi();
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get("tab") === "schedule" ? "schedule" : "message";
+  const [tab, setTab] = useState<"schedule" | "message">(tabFromUrl);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      const t = searchParams.get("tab");
+      if (t === "schedule") setTab("schedule");
+      else if (t === "message") setTab("message");
+    });
+  }, [searchParams]);
 
   return (
     <div className="min-h-screen px-4 py-16 sm:py-20">
       <div className="mx-auto max-w-2xl">
         <div className="glass-card rounded-3xl p-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/80">Contact</p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Contact Us</h1>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Connect with Axis Team</h1>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
-            Have a question about Axis or want to talk to our team? Send a message below, or reach us directly.
+            Schedule a meeting with our team or send us a message — whatever works best for you.
           </p>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <a
-              href={`mailto:${SUPPORT_EMAIL}`}
-              className="flex items-center gap-2 rounded-xl border border-border bg-[var(--glass-fill)] px-4 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
-            >
-              <MailIcon />
-              <span className="min-w-0 break-all">{SUPPORT_EMAIL}</span>
-            </a>
-            <a
-              href={`tel:${SUPPORT_PHONE_TEL}`}
-              className="flex items-center gap-2 rounded-xl border border-border bg-[var(--glass-fill)] px-4 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
-            >
-              <PhoneIcon />
-              <span>{SUPPORT_PHONE_DISPLAY}</span>
-            </a>
+          <div className="mt-5">
+            <SegmentedTwo
+              value={tab}
+              onChange={setTab}
+              left={{ id: "schedule", label: "Schedule meeting" }}
+              right={{ id: "message", label: "Send message" }}
+            />
           </div>
 
-          <div className="mt-8">
-            <ContactForm showToast={showToast} />
+          <div key={tab} className="animate-fade-in">
+            {tab === "message" ? (
+              <ContactMessageForm showToast={showToast} />
+            ) : (
+              <PartnerMeetingScheduler showToast={showToast} />
+            )}
           </div>
         </div>
+
+        <ContactInfo />
       </div>
     </div>
   );
 }
 
-function ContactForm({ showToast }: { showToast: (m: string) => void }) {
+function ContactInfo() {
+  return (
+    <div className="mt-6 grid gap-3 sm:grid-cols-3">
+      <a
+        href={`mailto:${SUPPORT_EMAIL}`}
+        className="flex items-center gap-2 rounded-xl border border-border bg-[var(--glass-fill)] px-4 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
+      >
+        <MailIcon />
+        <span className="min-w-0 break-all">{SUPPORT_EMAIL}</span>
+      </a>
+      <a
+        href={`tel:${SUPPORT_PHONE_TEL}`}
+        className="flex items-center gap-2 rounded-xl border border-border bg-[var(--glass-fill)] px-4 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
+      >
+        <PhoneIcon />
+        <span>{SUPPORT_PHONE_DISPLAY}</span>
+      </a>
+      <a
+        href={MAPS_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-start gap-2 rounded-xl border border-border bg-[var(--glass-fill)] px-4 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
+      >
+        <MapPinIcon />
+        <span className="min-w-0 leading-snug">
+          {ADDRESS_LINES.map((line, i) => (
+            <span key={line} className={i === 0 ? "block font-semibold" : "block text-muted"}>
+              {line}
+            </span>
+          ))}
+        </span>
+      </a>
+    </div>
+  );
+}
+
+function ContactMessageForm({ showToast }: { showToast: (m: string) => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [topic, setTopic] = useState("");
@@ -103,7 +170,7 @@ function ContactForm({ showToast }: { showToast: (m: string) => void }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="mt-6 space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name *">
           <input type="text" placeholder="Jane Smith" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
@@ -124,9 +191,9 @@ function ContactForm({ showToast }: { showToast: (m: string) => void }) {
 
       <Field label="Message *">
         <textarea
-          rows={6}
+          rows={10}
           placeholder="What can we help you with?"
-          className={`${inputCls} min-h-[160px] resize-y leading-relaxed`}
+          className={`${inputCls} min-h-[220px] resize-y leading-relaxed`}
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
@@ -170,6 +237,15 @@ function PhoneIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-primary" aria-hidden>
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
+function MapPinIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0 text-primary" aria-hidden>
+      <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+      <circle cx="12" cy="10" r="3" />
     </svg>
   );
 }

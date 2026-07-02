@@ -26,7 +26,7 @@ export default function PartnerLandingPage() {
             Full-service management or self-serve software — we help owners maximize revenue while minimizing effort.
           </p>
           <div className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4" style={{ animationDelay: "120ms" }}>
-            <Link href="/partner/contact?tab=schedule" className="btn-cobalt inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.98] sm:w-auto">Book a consultation</Link>
+            <Link href="/contact?tab=schedule" className="btn-cobalt inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.98] sm:w-auto">Book a consultation</Link>
             <Link href="/partner/pricing" className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.99] sm:w-auto">Use our software</Link>
           </div>
           <div className="animate-fade-up mx-auto mt-12 grid max-w-md grid-cols-2 gap-4 sm:mt-10 sm:gap-6" style={{ animationDelay: "150ms" }}>
@@ -99,7 +99,7 @@ export default function PartnerLandingPage() {
             <h2 className="text-2xl font-semibold tracking-[-0.02em] text-white sm:text-3xl">Interested in working with us?</h2>
             <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-white/85">Schedule a consultation to discuss full-service management and how we can help.</p>
             <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-              <Link href="/partner/contact?tab=schedule" className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 active:scale-[0.99] sm:w-auto">Book consultation</Link>
+              <Link href="/contact?tab=schedule" className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 active:scale-[0.99] sm:w-auto">Book consultation</Link>
             </div>
             <p className="mt-6 text-sm text-white/70">No commitment required · Typically respond within 1 business day</p>
           </div>

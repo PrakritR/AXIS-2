@@ -59,13 +59,15 @@ export function PublicNavbar() {
     () => pathname.startsWith("/partner") && !pathname.startsWith("/partner/pricing"),
     [pathname],
   );
+  const contactActive = useMemo(() => pathname === "/contact", [pathname]);
 
   const menu: NavbarMenuItem[] = useMemo(
     () => [
       { title: "Partners", url: "/partner", active: partnerActive },
       { title: "Pricing", url: "/partner/pricing", active: pricingActive },
+      { title: "Contact", url: "/contact", active: contactActive },
     ],
-    [partnerActive, pricingActive],
+    [partnerActive, pricingActive, contactActive],
   );
 
   if (hideOnNative) return null;

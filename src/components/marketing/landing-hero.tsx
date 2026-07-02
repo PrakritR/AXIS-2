@@ -26,7 +26,7 @@ export function LandingHero() {
         </p>
 
         <div
-          className="animate-fade-up mt-10 flex justify-center sm:mt-12"
+          className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-4 sm:mt-12 sm:flex-row"
           style={{ animationDelay: "120ms" }}
         >
           <Link
@@ -34,6 +34,12 @@ export function LandingHero() {
             className="btn-metallic hero-cta-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:brightness-105 active:translate-y-px active:scale-[0.99] sm:w-auto"
           >
             Partner with Axis
+          </Link>
+          <Link
+            href="/contact"
+            className="inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full border border-border px-8 py-3 text-sm font-semibold text-foreground transition-colors duration-200 hover:bg-foreground/5 active:scale-[0.99] sm:w-auto"
+          >
+            Contact us
           </Link>
         </div>
       </div>
