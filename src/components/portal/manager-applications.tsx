@@ -209,11 +209,15 @@ function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucke
 }
 
 /** Server PDF endpoint for an application, with the client-resolved room label as a display hint. */
-function applicationPdfHref(row: DemoApplicantRow): string {
+function applicationPdfHref(row: DemoApplicantRow, opts?: { inline?: boolean }): string {
   const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
   const roomLabel = getRoomChoiceLabel(roomChoice);
-  const query = roomLabel ? `?roomLabel=${encodeURIComponent(roomLabel)}` : "";
-  return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query}`;
+  const params = new URLSearchParams();
+  if (roomLabel) params.set("roomLabel", roomLabel);
+  // Ask the route for an inline disposition so the browser renders (not downloads) the PDF in a preview frame.
+  if (opts?.inline) params.set("disposition", "inline");
+  const query = params.toString();
+  return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query ? `?${query}` : ""}`;
 }
 
 /** Trigger a browser download of the application PDF without opening a blank tab. */
@@ -224,6 +228,46 @@ function downloadApplicationPdf(row: DemoApplicantRow): void {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+}
+
+/**
+ * Inline preview of the official application PDF, embedded via an authenticated same-origin
+ * iframe so managers can read the document without downloading. The white PDF page reads
+ * clearly on the themed card frame in both light and dark mode; a Download PDF action stays
+ * available alongside it.
+ */
+function ApplicationPdfPreview({ row }: { row: DemoApplicantRow }) {
+  const previewSrc = applicationPdfHref(row, { inline: true });
+  return (
+    <section className="mt-8 border-t border-border pt-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application document</p>
+          <h4 className="mt-1.5 text-base font-semibold tracking-[-0.01em] text-foreground">Official application PDF</h4>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted">
+            Preview the branded application document below — the same file the Download PDF button produces.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          data-attr="application-pdf-download"
+          onClick={() => downloadApplicationPdf(row)}
+        >
+          Download PDF
+        </Button>
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-[#525659] shadow-sm">
+        <iframe
+          src={previewSrc}
+          title="Application document preview"
+          loading="lazy"
+          className="h-[560px] w-full border-0 bg-white"
+        />
+      </div>
+    </section>
+  );
 }
 
 function roomSortKey(row: DemoApplicantRow): string {
@@ -934,6 +978,7 @@ export function ManagerApplications() {
                                   )
                                 }
                               />
+                              <ApplicationPdfPreview row={row} />
                               <div className="mt-8 border-t border-border pt-8">
                               <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application on file</p>
                               <div className="mt-4">
