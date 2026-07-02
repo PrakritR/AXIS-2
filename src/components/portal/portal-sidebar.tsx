@@ -38,12 +38,6 @@ function hrefForSection(def: PortalDefinition, section: string) {
   return `${def.basePath}/${section}/${meta.tabs[0].id}`;
 }
 
-function sidebarBrandHref(definition: PortalDefinition): string {
-  const dashboard = definition.sections.find((s) => s.section === "dashboard");
-  if (dashboard) return `${definition.basePath}/dashboard`;
-  return definition.basePath;
-}
-
 function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: string } {
   switch (kind) {
     case "resident":
@@ -100,7 +94,6 @@ export function PortalSidebar({
   const router = useRouter();
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
-  const brandHref = useMemo(() => sidebarBrandHref(definition), [definition]);
   const hasAssistant = useHasAxisAssistant();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
@@ -390,10 +383,9 @@ export function PortalSidebar({
       ) : (
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-3">
           <Link
-            href={brandHref}
+            href="/"
             prefetch
-            aria-label={brand.ariaLabel}
-            onClick={portalNavClick(router, brandHref)}
+            aria-label="Axis home"
             className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90"
           >
             <AxisLogoMark size="compact" />
@@ -454,13 +446,23 @@ export function PortalSidebar({
 
       <div className="shrink-0 lg:hidden">
         <div className={PORTAL_MOBILE_CHROME_CLASS}>
-          <nav
-            ref={topNavScrollRef}
-            className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
-            aria-label="Portal sections"
-          >
-            {navItems.map((s) => renderMobileNavLink(s, "top"))}
-          </nav>
+          <div className="flex items-center gap-2 px-3 py-2 sm:px-4">
+            <Link
+              href="/"
+              prefetch
+              aria-label="Axis home"
+              className="shrink-0 transition-opacity hover:opacity-90"
+            >
+              <AxisLogoMark size="compact" />
+            </Link>
+            <nav
+              ref={topNavScrollRef}
+              className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              aria-label="Portal sections"
+            >
+              {navItems.map((s) => renderMobileNavLink(s, "top"))}
+            </nav>
+          </div>
         </div>
       </div>
 
