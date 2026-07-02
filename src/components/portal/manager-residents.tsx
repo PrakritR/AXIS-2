@@ -314,7 +314,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
-  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
+  // Per-charge reminder lists show the full saved default schedule, so bypass
+  // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
+  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
   const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   const [hcTick, setHcTick] = useState(0);

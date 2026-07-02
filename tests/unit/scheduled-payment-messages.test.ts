@@ -4,6 +4,7 @@ import {
   computePreDueSendAt,
   filterScheduledPaymentMessagesForUnpaidCharges,
   filterScheduledPaymentMessagesForVisibility,
+  manageableRemindersForCharge,
   projectScheduledPaymentMessages,
   scheduledMessageListId,
   shouldSendScheduledMessage,
@@ -231,6 +232,66 @@ describe("scheduled-payment-messages", () => {
       includeHidden: false,
     });
     expect(messages).toHaveLength(0);
+  });
+
+  it("per-charge reminders reflect the full saved default schedule, not the inbox window", () => {
+    // Charge due Jun 10; "now" is May 1 so every pre-due send is in the future.
+    const now = new Date(2026, 4, 1);
+    const savedDays = [7, 5, 3, 2, 1];
+    const messages = projectScheduledPaymentMessages({
+      managerUserId: "mgr-1",
+      charges: [makeCharge()],
+      settings: {
+        ...DEFAULT_MANAGER_AUTOMATION_SETTINGS,
+        preDueReminderDays: savedDays,
+        // A narrow inbox window would hide the far-out sends in Inbox → Schedule…
+        scheduleVisibilityMode: "days_before_send",
+        scheduleVisibilityDays: 2,
+      },
+      now,
+      // …but the per-charge view loads with includeHidden:true, so it sees them all.
+      includeHidden: true,
+    });
+
+    const manageable = manageableRemindersForCharge(
+      messages,
+      "hc_rent_test@test.com_prop1_2026-06",
+      12,
+      now,
+    );
+    const preDueDays = manageable
+      .filter((m) => m.kind === "pre_due")
+      .map((m) => m.daysBeforeDue)
+      .sort((a, b) => (b ?? 0) - (a ?? 0));
+    expect(preDueDays).toEqual(savedDays);
+    // Same-day reminder is included too; nothing is dropped by the inbox window.
+    expect(manageable.some((m) => m.kind === "same_day")).toBe(true);
+  });
+
+  it("per-charge reminders drop past-dated sends", () => {
+    // Charge due Jun 10; "now" is Jun 9 so 7d/5d/3d/2d sends are already in the past.
+    const now = new Date(2026, 5, 9);
+    const messages = projectScheduledPaymentMessages({
+      managerUserId: "mgr-1",
+      charges: [makeCharge()],
+      settings: {
+        ...DEFAULT_MANAGER_AUTOMATION_SETTINGS,
+        preDueReminderDays: [7, 5, 3, 2, 1],
+        scheduleVisibilityMode: "all",
+      },
+      now,
+      includeHidden: true,
+    });
+    const manageable = manageableRemindersForCharge(
+      messages,
+      "hc_rent_test@test.com_prop1_2026-06",
+      12,
+      now,
+    );
+    // Only the 1-day-before (Jun 9) and due-date (Jun 10) sends remain upcoming.
+    expect(manageable.every((m) => new Date(m.sendAt).getTime() >= new Date(2026, 5, 9).setHours(0, 0, 0, 0))).toBe(true);
+    expect(manageable.some((m) => m.kind === "pre_due" && m.daysBeforeDue === 1)).toBe(true);
+    expect(manageable.some((m) => m.kind === "pre_due" && (m.daysBeforeDue ?? 0) >= 2)).toBe(false);
   });
 
   it("filters inbox schedule rows to the days-before-send visibility window", () => {

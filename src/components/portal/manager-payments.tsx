@@ -80,7 +80,9 @@ export function ManagerPayments() {
   const [propertyTick, setPropertyTick] = useState(0);
   const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
-  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
+  // Per-payment reminder lists show the full saved default schedule, so bypass
+  // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
+  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
 
   useEffect(() => {
