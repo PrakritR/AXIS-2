@@ -1,14 +1,26 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { defineTool } from "../registry";
+import { defineTool, defineWriteTool } from "../registry";
 import type { AgentContext } from "../context";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import {
+  reconcileDuplicateHouseholdChargeRecords,
+  syncLedgerChargeEntry,
+} from "@/lib/reports/ledger-sync";
 import { loadAllManagerRows } from "./load-manager-rows";
 import {
   filterOverdueCharges,
   findOwnedOverdueCharge,
   buildRentReminderPreview,
+  buildBulkReminderPreview,
+  buildRentRemindersActionPreview,
+  buildChargeFromInput,
+  buildCreateChargePreview,
+  type CreateChargeInput,
   type RentReminderPreview,
 } from "./payments-logic";
+import { loadManagerApplications } from "./residents";
+import { findOwnedResident } from "./residents-logic";
 
 /** Server-side read of the landlord's charges, scoped by manager_user_id. */
 async function loadManagerCharges(ctx: AgentContext): Promise<HouseholdCharge[]> {
@@ -200,3 +212,149 @@ export async function executeSendRentReminder(
 
   return { ok: true, preview, delivery };
 }
+
+/**
+ * Gated write: send rent reminders for one or more overdue charges. Each id is
+ * re-resolved against the manager's own overdue set at preview AND execute
+ * time, and each send reuses executeSendRentReminder (per-charge audit row,
+ * same-day dedupe, inbox record).
+ */
+export const sendRentRemindersTool = defineWriteTool<{ chargeIds: string[] }, { reply: string }>({
+  name: "send_rent_reminders",
+  description:
+    "Send payment reminders (email + portal inbox) for one or more of the landlord's overdue charges. Use get_overdue_charges first to find the charge ids. The landlord sees exactly who will be reminded and must confirm before anything is sent.",
+  inputSchema: z
+    .object({
+      chargeIds: z
+        .array(z.string())
+        .min(1)
+        .max(50)
+        .describe("Charge ids from get_overdue_charges to send reminders for."),
+    })
+    .strict(),
+  preview: async (ctx, input) => {
+    const { resolved, missing } = buildBulkReminderPreview(await loadManagerCharges(ctx), input.chargeIds);
+    if (resolved.length === 0) throw new Error("None of these ids match your overdue charges.");
+    return buildRentRemindersActionPreview(resolved, missing);
+  },
+  handler: async (ctx, input) => {
+    const { resolved, missing } = buildBulkReminderPreview(await loadManagerCharges(ctx), input.chargeIds);
+    if (resolved.length === 0) throw new Error("None of these ids match your overdue charges anymore.");
+    const counts = { emailed: 0, portal_only: 0, already_sent: 0, email_failed: 0, not_sent: 0 };
+    for (const p of resolved) {
+      const result = await executeSendRentReminder(ctx, p.chargeId);
+      if (result.ok) counts[result.delivery] += 1;
+      else counts.not_sent += 1;
+    }
+    const parts: string[] = [];
+    if (counts.emailed) parts.push(`${counts.emailed} emailed`);
+    if (counts.portal_only) parts.push(`${counts.portal_only} recorded in the portal`);
+    if (counts.already_sent) parts.push(`${counts.already_sent} already reminded today`);
+    if (counts.email_failed) parts.push(`${counts.email_failed} failed to send`);
+    if (counts.not_sent) parts.push(`${counts.not_sent} could not be sent`);
+    // The set can drift between preview and confirm (e.g. a charge got paid);
+    // say so instead of silently shrinking the send.
+    if (missing.length) parts.push(`${missing.length} skipped (no longer overdue)`);
+    return { reply: `Reminders processed: ${parts.join(", ")}.` };
+  },
+});
+
+const CHARGE_KINDS = ["rent", "utilities", "late_fee", "security_deposit", "move_in_fee", "other_cost"] as const;
+
+const createChargeSchema = z
+  .object({
+    residentEmail: z
+      .string()
+      .describe("The resident's email, as returned by list_residents. Must be one of the landlord's own residents."),
+    kind: z.enum(CHARGE_KINDS).describe("The type of charge."),
+    title: z.string().min(1).max(120).describe("Short human-readable title, e.g. 'July rent' or 'Late fee'."),
+    amount: z.number().positive().max(100000).describe("Charge amount in dollars, e.g. 1500 or 49.5."),
+    dueDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe("Optional due date, YYYY-MM-DD."),
+  })
+  .strict();
+
+/**
+ * Gated write: create a household charge for one of the landlord's own
+ * residents. Persists through the same upsert + ledger-sync path as the
+ * Payments UI, so the ledger and reports stay consistent.
+ */
+export const createChargeTool = defineWriteTool<CreateChargeInput, { reply: string }>({
+  name: "create_charge",
+  description:
+    "Create a new household charge (rent, utilities, late fee, security deposit, move-in fee, or other cost) for one of the landlord's own residents. Use list_residents first to get the resident's email. The landlord sees the exact charge and must confirm before it is created.",
+  inputSchema: createChargeSchema,
+  preview: async (ctx, input) => {
+    const resident = findOwnedResident(await loadManagerApplications(ctx), input.residentEmail);
+    if (!resident) throw new Error("No resident with that email in this landlord's portfolio.");
+    return buildCreateChargePreview(
+      buildChargeFromInput(resident, input, ctx.landlordId, "preview", new Date().toISOString()),
+    );
+  },
+  handler: async (ctx, input) => {
+    const resident = findOwnedResident(await loadManagerApplications(ctx), input.residentEmail);
+    if (!resident) throw new Error("No resident with that email in this landlord's portfolio.");
+    const nowIso = new Date().toISOString();
+    const charge = buildChargeFromInput(resident, input, ctx.landlordId, randomUUID(), nowIso);
+
+    // Record intent first, idempotently: the same resident + kind + title +
+    // amount on the same day is treated as an accidental duplicate (a
+    // double-clicked or replayed confirm), while a distinct title still goes
+    // through.
+    const amountCents = Math.round(input.amount * 100);
+    const titleSlug = input.title.trim().toLowerCase();
+    const dedupeKey = `create_charge:${ctx.landlordId}:${charge.residentEmail}:${input.kind}:${titleSlug}:${amountCents}:${nowIso.slice(0, 10)}`;
+    const { error: auditError } = await ctx.db.from("audit_log").insert({
+      actor_user_id: ctx.userId,
+      landlord_id: ctx.landlordId,
+      action: "create_charge",
+      tool_name: "create_charge",
+      input_summary: { residentEmail: charge.residentEmail, kind: input.kind, amountCents },
+      result_summary: { chargeId: charge.id },
+      dedupe_key: dedupeKey,
+      created_at: nowIso,
+    });
+    if (auditError) {
+      if (auditError.code === "23505") {
+        return {
+          reply: `A ${charge.amountLabel} ${input.kind} charge for ${charge.residentName} was already created today; nothing new was created.`,
+        };
+      }
+      throw new Error("Could not record the action; no charge was created.");
+    }
+
+    // Same column mapping + ledger sync as the Payments UI route.
+    const { error } = await ctx.db.from("portal_household_charge_records").upsert(
+      {
+        id: charge.id,
+        manager_user_id: ctx.landlordId,
+        resident_user_id: null,
+        resident_email: charge.residentEmail,
+        property_id: charge.propertyId || null,
+        kind: charge.kind,
+        status: charge.status,
+        row_data: charge,
+        updated_at: nowIso,
+      },
+      { onConflict: "id" },
+    );
+    if (error) {
+      // The charge never persisted: the audit row must say so, and the cleared
+      // dedupe key lets a retry record a fresh attempt.
+      await ctx.db
+        .from("audit_log")
+        .update({ dedupe_key: null, result_summary: { chargeId: charge.id, saved: false } })
+        .eq("dedupe_key", dedupeKey);
+      throw new Error("Could not save the charge.");
+    }
+    await reconcileDuplicateHouseholdChargeRecords(ctx.db, ctx.landlordId).catch(() => undefined);
+    await syncLedgerChargeEntry(ctx.db, charge).catch(() => undefined);
+
+    return {
+      reply: `Created a ${charge.amountLabel} ${input.kind} charge for ${charge.residentName}${charge.dueDateLabel ? `, due ${charge.dueDateLabel}` : ""}.`,
+    };
+  },
+});
