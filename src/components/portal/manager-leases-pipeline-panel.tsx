@@ -2,7 +2,6 @@
 
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
@@ -26,6 +25,8 @@ import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerat
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import { LeaseEditRequestModal, LEASE_EDIT_REQUEST_TEMPLATE_INTRO } from "@/components/portal/lease-edit-request-modal";
+import { PRIMARY_AXIS_ADMIN_EMAIL, PRIMARY_AXIS_ADMIN_LABEL } from "@/data/inbox-scoped-directory";
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
@@ -91,7 +92,8 @@ export function ManagerLeasesPipelinePanel({
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [adminNoteById, setAdminNoteById] = useState<Record<string, string>>({});
+  const [editRequestRow, setEditRequestRow] = useState<LeasePipelineRow | null>(null);
+  const [editRequestBusy, setEditRequestBusy] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
   const [generatingRowId, setGeneratingRowId] = useState<string | null>(null);
@@ -345,20 +347,69 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onRequestAdminEdits = (row: LeasePipelineRow) => {
-    const text = adminNoteById[row.id]?.trim();
-    if (!text) {
-      showToast("Add a message for the admin team.");
-      return;
+    setEditRequestRow(row);
+  };
+
+  function leaseEditRequestSubject(row: LeasePipelineRow): string {
+    const unit = row.unit.trim() || "unit";
+    return `Lease edits requested — ${row.residentName || "Resident"} (${unit})`;
+  }
+
+  function leaseEditRequestBody(row: LeasePipelineRow, note: string): string {
+    const unit = row.unit.trim() || "the unit";
+    const details = note.trim() || "(No additional details provided.)";
+    const lines = [
+      LEASE_EDIT_REQUEST_TEMPLATE_INTRO,
+      "",
+      `Lease: ${row.residentName || "Resident"} — ${unit}`,
+      "",
+      "Issue described by the property manager:",
+      details,
+      "",
+      "Property Manager",
+    ];
+    return lines.join("\n");
+  }
+
+  const onSubmitEditRequest = async (note: string) => {
+    const row = editRequestRow;
+    if (!row || editRequestBusy) return;
+    setEditRequestBusy(true);
+    try {
+      const subject = leaseEditRequestSubject(row);
+      const body = leaseEditRequestBody(row, note);
+
+      // Notify admin via BOTH the Axis portal inbox and a Resend email. The
+      // shared helper posts to /api/portal/send-inbox-message with
+      // deliverToPortalInbox + deliverViaEmail, matching the other send-* routes.
+      const delivery = await deliverPortalInboxMessage({
+        fromName: "Property Manager",
+        toEmails: [PRIMARY_AXIS_ADMIN_EMAIL],
+        subject,
+        text: body,
+      });
+
+      const result = sendLeaseToAdminReview(row.id, managerUserId);
+      if (!result.ok) {
+        showToast(result.error);
+        return;
+      }
+      appendLeaseThreadMessage(row.id, "manager", body, managerUserId);
+
+      if (delivery.ok) {
+        showToast(
+          delivery.skipped
+            ? "Sent to Admin Review — admin inbox updated."
+            : "Sent to Admin Review — admin notified by inbox and email.",
+        );
+      } else {
+        showToast(`Sent to Admin Review, but admin notification failed: ${delivery.error ?? "unknown error"}`);
+      }
+      setEditRequestRow(null);
+      setExpandedId(null);
+    } finally {
+      setEditRequestBusy(false);
     }
-    const result = sendLeaseToAdminReview(row.id, managerUserId);
-    if (!result.ok) {
-      showToast(result.error);
-      return;
-    }
-    appendLeaseThreadMessage(row.id, "manager", text, managerUserId);
-    setAdminNoteById((s) => ({ ...s, [row.id]: "" }));
-    showToast("Sent to Admin Review.");
-    setExpandedId(null);
   };
 
   const onMoveToManagerReview = (row: LeasePipelineRow) => {
@@ -434,6 +485,18 @@ export function ManagerLeasesPipelinePanel({
           onClose={() => setSigningRow(null)}
         />
       ) : null}
+      <LeaseEditRequestModal
+        open={editRequestRow !== null}
+        residentName={editRequestRow?.residentName ?? ""}
+        unit={editRequestRow?.unit ?? ""}
+        recipientLabel={`${PRIMARY_AXIS_ADMIN_LABEL} (${PRIMARY_AXIS_ADMIN_EMAIL})`}
+        busy={editRequestBusy}
+        onClose={() => {
+          if (editRequestBusy) return;
+          setEditRequestRow(null);
+        }}
+        onSubmit={onSubmitEditRequest}
+      />
       <LeaseRegenerateConfirmModal
         open={regenerateConfirmRow !== null}
         busy={Boolean(regenerateConfirmRow && generatingRowId === regenerateConfirmRow.id)}
@@ -560,23 +623,6 @@ export function ManagerLeasesPipelinePanel({
                               <p className="text-amber-700">Pending</p>
                             )}
                           </div>
-                        </div>
-                      ) : null}
-
-                      {tab === "manager" ? (
-                        <div className="mt-3 space-y-3">
-                          <Textarea
-                            rows={2}
-                            placeholder="Message for admin when requesting edits…"
-                            value={adminNoteById[row.id] ?? ""}
-                            onChange={(e) =>
-                              setAdminNoteById((s) => ({
-                                ...s,
-                                [row.id]: e.target.value,
-                              }))
-                            }
-                            className="max-w-xl rounded-xl border border-border bg-card text-sm"
-                          />
                         </div>
                       ) : null}
 
