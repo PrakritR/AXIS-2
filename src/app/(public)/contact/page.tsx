@@ -50,8 +50,7 @@ function ContactInner() {
     <div className="min-h-screen px-4 py-16 sm:py-20">
       <div className="mx-auto max-w-2xl">
         <div className="glass-card rounded-3xl p-8">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/80">Contact</p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Connect with Axis Team</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Connect with Axis Team</h1>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
             Schedule a meeting with our team or send us a message — whatever works best for you.
           </p>
