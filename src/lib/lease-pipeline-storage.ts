@@ -466,6 +466,9 @@ function write(rows: LeasePipelineRow[], scopeUserId?: string | null) {
   persistLeasePipelineToSession(rows, scopeUserId ?? activeLeasePipelineScopeUserId);
   leasePipelineLastSyncedAt = Date.now();
   emit();
+  // Demo sandbox is local-only: keep the in-memory/session write but never
+  // mirror to the server.
+  if (isDemoModeActive()) return;
   const payload = JSON.stringify({ action: "replace", rows });
   const byteLength = new TextEncoder().encode(payload).length;
   const shouldUseRowUpserts = byteLength > 3_500_000 || rows.some((row) => Boolean(row.managerUploadedPdf?.dataUrl));
@@ -517,7 +520,7 @@ function findRawLeaseRowIndex(rowId: string, managerUserId?: string | null): num
 export type LeasePipelineActionResult = { ok: true } | { ok: false; error: string };
 
 function persistLeaseRowToServer(row: LeasePipelineRow) {
-  if (!canUseStorage()) return;
+  if (!canUseStorage() || isDemoModeActive()) return;
   void fetch("/api/portal-lease-pipeline", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -528,6 +531,7 @@ function persistLeaseRowToServer(row: LeasePipelineRow) {
 
 async function persistLeaseRowToServerAwait(row: LeasePipelineRow): Promise<boolean> {
   if (!canUseStorage()) return false;
+  if (isDemoModeActive()) return true;
   try {
     const res = await fetch("/api/portal-lease-pipeline", {
       method: "POST",

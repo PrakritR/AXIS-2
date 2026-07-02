@@ -594,6 +594,22 @@ html {
   border-color: rgba(255, 255, 255, 0.14);
 }
 
+/*
+ * Public /demo sandbox: reused portal modals (New listing, Add payment,
+ * Compose, …) render bounded inside the demo frame rather than covering the
+ * whole browser. `contain: layout paint` makes the frame the containing block
+ * for the modals' `position: fixed` overlays (both those portaled into the
+ * frame and those rendered inline) and clips them to the frame box.
+ */
+.demo-portal-frame {
+  contain: layout paint;
+}
+
+/* Keep viewport-based modal sizing bounded to the frame, not the browser. */
+.demo-portal-frame .min-h-screen {
+  min-height: 100%;
+}
+
 .surface-panel {
   background: #ffffff;
 }

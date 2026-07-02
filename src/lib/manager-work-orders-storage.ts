@@ -52,7 +52,7 @@ function emit() {
 }
 
 function mirrorWorkOrdersToServer(rows: DemoManagerWorkOrderRow[]) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-work-orders", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -62,7 +62,7 @@ function mirrorWorkOrdersToServer(rows: DemoManagerWorkOrderRow[]) {
 }
 
 function deleteWorkOrderFromServer(id: string) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-work-orders", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

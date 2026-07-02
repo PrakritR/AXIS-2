@@ -7,6 +7,7 @@ import { useIsClient } from "@/hooks/use-is-client";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { MODAL_PANEL_CLASS } from "@/components/ui/modal-styles";
+import { usePortalContainer } from "@/components/ui/portal-container-context";
 import { cn } from "@/lib/utils";
 
 export { MODAL_INSET_BOX_CLASS, MODAL_INSET_BOX_PRE_CLASS, MODAL_PANEL_CLASS, MODAL_WARNING_BOX_CLASS, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal-styles";
@@ -29,6 +30,7 @@ export function Modal({
   stackClassName?: string;
 }) {
   const isClient = useIsClient();
+  const portalContainer = usePortalContainer();
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(open, panelRef);
 
@@ -72,6 +74,6 @@ export function Modal({
         </div>
       </div>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }

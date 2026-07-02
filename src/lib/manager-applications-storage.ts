@@ -233,7 +233,7 @@ function emit() {
 }
 
 function mirrorApplicationsToServer(rows: DemoApplicantRow[]) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/manager-applications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -243,7 +243,7 @@ function mirrorApplicationsToServer(rows: DemoApplicantRow[]) {
 }
 
 function mirrorApplicationRowToServer(row: DemoApplicantRow) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/manager-applications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -278,6 +278,7 @@ export async function upsertApplicationRowToServerAwait(
 
 export async function deleteManagerApplicationFromServer(id: string): Promise<{ ok: boolean; error?: string }> {
   if (typeof window === "undefined" || !id.trim()) return { ok: false, error: "Application ID is required." };
+  if (isDemoModeActive()) return { ok: true };
   try {
     const res = await fetch("/api/manager-applications", {
       method: "POST",

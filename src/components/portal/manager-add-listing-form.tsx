@@ -105,6 +105,7 @@ import {
 } from "@/lib/wizard-field-errors";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
 import { Modal } from "@/components/ui/modal";
+import { usePortalContainer } from "@/components/ui/portal-container-context";
 
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-border bg-auth-input-bg px-3.5 py-2.5 text-[14px] text-foreground outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20";
@@ -843,6 +844,7 @@ export function ManagerAddListingForm({
   // Portal to document.body once mounted, so this modal can't get visually trapped by an
   // ancestor that creates a containing block for fixed-position descendants (e.g. transform/filter).
   const mounted = useIsClient();
+  const portalContainer = usePortalContainer();
   const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const [serviceOffers, setServiceOffers] = useState<ManagerListingServiceOption[]>(() => {
@@ -4043,6 +4045,6 @@ export function ManagerAddListingForm({
         </div>
       </Modal>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }
