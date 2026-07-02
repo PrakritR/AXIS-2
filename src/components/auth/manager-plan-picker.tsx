@@ -90,10 +90,12 @@ function ManagerPlanPickerInner() {
   }, []);
 
   useEffect(() => {
-    const tier = searchParams.get("tier");
-    if (tier && isPlanTierId(tier)) setSelectedTierId(tier);
-    const billing = searchParams.get("billing");
-    if (billing === "monthly" || billing === "annual") setBilling(billing);
+    void Promise.resolve().then(() => {
+      const tier = searchParams.get("tier");
+      if (tier && isPlanTierId(tier)) setSelectedTierId(tier);
+      const billing = searchParams.get("billing");
+      if (billing === "monthly" || billing === "annual") setBilling(billing);
+    });
   }, [searchParams]);
 
   useEffect(() => {
