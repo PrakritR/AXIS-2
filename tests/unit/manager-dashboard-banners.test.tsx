@@ -7,8 +7,6 @@
 // "Pending & overdue payments" table (which still lists overdue charges) stay.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
-import fs from "node:fs";
-import path from "node:path";
 
 // ── Inject a deterministic scenario through the data layer the dashboard reads.
 // One overdue charge + one on-time pending charge + apps/leases/inbox items, so
@@ -104,9 +102,6 @@ vi.mock("@/lib/demo-property-pipeline", () => ({ PROPERTY_PIPELINE_EVENT: "prope
 
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 
-const EVIDENCE_DIR =
-  "/var/folders/ds/wcjw4lg13z33mjzn973y5rhm0000gn/T/no-mistakes-evidence/01KWGXMA7B8JN9WEP1Z8XXSNA0";
-
 function findBannerBlock(): HTMLElement {
   // The Action-required banner block is the wrapper holding the NotifBanners
   // (portal-banner-* pills). Grab the closest such wrapper via a known banner.
@@ -148,16 +143,5 @@ describe("Manager dashboard — overdue-charges banner removed", () => {
     // The overdue charge's resident + charge title appear in the payments table.
     expect(screen.getAllByText("Dana Ramirez").length).toBeGreaterThan(0);
     expect(screen.getByText(/May rent/)).toBeTruthy();
-  });
-
-  it("writes the rendered banner-block HTML as review evidence", () => {
-    const { container } = render(<ManagerDashboard />);
-    fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
-    fs.writeFileSync(
-      path.join(EVIDENCE_DIR, "manager-dashboard-after.rendered.html"),
-      container.innerHTML,
-      "utf8",
-    );
-    expect(fs.existsSync(path.join(EVIDENCE_DIR, "manager-dashboard-after.rendered.html"))).toBe(true);
   });
 });
