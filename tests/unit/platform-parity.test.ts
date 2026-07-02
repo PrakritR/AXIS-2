@@ -8,6 +8,7 @@ import {
   isNativeDeepLinkPath,
   REGISTERED_PUSH_DEEP_LINKS,
 } from "@/lib/platform/parity";
+import { isNativeAppAllowedPath } from "@/lib/auth/native-entry-paths";
 import { RESIDENT_FREE_MANAGER_SECTIONS } from "@/lib/manager-access";
 import {
   RESIDENT_APPROVED_PORTAL_SECTIONS,
@@ -27,6 +28,14 @@ describe("platform parity (web + native WebView)", () => {
   it("documents that portal UI is shared — no duplicate app routes", () => {
     expect(IN_APP_PATH_PREFIXES).toContain("/resident/");
     expect(IN_APP_PATH_PREFIXES).toContain("/portal/");
+  });
+
+  it("public /contact page is an in-app route reachable from inside the native app", () => {
+    // Linked from the admin portal ("Contact us") and the marketing footer/CTA,
+    // so it must load inside the WebView instead of kicking out to a browser.
+    expect(isInAppPath("/contact")).toBe(true);
+    expect(isNativeDeepLinkPath("/contact")).toBe(true);
+    expect(isNativeAppAllowedPath("/contact")).toBe(true);
   });
 
   it("resident free-tier ids match manager-access gating", () => {
