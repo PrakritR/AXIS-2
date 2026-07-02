@@ -17,6 +17,8 @@ import {
   type DemoPortalRole,
 } from "@/lib/demo/demo-session";
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
+import { DemoFrameAssistant } from "@/components/demo/demo-frame-assistant";
+import { DemoShowcaseOverlay, type ShowcaseKind } from "@/components/demo/demo-showcase-overlay";
 
 function definitionForRole(role: DemoPortalRole): PortalDefinition {
   if (role === "resident") {
@@ -46,7 +48,34 @@ const TOUR_PROMPTS = [
   "How many leases are awaiting signature?",
 ];
 
-type Step = { type: "section"; section: string } | { type: "assistant"; prompt: string };
+type Step =
+  | { type: "section"; section: string }
+  | { type: "showcase"; kind: ShowcaseKind }
+  | { type: "assistant"; prompt: string };
+
+/** How long each step is held on screen (ms). */
+const STEP_DELAY: Record<Step["type"], number> = {
+  section: 2600,
+  showcase: 6600,
+  assistant: 9000,
+};
+
+/**
+ * Build the ordered auto-play script: walk every tour section in registry order,
+ * and right after the relevant tab, drop in a scripted showcase that demonstrates
+ * a real flow working — creating a listing (after Properties) and a rent payment
+ * clearing (after Payments) — then finish with a couple of live assistant asks.
+ */
+function buildSteps(def: PortalDefinition): Step[] {
+  const steps: Step[] = [];
+  for (const section of tourSections(def)) {
+    steps.push({ type: "section", section });
+    if (section === "properties") steps.push({ type: "showcase", kind: "listing" });
+    if (section === "payments") steps.push({ type: "showcase", kind: "payment" });
+  }
+  for (const prompt of TOUR_PROMPTS) steps.push({ type: "assistant", prompt });
+  return steps;
+}
 
 function PlayIcon() {
   return (
@@ -108,19 +137,18 @@ export function DemoPortalShell() {
   }, []);
 
   // --- Run demo auto-play ----------------------------------------------------
-  const steps: Step[] = useMemo(() => {
-    const s: Step[] = tourSections(def).map((sec) => ({ type: "section", section: sec }));
-    for (const prompt of TOUR_PROMPTS) s.push({ type: "assistant", prompt });
-    return s;
-  }, [def]);
+  const steps: Step[] = useMemo(() => buildSteps(def), [def]);
 
   const [running, setRunning] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  // The scripted feature demo (listing / payment) currently overlaying the frame.
+  const [showcase, setShowcase] = useState<ShowcaseKind | null>(null);
 
   const switchRole = useCallback(
     (next: DemoPortalRole) => {
       setRunning(false);
       setStepIndex(0);
+      setShowcase(null);
       closeAxisAssistant();
       setDemoRole(next);
       setSection("dashboard");
@@ -130,21 +158,28 @@ export function DemoPortalShell() {
   );
 
   useEffect(() => {
-    if (!running) return;
+    if (!running) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear any showcase overlay when the tour stops
+      setShowcase(null);
+      return;
+    }
     const step = steps[stepIndex];
     if (!step) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- tour finished; stop the timer-driven autoplay
       setRunning(false);
       return;
     }
     if (step.type === "section") {
+      setShowcase(null);
       const firstTab = def.sections.find((s) => s.section === step.section)?.tabs[0]?.id ?? null;
       selectSection(step.section, firstTab);
+    } else if (step.type === "showcase") {
+      // Keep the underlying panel (Properties / Payments) and overlay the demo.
+      setShowcase(step.kind);
     } else {
+      setShowcase(null);
       sendAxisAssistantPrompt(step.prompt);
     }
-    const delay = step.type === "assistant" ? 9000 : 3400;
-    const id = window.setTimeout(() => setStepIndex((i) => i + 1), delay);
+    const id = window.setTimeout(() => setStepIndex((i) => i + 1), STEP_DELAY[step.type]);
     return () => window.clearTimeout(id);
   }, [running, stepIndex, steps, def, selectSection]);
 
@@ -373,6 +408,14 @@ export function DemoPortalShell() {
 
           <DemoSectionRenderer key={`${role}:${section}`} role={role} section={section} tab={tab} meta={meta} />
         </div>
+
+        {/* Scripted feature demo (listing / payment), overlaid within the frame */}
+        {showcase ? <DemoShowcaseOverlay kind={showcase} /> : null}
+
+        {/* In-demo, portal-scoped Axis Assistant — pinned bottom-right INSIDE the
+            frame, exactly where it lives in the real property portal. Answers
+            questions about this demo portfolio via the sandboxed demo-chat. */}
+        <DemoFrameAssistant />
       </div>
     </div>
     </PortalContainerProvider>
