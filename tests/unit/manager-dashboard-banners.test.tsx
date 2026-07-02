@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 //
-// Renders the manager Dashboard with a scenario that has BOTH overdue charges
-// and other action items. Locks in the "Remove overdue-charges banner" change:
-// the rose "N overdue charges totalling $X" NotifBanner must be gone from the
-// Action-required banner block, while every other banner and the separate
-// "Pending & overdue payments" table (which still lists overdue charges) stay.
+// Renders the manager Dashboard with a scenario that has action items (overdue
+// charges, apps, leases, inbox, properties). Locks in the "remove all
+// top-of-page notification banners" change: NO NotifBanner strip renders on the
+// dashboard, while the separate "Pending & overdue payments" table (which still
+// lists overdue charges) stays.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 
 // ── Inject a deterministic scenario through the data layer the dashboard reads.
 // One overdue charge + one on-time pending charge + apps/leases/inbox items, so
@@ -102,36 +102,19 @@ vi.mock("@/lib/demo-property-pipeline", () => ({ PROPERTY_PIPELINE_EVENT: "prope
 
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 
-function findBannerBlock(): HTMLElement {
-  // The Action-required banner block is the wrapper holding the NotifBanners
-  // (portal-banner-* pills). Grab the closest such wrapper via a known banner.
-  const anyBanner = document.querySelector(".portal-banner-info, .portal-banner-pending, .portal-banner-danger");
-  expect(anyBanner, "expected an action-required banner to render").not.toBeNull();
-  return anyBanner!.parentElement as HTMLElement;
-}
-
-describe("Manager dashboard — overdue-charges banner removed", () => {
+describe("Manager dashboard — top notification banners removed", () => {
   afterEach(cleanup);
 
-  it("does not render the rose overdue-charges banner even when overdue charges exist", () => {
+  it("renders no top-of-page notification banner strip, even with action items", () => {
     render(<ManagerDashboard />);
 
-    // The banner block renders (other action items are present)...
-    const block = findBannerBlock();
-    // ...but the rose danger banner (the only user of portal-banner-danger here)
-    // and its "overdue charges totalling ..." copy are gone.
+    // No NotifBanner pills of any tone render anywhere on the dashboard.
     expect(document.querySelector(".portal-banner-danger")).toBeNull();
-    expect(within(block).queryByText(/overdue charges? totalling/i)).toBeNull();
-    expect(block.textContent).not.toMatch(/across residents/i);
-  });
-
-  it("keeps the other action-required banners", () => {
-    render(<ManagerDashboard />);
-    const block = findBannerBlock();
-    expect(within(block).getByText(/waiting for a decision/i)).toBeTruthy(); // applications
-    expect(within(block).getByText(/your signature/i)).toBeTruthy(); // leases
-    expect(within(block).getByText(/unread message/i)).toBeTruthy(); // inbox
-    expect(within(block).getByText(/pending Axis approval/i)).toBeTruthy(); // properties
+    expect(document.querySelector(".portal-banner-info")).toBeNull();
+    expect(document.querySelector(".portal-banner-pending")).toBeNull();
+    // The old action-required banner copy is gone.
+    expect(screen.queryByText(/overdue charges? totalling/i)).toBeNull();
+    expect(screen.queryByText(/waiting for a decision/i)).toBeNull();
   });
 
   it("still surfaces the overdue charge in the Pending & overdue payments table", () => {

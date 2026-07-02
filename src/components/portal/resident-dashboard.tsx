@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ManagerPortalPageShell,
@@ -85,25 +84,6 @@ function StatusBadge({ label, tone }: { label: string; tone: string }) {
     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${cls[tone] ?? cls.slate}`}>
       {label}
     </span>
-  );
-}
-
-function NotifBanner({
-  tone,
-  children,
-}: {
-  tone: "amber" | "blue" | "rose";
-  children: React.ReactNode;
-}) {
-  const cls = {
-    amber: "portal-banner-pending",
-    blue: "portal-banner-info",
-    rose: "portal-banner-danger",
-  }[tone];
-  return (
-    <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
-      {children}
-    </div>
   );
 }
 
@@ -295,50 +275,6 @@ export function ResidentDashboard({
       <div className={PORTAL_DASHBOARD_STACK}>
 
         <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>{statusCopy}</div>
-
-        {(pendingCharges.length > 0 || lease.cta || inbox > 0 || (canUseFullPortal && openWO > 0)) && (
-          <div className="space-y-2">
-            {pendingCharges.length > 0 && (
-              <NotifBanner tone="amber">
-                <span>
-                  <span className="font-semibold">{dollars(pendingTotal)}</span>{" "}
-                  outstanding balance — {pendingCharges.length} pending charge{pendingCharges.length === 1 ? "" : "s"}
-                </span>
-                <Link href={`${BASE}/payments`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Payments →
-                </Link>
-              </NotifBanner>
-            )}
-            {lease.cta && (
-              <NotifBanner tone="blue">
-                <span>Your lease is ready — <span className="font-semibold">signature required</span></span>
-                <Link href={`${BASE}/lease`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Lease →
-                </Link>
-              </NotifBanner>
-            )}
-            {inbox > 0 && (
-              <NotifBanner tone="blue">
-                <span>
-                  <span className="font-semibold">{inbox}</span> unread message{inbox === 1 ? "" : "s"} in your inbox
-                </span>
-                <Link href={`${BASE}/inbox/unopened`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Inbox →
-                </Link>
-              </NotifBanner>
-            )}
-            {canUseFullPortal && openWO > 0 && (
-              <NotifBanner tone="rose">
-                <span>
-                  <span className="font-semibold">{openWO}</span> open maintenance request{openWO === 1 ? "" : "s"} awaiting scheduling
-                </span>
-                <Link href={`${BASE}/services/work-orders`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Work orders →
-                </Link>
-              </NotifBanner>
-            )}
-          </div>
-        )}
 
         {appStatus === "approved" ? (
           <>

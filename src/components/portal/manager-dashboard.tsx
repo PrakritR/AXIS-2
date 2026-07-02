@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -60,28 +59,6 @@ function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
   return formatPacificDateTime(d);
-}
-
-function NotifBanner({
-  tone,
-  children,
-}: {
-  tone: "amber" | "blue" | "yellow" | "rose";
-  children: React.ReactNode;
-}) {
-  const cls = {
-    amber: "portal-banner-pending",
-    blue: "portal-banner-info",
-    yellow: "portal-banner-pending",
-    rose: "portal-banner-danger",
-  }[tone];
-  return (
-    <div
-      className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls} [html[data-native]_&]:min-w-[min(100%,17rem)] [html[data-native]_&]:shrink-0`}
-    >
-      {children}
-    </div>
-  );
 }
 
 export function ManagerDashboard() {
@@ -201,91 +178,17 @@ export function ManagerDashboard() {
     activeResidents,
     pendingLeaseRows,
     pendingCharges,
-    inbox,
     inboxThreads,
-    needsManagerSig,
     totalProperties,
     pendingProperties,
     tours,
   } = data;
 
   const pendingTours = tours.filter((t) => t.status === "pending");
-  const nextTour = tours.find((t) => t.status === "confirmed") ?? null;
 
   return (
     <ManagerPortalPageShell title="Dashboard" hideTitleOnNative>
       <div className={PORTAL_DASHBOARD_STACK}>
-
-        {/* ── Action-required banners ── */}
-        {(pendingApps.length > 0 ||
-          needsManagerSig > 0 ||
-          inbox > 0 ||
-          pendingTours.length > 0 ||
-          nextTour ||
-          pendingProperties > 0) && (
-          <div className="space-y-2 [html[data-native]_&]:flex [html[data-native]_&]:gap-2 [html[data-native]_&]:overflow-x-auto [html[data-native]_&]:space-y-0 [html[data-native]_&]:pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [html[data-native]_&]:[&::-webkit-scrollbar]:hidden">
-            {pendingTours.length > 0 && (
-              <NotifBanner tone="amber">
-                <span>
-                  <span className="font-semibold">{pendingTours.length}</span> pending tour request{pendingTours.length === 1 ? "" : "s"} awaiting your approval
-                </span>
-                <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Calendar →
-                </Link>
-              </NotifBanner>
-            )}
-            {pendingApps.length > 0 && (
-              <NotifBanner tone="amber">
-                <span>
-                  <span className="font-semibold">{pendingApps.length}</span> application{pendingApps.length === 1 ? "" : "s"} waiting for a decision
-                </span>
-                <Link href={`${BASE}/applications`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Applications →
-                </Link>
-              </NotifBanner>
-            )}
-            {needsManagerSig > 0 && (
-              <NotifBanner tone="blue">
-                <span>
-                  <span className="font-semibold">{needsManagerSig}</span> lease{needsManagerSig === 1 ? "" : "s"} need{needsManagerSig === 1 ? "s" : ""} your signature
-                </span>
-                <Link href={`${BASE}/leases`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Leases →
-                </Link>
-              </NotifBanner>
-            )}
-            {inbox > 0 && (
-              <NotifBanner tone="blue">
-                <span>
-                  <span className="font-semibold">{inbox}</span> unread message{inbox === 1 ? "" : "s"} in your inbox
-                </span>
-                <Link href={`${BASE}/inbox/unopened`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Inbox →
-                </Link>
-              </NotifBanner>
-            )}
-            {nextTour && (
-              <NotifBanner tone="yellow">
-                <span>
-                  Next confirmed tour{tours.filter((t) => t.status === "confirmed").length > 1 ? ` (${tours.filter((t) => t.status === "confirmed").length} total)` : ""}: <span className="font-semibold">{nextTour.label}</span>{nextTour.propertyTitle ? ` · ${nextTour.propertyTitle}` : ""} at <span className="font-semibold">{fmt(nextTour.start)}</span>
-                </span>
-                <Link href={`${BASE}/calendar`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Calendar →
-                </Link>
-              </NotifBanner>
-            )}
-            {pendingProperties > 0 && (
-              <NotifBanner tone="amber">
-                <span>
-                  <span className="font-semibold">{pendingProperties}</span> propert{pendingProperties === 1 ? "y" : "ies"} pending Axis approval
-                </span>
-                <Link href={`${BASE}/properties`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Properties →
-                </Link>
-              </NotifBanner>
-            )}
-          </div>
-        )}
 
         {/* ── KPI tiles ── */}
         <div className="grid grid-cols-2 gap-3">

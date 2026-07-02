@@ -110,7 +110,10 @@ type PlanModalState =
       fromTier: ManagerSkuTier;
     };
 
-export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
+export function ManagerPlan({
+  embedded = false,
+  showCurrentPlan = true,
+}: { embedded?: boolean; showCurrentPlan?: boolean } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const planBasePath = "/portal";
@@ -532,7 +535,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
       id={embedded ? MANAGER_PLAN_PORTAL_SECTION_ID : undefined}
     >
         {/* Current plan summary */}
-        {!sub ? (
+        {showCurrentPlan && (!sub ? (
           <div className="h-36 animate-pulse rounded-2xl border border-border bg-accent/30" aria-hidden />
         ) : (
           <section className="surface-panel overflow-hidden rounded-2xl border border-border shadow-[var(--shadow-card)]">
@@ -675,7 +678,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
               </div>
             ) : null}
           </section>
-        )}
+        ))}
 
         {/* Compare plans */}
         <section>

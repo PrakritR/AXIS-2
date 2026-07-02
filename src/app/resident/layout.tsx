@@ -1,4 +1,4 @@
-import { AdminPreviewBanner } from "@/components/portal/admin-preview-banner";
+import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileBackBar } from "@/components/portal/portal-mobile-back-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
@@ -11,11 +11,8 @@ import {
   PORTAL_MAIN_CONTENT_ID,
   PORTAL_MAIN_CONTENT_INNER_CLASS,
   PORTAL_SHELL_ROOT_CLASS,
-  PORTAL_TOP_BANNER_STRIP_CLASS,
 } from "@/lib/portal-layout-classes";
-import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
-import { getPortalAccessContext, hasAdminRole } from "@/lib/auth/portal-access";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
 import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
@@ -31,24 +28,12 @@ export default async function ResidentLayout({ children }: { children: React.Rea
     : null;
   const sidebarCollapsed = await getSidebarCollapsed();
 
-  const ctx = await getPortalAccessContext();
-  const preview = await getAdminPreviewFromCookies();
-  const showPreviewBanner = hasAdminRole(ctx) && preview?.portal === "resident";
-  let previewLabel: string | null = null;
-  if (showPreviewBanner && preview) {
-    previewLabel = profile?.full_name?.trim() || profile?.email || preview.targetUserId;
-  }
-
   return (
+    <AxisAssistant managerName={profile?.full_name ?? null}>
     <div className={PORTAL_SHELL_ROOT_CLASS}>
       <SurfaceThemeDefault theme="light" />
       <PublicHomePrefetch />
       <PortalDataPrefetch kind="resident" />
-      {showPreviewBanner ? (
-        <div className={`${PORTAL_TOP_BANNER_STRIP_CLASS} shrink-0`}>
-          <AdminPreviewBanner label={previewLabel} />
-        </div>
-      ) : null}
       <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
         <PortalSkipLink />
         <PortalSidebar
@@ -73,5 +58,6 @@ export default async function ResidentLayout({ children }: { children: React.Rea
         </div>
       </div>
     </div>
+    </AxisAssistant>
   );
 }

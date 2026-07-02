@@ -28,7 +28,6 @@ import {
   readLeasePipeline,
   syncLeasePipelineFromServer,
 } from "@/lib/lease-pipeline-storage";
-import { syncHouseholdChargesFromServer } from "@/lib/household-charges";
 import { readBugFeedbackRows, syncBugFeedbackFromServer } from "@/lib/portal-bug-feedback";
 
 type PortalCounts = { managers: number; residents: number };
@@ -37,25 +36,6 @@ function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
   return formatPacificDateTime(d);
-}
-
-function NotifBanner({
-  tone,
-  children,
-}: {
-  tone: "amber" | "blue" | "rose";
-  children: React.ReactNode;
-}) {
-  const cls = {
-    amber: "portal-banner-pending",
-    blue: "portal-banner-info",
-    rose: "portal-banner-danger",
-  }[tone];
-  return (
-    <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
-      {children}
-    </div>
-  );
 }
 
 function Tile({
@@ -219,14 +199,11 @@ export function AdminDashboard() {
   const {
     pendingProps,
     totalProps,
-    leasesInAdminReview,
     adminReviewLeases,
     pendingPropertyRows,
-    inboxUnread,
     inboxPreview,
     feedbackTotal,
     openFeedback,
-    openFeedbackTotal,
     upcomingMeetings,
     pendingMeetingCount,
     totalMeetings,
@@ -234,68 +211,10 @@ export function AdminDashboard() {
   } = data;
 
   const totalUsers = counts.managers + counts.residents;
-  const openFeedbackCount = openFeedbackTotal;
-  const hasBanners =
-    pendingProps > 0 || leasesInAdminReview > 0 || inboxUnread > 0 || pendingMeetingCount > 0 || openFeedbackCount > 0;
 
   return (
     <div className={`${PORTAL_SECTION_SURFACE} ${PORTAL_DASHBOARD_STACK}`}>
       <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-foreground [html[data-native]_&]:text-[1.2rem]">Dashboard</h1>
-
-      {hasBanners && (
-        <div className="space-y-2">
-          {pendingProps > 0 && (
-            <NotifBanner tone="amber">
-              <span>
-                <span className="font-semibold">{pendingProps}</span> propert{pendingProps === 1 ? "y" : "ies"} pending your approval
-              </span>
-              <Link href="/admin/properties" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Properties →
-              </Link>
-            </NotifBanner>
-          )}
-          {leasesInAdminReview > 0 && (
-            <NotifBanner tone="blue">
-              <span>
-                <span className="font-semibold">{leasesInAdminReview}</span> lease{leasesInAdminReview === 1 ? "" : "s"} in admin review
-              </span>
-              <Link href="/admin/leases" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Leases →
-              </Link>
-            </NotifBanner>
-          )}
-          {inboxUnread > 0 && (
-            <NotifBanner tone="blue">
-              <span>
-                <span className="font-semibold">{inboxUnread}</span> unread message{inboxUnread === 1 ? "" : "s"} in admin inbox
-              </span>
-              <Link href="/admin/inbox/unopened" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Inbox →
-              </Link>
-            </NotifBanner>
-          )}
-          {pendingMeetingCount > 0 && (
-            <NotifBanner tone="blue">
-              <span>
-                <span className="font-semibold">{pendingMeetingCount}</span> meeting request{pendingMeetingCount === 1 ? "" : "s"} need confirmation
-              </span>
-              <Link href="/admin/events" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Meetings →
-              </Link>
-            </NotifBanner>
-          )}
-          {openFeedbackCount > 0 && (
-            <NotifBanner tone="rose">
-              <span>
-                <span className="font-semibold">{openFeedbackCount}</span> open feedback item{openFeedbackCount === 1 ? "" : "s"} to review
-              </span>
-              <Link href="/admin/bugs-feedback" className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                Feedback →
-              </Link>
-            </NotifBanner>
-          )}
-        </div>
-      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Tile
