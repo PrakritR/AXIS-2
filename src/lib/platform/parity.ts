@@ -23,7 +23,7 @@ export const IN_APP_PATH_PREFIXES = [
 ] as const;
 
 /** Exact paths (no trailing segment) that are also in-app. */
-export const IN_APP_PATH_EXACT = ["/", "/partner", "/pricing"] as const;
+export const IN_APP_PATH_EXACT = ["/", "/partner", "/pricing", "/contact"] as const;
 
 /**
  * Push notification tap targets used in server code — keep in sync when adding

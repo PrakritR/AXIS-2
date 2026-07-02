@@ -6,7 +6,7 @@ Property management software for listing units, screening applicants, signing le
 
 | Surface | Path | Who |
 | --- | --- | --- |
-| **Marketing** | `/`, `/partner`, `/pricing` | Prospective property managers |
+| **Marketing** | `/`, `/partner`, `/pricing`, `/contact` | Prospective property managers |
 | **Manager workspace** | `/portal` | Property managers (Free, Pro, Business tiers) |
 | **Resident portal** | `/resident` | Tenants linked to a manager |
 | **Admin portal** | `/admin` | Platform operators |
