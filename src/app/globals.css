@@ -1452,17 +1452,17 @@ html[data-native] .axis-page-frame > footer {
 
 .axis-assistant-panel {
   bottom: calc(max(1.25rem, env(safe-area-inset-bottom, 0px)) + 3.75rem);
-  left: max(1.25rem, env(safe-area-inset-left, 0px));
+  right: max(1.25rem, env(safe-area-inset-right, 0px));
   max-height: min(38rem, calc(100dvh - 7.5rem));
   width: min(26rem, calc(100vw - 2.5rem));
   animation: axis-assistant-panel-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  transform-origin: bottom left;
+  transform-origin: bottom right;
 }
 
 @media (min-width: 1024px) {
   .axis-assistant-panel {
     bottom: calc(1.75rem + 3.75rem);
-    left: 2rem;
+    right: 2rem;
     max-height: min(40rem, calc(100dvh - 8rem));
     width: min(28rem, calc(100vw - 18rem));
   }

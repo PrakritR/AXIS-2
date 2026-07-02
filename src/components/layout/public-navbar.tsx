@@ -64,8 +64,8 @@ export function PublicNavbar() {
 
   const menu: NavbarMenuItem[] = useMemo(
     () => [
-      { title: "Demo", url: "/demo", active: demoActive },
       { title: "Partners", url: "/partner", active: partnerActive },
+      { title: "Demo", url: "/demo", active: demoActive },
       { title: "Pricing", url: "/partner/pricing", active: pricingActive },
       { title: "Contact", url: "/contact", active: contactActive },
     ],

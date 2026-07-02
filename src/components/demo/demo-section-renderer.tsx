@@ -27,15 +27,6 @@ const PortalCalendar = dynamic(() => import("@/components/portal/portal-calendar
 const ProAccountLinksPanel = dynamic(() => import("@/components/portal/pro-account-links-panel").then((m) => m.ProAccountLinksPanel), { ssr: false, loading });
 const PortalBugFeedbackPanel = dynamic(() => import("@/components/portal/portal-bug-feedback-panel").then((m) => m.PortalBugFeedbackPanel), { ssr: false, loading });
 
-// Admin panels
-const AdminDashboard = dynamic(() => import("@/components/portal/admin-dashboard").then((m) => m.AdminDashboard), { ssr: false, loading });
-const AdminPropertiesClient = dynamic(() => import("@/components/portal/admin-properties-client").then((m) => m.AdminPropertiesClient), { ssr: false, loading });
-const AdminLeasesClient = dynamic(() => import("@/components/portal/admin-leases-client").then((m) => m.AdminLeasesClient), { ssr: false, loading });
-const AdminEventsClient = dynamic(() => import("@/components/portal/admin-events-client").then((m) => m.AdminEventsClient), { ssr: false, loading });
-const AdminInboxClient = dynamic(() => import("@/components/portal/admin-inbox-client").then((m) => m.AdminInboxClient), { ssr: false, loading });
-const AdminBugFeedbackClient = dynamic(() => import("@/components/portal/admin-bug-feedback-client").then((m) => m.AdminBugFeedbackClient), { ssr: false, loading });
-const AdminAxisUsersClient = dynamic(() => import("@/components/portal/admin-axis-users-client").then((m) => m.AdminAxisUsersClient), { ssr: false, loading });
-
 // Resident panels
 const ResidentDashboard = dynamic(() => import("@/components/portal/resident-dashboard").then((m) => m.ResidentDashboard), { ssr: false, loading });
 const ResidentLeasePanel = dynamic(() => import("@/components/portal/resident-lease-panel").then((m) => m.ResidentLeasePanel), { ssr: false, loading });
@@ -66,7 +57,7 @@ export function DemoSectionRenderer({
 }): ReactNode {
   const firstTab = meta?.tabs[0]?.id;
   const tabId = tab ?? firstTab ?? "index";
-  const basePath = role === "resident" ? "/resident" : role === "admin" ? "/admin" : "/portal";
+  const basePath = role === "resident" ? "/resident" : "/portal";
 
   if (role === "manager") {
     switch (section) {
@@ -103,29 +94,6 @@ export function DemoSectionRenderer({
         return <PortalBugFeedbackPanel reporterRole="manager" />;
       case "profile":
         return <Placeholder title="Settings" message="Profile settings appear here for your real account." />;
-      default:
-        return <Placeholder title={meta?.label ?? "Section"} message="Nothing to show yet." />;
-    }
-  }
-
-  if (role === "admin") {
-    switch (section) {
-      case "dashboard":
-        return <AdminDashboard />;
-      case "properties":
-        return <AdminPropertiesClient />;
-      case "leases":
-        return <AdminLeasesClient />;
-      case "events":
-        return <AdminEventsClient />;
-      case "inbox":
-        return <AdminInboxClient tabId={tabId} />;
-      case "bugs-feedback":
-        return <AdminBugFeedbackClient />;
-      case "axis-users":
-        return <AdminAxisUsersClient />;
-      case "profile":
-        return <Placeholder title="Settings" message="Admin profile settings appear here for your real account." />;
       default:
         return <Placeholder title={meta?.label ?? "Section"} message="Nothing to show yet." />;
     }

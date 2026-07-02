@@ -14,7 +14,7 @@
  * effects, and it can never leak into a real signed-in portal session.
  */
 
-export type DemoPortalRole = "manager" | "admin" | "resident";
+export type DemoPortalRole = "manager" | "resident";
 
 export const DEMO_MANAGER_USER_ID = "demo-manager";
 export const DEMO_RESIDENT_USER_ID = "demo-resident";
@@ -57,8 +57,8 @@ export function demoSessionForRole(r: DemoPortalRole): DemoSessionSnapshot {
   if (r === "resident") {
     return { userId: DEMO_RESIDENT_USER_ID, email: DEMO_RESIDENT_EMAIL, ready: true };
   }
-  // Manager and admin share the manager-scoped demo account so seeded manager
-  // data (charges, applications, leases…) is visible from both portals.
+  // The manager view uses the manager-scoped demo account so seeded manager
+  // data (charges, applications, leases…) is visible.
   return { userId: DEMO_MANAGER_USER_ID, email: DEMO_MANAGER_EMAIL, ready: true };
 }
 

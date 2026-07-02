@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { groupNavItems } from "@/lib/portals/nav-groups";
 import { proPortal } from "@/lib/portals/pro";
-import { adminPortal } from "@/lib/portals/admin";
 import { RESIDENT_APPROVED_PORTAL_SECTIONS, RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import type { PortalDefinition, PortalSection } from "@/lib/portal-types";
 import { closeAxisAssistant, sendAxisAssistantPrompt } from "@/lib/axis-assistant/open-store";
@@ -18,7 +17,6 @@ import {
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
 
 function definitionForRole(role: DemoPortalRole): PortalDefinition {
-  if (role === "admin") return adminPortal;
   if (role === "resident") {
     return {
       kind: "resident",
@@ -32,9 +30,8 @@ function definitionForRole(role: DemoPortalRole): PortalDefinition {
 }
 
 const ROLES: { id: DemoPortalRole; label: string }[] = [
-  { id: "manager", label: "Manager" },
-  { id: "admin", label: "Admin" },
   { id: "resident", label: "Resident" },
+  { id: "manager", label: "Manager" },
 ];
 
 /** Sections the auto-play tour steps through (sidebar order, minus Settings). */
@@ -221,7 +218,7 @@ export function DemoPortalShell() {
           <div className="flex h-12 items-center gap-2 border-b border-border px-3">
             <span className="text-sm font-semibold text-foreground">Axis</span>
             <span className="rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
-              {role === "resident" ? "Resident" : role === "admin" ? "Admin" : "Manager"}
+              {role === "resident" ? "Resident" : "Manager"}
             </span>
           </div>
           <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2" aria-label="Demo sections">

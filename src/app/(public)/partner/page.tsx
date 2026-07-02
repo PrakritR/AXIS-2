@@ -15,16 +15,9 @@ export default function PartnerLandingPage() {
       <section className="hero-chrome-scene relative overflow-hidden pb-10 pt-14 sm:pb-12 sm:pt-20 md:pt-24">
         <ChromeSubstrate variant="full" />
         <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6">
-          <div className="hero-eyebrow animate-fade-up mb-5 inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-md sm:mb-6 sm:px-4">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--steel-light)] shadow-[0_0_10px_rgba(188,212,255,0.9)]" />
-            <span className="text-xs font-semibold tracking-wide sm:text-[13px]">Axis Housing · Partner program</span>
-          </div>
           <h1 className="hero-title animate-fade-up text-[2.25rem] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[3.25rem] md:text-[3.75rem]" style={{ animationDelay: "60ms" }}>
             We manage your property so <span className="text-gradient-accent">you don&apos;t have to</span>
           </h1>
-          <p className="hero-subtitle animate-fade-up mx-auto mt-5 max-w-2xl text-base leading-relaxed sm:text-lg" style={{ animationDelay: "90ms" }}>
-            Full-service management or self-serve software — we help owners maximize revenue while minimizing effort.
-          </p>
           <div className="animate-fade-up mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4" style={{ animationDelay: "120ms" }}>
             <Link href="/contact?tab=schedule" className="btn-cobalt inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.98] sm:w-auto">Book a consultation</Link>
             <Link href="/partner/pricing" className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 hover:-translate-y-0.5 hover:brightness-105 active:scale-[0.99] sm:w-auto">Use our software</Link>
