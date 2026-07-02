@@ -11,6 +11,7 @@ export function useNativePlatform(): NativePlatform | null {
   useEffect(() => {
     const sync = detectNativePlatformSync();
     if (sync) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronous platform detection on mount
       setPlatform(sync);
       return;
     }

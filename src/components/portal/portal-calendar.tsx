@@ -142,6 +142,7 @@ export function PortalCalendar({
 
   useEffect(() => {
     if (portal !== "manager" || !userId || !activeCalendarPropertyId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear co-manager state when scope is unavailable
       setCoManagerPeers([]);
       setShareAvailability(false);
       return;

@@ -10,6 +10,7 @@ export const RESIDENT_PORTAL_BASE_PATH = "/resident";
 export const RESIDENT_FREE_TIER_SECTION_IDS = [
   "dashboard",
   "lease",
+  "applications",
   "payments",
   "move-in",
   "profile",

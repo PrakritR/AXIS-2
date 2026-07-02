@@ -242,6 +242,10 @@ export async function renderPortalSection(
           managerSubscriptionTier: residentManagerTier,
         })
       : false;
+  if (kind === "resident" && section === "applications") {
+    if (tabParts?.length) notFound();
+    return <ResidentApplicationsPanel />;
+  }
   // Legacy path support: work-orders moved under Services tabs.
   if (
     (kind === "manager" || kind === "pro") &&
@@ -509,10 +513,6 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "payments") {
     if (tabParts?.length) notFound();
     return <ResidentPaymentsPanel />;
-  }
-
-  if (kind === "resident" && section === "applications") {
-    redirect(`${def.basePath}/documents/application`);
   }
 
   if (kind === "resident" && section === "financials") {

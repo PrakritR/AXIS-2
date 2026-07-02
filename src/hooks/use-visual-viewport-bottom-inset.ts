@@ -27,6 +27,7 @@ export function useVisualViewportBottomInset(active = true): number {
 
   useEffect(() => {
     if (!active) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset inset when tracking is disabled
       setInset(0);
       return;
     }

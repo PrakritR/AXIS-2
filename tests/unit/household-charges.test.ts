@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chargeDueLabel,
   chargeVisibleToManager,
@@ -30,6 +30,11 @@ function makeCharge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
   } as HouseholdCharge;
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
 describe("household-charges pure helpers", () => {
   it("detects overdue charges", () => {
     const overdue = makeCharge({ dueDateLabel: "Jan 1, 2020" });
@@ -55,6 +60,56 @@ describe("household-charges pure helpers", () => {
     });
     expect(householdChargeToLedgerRow(paid).bucket).toBe("paid");
     expect(householdChargeToLedgerRow(paid).statusLabel).toBe("Paid");
+  });
+});
+
+describe("syncHouseholdChargesFromServer", () => {
+  it("starts a new request for forced syncs while another sync is in flight", async () => {
+    vi.resetModules();
+
+    const session = new Map<string, string>();
+    vi.stubGlobal("window", {
+      sessionStorage: {
+        getItem: vi.fn((key: string) => session.get(key) ?? null),
+        setItem: vi.fn((key: string, value: string) => {
+          session.set(key, value);
+        }),
+      },
+      dispatchEvent: vi.fn(),
+    });
+
+    let resolveFirst: (value: { ok: true; json: () => Promise<{ charges: HouseholdCharge[]; rentProfiles: [] }> }) => void;
+    const firstResponse = new Promise<{ ok: true; json: () => Promise<{ charges: HouseholdCharge[]; rentProfiles: [] }> }>(
+      (resolve) => {
+        resolveFirst = resolve;
+      },
+    );
+    const fetchMock = vi.fn()
+      .mockReturnValueOnce(firstResponse)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ charges: [makeCharge({ id: "mgr-b-charge", managerUserId: "mgr-b" })], rentProfiles: [] }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { syncHouseholdChargesFromServer } = await import("@/lib/household-charges");
+
+    const firstSync = syncHouseholdChargesFromServer(false);
+    const forcedSync = syncHouseholdChargesFromServer(true);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    resolveFirst!({
+      ok: true,
+      json: async () => ({ charges: [makeCharge({ id: "mgr-a-charge", managerUserId: "mgr-a" })], rentProfiles: [] }),
+    });
+
+    await expect(forcedSync).resolves.toEqual(
+      expect.objectContaining({
+        charges: expect.arrayContaining([expect.objectContaining({ managerUserId: "mgr-b" })]),
+      }),
+    );
+    await firstSync;
   });
 });
 

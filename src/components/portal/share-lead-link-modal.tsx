@@ -87,8 +87,9 @@ export function ShareLeadLinkModal({
     if (kind !== "listing" || !propertyId) return null;
     const property = getPropertyById(propertyId);
     if (!property) return null;
+    const { listingRoomId } = roomChoice ? parseRoomChoiceValue(roomChoice) : { listingRoomId: undefined };
     const roomName = roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
-    return buildListingShareSummary(property, { roomChoice: roomName });
+    return buildListingShareSummary(property, { roomChoice: roomName, roomId: listingRoomId });
   }, [kind, propertyId, roomChoice, roomOptions]);
 
   const invitePreviewBody = useMemo(() => {

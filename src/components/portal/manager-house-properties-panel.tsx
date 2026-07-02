@@ -328,11 +328,6 @@ function ManagerPropertyInlineDetails({
           >
             Delete listing
           </Button>
-          {displaySub && portalSub ? (
-            <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
-              Edit listing
-            </Button>
-          ) : null}
         </div>
       ) : null}
 
@@ -395,6 +390,14 @@ function ManagerPropertyInlineDetails({
             }
           >
             Delete property
+          </Button>
+        </div>
+      ) : null}
+
+      {displaySub && portalSub ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
+            Edit listing
           </Button>
         </div>
       ) : null}
