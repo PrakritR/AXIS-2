@@ -3,6 +3,7 @@
  * Primary flow: `/api/pro/account-links` + `account_link_invites` table.
  */
 
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { CoManagerPermissions, PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
 import {
   coManagerPermissionsFromLegacy,
@@ -167,6 +168,7 @@ export async function syncProRelationshipsFromServer(
   opts?: { force?: boolean },
 ): Promise<ProRelationshipRecord[]> {
   if (typeof window === "undefined" || !userId.trim()) return [];
+  if (isDemoModeActive()) return memoryByUser.get(userId) ?? [];
   const force = opts?.force === true;
   const inFlight = relationshipsSyncPromises.get(userId);
   if (!force && inFlight) return inFlight;

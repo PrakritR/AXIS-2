@@ -8,6 +8,7 @@ import { FinancialReportDocumentView } from "@/components/portal/reports/formal-
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { ReportTable } from "@/components/portal/reports/report-table";
 import type { ReportResult } from "@/lib/reports/types";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 function defaultStatementRange() {
   const now = new Date();
@@ -34,6 +35,10 @@ export function ResidentFinancialsPanel({
   const [range, setRange] = useState(defaultStatementRange);
 
   const loadSummary = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/reports/resident-balance?backfill=1");

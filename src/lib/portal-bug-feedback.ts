@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { emitAdminUi } from "@/lib/demo-admin-ui";
 import { normalizeBugFeedbackRow } from "@/lib/portal-bug-feedback-utils";
 
@@ -60,6 +61,13 @@ export function readBugFeedbackRows(): PortalBugFeedbackRow[] {
   return cachedRows;
 }
 
+/** Demo seed: load feedback rows into the local cache (local-only, no server). */
+export function seedDemoBugFeedback(rows: PortalBugFeedbackRow[]): void {
+  cachedRows = rows;
+  syncedFromServer = true;
+  if (isBrowser()) emitAdminUi();
+}
+
 export type BugFeedbackSyncResult = {
   rows: PortalBugFeedbackRow[];
   error?: string;
@@ -70,6 +78,7 @@ export async function syncBugFeedbackFromServer(opts?: {
   force?: boolean;
 }): Promise<BugFeedbackSyncResult> {
   if (!isBrowser()) return { rows: [] };
+  if (isDemoModeActive()) return { rows: cachedRows };
   if (syncedFromServer && !opts?.force) return { rows: cachedRows };
   try {
     const res = await fetch("/api/portal-bug-feedback", { credentials: "include" });

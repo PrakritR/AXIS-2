@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDate } from "@/lib/pacific-time";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 type ManagerRow = {
   id: string;
@@ -447,6 +448,10 @@ export function AdminAxisUsersClient() {
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
 
   const load = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setLoadError(null);
     try {

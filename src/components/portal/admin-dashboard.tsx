@@ -11,6 +11,7 @@ import {
   formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
 import { formatPacificDateTime } from "@/lib/pacific-time";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { readInboxMessages, syncInboxMessagesFromServer } from "@/lib/demo-admin-partner-inbox";
 import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
 import { adminKpiCounts, readAdminPropertyRows } from "@/lib/demo-admin-property-inventory";
@@ -85,6 +86,7 @@ export function AdminDashboard() {
   const [cutoffMs, setCutoffMs] = useState(() => Date.now() - 30 * 60 * 1000);
 
   const loadCounts = useCallback(async () => {
+    if (isDemoModeActive()) return;
     try {
       const res = await fetch("/api/admin/portal-users");
       const body = (await res.json()) as { counts?: PortalCounts };

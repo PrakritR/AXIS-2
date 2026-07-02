@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { MockProperty } from "@/data/types";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
@@ -147,6 +148,14 @@ function writeExtrasMap(m: ExtrasMap, opts?: { silent?: boolean }) {
   writeJson(EXTRAS_BY_USER_KEY, m, opts);
 }
 
+/** Demo seed: register live listings for a manager (local-only, no server mirror). */
+export function seedDemoManagerProperties(userId: string, extras: MockProperty[]): void {
+  if (!isBrowser()) return;
+  const map = readExtrasMap();
+  map[userId] = extras;
+  writeExtrasMap(map);
+}
+
 function mirrorPropertyRecord(input: {
   id: string;
   managerUserId: string | null;
@@ -155,7 +164,7 @@ function mirrorPropertyRecord(input: {
   propertyData?: unknown;
   editRequestNote?: string | null;
 }) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/property-records", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -179,7 +188,7 @@ async function upsertPropertyRecordToServer(input: {
   propertyData?: unknown;
   editRequestNote?: string | null;
 }): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined" || isDemoModeActive()) return false;
   try {
     const res = await fetch("/api/property-records", {
       method: "POST",
@@ -202,7 +211,7 @@ async function upsertPropertyRecordToServer(input: {
 }
 
 export function deleteMirroredPropertyRecord(id: string) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/property-records", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -231,6 +240,7 @@ export function hasCachedPropertyPipeline(): boolean {
 
 export async function syncPropertyPipelineFromServer(opts?: { force?: boolean }): Promise<boolean> {
   if (!isBrowser()) return false;
+  if (isDemoModeActive()) return true;
   const force = opts?.force === true;
   const lastSyncedAt = readPropertyPipelineSyncedAt();
   if (!force && propertyPipelineSyncPromise) return propertyPipelineSyncPromise;
@@ -271,7 +281,7 @@ export async function syncPropertyPipelineFromServer(opts?: { force?: boolean })
 }
 
 export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
-  if (!isBrowser()) return;
+  if (!isBrowser() || isDemoModeActive()) return;
   const pendingMap = readPendingMap();
   const extrasMap = readExtrasMap();
   const jobs: Promise<unknown>[] = [];

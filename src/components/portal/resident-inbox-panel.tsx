@@ -10,6 +10,7 @@ import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRo
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDateTime } from "@/lib/pacific-time";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
@@ -89,6 +90,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
 
   useEffect(() => {
+    if (isDemoModeActive()) return;
     let active = true;
     void fetch("/api/portal/inbox-eligible-contacts?portal=resident", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : { contacts: [] }))

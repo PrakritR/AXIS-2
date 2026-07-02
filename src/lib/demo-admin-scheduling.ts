@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { emitAdminUi } from "@/lib/demo-admin-ui";
 import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 
@@ -210,6 +211,7 @@ async function deleteJsonRecordFromServer(id: string): Promise<boolean> {
 
 export async function syncScheduleRecordsFromServer(opts?: { force?: boolean }): Promise<boolean> {
   if (!isBrowser()) return false;
+  if (isDemoModeActive()) return true;
   const force = opts?.force === true;
   const lastSyncedAt = readScheduleSyncedAt();
   if (!force && scheduleSyncPromise) return scheduleSyncPromise;

@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { removePendingWorkOrderChargesForWorkOrder } from "@/lib/household-charges";
 
@@ -73,6 +74,7 @@ function deleteWorkOrderFromServer(id: string) {
 export async function syncManagerWorkOrdersFromServer(opts?: { force?: boolean }): Promise<DemoManagerWorkOrderRow[]> {
   if (!canUseStorage()) return [];
   hydrateWorkOrdersFromSession();
+  if (isDemoModeActive()) return readManagerWorkOrderRows();
   const force = opts?.force === true;
   if (!force && managerWorkOrdersSyncPromise) return managerWorkOrdersSyncPromise;
   if (!force && managerWorkOrdersLastSyncedAt > 0 && Date.now() - managerWorkOrdersLastSyncedAt < MANAGER_WORK_ORDERS_SYNC_TTL_MS) {
@@ -120,6 +122,15 @@ export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void
   managerWorkOrdersLastSyncedAt = Date.now();
   emit();
   mirrorWorkOrdersToServer(rows);
+}
+
+/** Demo seed: load work-order rows into the local store without server mirror. */
+export function seedDemoManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void {
+  if (!canUseStorage()) return;
+  memoryRows = rows;
+  persistWorkOrdersToSession(rows);
+  managerWorkOrdersLastSyncedAt = Date.now();
+  emit();
 }
 
 export function updateManagerWorkOrder(
