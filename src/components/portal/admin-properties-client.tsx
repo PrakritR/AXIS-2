@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ import {
   PORTAL_TABLE_TD,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { MANAGER_TABLE_TH, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
   mirrorLocalPropertyPipelineToServer,
   PROPERTY_PIPELINE_EVENT,
@@ -385,36 +385,26 @@ export function AdminPropertiesClient() {
   }, [tick, activeKpi]);
   const status = rowStatus(activeKpi);
 
+  const kpiTabs = useMemo(
+    () => KPI_LABELS.map((label, i) => ({ id: String(i), label, count: kpiValues[i] })),
+    [kpiValues],
+  );
+
   return (
     <ManagerPortalPageShell
       title="Properties"
+      filterRow={
+        <ManagerPortalStatusPills
+          tabs={kpiTabs}
+          activeId={String(activeKpi)}
+          onChange={(id) => {
+            setActiveKpi(Number(id) as AdminPropertyBucketIndex);
+            setExpandedRowKey(null);
+          }}
+        />
+      }
     >
-      <div className="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
-        {KPI_LABELS.map((label, i) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => {
-              setActiveKpi(i as AdminPropertyBucketIndex);
-              setExpandedRowKey(null);
-            }}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
-              activeKpi === i ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
-            }`}
-          >
-            {label}
-            <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                activeKpi === i ? "bg-accent/30 text-muted" : "bg-accent/40 text-muted"
-              }`}
-            >
-              {kpiValues[i]}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className={`${PORTAL_DATA_TABLE_WRAP} mt-4`}>
+      <div className={PORTAL_DATA_TABLE_WRAP}>
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-accent/30/20 px-4 py-14 text-center sm:py-16">
             <AxisHeaderMarkTile>

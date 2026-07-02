@@ -119,6 +119,32 @@ When changing portal nav, routes, push notifications, or uploads:
 
 See **`docs/web-and-native-parity.md`** and `.cursor/rules/web-native-parity.mdc`.
 
+## Admin portal table tabs
+
+Every internal staff admin tab (`/admin` routes) that renders a record table
+follows one layout: sort/filter pills above a divider, table below it. Build
+new admin tabs — and fix existing ones — with the shared primitives instead of
+hand-rolled markup:
+
+- `ManagerPortalPageShell` (`src/components/portal/portal-metrics.tsx`) renders
+  title → `filterRow` slot → divider → `children`. Pass filters as `filterRow`
+  (composing multiple filter groups with `ManagerPortalFilterRow`) so the
+  divider lands below them and the table, passed as `children`, sits below
+  that.
+- `ManagerPortalStatusPills` for pill groups with counts;
+  `PORTAL_TOOLBAR_GROUP` / `PORTAL_TOOLBAR_PILL_BUTTON` /
+  `PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE` for toggle groups without count badges.
+- Table primitives in `src/components/portal/portal-data-table.tsx`
+  (`PORTAL_DATA_TABLE_WRAP`, `PORTAL_DATA_TABLE_SCROLL`,
+  `PORTAL_TABLE_HEAD_ROW`, `PORTAL_TABLE_TR_EXPANDABLE`, `PORTAL_TABLE_TD`,
+  `PORTAL_TABLE_DETAIL_ROW`, `PORTAL_TABLE_DETAIL_CELL`,
+  `createPortalRowExpandClick`) plus `MANAGER_TABLE_TH` from
+  `portal-metrics.tsx`.
+
+Feedback (`admin-bug-feedback-client.tsx`) and Inbox (`admin-inbox-client.tsx`)
+are the reference implementations — copy their structure rather than
+reinventing table/filter markup per tab.
+
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the

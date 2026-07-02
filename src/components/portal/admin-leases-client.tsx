@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,17 @@ import {
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { rentSummaryFromApplication } from "@/lib/generated-lease";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
-import { MANAGER_TABLE_TH, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
-import { PORTAL_DATA_TABLE_WRAP, PORTAL_DATA_TABLE_SCROLL, PORTAL_TABLE_DETAIL_ROW, PORTAL_TABLE_TR_EXPANDABLE, createPortalRowExpandClick } from "@/components/portal/portal-data-table";
+import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import {
+  PORTAL_DATA_TABLE_WRAP,
+  PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_TD,
+  PORTAL_TABLE_TR_EXPANDABLE,
+  createPortalRowExpandClick,
+} from "@/components/portal/portal-data-table";
 
 function naturalLabelSort(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -294,19 +303,19 @@ export function AdminLeasesClient() {
   const visibleExpandedLeaseId = expandedLeaseId && rows.some((r) => r.id === expandedLeaseId) ? expandedLeaseId : null;
 
   return (
-    <div className={PORTAL_SECTION_SURFACE}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Leases</h1>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+    <ManagerPortalPageShell
+      title="Leases"
+      filterRow={
+        <ManagerPortalFilterRow>
           <PortalPropertyFilterPill
             propertyOptions={propertyOptions}
             propertyValue={selectedPropertyFilter}
             onPropertyChange={setPropertyFilter}
           />
-        </div>
-      </div>
-
-      <div className={`${PORTAL_DATA_TABLE_WRAP} mt-5`}>
+        </ManagerPortalFilterRow>
+      }
+    >
+      <div className={PORTAL_DATA_TABLE_WRAP}>
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center bg-accent/30/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
@@ -320,7 +329,7 @@ export function AdminLeasesClient() {
           <div className={PORTAL_DATA_TABLE_SCROLL}>
             <table className="w-full min-w-[640px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-border bg-card">
+                <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Lease</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Rent</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
@@ -338,21 +347,21 @@ export function AdminLeasesClient() {
                       )}
                       aria-expanded={visibleExpandedLeaseId === row.id}
                     >
-                      <td className="px-5 py-4 align-middle">
+                      <td className={PORTAL_TABLE_TD}>
                         <p className="font-semibold text-foreground">{row.unit || "—"}</p>
                         <p className="mt-0.5 text-sm text-muted">{row.residentName || "—"}</p>
                       </td>
-                      <td className="px-5 py-4 align-middle">
+                      <td className={PORTAL_TABLE_TD}>
                         <p className="font-semibold text-foreground">{rentLabel ?? "—"}</p>
                         <p className="text-xs text-muted">From application / listing</p>
                       </td>
-                      <td className="px-5 py-4 align-middle">
+                      <td className={PORTAL_TABLE_TD}>
                         <StatusPill bucket={bucketToPillIndex(row.bucket)} />
                       </td>
                     </tr>
                     {visibleExpandedLeaseId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={3} className="px-5 py-4">
+                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                           <LeasePipelineAdminDetail
                             row={row}
                             onSaved={() => setTick((t) => t + 1)}
@@ -369,6 +378,6 @@ export function AdminLeasesClient() {
           </div>
         )}
       </div>
-    </div>
+    </ManagerPortalPageShell>
   );
 }

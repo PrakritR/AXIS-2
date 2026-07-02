@@ -2,8 +2,26 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
-import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
-import { PORTAL_TABLE_TR_EXPANDABLE, createPortalRowExpandClick } from "@/components/portal/portal-data-table";
+import {
+  MANAGER_TABLE_TH,
+  ManagerPortalFilterRow,
+  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+  PORTAL_TOOLBAR_GROUP,
+  PORTAL_TOOLBAR_LABEL,
+  PORTAL_TOOLBAR_PILL_BUTTON,
+  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
+} from "@/components/portal/portal-metrics";
+import {
+  PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_DATA_TABLE_WRAP,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_HEAD_ROW,
+  PORTAL_TABLE_TD,
+  PORTAL_TABLE_TR_EXPANDABLE,
+  createPortalRowExpandClick,
+} from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -189,8 +207,8 @@ function ManagerDetailRow({
     }
   };
   return (
-    <tr className="bg-accent/30">
-      <td colSpan={5} className="px-5 py-4">
+    <tr className={PORTAL_TABLE_DETAIL_ROW}>
+      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
@@ -337,8 +355,8 @@ function SimpleAccountDetailRow({
     }
   };
   return (
-    <tr className="bg-accent/30">
-      <td colSpan={5} className="px-5 py-4">
+    <tr className={PORTAL_TABLE_DETAIL_ROW}>
+      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
         <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
@@ -520,92 +538,60 @@ export function AdminAxisUsersClient() {
   ];
 
   return (
-    <div className={PORTAL_SECTION_SURFACE}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Axis users</h1>
-      </div>
-
-      <div className="mt-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Category</p>
-        <div className="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
-          {ROLE_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                setCategory(tab.id);
-                setExpandedKey(null);
-              }}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-150 sm:px-4 sm:text-sm ${
-                category === tab.id ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
-              }`}
-            >
-              {tab.label}
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                  category === tab.id ? "bg-accent/30 text-muted" : "bg-accent/40 text-muted"
-                }`}
-              >
-                {tab.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Status</p>
-          <div className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setStatusTab(tab.id);
+    <ManagerPortalPageShell
+      title="Axis users"
+      filterRow={
+        <ManagerPortalFilterRow>
+          <div>
+            <p className={PORTAL_TOOLBAR_LABEL}>Category</p>
+            <div className="mt-1.5">
+              <ManagerPortalStatusPills
+                tabs={ROLE_TABS}
+                activeId={category}
+                onChange={(id) => {
+                  setCategory(id as CategoryFilter);
                   setExpandedKey(null);
                 }}
-                className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-                  statusTab === tab.id ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                    statusTab === tab.id ? "bg-accent/30 text-muted" : "bg-accent/40 text-muted"
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-        {showTierFilter ? (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Manager plan</p>
-            <div className="mt-1.5 inline-flex flex-wrap items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
-              {TIER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    setTierFilter(opt.id);
-                    setExpandedKey(null);
-                  }}
-                  className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
-                    tierFilter === opt.id ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              />
             </div>
           </div>
-        ) : null}
-      </div>
-
-      <div className="mt-5 overflow-hidden rounded-2xl border border-border bg-card">
+          <div>
+            <p className={PORTAL_TOOLBAR_LABEL}>Status</p>
+            <div className="mt-1.5">
+              <ManagerPortalStatusPills
+                tabs={STATUS_TABS}
+                activeId={statusTab}
+                onChange={(id) => {
+                  setStatusTab(id as StatusTab);
+                  setExpandedKey(null);
+                }}
+              />
+            </div>
+          </div>
+          {showTierFilter ? (
+            <div>
+              <p className={PORTAL_TOOLBAR_LABEL}>Manager plan</p>
+              <div className={`mt-1.5 ${PORTAL_TOOLBAR_GROUP}`}>
+                {TIER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setTierFilter(opt.id);
+                      setExpandedKey(null);
+                    }}
+                    className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${tierFilter === opt.id ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </ManagerPortalFilterRow>
+      }
+    >
+      <div className={PORTAL_DATA_TABLE_WRAP}>
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-sm text-muted">Loading…</p>
@@ -627,14 +613,14 @@ export function AdminAxisUsersClient() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className={PORTAL_DATA_TABLE_SCROLL}>
             <table className="w-full min-w-[min(100%,48rem)] border-collapse text-left">
               <thead>
-                <tr className="border-b border-border bg-card">
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Category</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</th>
-                  <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Status</th>
+                <tr className={PORTAL_TABLE_HEAD_ROW}>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Account</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Plan</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -644,24 +630,24 @@ export function AdminAxisUsersClient() {
                   return (
                     <Fragment key={rowKey}>
                       <tr
-                        className={`border-b border-border ${isOpen ? "" : "last:border-0"} ${PORTAL_TABLE_TR_EXPANDABLE}`}
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
                         onClick={createPortalRowExpandClick(() => setExpandedKey(isOpen ? null : rowKey))}
                         aria-expanded={isOpen}
                       >
-                        <td className="px-5 py-4 align-middle">
+                        <td className={PORTAL_TABLE_TD}>
                           <RolePill kind={row.kind} />
                         </td>
-                        <td className="px-5 py-4 align-middle">
+                        <td className={PORTAL_TABLE_TD}>
                           <p className="font-semibold text-foreground">{row.fullName || row.email}</p>
                           <p className="mt-0.5 text-sm text-muted">{row.email}</p>
                           {row.managerId ? (
                             <p className="mt-0.5 font-mono text-xs text-muted">{row.managerId}</p>
                           ) : null}
                         </td>
-                        <td className="px-5 py-4 align-middle">
+                        <td className={PORTAL_TABLE_TD}>
                           {row.kind === "manager" ? <TierBadge tier={row.tier} /> : <span className="text-sm text-muted">—</span>}
                         </td>
-                        <td className="px-5 py-4 align-middle">
+                        <td className={PORTAL_TABLE_TD}>
                           <StatusPill active={row.active} />
                         </td>
                       </tr>
@@ -683,6 +669,6 @@ export function AdminAxisUsersClient() {
           </div>
         )}
       </div>
-    </div>
+    </ManagerPortalPageShell>
   );
 }
