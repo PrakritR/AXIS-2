@@ -7,6 +7,7 @@ import {
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
+import { appendInboxThreadReply } from "@/lib/portal-inbox-delivery";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -178,39 +179,13 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
 
     if (threadId) {
-      const { data: threadRow } = await db
-        .from("portal_inbox_thread_records")
-        .select("id, row_data, owner_user_id, participant_email, scope")
-        .eq("id", threadId)
-        .maybeSingle();
-      if (threadRow && (threadRow.owner_user_id === user.id || String(threadRow.participant_email ?? "").toLowerCase() === senderEmail)) {
-        const rowData = (threadRow.row_data ?? {}) as Record<string, unknown>;
-        const messages = Array.isArray(rowData.messages) ? [...rowData.messages] : [];
-        const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-        messages.push({
-          id: `reply-${Date.now().toString(36)}`,
-          from: fromName,
-          body: text,
-          at: when,
-        });
-        const nextRowData = {
-          ...rowData,
-          messages,
-          preview: text.slice(0, 100).replace(/\n/g, " "),
-          unread: false,
-        };
-        await db.from("portal_inbox_thread_records").upsert(
-          {
-            id: threadId,
-            scope: String(threadRow.scope ?? rowData.scope ?? MANAGER_INBOX_SCOPE),
-            owner_user_id: threadRow.owner_user_id,
-            participant_email: threadRow.participant_email,
-            row_data: nextRowData,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" },
-        );
-      }
+      await appendInboxThreadReply(db, {
+        threadId,
+        senderUserId: user.id,
+        senderEmail,
+        fromName,
+        text,
+      });
     }
 
     let toUserIds = normalizeUserIds(body.toUserIds);
