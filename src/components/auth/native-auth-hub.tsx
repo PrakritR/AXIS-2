@@ -23,6 +23,7 @@ import {
   type ContinuePartnerPricingResult,
 } from "@/lib/auth/partner-pricing-google-flow";
 import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
+import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { ResidentApplyPropertyPicker } from "@/components/auth/resident-apply-property-picker";
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
@@ -132,14 +133,20 @@ function RoleToggle({
   );
 }
 
-function NativeAuthHubInner() {
+function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useAppUi();
   useAuthWelcomeChrome(true);
 
-  const initialMode = searchParams.get("mode") === "create" ? "create" : "sign-in";
+  const modeParam = searchParams.get("mode");
+  const initialMode: AuthMode =
+    modeParam === "create" ? "create" : modeParam === "sign-in" ? "sign-in" : defaultMode;
   const initialRole = searchParams.get("role") === "manager" ? "manager" : "resident";
+  const tierParam = searchParams.get("tier");
+  const initialTier: PlanTierId =
+    tierParam === "pro" || tierParam === "business" || tierParam === "free" ? tierParam : "free";
+  const initialBilling: "monthly" | "annual" = searchParams.get("billing") === "annual" ? "annual" : "monthly";
 
   const [checkingSession, setCheckingSession] = useState(true);
   const [mode, setMode] = useState<AuthMode>(initialMode);
@@ -153,8 +160,8 @@ function NativeAuthHubInner() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [stripeCheckoutBlocked, setStripeCheckoutBlocked] = useState<string | null>(null);
 
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
-  const [selectedTierId, setSelectedTierId] = useState<PlanTierId>("free");
+  const [billing, setBilling] = useState<"monthly" | "annual">(initialBilling);
+  const [selectedTierId, setSelectedTierId] = useState<PlanTierId>(initialTier);
   const [planTiers, setPlanTiers] = useState(MANAGER_PLAN_TIERS);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
 
@@ -166,6 +173,18 @@ function NativeAuthHubInner() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from stored login on mount
     if (remembered) setEmail(remembered);
     setStripeCheckoutBlocked(stripeLiveJsBlockedMessage());
+  }, []);
+
+  useEffect(() => {
+    // If we arrived without an explicit ?tier= (e.g. the pricing redirect only persisted the
+    // offer), preselect the plan the user picked on the pricing page.
+    if (tierParam) return;
+    const stored = readManagerPricingOffer();
+    if (!stored) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from stored pricing offer
+    setSelectedTierId(stored.tier);
+    setBilling(stored.billing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount hydration
   }, []);
 
   useEffect(() => {
@@ -356,38 +375,7 @@ function NativeAuthHubInner() {
 
   const locked = busy;
   const isCreate = mode === "create";
-  const managerCta =
-    selectedTierId === "free"
-      ? `Create account · ${selectedTier.label}`
-      : `Start ${MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day trial · ${selectedTier.label}`;
-
-  if (checkoutClientSecret) {
-    return (
-      <AuthCard wide>
-        <AuthBrandHeader subtitle="Add payment method" />
-        <p className="mt-2 text-center text-xs text-muted">
-          {selectedTier.label} · {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then {selectedPrice.headline}
-          {selectedPrice.period ?? ""}
-        </p>
-        <div className="mt-4 rounded-2xl border border-border bg-card/50 p-3">
-          <EmbeddedCheckoutMount
-            clientSecret={checkoutClientSecret}
-            onError={(message) => {
-              showToast(message);
-              setCheckoutClientSecret(null);
-            }}
-          />
-        </div>
-        <button
-          type="button"
-          className="mt-4 block w-full text-center text-[13px] font-semibold text-primary/90"
-          onClick={() => setCheckoutClientSecret(null)}
-        >
-          ← Change plan
-        </button>
-      </AuthCard>
-    );
-  }
+  const managerCta = selectedTierId === "free" ? "Continue" : "Continue to payment";
 
   return (
     <AuthCard wide={isCreate}>
@@ -539,14 +527,41 @@ function NativeAuthHubInner() {
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={locked}
                 />
-                <Button
-                  type="button"
-                  className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                  disabled={locked || Boolean(stripeCheckoutBlocked && selectedTierId !== "free")}
-                  onClick={() => void createManager()}
-                >
-                  {busy ? "Creating…" : managerCta}
-                </Button>
+                {checkoutClientSecret ? (
+                  <div className="native-auth-payment-reveal mt-1 rounded-2xl border border-border bg-card/50 p-3">
+                    <p className="mb-2 text-center text-xs font-semibold text-foreground">
+                      Add a payment method to finish
+                    </p>
+                    <p className="mb-3 text-center text-[11px] text-muted">
+                      {selectedTier.label} · {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then{" "}
+                      {selectedPrice.headline}
+                      {selectedPrice.period ?? ""}
+                    </p>
+                    <EmbeddedCheckoutMount
+                      clientSecret={checkoutClientSecret}
+                      onError={(message) => {
+                        showToast(message);
+                        setCheckoutClientSecret(null);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="mt-3 block w-full text-center text-[13px] font-semibold text-primary/90"
+                      onClick={() => setCheckoutClientSecret(null)}
+                    >
+                      ← Change plan
+                    </button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+                    disabled={locked || Boolean(stripeCheckoutBlocked && selectedTierId !== "free")}
+                    onClick={() => void createManager()}
+                  >
+                    {busy ? "Creating…" : managerCta}
+                  </Button>
+                )}
               </>
             )}
             {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
@@ -557,7 +572,7 @@ function NativeAuthHubInner() {
   );
 }
 
-export function NativeAuthHub() {
+export function NativeAuthHub({ defaultMode = "sign-in" }: { defaultMode?: AuthMode } = {}) {
   return (
     <Suspense
       fallback={
@@ -566,7 +581,7 @@ export function NativeAuthHub() {
         </AuthCard>
       }
     >
-      <NativeAuthHubInner />
+      <NativeAuthHubInner defaultMode={defaultMode} />
     </Suspense>
   );
 }
