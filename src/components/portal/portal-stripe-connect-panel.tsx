@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { openAppUrl, shouldUseInAppConnectFlow } from "@/lib/native/open-url";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 type ConnectStatus = {
   connected: boolean;
@@ -45,6 +46,10 @@ export function PortalStripeConnectPanel({
   const handledConnectParam = useRef(false);
 
   const loadStatus = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setStatusLoaded(true);
+      return;
+    }
     try {
       const res = await fetch("/api/stripe/connect/status", { credentials: "include" });
       const body = (await res.json()) as ConnectStatus & { error?: string };

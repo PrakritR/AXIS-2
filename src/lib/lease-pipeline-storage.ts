@@ -4,6 +4,7 @@
  * Signing order: manager prepares/sends → resident signs → manager countersigns → fully signed.
  */
 
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { type ManagerLeaseBucket, type ManagerLeaseTab } from "@/data/demo-portal";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
@@ -441,6 +442,16 @@ function approvedLeasePlacementLabel(input: {
   return [propertyTitle, roomLabel].filter(Boolean).join(" · ") || propertyTitle || "—";
 }
 
+/** Demo seed: load lease-pipeline rows into the local store without server mirror. */
+export function seedDemoLeasePipeline(rows: LeasePipelineRow[], scopeUserId: string): void {
+  if (!canUseStorage()) return;
+  ensureLeasePipelineScope(scopeUserId);
+  memoryRows = rows.map(normalizeLeasePipelineRow);
+  persistLeasePipelineToSession(memoryRows, scopeUserId);
+  leasePipelineLastSyncedAt = Date.now();
+  emit();
+}
+
 function readRaw(scopeUserId?: string | null): LeasePipelineRow[] | null {
   ensureLeasePipelineScope(scopeUserId);
   hydrateLeasePipelineFromSession(scopeUserId ?? activeLeasePipelineScopeUserId);
@@ -714,6 +725,7 @@ export async function syncLeasePipelineFromServer(managerUserId?: string | null,
   if (!canUseStorage()) return [];
   ensureLeasePipelineScope(managerUserId);
   hydrateLeasePipelineFromSession(managerUserId);
+  if (isDemoModeActive()) return readLeasePipeline(managerUserId);
   const force = opts?.force === true;
   if (!force && leasePipelineSyncPromise) return leasePipelineSyncPromise;
   if (!force && leasePipelineLastSyncedAt > 0 && Date.now() - leasePipelineLastSyncedAt < LEASE_PIPELINE_SYNC_TTL_MS) {

@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { MockProperty } from "@/data/types";
 import {
   appendExtraListing,
@@ -88,7 +89,7 @@ function mirrorAdminPropertyRecord(input: {
   propertyData?: MockProperty | null;
   editRequestNote?: string | null;
 }) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/property-records", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

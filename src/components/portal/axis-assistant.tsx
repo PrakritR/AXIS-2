@@ -27,6 +27,7 @@ import {
   openAxisAssistant,
   setAxisAssistantOpen,
   subscribeAxisAssistantOpen,
+  subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { cn } from "@/lib/utils";
@@ -184,7 +185,7 @@ const MemoizedLayoutSlot = memo(function MemoizedLayoutSlot({ children }: { chil
  * Panel + FAB live outside the portal layout tree so opening the assistant does not
  * re-render dashboard/sidebar content (keeps INP under budget).
  */
-function AxisAssistantChrome({ managerName }: { managerName?: string | null }) {
+function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { managerName?: string | null; endpoint?: string }) {
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
   const open = useAxisAssistantOpen();
@@ -253,6 +254,15 @@ function AxisAssistantChrome({ managerName }: { managerName?: string | null }) {
     closeAxisAssistant();
   }, []);
 
+  // Scripted prompts (the /demo "Run demo" auto-play) submit through here.
+  const sendRef = useRef<(prompt?: string) => void>(() => {});
+  useEffect(() => {
+    return subscribeAxisAssistantPrompt((prompt) => {
+      // Defer so the panel is mounted/open before the first scripted send.
+      requestAnimationFrame(() => sendRef.current(prompt));
+    });
+  }, []);
+
   async function send(prompt?: string) {
     const text = (prompt ?? input).trim();
     if (!text || loading) return;
@@ -264,7 +274,7 @@ function AxisAssistantChrome({ managerName }: { managerName?: string | null }) {
     setLastTools([]);
     setPendingConfirm(null);
     try {
-      const res = await fetch("/api/agent/chat", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next }),
@@ -303,7 +313,7 @@ function AxisAssistantChrome({ managerName }: { managerName?: string | null }) {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/agent/chat", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -324,6 +334,12 @@ function AxisAssistantChrome({ managerName }: { managerName?: string | null }) {
       setLoading(false);
     }
   }
+
+  // Keep the scripted-prompt sender pointing at the latest closure (updated
+  // after each render so it captures current messages/loading state).
+  useEffect(() => {
+    sendRef.current = (prompt?: string) => void send(prompt);
+  });
 
   const hideEmptyChrome = showNativeChrome && keyboardOpen && !hasConversation;
 
@@ -594,9 +610,13 @@ function AxisAssistantChrome({ managerName }: { managerName?: string | null }) {
  */
 export function AxisAssistant({
   managerName,
+  endpoint,
   children,
 }: {
   managerName?: string | null;
+  /** Chat backend to target. Defaults to the auth-gated `/api/agent/chat`; the
+   * public demo passes the sandboxed `/api/agent/demo-chat`. */
+  endpoint?: string;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -606,7 +626,7 @@ export function AxisAssistant({
   return (
     <AxisAssistantPresenceContext.Provider value={true}>
       <MemoizedLayoutSlot>{children}</MemoizedLayoutSlot>
-      <AxisAssistantChrome managerName={managerName} />
+      <AxisAssistantChrome managerName={managerName} endpoint={endpoint} />
     </AxisAssistantPresenceContext.Provider>
   );
 }

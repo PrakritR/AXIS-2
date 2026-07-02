@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 export type ManagerVendorRow = {
   id: string;
   managerUserId: string | null;
@@ -100,6 +101,7 @@ export function makeVendorId(): string {
 export async function syncManagerVendorsFromServer(opts?: { force?: boolean }): Promise<ManagerVendorRow[]> {
   if (!canUseStorage()) return [];
   hydrateVendorsFromSession();
+  if (isDemoModeActive()) return readManagerVendorRows();
   const force = opts?.force === true;
   if (!force && managerVendorsSyncPromise) return managerVendorsSyncPromise;
   if (!force && managerVendorsLastSyncedAt > 0 && Date.now() - managerVendorsLastSyncedAt < MANAGER_VENDORS_SYNC_TTL_MS) {
@@ -134,6 +136,15 @@ export function readManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY_FALLB
 
 export function readActiveManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY_FALLBACK): ManagerVendorRow[] {
   return readManagerVendorRows(fallback).filter((v) => v.active !== false);
+}
+
+/** Demo seed: load vendor rows into the local store without server mirror. */
+export function seedDemoManagerVendorRows(rows: ManagerVendorRow[]): void {
+  if (!canUseStorage()) return;
+  memoryRows = rows;
+  persistVendorsToSession(rows);
+  managerVendorsLastSyncedAt = Date.now();
+  emit();
 }
 
 export function writeManagerVendorRows(rows: ManagerVendorRow[], managerUserId?: string | null): void {

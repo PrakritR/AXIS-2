@@ -36,6 +36,7 @@ import {
   type AdminComposeSendMode,
   type InboxMessage,
 } from "@/lib/demo-admin-partner-inbox";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 function formatWhen(iso: string) {
   try {
@@ -347,6 +348,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   }, []);
 
   useEffect(() => {
+    if (isDemoModeActive()) return;
     let cancelled = false;
     void (async () => {
       try {

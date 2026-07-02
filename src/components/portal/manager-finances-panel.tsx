@@ -30,6 +30,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import type { ReportColumn, ReportResult, ReportRow } from "@/lib/reports/types";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
@@ -394,6 +395,10 @@ export function ManagerFinancesPanel({
 
   const loadTable = useCallback(async () => {
     if (!ready) return;
+    if (isDemoModeActive()) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const params = new URLSearchParams({ from: filters.from, to: filters.to, backfill: "1" });

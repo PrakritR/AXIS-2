@@ -1,5 +1,6 @@
 "use client";
 
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -110,7 +111,7 @@ export function ManagerPayments() {
   }, [authReady, userId]);
 
   useEffect(() => {
-    if (!authReady || !userId) return;
+    if (!authReady || !userId || isDemoModeActive()) return;
     let cancelled = false;
     void fetch("/api/portal/purge-orphaned-records", {
       method: "POST",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -635,6 +636,10 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
   const [settingsRevision, setSettingsRevision] = useState(0);
 
   const reload = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/portal/scheduled-messages${query}`, { credentials: "include", cache: "no-store" });
@@ -659,6 +664,10 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
   }, []);
 
   useEffect(() => {
+    if (isDemoModeActive()) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     void (async () => {
       setLoading(true);

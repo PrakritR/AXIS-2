@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 /** Persist portal inbox threads (demo localStorage) so actions survive navigation and reloads. */
 
 export type InboxThreadMessage = {
@@ -144,6 +145,7 @@ export async function syncPersistedInboxFromServer(
 ): Promise<PersistedInboxThread[]> {
   if (!canUse()) return [];
   hydrateInboxFromSession(key);
+  if (isDemoModeActive()) return memoryByKey.get(key) ?? [];
   const force = opts?.force === true;
   const inflight = inboxSyncPromiseByKey.get(key);
   if (!force && inflight) return inflight;
@@ -268,6 +270,15 @@ export async function persistInboxAwait(key: string, threads: PersistedInboxThre
   }
   commitInboxMemory(key, threads);
   return postInboxRows("replace", key, threads);
+}
+
+/** Demo seed: load inbox threads into the local store without server mirror. */
+export function seedDemoInbox(key: string, threads: PersistedInboxThread[]): void {
+  if (!canUse()) return;
+  memoryByKey.set(key, threads);
+  persistInboxToSession(key, threads);
+  inboxLastSyncedAtByKey.set(key, Date.now());
+  window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
 }
 
 export function persistInbox(key: string, threads: PersistedInboxThread[]): void {

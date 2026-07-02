@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import {
@@ -300,6 +301,7 @@ export async function syncManagerApplicationsFromServer(opts?: {
   const managerUserId = opts?.managerUserId ?? undefined;
   ensureApplicationsScope(managerUserId);
   hydrateManagerApplicationsFromSession(managerUserId);
+  if (isDemoModeActive()) return readManagerApplicationRows();
   const force = opts?.force === true;
   if (!force && managerApplicationsSyncPromise) return managerApplicationsSyncPromise;
   if (!force && managerApplicationsLastSyncedAt > 0 && Date.now() - managerApplicationsLastSyncedAt < MANAGER_APPLICATIONS_SYNC_TTL_MS) {
@@ -381,6 +383,16 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Demo seed: load application rows into the local store without server mirror. */
+export function seedDemoManagerApplicationRows(rows: DemoApplicantRow[], scopeUserId: string): void {
+  if (!canUseStorage()) return;
+  ensureApplicationsScope(scopeUserId);
+  memoryRows = normalizeApplicationRows(rows);
+  persistManagerApplicationsToSession(memoryRows, scopeUserId);
+  managerApplicationsLastSyncedAt = Date.now();
+  emit();
 }
 
 export function resetManagerApplicationRowsToDemo(): void {

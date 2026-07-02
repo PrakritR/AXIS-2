@@ -3,6 +3,7 @@
  * Supabase is the persistence layer; this module keeps only in-memory page-session state.
  */
 
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
@@ -216,12 +217,12 @@ function emit() {
 }
 
 function postHouseholdPayload(body: unknown) {
-  if (!isBrowser()) return;
+  if (!isBrowser() || isDemoModeActive()) return;
   void postHouseholdPayloadAwait(body).catch(() => { /* fire-and-forget */ });
 }
 
 async function postHouseholdPayloadAwait(body: unknown): Promise<boolean> {
-  if (!isBrowser()) return false;
+  if (!isBrowser() || isDemoModeActive()) return false;
   const res = await fetch("/api/portal-household-charges", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -247,6 +248,10 @@ export async function syncHouseholdChargesFromServer(
   { skipReconcile = false }: { skipReconcile?: boolean } = {},
 ): Promise<HouseholdChargesSyncResult> {
   if (!isBrowser()) return { charges: [], rentProfiles: [] };
+  if (isDemoModeActive()) {
+    hydrateHouseholdStateFromSession();
+    return { charges: readAll(), rentProfiles: readRentProfiles() };
+  }
   if (!force && householdChargesSyncPromise) return householdChargesSyncPromise;
   if (!force && householdChargesLastSyncedAt > 0 && Date.now() - householdChargesLastSyncedAt < HOUSEHOLD_CHARGES_SYNC_TTL_MS) {
     return { charges: readAll(), rentProfiles: readRentProfiles() };
@@ -337,6 +342,20 @@ function writeRentProfiles(rows: RecurringRentProfile[]) {
   householdChargesLastSyncedAt = Date.now();
   mirrorRentProfiles(normalized);
   syncAllRecurringRentCharges();
+  emit();
+}
+
+/**
+ * Demo seed: load charges + rent profiles directly into the local store without
+ * mirroring to the server (used only by the public `/demo` sandbox). Overwrites
+ * whatever is cached so re-seeding is idempotent.
+ */
+export function seedDemoHouseholdCharges(charges: HouseholdCharge[], rentProfiles: RecurringRentProfile[] = []): void {
+  if (!isBrowser()) return;
+  memoryCharges = dedupeCharges(charges);
+  memoryRentProfiles = dedupeRecurringRentProfiles(rentProfiles);
+  persistHouseholdStateToSession();
+  householdChargesLastSyncedAt = Date.now();
   emit();
 }
 

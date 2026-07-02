@@ -19,6 +19,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
@@ -86,6 +87,10 @@ export function ManagerProperties() {
   const refreshPending = refreshPortfolio;
 
   const loadSku = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setSkuLoaded(true);
+      return;
+    }
     try {
       const res = await fetch("/api/manager/subscription", { credentials: "include" });
       const body = (await res.json()) as { tier?: string | null };

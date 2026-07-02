@@ -25,3 +25,18 @@ export function openAxisAssistant(): void {
 export function closeAxisAssistant(): void {
   setAxisAssistantOpen(false);
 }
+
+// --- scripted prompt channel (used by the /demo "Run demo" auto-play) ---------
+type PromptListener = (prompt: string) => void;
+const promptListeners = new Set<PromptListener>();
+
+export function subscribeAxisAssistantPrompt(listener: PromptListener): () => void {
+  promptListeners.add(listener);
+  return () => promptListeners.delete(listener);
+}
+
+/** Open the assistant and submit a prompt programmatically. */
+export function sendAxisAssistantPrompt(prompt: string): void {
+  openAxisAssistant();
+  for (const listener of promptListeners) listener(prompt);
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import Image from "next/image";
 import Link from "next/link";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
@@ -525,7 +526,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   // Silently purge server-side orphaned records for deleted residents on mount.
   useEffect(() => {
-    if (!authReady || !userId) return;
+    if (!authReady || !userId || isDemoModeActive()) return;
     let cancelled = false;
     void fetch("/api/portal/purge-orphaned-records", {
       method: "POST",
