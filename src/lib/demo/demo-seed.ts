@@ -2,8 +2,13 @@
  * Seeds the browser-local demo stores for the public `/demo` sandbox from the
  * shared fictional dataset in `demo-data.ts`. Everything is written straight into
  * each store's dedicated `seedDemo…` helper (never the server), scoped to the
- * synthetic demo manager/resident ids. Idempotent; only runs while `/demo` is
- * active.
+ * synthetic demo manager/resident ids.
+ *
+ * The demo is ephemeral: this force-resets every store to the seed on each mount
+ * (every page load and every client-side navigation back to `/demo`), so nothing
+ * a visitor does in the sandbox survives a refresh. Each `seedDemo…` helper does
+ * a full overwrite (not a merge), which discards any edits/additions/deletes the
+ * visitor made in the previous session.
  */
 import { seedDemoHouseholdCharges } from "@/lib/household-charges";
 import { seedDemoManagerApplicationRows } from "@/lib/manager-applications-storage";
@@ -35,12 +40,12 @@ import {
   demoWorkOrders,
 } from "@/lib/demo/demo-data";
 
-let seeded = false;
-
-/** Populate every demo store. Idempotent; only runs on the `/demo` sandbox. */
+/**
+ * Reset every demo store to the seed. Runs on each `/demo` mount so the sandbox
+ * always starts fresh; only runs client-side on the `/demo` route.
+ */
 export function seedDemoPortalData(): void {
-  if (typeof window === "undefined" || !isDemoModeActive() || seeded) return;
-  seeded = true;
+  if (typeof window === "undefined" || !isDemoModeActive()) return;
 
   seedDemoManagerProperties(DEMO_MANAGER_USER_ID, demoProperties());
 

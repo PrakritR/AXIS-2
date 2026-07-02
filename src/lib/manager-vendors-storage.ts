@@ -64,7 +64,7 @@ function ownVendorRows(rows: ManagerVendorRow[], managerUserId: string | null | 
 }
 
 function mirrorVendorsToServer(rows: ManagerVendorRow[], managerUserId?: string | null) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   const payload = managerUserId ? ownVendorRows(rows, managerUserId) : rows;
   void fetch("/api/portal-vendors", {
     method: "POST",
@@ -75,7 +75,7 @@ function mirrorVendorsToServer(rows: ManagerVendorRow[], managerUserId?: string 
 }
 
 function mirrorVendorRowToServer(row: ManagerVendorRow) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-vendors", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -85,7 +85,7 @@ function mirrorVendorRowToServer(row: ManagerVendorRow) {
 }
 
 function deleteVendorFromServer(id: string) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-vendors", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

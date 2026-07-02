@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
+import { PortalContainerProvider } from "@/components/ui/portal-container-context";
 import { groupNavItems } from "@/lib/portals/nav-groups";
 import { proPortal } from "@/lib/portals/pro";
 import { RESIDENT_APPROVED_PORTAL_SECTIONS, RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
@@ -76,6 +78,19 @@ export function DemoPortalShell() {
     () => groupNavItems(def.kind, def.sections.map((s) => ({ section: s.section, meta: s }))),
     [def],
   );
+  // Match the real portal sidebar: the trailing unlabeled group (Feedback) is
+  // pushed to the bottom, separate from the Team group above it.
+  const firstTrailingGroupIdx = useMemo(
+    () => navGroups.findIndex((g) => g.id === "account" || g.id === "more"),
+    [navGroups],
+  );
+
+  // The demo frame element — reused portal modals portal into it (see
+  // PortalContainerProvider below) so they stay bounded inside the demo screen
+  // instead of covering the whole browser.
+  const [frameEl, setFrameEl] = useState<HTMLDivElement | null>(null);
+  // Collapsible sidebar, mirroring the real PortalSidebar "«/»" toggle.
+  const [collapsed, setCollapsed] = useState(false);
 
   const [section, setSection] = useState<string>("dashboard");
   const [tab, setTab] = useState<string | null>(null);
@@ -154,6 +169,7 @@ export function DemoPortalShell() {
   const finished = stepIndex >= steps.length;
 
   return (
+    <PortalContainerProvider container={frameEl}>
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 py-4 sm:px-4">
       {/* Controls bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -212,23 +228,70 @@ export function DemoPortalShell() {
       </div>
 
       {/* Portal window */}
-      <div className="relative flex min-h-[70vh] overflow-hidden rounded-2xl border border-border bg-background shadow-[var(--shadow-lg,0_20px_60px_-30px_rgba(15,23,42,0.5))]">
+      <div
+        ref={setFrameEl}
+        className="demo-portal-frame relative flex min-h-[70vh] overflow-hidden rounded-2xl border border-border bg-background shadow-[var(--shadow-lg,0_20px_60px_-30px_rgba(15,23,42,0.5))]"
+      >
         {/* Sidebar */}
-        <aside className="hidden w-[208px] shrink-0 flex-col border-r border-border bg-background glass-nav md:flex">
-          <div className="flex h-12 items-center gap-2 border-b border-border px-3">
-            <span className="text-sm font-semibold text-foreground">Axis</span>
-            <span className="rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
-              {role === "resident" ? "Resident" : "Manager"}
-            </span>
-          </div>
-          <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-2" aria-label="Demo sections">
+        <aside
+          className={cn(
+            "hidden shrink-0 flex-col border-r border-border bg-background glass-nav transition-[width] duration-200 md:flex",
+            collapsed ? "w-[58px]" : "w-[208px]",
+          )}
+        >
+          {collapsed ? (
+            <div className="flex h-12 shrink-0 items-center justify-center border-b border-border">
+              <button
+                type="button"
+                onClick={() => setCollapsed(false)}
+                aria-label="Expand sidebar"
+                aria-expanded={false}
+                data-attr="demo-sidebar-expand"
+                className="grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-accent/70 hover:text-foreground"
+              >
+                <ChevronsRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <div className="flex h-12 items-center gap-2 border-b border-border px-3">
+              <span className="text-sm font-semibold text-foreground">Axis</span>
+              <span className="rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
+                {role === "resident" ? "Resident" : "Manager"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCollapsed(true)}
+                aria-label="Collapse sidebar"
+                aria-expanded
+                data-attr="demo-sidebar-collapse"
+                className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-muted transition hover:bg-accent/70 hover:text-foreground"
+              >
+                <ChevronsLeft className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )}
+          <nav
+            className={cn(
+              "flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto py-2",
+              collapsed ? "items-center px-2" : "px-2",
+            )}
+            aria-label="Demo sections"
+          >
             {navGroups.map((group, i) => (
-              <div key={group.id} className={cn("flex flex-col gap-0.5", i > 0 && "mt-1")}>
-                {group.label ? (
+              <div
+                key={group.id}
+                className={cn(
+                  "flex w-full flex-col gap-0.5",
+                  collapsed && "items-center",
+                  i === firstTrailingGroupIdx ? "mt-auto pt-2" : i > 0 && "mt-1",
+                )}
+              >
+                {group.label && !collapsed ? (
                   <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted/70">
                     {group.label}
                   </p>
                 ) : null}
+                {collapsed && i > 0 ? <div className="my-1 h-px w-6 bg-border" aria-hidden /> : null}
                 {group.items.map((item) => {
                   const active = section === item.section;
                   return (
@@ -237,8 +300,11 @@ export function DemoPortalShell() {
                       type="button"
                       data-attr={`demo-nav-${item.section}`}
                       onClick={() => selectSection(item.section, item.meta.tabs[0]?.id ?? null)}
+                      title={collapsed ? item.meta.label : undefined}
                       className={cn(
-                        "relative flex min-h-9 items-center gap-2.5 rounded-[12px] px-2.5 py-[7px] text-left text-[13px] font-medium transition",
+                        collapsed
+                          ? "relative grid h-9 w-9 place-items-center rounded-[12px] transition"
+                          : "relative flex min-h-9 items-center gap-2.5 rounded-[12px] px-2.5 py-[7px] text-left text-[13px] font-medium transition",
                         active
                           ? "bg-[var(--glass-fill)] text-foreground ring-1 ring-border/60 [html[data-theme=light]_&]:bg-card [html[data-theme=light]_&]:shadow-[var(--shadow-sm)]"
                           : "text-muted hover:bg-accent/70 hover:text-foreground",
@@ -248,7 +314,7 @@ export function DemoPortalShell() {
                       <span className={active ? "text-primary" : "opacity-80"} aria-hidden>
                         <PortalNavIcon section={item.section} className="h-[17px] w-[17px] shrink-0" />
                       </span>
-                      <span className="min-w-0 truncate">{item.meta.label}</span>
+                      {collapsed ? null : <span className="min-w-0 truncate">{item.meta.label}</span>}
                     </button>
                   );
                 })}
@@ -309,5 +375,6 @@ export function DemoPortalShell() {
         </div>
       </div>
     </div>
+    </PortalContainerProvider>
   );
 }

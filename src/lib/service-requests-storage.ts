@@ -95,7 +95,7 @@ export function seedDemoServiceRequests(requests: ServiceRequest[]): void {
  * optimistic local update already drove the UI.
  */
 function mirrorServiceRequestToServer(row: ServiceRequest): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-service-requests", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -105,7 +105,7 @@ function mirrorServiceRequestToServer(row: ServiceRequest): void {
 }
 
 function deleteServiceRequestFromServer(id: string): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-service-requests", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

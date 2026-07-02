@@ -45,6 +45,9 @@ function writeLocal(rows: PortalBugFeedbackRow[]) {
 
 async function persistRow(row: PortalBugFeedbackRow) {
   if (!isBrowser()) return;
+  // Demo sandbox is local-only: the cached-row update already drove the UI;
+  // never write feedback to the real backend.
+  if (isDemoModeActive()) return;
   const res = await fetch("/api/portal-bug-feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -158,6 +161,11 @@ export async function deleteBugFeedbackRow(id: string, opts?: { admin?: boolean 
   if (!isBrowser()) return;
   const trimmedId = id.trim();
   if (!trimmedId) throw new Error("Missing feedback id.");
+  // Demo sandbox is local-only: delete from the cache without touching the server.
+  if (isDemoModeActive()) {
+    writeLocal(cachedRows.filter((r) => r.id !== trimmedId));
+    return;
+  }
   const endpoint = opts?.admin ? "/api/admin/portal-bug-feedback" : "/api/portal-bug-feedback";
   const res = await fetch(endpoint, {
     method: "POST",
