@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
+import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
@@ -83,6 +84,24 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const persistInboxRef = useRef(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  // Individually-selectable recipients (this resident's own manager[s] + co-managers),
+  // scoped server-side by /api/portal/inbox-eligible-contacts.
+  const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/portal/inbox-eligible-contacts?portal=resident", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : { contacts: [] }))
+      .then((data: { contacts?: InboxScopedContact[] }) => {
+        if (active) setEligibleContacts(Array.isArray(data.contacts) ? data.contacts : []);
+      })
+      .catch(() => {
+        if (active) setEligibleContacts([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     persistInboxRef.current = false;
@@ -485,6 +504,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         portal="resident"
         senderName="Resident"
         senderEmail="resident@example.com"
+        liveContacts={eligibleContacts}
       />
 
       {rowsForTab.length === 0 ? (
