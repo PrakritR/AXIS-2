@@ -46,15 +46,22 @@ function ResidentAuthWeb() {
           showLogo
           eyebrow="Resident"
           title="Get started"
-          subtitle="Sign in or apply with your manager's link"
+          subtitle="Create your account, sign in, or apply with your manager's link"
         />
 
         <AuthRoleStack
           options={[
-            { id: "sign-in", label: "Sign in", hint: "Google or email", icon: "sign-in" },
+            { id: "create", label: "Create account", hint: "Use your application email", icon: "resident" },
+            { id: "sign-in", label: "Sign in", hint: "Google or email", icon: "sign-in", tone: "steel" },
             { id: "apply", label: "Apply", hint: "Paste your link", icon: "apply", tone: "steel" },
           ]}
-          onSelect={(id) => setMode(id as ResidentMode)}
+          onSelect={(id) => {
+            if (id === "create") {
+              router.push("/auth/create-account?role=resident");
+              return;
+            }
+            setMode(id as ResidentMode);
+          }}
         />
 
         <p className="auth-footer-link mt-5 text-center text-[13px] text-muted sm:mt-6 sm:text-sm">
@@ -72,7 +79,7 @@ function ResidentAuthWeb() {
         <AuthPageHeader eyebrow="Resident" title="Sign in" accent={false} showLogo />
 
         <div className="mt-5">
-          <GoogleSignInButton nextPath="/resident/dashboard" />
+          <GoogleSignInButton nextPath="/resident/dashboard" intent="resident" />
         </div>
 
         <div className="my-4">

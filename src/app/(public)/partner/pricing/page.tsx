@@ -53,9 +53,12 @@ export default function PartnerPricingPage() {
   const [googleSession, setGoogleSession] = useState<PartnerPricingSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
 
-  const googleSignedIn = Boolean(googleSession?.authenticated && googleSession.isGoogle !== false);
-  const pricingAccountComplete = googleSignedIn && googleSession != null && !googleSession.needsPricing;
-  const showGoogleAccountPanel = googleSignedIn;
+  // Any authenticated session counts as signed-in (matches manager-plan-picker). Previously
+  // this required a Google identity, so a signed-in email/password manager was treated as
+  // logged-out and pushed through a brand-new Google login over a valid session.
+  const signedIn = Boolean(googleSession?.authenticated);
+  const pricingAccountComplete = signedIn && googleSession != null && !googleSession.needsPricing;
+  const showGoogleAccountPanel = signedIn;
 
   useEffect(() => {
     let cancelled = false;

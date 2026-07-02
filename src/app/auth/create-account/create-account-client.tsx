@@ -232,7 +232,7 @@ export default function CreateAccountClient() {
   const passwordLabel = reusingExistingAccount ? "Password" : "Create password";
   const existingAccountHint =
     role === "resident" && reusingExistingAccount
-      ? "This email already has an Axis login. Your Axis ID and email match your application — you can use a new password below to sign in as a resident."
+      ? "This email already has an Axis login. Enter that account's password to add resident access."
       : reusingExistingAccount && existingAccountRoles.length
         ? `This email already has Axis access for ${existingAccountRoles.map((r) => r[0]!.toUpperCase() + r.slice(1)).join(", ")}. Use the same password to add ${role} access to that login.`
         : reusingExistingAccount
@@ -261,8 +261,21 @@ export default function CreateAccountClient() {
           showToast(body.error ?? "Could not create account.");
           return;
         }
-        showToast(`Account ready. Axis ID ${body.managerId ?? effectiveCheckoutPreview.managerId}. Sign in with your email.`);
-        router.push("/auth/sign-in");
+        // Sign the just-created manager straight in with the password they set here —
+        // no reason to bounce back through the sign-in screen after paying.
+        const supabase = createSupabaseBrowserClient();
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: effectiveCheckoutPreview.email,
+          password,
+        });
+        if (signInError || !signInData?.user) {
+          showToast(`Account ready. Axis ID ${body.managerId ?? effectiveCheckoutPreview.managerId}. Sign in with your email.`);
+          router.push("/auth/sign-in");
+          return;
+        }
+        posthog.identify(signInData.user.id);
+        showToast(`Account ready. Axis ID ${body.managerId ?? effectiveCheckoutPreview.managerId}.`);
+        window.location.replace("/portal/dashboard");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Sign up failed";
         showToast(msg);
@@ -340,23 +353,20 @@ export default function CreateAccountClient() {
       return;
     }
 
-    if (!axisId.trim()) {
-      showToast("Axis ID is required.");
-      return;
-    }
-
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/register-resident", {
+      // Email-only resident signup: the application is matched by email, so no Axis ID
+      // is required. Existing logins are verified by password (never silently reset).
+      const res = await fetch("/api/auth/resident-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
           password,
-          axisId: axisId.trim(),
+          fullName: fullName.trim() || undefined,
         }),
       });
-      const body = (await res.json()) as { error?: string; reusedExistingAuthUser?: boolean; axisId?: string };
+      const body = (await res.json()) as { error?: string; linkedApplication?: boolean; axisId?: string };
       if (!res.ok) {
         showToast(body.error ?? "Could not create resident account.");
         return;
@@ -367,22 +377,14 @@ export default function CreateAccountClient() {
         password,
       });
       if (signInError) {
-        showToast(
-          body.reusedExistingAuthUser
-            ? "Resident access updated. Sign in with the email and password you just set."
-            : "Resident account created. Sign in with your email.",
-        );
+        showToast("Resident account created. Sign in with your email.");
         router.push("/auth/sign-in");
         return;
       }
       if (residentSignInData?.user) {
         posthog.identify(residentSignInData.user.id);
       }
-      showToast(
-        body.reusedExistingAuthUser
-          ? "Resident access updated. You are signed in."
-          : "Resident account created. You are signed in.",
-      );
+      showToast("Resident account created. You are signed in.");
       router.push("/resident/dashboard");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign up failed";
@@ -431,10 +433,9 @@ export default function CreateAccountClient() {
           </>
         ) : role === "resident" ? (
           <>
-            Use the same email address from your rental application together with your Axis ID. If the email does not
-            match that application, Axis will not create the resident account. This Axis ID can only create resident
-            portal access. After signup, your resident portal stays limited until an Axis manager marks your
-            application fee paid and approves your application.
+            Use the same email address from your rental application. Axis links your account to that application
+            automatically—no Axis ID needed. After signup, your resident portal stays limited until an Axis manager
+            marks your application fee paid and approves your application.
           </>
         ) : (
           <>
@@ -636,37 +637,24 @@ export default function CreateAccountClient() {
           <>
             {role === "resident" ? (
               <div>
-                <label className={FIELD_LABEL_CLASS} htmlFor="app">
-                  Axis ID
-                  <Req />
-                </label>
-                <Input
-                  id="app"
-                  className="mt-1.5 font-mono"
-                  placeholder="AXIS-XXXXXXXX"
-                  value={axisId}
-                  onChange={(e) => setAxisId(e.target.value)}
-                />
                 {googleSignedIn && googleSessionEmail ? (
-                  <div className="mt-4">
+                  <div className="mb-4">
                     <GoogleSignedInBanner
                       email={googleSessionEmail}
                       fullName={googleSessionName}
-                      subtitle="Use Continue with Google below to link this Axis ID to your Google account."
+                      subtitle="Continue with Google below to finish setting up your resident account."
                     />
                   </div>
                 ) : null}
-                <div className="mt-4">
-                  <ResidentGoogleSignUpButton axisId={axisId} disabled={busy} />
-                </div>
+                {/* Email-only resident signup — the rental application is matched by email, so
+                    the Axis ID field is gone. A manager link may still pass one via the URL. */}
+                <ResidentGoogleSignUpButton axisId={axisId} disabled={busy} />
                 {!googleSignedIn ? (
-                  <>
-                    <div className="my-4 flex items-center gap-3">
-                      <div className="h-px flex-1 bg-border" aria-hidden />
-                      <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
-                      <div className="h-px flex-1 bg-border" aria-hidden />
-                    </div>
-                  </>
+                  <div className="my-4 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-border" aria-hidden />
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or set a password</span>
+                    <div className="h-px flex-1 bg-border" aria-hidden />
+                  </div>
                 ) : null}
               </div>
             ) : null}

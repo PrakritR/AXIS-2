@@ -3,6 +3,7 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import { portalDashboardPath } from "@/components/auth/portal-switcher";
+import { clearResidentSignupAxisId, readResidentSignupAxisId } from "@/lib/auth/resident-oauth-storage";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
@@ -35,11 +36,14 @@ function ResidentOauthFinishContent() {
               : null,
         );
 
+        // Forward the Axis ID the applicant typed on the create-account form so the
+        // Google path enforces the same application email+ID match as the password path.
+        const storedAxisId = readResidentSignupAxisId();
         const res = await fetch("/api/auth/register-resident-oauth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({}),
+          body: JSON.stringify(storedAxisId ? { axisId: storedAxisId } : {}),
         });
         const body = (await res.json()) as { error?: string };
         if (!res.ok) {
@@ -47,6 +51,7 @@ function ResidentOauthFinishContent() {
           return;
         }
 
+        clearResidentSignupAxisId();
         window.location.replace(portalDashboardPath("resident"));
       } catch (e) {
         const message = e instanceof Error ? e.message : "Could not finish resident signup.";

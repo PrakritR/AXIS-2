@@ -1,4 +1,3 @@
-import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { clearOAuthNextCookie, readOAuthIntentFromRequest, readOAuthSurfaceFromRequest } from "@/lib/auth/oauth-next-cookie";
@@ -97,8 +96,9 @@ export async function handleOAuthCallback(
     } = await supabase.auth.getUser();
     if (user) {
       const service = createSupabaseServiceRoleClient();
+      // Link any prior email/password account to this OAuth identity, then resolve the
+      // destination ONCE. No auto free-manager provisioning — unknown users pick a role.
       await reconcileAuthAccountsByEmail(service, user);
-      await ensureFreeManagerPortalAccess(service, user);
       const resolvedPath = options?.resolveRedirect
         ? await options.resolveRedirect(service, user, safePath)
         : await resolveOAuthPortalRedirect(service, user, safePath, {

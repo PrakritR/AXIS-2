@@ -5,14 +5,15 @@ import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
 export const AUTH_WELCOME_ROLE_OPTIONS = [
   {
-    id: "/auth/sign-in?mode=create&role=resident",
+    // `intent` drives web sign-in routing; `mode`/`role` drive the native hub.
+    id: "/auth/sign-in?intent=resident&mode=create&role=resident",
     label: "Resident",
     hint: "Rent, pay & apply",
     icon: "resident" as const,
     tone: "blue" as const,
   },
   {
-    id: "/auth/sign-in?mode=create&role=manager",
+    id: "/auth/sign-in?intent=manager&mode=create&role=manager",
     label: "Manager",
     hint: "List properties & lease",
     icon: "manager" as const,
