@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendSms } from "@/lib/twilio";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
@@ -118,8 +119,22 @@ export async function deliverPortalInboxMessage(
     }
   }
 
-  const recipients = [...recipientsByEmail.values()];
+  let recipients = [...recipientsByEmail.values()];
   if (recipients.length === 0) return { ok: false, error: "No recipients selected." };
+
+  // Enforce role scope server-side (mirrors the interactive send route). Scheduled
+  // sends are authored by managers; an out-of-scope recipient is rejected here too.
+  if (senderRole !== "admin") {
+    const { allowed } = await filterRecipientsBySenderScope(
+      db,
+      { id: opts.senderUserId, email: senderEmail, role: senderRole, isAdmin: false },
+      recipients,
+    );
+    if (allowed.length === 0) {
+      return { ok: false, error: "You can only message people connected to your account." };
+    }
+    recipients = allowed;
+  }
 
   const toEmails = recipients.map((r) => r.email).filter((email) => !email.endsWith("@axis.local"));
 
