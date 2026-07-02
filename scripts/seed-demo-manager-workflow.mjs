@@ -97,6 +97,7 @@ async function main() {
   await seedCharges(charges);
   await seedIncomeLedger(charges);
   await seedExpenses();
+  await seedPromotions();
 
   await printSummary();
   console.log("\n=== Done. Sign in as", TARGET_EMAIL, "and open the manager portal. ===\n");
@@ -872,6 +873,112 @@ async function seedExpenses() {
 }
 
 // ---------------------------------------------------------------------------
+// 8. Promotions (AI flyers) — a couple of generated flyers + one draft, so the
+//    Promotion tab is populated for the test manager.
+// ---------------------------------------------------------------------------
+async function seedPromotions() {
+  const mk = (slug, propKey, label, title, theme, status, inputs, copy, ageDays) => {
+    const id = key(slug);
+    const created = iso(daysFromNow(ageDays));
+    return {
+      id,
+      manager_user_id: managerUserId,
+      row_data: {
+        id,
+        managerUserId,
+        propertyId: propKey ? key(propKey) : null,
+        propertyLabel: label,
+        title,
+        theme,
+        status,
+        inputs,
+        copy,
+        createdAt: created,
+        updatedAt: created,
+      },
+      updated_at: created,
+    };
+  };
+
+  const rows = [
+    mk(
+      "promo-cedar",
+      "prop-cedar",
+      "Cedar Flat 2B — Fremont",
+      "Fremont 2-bed feature",
+      "cobalt",
+      "generated",
+      {
+        headline: "Modern 2-bed near the canal",
+        sellingPoints: "Modern finishes\nNear the canal\nWalk to transit",
+        price: "$2,400 / mo",
+        promo: "First month free",
+        cta: "Book a tour today",
+        contact: "leasing@axis.com · (206) 555-0142",
+        tone: "Warm & welcoming",
+      },
+      {
+        headline: "Modern Living by the Canal",
+        subheadline: "Cedar Flat 2B — Fremont · $2,400 / mo",
+        sellingPoints: ["Modern finishes throughout", "Steps from the canal", "Walk to transit"],
+        promoLine: "First month free",
+        ctaText: "Book a tour today",
+        closingLine: "Contact us: leasing@axis.com · (206) 555-0142",
+      },
+      -6,
+    ),
+    mk(
+      "promo-magnolia",
+      "prop-magnolia",
+      "Magnolia House — Capitol Hill",
+      "Shared house rooms",
+      "forest",
+      "generated",
+      {
+        headline: "Furnished rooms, flexible terms",
+        sellingPoints: "Furnished rooms\nFlexible terms\nUtilities included",
+        price: "$1,050–$1,300 / mo",
+        promo: "",
+        cta: "Reserve a room",
+        contact: "leasing@axis.com",
+        tone: "Calm & professional",
+      },
+      {
+        headline: "Furnished Rooms on Capitol Hill",
+        subheadline: "Magnolia House — Capitol Hill · $1,050–$1,300 / mo",
+        sellingPoints: ["Fully furnished rooms", "Flexible lease terms", "Utilities included"],
+        promoLine: "",
+        ctaText: "Reserve a room",
+        closingLine: "Contact us: leasing@axis.com",
+      },
+      -2,
+    ),
+    mk(
+      "promo-birch-draft",
+      "prop-birch",
+      "Birch Court — Ballard",
+      "Ballard rooms (draft)",
+      "sunset",
+      "draft",
+      {
+        headline: "Bright rooms near the water",
+        sellingPoints: "Bright rooms\nNear the water\nClose to transit",
+        price: "$1,100–$1,250 / mo",
+        promo: "$250 off first month",
+        cta: "Apply online",
+        contact: "leasing@axis.com",
+        tone: "Bold & energetic",
+      },
+      null,
+      0,
+    ),
+  ];
+
+  await must(sb.from("manager_promotion_records").upsert(rows, { onConflict: "id" }), "manager_promotion_records");
+  console.log(`Seeded ${rows.length} promotions (generated + draft).`);
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 async function printSummary() {
@@ -889,6 +996,7 @@ async function printSummary() {
   counts.recurringRent = await q("portal_recurring_rent_profile_records");
   counts.ledgerEntries = await q("ledger_entries");
   counts.expenses = await q("manager_expense_entries");
+  counts.promotions = await q("manager_promotion_records");
   console.log("\nManager-scoped row counts:", JSON.stringify(counts, null, 2));
 }
 

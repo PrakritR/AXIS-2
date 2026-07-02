@@ -15,6 +15,7 @@ import { seedDemoManagerApplicationRows } from "@/lib/manager-applications-stora
 import { seedDemoLeasePipeline } from "@/lib/lease-pipeline-storage";
 import { seedDemoManagerWorkOrderRows } from "@/lib/manager-work-orders-storage";
 import { seedDemoManagerVendorRows } from "@/lib/manager-vendors-storage";
+import { seedDemoManagerPromotionRows } from "@/lib/manager-promotions-storage";
 import { seedDemoServiceRequests } from "@/lib/service-requests-storage";
 import { seedDemoInbox, MANAGER_INBOX_STORAGE_KEY, RESIDENT_INBOX_STORAGE_KEY } from "@/lib/portal-inbox-storage";
 import { seedDemoManagerProperties } from "@/lib/demo-property-pipeline";
@@ -34,6 +35,7 @@ import {
   demoLeases,
   demoManagerInbox,
   demoProperties,
+  demoPromotions,
   demoResidentInbox,
   demoServiceRequests,
   demoVendors,
@@ -66,6 +68,7 @@ export function seedDemoPortalData(): void {
   seedDemoLeasePipeline(demoLeases(), DEMO_MANAGER_USER_ID);
   seedDemoManagerWorkOrderRows(demoWorkOrders());
   seedDemoManagerVendorRows(demoVendors());
+  seedDemoManagerPromotionRows(demoPromotions());
   seedDemoServiceRequests(demoServiceRequests());
   seedDemoInbox(MANAGER_INBOX_STORAGE_KEY, demoManagerInbox());
   seedDemoInbox(RESIDENT_INBOX_STORAGE_KEY, demoResidentInbox());

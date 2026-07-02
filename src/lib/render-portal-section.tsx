@@ -2,6 +2,7 @@ import { AdminDashboard } from "@/components/portal/admin-dashboard";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerPayments } from "@/components/portal/manager-payments";
+import { ManagerPromotion } from "@/components/portal/manager-promotion";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
@@ -471,6 +472,9 @@ export async function renderPortalSection(
         "calendar",
         managerOwnerSubscriptionTier,
       );
+    }
+    if (section === "promotion") {
+      return subscriptionGated(<ManagerPromotion />, kind, "promotion", managerOwnerSubscriptionTier);
     }
     if (section === "bugs-feedback") {
       return subscriptionGated(

@@ -20,6 +20,7 @@ const PRO_GROUPS: NavGroupConfig[] = [
   { id: "properties", label: "Properties", sections: ["properties", "applications", "residents", "leases"] },
   { id: "financials", label: "Financials", sections: ["payments", "financials", "documents"] },
   { id: "operations", label: "Operations", sections: ["calendar", "services", "inbox"] },
+  { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
   { id: "account", label: null, sections: ["bugs-feedback"] },
 ];
