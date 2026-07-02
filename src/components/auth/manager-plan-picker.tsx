@@ -91,10 +91,14 @@ function ManagerPlanPickerInner() {
 
   useEffect(() => {
     void Promise.resolve().then(() => {
+      // Preselect from the query, else from a tier the user picked on marketing pricing.
+      const stored = readManagerPricingOffer();
       const tier = searchParams.get("tier");
       if (tier && isPlanTierId(tier)) setSelectedTierId(tier);
+      else if (stored?.tier) setSelectedTierId(stored.tier);
       const billing = searchParams.get("billing");
       if (billing === "monthly" || billing === "annual") setBilling(billing);
+      else if (stored?.billing) setBilling(stored.billing);
     });
   }, [searchParams]);
 
@@ -232,7 +236,7 @@ function ManagerPlanPickerInner() {
       });
       if (signInError) {
         showToast("Account created. Sign in to continue.");
-        router.push("/auth/manager");
+        router.push("/auth/sign-in");
         return;
       }
 
@@ -398,8 +402,7 @@ function ManagerPlanPickerInner() {
         )}
         </div>
 
-        <AuthAccountFooterLink href="/auth/manager">Already have an account? Sign in</AuthAccountFooterLink>
-        <AuthAccountFooterLink href="/auth/sign-in">Change role</AuthAccountFooterLink>
+        <AuthAccountFooterLink href="/auth/sign-in">Already have an account? Sign in</AuthAccountFooterLink>
       </div>
     </AuthCard>
   );

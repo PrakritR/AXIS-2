@@ -10,7 +10,7 @@ import {
   type OAuthSurface,
 } from "@/lib/auth/post-oauth-routing";
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
-import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
+import { GET_STARTED_PATH } from "@/lib/auth/get-started-path";
 import {
   findManagerPurchaseForAccount,
   isManagerOnboardingComplete,
@@ -88,23 +88,23 @@ export async function resolveOAuthPortalRedirect(
   }
 
   const { data: roleRows } = await supabase.from("profile_roles").select("role").eq("user_id", user.id);
-  const roles = (roleRows ?? []).map((row) => row.role).filter((role): role is AuthRole => isAuthRole(role));
+  const roles = [...new Set((roleRows ?? []).map((row) => row.role).filter((role): role is AuthRole => isAuthRole(role)))];
 
-  if (roles.includes("resident") && !roles.includes("manager") && !roles.includes("admin")) {
+  // Multi-role users (e.g. admin+manager) always pick their portal explicitly — the chooser
+  // must never be skipped by a single-role branch below.
+  if (roles.length > 1) {
     return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
 
-  const isManagerAccount = roles.includes("manager");
-  if (isManagerAccount && (await managerNeedsPricingSelection(supabase, user.id, email))) {
-    return finish(MANAGER_PRICING_ENTRY_PATH);
+  const soleRole = roles[0] ?? null;
+  if (soleRole === "resident" || soleRole === "admin") {
+    return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
-
-  if (isManagerAccount) {
+  if (soleRole === "manager") {
+    if (await managerNeedsPricingSelection(supabase, user.id, email)) {
+      return finish(MANAGER_PRICING_ENTRY_PATH);
+    }
     return finish(managerPortalDestination(safeIntended));
-  }
-
-  if (roles.length > 0) {
-    return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
@@ -162,64 +162,32 @@ export async function resolveOAuthPortalRedirect(
     return finish(managerOauthFinishPath(pendingPurchase.stripe_checkout_session_id));
   }
 
-  if (intent === "resident") {
-    const { data: applicationRows } = await supabase
-      .from("manager_application_records")
-      .select("id, resident_email, row_data")
-      .eq("resident_email", email);
-
-    const approvedApplication = (applicationRows ?? []).find((row) => applicationBucket(row.row_data) === "approved");
-    if (approvedApplication) {
-      const linked = await completeResidentSignupFromOAuth(supabase, user.id, email, approvedApplication.id);
-      if (linked.ok) {
-        return finish("/resident/dashboard");
-      }
-      const params = new URLSearchParams({
-        role: "resident",
-        message: "resident_signup_failed",
-      });
-      if (linked.error) params.set("error", linked.error);
-      return finish(`/auth/create-account?${params.toString()}`);
-    }
-
-    const hasUnapprovedApplication = (applicationRows ?? []).some((row) => applicationBucket(row.row_data) !== "approved");
-    if (hasUnapprovedApplication) {
-      return finish("/auth/create-account?role=resident&message=application_pending");
-    }
-  }
-
+  // Link by rental application (approved OR pending). A pending applicant lands in the
+  // resident portal in a limited state — never bounced back to create-account.
   const { data: applicationRows } = await supabase
     .from("manager_application_records")
     .select("id, resident_email, row_data")
     .eq("resident_email", email);
 
   const approvedApplication = (applicationRows ?? []).find((row) => applicationBucket(row.row_data) === "approved");
-  if (approvedApplication) {
-    const linked = await completeResidentSignupFromOAuth(supabase, user.id, email, approvedApplication.id);
+  const linkableApplication = approvedApplication ?? (applicationRows ?? [])[0];
+  if (linkableApplication) {
+    const linked = await completeResidentSignupFromOAuth(supabase, user.id, email, linkableApplication.id);
     if (linked.ok) {
       return finish("/resident/dashboard");
     }
-    const params = new URLSearchParams({
-      role: "resident",
-      message: "resident_signup_failed",
-    });
+    const params = new URLSearchParams({ role: "resident", message: "resident_signup_failed" });
     if (linked.error) params.set("error", linked.error);
     return finish(`/auth/create-account?${params.toString()}`);
   }
 
-  const hasUnapprovedApplication = (applicationRows ?? []).some((row) => applicationBucket(row.row_data) !== "approved");
-  if (hasUnapprovedApplication) {
-    return finish("/auth/create-account?role=resident&message=application_pending");
+  // Unknown account: no role, no purchase, no application. Do NOT silently create a free
+  // manager. Honor an explicit intent; otherwise send the user to the quick role chooser.
+  if (intent === "manager") {
+    return finish(MANAGER_PRICING_ENTRY_PATH);
   }
-
-  const freeProvision = await ensureFreeManagerPortalAccess(supabase, user);
-  if (freeProvision.status === "portal_ready") {
-    return finish("/portal/dashboard");
-  }
-
   if (intent === "resident") {
     return finish("/auth/create-account?role=resident&message=resident_signup_failed");
   }
-
-  return finish(MANAGER_PRICING_ENTRY_PATH);
+  return finish(GET_STARTED_PATH);
 }

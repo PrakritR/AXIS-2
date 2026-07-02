@@ -4,54 +4,14 @@ import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
-import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
-
-function isAuthRole(value: unknown): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "admin";
-}
 
 function safeNext(raw: string | null): string {
   if (!raw?.startsWith("/")) return "";
   const normalized = normalizePostAuthPath(raw);
   return normalized === "/auth/continue" ? "" : normalized;
-}
-
-async function fetchPortalRolesFast(): Promise<AuthRole[] | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 2500);
-    const res = await fetch("/api/auth/portal-roles", {
-      credentials: "include",
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    window.clearTimeout(timeout);
-    if (!res.ok) return null;
-    const body = (await res.json()) as { roles?: AuthRole[] };
-    return Array.isArray(body.roles) ? body.roles.filter(isAuthRole) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchLegacyRole(
-  supabase: ReturnType<typeof createSupabaseBrowserClient>,
-  userId: string,
-): Promise<AuthRole | null> {
-  try {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-    return isAuthRole(profile?.role) ? profile.role : null;
-  } catch {
-    return null;
-  }
-}
-
-function fallbackRolesFromUser(user: { user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null }): AuthRole[] {
-  const role = user.user_metadata?.role ?? user.app_metadata?.role;
-  return isAuthRole(role) ? [role] : [];
 }
 
 function AuthContinueLoading() {
@@ -82,64 +42,39 @@ function ContinueContent() {
           return;
         }
 
-        let roles = await fetchPortalRolesFast();
-        if (!roles || roles.length === 0) {
-          roles = fallbackRolesFromUser(user);
-        }
-        if (roles.length === 0) {
-          const legacyRole = await fetchLegacyRole(supabase, user.id);
-          if (legacyRole) {
-            roles = [legacyRole];
+        // Single source of truth: the server resolves the destination once (portal, plan,
+        // signup-finish, choose-portal, or the get-started role chooser for unknown users).
+        const resolveDestination = async (): Promise<string | null> => {
+          try {
+            const res = await fetch(
+              `/api/auth/oauth-portal-access?next=${encodeURIComponent(nextPath || "/auth/continue")}`,
+              { credentials: "include", cache: "no-store" },
+            );
+            if (!res.ok) return null;
+            const body = (await res.json()) as { redirectTo?: string };
+            const candidate = body.redirectTo?.startsWith("/") ? normalizePostAuthPath(body.redirectTo) : null;
+            return candidate === "/auth/continue" ? null : candidate;
+          } catch {
+            return null;
           }
-        }
+        };
 
-        if (roles.length === 0) {
-          const resolvePortalAccess = async (): Promise<string | null> => {
-            try {
-              const accessRes = await fetch(
-                `/api/auth/oauth-portal-access?next=${encodeURIComponent(nextPath || "/auth/continue")}`,
-                { credentials: "include", cache: "no-store" },
-              );
-              if (!accessRes.ok) return null;
-              const body = (await accessRes.json()) as { redirectTo?: string };
-              const candidate = body.redirectTo?.startsWith("/") ? normalizePostAuthPath(body.redirectTo) : null;
-              return candidate === "/auth/continue" ? null : candidate;
-            } catch {
-              return null;
-            }
-          };
-
-          let redirectTo = await resolvePortalAccess();
-          if (!redirectTo) {
-            await new Promise((resolve) => window.setTimeout(resolve, 400));
-            redirectTo = await resolvePortalAccess();
-          }
-          if (redirectTo) {
-            if (cancelled || didRedirectRef.current) return;
-            didRedirectRef.current = true;
-            window.location.replace(nativeAwarePath(redirectTo));
-            return;
-          }
-          if (cancelled || didRedirectRef.current) return;
-          didRedirectRef.current = true;
-          window.location.replace(
-            "/auth/sign-in?error=oauth&message=" +
-              encodeURIComponent("No portal account found for this Google login. Create an account or use email and password."),
-          );
-          return;
+        let redirectTo = await resolveDestination();
+        if (!redirectTo) {
+          await new Promise((resolve) => window.setTimeout(resolve, 400));
+          redirectTo = await resolveDestination();
         }
 
         if (cancelled || didRedirectRef.current) return;
         didRedirectRef.current = true;
 
-        if (roles.length > 1) {
-          const q = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
-          window.location.replace(`/auth/choose-portal${q}`);
+        if (redirectTo) {
+          window.location.replace(nativeAwarePath(redirectTo));
           return;
         }
 
-        const role = roles[0] ?? "manager";
-        window.location.replace(nativeAwarePath(normalizePostAuthPath(nextPath, role)));
+        // Resolution failed (network/500) — keep the user on a safe authenticated screen.
+        window.location.replace(nativeAwarePath("/auth/get-started"));
       } catch {
         if (cancelled) return;
         setErrorText("Still loading your portal. If this keeps happening, go back and try sign-in again.");

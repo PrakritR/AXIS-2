@@ -7,30 +7,29 @@ export function ResidentGoogleSignUpButton({
   axisId,
   disabled = false,
 }: {
-  axisId: string;
+  /** Optional — a manager application link may pass an Axis ID; signup links by email either way. */
+  axisId?: string;
   disabled?: boolean;
 }) {
-  const trimmed = axisId.trim();
-  const canUseGoogle = trimmed.length > 0;
+  const trimmed = axisId?.trim() ?? "";
 
   return (
     <>
       <GoogleSignInButton
         label="Continue with Google"
+        intent="resident"
         fixedCallbackPath="/auth/callback/resident-signup"
         viaContinue={false}
-        disabled={disabled || !canUseGoogle}
+        disabled={disabled}
         onBeforeRedirect={() => {
-          persistResidentSignupAxisId(trimmed);
+          // Only meaningful when a manager link supplied an Axis ID; otherwise the finish
+          // step links the resident to their application by email.
+          if (trimmed) persistResidentSignupAxisId(trimmed);
         }}
       />
-      {!canUseGoogle ? (
-        <p className="auth-choice-hint mt-1.5 text-center text-[11px] text-muted sm:mt-2 sm:text-xs">Enter Axis ID first</p>
-      ) : (
-        <p className="auth-choice-hint mt-1.5 text-center text-[11px] text-muted sm:mt-2 sm:text-xs">
-          Same email as your application
-        </p>
-      )}
+      <p className="auth-choice-hint mt-1.5 text-center text-[11px] text-muted sm:mt-2 sm:text-xs">
+        Use the same email as your application
+      </p>
     </>
   );
 }

@@ -29,7 +29,6 @@ import {
 } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
 import {
@@ -79,9 +78,6 @@ const STEP_META = [
 ] as const;
 
 function rentalApplicationExitPath(): string {
-  if (typeof window !== "undefined" && detectNativePlatformSync()) {
-    return "/auth/sign-in?mode=create&role=resident";
-  }
   return "/auth/sign-in";
 }
 

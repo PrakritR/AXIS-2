@@ -25,7 +25,7 @@ export function NativeManagerPlanRedirect() {
         router.replace(MANAGER_PLAN_PORTAL_URL);
         return;
       }
-      router.replace("/auth/sign-in?mode=create&role=manager");
+      router.replace("/auth/create-account");
     })();
   }, [isNative, router]);
 

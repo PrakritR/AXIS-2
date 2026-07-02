@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
-import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -25,9 +23,9 @@ export async function GET(req: NextRequest) {
     const rawNext = url.searchParams.get("next")?.trim() ?? "/auth/continue";
     const intendedPath = normalizePostAuthPath(rawNext.startsWith("/") ? rawNext : "/auth/continue");
 
+    // Single resolver: the OAuth callback already reconciled accounts; do not re-run
+    // reconcile / free-manager provisioning here (this route also serves password sign-in).
     const service = createSupabaseServiceRoleClient();
-    await reconcileAuthAccountsByEmail(service, user);
-    await ensureFreeManagerPortalAccess(service, user);
     const redirectTo = normalizePostAuthPath(
       await resolveOAuthPortalRedirect(service, user, intendedPath, {
         intent: readOAuthIntentFromRequest(req),

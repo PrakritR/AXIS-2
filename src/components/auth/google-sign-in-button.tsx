@@ -95,9 +95,8 @@ export function GoogleSignInButton({
         options: {
           redirectTo,
           skipBrowserRedirect: true,
-          queryParams: {
-            prompt: "select_account",
-          },
+          // No forced prompt: an already-linked Google session re-authenticates silently
+          // instead of pushing the account chooser on every entry point.
         },
       });
       if (error) {

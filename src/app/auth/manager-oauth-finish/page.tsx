@@ -3,6 +3,7 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { portalDashboardPath } from "@/components/auth/portal-switcher";
+import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -28,9 +29,9 @@ function ManagerOauthFinishContent() {
       void (async () => {
         try {
           const supabase = createSupabaseBrowserClient();
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
+          // Returning from Stripe checkout the Supabase session cookie can lag a beat;
+          // poll before falling back to sign-in so a healthy session never re-auths.
+          const user = await waitForAuthUser(supabase);
 
           if (!user) {
             window.location.replace(`/auth/sign-in?next=${encodeURIComponent(`/auth/manager-oauth-finish?session_id=${sessionId}`)}`);
