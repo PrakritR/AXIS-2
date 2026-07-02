@@ -85,17 +85,20 @@ function NotifBanner({
 }
 
 export function ManagerDashboard() {
-  const { userId } = useManagerUserId();
+  const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
   const [nowMs] = useState(() => Date.now());
 
   useEffect(() => {
+    if (!authReady || !userId) {
+      return;
+    }
     void Promise.allSettled([
       syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
-      syncHouseholdChargesFromServer(),
+      syncHouseholdChargesFromServer(true),
       syncScheduleRecordsFromServer(),
     ]).then(bump);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
@@ -114,8 +117,7 @@ export function ManagerDashboard() {
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
-   
-  }, [userId]);
+  }, [userId, authReady]);
 
   const data = useMemo(() => {
     void tick;

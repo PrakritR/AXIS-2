@@ -51,7 +51,7 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
     expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
     expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("services"));
     expect(ordered.indexOf("services")).toBeLessThan(ordered.indexOf("inbox"));
-    expect(ordered.indexOf("financials")).toBeLessThan(ordered.indexOf("bugs-feedback"));
+    expect(ordered.indexOf("documents")).toBeLessThan(ordered.indexOf("bugs-feedback"));
   });
 });
 
@@ -91,20 +91,20 @@ describe("resident portal nav grouping", () => {
 
   it("limited: groups locked sections between move-in and feedback", () => {
     const sections = sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["inbox", "documents", "financials"], "move-in", "bugs-feedback");
-    for (const id of ["inbox", "documents", "financials"]) {
+    expectContiguousBlock(sections, ["inbox", "documents"], "move-in", "bugs-feedback");
+    for (const id of ["inbox", "documents"]) {
       expect(freeIds.has(id)).toBe(false);
     }
   });
 
   it("approved: follows property-management block order after move-in", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["services", "inbox", "documents", "financials"], "move-in", "bugs-feedback");
+    expectContiguousBlock(sections, ["services", "inbox", "documents"], "move-in", "bugs-feedback");
   });
 
   it("approved: mirrors pro free block then paid workspace pattern", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expect(sections.slice(0, 4)).toEqual(["dashboard", "applications", "payments", "move-in"]);
+    expect(sections.slice(0, 4)).toEqual(["dashboard", "lease", "payments", "move-in"]);
     expect(sections.slice(-2)).toEqual(["bugs-feedback", "profile"]);
   });
 });

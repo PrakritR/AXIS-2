@@ -8,7 +8,10 @@ export type ListingShareSummary = {
 };
 
 /** Short bullet-style facts for prospect emails (no long amenity lists). */
-export function buildListingShareSummary(property: MockProperty): ListingShareSummary {
+export function buildListingShareSummary(
+  property: MockProperty,
+  options?: { roomChoice?: string },
+): ListingShareSummary {
   const title = (property.title || property.buildingName || property.address).trim() || "Listing";
   const lines: string[] = [];
 
@@ -32,8 +35,19 @@ export function buildListingShareSummary(property: MockProperty): ListingShareSu
   if (sub?.v) {
     const normalized = normalizeManagerListingSubmissionV1(sub);
     if (!isEntireHomeListing(normalized)) {
-      const roomCount = normalized.rooms.filter((r) => r.name.trim()).length;
-      if (roomCount > 0) lines.push(`${roomCount} room${roomCount === 1 ? "" : "s"} available`);
+      const rooms = normalized.rooms.filter((r) => r.name.trim());
+      const selectedRoom = options?.roomChoice?.trim();
+      if (selectedRoom) {
+        const room = rooms.find((r) => r.name.trim() === selectedRoom);
+        if (room) {
+          lines.push(`${room.name.trim()}${room.monthlyRent > 0 ? ` · $${room.monthlyRent.toLocaleString()}/mo` : ""}`);
+        } else {
+          lines.push(selectedRoom);
+        }
+      } else {
+        const roomCount = rooms.length;
+        if (roomCount > 0) lines.push(`${roomCount} room${roomCount === 1 ? "" : "s"} available`);
+      }
     }
   }
 
