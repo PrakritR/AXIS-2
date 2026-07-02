@@ -10,24 +10,18 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 
 vi.mock("@/lib/manager-property-links", () => ({
-  managerCanSharePropertyForUser: vi.fn(),
   buildManagerApplyUrl: vi.fn((origin: string, params: { propertyId: string }) => `${origin}/rent/apply?propertyId=${params.propertyId}`),
   buildManagerTourUrl: vi.fn((origin: string, propertyId: string) => `${origin}/rent/tours-contact?propertyId=${propertyId}`),
   buildManagerListingUrl: vi.fn((origin: string, propertyId: string) => `${origin}/rent/listings/${propertyId}`),
 }));
 
-vi.mock("@/lib/demo-property-pipeline", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/demo-property-pipeline")>();
-  return {
-    ...actual,
-    readAllExtraListings: vi.fn(),
-  };
-});
+vi.mock("@/lib/manager-property-share-access", () => ({
+  getShareablePropertyForUser: vi.fn(),
+}));
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { managerCanSharePropertyForUser } from "@/lib/manager-property-links";
-import { readAllExtraListings } from "@/lib/demo-property-pipeline";
+import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
 import { POST as sendLeadInvite } from "@/app/api/portal/send-lead-invite/route";
 
 describe("POST /api/portal/send-lead-invite", () => {
@@ -62,7 +56,7 @@ describe("POST /api/portal/send-lead-invite", () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
   });
 
-  it("returns 403 when manager cannot share property", async () => {
+  it("returns 403 when the manager does not own (and is not assigned) the property", async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1", email: "mgr@example.com" } } }) },
     } as never);
@@ -75,14 +69,16 @@ describe("POST /api/portal/send-lead-invite", () => {
         }),
       }),
     } as never);
-    vi.mocked(managerCanSharePropertyForUser).mockReturnValue(false);
+    // Server-side ownership check rejects a property this manager doesn't own.
+    vi.mocked(getShareablePropertyForUser).mockResolvedValue(null);
 
     const req = jsonRequest("http://localhost/api/portal/send-lead-invite", {
       method: "POST",
-      body: { kind: "apply", to: "prospect@example.com", propertyId: "mgr-1" },
+      body: { kind: "listing", to: "prospect@example.com", propertyId: "other-managers-prop" },
     });
     const res = await sendLeadInvite(req);
     expect(res.status).toBe(403);
+    expect(getShareablePropertyForUser).toHaveBeenCalledWith("user-1", "other-managers-prop");
   });
 
   it("sends invite email when authorized and Resend succeeds", async () => {
@@ -98,10 +94,11 @@ describe("POST /api/portal/send-lead-invite", () => {
         }),
       }),
     } as never);
-    vi.mocked(managerCanSharePropertyForUser).mockReturnValue(true);
-    vi.mocked(readAllExtraListings).mockReturnValue([
-      { id: "mgr-1", title: "Test House", adminPublishLive: true } as never,
-    ]);
+    vi.mocked(getShareablePropertyForUser).mockResolvedValue({
+      id: "mgr-1",
+      title: "Test House",
+      adminPublishLive: true,
+    } as never);
     vi.stubEnv("RESEND_API_KEY", "re_test_key");
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ id: "email_1" }), { status: 200 }),

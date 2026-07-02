@@ -1,7 +1,7 @@
 import type { AdminPropertyRow } from "@/lib/demo-admin-property-inventory";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
-import { readExtraListingsForUser, readAllExtraListings } from "@/lib/demo-property-pipeline";
-import { collectAccessiblePropertyIds, readLinkedListingsForUser, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
+import { readExtraListingsForUser } from "@/lib/demo-property-pipeline";
+import { readLinkedListingsForUser, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 
 export type ManagerApplyLinkParams = {
   propertyId: string;
@@ -53,17 +53,6 @@ export function buildManagerShareablePropertyOptions(userId: string | null): Man
   return [...labelById.entries()]
     .map(([id, label]) => ({ id, label }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-}
-
-export function managerCanSharePropertyForUser(userId: string | null, propertyId: string): boolean {
-  if (!userId) return false;
-  const id = propertyId.trim();
-  if (!id || !collectAccessiblePropertyIds(userId).has(id)) return false;
-  const listing =
-    readExtraListingsForUser(userId).find((p) => p.id === id) ??
-    readAllExtraListings().find((p) => p.id === id);
-  if (!listing) return false;
-  return listing.adminPublishLive === true;
 }
 
 export async function copyTextToClipboard(text: string): Promise<boolean> {
