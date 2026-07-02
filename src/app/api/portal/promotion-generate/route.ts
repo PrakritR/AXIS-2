@@ -14,6 +14,7 @@ import { resolveAgentContext } from "@/lib/tools/context";
 import { TIER_MODELS } from "@/lib/agent/model";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
 import { track } from "@/lib/analytics/posthog";
+import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
 import {
   composeFallbackFlyerCopy,
   parseSellingPoints,
@@ -38,6 +39,7 @@ function normalizeInputs(raw: Record<string, unknown>): PromotionInputs {
     cta: clean(raw.cta),
     contact: clean(raw.contact),
     tone: clean(raw.tone),
+    customDetails: clean(raw.customDetails),
   };
 }
 
@@ -62,6 +64,7 @@ function buildUserPrompt(inputs: PromotionInputs, propertyLabel: string): string
     `Promotional offer: ${inputs.promo || "(none)"}`,
     `Desired call to action: ${inputs.cta || "(none)"}`,
     `Contact: ${inputs.contact || "(none)"}`,
+    `Additional property details: ${inputs.customDetails || "(none)"}`,
     `Tone: ${inputs.tone || "Warm & welcoming"}`,
     "",
     "Write the flyer copy now as the JSON object.",
@@ -96,9 +99,24 @@ export async function POST(req: Request) {
     const ctx = await resolveAgentContext();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const body = (await req.json()) as { inputs?: Record<string, unknown>; propertyLabel?: unknown };
+    const body = (await req.json()) as {
+      inputs?: Record<string, unknown>;
+      propertyLabel?: unknown;
+      propertyId?: unknown;
+    };
     const inputs = normalizeInputs(body.inputs ?? {});
     const propertyLabel = clean(body.propertyLabel);
+
+    // When the flyer is tied to a saved property, the manager must own (or be an
+    // assigned co-manager of) it — never trust a client-supplied propertyId.
+    // Custom flyers carry no propertyId and skip this check.
+    const propertyId = typeof body.propertyId === "string" ? body.propertyId.trim() : "";
+    if (propertyId) {
+      const owned = await getShareablePropertyForUser(ctx.userId, propertyId);
+      if (!owned) {
+        return NextResponse.json({ error: "You do not manage this property." }, { status: 403 });
+      }
+    }
 
     // Cost/availability guard: without a key, return deterministic copy instead
     // of erroring so the client still renders a flyer.

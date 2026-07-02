@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { usePathname } from "next/navigation";
 
 import { track } from "@/lib/analytics/track-client";
 import { useIsClient } from "@/hooks/use-is-client";
@@ -61,17 +62,21 @@ function handleOpen() {
 }
 
 /**
- * Site-wide general AI assistant. A larger FAB pinned bottom-right on EVERY page
- * (public, auth, portal). Answers broad questions about Axis via the tool-free
- * `/api/agent/general-chat` endpoint. Distinct from the portal-scoped Axis
- * Assistant; when that one is on screen this FAB lifts above it so the two never
- * stack on the same corner.
+ * Site-wide general AI assistant. A larger FAB pinned bottom-right on
+ * public / marketing pages (home, pricing, create-account, /demo). It is
+ * intentionally NOT rendered inside the manager, admin, or resident portals —
+ * those surfaces keep their own portal-scoped Axis Assistant, so only one AI
+ * button ever shows there. Answers broad questions about Axis via the tool-free
+ * `/api/agent/general-chat` endpoint.
  */
+const PORTAL_PATH_PREFIXES = ["/portal", "/admin", "/resident"];
+
 export function GeneralAssistant() {
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
   const open = useGeneralOpen();
   const portalPresent = usePortalAssistantPresent();
+  const pathname = usePathname();
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -136,6 +141,14 @@ export function GeneralAssistant() {
   // Native app uses the in-portal assistant + bottom nav; keep the web-only
   // general FAB out of the native chrome entirely.
   if (showNativeChrome) return null;
+
+  // Portal surfaces (manager, admin, resident) have their own Axis Assistant —
+  // the captain wants only that one there, so the general FAB stays on
+  // public / marketing pages only.
+  const inPortal = PORTAL_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname?.startsWith(`${prefix}/`),
+  );
+  if (inPortal) return null;
 
   const trigger =
     open ? null : (

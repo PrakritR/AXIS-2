@@ -22,6 +22,7 @@ function normalizeRow(row: ManagerPromotionRow, managerUserId: string): ManagerP
     propertyId: row.propertyId ? String(row.propertyId) : null,
     propertyLabel: String(row.propertyLabel ?? "").trim(),
     title: String(row.title ?? "").trim(),
+    flyerSize: row.flyerSize ?? "letter",
     status: row.status === "generated" ? "generated" : "draft",
     updatedAt: new Date().toISOString(),
   };
