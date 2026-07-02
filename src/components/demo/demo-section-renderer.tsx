@@ -115,11 +115,9 @@ export function DemoSectionRenderer({
         />
       );
     case "lease":
-      return (
-        <ManagerPortalPageShell title="Lease">
-          <ResidentLeasePanel />
-        </ManagerPortalPageShell>
-      );
+      // ResidentLeasePanel renders its own "Lease" page shell; wrapping it in a
+      // second shell would stack the header twice.
+      return <ResidentLeasePanel />;
     case "payments":
       return <ResidentPaymentsPanel />;
     case "move-in":
