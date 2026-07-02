@@ -6,8 +6,11 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
 import { portalNavClick } from "@/lib/portal-nav-client";
 import { portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
+import { groupNavItems } from "@/lib/portals/nav-groups";
+import type { PortalKind } from "@/lib/portal-types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 
 export type PortalMoreNavItem = {
   section: string;
@@ -37,6 +40,8 @@ type PortalNativeMoreSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   items: PortalMoreNavItem[];
+  /** Portal role — buckets the sheet into the same grouped sections as the web sidebar. */
+  kind: PortalKind;
   activeSection: string;
   showNavIcons: boolean;
 };
@@ -87,10 +92,23 @@ export function PortalNativeMoreSheet({
   open,
   onOpenChange,
   items,
+  kind,
   activeSection,
   showNavIcons,
 }: PortalNativeMoreSheetProps) {
   const closeSheet = () => onOpenChange(false);
+
+  // Bucket into the same headings/order as the web sidebar (PORTAL_NAV_GROUPS).
+  // The web sidebar excludes some sections (e.g. `profile`) because they live in
+  // the desktop-only account menu; on mobile this sheet is the only surface for
+  // them, so append anything grouping dropped as a trailing group.
+  const navGroups = useMemo(() => {
+    const grouped = groupNavItems(kind, items);
+    const rendered = new Set(grouped.flatMap((g) => g.items.map((i) => i.section)));
+    const trailing = items.filter((i) => !rendered.has(i.section));
+    if (trailing.length) grouped.push({ id: "account-extra", label: null, items: trailing });
+    return grouped;
+  }, [kind, items]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -106,18 +124,27 @@ export function PortalNativeMoreSheet({
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2 pt-1"
           aria-label="Portal sections"
         >
-          <ul className="space-y-1">
-            {items.map((item) => (
-              <li key={item.section}>
-                <MoreNavRow
-                  item={item}
-                  active={activeSection === item.section}
-                  showNavIcons={showNavIcons}
-                  onNavigate={closeSheet}
-                />
-              </li>
-            ))}
-          </ul>
+          {navGroups.map((group) => (
+            <div key={group.id} className="flex flex-col gap-1 pt-1 first:pt-0">
+              {group.label ? (
+                <p className="px-3 pb-1 pt-2.5 text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted/70">
+                  {group.label}
+                </p>
+              ) : null}
+              <ul className="space-y-1">
+                {group.items.map((item) => (
+                  <li key={item.section}>
+                    <MoreNavRow
+                      item={item}
+                      active={activeSection === item.section}
+                      showNavIcons={showNavIcons}
+                      onNavigate={closeSheet}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </nav>
       </SheetContent>
     </Sheet>

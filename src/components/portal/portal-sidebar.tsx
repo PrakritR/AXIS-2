@@ -468,6 +468,7 @@ export function PortalSidebar({
         open={sectionsSheetOpen}
         onOpenChange={setSectionsSheetOpen}
         items={moreSheetItems}
+        kind={definition.kind}
         activeSection={activeSection}
         showNavIcons={showNavIcons}
       />
