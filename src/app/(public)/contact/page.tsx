@@ -1,7 +1,6 @@
 "use client";
 
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { appendPartnerInboxMessage } from "@/lib/demo-admin-partner-inbox";
 import { useState } from "react";
 
 const SUPPORT_EMAIL = "info@axis-seattle-housing.com";
@@ -60,8 +59,9 @@ function ContactForm({ showToast }: { showToast: (m: string) => void }) {
   const [email, setEmail] = useState("");
   const [topic, setTopic] = useState("");
   const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     const n = name.trim();
     const em = email.trim();
     const tp = topic.trim();
@@ -78,17 +78,28 @@ function ContactForm({ showToast }: { showToast: (m: string) => void }) {
       showToast("Please enter a message.");
       return;
     }
-    appendPartnerInboxMessage({
-      name: n,
-      email: em,
-      topic: tp,
-      body: msg,
-    });
-    showToast("Message sent. Our team will get back to you soon.");
-    setName("");
-    setEmail("");
-    setTopic("");
-    setBody("");
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/public/contact-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: n, email: em, topic: tp, body: msg }),
+      });
+      if (!res.ok) {
+        showToast(`Could not send your message. Please try again or email ${SUPPORT_EMAIL}.`);
+        return;
+      }
+      showToast("Message sent. Our team will get back to you soon.");
+      setName("");
+      setEmail("");
+      setTopic("");
+      setBody("");
+    } catch {
+      showToast(`Could not send your message. Please try again or email ${SUPPORT_EMAIL}.`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -125,9 +136,10 @@ function ContactForm({ showToast }: { showToast: (m: string) => void }) {
         type="button"
         data-attr="contact-us-submit"
         onClick={submit}
-        className="btn-cobalt mt-2 w-full rounded-2xl py-3.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
+        disabled={submitting}
+        className="btn-cobalt mt-2 w-full rounded-2xl py-3.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Send message
+        {submitting ? "Sending…" : "Send message"}
       </button>
     </div>
   );
