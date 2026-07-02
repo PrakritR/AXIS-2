@@ -29,6 +29,7 @@ import {
   subscribeAxisAssistantOpen,
   subscribeAxisAssistantPrompt,
 } from "@/lib/axis-assistant/open-store";
+import { registerPortalAssistant } from "@/lib/general-assistant/open-store";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { cn } from "@/lib/utils";
 
@@ -622,6 +623,10 @@ export function AxisAssistant({
   useEffect(() => {
     return () => setAxisAssistantOpen(false);
   }, []);
+
+  // Announce to the site-wide general assistant that a portal-scoped assistant
+  // FAB is on screen, so it lifts its own FAB above ours (both are bottom-right).
+  useEffect(() => registerPortalAssistant(), []);
 
   return (
     <AxisAssistantPresenceContext.Provider value={true}>
