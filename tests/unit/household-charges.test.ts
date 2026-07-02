@@ -61,6 +61,27 @@ describe("household-charges pure helpers", () => {
     expect(householdChargeToLedgerRow(paid).bucket).toBe("paid");
     expect(householdChargeToLedgerRow(paid).statusLabel).toBe("Paid");
   });
+
+  it("dedupes charges hydrated with a missing residentEmail without crashing", () => {
+    // Regression: rows hydrated from localStorage/server JSON are cast as
+    // HouseholdCharge without validation, so residentEmail/residentName can be
+    // undefined. chargeBusinessKey() calls .trim() on residentEmail, which
+    // previously threw "undefined is not an object (evaluating 't.trim')" and
+    // took down the whole manager Payments tab via the error boundary.
+    const missingEmail = makeCharge({
+      id: "chg-missing-email",
+      residentEmail: undefined as unknown as string,
+      residentName: undefined as unknown as string,
+    });
+    let result: ReturnType<typeof dedupeHouseholdCharges> = [];
+    expect(() => {
+      result = dedupeHouseholdCharges([missingEmail]);
+    }).not.toThrow();
+    expect(result).toHaveLength(1);
+    // Coerced to "" so every downstream .trim() consumer is safe.
+    expect(result[0]!.residentEmail).toBe("");
+    expect(result[0]!.residentName).toBe("");
+  });
 });
 
 describe("syncHouseholdChargesFromServer", () => {
