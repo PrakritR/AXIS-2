@@ -91,10 +91,14 @@ function ManagerPlanPickerInner() {
 
   useEffect(() => {
     void Promise.resolve().then(() => {
+      // Preselect from the query, else from a tier the user picked on marketing pricing.
+      const stored = readManagerPricingOffer();
       const tier = searchParams.get("tier");
       if (tier && isPlanTierId(tier)) setSelectedTierId(tier);
+      else if (stored?.tier) setSelectedTierId(stored.tier);
       const billing = searchParams.get("billing");
       if (billing === "monthly" || billing === "annual") setBilling(billing);
+      else if (stored?.billing) setBilling(stored.billing);
     });
   }, [searchParams]);
 
