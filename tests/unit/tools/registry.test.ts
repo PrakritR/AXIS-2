@@ -26,8 +26,32 @@ describe("agent registry", () => {
     }
   });
 
-  it("exposes only read tools to the model loop (writes are gated elsewhere)", () => {
-    for (const tool of tools) expect(tool.kind).toBe("read");
+  it("registers the gated write tools", () => {
+    const names = new Set(tools.map((t) => t.name));
+    for (const expected of [
+      "send_rent_reminders",
+      "send_resident_message",
+      "create_charge",
+      "create_lease_draft",
+      "update_lease_draft",
+    ]) {
+      expect(names.has(expected)).toBe(true);
+    }
+  });
+
+  it("gives every write tool a preview so nothing executes unseen", () => {
+    for (const tool of tools) {
+      if (tool.kind === "write") expect(typeof tool.preview).toBe("function");
+    }
+  });
+
+  it("excludes write tools when the readOnly filter is requested", () => {
+    const readOnly = toAnthropicTools(agentRegistry, { readOnly: true });
+    const writes = tools.filter((t) => t.kind === "write");
+    expect(writes.length).toBeGreaterThan(0);
+    expect(readOnly).toHaveLength(tools.length - writes.length);
+    const readOnlyNames = new Set(readOnly.map((s) => s.name));
+    for (const w of writes) expect(readOnlyNames.has(w.name)).toBe(false);
   });
 
   it("has unique, Anthropic-valid tool names", () => {
@@ -36,8 +60,8 @@ describe("agent registry", () => {
     for (const name of names) expect(name).toMatch(/^[a-z0-9_]{1,64}$/);
   });
 
-  it("produces a valid Anthropic schema for each tool", () => {
-    const schemas = toAnthropicTools(agentRegistry, { readOnly: true });
+  it("produces a valid Anthropic schema for each tool (reads and writes)", () => {
+    const schemas = toAnthropicTools(agentRegistry);
     expect(schemas).toHaveLength(tools.length);
     for (const s of schemas) {
       expect(typeof s.name).toBe("string");
