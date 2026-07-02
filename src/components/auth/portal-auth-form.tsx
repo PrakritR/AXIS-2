@@ -325,6 +325,12 @@ export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
           </>
         )}
       </p>
+
+      <p className="mt-3 text-center text-[13px] text-muted sm:mt-4 sm:text-sm">
+        <Link className="font-semibold text-primary hover:opacity-90" href="/">
+          ← Back to home
+        </Link>
+      </p>
     </AuthCard>
   );
 }
