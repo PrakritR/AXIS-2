@@ -62,10 +62,6 @@ function fmt(iso: string) {
   return formatPacificDateTime(d);
 }
 
-function dollars(cents: number) {
-  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 function NotifBanner({
   tone,
   children,
@@ -144,12 +140,6 @@ export function ManagerDashboard() {
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
-    const overdueCharges = pendingCharges.filter((c) => isHouseholdChargeOverdue(c));
-    const overdueTotal = overdueCharges.reduce((s, c) => {
-      const n = Number(c.balanceLabel.replace(/[^\d.]/g, ""));
-      return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
-    }, 0);
-
     const inboxCount = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
     const inboxThreads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
       .filter((t) => t.folder === "inbox" && t.unread)
@@ -193,8 +183,6 @@ export function ManagerDashboard() {
       activeResidents,
       pendingLeaseRows,
       pendingCharges,
-      overdueCharges,
-      overdueTotal,
       inbox: inboxCount,
       inboxThreads,
       needsManagerSig,
@@ -211,8 +199,6 @@ export function ManagerDashboard() {
     activeResidents,
     pendingLeaseRows,
     pendingCharges,
-    overdueCharges,
-    overdueTotal,
     inbox,
     inboxThreads,
     needsManagerSig,
@@ -234,8 +220,7 @@ export function ManagerDashboard() {
           inbox > 0 ||
           pendingTours.length > 0 ||
           nextTour ||
-          pendingProperties > 0 ||
-          overdueCharges.length > 0) && (
+          pendingProperties > 0) && (
           <div className="space-y-2 [html[data-native]_&]:flex [html[data-native]_&]:gap-2 [html[data-native]_&]:overflow-x-auto [html[data-native]_&]:space-y-0 [html[data-native]_&]:pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [html[data-native]_&]:[&::-webkit-scrollbar]:hidden">
             {pendingTours.length > 0 && (
               <NotifBanner tone="amber">
@@ -294,16 +279,6 @@ export function ManagerDashboard() {
                 </span>
                 <Link href={`${BASE}/properties`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
                   Properties →
-                </Link>
-              </NotifBanner>
-            )}
-            {overdueCharges.length > 0 && (
-              <NotifBanner tone="rose">
-                <span>
-                  <span className="font-semibold">{overdueCharges.length}</span> overdue charge{overdueCharges.length === 1 ? "" : "s"} totalling <span className="font-semibold">{dollars(overdueTotal)}</span> across residents
-                </span>
-                <Link href={`${BASE}/payments`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Payments →
                 </Link>
               </NotifBanner>
             )}
