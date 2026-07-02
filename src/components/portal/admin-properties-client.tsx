@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Badge } from "@/components/ui/badge";
