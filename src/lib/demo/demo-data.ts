@@ -10,6 +10,7 @@ import type { DemoApplicantRow, DemoManagerWorkOrderRow } from "@/data/demo-port
 import type { HouseholdCharge, RecurringRentProfile } from "@/lib/household-charges";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
+import type { ManagerPromotionRow } from "@/lib/promotion-flyer";
 import type { ServiceRequest } from "@/lib/service-requests-storage";
 import type { PersistedInboxThread } from "@/lib/portal-inbox-storage";
 import type { PortalBugFeedbackRow } from "@/lib/portal-bug-feedback";
@@ -332,6 +333,88 @@ export function demoVendors(): ManagerVendorRow[] {
     mk("demo-vendor-2", "Rainier Plumbing", "Plumbing", "(206) 555-0177", "dispatch@rainierplumb.example.com"),
     mk("demo-vendor-3", "Emerald Painters", "Painting", "(206) 555-0163", "hello@emeraldpaint.example.com"),
     mk("demo-vendor-4", "Puget Electric", "Electrical", "(206) 555-0189", "team@pugetelectric.example.com"),
+  ];
+}
+
+export function demoPromotions(): ManagerPromotionRow[] {
+  return [
+    {
+      id: "demo-promo-1",
+      managerUserId: DEMO_MANAGER_USER_ID,
+      propertyId: PROP.pioneer,
+      propertyLabel: "The Pioneer — Pioneer Square",
+      title: "Spring leasing push",
+      theme: "cobalt",
+      status: "generated",
+      inputs: {
+        headline: "Modern living in Pioneer Square",
+        sellingPoints: "In-unit laundry\nRooftop deck\nSteps from light rail",
+        price: "$2,400/mo",
+        promo: "First month free",
+        cta: "Book a tour today",
+        contact: "leasing@axis.com · (206) 555-0142",
+        tone: "Warm & welcoming",
+      },
+      copy: {
+        headline: "Your Pioneer Square Home Awaits",
+        subheadline: "The Pioneer — Pioneer Square · $2,400/mo",
+        sellingPoints: ["In-unit laundry", "Private rooftop deck", "Steps from light rail"],
+        promoLine: "First month free",
+        ctaText: "Book a tour today",
+        closingLine: "Contact us: leasing@axis.com · (206) 555-0142",
+      },
+      createdAt: isoDaysFromNow(-4),
+      updatedAt: isoDaysFromNow(-4),
+    },
+    {
+      id: "demo-promo-2",
+      managerUserId: DEMO_MANAGER_USER_ID,
+      propertyId: PROP.cascade,
+      propertyLabel: "Cascade Lofts — Belltown",
+      title: "Belltown loft feature",
+      theme: "sunset",
+      status: "generated",
+      inputs: {
+        headline: "Belltown loft living",
+        sellingPoints: "Floor-to-ceiling windows\nStainless appliances\nWalk to waterfront",
+        price: "$1,950/mo",
+        promo: "",
+        cta: "Schedule a viewing",
+        contact: "leasing@axis.com",
+        tone: "Modern & upscale",
+      },
+      copy: {
+        headline: "Loft Living in Belltown",
+        subheadline: "Cascade Lofts — Belltown · $1,950/mo",
+        sellingPoints: ["Floor-to-ceiling windows", "Stainless appliances", "Walk to the waterfront"],
+        promoLine: "",
+        ctaText: "Schedule a viewing",
+        closingLine: "Contact us: leasing@axis.com",
+      },
+      createdAt: isoDaysFromNow(-1),
+      updatedAt: isoDaysFromNow(-1),
+    },
+    {
+      id: "demo-promo-3",
+      managerUserId: DEMO_MANAGER_USER_ID,
+      propertyId: PROP.emerald,
+      propertyLabel: "Emerald Court — First Hill",
+      title: "First Hill family unit (draft)",
+      theme: "forest",
+      status: "draft",
+      inputs: {
+        headline: "Spacious First Hill 3-bed",
+        sellingPoints: "3 bed · 2 bath\nParking included\nQuiet street",
+        price: "$3,200/mo",
+        promo: "$500 off first month",
+        cta: "Apply online",
+        contact: "leasing@axis.com",
+        tone: "Calm & professional",
+      },
+      copy: null,
+      createdAt: isoDaysFromNow(0),
+      updatedAt: isoDaysFromNow(0),
+    },
   ];
 }
 

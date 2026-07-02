@@ -72,6 +72,7 @@ export const proPortal: PortalDefinition = {
       label: "Co-managers",
       tabs: [],
     },
+    { section: "promotion", label: "Promotion", tabs: [] },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Settings", tabs: [] },
   ],
@@ -91,6 +92,7 @@ export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Documents", path: "/portal/documents/income-documents" },
   { label: "Finances", path: "/portal/financials/income" },
   { label: "Co-managers", path: "/portal/relationships" },
+  { label: "Promotion", path: "/portal/promotion" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
   { label: "Settings", path: "/portal/profile" },
 ] as const;

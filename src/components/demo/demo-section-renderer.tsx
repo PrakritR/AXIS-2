@@ -25,6 +25,7 @@ const ManagerFinancesPanel = dynamic(() => import("@/components/portal/manager-f
 const ManagerDocumentsPanel = dynamic(() => import("@/components/portal/manager-documents-panel").then((m) => m.ManagerDocumentsPanel), { ssr: false, loading });
 const PortalCalendar = dynamic(() => import("@/components/portal/portal-calendar").then((m) => m.PortalCalendar), { ssr: false, loading });
 const ProAccountLinksPanel = dynamic(() => import("@/components/portal/pro-account-links-panel").then((m) => m.ProAccountLinksPanel), { ssr: false, loading });
+const ManagerPromotion = dynamic(() => import("@/components/portal/manager-promotion").then((m) => m.ManagerPromotion), { ssr: false, loading });
 const PortalBugFeedbackPanel = dynamic(() => import("@/components/portal/portal-bug-feedback-panel").then((m) => m.PortalBugFeedbackPanel), { ssr: false, loading });
 
 // Admin panels
@@ -99,6 +100,8 @@ export function DemoSectionRenderer({
         return <ManagerDocumentsPanel tabId={tabId} basePath={basePath} />;
       case "relationships":
         return <ProAccountLinksPanel userId={DEMO_MANAGER_USER_ID} />;
+      case "promotion":
+        return <ManagerPromotion />;
       case "bugs-feedback":
         return <PortalBugFeedbackPanel reporterRole="manager" />;
       case "profile":
