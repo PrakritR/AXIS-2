@@ -71,52 +71,79 @@ export async function reconcileDuplicateHouseholdChargeRecords(
   return { removedChargeIds: duplicateIds };
 }
 
-async function syncDedupedCharges(
-  db: SupabaseClient,
-  rawCharges: HouseholdCharge[],
-): Promise<number> {
-  const charges = dedupeHouseholdCharges(rawCharges);
-  let synced = 0;
-  for (const charge of charges) {
-    await syncLedgerChargeEntry(db, charge);
-    synced += 1;
-  }
-  return synced;
-}
+type LedgerEntryRow = {
+  manager_user_id: string | null;
+  resident_user_id: string | null;
+  resident_email: string;
+  property_id: string;
+  unit_label: string;
+  lease_id: string | null;
+  entry_type: "charge" | "payment";
+  category_code: string;
+  amount_cents: number;
+  due_date: string | null;
+  posted_date: string;
+  source_charge_id: string;
+  description: string;
+  stripe_checkout_session_id?: string | null;
+  updated_at: string;
+};
 
-export async function syncLedgerChargeEntry(
-  db: SupabaseClient,
-  charge: HouseholdCharge,
-): Promise<void> {
+/** Row for the `charge` ledger entry mirroring a household charge (null if non-positive). */
+function buildChargeLedgerRow(charge: HouseholdCharge): LedgerEntryRow | null {
   const amountCents = chargeAmountCents(charge);
-  if (amountCents <= 0) return;
-
-  const postedDate = parseIsoDate(charge.createdAt) ?? new Date().toISOString().slice(0, 10);
-  const dueDate = dueDateFromCharge(charge);
-  const now = new Date().toISOString();
-
-  const row = {
+  if (amountCents <= 0) return null;
+  return {
     manager_user_id: charge.managerUserId,
     resident_user_id: charge.residentUserId,
     resident_email: charge.residentEmail.trim().toLowerCase(),
     property_id: charge.propertyId,
     unit_label: charge.propertyLabel,
     lease_id: charge.applicationId ?? null,
-    entry_type: "charge" as const,
+    entry_type: "charge",
     category_code: categoryCodeForChargeKind(charge.kind),
     amount_cents: amountCents,
-    due_date: dueDate,
-    posted_date: postedDate,
+    due_date: dueDateFromCharge(charge),
+    posted_date: parseIsoDate(charge.createdAt) ?? new Date().toISOString().slice(0, 10),
     source_charge_id: charge.id,
     description: charge.title,
-    updated_at: now,
+    updated_at: new Date().toISOString(),
   };
+}
 
+/** Row for the `payment` ledger entry recording that a charge was paid (null if non-positive). */
+function buildPaymentLedgerRow(
+  charge: HouseholdCharge,
+  paidAt?: string | null,
+  stripeCheckoutSessionId?: string | null,
+): LedgerEntryRow | null {
+  const amountCents = dollarsToCents(parseMoneyAmount(charge.amountLabel));
+  if (amountCents <= 0) return null;
+  return {
+    manager_user_id: charge.managerUserId,
+    resident_user_id: charge.residentUserId,
+    resident_email: charge.residentEmail.trim().toLowerCase(),
+    property_id: charge.propertyId,
+    unit_label: charge.propertyLabel,
+    lease_id: charge.applicationId ?? null,
+    entry_type: "payment",
+    category_code: categoryCodeForChargeKind(charge.kind),
+    amount_cents: amountCents,
+    due_date: dueDateFromCharge(charge),
+    posted_date: parseIsoDate(paidAt ?? charge.paidAt) ?? new Date().toISOString().slice(0, 10),
+    source_charge_id: charge.id,
+    description: `Payment — ${charge.title}`,
+    stripe_checkout_session_id: stripeCheckoutSessionId ?? null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function upsertLedgerEntryRow(db: SupabaseClient, row: LedgerEntryRow): Promise<void> {
   const { data: existing } = await db
     .from("ledger_entries")
     .select("id")
-    .eq("source_charge_id", charge.id)
-    .eq("entry_type", "charge")
+    .eq("source_charge_id", row.source_charge_id)
+    .eq("entry_type", row.entry_type)
     .maybeSingle();
 
   if (existing?.id) {
@@ -126,6 +153,74 @@ export async function syncLedgerChargeEntry(
     const { error } = await db.from("ledger_entries").insert(row);
     throwIfLedgerError(error);
   }
+}
+
+/**
+ * Mirror many charges into ledger entries in a bounded number of round-trips.
+ *
+ * Previously this looped over every charge doing a SELECT + INSERT/UPDATE (2–4
+ * serial round-trips each). On a manager with many charges that N+1 ran long
+ * enough to hang the `/api/reports` request the Finances panel awaits — leaving
+ * it stuck on "Loading entries…". Here we fetch all existing entries once, then
+ * do a single batched INSERT for new rows and a single batched UPSERT (keyed on
+ * the primary key) for changed rows — a fixed ~3 round-trips regardless of
+ * volume, which also respects the project's egress budget.
+ */
+async function syncDedupedCharges(
+  db: SupabaseClient,
+  rawCharges: HouseholdCharge[],
+): Promise<number> {
+  const charges = dedupeHouseholdCharges(rawCharges);
+  if (charges.length === 0) return 0;
+
+  const desired: LedgerEntryRow[] = [];
+  for (const charge of charges) {
+    const chargeRow = buildChargeLedgerRow(charge);
+    if (chargeRow) desired.push(chargeRow);
+    if (charge.status === "paid") {
+      const paymentRow = buildPaymentLedgerRow(charge, charge.paidAt);
+      if (paymentRow) desired.push(paymentRow);
+    }
+  }
+  if (desired.length === 0) return 0;
+
+  const sourceIds = [...new Set(desired.map((r) => r.source_charge_id))];
+  const existingByKey = new Map<string, string>();
+  for (let i = 0; i < sourceIds.length; i += 200) {
+    const slice = sourceIds.slice(i, i + 200);
+    const { data, error } = await db
+      .from("ledger_entries")
+      .select("id, source_charge_id, entry_type")
+      .in("source_charge_id", slice);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) existingByKey.set(`${row.source_charge_id}:${row.entry_type}`, row.id);
+  }
+
+  const toInsert: LedgerEntryRow[] = [];
+  const toUpdate: (LedgerEntryRow & { id: string })[] = [];
+  for (const row of desired) {
+    const id = existingByKey.get(`${row.source_charge_id}:${row.entry_type}`);
+    if (id) toUpdate.push({ ...row, id });
+    else toInsert.push(row);
+  }
+
+  if (toInsert.length) {
+    const { error } = await db.from("ledger_entries").insert(toInsert);
+    throwIfLedgerError(error);
+  }
+  if (toUpdate.length) {
+    const { error } = await db.from("ledger_entries").upsert(toUpdate, { onConflict: "id" });
+    throwIfLedgerError(error);
+  }
+  return charges.length;
+}
+
+export async function syncLedgerChargeEntry(
+  db: SupabaseClient,
+  charge: HouseholdCharge,
+): Promise<void> {
+  const row = buildChargeLedgerRow(charge);
+  if (row) await upsertLedgerEntryRow(db, row);
 
   if (charge.status === "paid") {
     await syncLedgerPaymentEntry(db, charge, charge.paidAt);
@@ -138,44 +233,8 @@ export async function syncLedgerPaymentEntry(
   paidAt?: string | null,
   stripeCheckoutSessionId?: string | null,
 ): Promise<void> {
-  const amountCents = dollarsToCents(parseMoneyAmount(charge.amountLabel));
-  if (amountCents <= 0) return;
-
-  const postedDate = parseIsoDate(paidAt ?? charge.paidAt) ?? new Date().toISOString().slice(0, 10);
-  const now = new Date().toISOString();
-
-  const row = {
-    manager_user_id: charge.managerUserId,
-    resident_user_id: charge.residentUserId,
-    resident_email: charge.residentEmail.trim().toLowerCase(),
-    property_id: charge.propertyId,
-    unit_label: charge.propertyLabel,
-    lease_id: charge.applicationId ?? null,
-    entry_type: "payment" as const,
-    category_code: categoryCodeForChargeKind(charge.kind),
-    amount_cents: amountCents,
-    due_date: dueDateFromCharge(charge),
-    posted_date: postedDate,
-    source_charge_id: charge.id,
-    description: `Payment — ${charge.title}`,
-    stripe_checkout_session_id: stripeCheckoutSessionId ?? null,
-    updated_at: now,
-  };
-
-  const { data: existing } = await db
-    .from("ledger_entries")
-    .select("id")
-    .eq("source_charge_id", charge.id)
-    .eq("entry_type", "payment")
-    .maybeSingle();
-
-  if (existing?.id) {
-    const { error } = await db.from("ledger_entries").update(row).eq("id", existing.id);
-    throwIfLedgerError(error);
-  } else {
-    const { error } = await db.from("ledger_entries").insert(row);
-    throwIfLedgerError(error);
-  }
+  const row = buildPaymentLedgerRow(charge, paidAt, stripeCheckoutSessionId);
+  if (row) await upsertLedgerEntryRow(db, row);
 }
 
 export async function backfillLedgerFromCharges(
