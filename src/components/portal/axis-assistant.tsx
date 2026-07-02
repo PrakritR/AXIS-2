@@ -88,13 +88,14 @@ function AxisAssistantFixedTrigger() {
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ToolTraceEntry = { tool: string; ok: boolean };
-type PendingConfirm = {
-  type: "send_rent_reminder";
-  chargeId: string;
-  residentName: string;
-  chargeTitle: string;
-  balanceDue?: string;
+type ActionPreview = {
+  kind: string;
+  title: string;
+  confirmLabel: string;
+  fields: { label: string; value: string }[];
+  warnings?: string[];
 };
+type PendingAction = { id: string; preview: ActionPreview };
 
 type Suggestion = { label: string; prompt: string; icon: ReactNode; toneClass: string };
 
@@ -181,7 +182,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lastTools, setLastTools] = useState<ToolTraceEntry[]>([]);
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -260,7 +261,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
     setInput("");
     setLoading(true);
     setLastTools([]);
-    setPendingConfirm(null);
+    setPendingAction(null);
     try {
       const res = await fetch(endpoint, {
         method: "POST",
@@ -270,7 +271,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
       const data = (await res.json()) as {
         reply?: string;
         toolTrace?: ToolTraceEntry[];
-        pendingConfirm?: PendingConfirm;
+        pendingAction?: PendingAction;
         error?: string;
       };
       if (!res.ok || data.error) {
@@ -278,7 +279,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
       } else {
         setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "" }]);
         setLastTools(data.toolTrace ?? []);
-        setPendingConfirm(data.pendingConfirm ?? null);
+        setPendingAction(data.pendingAction ?? null);
       }
     } catch {
       setError("Network error.");
@@ -290,31 +291,36 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
   function resetConversation() {
     setMessages([]);
     setLastTools([]);
-    setPendingConfirm(null);
+    setPendingAction(null);
     setError(null);
     setInput("");
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  async function confirmPendingAction() {
-    if (!pendingConfirm || loading) return;
+  /** Confirm or cancel the proposed action; either way the outcome is appended
+   * to the conversation so the next turn stays coherent. */
+  async function resolvePendingAction(decision: "confirm" | "deny") {
+    if (!pendingAction || loading) return;
     setError(null);
     setLoading(true);
     try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          confirmAction: { type: pendingConfirm.type, chargeId: pendingConfirm.chargeId },
-        }),
+        body: JSON.stringify(
+          decision === "confirm"
+            ? { confirmActionId: pendingAction.id }
+            : { denyActionId: pendingAction.id },
+        ),
       });
       const data = (await res.json()) as { reply?: string; toolTrace?: ToolTraceEntry[]; error?: string };
       if (!res.ok || data.error) {
         setError(data.error ?? "Could not complete that action.");
+        setPendingAction(null);
       } else {
         setMessages((m) => [...m, { role: "assistant", content: data.reply ?? "Done." }]);
         setLastTools(data.toolTrace ?? []);
-        setPendingConfirm(null);
+        setPendingAction(null);
       }
     } catch {
       setError("Network error.");
@@ -509,27 +515,39 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
             }}
             className="shrink-0 border-t border-border/60 bg-background/60 px-3 pb-3 pt-3 backdrop-blur-sm [html[data-native]_&]:pb-[max(0.75rem,var(--native-safe-bottom))]"
           >
-            {pendingConfirm ? (
-              <div className="mb-3 rounded-2xl border border-primary/25 bg-primary/5 p-3">
-                <p className="text-xs font-semibold text-foreground">Confirm action</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Send a payment reminder to {pendingConfirm.residentName} for {pendingConfirm.chargeTitle}
-                  {pendingConfirm.balanceDue ? ` (${pendingConfirm.balanceDue})` : ""}?
-                </p>
+            {pendingAction ? (
+              <div className="mb-3 max-h-64 overflow-y-auto rounded-2xl border border-primary/25 bg-primary/5 p-3">
+                <p className="text-xs font-semibold text-foreground">{pendingAction.preview.title}</p>
+                <dl className="mt-2 space-y-1.5">
+                  {pendingAction.preview.fields.map((f, i) => (
+                    <div key={i} className="text-xs leading-relaxed">
+                      <dt className="font-medium text-muted">{f.label}</dt>
+                      <dd className="whitespace-pre-wrap text-foreground">{f.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {pendingAction.preview.warnings?.map((w, i) => (
+                  <p
+                    key={i}
+                    className="mt-2 rounded-lg border border-[var(--status-pending-fg)]/25 bg-[var(--status-pending-fg)]/5 px-2 py-1.5 text-xs text-[var(--status-pending-fg)]"
+                  >
+                    {w}
+                  </p>
+                ))}
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
                     disabled={loading}
-                    onClick={() => void confirmPendingAction()}
+                    onClick={() => void resolvePendingAction("confirm")}
                     className="flex-1 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                   >
-                    Send reminder
+                    {pendingAction.preview.confirmLabel}
                   </button>
                   <button
                     type="button"
                     disabled={loading}
-                    onClick={() => setPendingConfirm(null)}
-                    className="rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted"
+                    onClick={() => void resolvePendingAction("deny")}
+                    className="rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -593,8 +611,9 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
 }
 
 /**
- * Axis Assistant panel. Read-only Q&A: it sends the conversation to the
- * agent endpoint and renders grounded answers plus which tools ran.
+ * Axis Assistant panel. Grounded Q&A plus gated actions: it sends the
+ * conversation to the agent endpoint, renders answers and which tools ran,
+ * and shows a confirmation card for any write action the agent proposes.
  */
 export function AxisAssistant({
   managerName,
