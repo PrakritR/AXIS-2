@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { AuthCard } from "@/components/auth/auth-card";
-import CreateAccountClient from "./create-account-client";
+import CreateAccountRouter from "./create-account-router";
 
 /** Avoid static prerender issues with search params / client hooks in production. */
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ function CreateAccountFallback() {
 export default function CreateAccountPage() {
   return (
     <Suspense fallback={<CreateAccountFallback />}>
-      <CreateAccountClient />
+      <CreateAccountRouter />
     </Suspense>
   );
 }

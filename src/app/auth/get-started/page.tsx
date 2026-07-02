@@ -2,6 +2,7 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { AuthBackLink, AuthPageHeader, AuthRoleStack } from "@/components/auth/auth-mobile-primitives";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -16,16 +17,36 @@ import { Suspense, useState } from "react";
  */
 function GetStartedContent() {
   const router = useRouter();
+  const { showToast } = useAppUi();
   const [busy, setBusy] = useState<string | null>(null);
 
-  const choose = (id: string) => {
+  const choose = async (id: string) => {
     setBusy(id);
     if (id === "manager") {
+      // Plan selection is manager onboarding AFTER the account exists — not a gate.
       window.location.replace(nativeAwarePath(MANAGER_PRICING_ENTRY_PATH));
       return;
     }
-    // Resident: they must attach to an existing rental application.
-    window.location.replace(nativeAwarePath("/auth/create-account?role=resident"));
+    // Resident: the user is already signed in — link them to their application by email
+    // (a pending/limited portal if no application matches yet). No Axis ID required.
+    try {
+      const res = await fetch("/api/auth/register-resident-oauth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        showToast(body.error ?? "Could not finish resident setup.");
+        setBusy(null);
+        return;
+      }
+      window.location.replace(nativeAwarePath("/resident/dashboard"));
+    } catch {
+      showToast("Network error. Try again.");
+      setBusy(null);
+    }
   };
 
   const signOut = async () => {
@@ -66,7 +87,7 @@ function GetStartedContent() {
             tone: "steel",
           },
         ]}
-        onSelect={choose}
+        onSelect={(id) => void choose(id)}
         disabled={busy !== null}
         busyId={busy}
       />

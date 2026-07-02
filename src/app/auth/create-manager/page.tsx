@@ -14,9 +14,10 @@ function CreateManagerRedirect() {
 
   useEffect(() => {
     if (sessionId) {
-      router.replace(`/auth/create-account?role=manager&session_id=${encodeURIComponent(sessionId)}`);
+      // Legacy post-payment link: keep the checkout session so account setup still works.
+      router.replace(`/auth/create-account?session_id=${encodeURIComponent(sessionId)}`);
     } else {
-      router.replace("/auth/create-account?role=manager");
+      router.replace("/auth/sign-in");
     }
   }, [sessionId, router]);
 

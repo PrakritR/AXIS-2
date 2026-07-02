@@ -9,7 +9,7 @@ import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { publicListingSearchOptions } from "@/lib/rental-application/public-listing-options";
 
 function authCreateResidentPath() {
-  return "/auth/sign-in?mode=create&role=resident";
+  return "/auth/create-account";
 }
 
 function normalizeHaystack(option: PropertySearchOption): string {

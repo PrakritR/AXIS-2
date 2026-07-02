@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { AuthWelcomeScreen } from "@/components/auth/auth-welcome-screen";
-
+/** Consolidated into the single portal sign-in (web + native shell entry). */
 export default function AuthWelcomePage() {
-  return <AuthWelcomeScreen showWebSignInLink />;
+  redirect("/auth/sign-in");
 }

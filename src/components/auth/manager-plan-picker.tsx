@@ -232,7 +232,7 @@ function ManagerPlanPickerInner() {
       });
       if (signInError) {
         showToast("Account created. Sign in to continue.");
-        router.push("/auth/manager");
+        router.push("/auth/sign-in");
         return;
       }
 
@@ -398,8 +398,7 @@ function ManagerPlanPickerInner() {
         )}
         </div>
 
-        <AuthAccountFooterLink href="/auth/manager">Already have an account? Sign in</AuthAccountFooterLink>
-        <AuthAccountFooterLink href="/auth/sign-in">Change role</AuthAccountFooterLink>
+        <AuthAccountFooterLink href="/auth/sign-in">Already have an account? Sign in</AuthAccountFooterLink>
       </div>
     </AuthCard>
   );
