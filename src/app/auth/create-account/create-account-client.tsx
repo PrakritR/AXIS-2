@@ -745,6 +745,12 @@ export default function CreateAccountClient() {
           ← Back to sign in
         </Link>
       </div>
+
+      <div className="mt-3 flex justify-center">
+        <Link className="text-sm font-semibold text-primary hover:opacity-90" href="/">
+          ← Back to home
+        </Link>
+      </div>
     </AuthCard>
   );
 }
