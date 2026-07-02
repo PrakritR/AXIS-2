@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
@@ -6,12 +6,22 @@ import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
 const MARGIN = 54;
-const FOOTER_Y = 42;
+const FOOTER_Y = 40;
 const LABEL_X = MARGIN;
 const VALUE_X = MARGIN + 168;
-const INK = rgb(0.12, 0.14, 0.18);
-const MUTED = rgb(0.4, 0.45, 0.52);
-const RULE = rgb(0.86, 0.89, 0.93);
+
+// Brand palette (mirrors src/app/globals.css design tokens).
+const NAVY = rgb(0.043, 0.106, 0.227); // #0b1b3a  brand ink / header band
+const BRAND = rgb(0.184, 0.42, 1); // #2f6bff  primary accent
+const STEEL = rgb(0.737, 0.831, 1); // #bcd4ff  light accent on dark
+const INK = rgb(0.12, 0.14, 0.18); // body text
+const MUTED = rgb(0.4, 0.45, 0.52); // labels / secondary text
+const RULE = rgb(0.86, 0.89, 0.93); // hairline rules
+const PANEL_BG = rgb(0.953, 0.965, 1); // summary panel fill
+const WHITE = rgb(1, 1, 1);
+
+const HEADER_HEIGHT = 104; // brand band on page 1
+const RUNNING_HEADER_HEIGHT = 30; // slim band on continuation pages
 
 type Field = { label: string; value: string };
 
@@ -74,6 +84,41 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): 
   return lines.length ? lines : [""];
 }
 
+/** Truncate to a single line that fits maxWidth, appending an ellipsis when clipped. */
+function truncateToWidth(text: string, font: PDFFont, size: number, maxWidth: number): string {
+  if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
+  let out = text;
+  while (out.length > 1 && font.widthOfTextAtSize(`${out}…`, size) > maxWidth) {
+    out = out.slice(0, -1).trimEnd();
+  }
+  return `${out}…`;
+}
+
+/**
+ * Draw the Axis "AX" monogram inside a rounded brand tile. Vector reproduction of
+ * the app's <AxisLogoMark> glyph so the document header carries real branding.
+ */
+function drawAxisMark(page: PDFPage, x: number, topY: number, tile: number) {
+  // Brand tile.
+  page.drawRectangle({ x, y: topY - tile, width: tile, height: tile, color: BRAND });
+  // Glyph is authored in a 46×26 viewBox; center it within the tile.
+  const glyphW = tile * 0.62;
+  const s = glyphW / 46;
+  const gx = x + (tile - glyphW) / 2;
+  const gTop = topY - (tile - 26 * s) / 2;
+  const P = (vx: number, vy: number) => ({ x: gx + vx * s, y: gTop - vy * s });
+  const stroke = Math.max(1.4, 2.55 * s);
+  const line = (a: [number, number], b: [number, number], color = WHITE, thickness = stroke) =>
+    page.drawLine({ start: P(a[0], a[1]), end: P(b[0], b[1]), thickness, color, lineCap: 1 });
+  // "A"
+  line([3.5, 21.5], [11, 4]);
+  line([11, 4], [18.5, 21.5]);
+  line([7.55, 14.25], [14.45, 14.25]);
+  // "X"
+  line([27, 4], [43, 22], STEEL, Math.max(1.4, 2.75 * s));
+  line([43, 4], [27, 22]);
+}
+
 export type ApplicationPdfOptions = {
   /** Human room label resolved on the client (listing catalog is not available server-side). */
   roomLabel?: string;
@@ -91,17 +136,46 @@ export async function buildApplicationPdf(
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
 
-  let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  let y = PAGE_HEIGHT - MARGIN;
   const contentWidth = PAGE_WIDTH - MARGIN * 2;
   const valueWidth = PAGE_WIDTH - MARGIN - VALUE_X;
+  const applicantName = clean(app.fullLegalName) || clean(row.name) || "Applicant";
+  const axisId = clean(row.id) || "—";
+  const generated = options.generatedAt ? new Date(options.generatedAt) : new Date();
+  const generatedLabel = generated.toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" });
+  const roomLabel = clean(options.roomLabel);
+
+  let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  let y = PAGE_HEIGHT;
+
+  /** Slim brand band repeated at the top of continuation pages. */
+  const drawRunningHeader = (p: PDFPage) => {
+    p.drawRectangle({
+      x: 0,
+      y: PAGE_HEIGHT - RUNNING_HEADER_HEIGHT,
+      width: PAGE_WIDTH,
+      height: RUNNING_HEADER_HEIGHT,
+      color: NAVY,
+    });
+    const midY = PAGE_HEIGHT - RUNNING_HEADER_HEIGHT / 2 - 3;
+    p.drawText("AXIS", { x: MARGIN, y: midY, size: 9, font: bold, color: WHITE });
+    p.drawText("Rental Application", { x: MARGIN + 34, y: midY, size: 9, font: regular, color: STEEL });
+    const idText = `Axis ID ${axisId}`;
+    p.drawText(idText, {
+      x: PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize(idText, 8.5),
+      y: midY + 0.5,
+      size: 8.5,
+      font: regular,
+      color: STEEL,
+    });
+  };
 
   const newPage = () => {
     page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    y = PAGE_HEIGHT - MARGIN;
+    drawRunningHeader(page);
+    y = PAGE_HEIGHT - RUNNING_HEADER_HEIGHT - 28;
   };
   const ensure = (needed: number) => {
-    if (y - needed < FOOTER_Y + 24) newPage();
+    if (y - needed < FOOTER_Y + 26) newPage();
   };
 
   const drawField = ({ label, value }: Field) => {
@@ -114,12 +188,18 @@ export async function buildApplicationPdf(
     y -= Math.max(16, lines.length * 13 + 3);
   };
 
-  const drawSection = (title: string, fields: Field[]) => {
-    const populated = fields.filter((f) => f.value.trim());
-    if (populated.length === 0) return;
+  const drawSectionHeader = (title: string) => {
     ensure(40);
-    y -= 10;
-    page.drawText(title.toUpperCase(), { x: MARGIN, y: y - 10, size: 10.5, font: bold, color: INK });
+    y -= 12;
+    // Brand accent tick to the left of each section title.
+    page.drawRectangle({ x: MARGIN, y: y - 11, width: 3, height: 11, color: BRAND });
+    page.drawText(title.toUpperCase(), {
+      x: MARGIN + 11,
+      y: y - 10,
+      size: 10.5,
+      font: bold,
+      color: NAVY,
+    });
     y -= 16;
     page.drawLine({
       start: { x: MARGIN, y: y - 2 },
@@ -128,23 +208,20 @@ export async function buildApplicationPdf(
       color: RULE,
     });
     y -= 10;
+  };
+
+  const drawSection = (title: string, fields: Field[]) => {
+    const populated = fields.filter((f) => f.value.trim());
+    if (populated.length === 0) return;
+    drawSectionHeader(title);
     for (const field of populated) drawField(field);
   };
 
   const drawFreeText = (title: string, body: string) => {
     const text = body.trim();
     if (!text) return;
-    ensure(40);
-    y -= 10;
-    page.drawText(title.toUpperCase(), { x: MARGIN, y: y - 10, size: 10.5, font: bold, color: INK });
-    y -= 16;
-    page.drawLine({
-      start: { x: MARGIN, y: y - 2 },
-      end: { x: MARGIN + contentWidth, y: y - 2 },
-      thickness: 0.75,
-      color: RULE,
-    });
-    y -= 12;
+    drawSectionHeader(title);
+    y -= 2;
     for (const line of wrapText(text, regular, 10, contentWidth)) {
       ensure(14);
       page.drawText(line, { x: MARGIN, y: y - 9, size: 10, font: regular, color: INK });
@@ -152,28 +229,97 @@ export async function buildApplicationPdf(
     }
   };
 
-  // ---- Header -------------------------------------------------------------
-  page.drawText("AXIS PROPERTY MANAGEMENT", { x: MARGIN, y: y - 9, size: 9, font: bold, color: MUTED });
-  y -= 22;
-  page.drawText("Rental Application", { x: MARGIN, y: y - 16, size: 20, font: bold, color: INK });
-  y -= 26;
-  const applicantName = clean(app.fullLegalName) || clean(row.name) || "Applicant";
-  page.drawText(applicantName, { x: MARGIN, y: y - 12, size: 12, font: regular, color: INK });
-  y -= 18;
-  const generated = options.generatedAt ? new Date(options.generatedAt) : new Date();
-  page.drawText(
-    `Axis ID ${clean(row.id) || "—"}   ·   ${statusLabel(row)}   ·   Generated ${generated.toLocaleString("en-US", {
-      dateStyle: "long",
-      timeStyle: "short",
-    })}`,
-    { x: MARGIN, y: y - 9, size: 9, font: regular, color: MUTED },
-  );
-  y -= 14;
+  // ---- Branded header band -----------------------------------------------
+  page.drawRectangle({ x: 0, y: PAGE_HEIGHT - HEADER_HEIGHT, width: PAGE_WIDTH, height: HEADER_HEIGHT, color: NAVY });
+  // Brand accent underline beneath the band.
+  page.drawRectangle({ x: 0, y: PAGE_HEIGHT - HEADER_HEIGHT - 3, width: PAGE_WIDTH, height: 3, color: BRAND });
 
-  const roomLabel = clean(options.roomLabel);
+  const bandTop = PAGE_HEIGHT - 30;
+  drawAxisMark(page, MARGIN, bandTop, 40);
+  const wordmarkX = MARGIN + 40 + 14;
+  page.drawText("AXIS", { x: wordmarkX, y: bandTop - 17, size: 19, font: bold, color: WHITE });
+  page.drawText("PROPERTY MANAGEMENT", {
+    x: wordmarkX,
+    y: bandTop - 32,
+    size: 7.5,
+    font: bold,
+    color: STEEL,
+  });
+
+  const docTitle = "RENTAL APPLICATION";
+  page.drawText(docTitle, {
+    x: PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize(docTitle, 14),
+    y: bandTop - 15,
+    size: 14,
+    font: bold,
+    color: WHITE,
+  });
+  const docSub = "Official application record";
+  page.drawText(docSub, {
+    x: PAGE_WIDTH - MARGIN - regular.widthOfTextAtSize(docSub, 8.5),
+    y: bandTop - 30,
+    size: 8.5,
+    font: regular,
+    color: STEEL,
+  });
+
+  y = PAGE_HEIGHT - HEADER_HEIGHT - 3 - 24;
+
+  // ---- Applicant identity + at-a-glance summary panel ---------------------
+  page.drawText(applicantName, { x: MARGIN, y: y - 16, size: 17, font: bold, color: INK });
+  y -= 22;
+  page.drawText(
+    `Axis ID ${axisId}    ·    ${statusLabel(row)}    ·    Generated ${generatedLabel}`,
+    { x: MARGIN, y: y - 10, size: 9, font: regular, color: MUTED },
+  );
+  y -= 22;
+
+  const summaryFields: Field[] = [
+    { label: "Property", value: clean(row.property) || "—" },
+    { label: "Room", value: roomLabel || clean(app.roomChoice1) || "—" },
+    { label: "Move-in date", value: formatLeaseDateLabel(app.leaseStart) || clean(app.leaseStart) || "—" },
+    {
+      label: "Signed monthly rent",
+      value:
+        row.signedMonthlyRent && row.signedMonthlyRent > 0
+          ? `$${row.signedMonthlyRent.toFixed(2)} / mo`
+          : money(app.managerRentOverride) || "—",
+    },
+  ];
+  const panelPadX = 18;
+  const panelPadY = 16;
+  const colGap = 24;
+  const colWidth = (contentWidth - panelPadX * 2 - colGap) / 2;
+  const rowH = 34;
+  const panelHeight = panelPadY * 2 + rowH * 2 - 8;
+  const panelTop = y;
+  page.drawRectangle({
+    x: MARGIN,
+    y: panelTop - panelHeight,
+    width: contentWidth,
+    height: panelHeight,
+    color: PANEL_BG,
+    borderColor: RULE,
+    borderWidth: 0.75,
+  });
+  summaryFields.forEach((field, i) => {
+    const col = i % 2;
+    const rowIdx = Math.floor(i / 2);
+    const cellX = MARGIN + panelPadX + col * (colWidth + colGap);
+    const cellTop = panelTop - panelPadY - rowIdx * rowH;
+    page.drawText(field.label.toUpperCase(), { x: cellX, y: cellTop - 8, size: 7.5, font: bold, color: MUTED });
+    page.drawText(truncateToWidth(field.value, bold, 11.5, colWidth), {
+      x: cellX,
+      y: cellTop - 23,
+      size: 11.5,
+      font: bold,
+      color: NAVY,
+    });
+  });
+  y = panelTop - panelHeight - 4;
 
   // ---- Applicant ----------------------------------------------------------
-  drawSection("Applicant", [
+  drawSection("Applicant details", [
     { label: "Full legal name", value: applicantName },
     { label: "Email", value: clean(app.email) || clean(row.email) },
     { label: "Phone", value: clean(app.phone) },
@@ -184,7 +330,7 @@ export async function buildApplicationPdf(
   ]);
 
   // ---- Property / placement ----------------------------------------------
-  drawSection("Property applied for", [
+  drawSection("Property & room", [
     { label: "Property", value: clean(row.property) },
     { label: "Room", value: roomLabel || clean(app.roomChoice1) },
     { label: "Second choice", value: roomLabel ? "" : clean(app.roomChoice2) },
@@ -302,19 +448,31 @@ export async function buildApplicationPdf(
   // ---- Manager notes ------------------------------------------------------
   drawFreeText("Manager notes", clean(row.detail));
 
-  // ---- Footer -------------------------------------------------------------
+  // ---- Closing note -------------------------------------------------------
   ensure(30);
-  y -= 8;
+  y -= 12;
   page.drawText(
     "Generated from Axis application records. Amounts and placement can change later in the lease or payment portal.",
     { x: MARGIN, y: y - 9, size: 8, font: italic, color: MUTED, maxWidth: contentWidth },
   );
 
+  // ---- Footer on every page ----------------------------------------------
   const pages = pdf.getPages();
+  const footerLabel = `Axis Property Management  ·  Confidential`;
   pages.forEach((p, index) => {
-    p.drawText(`Axis ID ${clean(row.id) || "—"}`, { x: MARGIN, y: FOOTER_Y, size: 8, font: regular, color: MUTED });
-    p.drawText(`Page ${index + 1} of ${pages.length}`, {
-      x: PAGE_WIDTH - MARGIN - 70,
+    p.drawLine({
+      start: { x: MARGIN, y: FOOTER_Y + 12 },
+      end: { x: PAGE_WIDTH - MARGIN, y: FOOTER_Y + 12 },
+      thickness: 0.75,
+      color: RULE,
+    });
+    p.drawText(footerLabel, { x: MARGIN, y: FOOTER_Y, size: 8, font: regular, color: MUTED });
+    const idText = `Axis ID ${axisId}`;
+    const idWidth = regular.widthOfTextAtSize(idText, 8);
+    p.drawText(idText, { x: (PAGE_WIDTH - idWidth) / 2, y: FOOTER_Y, size: 8, font: regular, color: MUTED });
+    const pageText = `Page ${index + 1} of ${pages.length}`;
+    p.drawText(pageText, {
+      x: PAGE_WIDTH - MARGIN - regular.widthOfTextAtSize(pageText, 8),
       y: FOOTER_Y,
       size: 8,
       font: regular,

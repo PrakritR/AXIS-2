@@ -10,6 +10,7 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   PORTAL_FILTER_ACTIONS_MOBILE,
+  PORTAL_HEADER_ACTION_BTN,
   PORTAL_KPI_LABEL,
   PORTAL_KPI_VALUE,
   PORTAL_PAGE_ACTIONS_DESKTOP,
@@ -264,7 +265,21 @@ export function ManagerDocumentsPanel({
     <ManagerPortalPageShell
       title="Documents"
       titleAside={
-        hasExportActions ? <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div> : undefined
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {hasExportActions ? (
+            <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div>
+          ) : null}
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_HEADER_ACTION_BTN}
+            onClick={() => void runReport()}
+            disabled={loading}
+            data-attr="documents-generate-report"
+          >
+            {loading ? "Generating…" : "Generate report"}
+          </Button>
+        </div>
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -274,23 +289,26 @@ export function ManagerDocumentsPanel({
       }
     >
       <div className="space-y-4">
-        {tabId === "income-documents" || tabId === "expense-documents" ? (
-          <FormalDocumentScopeBar
-            filters={scopeFilters}
-            onChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
-          />
-        ) : null}
-
         <ReportFilterBar
           showProperty={showProperty}
           showDateRange={showDateRange}
           showDaysAhead={false}
           showTaxYear={showTaxYear}
+          showRunButton={false}
           propertyOptions={propertyOptions}
           filters={filters}
           onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
           onRun={() => void runReport()}
           loading={loading}
+          leading={
+            tabId === "income-documents" || tabId === "expense-documents" ? (
+              <FormalDocumentScopeBar
+                inline
+                filters={scopeFilters}
+                onChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
+              />
+            ) : null
+          }
         />
 
         {tabId === "tax-summary" && generated ? <TaxSummaryCards report={report} /> : null}

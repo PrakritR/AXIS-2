@@ -100,7 +100,7 @@ function ApplicationBackgroundCheckStatusBadge({ row }: { row: DemoApplicantRow 
         {backgroundCheckStatusLabel(status)}
       </span>
       {screening?.recommendation && screening.recommendation !== "not_available" ? (
-        <span className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200/80">
+        <span className="inline-flex max-w-full items-center rounded-full bg-foreground/5 px-2.5 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
           {recommendationLabel(screening.recommendation)}
         </span>
       ) : null}
@@ -329,7 +329,7 @@ function ManagerApplicationPlacementEditor({
       </div>
 
       {resolved.missing.length > 0 ? (
-        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-relaxed text-amber-900">
+        <div className="mt-5 rounded-2xl border portal-banner-pending px-5 py-4 text-sm leading-relaxed">
           <span className="font-semibold">Not captured on the application yet:</span>{" "}
           {resolved.missing.join(", ")}. Add these to the listing or application, or set them later in the lease portal.
         </div>
@@ -884,7 +884,7 @@ export function ManagerApplications() {
                             <Button
                               type="button"
                               variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
                               onClick={() => void deleteApplication(row.id)}
                             >
                               Delete application
@@ -892,7 +892,7 @@ export function ManagerApplications() {
                           </PortalTableDetailActions>
 
                           {row.application ? (
-                            <div className="portal-desktop-scroll-panel overscroll-contain rounded-3xl border border-border bg-gradient-to-b from-white to-slate-50/50 p-5 shadow-[0_2px_20px_-12px_rgba(15,23,42,0.12)] sm:p-7">
+                            <div className="portal-desktop-scroll-panel overscroll-contain rounded-3xl border border-border bg-accent/40 p-5 shadow-[0_2px_20px_-12px_rgba(15,23,42,0.12)] sm:p-7">
                               <ManagerApplicationPlacementEditor
                                 key={[
                                   row.id,
