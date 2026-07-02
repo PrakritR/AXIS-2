@@ -308,8 +308,7 @@ export default function PartnerPricingPage() {
   return (
     <div className="min-h-screen px-4 py-14 sm:px-5 sm:py-20">
       <div className="mx-auto max-w-3xl text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Partner pricing</p>
-        <h1 className="mt-3 text-4xl font-bold tracking-[-0.03em] text-foreground sm:text-5xl md:text-[3.25rem]">Start with Axis.</h1>
+        <h1 className="text-4xl font-bold tracking-[-0.03em] text-foreground sm:text-5xl md:text-[3.25rem]">Start with Axis.</h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted">
           Choose a tier and sign in with Google to create your account instantly. Free starts right away; Pro and
           Business upgrade through secure checkout when you are ready.
