@@ -118,8 +118,16 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const counts = useMemo(() => countThreads(local), [local]);
 
+  // Residents have no scheduled-messages feature (that's manager-only), and the
+  // resident inbox route rejects the "schedule" tab with a 404. Drop that pill so
+  // residents can't navigate to a route that doesn't exist for them.
   const tabs = useMemo(
-    () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
+    () =>
+      INBOX_TAB_DEFS.filter(({ id }) => id !== "schedule").map(({ id, label }) => ({
+        id,
+        label,
+        count: counts[id as keyof typeof counts],
+      })),
     [counts],
   );
 
