@@ -30,6 +30,9 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
               <Link href="/support" className="transition-colors hover:text-primary">
                 Support
               </Link>
+              <Link href="/contact" className="transition-colors hover:text-primary">
+                Contact
+              </Link>
               <span className="text-muted">Axis</span>
             </div>
           </div>
@@ -103,6 +106,9 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
                   <MailIcon />
                   <span className="min-w-0 break-all leading-snug">info@axis-seattle-housing.com</span>
                 </a>
+                <Link href="/contact" className={footerLinkClass}>
+                  Contact us
+                </Link>
               </div>
             </div>
           </div>
@@ -121,6 +127,9 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
             </Link>
             <Link href="/support" className="transition-colors hover:text-primary">
               Support
+            </Link>
+            <Link href="/contact" className="transition-colors hover:text-primary">
+              Contact
             </Link>
             <span className="text-muted">Axis</span>
           </div>

@@ -109,12 +109,18 @@ export function LandingFinalCta() {
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-white/85">
             Run applications, leases, and rent collection on Axis — or let us manage your properties end to end.
           </p>
-          <div className="mt-10 flex justify-center">
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
               href="/partner"
               className="btn-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold text-foreground transition-[transform,filter] duration-200 active:scale-[0.99] sm:w-auto"
             >
               Partner with Axis
+            </Link>
+            <Link
+              href="/contact"
+              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-white/30 px-8 py-3 text-sm font-semibold text-white transition-colors duration-200 hover:bg-white/10 sm:w-auto"
+            >
+              Contact us
             </Link>
           </div>
         </div>

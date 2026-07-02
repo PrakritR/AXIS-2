@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
@@ -20,6 +21,15 @@ export function PortalSettingsExtras({ currentKind }: { currentKind: PortalKind 
       <div className="border-t border-border pt-4">
         <PortalRoleSwitcher currentKind={currentKind} />
       </div>
+
+      {currentKind === "admin" ? (
+        <Link
+          href="/contact"
+          className="block w-full rounded-full border border-border px-4 py-3 text-center text-sm font-semibold text-foreground transition hover:bg-accent/70"
+        >
+          Contact us
+        </Link>
+      ) : null}
 
       <PortalSignOutButton className="w-full rounded-full border border-border px-4 py-3 text-center text-sm font-semibold text-foreground transition hover:bg-accent/70 disabled:opacity-60" />
     </div>
