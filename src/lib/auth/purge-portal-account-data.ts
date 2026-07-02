@@ -1,5 +1,6 @@
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { purgeCoManagerReferencesToUser } from "@/lib/auth/purge-orphaned-co-manager-links";
+import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
@@ -38,7 +39,7 @@ export async function purgeResidentPortalData(
       db.from("portal_recurring_rent_profile_records").delete().eq("resident_email", email),
       db.from("portal_lease_pipeline_records").delete().eq("resident_email", email),
       db.from("portal_work_order_records").delete().eq("resident_email", email),
-      db.from("portal_inbox_thread_records").delete().eq("participant_email", email),
+      db.from("portal_inbox_thread_records").delete().eq("participant_email", email).neq("scope", ADMIN_INBOX_SCOPE),
       db.from("portal_outbound_mail_records").delete().eq("recipient_email", email),
       db.from("portal_resident_lease_upload_records").delete().eq("resident_email", email),
       db.from("manager_application_records").delete().eq("resident_email", email),

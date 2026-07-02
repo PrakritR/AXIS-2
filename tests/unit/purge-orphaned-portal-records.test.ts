@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PortalAccountIndex } from "@/lib/auth/purge-orphaned-portal-records";
 import { isOrphanInboxThread } from "@/lib/auth/purge-orphaned-portal-records";
+import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
 
 function residentStillExists(
   record: { resident_email?: unknown; resident_user_id?: unknown; row_data?: unknown },
@@ -114,6 +115,15 @@ describe("orphan inbox thread detection", () => {
 
   it("keeps resident welcome threads with null owner_user_id", () => {
     expect(isOrphanInboxThread({ owner_user_id: null, participant_email: "resident@test.com" }, index)).toBe(false);
+  });
+
+  it("keeps admin contact threads from anonymous senders", () => {
+    expect(
+      isOrphanInboxThread(
+        { owner_user_id: null, participant_email: "lead@test.com", scope: ADMIN_INBOX_SCOPE },
+        index,
+      ),
+    ).toBe(false);
   });
 
   it("flags manager inbox rows whose resident counterparty no longer exists", () => {
