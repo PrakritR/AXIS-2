@@ -12,6 +12,9 @@ export type PromotionTheme = "cobalt" | "sunset" | "forest" | "slate";
 
 export type PromotionStatus = "draft" | "generated";
 
+/** Output format / canvas the flyer is rendered at. */
+export type FlyerSize = "letter" | "a4" | "ig_post" | "ig_story";
+
 /** Raw inputs the manager sets in the form (untrusted free text). */
 export type PromotionInputs = {
   headline: string;
@@ -26,6 +29,12 @@ export type PromotionInputs = {
   contact: string;
   /** Copy tone, e.g. "Warm & welcoming". */
   tone: string;
+  /**
+   * Free-form custom property details typed on the "Custom" path (address,
+   * features, neighborhood notes). Fed to the AI as additional facts to
+   * advertise. Empty when a saved property was picked from the dropdown.
+   */
+  customDetails: string;
 };
 
 /** AI-composed (or fallback-composed) flyer copy. Facts stay from inputs. */
@@ -47,6 +56,8 @@ export type ManagerPromotionRow = {
   /** Short promotion title (table column). */
   title: string;
   theme: PromotionTheme;
+  /** Output size / format the flyer is rendered at. Defaults to Letter. */
+  flyerSize: FlyerSize;
   status: PromotionStatus;
   inputs: PromotionInputs;
   /** null until copy has been generated. */
@@ -68,6 +79,27 @@ export const PROMOTION_TONE_OPTIONS = [
   "Bold & energetic",
   "Calm & professional",
 ];
+
+export const PROMOTION_SIZE_OPTIONS: { id: FlyerSize; label: string }[] = [
+  { id: "letter", label: 'Letter — 8.5" × 11"' },
+  { id: "a4", label: "A4 — 210 × 297 mm" },
+  { id: "ig_post", label: "Instagram post — 1080 × 1080" },
+  { id: "ig_story", label: "Instagram story — 1080 × 1920" },
+];
+
+/** CSS canvas spec per flyer size, used by {@link buildFlyerHtml}. */
+type SizeSpec = { width: string; minHeight: string; page: string; heroPad: string; bodyPad: string };
+
+const SIZE_SPECS: Record<FlyerSize, SizeSpec> = {
+  letter: { width: "8.5in", minHeight: "11in", page: "letter portrait", heroPad: "0.85in 0.8in 0.7in", bodyPad: "0.6in 0.8in 0.5in" },
+  a4: { width: "210mm", minHeight: "297mm", page: "A4 portrait", heroPad: "22mm 20mm 18mm", bodyPad: "16mm 20mm 14mm" },
+  ig_post: { width: "1080px", minHeight: "1080px", page: "1080px 1080px", heroPad: "72px 72px 56px", bodyPad: "48px 72px 40px" },
+  ig_story: { width: "1080px", minHeight: "1920px", page: "1080px 1920px", heroPad: "120px 80px 72px", bodyPad: "64px 80px 56px" },
+};
+
+export function sizeSpecFor(size: FlyerSize | undefined): SizeSpec {
+  return SIZE_SPECS[size ?? "letter"] ?? SIZE_SPECS.letter;
+}
 
 type ThemePalette = { from: string; to: string; accent: string; ink: string };
 
@@ -98,7 +130,11 @@ export function parseSellingPoints(raw: string): string[] {
  * it only reshapes the manager-provided inputs into flyer-ready copy.
  */
 export function composeFallbackFlyerCopy(inputs: PromotionInputs, propertyLabel: string): FlyerCopy {
-  const points = parseSellingPoints(inputs.sellingPoints);
+  // Selling points fall back to the custom-details text when no explicit list
+  // was given, so the "Custom (type below)" path still yields flyer bullets.
+  const points = parseSellingPoints(
+    inputs.sellingPoints.trim() ? inputs.sellingPoints : inputs.customDetails,
+  );
   const headline = inputs.headline.trim() || (propertyLabel ? `Now Leasing — ${propertyLabel}` : "Now Leasing");
   const subParts: string[] = [];
   if (propertyLabel) subParts.push(propertyLabel);
@@ -129,11 +165,14 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * Render a promotion as a standalone, print-ready HTML document (Letter portrait).
+ * Render a promotion as a standalone, print-ready HTML document. The canvas
+ * (page size, sheet dimensions, padding) is driven by `row.flyerSize` so the
+ * output matches the manager's chosen format (Letter, A4, or Instagram sizes).
  * Falls back to composed copy when `row.copy` is null so a preview always renders.
  */
 export function buildFlyerHtml(row: ManagerPromotionRow): string {
   const palette = paletteForTheme(row.theme);
+  const size = sizeSpecFor(row.flyerSize);
   const copy = row.copy ?? composeFallbackFlyerCopy(row.inputs, row.propertyLabel);
   const bullets = copy.sellingPoints
     .map(
@@ -155,7 +194,7 @@ export function buildFlyerHtml(row: ManagerPromotionRow): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(copy.headline)}</title>
 <style>
-  @page { size: letter portrait; margin: 0; }
+  @page { size: ${size.page}; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
@@ -166,8 +205,8 @@ export function buildFlyerHtml(row: ManagerPromotionRow): string {
     print-color-adjust: exact;
   }
   .sheet {
-    width: 8.5in;
-    min-height: 11in;
+    width: ${size.width};
+    min-height: ${size.minHeight};
     margin: 0 auto;
     background: #ffffff;
     display: flex;
@@ -176,7 +215,7 @@ export function buildFlyerHtml(row: ManagerPromotionRow): string {
   }
   .hero {
     position: relative;
-    padding: 0.85in 0.8in 0.7in;
+    padding: ${size.heroPad};
     color: #ffffff;
     background: linear-gradient(135deg, ${palette.from}, ${palette.to});
   }
@@ -188,7 +227,7 @@ export function buildFlyerHtml(row: ManagerPromotionRow): string {
     background: rgba(255,255,255,0.18); border: 1.5px solid rgba(255,255,255,0.55);
     font-size: 16px; font-weight: 700; letter-spacing: 0.01em;
   }
-  .body { padding: 0.6in 0.8in 0.5in; display: flex; flex-direction: column; gap: 26px; flex: 1; }
+  .body { padding: ${size.bodyPad}; display: flex; flex-direction: column; gap: 26px; flex: 1; }
   .points { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
   .points li { display: flex; align-items: flex-start; gap: 12px; font-size: 18px; font-weight: 500; line-height: 1.35; }
   .dot { margin-top: 8px; width: 9px; height: 9px; border-radius: 999px; background: ${palette.accent}; flex: 0 0 auto; }

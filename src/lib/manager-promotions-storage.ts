@@ -165,7 +165,8 @@ export function subscribeManagerPromotions(cb: () => void) {
 export async function generateFlyerCopy(
   inputs: PromotionInputs,
   propertyLabel: string,
-): Promise<{ copy: FlyerCopy; source: "ai" | "fallback" }> {
+  propertyId?: string | null,
+): Promise<{ copy: FlyerCopy; source: "ai" | "fallback" | "forbidden" }> {
   if (isDemoModeActive() || typeof window === "undefined") {
     return { copy: composeFallbackFlyerCopy(inputs, propertyLabel), source: "fallback" };
   }
@@ -174,8 +175,12 @@ export async function generateFlyerCopy(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ inputs, propertyLabel }),
+      body: JSON.stringify({ inputs, propertyLabel, propertyId: propertyId ?? null }),
     });
+    // Server rejected an unowned property — surface it, don't silently compose.
+    if (res.status === 403) {
+      return { copy: composeFallbackFlyerCopy(inputs, propertyLabel), source: "forbidden" };
+    }
     if (!res.ok) return { copy: composeFallbackFlyerCopy(inputs, propertyLabel), source: "fallback" };
     const body = (await res.json()) as { copy?: FlyerCopy };
     if (!body.copy || !body.copy.headline) {

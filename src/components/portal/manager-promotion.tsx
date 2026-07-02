@@ -7,8 +7,13 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_TD,
+  PORTAL_DETAIL_BTN,
+  PortalTableDetailActions,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -17,8 +22,14 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
 import { PromotionFlyerPreview } from "@/components/portal/promotion-flyer-preview";
 import {
+  buildManagerPromotionPropertyOptions,
+  type ManagerPromotionPropertyOption,
+} from "@/lib/manager-property-links";
+import {
   PROMOTION_THEME_OPTIONS,
   PROMOTION_TONE_OPTIONS,
+  PROMOTION_SIZE_OPTIONS,
+  type FlyerSize,
   type ManagerPromotionRow,
   type PromotionInputs,
   type PromotionTheme,
@@ -34,7 +45,6 @@ import {
 } from "@/lib/manager-promotions-storage";
 import {
   PROPERTY_PIPELINE_EVENT,
-  readExtraListingsForUser,
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 
@@ -44,11 +54,13 @@ type PromotionDraft = {
   title: string;
   headline: string;
   sellingPoints: string;
+  customDetails: string;
   price: string;
   promo: string;
   cta: string;
   contact: string;
   theme: PromotionTheme;
+  flyerSize: FlyerSize;
   tone: string;
 };
 
@@ -60,11 +72,13 @@ const EMPTY_DRAFT: PromotionDraft = {
   title: "",
   headline: "",
   sellingPoints: "",
+  customDetails: "",
   price: "",
   promo: "",
   cta: "",
   contact: "",
   theme: "cobalt",
+  flyerSize: "letter",
   tone: PROMOTION_TONE_OPTIONS[0]!,
 };
 
@@ -83,6 +97,7 @@ function draftInputs(draft: PromotionDraft): PromotionInputs {
     cta: draft.cta.trim(),
     contact: draft.contact.trim(),
     tone: draft.tone.trim(),
+    customDetails: draft.customDetails.trim(),
   };
 }
 
@@ -103,6 +118,7 @@ export function ManagerPromotion() {
   const [generating, setGenerating] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -126,9 +142,11 @@ export function ManagerPromotion() {
     return readManagerPromotionRows().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }, [tick]);
 
-  const listings = useMemo(() => {
+  // Owner-scoped: only the manager's OWN live listings (plus co-managed ones),
+  // with clean display names — never another manager's or a raw seed key.
+  const listings = useMemo<ManagerPromotionPropertyOption[]>(() => {
     void propertyTick;
-    return readExtraListingsForUser(userId);
+    return buildManagerPromotionPropertyOptions(userId);
   }, [userId, propertyTick]);
 
   const counts = useMemo(
@@ -160,7 +178,7 @@ export function ManagerPromotion() {
       setDraft((d) => ({ ...d, propertyKey: key }));
       return;
     }
-    const listing = listings.find((l) => l.id === key);
+    const listing = listings.find((l) => l.id === key)?.property;
     setDraft((d) => ({
       ...d,
       propertyKey: key,
@@ -182,19 +200,25 @@ export function ManagerPromotion() {
       showToast("Add a property/listing or a headline first.");
       return;
     }
+    const propertyId = draft.propertyKey === CUSTOM_PROPERTY_KEY ? null : draft.propertyKey;
     setGenerating(true);
-    track("promotion_generation_started", { theme: draft.theme });
+    track("promotion_generation_started", { theme: draft.theme, flyer_size: draft.flyerSize });
     try {
       const inputs = draftInputs(draft);
-      const { copy, source } = await generateFlyerCopy(inputs, label);
+      const { copy, source } = await generateFlyerCopy(inputs, label, propertyId);
+      if (source === "forbidden") {
+        showToast("You can only create flyers for your own properties.");
+        return;
+      }
       const now = new Date().toISOString();
       upsertManagerPromotion({
         id: makePromotionId(),
         managerUserId: userId ?? null,
-        propertyId: draft.propertyKey === CUSTOM_PROPERTY_KEY ? null : draft.propertyKey,
+        propertyId,
         propertyLabel: label,
         title,
         theme: draft.theme,
+        flyerSize: draft.flyerSize,
         status: "generated",
         inputs,
         copy,
@@ -215,7 +239,11 @@ export function ManagerPromotion() {
     setRegeneratingId(row.id);
     track("promotion_regenerated", { theme: row.theme });
     try {
-      const { copy } = await generateFlyerCopy(row.inputs, row.propertyLabel);
+      const { copy, source } = await generateFlyerCopy(row.inputs, row.propertyLabel, row.propertyId);
+      if (source === "forbidden") {
+        showToast("You can only create flyers for your own properties.");
+        return;
+      }
       upsertManagerPromotion({ ...row, copy, status: "generated", updatedAt: new Date().toISOString() });
       showToast("Flyer regenerated.");
     } catch {
@@ -228,6 +256,7 @@ export function ManagerPromotion() {
   function removePromotion(id: string) {
     if (!deleteManagerPromotionRow(id)) return;
     if (previewId === id) setPreviewId(null);
+    if (expandedId === id) setExpandedId(null);
     showToast("Promotion deleted.");
   }
 
@@ -244,7 +273,6 @@ export function ManagerPromotion() {
   return (
     <ManagerPortalPageShell
       title="Promotion"
-      subtitle="Generate on-brand marketing flyers for your listings with AI."
       titleAside={
         <Button type="button" onClick={openNew} data-attr="promotion-new">
           New promotion
@@ -255,9 +283,6 @@ export function ManagerPromotion() {
       {showForm ? (
         <div className="mb-6 rounded-2xl border border-border bg-card p-5">
           <p className="text-sm font-semibold text-foreground">New promotion</p>
-          <p className="mt-1 text-xs text-muted">
-            Set the inputs, then generate. Copy is AI-composed from your facts; the flyer uses your Axis brand styling.
-          </p>
           <PromotionForm draft={draft} setDraft={setDraft} listings={listings} onSelectProperty={onSelectProperty} />
           <div className="mt-4 flex flex-wrap gap-2">
             <Button type="button" onClick={generate} disabled={generating} data-attr="promotion-generate">
@@ -285,69 +310,90 @@ export function ManagerPromotion() {
       ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[560px] border-collapse text-left text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={MANAGER_TABLE_TH}>Property / Listing</th>
                   <th className={MANAGER_TABLE_TH}>Title / Headline</th>
                   <th className={MANAGER_TABLE_TH}>Created</th>
-                  <th className={MANAGER_TABLE_TH}>Status</th>
-                  <th className={MANAGER_TABLE_TH}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((row) => (
-                  <Fragment key={row.id}>
-                    <tr className={PORTAL_TABLE_TR}>
-                      <td className={PORTAL_TABLE_TD}>{row.propertyLabel || "—"}</td>
-                      <td className={PORTAL_TABLE_TD}>{row.copy?.headline || row.title || "—"}</td>
-                      <td className={PORTAL_TABLE_TD}>{formatDate(row.createdAt)}</td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
-                            row.status === "generated"
-                              ? "portal-badge-success ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-                              : "bg-accent/30 text-muted ring-border"
-                          }`}
-                        >
-                          {row.status === "generated" ? "Generated" : "Draft"}
-                        </span>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 text-xs"
-                            onClick={() => setPreviewId(row.id)}
-                            data-attr="promotion-view"
-                          >
-                            View
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 text-xs"
-                            onClick={() => regenerate(row)}
-                            disabled={regeneratingId === row.id}
-                            data-attr="promotion-regenerate"
-                          >
-                            {regeneratingId === row.id ? "…" : "Regenerate"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 text-xs"
-                            onClick={() => removePromotion(row.id)}
-                            data-attr="promotion-delete"
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  </Fragment>
-                ))}
+                {visible.map((row) => {
+                  const isOpen = expandedId === row.id;
+                  return (
+                    <Fragment key={row.id}>
+                      <tr
+                        className={`${PORTAL_TABLE_TR_EXPANDABLE} ${isOpen ? "bg-accent/30" : ""}`}
+                        onClick={createPortalRowExpandClick(() =>
+                          setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                        )}
+                        aria-expanded={isOpen}
+                        data-attr="promotion-row"
+                      >
+                        <td className={PORTAL_TABLE_TD}>{row.propertyLabel || "—"}</td>
+                        <td className={PORTAL_TABLE_TD}>{row.copy?.headline || row.title || "—"}</td>
+                        <td className={PORTAL_TABLE_TD}>{formatDate(row.createdAt)}</td>
+                      </tr>
+                      {isOpen ? (
+                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                          <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="font-semibold uppercase tracking-[0.12em] text-muted/80">Status</span>
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
+                                    row.status === "generated"
+                                      ? "portal-badge-success ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+                                      : "bg-accent/30 text-muted ring-border"
+                                  }`}
+                                >
+                                  {row.status === "generated" ? "Generated" : "Draft"}
+                                </span>
+                              </span>
+                              {row.title ? (
+                                <span>
+                                  <span className="font-semibold uppercase tracking-[0.12em] text-muted/80">Title</span>{" "}
+                                  {row.title}
+                                </span>
+                              ) : null}
+                            </div>
+                            <PortalTableDetailActions>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => setPreviewId(row.id)}
+                                data-attr="promotion-view"
+                              >
+                                View flyer
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => regenerate(row)}
+                                disabled={regeneratingId === row.id}
+                                data-attr="promotion-regenerate"
+                              >
+                                {regeneratingId === row.id ? "Regenerating…" : "Regenerate"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => removePromotion(row.id)}
+                                data-attr="promotion-delete"
+                              >
+                                Delete
+                              </Button>
+                            </PortalTableDetailActions>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -369,9 +415,10 @@ function PromotionForm({
 }: {
   draft: PromotionDraft;
   setDraft: React.Dispatch<React.SetStateAction<PromotionDraft>>;
-  listings: { id: string; title: string }[];
+  listings: ManagerPromotionPropertyOption[];
   onSelectProperty: (key: string) => void;
 }) {
+  const isCustom = draft.propertyKey === CUSTOM_PROPERTY_KEY;
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <div>
@@ -380,7 +427,7 @@ function PromotionForm({
           <option value={CUSTOM_PROPERTY_KEY}>Custom (type below)</option>
           {listings.map((l) => (
             <option key={l.id} value={l.id}>
-              {l.title}
+              {l.label}
             </option>
           ))}
         </Select>
@@ -394,6 +441,21 @@ function PromotionForm({
           placeholder="The Pioneer — Pioneer Square"
         />
       </div>
+      {isCustom ? (
+        <div className="sm:col-span-2">
+          <label className="text-xs font-semibold text-muted">Custom property details</label>
+          <Textarea
+            className="mt-1"
+            rows={4}
+            value={draft.customDetails}
+            onChange={(e) => setDraft((d) => ({ ...d, customDetails: e.target.value }))}
+            placeholder={"Address, unit mix, square footage, standout features, neighborhood — anything the flyer should highlight."}
+          />
+          <p className="mt-1 text-[11px] text-muted">
+            Fed to the AI as facts to advertise. Used to fill in selling points when you leave them blank.
+          </p>
+        </div>
+      ) : null}
       <div className="sm:col-span-2">
         <label className="text-xs font-semibold text-muted">Promotion title (internal)</label>
         <Input
@@ -482,6 +544,21 @@ function PromotionForm({
           {PROMOTION_TONE_OPTIONS.map((t) => (
             <option key={t} value={t}>
               {t}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="sm:col-span-2">
+        <label className="text-xs font-semibold text-muted">Flyer size</label>
+        <Select
+          className="mt-1"
+          value={draft.flyerSize}
+          onChange={(e) => setDraft((d) => ({ ...d, flyerSize: e.target.value as FlyerSize }))}
+          data-attr="promotion-flyer-size"
+        >
+          {PROMOTION_SIZE_OPTIONS.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
             </option>
           ))}
         </Select>

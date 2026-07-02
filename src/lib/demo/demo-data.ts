@@ -345,6 +345,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
       propertyLabel: "The Pioneer — Pioneer Square",
       title: "Spring leasing push",
       theme: "cobalt",
+      flyerSize: "letter",
       status: "generated",
       inputs: {
         headline: "Modern living in Pioneer Square",
@@ -354,6 +355,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Book a tour today",
         contact: "leasing@axis.com · (206) 555-0142",
         tone: "Warm & welcoming",
+        customDetails: "",
       },
       copy: {
         headline: "Your Pioneer Square Home Awaits",
@@ -373,6 +375,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
       propertyLabel: "Cascade Lofts — Belltown",
       title: "Belltown loft feature",
       theme: "sunset",
+      flyerSize: "ig_post",
       status: "generated",
       inputs: {
         headline: "Belltown loft living",
@@ -382,6 +385,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Schedule a viewing",
         contact: "leasing@axis.com",
         tone: "Modern & upscale",
+        customDetails: "",
       },
       copy: {
         headline: "Loft Living in Belltown",
@@ -401,6 +405,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
       propertyLabel: "Emerald Court — First Hill",
       title: "First Hill family unit (draft)",
       theme: "forest",
+      flyerSize: "letter",
       status: "draft",
       inputs: {
         headline: "Spacious First Hill 3-bed",
@@ -410,6 +415,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Apply online",
         contact: "leasing@axis.com",
         tone: "Calm & professional",
+        customDetails: "",
       },
       copy: null,
       createdAt: isoDaysFromNow(0),
