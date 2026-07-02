@@ -232,7 +232,17 @@ export function ListingDetailSections({
   return (
     <div className="bg-background text-foreground" data-listing-sections-root>
       <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>
-        {previewModal ? <ListingStickySubnav mode="modal" /> : null}
+        {previewModal ? (
+          <ListingStickySubnav mode="modal" />
+        ) : (
+          <Link
+            href="/rent/browse"
+            data-attr="listing-detail-back"
+            className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:opacity-90"
+          >
+            ← Back to homes
+          </Link>
+        )}
         <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
 
         <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
