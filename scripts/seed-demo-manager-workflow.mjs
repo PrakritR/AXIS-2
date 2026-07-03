@@ -37,6 +37,10 @@ import {
   assertTestProjectUrl,
   DEMO_WORKFLOW_RESIDENT_EMAILS,
 } from "../tests/helpers/canonical-test-accounts.mjs";
+import {
+  ensureManagerStripeCustomer,
+  getSeedStripeClient,
+} from "../tests/helpers/ensure-stripe-test-customer.mjs";
 
 // ---------------------------------------------------------------------------
 // Config / env
@@ -59,6 +63,7 @@ assertTestProjectUrl(url);
 const sb = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
+const stripe = getSeedStripeClient();
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -185,6 +190,12 @@ async function ensureManager() {
   } else {
     console.log("Manager already on a paid tier — Residents/Leases/Finances unlocked.");
   }
+
+  // Give the manager a REAL Stripe test customer + default test card (not a
+  // hand-typed cus_test_* placeholder) so manager charges — e.g. applicant
+  // screening (src/lib/screening/charge-manager.ts) — succeed in test mode.
+  await ensureManagerStripeCustomer(stripe, sb, { email: TARGET_EMAIL, userId: uid });
+
   return uid;
 }
 

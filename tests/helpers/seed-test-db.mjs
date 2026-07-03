@@ -30,6 +30,7 @@ import {
   DEMO_WORKFLOW_RESIDENT_EMAILS,
   PRODUCTION_ADMIN_EMAIL,
 } from "./canonical-test-accounts.mjs";
+import { ensureManagerStripeCustomer, getSeedStripeClient } from "./ensure-stripe-test-customer.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -69,6 +70,7 @@ for (const [label, email] of [
 const supabase = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
+const stripe = getSeedStripeClient();
 
 /** Throws when a Supabase mutation returned an error — no more silent seed failures. */
 async function must(promise, label) {
@@ -177,6 +179,10 @@ try {
       "manager_purchases",
     );
   }
+  // Give the manager a REAL Stripe test customer + default test card (not a
+  // hand-typed cus_test_* placeholder) so manager charges — e.g. applicant
+  // screening (src/lib/screening/charge-manager.ts) — succeed in test mode.
+  await ensureManagerStripeCustomer(stripe, supabase, { email: managerEmail, userId: managerUserId });
 
   // Stable id + upsert so repeated e2e runs reuse ONE well-formed record for the
   // shared demo manager instead of accumulating raw-id "Seed Property <ts>" rows.
@@ -607,6 +613,7 @@ try {
       "manager_purchases(manager2)",
     );
   }
+  await ensureManagerStripeCustomer(stripe, supabase, { email: manager2Email, userId: manager2UserId });
 
   // ── Catalog properties (all Seattle — a supported lease jurisdiction) ─────
   const usd = (n) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
