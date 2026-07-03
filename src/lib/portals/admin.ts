@@ -17,6 +17,7 @@ export const adminPortal: PortalDefinition = {
       tabs: [
         { id: "unopened", label: "Unopened" },
         { id: "opened", label: "Opened" },
+        { id: "schedule", label: "Schedule" },
         { id: "sent", label: "Sent" },
         { id: "trash", label: "Trash" },
       ],

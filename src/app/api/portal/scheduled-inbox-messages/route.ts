@@ -37,7 +37,7 @@ async function requirePortalActor(preferredRole?: PortalRole): Promise<PortalAct
   ]);
   const roleList = (roles ?? []).map((r) => String(r.role).toLowerCase());
   const legacy = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
-  const isManager = roleList.includes("manager") || legacy === "manager" || legacy === "admin";
+  const isManager = roleList.includes("manager") || roleList.includes("admin") || legacy === "manager" || legacy === "admin";
   const isResident = roleList.includes("resident") || legacy === "resident";
   if (!isManager && !isResident) return null;
 

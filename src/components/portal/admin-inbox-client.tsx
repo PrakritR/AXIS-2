@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
+import { AdminInboxSchedulePanel } from "@/components/portal/admin-inbox-schedule-panel";
+import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
 import {
   appendInboxMessage,
   appendThreadReply,
@@ -60,10 +62,6 @@ function toAdminTableRows(list: InboxMessage[], tabId: string): PortalInboxTable
   }));
 }
 
-// Admin inbox has no scheduled-messages backend, so the shared "schedule" tab
-// (manager-only) must not render here — its route would 404 under /admin.
-const ADMIN_INBOX_TAB_DEFS = INBOX_TAB_DEFS.filter((t) => t.id !== "schedule");
-
 const ADMIN_COMPOSE_MODE_OPTIONS: { value: AdminComposeSendMode; label: string }[] = [
   { value: "all_portal", label: "Everyone (managers & residents)" },
   { value: "all_managers", label: "All managers" },
@@ -74,16 +72,27 @@ const ADMIN_COMPOSE_MODE_OPTIONS: { value: AdminComposeSendMode; label: string }
 
 type Recipient = { id: string; name: string; email: string };
 
+function defaultScheduleAtLocal(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function ComposeModal({
   open,
   onClose,
   onSent,
   recipients,
+  initialSchedule,
 }: {
   open: boolean;
   onClose: () => void;
   onSent: () => void;
   recipients: { managers: Recipient[]; residents: Recipient[] };
+  /** Open pre-set to "Schedule for later" (used by the Schedule tab's "Schedule message" button). */
+  initialSchedule?: boolean;
 }) {
   const { showToast } = useAppUi();
   const [mode, setMode] = useState<AdminComposeSendMode>("pick_managers");
@@ -91,6 +100,8 @@ function ComposeModal({
   const [topic, setTopic] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sendMode, setSendMode] = useState<"now" | "schedule">("now");
+  const [sendAtLocal, setSendAtLocal] = useState(defaultScheduleAtLocal());
 
   const pickPool = useMemo(() => {
     if (mode === "pick_managers") return recipients.managers;
@@ -106,8 +117,10 @@ function ComposeModal({
       setMode("pick_managers");
       const first = recipients.managers[0]?.id;
       setSelectedIds(first ? new Set([first]) : new Set());
+      setSendMode(initialSchedule ? "schedule" : "now");
+      setSendAtLocal(defaultScheduleAtLocal());
     });
-  }, [open, recipients.managers]);
+  }, [open, recipients.managers, initialSchedule]);
 
   if (!open) return null;
 
@@ -123,94 +136,150 @@ function ComposeModal({
   const pickHeading =
     mode === "pick_managers" ? "Which managers" : mode === "pick_residents" ? "Which residents" : null;
 
-  const submit = () => {
-    setBusy(true);
-    try {
-      const isPick = mode.startsWith("pick");
-      if (isPick && selectedIds.size === 0) {
+  const resolvePicked = (): Recipient[] => {
+    if (mode === "all_portal") return [...recipients.managers, ...recipients.residents];
+    if (mode === "all_managers") return recipients.managers;
+    if (mode === "all_residents") return recipients.residents;
+    const pool = mode === "pick_managers" ? recipients.managers : recipients.residents;
+    return pool.filter((p) => selectedIds.has(p.id));
+  };
+
+  const submitSendNow = (topicTrim: string, bodyTrim: string) => {
+    let toUserIds: string[] = [];
+
+    if (mode === "all_portal" || mode === "all_managers" || mode === "all_residents") {
+      const label =
+        mode === "all_portal"
+          ? "All managers & residents"
+          : mode === "all_managers"
+            ? "All managers"
+            : "All residents";
+      const emailStub =
+        mode === "all_portal"
+          ? "all-portal@axis.local"
+          : mode === "all_managers"
+            ? "all-managers@axis.local"
+            : "all-residents@axis.local";
+      appendInboxMessage({
+        name: "Broadcast",
+        email: emailStub,
+        topic: topicTrim,
+        body: bodyTrim,
+        folder: "sent",
+        senderRole: "admin",
+        composeAudience: mode === "all_portal" ? "all" : mode,
+        composeRecipientLabel: label,
+      });
+      toUserIds = resolvePicked().map((p) => p.id);
+    } else {
+      const picked = resolvePicked();
+      if (picked.length === 0) {
         showToast("Select at least one recipient.");
-        return;
+        return false;
       }
+      const roleLabel = mode === "pick_managers" ? "Manager" : "Resident";
+      appendInboxMessage({
+        name: picked.length === 1 ? picked[0]!.name : `${picked.length} recipients`,
+        email: picked.map((p) => p.email).filter(Boolean).join("; "),
+        topic: topicTrim,
+        body: bodyTrim,
+        folder: "sent",
+        senderRole: "admin",
+        composeAudience: picked.length > 1 ? "multi" : mode === "pick_managers" ? "manager" : "resident",
+        composeRecipientLabel:
+          picked.length === 1
+            ? `${picked[0]!.name} (${roleLabel})`
+            : `${picked.length} ${roleLabel.toLowerCase()}s (${picked.map((p) => p.name).join(", ")})`,
+      });
+      toUserIds = picked.map((p) => p.id);
+    }
 
-      const topicTrim = topic.trim();
-      const bodyTrim = body.trim();
-      if (!topicTrim || !bodyTrim) {
-        showToast("Add a subject and message.");
-        return;
-      }
+    // Deliver to each recipient's real portal inbox (admin's own "Sent" record above is separate).
+    if (toUserIds.length > 0) {
+      void fetch("/api/portal/send-inbox-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          fromName: "PropLane Admin",
+          toUserIds,
+          subject: topicTrim,
+          text: bodyTrim,
+          deliverViaEmail: false,
+        }),
+      }).catch(() => undefined);
+    }
 
-      let toUserIds: string[] = [];
+    showToast("Message sent. It appears under Sent.");
+    return true;
+  };
 
-      if (mode === "all_portal" || mode === "all_managers" || mode === "all_residents") {
-        const label =
-          mode === "all_portal"
-            ? "All managers & residents"
-            : mode === "all_managers"
-              ? "All managers"
-              : "All residents";
-        const emailStub =
-          mode === "all_portal"
-            ? "all-portal@axis.local"
-            : mode === "all_managers"
-              ? "all-managers@axis.local"
-              : "all-residents@axis.local";
-        appendInboxMessage({
-          name: "Broadcast",
-          email: emailStub,
-          topic: topicTrim,
-          body: bodyTrim,
-          folder: "sent",
-          senderRole: "admin",
-          composeAudience: mode === "all_portal" ? "all" : mode,
-          composeRecipientLabel: label,
-        });
-        toUserIds =
-          mode === "all_portal"
-            ? [...recipients.managers, ...recipients.residents].map((p) => p.id)
-            : mode === "all_managers"
-              ? recipients.managers.map((p) => p.id)
-              : recipients.residents.map((p) => p.id);
-      } else {
-        const pool = mode === "pick_managers" ? recipients.managers : recipients.residents;
-        const picked = pool.filter((p) => selectedIds.has(p.id));
-        if (picked.length === 0) {
-          showToast("Select at least one recipient.");
-          return;
-        }
-        const roleLabel = mode === "pick_managers" ? "Manager" : "Resident";
-        appendInboxMessage({
-          name: picked.length === 1 ? picked[0]!.name : `${picked.length} recipients`,
-          email: picked.map((p) => p.email).filter(Boolean).join("; "),
-          topic: topicTrim,
-          body: bodyTrim,
-          folder: "sent",
-          senderRole: "admin",
-          composeAudience: picked.length > 1 ? "multi" : mode === "pick_managers" ? "manager" : "resident",
-          composeRecipientLabel:
-            picked.length === 1
-              ? `${picked[0]!.name} (${roleLabel})`
-              : `${picked.length} ${roleLabel.toLowerCase()}s (${picked.map((p) => p.name).join(", ")})`,
-        });
-        toUserIds = picked.map((p) => p.id);
-      }
+  const submitSchedule = async (topicTrim: string, bodyTrim: string) => {
+    const sendAt = new Date(sendAtLocal);
+    if (Number.isNaN(sendAt.getTime())) {
+      showToast("Choose a valid send date and time.");
+      return false;
+    }
+    if (sendAt.getTime() < Date.now() - 60_000) {
+      showToast("Send time must be in the future.");
+      return false;
+    }
+    const picked = resolvePicked();
+    if (picked.length === 0) {
+      showToast("Select at least one recipient.");
+      return false;
+    }
 
-      // Deliver to each recipient's real portal inbox (admin's own "Sent" record above is separate).
-      if (toUserIds.length > 0) {
-        void fetch("/api/portal/send-inbox-message", {
+    const results = await Promise.all(
+      picked.map((p) =>
+        fetch("/api/portal/scheduled-inbox-messages", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            fromName: "PropLane Admin",
-            toUserIds,
             subject: topicTrim,
-            text: bodyTrim,
+            body: bodyTrim,
+            sendAt: sendAt.toISOString(),
+            recipientEmail: p.email,
+            recipientName: p.name,
+            recipientUserId: p.id,
             deliverViaEmail: false,
           }),
-        }).catch(() => undefined);
-      }
+        })
+          .then((res) => res.ok)
+          .catch(() => false),
+      ),
+    );
+    if (results.some((ok) => !ok)) {
+      showToast("Some recipients could not be scheduled.");
+      return false;
+    }
 
-      showToast("Message sent. It appears under Sent.");
+    showToast(
+      picked.length === 1 ? "Message scheduled." : `Message scheduled for ${picked.length} recipients.`,
+    );
+    return true;
+  };
+
+  const submit = async () => {
+    const isPick = mode.startsWith("pick");
+    if (isPick && selectedIds.size === 0) {
+      showToast("Select at least one recipient.");
+      return;
+    }
+
+    const topicTrim = topic.trim();
+    const bodyTrim = body.trim();
+    if (!topicTrim || !bodyTrim) {
+      showToast("Add a subject and message.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const ok =
+        sendMode === "schedule" ? await submitSchedule(topicTrim, bodyTrim) : submitSendNow(topicTrim, bodyTrim);
+      if (!ok) return;
       onSent();
       onClose();
     } finally {
@@ -313,6 +382,37 @@ function ComposeModal({
               placeholder="Write your message…"
             />
           </div>
+
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">When</label>
+            <div className="mt-1.5 flex gap-2">
+              <button
+                type="button"
+                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium ${sendMode === "now" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted"}`}
+                onClick={() => setSendMode("now")}
+                disabled={busy}
+              >
+                Send now
+              </button>
+              <button
+                type="button"
+                className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium ${sendMode === "schedule" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted"}`}
+                onClick={() => setSendMode("schedule")}
+                disabled={busy}
+              >
+                Schedule for later
+              </button>
+            </div>
+            {sendMode === "schedule" ? (
+              <Input
+                type="datetime-local"
+                className="mt-2"
+                value={sendAtLocal}
+                onChange={(e) => setSendAtLocal(e.target.value)}
+                disabled={busy}
+              />
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-5 flex flex-wrap justify-start gap-2">
@@ -320,7 +420,7 @@ function ComposeModal({
             Cancel
           </Button>
           <Button type="button" className="rounded-full" onClick={() => void submit()} disabled={busy}>
-            {busy ? "Sending…" : "Send"}
+            {busy ? "Sending…" : sendMode === "schedule" ? "Schedule" : "Send"}
           </Button>
         </div>
       </div>
@@ -337,10 +437,36 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   // Messages marked read while viewing "Unopened" stay listed here until the tab
   // is switched or the page is refreshed; they only move to "Opened" on reset.
   const [retainedIds, setRetainedIds] = useState<Set<string>>(() => new Set());
+  const [composeInitialSchedule, setComposeInitialSchedule] = useState(false);
   const [recipients, setRecipients] = useState<{ managers: Recipient[]; residents: Recipient[] }>({
     managers: [],
     residents: [],
   });
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
+  const [scheduledLoading, setScheduledLoading] = useState(true);
+
+  const reloadScheduled = useCallback(async () => {
+    setScheduledLoading(true);
+    try {
+      const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });
+      if (!res.ok) return;
+      const body = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
+      setScheduledMessages(Array.isArray(body.messages) ? body.messages : []);
+    } catch {
+      /* ignore */
+    } finally {
+      setScheduledLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadScheduled();
+  }, [reloadScheduled]);
+
+  const scheduleCount = useMemo(
+    () => scheduledMessages.filter((m) => isUpcomingScheduledInboxMessage(m.sendAt, m.status) && m.status === "scheduled").length,
+    [scheduledMessages],
+  );
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -404,15 +530,14 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     return {
       unopened: all.filter((m) => m.folder === "inbox" && !m.read).length,
       opened: all.filter((m) => m.folder === "inbox" && m.read).length,
+      schedule: scheduleCount,
       sent: all.filter((m) => m.folder === "sent").length,
       trash: all.filter((m) => m.folder === "trash").length,
     };
-  }, [all]);
+  }, [all, scheduleCount]);
 
   const inboxTabs = useMemo(
-    () => [
-      ...ADMIN_INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
-    ],
+    () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
     [folderCounts],
   );
 
@@ -458,7 +583,15 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
       title="Inbox"
       titleAside={
         <>
-          <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => setComposeOpen(true)}>
+          <Button
+            type="button"
+            variant="primary"
+            className="shrink-0 rounded-full"
+            onClick={() => {
+              setComposeInitialSchedule(false);
+              setComposeOpen(true);
+            }}
+          >
             New message
           </Button>
           {tabId === "trash" && folderCounts.trash > 0 ? (
@@ -497,11 +630,25 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
         <ComposeModal
           open={composeOpen}
           onClose={() => setComposeOpen(false)}
-          onSent={() => setTick((t) => t + 1)}
+          onSent={() => {
+            setTick((t) => t + 1);
+            void reloadScheduled();
+          }}
           recipients={recipients}
+          initialSchedule={composeInitialSchedule}
         />
 
-        {rows.length === 0 ? (
+        {tabId === "schedule" ? (
+          <AdminInboxSchedulePanel
+            messages={scheduledMessages}
+            loading={scheduledLoading}
+            onReload={() => void reloadScheduled()}
+            onScheduleNew={() => {
+              setComposeInitialSchedule(true);
+              setComposeOpen(true);
+            }}
+          />
+        ) : rows.length === 0 ? (
           <PortalInboxEmptyState title={emptyCopy} />
         ) : (
           <PortalInboxMessageTable

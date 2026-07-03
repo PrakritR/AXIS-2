@@ -1,5 +1,6 @@
 import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { userHoldsAdminRole } from "@/lib/auth/admin-role";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import {
   ensureSmsIncludesPortalLink,
@@ -212,8 +213,11 @@ export async function deliverPortalInboxMessage(
   if (recipients.length === 0) return { ok: false, error: "No recipients selected." };
 
   // Enforce role scope server-side (mirrors the interactive send route). Scheduled
-  // sends are authored by managers; an out-of-scope recipient is rejected here too.
-  if (senderRole !== "admin") {
+  // sends are authored by managers or admins; an out-of-scope recipient is rejected
+  // here too. Admins are unrestricted — fall back to the role-membership check
+  // (mirrors send-inbox-message) since profiles.role may not literally be "admin".
+  const senderIsAdmin = senderRole === "admin" || (await userHoldsAdminRole(db, opts.senderUserId));
+  if (!senderIsAdmin) {
     const { allowed } = await filterRecipientsBySenderScope(
       db,
       { id: opts.senderUserId, email: senderEmail, role: senderRole, isAdmin: false },
