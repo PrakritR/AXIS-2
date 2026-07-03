@@ -16,6 +16,7 @@ import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
+  isHouseholdChargeOverdue,
   readChargesForResident,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
@@ -236,7 +237,14 @@ export function ResidentDashboard({
     const inbox = countUnopenedPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK);
 
     const charges = email ? readChargesForResident(email, residentUserId) : [];
-    const pendingCharges = charges.filter((c) => c.status === "pending");
+    const pendingCharges = charges
+      .filter((c) => c.status === "pending")
+      .sort((a, b) => {
+        const aOverdue = isHouseholdChargeOverdue(a);
+        const bOverdue = isHouseholdChargeOverdue(b);
+        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+        return 0;
+      });
     const pendingTotal = pendingCharges.reduce((s, c) => {
       const n = Number(c.balanceLabel.replace(/[^\d.]/g, ""));
       return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
@@ -269,6 +277,7 @@ export function ResidentDashboard({
   }
 
   const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
+  const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
     <ManagerPortalPageShell title={welcomeTitle} subtitle={propertySubtitle} hideTitleOnNative>
@@ -297,23 +306,42 @@ export function ResidentDashboard({
 
             <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
               <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-                <PortalDashboardSectionHeader title="Payments" href={`${BASE}/payments`} linkLabel="Payments →" />
+                <PortalDashboardSectionHeader
+                  title="Payments"
+                  href={`${BASE}/payments`}
+                  linkLabel="Payments →"
+                  badge={
+                    overdueChargeCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">
+                        <span aria-hidden className="size-1.5 rounded-full bg-rose-500" />
+                        {overdueChargeCount} overdue
+                      </span>
+                    ) : null
+                  }
+                />
                 <PortalDashboardPreviewList
                   items={pendingCharges}
                   href={`${BASE}/payments`}
                   emptyMessage="No outstanding charges."
                   keyForItem={(charge) => charge.id}
-                  renderRow={(charge) => (
-                    <PortalDashboardCompactRow
-                      title={charge.title || "Charge"}
-                      subtitle={formatCompactChargeLine(charge.title || "Charge", charge.balanceLabel, chargeDueLabel(charge))}
-                      badge={
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                          {charge.balanceLabel}
-                        </span>
-                      }
-                    />
-                  )}
+                  renderRow={(charge) => {
+                    const overdue = isHouseholdChargeOverdue(charge);
+                    return (
+                      <PortalDashboardCompactRow
+                        title={charge.title || "Charge"}
+                        subtitle={formatCompactChargeLine(charge.title || "Charge", charge.balanceLabel, chargeDueLabel(charge))}
+                        badge={
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {overdue ? `${charge.balanceLabel} · Overdue` : charge.balanceLabel}
+                          </span>
+                        }
+                      />
+                    );
+                  }}
                 />
               </div>
 

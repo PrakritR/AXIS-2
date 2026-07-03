@@ -28,6 +28,7 @@ import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
+  isHouseholdChargeOverdue,
   linkHouseholdChargesToResidentUser,
   readChargesForResident,
   syncHouseholdChargesFromServer,
@@ -82,12 +83,6 @@ const PAYMENT_METHOD_OPTIONS: {
     description: "Instant card payment",
   },
 ];
-
-function statusClass(label: string) {
-  const l = label.toLowerCase();
-  if (l.includes("paid")) return "approved" as const;
-  return "pending" as const;
-}
 
 function centsFromLabel(label: string): number {
   const n = Number(label.replace(/[^\d.]/g, ""));
@@ -214,7 +209,17 @@ export function ResidentPaymentsPanel() {
     [charges],
   );
 
-  const rows = useMemo(() => charges.filter((c) => (tab === "pending" ? c.status === "pending" : c.status === "paid")), [charges, tab]);
+  const rows = useMemo(() => {
+    const filtered = charges.filter((c) => (tab === "pending" ? c.status === "pending" : c.status === "paid"));
+    if (tab !== "pending") return filtered;
+    // Overdue charges surface at the top of the unpaid list.
+    return [...filtered].sort((a, b) => {
+      const aOverdue = isHouseholdChargeOverdue(a);
+      const bOverdue = isHouseholdChargeOverdue(b);
+      if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+      return 0;
+    });
+  }, [charges, tab]);
   const pendingTotal = useMemo(
     () =>
       charges
@@ -227,6 +232,7 @@ export function ResidentPaymentsPanel() {
     return {
       pending: charges.filter((c) => c.status === "pending").length,
       paid: charges.filter((c) => c.status === "paid").length,
+      overdue: charges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c)).length,
     };
   }, [charges]);
 
@@ -449,6 +455,12 @@ export function ResidentPaymentsPanel() {
           <div className="inline-flex shrink-0 items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted">
             Unpaid: <span className="ms-1 tabular-nums text-foreground">${(pendingTotal / 100).toFixed(2)}</span>
           </div>
+          {counts.overdue > 0 ? (
+            <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
+              <span aria-hidden className="size-1.5 rounded-full bg-current" />
+              {counts.overdue} overdue
+            </div>
+          ) : null}
           {tab === "pending" && unpaidAchCharges.length > 0 ? (
             <>
               <Button type="button" variant="outline" className={`shrink-0 rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`} onClick={selectAllUnpaidAch}>
@@ -522,6 +534,7 @@ export function ResidentPaymentsPanel() {
                   </thead>
                   <tbody>
                     {rows.map((row) => {
+                      const overdue = row.status === "pending" && isHouseholdChargeOverdue(row);
                       const achPayable = row.status === "pending" && canPayHouseholdChargeWithAxisAch(row);
                       const showSelectCol = tab === "pending" && unpaidAchCharges.length > 0;
                       const detailColSpan = showSelectCol ? 7 : 6;
@@ -561,8 +574,8 @@ export function ResidentPaymentsPanel() {
                               {row.balanceLabel}
                             </td>
                             <td className={PORTAL_TABLE_TD}>
-                              <Badge tone={statusClass(row.status === "paid" ? "Paid" : "Unpaid")}>
-                                {row.status === "paid" ? "Paid" : "Unpaid"}
+                              <Badge tone={row.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
+                                {row.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
                               </Badge>
                             </td>
                           </tr>

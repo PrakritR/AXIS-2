@@ -185,6 +185,7 @@ export function ManagerDashboard() {
   } = data;
 
   const pendingTours = tours.filter((t) => t.status === "pending");
+  const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
     <ManagerPortalPageShell title="Dashboard" hideTitleOnNative>
@@ -303,6 +304,14 @@ export function ManagerDashboard() {
               title="Pending & overdue payments"
               href={`${BASE}/payments`}
               linkLabel="Payments →"
+              badge={
+                overdueChargeCount > 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">
+                    <span aria-hidden className="size-1.5 rounded-full bg-rose-500" />
+                    {overdueChargeCount} overdue
+                  </span>
+                ) : null
+              }
             />
             <PortalDashboardPreviewList
               items={pendingCharges}

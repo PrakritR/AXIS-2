@@ -272,7 +272,13 @@ export function ManagerPayments() {
   }, [rowsForCounts]);
 
   const tabs = useMemo(
-    () => PAY_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
+    () =>
+      PAY_LABELS.map(({ id, label }) => ({
+        id,
+        label,
+        count: counts[id],
+        alert: id === "overdue" && counts.overdue > 0,
+      })),
     [counts],
   );
   const rowsForBucket = useMemo(() => {
