@@ -1,5 +1,6 @@
 import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { getStripe } from "@/lib/stripe";
+import { randomUUID } from "node:crypto";
 import type Stripe from "stripe";
 
 export type ScreeningChargeResult =
@@ -62,7 +63,7 @@ export async function chargeManagerForScreening(opts: {
           manager_user_id: opts.managerUserId,
         },
       },
-      { idempotencyKey: `screening_${opts.applicationId}` },
+      { idempotencyKey: `screening_${opts.applicationId}_${randomUUID()}` },
     );
     if (intent.status !== "succeeded" && intent.status !== "processing") {
       return {

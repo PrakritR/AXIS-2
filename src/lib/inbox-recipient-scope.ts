@@ -36,7 +36,7 @@ export type InboxScopeRecipient = { email: string; userId: string | null };
 
 function isManagerRole(role: string | null): boolean {
   const r = String(role ?? "").trim().toLowerCase();
-  return r === "manager" || r === "pro";
+  return r === "manager" || r === "owner" || r === "pro";
 }
 
 /** Emails of co-managers linked to any of the given manager ids (via pro relationships). */

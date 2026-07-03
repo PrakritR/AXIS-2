@@ -3,11 +3,12 @@
  *
  * Security: the Checkr key stays server-side (in the lib client). The manager
  * is authenticated from the session cookie and may only act on applications
- * they own (or an admin). `managerUserId` is derived from the record, never
- * from model/client input.
+ * they own, are linked to by property, or an admin. `managerUserId` is derived
+ * from the record, never from model/client input.
  */
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { track } from "@/lib/analytics/posthog";
 import { runBackgroundCheck, refreshBackgroundCheck } from "@/lib/checkr/background-check";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     const admin = await isAdminUser(user.id);
     const { data: record } = await db
       .from("manager_application_records")
-      .select("manager_user_id, row_data")
+      .select("manager_user_id, property_id, assigned_property_id, row_data")
       .eq("id", applicationId)
       .maybeSingle();
 
@@ -45,7 +46,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Application has no assigned manager." }, { status: 400 });
     }
     if (!admin && managerUserId !== user.id) {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      const linked = await collectLinkedPropertyIdsForUser(db, user.id);
+      const rowData = (record?.row_data ?? {}) as {
+        propertyId?: string;
+        assignedPropertyId?: string;
+        application?: { propertyId?: string };
+      };
+      const propertyId = String(record?.property_id ?? rowData.propertyId ?? rowData.application?.propertyId ?? "").trim();
+      const assignedPropertyId = String(record?.assigned_property_id ?? rowData.assignedPropertyId ?? "").trim();
+      if (!((propertyId && linked.has(propertyId)) || (assignedPropertyId && linked.has(assignedPropertyId)))) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
     }
 
     const result =

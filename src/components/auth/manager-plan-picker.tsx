@@ -165,7 +165,8 @@ function ManagerPlanPickerInner() {
           setBilling(stored.billing);
         }
 
-        const result = await handleGoogleSignedInReturn();
+        const offer = stored ?? buildPricingOffer({ tier: selectedTierId, billing, returnSurface: "mobile-plan" });
+        const result = await handleGoogleSignedInReturn(offer);
         if (cancelled) return;
 
         const nextSession = await fetchPartnerPricingSession();
@@ -177,7 +178,6 @@ function ManagerPlanPickerInner() {
           return;
         }
 
-        const offer = stored ?? buildPricingOffer({ tier: selectedTierId, billing, returnSurface: "mobile-plan" });
         applyPricingResult(await continuePartnerPricingWithOffer(offer));
       } finally {
         if (!cancelled) setGoogleCheckoutBusy(false);

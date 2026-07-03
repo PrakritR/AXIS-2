@@ -114,7 +114,8 @@ export function ManagerSignupPanel({
       setFinishingGoogle(true);
       try {
         const stored = readManagerPricingOffer();
-        const result = await handleGoogleSignedInReturn();
+        const offer = stored ?? buildPricingOffer({ tier, billing, promo: trimmedPromo, returnSurface });
+        const result = await handleGoogleSignedInReturn(offer);
         if (cancelled) return;
         if (result.status !== "provisioned") {
           if (result.status === "error") {
@@ -123,7 +124,6 @@ export function ManagerSignupPanel({
           }
           return;
         }
-        const offer = stored ?? buildPricingOffer({ tier, billing, promo: trimmedPromo, returnSurface });
         const continued = await continuePartnerPricingWithOffer(offer);
         if (!cancelled) applyPricingResult(continued);
       } finally {

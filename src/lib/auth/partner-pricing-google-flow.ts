@@ -157,16 +157,22 @@ export function buildPricingOffer(opts: {
   };
 }
 
-export async function handleGoogleSignedInReturn(): Promise<{ status: "provisioned" } | { status: "error"; message: string }> {
-  const provision = await ensurePartnerPricingFreeAccount();
-  if (!provision.ok) {
-    return { status: "error", message: provision.error };
+export async function handleGoogleSignedInReturn(
+  offer?: ManagerPricingOffer,
+): Promise<{ status: "provisioned" } | { status: "error"; message: string }> {
+  if (!offer || offer.tier === "free") {
+    const provision = await ensurePartnerPricingFreeAccount();
+    if (!provision.ok) {
+      return { status: "error", message: provision.error };
+    }
   }
 
   if (typeof window !== "undefined") {
     const stored = readManagerPricingOffer();
     const onMobilePlan =
-      stored?.returnSurface === "mobile-plan" || window.location.pathname.startsWith("/auth/manager/plan");
+      offer?.returnSurface === "mobile-plan" ||
+      stored?.returnSurface === "mobile-plan" ||
+      window.location.pathname.startsWith("/auth/manager/plan");
     if (onMobilePlan) {
       window.history.replaceState({}, "", "/auth/manager/plan");
     } else {

@@ -118,6 +118,7 @@ export function PromotionFlyerPreview({
             ref={iframeRef}
             title="Flyer preview"
             srcDoc={html}
+            sandbox="allow-same-origin allow-modals"
             className="h-full w-full border-0"
           />
         </div>
