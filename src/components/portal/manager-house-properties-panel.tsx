@@ -140,7 +140,8 @@ function deferCatalogMutation(fn: () => void) {
 }
 
 const MANAGER_STAGES = [
-  { key: "pending", label: "Pending", buckets: [0, 1] as AdminPropertyBucketIndex[] },
+  { key: "pending", label: "Pending", buckets: [0] as AdminPropertyBucketIndex[] },
+  { key: "requestChange", label: "Request change", buckets: [1] as AdminPropertyBucketIndex[] },
   { key: "listed", label: "Listed", buckets: [2] as AdminPropertyBucketIndex[] },
   { key: "unlisted", label: "Unlisted", buckets: [3] as AdminPropertyBucketIndex[] },
   { key: "rejected", label: "Rejected", buckets: [4] as AdminPropertyBucketIndex[] },
@@ -150,6 +151,7 @@ export type ManagerStageKey = (typeof MANAGER_STAGES)[number]["key"];
 
 export const MANAGER_PROPERTY_EMPTY_COPY: Record<ManagerStageKey, string> = {
   pending: "Nothing awaiting review.",
+  requestChange: "No properties awaiting edits.",
   listed: "No listed properties.",
   unlisted: "No unlisted properties.",
   rejected: "No rejected properties.",
@@ -774,10 +776,11 @@ export function ManagerHousePropertiesPanel({
   const stageCounts = useMemo(() => {
     void tick;
     if (!scopeUserId) {
-      return { pending: 0, listed: 0, unlisted: 0, rejected: 0 };
+      return { pending: 0, requestChange: 0, listed: 0, unlisted: 0, rejected: 0 };
     }
     return {
-      pending: managerPropertyRowsForStage([0, 1], scopeUserId).length,
+      pending: managerPropertyRowsForStage([0], scopeUserId).length,
+      requestChange: managerPropertyRowsForStage([1], scopeUserId).length,
       listed: managerPropertyRowsForStage([2], scopeUserId).length,
       unlisted: managerPropertyRowsForStage([3], scopeUserId).length,
       rejected: managerPropertyRowsForStage([4], scopeUserId).length,

@@ -124,7 +124,10 @@ export function ManagerProperties() {
   useEffect(() => {
     queueMicrotask(() => {
       void refreshPortfolio().then(() => {
-        void mirrorLocalPropertyPipelineToServer(userId, collectLinkedPropertyIds(userId ?? ""));
+        // Only push local state up once a real sync has run (userId resolved) — otherwise
+        // this re-uploads a stale locally-cached snapshot and can clobber an admin-side
+        // status change (e.g. request-change) that happened since this browser last synced.
+        if (userId) void mirrorLocalPropertyPipelineToServer(userId, collectLinkedPropertyIds(userId));
       });
     });
     const on = () => {
@@ -136,13 +139,14 @@ export function ManagerProperties() {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("axis-pro-relationships", on);
     };
-  }, [refreshPortfolio]);
+  }, [refreshPortfolio, userId]);
 
   const stageCounts = useMemo(() => {
     void portfolioTick;
     const kpiValues = adminKpiCounts(scopeUserId);
     return {
-      pending: kpiValues[0] + kpiValues[1],
+      pending: kpiValues[0],
+      requestChange: kpiValues[1],
       listed: kpiValues[2],
       unlisted: kpiValues[3],
       rejected: kpiValues[4],

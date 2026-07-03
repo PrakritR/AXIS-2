@@ -28,6 +28,10 @@ import { monthlyRentListingLabel } from "@/lib/rental-application/listing-fees-d
 /** Admin-wide queue (all managers). Manager portal passes `forManagerUserId` for isolated side-buckets. */
 const SIDE_KEY_GLOBAL = "axis_admin_property_buckets_v1";
 const sideMemory = new Map<string, unknown>();
+/** Must match the session-cache prefix in demo-property-pipeline.ts — that's where
+ *  syncPropertyPipelineFromServer persists the synced side buckets, so a fresh page
+ *  load (e.g. a different portal session) can rehydrate them here. */
+const SESSION_CACHE_PREFIX = "axis_property_pipeline_cache_v1:";
 
 function sideKey(forManagerUserId?: string | null): string {
   if (forManagerUserId) return `axis_mgr_property_side_v1_${forManagerUserId}`;
@@ -77,12 +81,29 @@ function isBrowser() {
 
 function readJson<T>(key: string, fallback: T): T {
   if (!isBrowser()) return fallback;
-  return sideMemory.has(key) ? (sideMemory.get(key) as T) : fallback;
+  if (sideMemory.has(key)) return sideMemory.get(key) as T;
+  try {
+    const raw = window.sessionStorage.getItem(`${SESSION_CACHE_PREFIX}${key}`);
+    if (raw) {
+      const parsed = JSON.parse(raw) as T;
+      sideMemory.set(key, parsed);
+      return parsed;
+    }
+  } catch {
+    /* ignore session cache read failures */
+  }
+  return fallback;
 }
 
 function writeSideStorage(side: SideBuckets, forManagerUserId?: string | null) {
   if (!isBrowser()) return;
-  sideMemory.set(sideKey(forManagerUserId), side);
+  const key = sideKey(forManagerUserId);
+  sideMemory.set(key, side);
+  try {
+    window.sessionStorage.setItem(`${SESSION_CACHE_PREFIX}${key}`, JSON.stringify(side));
+  } catch {
+    /* ignore session cache write failures */
+  }
   window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
 }
 
