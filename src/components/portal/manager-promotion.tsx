@@ -402,27 +402,7 @@ export function ManagerPromotion() {
                       {isOpen ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
                           <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="font-semibold uppercase tracking-[0.12em] text-muted/80">Status</span>
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
-                                    row.status === "generated"
-                                      ? "portal-badge-success ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-                                      : "bg-accent/30 text-muted ring-border"
-                                  }`}
-                                >
-                                  {row.status === "generated" ? "Generated" : "Draft"}
-                                </span>
-                              </span>
-                              {row.title ? (
-                                <span>
-                                  <span className="font-semibold uppercase tracking-[0.12em] text-muted/80">Title</span>{" "}
-                                  {row.title}
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-4">
+                            <div>
                               <PromotionFlyerPreview promotion={row} embedded />
                             </div>
                             <PortalTableDetailActions>
