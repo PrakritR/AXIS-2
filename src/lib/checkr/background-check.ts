@@ -19,6 +19,7 @@ import type {
 } from "@/lib/checkr/types";
 import { propertyFromRecord } from "@/lib/resident-move-in-resolve";
 import { chargeManagerForScreening } from "@/lib/screening/charge-manager";
+import { getStripe } from "@/lib/stripe";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -185,10 +186,25 @@ export async function runBackgroundCheck(opts: {
   try {
     created = await createBackgroundCheck(applicantInputFromApplication(row.application), property);
   } catch (e) {
+    const providerError = e instanceof Error ? e.message : "Checkr request failed.";
+    try {
+      const stripe = getStripe();
+      await stripe.refunds.create({ payment_intent: charge.paymentIntentId, reason: "requested_by_customer" });
+    } catch (refundError) {
+      // The manager was charged but the screening never ran and the refund
+      // itself failed — log everything needed for manual reconciliation.
+      console.error("checkr background check: charge not refunded after order-creation failure", {
+        applicationId: row.id,
+        managerUserId: opts.managerUserId,
+        paymentIntentId: charge.paymentIntentId,
+        providerError,
+        refundError: refundError instanceof Error ? refundError.message : String(refundError),
+      });
+    }
     return {
       ok: false,
       status: 502,
-      error: e instanceof Error ? e.message : "Checkr request failed.",
+      error: providerError,
       code: "provider_error",
     };
   }

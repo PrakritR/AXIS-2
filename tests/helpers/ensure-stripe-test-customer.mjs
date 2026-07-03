@@ -63,8 +63,11 @@ export async function ensureStripeTestCustomerId(stripe, { email, candidateCusto
       if (customer.deleted) continue;
       await ensureDefaultTestPaymentMethod(stripe, id);
       return id;
-    } catch {
-      // Placeholder / deleted / never-existed id (e.g. "No such customer") — try the next candidate.
+    } catch (e) {
+      // Placeholder / deleted / never-existed id (e.g. "No such customer") — try the next
+      // candidate. Any other error (timeout, rate limit) must propagate rather than being
+      // treated as "customer missing", or a transient hiccup creates a duplicate customer.
+      if (e?.code !== "resource_missing") throw e;
     }
   }
 

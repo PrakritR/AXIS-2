@@ -99,11 +99,16 @@ export async function POST(req: Request) {
             .filter((r) => !r.managerUserId || r.managerUserId === managerUserId)
             .map((r) => normalizeRow(r, managerUserId))
         : [];
+      const failedIds: string[] = [];
       for (const row of rows) {
-        await db.from("manager_promotion_records").upsert(
+        const { error } = await db.from("manager_promotion_records").upsert(
           { id: row.id, manager_user_id: managerUserId, row_data: row, updated_at: row.updatedAt },
           { onConflict: "id" },
         );
+        if (error) failedIds.push(row.id);
+      }
+      if (failedIds.length > 0) {
+        return NextResponse.json({ ok: false, error: "Some promotions failed to save.", failedIds }, { status: 500 });
       }
       return NextResponse.json({ ok: true });
     }

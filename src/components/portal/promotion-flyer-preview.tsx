@@ -66,6 +66,7 @@ export function PromotionFlyerPreview({
           ref={iframeRef}
           title={`Flyer — ${promotion.title || promotion.propertyLabel || "promotion"}`}
           srcDoc={html}
+          sandbox="allow-same-origin"
           className="h-full w-full border-0"
         />
       </div>

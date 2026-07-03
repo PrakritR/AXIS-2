@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
+import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { buildVendorVisitEmail } from "@/lib/vendor-visit-email";
@@ -14,7 +15,16 @@ export async function POST(req: Request) {
     } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, error: "Not authenticated." }, { status: 401 });
 
+    const db = createSupabaseServiceRoleClient();
+    const admin = await isAdminUser(user.id);
+    const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+    if (!admin && role !== "manager" && role !== "pro") {
+      return NextResponse.json({ ok: false, error: "Forbidden." }, { status: 403 });
+    }
+
     const body = (await req.json().catch(() => ({}))) as {
+      workOrderId?: string;
       vendorEmail?: string;
       vendorName?: string;
       workOrderTitle?: string;
@@ -24,6 +34,21 @@ export async function POST(req: Request) {
       description?: string;
       preferredArrival?: string;
     };
+
+    const workOrderId = String(body.workOrderId ?? "").trim();
+    if (!workOrderId) {
+      return NextResponse.json({ ok: false, error: "Work order id required." }, { status: 400 });
+    }
+    if (!admin) {
+      const { data: workOrder } = await db
+        .from("portal_work_order_records")
+        .select("manager_user_id")
+        .eq("id", workOrderId)
+        .maybeSingle();
+      if (!workOrder || workOrder.manager_user_id !== user.id) {
+        return NextResponse.json({ ok: false, error: "Forbidden." }, { status: 403 });
+      }
+    }
 
     const vendorEmail = String(body.vendorEmail ?? "").trim().toLowerCase();
     const vendorName = String(body.vendorName ?? "").trim();
@@ -67,9 +92,8 @@ export async function POST(req: Request) {
       emailSent = res.ok;
     }
 
-    const db = createSupabaseServiceRoleClient();
     const outboundId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    await db.from("portal_outbound_mail_records").upsert(
+    const { error: auditError } = await db.from("portal_outbound_mail_records").upsert(
       {
         id: outboundId,
         recipient_email: vendorEmail,
@@ -79,6 +103,9 @@ export async function POST(req: Request) {
       },
       { onConflict: "id" },
     );
+    if (auditError) {
+      console.error("send-vendor-visit-email: audit log write failed", auditError);
+    }
 
     track("work_order_vendor_email_sent", user.id, { email_sent: emailSent });
     return NextResponse.json({ ok: true, emailSent, skipped: skipExternalEmail });

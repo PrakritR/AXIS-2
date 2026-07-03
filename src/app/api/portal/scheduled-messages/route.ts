@@ -59,7 +59,7 @@ export async function POST(req: Request) {
       .select("id, manager_user_id")
       .eq("id", chargeId)
       .maybeSingle();
-    if (!chargeRow || (chargeRow.manager_user_id && chargeRow.manager_user_id !== ctx.userId)) {
+    if (!chargeRow || chargeRow.manager_user_id !== ctx.userId) {
       return NextResponse.json({ error: "Charge not found." }, { status: 404 });
     }
 

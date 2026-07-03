@@ -387,22 +387,23 @@ export function ManagerLeasesPipelinePanel({
       const subject = leaseEditRequestSubject(row);
       const body = leaseEditRequestBody(row, note);
 
-      // Notify admin via BOTH the Axis portal inbox and a Resend email. The
-      // shared helper posts to /api/portal/send-inbox-message with
-      // deliverToPortalInbox + deliverViaEmail, matching the other send-* routes.
-      const delivery = await deliverPortalInboxMessage({
-        fromName: "Property Manager",
-        toEmails: [PRIMARY_AXIS_ADMIN_EMAIL],
-        subject,
-        text: body,
-      });
-
       const result = sendLeaseToAdminReview(row.id, managerUserId);
       if (!result.ok) {
         showToast(result.error);
         return;
       }
       appendLeaseThreadMessage(row.id, "manager", body, managerUserId);
+
+      // Notify admin via BOTH the Axis portal inbox and a Resend email, only
+      // after the state transition above succeeded. The shared helper posts
+      // to /api/portal/send-inbox-message with deliverToPortalInbox +
+      // deliverViaEmail, matching the other send-* routes.
+      const delivery = await deliverPortalInboxMessage({
+        fromName: "Property Manager",
+        toEmails: [PRIMARY_AXIS_ADMIN_EMAIL],
+        subject,
+        text: body,
+      });
 
       if (delivery.ok) {
         showToast(

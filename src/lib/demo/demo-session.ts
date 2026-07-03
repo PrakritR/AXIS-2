@@ -27,7 +27,7 @@ export type DemoSessionSnapshot = { userId: string | null; email: string | null;
 
 /** True when the browser is on the public demo sandbox. */
 export function isDemoModeActive(): boolean {
-  return typeof window !== "undefined" && window.location.pathname.startsWith("/demo");
+  return typeof window !== "undefined" && Boolean(window.location?.pathname?.startsWith("/demo"));
 }
 
 /**

@@ -270,6 +270,10 @@ export function ManagerApplications() {
     writeManagerApplicationRows(next);
   }, []);
 
+  const handleScreeningUpdated = useCallback(() => {
+    void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
+  }, [userId]);
+
   const propertyOptions = buildManagerPropertyFilterOptions(userId);
   const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(userId), [userId, portfolioTick]);
 
@@ -488,9 +492,7 @@ export function ManagerApplications() {
 
       <ApplicationScreeningPanel
         row={row}
-        onUpdated={() => {
-          void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
-        }}
+        onUpdated={handleScreeningUpdated}
         onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
       />
     </div>
@@ -542,9 +544,7 @@ export function ManagerApplications() {
         row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
         open={checkrScreeningRowId !== null}
         onClose={() => setCheckrScreeningRowId(null)}
-        onUpdated={() => {
-          void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
-        }}
+        onUpdated={handleScreeningUpdated}
       />
       {!authReady && rows.length === 0 ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>

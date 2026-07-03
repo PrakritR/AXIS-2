@@ -204,6 +204,7 @@ export function ManagerWorkOrdersPanel({
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
+            workOrderId: row.id,
             vendorEmail,
             vendorName: vendor.name,
             workOrderTitle: row.title,

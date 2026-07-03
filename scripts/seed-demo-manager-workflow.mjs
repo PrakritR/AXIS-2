@@ -211,7 +211,7 @@ async function cleanupPriorInconsistentRows() {
       .filter((r) => typeof r.property_id === "string" && r.property_id.startsWith("seedfd_") && !r.property_id.startsWith(`${PREFIX}_`))
       .map((r) => r.id);
     if (orphanIds.length) {
-      await sb.from(table).delete().in("id", orphanIds);
+      await must(sb.from(table).delete().in("id", orphanIds), `cleanup orphaned ${table} rows`);
       console.log(`Cleaned ${orphanIds.length} orphaned ${table} rows (foreign property).`);
     }
   }
@@ -857,7 +857,10 @@ const catForKind = (k) => KIND_TO_CATEGORY[k] || "other_income";
 
 async function seedIncomeLedger(charges) {
   // Idempotent: clear this seed's ledger rows first (keyed by our source_charge_id prefix).
-  await sb.from("ledger_entries").delete().eq("manager_user_id", managerUserId).like("source_charge_id", `${PREFIX}_%`);
+  await must(
+    sb.from("ledger_entries").delete().eq("manager_user_id", managerUserId).like("source_charge_id", `${PREFIX}_%`),
+    "clear prior seeded ledger entries",
+  );
 
   const rows = [];
   for (const c of charges) {
