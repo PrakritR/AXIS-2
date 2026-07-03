@@ -1,6 +1,10 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import {
+  displayableCustomFieldAnswers,
+  formatCustomFieldAnswerDisplay,
+} from "@/lib/rental-application/custom-fields";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 
 const PAGE_WIDTH = 612;
@@ -425,6 +429,17 @@ export async function buildApplicationPdf(
       value: [clean(app.ref2Name), clean(app.ref2Relationship), clean(app.ref2Phone)].filter(Boolean).join(" · "),
     },
   ]);
+
+  // ---- Manager-defined application questions -------------------------------
+  // Manager-authored labels can be long; clip to the label column so they don't
+  // collide with the answer column (standard labels are short and unaffected).
+  drawSection(
+    "Manager questions",
+    displayableCustomFieldAnswers(app.customFieldAnswers).map((answer) => ({
+      label: truncateToWidth(answer.label, bold, 9, VALUE_X - LABEL_X - 10),
+      value: formatCustomFieldAnswerDisplay(answer),
+    })),
+  );
 
   // ---- Disclosures --------------------------------------------------------
   drawSection("Disclosures", [

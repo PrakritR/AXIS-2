@@ -240,6 +240,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           roomChoice1: room1 || prev.roomChoice1,
           roomChoice2: "",
           roomChoice3: "",
+          // A restored draft may hold answers for a different listing's questions.
+          ...(prev.propertyId && prev.propertyId !== pid ? { customFieldAnswers: [] } : {}),
         };
       });
     });
@@ -248,6 +250,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => {
       const merged: RentalWizardFormState = { ...f, ...p };
+      // Custom application answers belong to one listing — drop them if the property changes.
+      if ("propertyId" in p && (p.propertyId ?? "") !== f.propertyId && !("customFieldAnswers" in p)) {
+        merged.customFieldAnswers = [];
+      }
       if ("leaseStart" in p) merged.leaseStart = normalizeIsoDateInput(p.leaseStart);
       if ("leaseEnd" in p) merged.leaseEnd = p.leaseEnd ? normalizeIsoDateInput(p.leaseEnd) : "";
       if ("leaseTerm" in p && p.leaseTerm === "Month-to-Month") merged.leaseEnd = "";
@@ -268,6 +274,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     setErrors((e) => {
       const next = { ...e };
       for (const k of Object.keys(p)) delete next[k];
+      if ("customFieldAnswers" in p) {
+        for (const k of Object.keys(next)) if (k.startsWith("custom:")) delete next[k];
+      }
       return next;
     });
   }, []);

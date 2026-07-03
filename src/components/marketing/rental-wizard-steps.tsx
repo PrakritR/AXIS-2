@@ -22,6 +22,15 @@ import {
 } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardErrors, RentalWizardFormState, YesNo } from "@/lib/rental-application/types";
 import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
+import {
+  customFieldAnswerValue,
+  customFieldErrorKey,
+  displayableCustomFieldAnswers,
+  formatCustomFieldAnswerDisplay,
+  listingCustomApplicationFields,
+  upsertCustomFieldAnswer,
+} from "@/lib/rental-application/custom-fields";
+import type { ManagerCustomApplicationField } from "@/lib/manager-listing-submission";
 import { wizardSectionErrorClass } from "@/lib/wizard-field-errors";
 
 const pillWrap = "flex flex-wrap gap-2 rounded-full border border-border bg-accent/30 p-1";
@@ -158,6 +167,75 @@ function ReviewRow({ k, v }: { k: string; v: ReactNode }) {
     <div className="grid gap-1 border-b border-border/80 pb-3 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,38%)_1fr] sm:gap-4">
       <dt className="font-medium text-muted">{k}</dt>
       <dd className="text-foreground">{v}</dd>
+    </div>
+  );
+}
+
+/** One manager-defined application question, rendered by its configured type. */
+function CustomQuestionField({
+  field,
+  value,
+  error,
+  onChange,
+}: {
+  field: ManagerCustomApplicationField;
+  value: string;
+  error?: string;
+  onChange: (next: string) => void;
+}) {
+  const inputId = `custom-${field.key}`;
+  const errorClass = error ? "border-red-400 ring-2 ring-red-100" : "";
+
+  if (field.type === "checkbox") {
+    return (
+      <div className="space-y-2" data-wizard-field={customFieldErrorKey(field.key)}>
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-xl border bg-card p-4 ${
+            error ? "border-red-300 bg-red-50/50 ring-2 ring-red-100" : "border-border"
+          }`}
+        >
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 rounded border-border text-primary"
+            checked={value === "yes"}
+            onChange={(e) => onChange(e.target.checked ? "yes" : "")}
+          />
+          <span className="text-sm font-medium text-foreground">
+            {field.label}
+            {field.required ? <span className="text-primary"> *</span> : null}
+          </span>
+        </label>
+        <FieldError msg={error} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2" data-wizard-field={customFieldErrorKey(field.key)}>
+      <Label htmlFor={inputId} required={field.required} optional={!field.required}>
+        {field.label}
+      </Label>
+      {field.type === "select" ? (
+        <Select id={inputId} value={value} onChange={(e) => onChange(e.target.value)} className={errorClass}>
+          <option value="">Select</option>
+          {field.options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </Select>
+      ) : field.type === "date" ? (
+        <Input id={inputId} type="date" value={value} onChange={(e) => onChange(e.target.value)} className={errorClass} />
+      ) : (
+        <Input
+          id={inputId}
+          inputMode={field.type === "number" ? "decimal" : undefined}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={errorClass}
+        />
+      )}
+      <FieldError msg={error} />
     </div>
   );
 }
@@ -1155,6 +1233,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
   }
 
   if (step === 9) {
+    const step9Prop = getPropertyById(form.propertyId);
+    const customFields = listingCustomApplicationFields(
+      step9Prop?.listingSubmission?.v === 1 ? step9Prop.listingSubmission : undefined,
+    );
     return (
       <div className="space-y-8">
         <div>
@@ -1263,6 +1345,28 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
+
+        {customFields.length > 0 ? (
+          <div className="space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5">
+            <div>
+              <h3 className="text-base font-bold tracking-tight text-foreground">Questions from your property manager</h3>
+              <StepIntro className="mt-1.5">
+                {step9Prop?.title ? `The manager of ${step9Prop.title} asks all applicants:` : "The property manager asks all applicants:"}
+              </StepIntro>
+            </div>
+            {customFields.map((field) => (
+              <CustomQuestionField
+                key={field.key}
+                field={field}
+                value={customFieldAnswerValue(form.customFieldAnswers, field.key)}
+                error={errors[customFieldErrorKey(field.key)]}
+                onChange={(next) =>
+                  patch({ customFieldAnswers: upsertCustomFieldAnswer(form.customFieldAnswers, field, next) })
+                }
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1459,6 +1563,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <ReviewRow k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes — ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
             <ReviewRow k="Criminal history" v={form.criminalHistory === "yes" ? `Yes — ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
           </ReviewSection>
+          {displayableCustomFieldAnswers(form.customFieldAnswers).length > 0 ? (
+            <ReviewSection title="Manager questions" stepTarget={9} onEdit={editFromReview}>
+              {displayableCustomFieldAnswers(form.customFieldAnswers).map((answer) => (
+                <ReviewRow key={answer.key} k={answer.label} v={displayOrDash(formatCustomFieldAnswerDisplay(answer))} />
+              ))}
+            </ReviewSection>
+          ) : null}
           <ReviewSection title="Consent" stepTarget={10} onEdit={editFromReview}>
             <ReviewRow k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
             <ReviewRow k="Accuracy confirmed" v={form.consentTruth ? "Yes" : "Not checked"} />

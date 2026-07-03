@@ -1,7 +1,22 @@
+import type { ManagerCustomApplicationFieldType } from "@/lib/manager-listing-submission";
+
 export const RENTAL_WIZARD_STEP_COUNT = 12;
 
 export type YesNo = "yes" | "no" | null;
 export type GroupRole = "first" | "joining" | null;
+
+/**
+ * Applicant answer to one manager-defined application question. Label and type are
+ * snapshotted at answer time so stored applications stay readable (review + PDF)
+ * even if the manager later edits or removes the question on the listing.
+ */
+export type RentalCustomFieldAnswer = {
+  key: string;
+  label: string;
+  type: ManagerCustomApplicationFieldType;
+  /** Raw answer; checkbox answers are "yes" / "" (unchecked). */
+  value: string;
+};
 
 export type RentalWizardFormState = {
   applyingAsGroup: YesNo;
@@ -87,6 +102,8 @@ export type RentalWizardFormState = {
   applicationFeePayChannel: "ach" | "zelle" | "venmo" | "other" | "stripe";
   /** Step 12 — applicant attests they sent a manual fee payment (manager must still mark the charge paid). */
   applicationFeeZelleSentConfirmed: boolean;
+  /** Step 9 — answers to the listing's manager-defined application questions. */
+  customFieldAnswers: RentalCustomFieldAnswer[];
 };
 
 /** Field and step-level messages (string keys so consent booleans can still surface errors). */

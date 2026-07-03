@@ -7,6 +7,7 @@ import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
+import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
 import { ManagerPropertySubmissionSummary } from "@/components/portal/manager-property-submission-summary";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
@@ -435,6 +436,14 @@ function ManagerPropertyInlineDetails({
 
       <ManagerPropertyHouseDetailsPanel
         noteKey={noteKey}
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+      />
+
+      <ManagerPropertyApplicationQuestionsPanel
         sub={managerSubmission}
         saveTarget={houseSaveTarget}
         managerUserId={managerUserId}

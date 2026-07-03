@@ -13,14 +13,20 @@ export function wizardSectionErrorClass(hasError: boolean, base = ""): string {
   return parts.join(" ");
 }
 
-/** Scroll to the first invalid field (in `orderedKeys` order) inside optional root. */
+/**
+ * Scroll to the first invalid field (in `orderedKeys` order) inside optional root.
+ * Error keys not in `orderedKeys` (e.g. dynamic manager-defined questions) are tried
+ * afterwards in the errors map's own order.
+ */
 export function scrollToFirstWizardFieldError(
   orderedKeys: string[],
   errors: Record<string, string | undefined>,
   root?: HTMLElement | null,
 ): void {
   if (typeof document === "undefined") return;
-  for (const key of orderedKeys) {
+  const ordered = new Set(orderedKeys);
+  const remaining = Object.keys(errors).filter((key) => !ordered.has(key));
+  for (const key of [...orderedKeys, ...remaining]) {
     if (!errors[key]) continue;
     const el =
       root?.querySelector(`[data-wizard-field="${key}"]`) ??

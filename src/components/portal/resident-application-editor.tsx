@@ -100,6 +100,9 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
         for (const key of Object.keys(p) as (keyof RentalWizardFormState)[]) {
           delete next[key];
         }
+        if ("customFieldAnswers" in p) {
+          for (const key of Object.keys(next)) if (key.startsWith("custom:")) delete next[key];
+        }
         return next;
       });
     },

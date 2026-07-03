@@ -243,6 +243,8 @@ export type ManagerListingSubmissionV1 = {
   quickFacts: ManagerQuickFactRow[];
   /** Resident-facing service request options for this property. */
   serviceRequestOptions?: ManagerListingServiceOption[];
+  /** Manager-defined application questions applicants answer for this listing (array order is display order). */
+  customApplicationFields?: ManagerCustomApplicationField[];
 };
 
 const LEASE_TERM_OPTION_SET = new Set<string>(LEASE_TERM_OPTIONS);
@@ -286,6 +288,89 @@ export type ManagerListingServiceOption = {
   residentEmails?: string[];
   createdAt: string;
 };
+
+export type ManagerCustomApplicationFieldType = "text" | "number" | "select" | "checkbox" | "date";
+
+export const CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS: readonly {
+  id: ManagerCustomApplicationFieldType;
+  label: string;
+}[] = [
+  { id: "text", label: "Text" },
+  { id: "number", label: "Number" },
+  { id: "select", label: "Dropdown" },
+  { id: "checkbox", label: "Checkbox" },
+  { id: "date", label: "Date" },
+];
+
+/** Manager-defined application question asked during the rental application for this listing. */
+export type ManagerCustomApplicationField = {
+  id: string;
+  /** Stable answer key (slug of the label at creation; unchanged by later label edits). */
+  key: string;
+  label: string;
+  type: ManagerCustomApplicationFieldType;
+  required: boolean;
+  /** Choices for `select` fields; ignored for other types. Array order is display order. */
+  options: string[];
+};
+
+const CUSTOM_APPLICATION_FIELD_TYPES = new Set<string>(
+  CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => o.id),
+);
+
+/** Kebab-case answer key from a question label, unique against `taken`. */
+export function customApplicationFieldKeyFromLabel(label: string, taken: Iterable<string>): string {
+  const base =
+    label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "question";
+  const used = new Set(taken);
+  if (!used.has(base)) return base;
+  let n = 2;
+  while (used.has(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
+/** Coerce persisted custom application fields into a clean array (drops malformed rows). */
+export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApplicationField[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ManagerCustomApplicationField[] = [];
+  const usedKeys = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const label = typeof o.label === "string" ? o.label.trim() : "";
+    if (!label) continue;
+    const type = CUSTOM_APPLICATION_FIELD_TYPES.has(String(o.type))
+      ? (o.type as ManagerCustomApplicationFieldType)
+      : "text";
+    const key =
+      typeof o.key === "string" && o.key.trim()
+        ? o.key.trim()
+        : customApplicationFieldKeyFromLabel(label, usedKeys);
+    if (usedKeys.has(key)) continue;
+    usedKeys.add(key);
+    const options =
+      type === "select" && Array.isArray(o.options)
+        ? (o.options as unknown[])
+            .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+            .map((v) => v.trim())
+        : [];
+    if (type === "select" && options.length === 0) continue;
+    out.push({
+      id: typeof o.id === "string" && o.id.trim() ? o.id.trim() : rid("caf"),
+      key,
+      label,
+      type,
+      required: o.required === true,
+      options,
+    });
+  }
+  return out;
+}
 
 /** Legacy persisted shapes (optional fields). */
 type LegacyListingSubmissionFields = {
@@ -822,6 +907,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     bundles,
     quickFacts,
     serviceRequestOptions,
+    customApplicationFields: normalizeCustomApplicationFields(
+      (sub as { customApplicationFields?: unknown }).customApplicationFields,
+    ),
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,
@@ -883,6 +971,17 @@ export function emptyQuickFactRow(): ManagerQuickFactRow {
     id: rid("qf"),
     label: "",
     value: "",
+  };
+}
+
+export function emptyCustomApplicationField(): ManagerCustomApplicationField {
+  return {
+    id: rid("caf"),
+    key: "",
+    label: "",
+    type: "text",
+    required: false,
+    options: [],
   };
 }
 
@@ -1079,6 +1178,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     bundles: [],
     quickFacts: [],
     serviceRequestOptions: [],
+    customApplicationFields: [],
   };
 }
 

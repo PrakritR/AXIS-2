@@ -1,5 +1,9 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import {
+  displayableCustomFieldAnswers,
+  formatCustomFieldAnswerDisplay,
+} from "@/lib/rental-application/custom-fields";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 import { leaseCss } from "@/lib/lease-templates/types";
 
@@ -197,6 +201,14 @@ ${section("References", [
     value: [clean(app.ref2Name), clean(app.ref2Relationship), clean(app.ref2Phone)].filter(Boolean).join(" · "),
   },
 ])}
+
+${section(
+  "Manager questions",
+  displayableCustomFieldAnswers(app.customFieldAnswers).map((answer) => ({
+    label: answer.label,
+    value: formatCustomFieldAnswerDisplay(answer),
+  })),
+)}
 
 ${section("Disclosures", [
   { label: "Prior eviction", value: yesNo(app.evictionHistory) },

@@ -18,6 +18,7 @@ import {
 } from "./application-fee-channel";
 import type { RentalWizardErrors, RentalWizardFormState } from "./types";
 import { digitsOnly, parseMoneyInput } from "./masks";
+import { listingCustomApplicationFields, validateCustomFieldAnswers } from "./custom-fields";
 
 function startOfTodayUTC(): Date {
   const n = new Date();
@@ -234,6 +235,11 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
     else if (f.criminalHistory === "yes" && !f.criminalDetails.trim()) {
       e.criminalDetails = "Brief details are required when you answer Yes.";
     }
+    const prop = getPropertyById(f.propertyId);
+    const customFields = listingCustomApplicationFields(
+      prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined,
+    );
+    Object.assign(e, validateCustomFieldAnswers(customFields, f.customFieldAnswers));
     return e;
   }
 
