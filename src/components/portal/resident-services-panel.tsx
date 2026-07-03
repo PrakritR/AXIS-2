@@ -67,33 +67,33 @@ import {
   syncLeasePipelineFromServer,
 } from "@/lib/lease-pipeline-storage";
 
-const STATUS_TABS: { id: ResidentWorkBucket; label: string }[] = [
+export const STATUS_TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "open", label: "Open" },
   { id: "scheduled", label: "Scheduled" },
   { id: "completed", label: "Completed" },
 ];
 
-type RequestStatusBucket = "pending" | "approved" | "completed";
+export type RequestStatusBucket = "pending" | "approved" | "completed";
 
-const REQUEST_STATUS_TABS: { id: RequestStatusBucket; label: string }[] = [
+export const REQUEST_STATUS_TABS: { id: RequestStatusBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
   { id: "approved", label: "Approved" },
   { id: "completed", label: "Completed" },
 ];
 
 /** Bucket a pill label with its count, e.g. "Open · 3" — omits the count when zero. */
-function pillLabelWithCount(label: string, count: number): string {
-  return count > 0 ? `${label} · ${count}` : label;
+export function pillLabelWithCount(label: string, count: number): string {
+  return count > 0 ? `${label} ${count}` : label;
 }
 
-type UnifiedItem =
+export type UnifiedItem =
   | { kind: "request"; req: ServiceRequest; sortKey: number }
   | { kind: "work-order"; row: DemoManagerWorkOrderRow; sortKey: number };
 
 // Maps the resident's actual request/work-order statuses onto the shared
 // Pending / Approved / Completed filter — denied and returned requests both
 // read as closed-out, so they bucket under Completed alongside finished work orders.
-function unifiedItemStatusBucket(item: UnifiedItem): RequestStatusBucket {
+export function unifiedItemStatusBucket(item: UnifiedItem): RequestStatusBucket {
   if (item.kind === "request") {
     if (item.req.status === "pending") return "pending";
     if (item.req.status === "approved") return "approved";
@@ -111,14 +111,14 @@ function priorityClass(p: string) {
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
-function formatDate(iso: string) {
+export function formatDate(iso: string) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return formatPacificDate(d, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
+export function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
   if (status === "pending")
     return (
       <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
@@ -152,7 +152,7 @@ const WORK_ORDER_BUCKET_LABEL: Record<ResidentWorkBucket, string> = {
   completed: "Completed",
 };
 
-function WorkOrderStatusBadge({ bucket }: { bucket: ResidentWorkBucket }) {
+export function WorkOrderStatusBadge({ bucket }: { bucket: ResidentWorkBucket }) {
   const cls =
     bucket === "completed"
       ? "portal-badge-success"
@@ -165,7 +165,7 @@ function WorkOrderStatusBadge({ bucket }: { bucket: ResidentWorkBucket }) {
 }
 
 /** "Service fee $45 · Paid · Deposit $100 · Pending" style summary for a request row. */
-function requestChargesSummary(req: ServiceRequest): string {
+export function requestChargesSummary(req: ServiceRequest): string {
   const charged = req.status === "approved" || req.status === "returned";
   const parts: string[] = [];
   if (req.price) {
@@ -177,7 +177,7 @@ function requestChargesSummary(req: ServiceRequest): string {
   return parts.join(" · ") || "—";
 }
 
-function ServiceRequestCard({
+export function ServiceRequestCard({
   req,
   onReturnPhotoUploaded,
   onDelete,
@@ -373,7 +373,7 @@ function ServiceRequestCard({
   );
 }
 
-function WorkOrderDetail({
+export function WorkOrderDetail({
   row,
   onEdit,
   onCancel,
@@ -388,19 +388,19 @@ function WorkOrderDetail({
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Priority</p>
       <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
       <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Preferred arrival</p>
-      <p className="mt-1 font-medium text-foreground">{row.preferredArrival ?? "Anytime"}</p>
+      <p className="mt-1 text-sm font-medium text-foreground">{row.preferredArrival ?? "Anytime"}</p>
       <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Details</p>
-      <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">{row.description}</p>
+      <p className="mt-1.5 text-sm whitespace-pre-wrap leading-relaxed">{row.description}</p>
       {row.scheduled && row.scheduled !== "—" ? (
         <>
           <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Visit</p>
-          <p className="mt-1 font-medium text-foreground">{row.scheduled}</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{row.scheduled}</p>
         </>
       ) : null}
       {row.cost && row.cost !== "—" ? (
         <>
           <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Cost</p>
-          <p className="mt-1 font-medium text-foreground">{row.cost}</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{row.cost}</p>
         </>
       ) : null}
       {row.photoDataUrls?.length ? (
@@ -993,7 +993,6 @@ export function ResidentServicesPanel({
       {activeTab === "requests" ? (
         <div>
           <div className="mb-3 flex items-center gap-3">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Requests</p>
             <PillTabs
               items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
                 id,

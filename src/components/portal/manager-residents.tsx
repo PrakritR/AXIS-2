@@ -1,7 +1,6 @@
 "use client";
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import Image from "next/image";
 import Link from "next/link";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -26,7 +25,10 @@ import {
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
+  PORTAL_TABLE_TR,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -37,32 +39,13 @@ import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
-  ChargeRemindersModal,
-  ReminderSettingsModal,
-  ScheduledMessageEditModal,
-  addChargeSetDateReminder,
-  patchScheduledMessage,
-  useScheduledPaymentMessages,
-} from "@/components/portal/payment-schedule-ui";
-import { ChargeReminderList } from "@/components/portal/manager-inbox-schedule-panel";
-import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
-import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
-import {
-  createManagerCharge,
   chargeDueLabel,
-  HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
-  findPendingWorkOrderCharge,
-  markHouseholdChargePaid,
-  parseMoneyAmount,
-  deleteHouseholdCharge,
   readChargesForManagerResident,
   recordApprovedApplicationCharges,
-  recordWorkOrderResidentCharge,
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
-  updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
   type HouseholdCharge,
 } from "@/lib/household-charges";
@@ -86,10 +69,7 @@ import {
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
-import {
-  buildNewChargeNoticeBody,
-  deliverPortalInboxMessage,
-} from "@/lib/portal-message-delivery";
+import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
@@ -125,15 +105,13 @@ import {
   SERVICE_REQUESTS_EVENT,
   readServiceRequestsForResident,
   readServiceRequestsForManager,
-  approveServiceRequest,
-  denyServiceRequest,
-  markServiceRequestServicePaid,
-  markServiceRequestDepositPaid,
   hasDeposit,
   deleteServiceRequestsForResident,
+  updateServiceRequest,
+  deleteServiceRequest,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
-import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import {
   invalidatePersistedInboxCache,
@@ -142,6 +120,8 @@ import {
   persistInbox,
   PORTAL_INBOX_CHANGED_EVENT,
   syncPersistedInboxFromServer,
+  upsertPersistedInboxRows,
+  deleteInboxThreadIds,
   type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
 import {
@@ -149,7 +129,31 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
-import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
+import { Select } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { PillTabs } from "@/components/ui/tabs";
+import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
+import {
+  INBOX_TAB_DEFS,
+  PortalInboxEmptyState,
+  PortalInboxMessageTable,
+  type PortalInboxTableRow,
+} from "@/components/portal/portal-inbox-ui";
+import {
+  REQUEST_STATUS_TABS,
+  STATUS_TABS,
+  ServiceRequestCard,
+  ServiceStatusBadge,
+  WorkOrderDetail,
+  WorkOrderStatusBadge,
+  formatDate as serviceRequestDateLabel,
+  pillLabelWithCount,
+  requestChargesSummary,
+  unifiedItemStatusBucket,
+  type RequestStatusBucket,
+  type UnifiedItem,
+} from "@/components/portal/resident-services-panel";
+import { isHouseholdChargeOverdue } from "@/lib/household-charges";
 
 type ActiveResident = {
   id: string;
@@ -185,12 +189,6 @@ function isPreviousResidentRow(row: DemoApplicantRow): boolean {
 const AR_LEASE_TERM_CUSTOM = "__custom__";
 const AR_LEASE_TERM_PRESETS = ["Month-to-month", "12 months", "6 months", "3 months"] as const;
 
-function statusPill(status: "pending" | "paid") {
-  return status === "paid"
-    ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-    : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-}
-
 function centsFromLabel(label: string): number {
   const n = Number(label.replace(/[^\d.]/g, ""));
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
@@ -202,124 +200,11 @@ function previewLine(body: string, max = 120) {
   return `${normalized.slice(0, max)}…`;
 }
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-function toDatetimeLocalValue(iso: string | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
-function fromDatetimeLocalValue(s: string): string | null {
-  if (!s.trim()) return null;
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
-
-function formatScheduledLabel(iso: string): string {
-  const d = new Date(iso);
-  return formatPacificDateTime(d);
-}
-
-function ResidentWorkOrderCostEditor({
-  row,
-  onSaved,
-  managerUserId,
-}: {
-  row: DemoManagerWorkOrderRow;
-  onSaved: () => void;
-  managerUserId: string | null;
-}) {
-  const { showToast } = useAppUi();
-  const [hcTick, setHcTick] = useState(0);
-  const initialVal = row.cost !== "—" && row.cost.trim() ? row.cost.replace(/^\$/, "") : "";
-  const [val, setVal] = useState(initialVal);
-  useEffect(() => {
-    const on = () => setHcTick((n) => n + 1);
-    window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-    return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
-  }, []);
-
-  const pendingCharge = findPendingWorkOrderCharge(row.id);
-  void hcTick;
-
-  if (row.bucket === "completed") {
-    return <span className="text-muted">{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>;
-  }
-
-  if (pendingCharge) {
-    return <span className="text-xs text-muted">Pending payment · {pendingCharge.balanceLabel}</span>;
-  }
-
-  const apply = () => {
-    const trimmed = val.trim();
-    if (!trimmed) {
-      updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
-      onSaved();
-      showToast("Cost cleared.");
-      return;
-    }
-    const amt = parseMoneyAmount(trimmed);
-    if (!Number.isFinite(amt) || amt < 0) {
-      showToast("Enter a valid dollar amount (0 or more) or clear the field.");
-      return;
-    }
-    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
-    const residentEmail = row.residentEmail?.trim() ?? "";
-    const residentName = row.residentName?.trim() ?? "";
-    const createdCharge =
-      residentEmail && residentEmail.includes("@")
-        ? recordWorkOrderResidentCharge({
-            managerUserId: managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
-            workOrderId: row.id,
-            propertyLabel: row.propertyName,
-            unit: row.unit,
-            workOrderTitle: row.title,
-            amountInput: trimmed,
-            residentEmail,
-            residentName,
-          })
-        : null;
-    onSaved();
-    showToast(createdCharge ? "Cost saved and payment created." : "Cost saved — visible to the resident.");
-  };
-
-  return (
-    <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center">
-      <Input
-        type="text"
-        inputMode="decimal"
-        placeholder="e.g. 75"
-        value={val}
-        onChange={(e) => setVal(e.target.value)}
-        className="h-8 w-[5.5rem] rounded-md text-xs"
-      />
-      <Button type="button" variant="outline" className="h-8 rounded-full px-2 py-0 text-[10px]" onClick={apply}>
-        Save
-      </Button>
-    </div>
-  );
-}
-
-function chargeEditAmountValue(charge: HouseholdCharge): string {
-  return String(centsFromLabel(charge.balanceLabel) / 100 || centsFromLabel(charge.amountLabel) / 100 || "").replace(/\.0+$/, "");
-}
-
 export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId }) {
   const { showToast } = useAppUi();
   const navigate = usePortalNavigate();
   const portalBase = usePaidPortalBasePath();
   const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
-  // Per-charge reminder lists show the full saved default schedule, so bypass
-  // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
-  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
-  const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
-  const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
-  const [chargeRemindersFor, setChargeRemindersFor] = useState<HouseholdCharge | null>(null);
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
@@ -330,18 +215,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [addChargeOpen, setAddChargeOpen] = useState(false);
-  const [chargeNoticePreview, setChargeNoticePreview] = useState<{
-    title: string;
-    amount: number;
-    blocksLease: boolean;
-  } | null>(null);
-  const [chargeNoticeBusy, setChargeNoticeBusy] = useState(false);
-  const [editChargeId, setEditChargeId] = useState<string | null>(null);
-  const [editChargeKind, setEditChargeKind] = useState<HouseholdCharge["kind"] | null>(null);
-  const [chargeTitle, setChargeTitle] = useState("");
-  const [chargeAmount, setChargeAmount] = useState("");
-  const [chargeBlocksLease, setChargeBlocksLease] = useState(false);
   const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
@@ -351,9 +224,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageSubject, setMessageSubject] = useState("");
   const [messageBody, setMessageBody] = useState("");
-  const [reminderBusy, setReminderBusy] = useState(false);
   const [leaseReminderBusy, setLeaseReminderBusy] = useState(false);
-  const [reminderPreview, setReminderPreview] = useState<{ res: ActiveResident; subject: string; body: string } | null>(null);
   const [leaseReminderPreview, setLeaseReminderPreview] = useState<{
     res: ActiveResident;
     leaseId: string;
@@ -370,10 +241,27 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   } | null>(null);
   const [leaseSendBusy, setLeaseSendBusy] = useState(false);
   const [signingLease, setSigningLease] = useState<LeasePipelineRow | null>(null);
-  const [visitAtById, setVisitAtById] = useState<Record<string, string>>({});
   const [welcomeEmailBusyForResident, setWelcomeEmailBusyForResident] = useState<string | null>(null);
   const [welcomePreviewFor, setWelcomePreviewFor] = useState<ActiveResident | null>(null);
   const [welcomePreviewContent, setWelcomePreviewContent] = useState("");
+
+  // Services tab replica (Requests / Work orders — mirrors resident-services-panel.tsx)
+  const [svcSubTab, setSvcSubTab] = useState<"requests" | "work-orders">("requests");
+  const [svcRequestsFilter, setSvcRequestsFilter] = useState<RequestStatusBucket>("pending");
+  const [svcWorkOrderBucket, setSvcWorkOrderBucket] = useState<ResidentWorkBucket>("open");
+  const [svcExpandedId, setSvcExpandedId] = useState<string | null>(null);
+  const [editingServiceRequest, setEditingServiceRequest] = useState<ServiceRequest | null>(null);
+  const [srEditNotes, setSrEditNotes] = useState("");
+  const [srEditReturnBy, setSrEditReturnBy] = useState("");
+  const [editingWorkOrderRow, setEditingWorkOrderRow] = useState<DemoManagerWorkOrderRow | null>(null);
+  const [woEditTitle, setWoEditTitle] = useState("");
+  const [woEditPriority, setWoEditPriority] = useState("Medium");
+  const [woEditArrival, setWoEditArrival] = useState("");
+  const [woEditDetails, setWoEditDetails] = useState("");
+
+  // Inbox tab replica (Unopened / Opened / Sent / Trash — mirrors resident-inbox-panel.tsx)
+  const [inboxSubTab, setInboxSubTab] = useState<"unopened" | "opened" | "sent" | "trash">("unopened");
+  const [inboxExpandedId, setInboxExpandedId] = useState<string | null>(null);
 
   // Add resident manually
   const [addResidentOpen, setAddResidentOpen] = useState(false);
@@ -702,7 +590,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   if (selectedId !== prevSelectedId) {
     setPrevSelectedId(selectedId);
-    if (selectedId) setChargeTab("pending");
+    if (selectedId) {
+      setChargeTab("pending");
+      setSvcSubTab("requests");
+      setSvcRequestsFilter("pending");
+      setSvcWorkOrderBucket("open");
+      setSvcExpandedId(null);
+      setInboxSubTab("unopened");
+      setInboxExpandedId(null);
+    }
   }
 
   if (selectedId && !filtered.some((resident) => resident.id === selectedId)) {
@@ -813,126 +709,96 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     [residentCharges],
   );
 
-  function openAddCharge() {
-    setChargeTitle("");
-    setChargeAmount("");
-    setChargeBlocksLease(false);
-    setEditChargeId(null);
-    setEditChargeKind(null);
-    setAddChargeOpen(true);
-  }
+  const overdueChargeCount = useMemo(
+    () => residentCharges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c)).length,
+    [residentCharges],
+  );
 
-  function openEditCharge(charge: HouseholdCharge) {
-    setEditChargeId(charge.id);
-    setEditChargeKind(charge.kind);
-    setChargeTitle(charge.title);
-    setChargeAmount(chargeEditAmountValue(charge));
-    setChargeBlocksLease(charge.blocksLeaseUntilPaid);
-    setAddChargeOpen(true);
-  }
+  const selectedApplicationRow = useMemo<DemoApplicantRow | null>(() => {
+    void hcTick;
+    if (!selected) return null;
+    return readManagerApplicationRows().find((row) => row.id === selected.id) ?? null;
+  }, [selected, hcTick]);
 
-  function submitCharge() {
-    if (!selected) return;
-    const amount = Number.parseFloat(chargeAmount);
-    if (!chargeTitle.trim()) {
-      showToast("Enter a charge title.");
-      return;
+  const residentUnifiedServiceItems = useMemo<UnifiedItem[]>(() => {
+    const items: UnifiedItem[] = [];
+    for (const req of residentServiceRequests) {
+      const t = new Date(req.requestedAt).getTime();
+      items.push({ kind: "request", req, sortKey: Number.isFinite(t) ? t : 0 });
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      showToast("Enter a valid amount.");
-      return;
+    for (const row of residentWorkOrders) {
+      const fromId = Number(row.id.replace(/^\D*/, ""));
+      const fromSchedule = row.scheduledAtIso ? new Date(row.scheduledAtIso).getTime() : 0;
+      const t = Number.isFinite(fromId) && fromId > 0 ? fromId : fromSchedule;
+      items.push({ kind: "work-order", row, sortKey: Number.isFinite(t) ? t : 0 });
     }
-    if (editChargeId) {
-      const updated = updateHouseholdChargeAmount(editChargeId, amount, userId ?? null, chargeTitle.trim());
-      if (updated) {
-        if (selected && editChargeKind) {
-          const nextRows = readManagerApplicationRows().map((row) => {
-            if (row.id !== selected.id || !row.application) return row;
-            if (editChargeKind === "security_deposit") {
-              return { ...row, application: { ...row.application, managerSecurityDepositOverride: String(amount) } };
-            }
-            if (editChargeKind === "move_in_fee") {
-              return { ...row, application: { ...row.application, managerMoveInFeeOverride: String(amount) } };
-            }
-            if (editChargeKind === "utilities" || editChargeKind === "prorated_utilities") {
-              return { ...row, application: { ...row.application, managerUtilitiesOverride: String(amount) } };
-            }
-            if (editChargeKind === "first_month_rent" || editChargeKind === "prorated_rent" || editChargeKind === "rent") {
-              return {
-                ...row,
-                signedMonthlyRent: amount,
-                application: { ...row.application, managerRentOverride: String(amount) },
-              };
-            }
-            return row;
-          });
-          writeManagerApplicationRows(nextRows);
-        }
-        showToast("Charge updated.");
-        setAddChargeOpen(false);
-        setEditChargeId(null);
-        setEditChargeKind(null);
-        setChargeTab("pending");
-      } else {
-        showToast("Could not update charge.");
-      }
-      return;
-    }
-    setAddChargeOpen(false);
-    setChargeNoticePreview({
-      title: chargeTitle.trim(),
-      amount,
-      blocksLease: chargeBlocksLease,
-    });
-  }
+    items.sort((a, b) => b.sortKey - a.sortKey);
+    return items;
+  }, [residentServiceRequests, residentWorkOrders]);
 
-  async function confirmChargeNotice(skipMessage: boolean) {
-    if (!selected || !chargeNoticePreview) return;
-    setChargeNoticeBusy(true);
-    try {
-      const result = createManagerCharge({
-        residentEmail: selected.email,
-        residentName: selected.name,
-        propertyId: selected.propertyId || "unknown",
-        propertyLabel: selected.propertyLabel,
-        managerUserId: userId ?? null,
-        title: chargeNoticePreview.title,
-        amount: chargeNoticePreview.amount,
-        blocksLeaseUntilPaid: chargeNoticePreview.blocksLease,
-      });
-      if (!result) {
-        showToast("Could not add charge.");
-        return;
-      }
-      setAddChargeOpen(false);
-      setChargeTab("pending");
-      if (skipMessage) {
-        showToast("Charge added (no notification sent).");
-        return;
-      }
-      const amountLabel = `$${chargeNoticePreview.amount.toFixed(2)}`;
-      const subject = `New charge: ${chargeNoticePreview.title}`;
-      const body = buildNewChargeNoticeBody({
-        residentName: selected.name,
-        chargeTitle: chargeNoticePreview.title,
-        amountLabel,
-        propertyLabel: selected.propertyLabel,
-      });
-      const notice = await deliverPortalInboxMessage({
-        toEmails: [selected.email],
-        subject,
-        text: body,
-      });
-      if (notice.ok) {
-        showToast(notice.skipped ? "Charge added. Notice sent to inbox (demo email skipped)." : "Charge added and notice sent via inbox and email.");
-      } else {
-        showToast("Charge added, but notice could not be sent.");
-      }
-    } finally {
-      setChargeNoticeBusy(false);
-      setChargeNoticePreview(null);
-    }
-  }
+  const residentServiceRequestsCounts = useMemo(() => {
+    const c: Record<RequestStatusBucket, number> = { pending: 0, approved: 0, completed: 0 };
+    for (const item of residentUnifiedServiceItems) c[unifiedItemStatusBucket(item)] += 1;
+    return c;
+  }, [residentUnifiedServiceItems]);
+
+  const residentFilteredUnifiedServiceItems = useMemo(
+    () => residentUnifiedServiceItems.filter((item) => unifiedItemStatusBucket(item) === svcRequestsFilter),
+    [residentUnifiedServiceItems, svcRequestsFilter],
+  );
+
+  const residentWorkOrderBucketCounts = useMemo(() => {
+    const c: Record<ResidentWorkBucket, number> = { open: 0, scheduled: 0, completed: 0 };
+    for (const row of residentWorkOrders) c[row.bucket] += 1;
+    return c;
+  }, [residentWorkOrders]);
+
+  const residentWorkOrdersInBucket = useMemo(
+    () => residentWorkOrders.filter((row) => row.bucket === svcWorkOrderBucket),
+    [residentWorkOrders, svcWorkOrderBucket],
+  );
+
+  const residentInboxCounts = useMemo(
+    () => ({
+      unopened: residentInboxThreads.filter((t) => t.folder === "inbox" && t.unread).length,
+      opened: residentInboxThreads.filter((t) => t.folder === "inbox" && !t.unread).length,
+      sent: residentInboxThreads.filter((t) => t.folder === "sent").length,
+      trash: residentInboxThreads.filter((t) => t.folder === "trash").length,
+    }),
+    [residentInboxThreads],
+  );
+
+  const residentInboxRowsForTab = useMemo(
+    () =>
+      residentInboxThreads.filter((t) => {
+        if (inboxSubTab === "unopened") return t.folder === "inbox" && t.unread;
+        if (inboxSubTab === "opened") return t.folder === "inbox" && !t.unread;
+        if (inboxSubTab === "sent") return t.folder === "sent";
+        return t.folder === "trash";
+      }),
+    [residentInboxThreads, inboxSubTab],
+  );
+
+  const residentInboxTableRows = useMemo<PortalInboxTableRow[]>(
+    () =>
+      residentInboxRowsForTab.map((t) => ({
+        id: t.id,
+        name: inboxSubTab === "sent" ? t.email || "Unknown recipient" : t.from,
+        email: inboxSubTab === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
+        topic: t.subject,
+        preview: t.preview,
+        whenLabel: t.time,
+        read: !t.unread,
+      })),
+    [residentInboxRowsForTab, inboxSubTab],
+  );
+
+  const residentInboxBodyById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const t of residentInboxThreads) m[t.id] = t.body;
+    return m;
+  }, [residentInboxThreads]);
+
 
   async function sendResidentMessage() {
     if (!selected) return;
@@ -960,6 +826,157 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
     setInboxTick((n) => n + 1);
     showToast(result.skipped ? "Message sent to inbox (demo email skipped)." : "Message sent via inbox and email.");
+  }
+
+  function openServiceRequestEdit(req: ServiceRequest) {
+    setEditingServiceRequest(req);
+    setSrEditNotes(req.notes);
+    setSrEditReturnBy(req.returnByDate);
+  }
+
+  function saveServiceRequestEdit() {
+    if (!editingServiceRequest) return;
+    if (hasDeposit(editingServiceRequest.deposit) && !srEditReturnBy.trim()) {
+      showToast("Please enter a return-by date.");
+      return;
+    }
+    updateServiceRequest(editingServiceRequest.id, {
+      notes: srEditNotes.trim(),
+      returnByDate: srEditReturnBy.trim(),
+    });
+    setEditingServiceRequest(null);
+    setSrTick((n) => n + 1);
+    showToast("Request updated.");
+  }
+
+  function deleteResidentServiceRequest(id: string) {
+    if (!window.confirm("Delete this service request? This cannot be undone.")) return;
+    deleteServiceRequest(id);
+    setSrTick((n) => n + 1);
+    setSvcExpandedId(null);
+    showToast("Request deleted.");
+  }
+
+  function openWorkOrderRowEdit(row: DemoManagerWorkOrderRow) {
+    setEditingWorkOrderRow(row);
+    setWoEditTitle(row.title);
+    setWoEditPriority(row.priority || "Medium");
+    setWoEditArrival(row.preferredArrival && row.preferredArrival !== "Anytime" ? row.preferredArrival : "");
+    setWoEditDetails(row.description);
+  }
+
+  function saveWorkOrderRowEdit() {
+    if (!editingWorkOrderRow) return;
+    if (!woEditTitle.trim()) {
+      showToast("Add a title first.");
+      return;
+    }
+    updateManagerWorkOrder(editingWorkOrderRow.id, (r) => ({
+      ...r,
+      title: woEditTitle.trim(),
+      priority: woEditPriority,
+      preferredArrival: woEditArrival.trim() || "Anytime",
+      description: woEditDetails.trim() || r.description,
+    }));
+    setEditingWorkOrderRow(null);
+    setWorkOrderTick((n) => n + 1);
+    showToast("Work order updated.");
+  }
+
+  function cancelResidentWorkOrder(id: string) {
+    if (!window.confirm("Cancel this work order? This cannot be undone.")) return;
+    deleteManagerWorkOrderRow(id);
+    setWorkOrderTick((n) => n + 1);
+    setSvcExpandedId(null);
+    showToast("Work order removed.");
+  }
+
+  function markResidentInboxThreadRead(id: string) {
+    const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
+    const target = all.find((t) => t.id === id);
+    if (!target || target.folder !== "inbox") return;
+    const updated: PersistedInboxThread = { ...target, unread: false };
+    const next = all.map((t) => (t.id === id ? updated : t));
+    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
+    setInboxTick((n) => n + 1);
+    void upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+    showToast("Marked as read.");
+  }
+
+  function markResidentInboxThreadUnread(id: string) {
+    const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
+    const target = all.find((t) => t.id === id);
+    if (!target || target.folder !== "inbox") return;
+    const updated: PersistedInboxThread = { ...target, unread: true };
+    const next = all.map((t) => (t.id === id ? updated : t));
+    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
+    setInboxTick((n) => n + 1);
+    void upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next);
+    showToast("Marked as unread.");
+  }
+
+  function moveResidentInboxThreadToTrash(id: string) {
+    const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
+    const target = all.find((t) => t.id === id);
+    if (!target || target.folder === "trash") return;
+    const updated: PersistedInboxThread = { ...target, folder: "trash", previousFolder: target.folder, unread: false };
+    const next = all.map((t) => (t.id === id ? updated : t));
+    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
+    setInboxTick((n) => n + 1);
+    setInboxExpandedId(null);
+    void upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next).then((ok) => {
+      showToast(ok ? "Moved to trash." : "Could not move message to trash.");
+    });
+  }
+
+  function restoreResidentInboxThreadFromTrash(id: string) {
+    const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
+    const target = all.find((t) => t.id === id && t.folder === "trash");
+    if (!target) return;
+    const dest = target.previousFolder ?? "inbox";
+    const updated: PersistedInboxThread = { ...target, folder: dest, previousFolder: undefined };
+    const next = all.map((t) => (t.id === id ? updated : t));
+    persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
+    setInboxTick((n) => n + 1);
+    setInboxExpandedId(null);
+    void upsertPersistedInboxRows(MANAGER_INBOX_STORAGE_KEY, [updated], next).then((ok) => {
+      showToast(ok ? "Restored." : "Could not restore message.");
+    });
+  }
+
+  function deleteResidentInboxThreadForever(id: string) {
+    void (async () => {
+      invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+      const ok = await deleteInboxThreadIds([id]);
+      if (!ok) {
+        showToast("Could not delete message.");
+        return;
+      }
+      const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
+      const next = all.filter((t) => t.id !== id);
+      persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
+      setInboxTick((n) => n + 1);
+      setInboxExpandedId(null);
+      showToast("Deleted permanently.");
+    })();
+  }
+
+  async function replyToResidentInboxThread(thread: PersistedInboxThread, text: string) {
+    if (!selected) return;
+    const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
+    const result = await deliverPortalInboxMessage({
+      fromName: managerEmail ?? "Property Manager",
+      toEmails: [selected.email],
+      subject,
+      text,
+    });
+    if (!result.ok) {
+      throw new Error(result.error ?? "Message could not be sent.");
+    }
+    invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+    const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+    persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
+    setInboxTick((n) => n + 1);
   }
 
   async function sendResidentAccountEmail(res: ActiveResident) {
@@ -992,48 +1009,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       showToast("Could not send account setup email.");
     } finally {
       setWelcomeEmailBusyForResident(null);
-    }
-  }
-
-  function openPaymentReminderPreview(res: ActiveResident, pendingCharges: HouseholdCharge[]) {
-    if (pendingCharges.length === 0) { showToast("No pending charges to remind about."); return; }
-    const total = pendingCharges.reduce((sum, c) => sum + (parseMoneyAmount(c.balanceLabel) || parseMoneyAmount(c.amountLabel)), 0);
-    const lines = pendingCharges.map((c) => `  • ${c.title}: ${c.balanceLabel}${c.dueDateLabel ? ` (due ${c.dueDateLabel})` : ""}`).join("\n");
-    const subject = "Payment reminder — outstanding balance";
-    const body = [
-      `Hi ${res.name.split(" ")[0] ?? res.name},`,
-      "",
-      "This is a reminder that you have the following outstanding payment(s):",
-      "",
-      lines,
-      "",
-      `Total due: $${total.toFixed(2)}`,
-      "",
-      "Please log into your resident portal to view details and submit payment.",
-      "",
-      "— Axis",
-    ].join("\n");
-    setReminderPreview({ res, subject, body });
-  }
-
-  async function doSendPaymentReminder(res: ActiveResident, subject: string, body: string) {
-    setReminderPreview(null);
-    setReminderBusy(true);
-    try {
-      await fetch("/api/portal/send-inbox-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ fromName: managerEmail ?? "Property Manager", toEmails: [res.email], subject, text: body, deliverToPortalInbox: true }),
-      });
-      const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
-      persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
-      setInboxTick((n) => n + 1);
-      showToast("Payment reminder sent to resident.");
-    } catch {
-      showToast("Could not send payment reminder.");
-    } finally {
-      setReminderBusy(false);
     }
   }
 
@@ -1433,27 +1408,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     showToast("Resident and all related portal data deleted.");
   }
 
-  function markPaid(chargeId: string) {
-    if (markHouseholdChargePaid(chargeId, userId ?? null)) {
-      showToast("Marked as paid.");
-      setHcTick((n) => n + 1);
-      void reloadSchedule();
-      void syncHouseholdChargesFromServer(true).then(() => {
-        setHcTick((n) => n + 1);
-        void reloadSchedule();
-      });
-    }
-  }
-
-  function deleteCharge(chargeId: string) {
-    if (!window.confirm("Delete this charge? This cannot be undone.")) return;
-    if (deleteHouseholdCharge(chargeId, userId ?? null)) {
-      showToast("Charge deleted.");
-      setHcTick((n) => n + 1);
-      void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
-    }
-  }
-
   function leaseGenerationGateTitle(row: LeasePipelineRow): string | undefined {
     const gate = leaseGenerationSupportedForRow(row);
     return gate.ok ? undefined : gate.error;
@@ -1659,100 +1613,45 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                         <td colSpan={6} className="bg-accent/30 px-4 py-5">
                           <div className="flex flex-col gap-4">
                             <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex flex-wrap items-center justify-start gap-2">
-                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Account</p>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
-                                    onClick={() => {
-                                      const signupUrl = residentAccountCreationUrl(window.location.origin, selected.axisId);
-                                      const previewBody = buildResidentWelcomeEmailBody({ residentName: selected.name, axisId: selected.axisId, signupUrl });
-                                      setWelcomePreviewContent(previewBody);
-                                      setWelcomePreviewFor(selected);
-                                    }}
-                                  >
-                                    Email account setup
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="rounded-full px-3 py-1 text-xs"
-                                    onClick={openEditResidentModal}
-                                  >
-                                    Edit resident
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
-                                    onClick={deleteSelectedResident}
-                                  >
-                                    Delete resident
-                                  </Button>
-                                </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
+                                  onClick={() => {
+                                    const signupUrl = residentAccountCreationUrl(window.location.origin, selected.axisId);
+                                    const previewBody = buildResidentWelcomeEmailBody({ residentName: selected.name, axisId: selected.axisId, signupUrl });
+                                    setWelcomePreviewContent(previewBody);
+                                    setWelcomePreviewFor(selected);
+                                  }}
+                                >
+                                  Email account setup
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full px-3 py-1 text-xs"
+                                  onClick={openEditResidentModal}
+                                >
+                                  Edit resident
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+                                  onClick={deleteSelectedResident}
+                                >
+                                  Delete resident
+                                </Button>
                               </div>
-                              <div className="mt-3 grid gap-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                                <div>
-                                  <span className="text-muted">Axis ID</span>
-                                  <p className="font-mono font-medium text-foreground">{selected.axisId}</p>
-                                </div>
-                                <div>
-                                  <span className="text-muted">Email</span>
-                                  <p className="font-medium text-foreground">{selected.email}</p>
-                                </div>
-                                <div>
-                                  <span className="text-muted">Property</span>
-                                  <p className="font-medium text-foreground">{selected.propertyLabel || "—"}</p>
-                                </div>
-                                <div>
-                                  <span className="text-muted">Room</span>
-                                  <p className="font-medium text-foreground">{selected.roomLabel || "—"}</p>
-                                </div>
-                                {selected.signedMonthlyRent ? (
-                                  <div>
-                                    <span className="text-muted">Monthly rent</span>
-                                    <p className="font-semibold text-foreground">${selected.signedMonthlyRent.toFixed(2)}/mo</p>
-                                  </div>
-                                ) : null}
-                                {selected.manualResidentDetails?.moveInDate ? (
-                                  <div>
-                                    <span className="text-muted">Move-in date</span>
-                                    <p className="font-medium text-foreground">{selected.manualResidentDetails.moveInDate}</p>
-                                  </div>
-                                ) : null}
-                                {selected.manualResidentDetails?.moveOutDate ? (
-                                  <div>
-                                    <span className="text-muted">Move-out date</span>
-                                    <p className="font-medium text-foreground">{selected.manualResidentDetails.moveOutDate}</p>
-                                  </div>
-                                ) : null}
-                                {selected.manualResidentDetails?.monthlyUtilities ? (
-                                  <div>
-                                    <span className="text-muted">Monthly utilities</span>
-                                    <p className="font-medium text-foreground">${selected.manualResidentDetails.monthlyUtilities}/mo</p>
-                                  </div>
-                                ) : null}
-                                {selected.manualResidentDetails?.moveInFee ? (
-                                  <div>
-                                    <span className="text-muted">Move-in fee</span>
-                                    <p className="font-medium text-foreground">${selected.manualResidentDetails.moveInFee}</p>
-                                  </div>
-                                ) : null}
-                                {selected.manualResidentDetails?.securityDeposit ? (
-                                  <div>
-                                    <span className="text-muted">Security deposit</span>
-                                    <p className="font-medium text-foreground">${selected.manualResidentDetails.securityDeposit}</p>
-                                  </div>
-                                ) : null}
-                                {selected.manualResidentDetails?.notes ? (
-                                  <div className="sm:col-span-2 lg:col-span-3">
-                                    <span className="text-muted">Notes</span>
-                                    <p className="whitespace-pre-wrap font-medium text-foreground">{selected.manualResidentDetails.notes}</p>
-                                  </div>
-                                ) : null}
-                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-border bg-card p-4">
+                              {selectedApplicationRow ? (
+                                <ApplicationDocumentPreview row={selectedApplicationRow} />
+                              ) : (
+                                <p className="text-sm text-muted">No application on file for this resident.</p>
+                              )}
                             </div>
 
                             <div className="rounded-2xl border border-border bg-card p-4">
@@ -1945,504 +1844,348 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             </div>
 
                             <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex items-center justify-start gap-3">
-                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Charges</p>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {chargeCounts.pending > 0 ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className="rounded-full px-3 py-1 text-xs"
-                                      disabled={reminderBusy}
-                                      onClick={() => openPaymentReminderPreview(selected, residentCharges.filter((c) => c.status === "pending"))}
-                                    >
-                                      {reminderBusy ? "Sending…" : "Send reminder"}
-                                    </Button>
-                                  ) : null}
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="rounded-full px-3 py-1 text-xs"
-                                    onClick={() => setReminderSettingsOpen(true)}
-                                  >
-                                    Reminder settings
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="primary"
-                                    className="rounded-full px-3 py-1 text-xs"
-                                    onClick={openAddCharge}
-                                  >
-                                    Add charge
-                                  </Button>
+                              <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted">Payments</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <ManagerPortalStatusPills
+                                  tabs={[
+                                    { id: "pending", label: "Unpaid", count: chargeCounts.pending },
+                                    { id: "paid", label: "Paid", count: chargeCounts.paid },
+                                  ]}
+                                  activeId={chargeTab}
+                                  onChange={(id) => setChargeTab(id as "pending" | "paid")}
+                                />
+                                <div className="inline-flex shrink-0 items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted">
+                                  Unpaid: <span className="ms-1 tabular-nums text-foreground">${(pendingBalance / 100).toFixed(2)}</span>
                                 </div>
-                              </div>
-                              <div className="mt-3 flex gap-2">
-                                {(["pending", "paid"] as const).map((t) => (
-                                  <button
-                                    key={t}
-                                    type="button"
-                                    onClick={() => setChargeTab(t)}
-                                    className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                                      chargeTab === t
-                                        ? "bg-primary text-primary-foreground"
-                                        : "bg-accent/30 text-muted hover:bg-accent/40"
-                                    }`}
-                                  >
-                                    {t === "pending" ? "Pending" : "Paid"}
-                                    <span className="ml-1 tabular-nums opacity-90">
-                                      ({t === "pending" ? chargeCounts.pending : chargeCounts.paid})
-                                    </span>
-                                  </button>
-                                ))}
-                                {pendingBalance > 0 ? (
-                                  <span className="ml-auto rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
-                                    ${(pendingBalance / 100).toFixed(2)} due
-                                  </span>
+                                {overdueChargeCount > 0 ? (
+                                  <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
+                                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                                    {overdueChargeCount} overdue
+                                  </div>
                                 ) : null}
                               </div>
                               {visibleCharges.length === 0 ? (
-                                <p className="mt-3 text-sm text-muted">
-                                  {residentCharges.length === 0
-                                    ? "No charges for this resident yet. Approve their application with rent and deposit saved, or add a charge."
-                                    : chargeTab === "pending"
-                                      ? "No pending charges."
-                                      : "No paid charges."}
-                                </p>
+                                <div className="mt-3">
+                                  <PortalDataTableEmpty
+                                    icon="payment"
+                                    message={
+                                      residentCharges.length === 0
+                                        ? "No charges yet."
+                                        : chargeTab === "pending"
+                                          ? "No unpaid charges yet."
+                                          : "No paid charges yet."
+                                    }
+                                  />
+                                </div>
                               ) : (
-                                <div className="mt-3 overflow-x-auto">
-                                  <table className="w-full border-collapse text-sm">
-                                    <thead>
-                                      <tr className="border-b border-border">
-                                        <th className="pb-2 text-left text-xs font-semibold text-muted">Charge</th>
-                                        <th className="pb-2 text-left text-xs font-semibold text-muted">Due</th>
-                                        <th className="pb-2 text-left text-xs font-semibold text-muted">Reminders</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-muted">Amount</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-muted">Balance</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-muted">Status</th>
-                                        <th className="pb-2 text-right text-xs font-semibold text-muted">Action</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {visibleCharges.map((c) => {
-                                        const chargeReminders =
-                                          c.status === "pending" ? manageableRemindersForCharge(scheduledMessages, c.id) : [];
-                                        return (
-                                        <tr key={c.id} className="border-b border-border last:border-0">
-                                          <td className="py-2 pr-4 font-medium text-foreground">{c.title}</td>
-                                          <td className="py-2 pr-4 text-xs text-muted">{chargeDueLabel(c)}</td>
-                                          <td className="py-2 pr-4 align-top">
-                                            {c.status === "pending" ? (
-                                              <div>
-                                                {chargeReminders.length > 0 ? (
-                                                  <ChargeReminderList
-                                                    messages={chargeReminders}
-                                                    onEdit={setScheduleEdit}
-                                                    onToggleCancel={async (msg, cancelled) => {
-                                                      try {
-                                                        await patchScheduledMessage(msg.id, { cancelled });
-                                                        showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
-                                                        void reloadSchedule();
-                                                      } catch (e) {
-                                                        showToast(e instanceof Error ? e.message : "Could not update reminder.");
-                                                      }
-                                                    }}
-                                                  />
-                                                ) : (
-                                                  <span className="text-xs text-muted">None scheduled</span>
-                                                )}
-                                                <button
-                                                  type="button"
-                                                  className="mt-1 block text-[11px] font-semibold text-primary hover:underline"
-                                                  onClick={() => setChargeRemindersFor(c)}
-                                                >
-                                                  + Add date
-                                                </button>
-                                              </div>
-                                            ) : (
-                                              <span className="text-xs text-muted">—</span>
-                                            )}
-                                          </td>
-                                          <td className="py-2 pr-4 text-right tabular-nums text-muted">{c.amountLabel}</td>
-                                          <td className="py-2 pr-4 text-right tabular-nums font-medium text-foreground">{c.balanceLabel}</td>
-                                          <td className="py-2 pr-4 text-right">
-                                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusPill(c.status)}`}>
-                                              {c.status === "paid" ? "Paid" : "Pending"}
-                                            </span>
-                                          </td>
-                                          <td className="py-2 text-right">
-                                            <div className="flex justify-start gap-2">
-                                              {c.status === "pending" ? (
-                                                <>
-                                                  <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="rounded-full px-2 py-0.5 text-xs"
-                                                    onClick={() => openEditCharge(c)}
-                                                  >
-                                                    Edit
-                                                  </Button>
-                                                  <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="rounded-full px-2 py-0.5 text-xs"
-                                                    onClick={() => markPaid(c.id)}
-                                                  >
-                                                    Mark paid
-                                                  </Button>
-                                                  <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="rounded-full px-2 py-0.5 text-xs text-red-600 hover:border-red-200"
-                                                    onClick={() => deleteCharge(c.id)}
-                                                  >
-                                                    Delete
-                                                  </Button>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="rounded-full px-2 py-0.5 text-xs"
-                                                    onClick={() => openEditCharge(c)}
-                                                  >
-                                                    Edit
-                                                  </Button>
-                                                  <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="rounded-full px-2 py-0.5 text-xs text-red-600 hover:border-red-200"
-                                                    onClick={() => deleteCharge(c.id)}
-                                                  >
-                                                    Delete
-                                                  </Button>
-                                                </>
-                                              )}
-                                            </div>
-                                          </td>
+                                <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
+                                  <div className={PORTAL_DATA_TABLE_SCROLL}>
+                                    <table className="sm:min-w-[640px] w-full border-collapse text-left text-sm">
+                                      <thead>
+                                        <tr className={PORTAL_TABLE_HEAD_ROW}>
+                                          <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
+                                          <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Property</th>
+                                          <th className={`${MANAGER_TABLE_TH} text-left`}>Due</th>
+                                          <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
+                                          <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
+                                          <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                                         </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
+                                      </thead>
+                                      <tbody>
+                                        {visibleCharges.map((c) => {
+                                          const overdue = c.status === "pending" && isHouseholdChargeOverdue(c);
+                                          return (
+                                            <tr key={c.id} className={PORTAL_TABLE_TR}>
+                                              <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{c.title}</td>
+                                              <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{selected.propertyLabel || "—"}</td>
+                                              <td className={PORTAL_TABLE_TD}>{chargeDueLabel(c)}</td>
+                                              <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{c.amountLabel}</td>
+                                              <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground hidden sm:table-cell`}>
+                                                {c.balanceLabel}
+                                              </td>
+                                              <td className={PORTAL_TABLE_TD}>
+                                                <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
+                                                  {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
+                                                </Badge>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               )}
                             </div>
 
                             <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                                <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Services</p>
-                                  <p className="mt-1 text-sm text-muted">All service requests and maintenance work orders from this resident.</p>
-                                </div>
-                                {residentServiceRequests.filter((r) => r.status === "pending").length > 0 ? (
-                                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-300/60">
-                                    {residentServiceRequests.filter((r) => r.status === "pending").length} awaiting approval
-                                  </span>
-                                ) : null}
+                              <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted">Services</p>
+                              <div className="mb-4">
+                                <PillTabs
+                                  items={[
+                                    { id: "requests", label: "Requests" },
+                                    { id: "work-orders", label: "Work orders" },
+                                  ]}
+                                  activeId={svcSubTab}
+                                  onChange={(id) => {
+                                    setSvcSubTab(id as "requests" | "work-orders");
+                                    setSvcExpandedId(null);
+                                  }}
+                                />
                               </div>
-                              {residentServiceRequests.length === 0 && residentWorkOrders.length === 0 ? (
-                                <p className="text-sm text-muted">No requests or work orders for this resident yet.</p>
-                              ) : (
-                                <div className="space-y-4">
-                              {residentServiceRequests.length > 0 ? (
-                                <>
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Requests</p>
-                                  <div className="space-y-3">
-                                  {residentServiceRequests.map((req) => {
-                                    const needsReturn = hasDeposit(req.deposit);
-                                    const statusColors: Record<string, string> = {
-                                      pending: "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-                                      approved: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-                                      returned: "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-                                      denied: "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-                                    };
-                                    const statusLabels: Record<string, string> = {
-                                      pending: "Pending approval",
-                                      approved: "Approved",
-                                      returned: "Return submitted",
-                                      denied: "Denied",
-                                    };
-                                    return (
-                                      <div key={req.id} className={`rounded-2xl border p-4 ${req.status === "pending" ? "portal-banner-pending" : "border-border bg-accent/30"}`}>
-                                        <div className="flex flex-wrap items-start justify-between gap-2">
-                                          <div>
-                                            <p className="font-semibold text-foreground">{req.offerName}</p>
-                                            <div className="mt-1 flex flex-wrap gap-1">
-                                              {req.price ? <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted">{req.price}</span> : null}
-                                              {needsReturn ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Deposit {req.deposit}</span> : null}
-                                              {req.returnByDate ? <span className="rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">Return by {formatPacificDate(req.returnByDate, { month: "short", day: "numeric" })}</span> : null}
-                                            </div>
-                                          </div>
-                                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${statusColors[req.status] ?? "bg-accent/30 text-muted ring-border"}`}>
-                                            {statusLabels[req.status] ?? req.status}
-                                          </span>
-                                        </div>
-                                        {req.notes ? <p className="mt-2 text-xs text-muted italic">&ldquo;{req.notes}&rdquo;</p> : null}
 
-                                        {/* Pending — Approve / Deny */}
-                                        {req.status === "pending" ? (
-                                          <div className="mt-3 flex flex-wrap gap-2 border-t border-amber-100 pt-3">
-                                            <Button
-                                              type="button"
-                                              className="h-7 rounded-full bg-emerald-600 px-3 text-[11px] font-semibold text-white hover:bg-emerald-700"
-                                              onClick={() => { approveServiceRequest(req.id); setSrTick((t) => t + 1); showToast(`Approved "${req.offerName}".`); }}
-                                            >
-                                              Approve
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              className="h-7 rounded-full border-rose-200 px-3 text-[11px] font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]"
-                                              onClick={() => { denyServiceRequest(req.id); setSrTick((t) => t + 1); showToast("Request denied."); }}
-                                            >
-                                              Deny
-                                            </Button>
-                                          </div>
-                                        ) : null}
-
-                                        {/* Approved / Returned — charges */}
-                                        {(req.status === "approved" || req.status === "returned") ? (
-                                          <div className="mt-3 rounded-xl bg-card p-3 ring-1 ring-border">
-                                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
-                                            <div className="space-y-2">
-                                              {req.price ? (
-                                                <div className="flex items-center justify-between">
-                                                  <span className="text-xs text-muted">Service fee · {req.price}</span>
-                                                  {req.servicePaid ? (
-                                                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
-                                                  ) : (
-                                                    <Button type="button" className="h-6 rounded-full px-2.5 text-[10px] font-semibold" onClick={() => { markServiceRequestServicePaid(req.id); setSrTick((t) => t + 1); showToast("Service charge marked paid."); }}>
-                                                      Mark paid
-                                                    </Button>
-                                                  )}
-                                                </div>
-                                              ) : null}
-                                              {needsReturn ? (
-                                                <div className="flex items-center justify-between">
-                                                  <span className="text-xs text-muted">Deposit · {req.deposit}</span>
-                                                  {req.depositPaid ? (
-                                                    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
-                                                  ) : (
-                                                    <Button type="button" className="h-6 rounded-full px-2.5 text-[10px] font-semibold" onClick={() => { markServiceRequestDepositPaid(req.id); setSrTick((t) => t + 1); showToast("Deposit marked refunded."); }}>
-                                                      Mark refunded
-                                                    </Button>
-                                                  )}
-                                                </div>
-                                              ) : null}
-                                            </div>
-                                          </div>
-                                        ) : null}
-
-                                        {req.returnPhotoDataUrl ? (
-                                          <div className="mt-3">
-                                            <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Return photo</p>
-                                            <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-28 overflow-hidden rounded-xl border border-border">
-                                              <Image src={req.returnPhotoDataUrl} alt="Return" width={112} height={84} className="h-20 w-full object-cover" unoptimized />
-                                            </a>
-                                          </div>
-                                        ) : null}
-                                        {req.status === "denied" && req.managerNote ? (
-                                          <p className="mt-2 text-xs text-rose-600">Note: {req.managerNote}</p>
-                                        ) : null}
-                                      </div>
-                                    );
-                                  })}
+                              {svcSubTab === "requests" ? (
+                                <div>
+                                  <div className="mb-3">
+                                    <PillTabs
+                                      items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
+                                        id,
+                                        label: pillLabelWithCount(label, residentServiceRequestsCounts[id]),
+                                      }))}
+                                      activeId={svcRequestsFilter}
+                                      onChange={(id) => setSvcRequestsFilter(id as RequestStatusBucket)}
+                                    />
                                   </div>
-                                </>
-                              ) : null}
-                              {residentWorkOrders.length > 0 ? (
-                                <>
-                                  {residentServiceRequests.length > 0 ? <div className="border-t border-border my-2" /> : null}
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Work orders</p>
-                                  <div className="space-y-4">
-                                  {residentWorkOrders.map((workOrder) => {
-                                    const pendingCharge = findPendingWorkOrderCharge(workOrder.id);
-                                    return (
-                                      <div key={workOrder.id} className="rounded-2xl border border-border bg-accent/30 p-4">
-                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                          <div className="min-w-0 flex-1">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              <p className="text-base font-semibold text-foreground">{workOrder.title}</p>
-                                              <span className="inline-flex rounded-full bg-accent/30 px-2.5 py-1 text-[11px] font-semibold text-muted">
-                                                {workOrder.priority}
-                                              </span>
-                                              <span className="inline-flex rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-muted ring-1 ring-border">
-                                                {workOrder.status}
-                                              </span>
-                                            </div>
-                                            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted">{workOrder.description}</p>
-                                            <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-                                              <div>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Preferred arrival</p>
-                                                <p className="mt-1 text-foreground">{workOrder.preferredArrival?.trim() || "Anytime"}</p>
-                                              </div>
-                                              <div>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Visit</p>
-                                                <p className="mt-1 text-foreground">{workOrder.scheduled && workOrder.scheduled !== "—" ? workOrder.scheduled : "Not scheduled"}</p>
-                                              </div>
-                                              <div>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Current cost</p>
-                                                <p className="mt-1 text-foreground">{workOrder.cost !== "—" && workOrder.cost.trim() ? workOrder.cost : "—"}</p>
-                                              </div>
-                                              <div>
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Payment</p>
-                                                <p className="mt-1 text-foreground">{pendingCharge ? `Pending · ${pendingCharge.balanceLabel}` : "No pending payment"}</p>
-                                              </div>
-                                            </div>
-                                            {workOrder.photoDataUrls?.length ? (
-                                              <div className="mt-4">
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Photos</p>
-                                                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                                                  {workOrder.photoDataUrls.map((src, index) => (
-                                                    <a
-                                                      key={`${workOrder.id}-photo-${index}`}
-                                                      href={src}
-                                                      target="_blank"
-                                                      rel="noreferrer"
-                                                      className="block overflow-hidden rounded-xl border border-border bg-card"
+                                  {residentUnifiedServiceItems.length === 0 ? (
+                                    <PortalDataTableEmpty message="No service requests or work orders yet." icon="service" />
+                                  ) : residentFilteredUnifiedServiceItems.length === 0 ? (
+                                    <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
+                                  ) : (
+                                    <div className={PORTAL_DATA_TABLE_WRAP}>
+                                      <div className={PORTAL_DATA_TABLE_SCROLL}>
+                                        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+                                          <thead>
+                                            <tr className={PORTAL_TABLE_HEAD_ROW}>
+                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
+                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Item</th>
+                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Charges</th>
+                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Return by</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {residentFilteredUnifiedServiceItems.map((item) => {
+                                              if (item.kind === "request") {
+                                                const req = item.req;
+                                                const rowId = `request-${req.id}`;
+                                                return (
+                                                  <Fragment key={rowId}>
+                                                    <tr
+                                                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                                                      onClick={createPortalRowExpandClick(() =>
+                                                        setSvcExpandedId((c) => (c === rowId ? null : rowId)),
+                                                      )}
+                                                      aria-expanded={svcExpandedId === rowId}
                                                     >
-                                                      <Image
-                                                        src={src}
-                                                        alt={`Work order photo ${index + 1}`}
-                                                        width={240}
-                                                        height={180}
-                                                        className="h-28 w-full object-cover"
-                                                        unoptimized
-                                                      />
-                                                    </a>
-                                                  ))}
-                                                </div>
-                                              </div>
-                                            ) : null}
-                                          </div>
-
-                                          <div className="w-full rounded-2xl border border-border bg-card p-3 lg:w-[22rem]">
-                                            <div>
-                                              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Cost</p>
-                                              <div className="mt-2">
-                                                <ResidentWorkOrderCostEditor
-                                                  key={`${workOrder.id}-${workOrder.cost}`}
-                                                  row={workOrder}
-                                                  managerUserId={userId ?? null}
-                                                  onSaved={() => {
-                                                    setWorkOrderTick((n) => n + 1);
-                                                    setHcTick((n) => n + 1);
-                                                    void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
-                                                  }}
-                                                />
-                                              </div>
-                                            </div>
-                                            <div className="mt-4">
-                                              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Visit date & time</p>
-                                              <div className="mt-2 flex flex-col gap-2">
-                                                <Input
-                                                  type="datetime-local"
-                                                  value={visitAtById[workOrder.id] ?? toDatetimeLocalValue(workOrder.scheduledAtIso)}
-                                                  onChange={(e) =>
-                                                    setVisitAtById((prev) => ({ ...prev, [workOrder.id]: e.target.value }))
-                                                  }
-                                                  className="h-10 rounded-xl text-sm"
-                                                />
-                                                <Button
-                                                  type="button"
-                                                  variant="outline"
-                                                  className="rounded-full"
-                                                  onClick={() => {
-                                                    const iso = fromDatetimeLocalValue(visitAtById[workOrder.id] ?? "");
-                                                    if (!iso) { showToast("Choose a date and time."); return; }
-                                                    updateManagerWorkOrder(workOrder.id, (row) => ({
-                                                      ...row,
-                                                      scheduledAtIso: iso,
-                                                      scheduled: formatScheduledLabel(iso),
-                                                      bucket: row.bucket === "open" ? "scheduled" : row.bucket,
-                                                      status: row.bucket === "open" ? "Scheduled" : row.status,
-                                                    }));
-                                                    setWorkOrderTick((n) => n + 1);
-                                                    showToast("Visit scheduled.");
-                                                  }}
-                                                >
-                                                  Save visit
-                                                </Button>
-                                              </div>
-                                            </div>
-                                            <div className="mt-4 flex flex-wrap gap-2">
-                                              {workOrder.bucket !== "completed" ? (
-                                                <Button
-                                                  type="button"
-                                                  variant="outline"
-                                                  className="rounded-full"
-                                                  onClick={() => {
-                                                    updateManagerWorkOrder(workOrder.id, (row) => ({
-                                                      ...row,
-                                                      bucket: "completed",
-                                                      status: "Completed",
-                                                    }));
-                                                    setWorkOrderTick((n) => n + 1);
-                                                    showToast("Work order marked complete.");
-                                                  }}
-                                                >
-                                                  Mark complete
-                                                </Button>
-                                              ) : null}
-                                              <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="rounded-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]"
-                                                onClick={() => {
-                                                  deleteManagerWorkOrderRow(workOrder.id);
-                                                  setWorkOrderTick((n) => n + 1);
-                                                  setHcTick((n) => n + 1);
-                                                  showToast("Work order deleted.");
-                                                }}
-                                              >
-                                                Delete
-                                              </Button>
-                                            </div>
-                                          </div>
-                                        </div>
+                                                      <td className={`${PORTAL_TABLE_TD} text-muted`}>Request</td>
+                                                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
+                                                      <td className={PORTAL_TABLE_TD}>
+                                                        <ServiceStatusBadge status={req.status} />
+                                                      </td>
+                                                      <td className={PORTAL_TABLE_TD}>{requestChargesSummary(req)}</td>
+                                                      <td className={PORTAL_TABLE_TD}>{req.returnByDate ? serviceRequestDateLabel(req.returnByDate) : "—"}</td>
+                                                    </tr>
+                                                    {svcExpandedId === rowId ? (
+                                                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                                                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                                                          <ServiceRequestCard
+                                                            req={req}
+                                                            onReturnPhotoUploaded={() => setSrTick((n) => n + 1)}
+                                                            onDelete={() => deleteResidentServiceRequest(req.id)}
+                                                            onEdit={() => openServiceRequestEdit(req)}
+                                                          />
+                                                        </td>
+                                                      </tr>
+                                                    ) : null}
+                                                  </Fragment>
+                                                );
+                                              }
+                                              const row = item.row;
+                                              const rowId = `work-order-${row.id}`;
+                                              return (
+                                                <Fragment key={rowId}>
+                                                  <tr
+                                                    className={PORTAL_TABLE_TR_EXPANDABLE}
+                                                    onClick={createPortalRowExpandClick(() =>
+                                                      setSvcExpandedId((c) => (c === rowId ? null : rowId)),
+                                                    )}
+                                                    aria-expanded={svcExpandedId === rowId}
+                                                  >
+                                                    <td className={`${PORTAL_TABLE_TD} text-muted`}>Work order</td>
+                                                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                                                    <td className={PORTAL_TABLE_TD}>
+                                                      <WorkOrderStatusBadge bucket={row.bucket} />
+                                                    </td>
+                                                    <td className={PORTAL_TABLE_TD}>{row.cost && row.cost !== "—" ? row.cost : "—"}</td>
+                                                    <td className={PORTAL_TABLE_TD}>—</td>
+                                                  </tr>
+                                                  {svcExpandedId === rowId ? (
+                                                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                                                      <td colSpan={5} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                                                        <WorkOrderDetail
+                                                          row={row}
+                                                          onEdit={() => openWorkOrderRowEdit(row)}
+                                                          onCancel={() => cancelResidentWorkOrder(row.id)}
+                                                        />
+                                                      </td>
+                                                    </tr>
+                                                  ) : null}
+                                                </Fragment>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
                                       </div>
-                                    );
-                                  })}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div>
+                                  <div className="mb-3">
+                                    <PillTabs
+                                      items={STATUS_TABS.map(({ id, label }) => ({
+                                        id,
+                                        label: pillLabelWithCount(label, residentWorkOrderBucketCounts[id]),
+                                      }))}
+                                      activeId={svcWorkOrderBucket}
+                                      onChange={(id) => setSvcWorkOrderBucket(id as ResidentWorkBucket)}
+                                    />
                                   </div>
-                                </>
-                              ) : null}
+                                  {residentWorkOrdersInBucket.length === 0 ? (
+                                    <PortalDataTableEmpty
+                                      icon="work-order"
+                                      message={residentWorkOrders.length === 0 ? "No work orders yet." : "No work orders in this status yet."}
+                                    />
+                                  ) : (
+                                    <div className={PORTAL_DATA_TABLE_WRAP}>
+                                      <div className={PORTAL_DATA_TABLE_SCROLL}>
+                                        <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                                          <thead>
+                                            <tr className={PORTAL_TABLE_HEAD_ROW}>
+                                              <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
+                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {residentWorkOrdersInBucket.map((row) => (
+                                              <Fragment key={row.id}>
+                                                <tr
+                                                  className={PORTAL_TABLE_TR_EXPANDABLE}
+                                                  onClick={createPortalRowExpandClick(() =>
+                                                    setSvcExpandedId((c) => (c === row.id ? null : row.id)),
+                                                  )}
+                                                  aria-expanded={svcExpandedId === row.id}
+                                                >
+                                                  <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-muted`}>{row.id}</td>
+                                                  <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                                                  <td className={PORTAL_TABLE_TD}>{row.status}</td>
+                                                </tr>
+                                                {svcExpandedId === row.id ? (
+                                                  <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                                                    <td colSpan={3} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                                                      <WorkOrderDetail
+                                                        row={row}
+                                                        onEdit={() => openWorkOrderRowEdit(row)}
+                                                        onCancel={() => cancelResidentWorkOrder(row.id)}
+                                                      />
+                                                    </td>
+                                                  </tr>
+                                                ) : null}
+                                              </Fragment>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
 
                             <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Inbox</p>
-                                  <p className="mt-1 text-sm text-muted">Messages for this specific resident appear here directly.</p>
-                                </div>
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Inbox</p>
                                 <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={() => setMessageOpen(true)}>
                                   New message
                                 </Button>
                               </div>
-                              {residentInboxThreads.length === 0 ? (
-                                <p className="mt-3 text-sm text-muted">No messages on file for this resident yet.</p>
+                              <div className="mt-3 mb-3">
+                                <ManagerPortalStatusPills
+                                  activeTone="primary"
+                                  tabs={INBOX_TAB_DEFS.filter(({ id }) => id !== "schedule").map(({ id, label }) => ({
+                                    id,
+                                    label,
+                                    count: residentInboxCounts[id as keyof typeof residentInboxCounts],
+                                  }))}
+                                  activeId={inboxSubTab}
+                                  onChange={(id) => {
+                                    setInboxSubTab(id as "unopened" | "opened" | "sent" | "trash");
+                                    setInboxExpandedId(null);
+                                  }}
+                                />
+                              </div>
+                              {residentInboxTableRows.length === 0 ? (
+                                <PortalInboxEmptyState
+                                  title={
+                                    inboxSubTab === "trash"
+                                      ? "No trash messages yet."
+                                      : inboxSubTab === "sent"
+                                        ? "No sent messages yet."
+                                        : inboxSubTab === "opened"
+                                          ? "No opened messages yet."
+                                          : "No messages yet."
+                                  }
+                                />
                               ) : (
-                                <div className="mt-3 space-y-3">
-                                  {residentInboxThreads.map((thread) => (
-                                    <div key={thread.id} className="rounded-xl border border-border bg-accent/30 p-3">
-                                      <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <div>
-                                          <p className="text-sm font-semibold text-foreground">{thread.subject}</p>
-                                          <p className="text-xs text-muted">
-                                            {thread.from} · {thread.time}
-                                          </p>
-                                        </div>
-                                        <span className="rounded-full bg-card px-2.5 py-1 text-[10px] font-semibold text-muted ring-1 ring-border">
-                                          {thread.folder === "sent" ? "Sent" : "Inbox"}
-                                        </span>
-                                      </div>
-                                      <p className="mt-2 whitespace-pre-wrap text-sm text-muted">{thread.body}</p>
-                                    </div>
-                                  ))}
-                                </div>
+                                <PortalInboxMessageTable
+                                  rows={residentInboxTableRows}
+                                  primaryPartyHeader={inboxSubTab === "sent" ? "To" : "From"}
+                                  onMarkRead={inboxSubTab === "unopened" ? markResidentInboxThreadRead : undefined}
+                                  getDetailBody={(row) => residentInboxBodyById[row.id]}
+                                  onReply={
+                                    inboxSubTab === "trash"
+                                      ? undefined
+                                      : (row, text) => {
+                                          const thread = residentInboxThreads.find((t) => t.id === row.id);
+                                          if (!thread) return;
+                                          return replyToResidentInboxThread(thread, text);
+                                        }
+                                  }
+                                  expandedId={inboxExpandedId}
+                                  onToggleExpand={(id) => setInboxExpandedId((cur) => (cur === id ? null : id))}
+                                  renderExtraActions={(row) => {
+                                    if (inboxSubTab === "trash") {
+                                      return (
+                                        <>
+                                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => restoreResidentInboxThreadFromTrash(row.id)}>
+                                            Restore
+                                          </Button>
+                                          <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => deleteResidentInboxThreadForever(row.id)}>
+                                            Delete forever
+                                          </Button>
+                                        </>
+                                      );
+                                    }
+                                    if (inboxSubTab === "opened") {
+                                      return (
+                                        <>
+                                          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markResidentInboxThreadUnread(row.id)}>
+                                            Mark unread
+                                          </Button>
+                                          <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => moveResidentInboxThreadToTrash(row.id)}>
+                                            Trash
+                                          </Button>
+                                        </>
+                                      );
+                                    }
+                                    return (
+                                      <Button type="button" variant="danger" className={PORTAL_DETAIL_BTN} onClick={() => moveResidentInboxThreadToTrash(row.id)}>
+                                        Trash
+                                      </Button>
+                                    );
+                                  }}
+                                />
                               )}
                             </div>
                           </div>
@@ -2721,74 +2464,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         </div>
       </Modal>
 
-      <Modal open={addChargeOpen} title={editChargeId ? "Edit charge" : "Add charge"} onClose={() => setAddChargeOpen(false)}>
-        <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted">
-            {editChargeId ? "Updating" : "Adding"} charge for{" "}
-            <span className="font-semibold text-foreground">{selected?.name || selected?.email}</span>.
-          </p>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Charge title</span>
-            <Input
-              value={chargeTitle}
-              onChange={(e) => setChargeTitle(e.target.value)}
-              placeholder="e.g. Late fee, Cleaning fee, Parking"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Amount ($)</span>
-            <Input
-              type="number"
-              min={0}
-              step={0.01}
-              value={chargeAmount}
-              onChange={(e) => setChargeAmount(e.target.value)}
-              placeholder="50.00"
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={chargeBlocksLease}
-              onChange={(e) => setChargeBlocksLease(e.target.checked)}
-              className="h-4 w-4 rounded border-border text-primary"
-            />
-            <span className="font-medium text-muted">Block lease signing until paid</span>
-          </label>
-          <div className="mt-2 flex justify-start gap-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddChargeOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={submitCharge}>
-              {editChargeId ? "Save changes" : "Review & add charge"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <PortalNotificationPreviewModal
-        open={chargeNoticePreview !== null && selected !== null}
-        title="New charge — notification preview"
-        onClose={() => setChargeNoticePreview(null)}
-        recipient={selected?.email ?? ""}
-        subject={chargeNoticePreview ? `New charge: ${chargeNoticePreview.title}` : ""}
-        body={
-          chargeNoticePreview && selected
-            ? buildNewChargeNoticeBody({
-                residentName: selected.name,
-                chargeTitle: chargeNoticePreview.title,
-                amountLabel: `$${chargeNoticePreview.amount.toFixed(2)}`,
-                propertyLabel: selected.propertyLabel,
-              })
-            : ""
-        }
-        confirmLabel="Add charge & send notice"
-        confirmLabelWithoutMessage="Add charge only"
-        confirmBusy={chargeNoticeBusy}
-        confirmBusyLabel="Adding…"
-        onConfirm={(skipMessage) => void confirmChargeNotice(skipMessage)}
-      />
-
       <PortalNotificationPreviewModal
         open={welcomePreviewFor !== null}
         title="Email account setup — preview"
@@ -2809,27 +2484,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           const res = welcomePreviewFor;
           setWelcomePreviewFor(null);
           void sendResidentAccountEmail(res);
-        }}
-      />
-
-      <PortalNotificationPreviewModal
-        open={reminderPreview !== null}
-        title="Payment reminder — preview"
-        onClose={() => setReminderPreview(null)}
-        recipient={reminderPreview?.res.email ?? ""}
-        subject={reminderPreview?.subject ?? ""}
-        body={reminderPreview?.body ?? ""}
-        confirmLabel="Send reminder"
-        confirmLabelWithoutMessage="Close without sending"
-        confirmBusy={reminderBusy}
-        confirmBusyLabel="Sending…"
-        onConfirm={(skipMessage) => {
-          if (!reminderPreview) return;
-          if (skipMessage) {
-            setReminderPreview(null);
-            return;
-          }
-          void doSendPaymentReminder(reminderPreview.res, reminderPreview.subject, reminderPreview.body);
         }}
       />
 
@@ -2901,57 +2555,101 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       </Modal>
       </ManagerPortalPageShell>
 
-      <ScheduledMessageEditModal
-        open={Boolean(scheduleEdit)}
-        message={scheduleEdit}
-        onClose={() => setScheduleEdit(null)}
-        onSaved={() => void reloadSchedule()}
-      />
-      <ReminderSettingsModal
-        open={reminderSettingsOpen}
-        onClose={() => setReminderSettingsOpen(false)}
-        settings={reminderSettings}
-        onSaved={(next) => {
-          setReminderSettings(next);
-          void reloadSchedule();
-        }}
-      />
-      {chargeRemindersFor ? (
-        <ChargeRemindersModal
-          open
-          onClose={() => setChargeRemindersFor(null)}
-          residentName={chargeRemindersFor.residentName || "Resident"}
-          chargeTitle={chargeRemindersFor.title}
-          dueDate={chargeDueLabel(chargeRemindersFor)}
-          messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersFor.id)}
-          onEdit={(message) => {
-            setChargeRemindersFor(null);
-            setScheduleEdit(message);
-          }}
-          onToggleCancel={async (msg, cancelled) => {
-            try {
-              await patchScheduledMessage(msg.id, { cancelled });
-              showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
-              void reloadSchedule();
-            } catch (e) {
-              showToast(e instanceof Error ? e.message : "Could not update reminder.");
-            }
-          }}
-          onOpenSettings={() => {
-            setChargeRemindersFor(null);
-            setReminderSettingsOpen(true);
-          }}
-          onAddSetDate={async (iso) => {
-            try {
-              await addChargeSetDateReminder(chargeRemindersFor.id, iso);
-              showToast("Reminder scheduled.");
-              void reloadSchedule();
-            } catch (e) {
-              showToast(e instanceof Error ? e.message : "Could not add reminder.");
-            }
-          }}
-        />
-      ) : null}
+      <Modal
+        open={editingServiceRequest !== null}
+        title="Edit request"
+        onClose={() => setEditingServiceRequest(null)}
+        panelClassName="max-w-lg"
+      >
+        {editingServiceRequest ? (
+          <>
+            <p className="text-xs text-muted">
+              Update the details of <span className="font-semibold text-foreground">{editingServiceRequest.offerName}</span>.
+              Pricing is set by the listing and can&apos;t be changed here.
+            </p>
+            <div className="mt-4 grid gap-3">
+              {hasDeposit(editingServiceRequest.deposit) ? (
+                <div>
+                  <p className="mb-1 text-[11px] font-medium text-muted">
+                    Return by date <span className="text-rose-500">*</span>
+                  </p>
+                  <Input
+                    type="date"
+                    value={srEditReturnBy}
+                    onChange={(e) => setSrEditReturnBy(e.target.value)}
+                    className="bg-card"
+                  />
+                </div>
+              ) : null}
+              <div>
+                <p className="mb-1 text-[11px] font-medium text-muted">Notes</p>
+                <Textarea
+                  value={srEditNotes}
+                  onChange={(e) => setSrEditNotes(e.target.value)}
+                  placeholder="Preferred timing, special instructions…"
+                  rows={3}
+                  className="bg-card"
+                />
+              </div>
+            </div>
+          </>
+        ) : null}
+        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
+          <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditingServiceRequest(null)}>
+            Cancel
+          </Button>
+          <Button type="button" className="rounded-full" onClick={saveServiceRequestEdit}>
+            Save changes
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={editingWorkOrderRow !== null}
+        title="Edit work order"
+        onClose={() => setEditingWorkOrderRow(null)}
+        panelClassName="max-w-lg"
+      >
+        <p className="text-xs text-muted">Update this maintenance request.</p>
+        <div className="mt-4 grid gap-3">
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-muted">Title</p>
+            <Input value={woEditTitle} onChange={(e) => setWoEditTitle(e.target.value)} placeholder="Short summary of the issue" className="bg-card" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-muted">Priority</p>
+              <Select value={woEditPriority} onChange={(e) => setWoEditPriority(e.target.value)} className="bg-card">
+                <option>Low</option>
+                <option>Medium</option>
+                <option>High</option>
+              </Select>
+            </div>
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-muted">Preferred arrival time</p>
+              <Input value={woEditArrival} onChange={(e) => setWoEditArrival(e.target.value)} placeholder='e.g. Weekdays after 5pm — or "anytime"' className="bg-card" />
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-muted">Details</p>
+            <Textarea
+              value={woEditDetails}
+              onChange={(e) => setWoEditDetails(e.target.value)}
+              placeholder="Describe the issue"
+              rows={4}
+              className="bg-card"
+            />
+          </div>
+        </div>
+        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
+          <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditingWorkOrderRow(null)}>
+            Cancel
+          </Button>
+          <Button type="button" className="rounded-full" onClick={saveWorkOrderRowEdit}>
+            Save changes
+          </Button>
+        </div>
+      </Modal>
     </>
   );
 }

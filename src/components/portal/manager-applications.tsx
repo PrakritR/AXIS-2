@@ -156,7 +156,7 @@ function downloadApplicationPdf(row: DemoApplicantRow): void {
  * application payload (e.g. manually added applicants), mirroring buildApplicationPdf which
  * falls back to row-level fields.
  */
-function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
+export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
   const documentHtml = useMemo(
     () => buildApplicationHtml(row, { roomLabel: applicationRoomLabel(row) || undefined }),
     [row],
