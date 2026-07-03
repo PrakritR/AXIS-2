@@ -33,19 +33,14 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
-import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
-import { ManagerCosignerReadonlyReview } from "@/components/portal/manager-cosigner-readonly-review";
-import { fetchCosignerSubmissionsForSignerAppId, type CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   MANAGER_APPLICATIONS_EVENT,
   deleteManagerApplicationFromServer,
-  effectiveApplicationForRow,
   normalizeApplicationAxisId,
   readManagerApplicationRows,
-  resolveApplicationPersonalFields,
   syncManagerApplicationsFromServer,
   writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
@@ -56,9 +51,7 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
-import { getPropertyById, getRoomChoiceLabel, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/data";
-import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
-import { resolvePlacementValuesForRow } from "@/lib/rental-application/placement-values";
+import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   recordApprovedApplicationCharges,
   recordSubmittedApplicationFeeCharge,
@@ -108,55 +101,11 @@ function ApplicationBackgroundCheckStatusBadge({ row }: { row: DemoApplicantRow 
   );
 }
 
-function CosignerSection({ applicationId }: { applicationId: string }) {
-  const [subs, setSubs] = useState<CosignerSubmission[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchCosignerSubmissionsForSignerAppId(applicationId).then((rows) => {
-      if (!cancelled) {
-        setSubs(rows);
-        setLoaded(true);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [applicationId]);
-
-  if (!loaded) return null;
-  if (subs.length === 0) return null;
-  return (
-    <div className="mt-6 space-y-6">
-      {subs.map((cosub, i) => (
-        <div key={i}>
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">
-            Co-signer on file{subs.length > 1 ? ` (${i + 1} of ${subs.length})` : ""}
-          </p>
-          <div className="mt-3">
-            <ManagerCosignerReadonlyReview sub={cosub} primaryApplicationAxisId={applicationId} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function ApplicantIds({ axisId }: { axisId: string }) {
   return (
     <div className="rounded-2xl border border-border bg-accent/30 p-5 sm:p-6">
       <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Axis ID</p>
       <p className="mt-3 font-mono text-sm font-medium leading-relaxed text-foreground">{axisId}</p>
-    </div>
-  );
-}
-
-function ApplicationInfoCard({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-border bg-card px-5 py-4 shadow-sm sm:py-[1.125rem]">
-      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">{label}</p>
-      <div className="mt-2 text-sm font-semibold leading-snug text-foreground">{value}</div>
     </div>
   );
 }
@@ -233,37 +182,20 @@ function downloadApplicationPdf(row: DemoApplicantRow): void {
 /**
  * Inline preview of the official application PDF, embedded via an authenticated same-origin
  * iframe so managers can read the document without downloading. The white PDF page reads
- * clearly on the themed card frame in both light and dark mode; a Download PDF action stays
- * available alongside it.
+ * clearly on the themed card frame in both light and dark mode; the Download PDF action in
+ * the detail toolbar produces the same file.
  */
 function ApplicationPdfPreview({ row }: { row: DemoApplicantRow }) {
   const previewSrc = applicationPdfHref(row, { inline: true });
   return (
-    <section className="mt-8 border-t border-border pt-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application document</p>
-          <h4 className="mt-1.5 text-base font-semibold tracking-[-0.01em] text-foreground">Official application PDF</h4>
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted">
-            Preview the branded application document below — the same file the Download PDF button produces.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          className={PORTAL_DETAIL_BTN}
-          data-attr="application-pdf-download"
-          onClick={() => downloadApplicationPdf(row)}
-        >
-          Download PDF
-        </Button>
-      </div>
-      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-[#525659] shadow-sm">
+    <section>
+      <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application</p>
+      <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-[#525659] shadow-sm">
         <iframe
           src={previewSrc}
           title="Application document preview"
           loading="lazy"
-          className="h-[560px] w-full border-0 bg-white"
+          className="h-[720px] w-full border-0 bg-white"
         />
       </div>
     </section>
@@ -299,177 +231,6 @@ function sortApplicationRows(rows: DemoApplicantRow[], bucket: ManagerApplicatio
     if (applicantCmp !== 0) return applicantCmp;
     return collator.compare(a.id, b.id);
   });
-}
-
-function stayTypeLabel(leaseTerm: string): string {
-  if (!leaseTerm) return "Not set";
-  if (leaseTerm === SHORT_TERM_LEASE_TERM) return "Short-Term Stay";
-  if (leaseTerm === "Month-to-Month") return "Month-to-Month";
-  if (leaseTerm === "Custom") return "Custom";
-  return `${leaseTerm} lease`;
-}
-
-function moneyLabel(amount: number): string {
-  return amount > 0 ? `$${amount.toFixed(2)}` : "None";
-}
-
-/**
- * Read-only placement summary for an approved application. All values are auto-filled from the
- * application and its listing — the captain's rule is "they should all be set, no need to edit."
- * These can only change later in the lease or payment portal, so this form shows them and lets the
- * manager confirm/sync them (which locks in the resident's charges) without free-text editing.
- */
-function ManagerApplicationPlacementEditor({
-  row,
-  onSave,
-}: {
-  row: DemoApplicantRow;
-  onSave: (
-    propertyId: string,
-    roomChoice: string,
-    signedMonthlyRent: number,
-    leaseTerm: string,
-    leaseStart: string,
-    leaseEnd: string,
-    utilitiesOverride: string,
-    securityDepositOverride: string,
-    moveInFeeOverride: string,
-    otherCostLabel: string,
-    otherCostAmount: string,
-  ) => void;
-}) {
-  const resolved = useMemo(() => resolvePlacementValuesForRow(row), [row]);
-
-  const applicantChoices = [
-    row.application?.roomChoice1?.trim(),
-    row.application?.roomChoice2?.trim(),
-    row.application?.roomChoice3?.trim(),
-  ].filter(Boolean) as string[];
-
-  const leaseEndLabel =
-    resolved.leaseTerm === "Month-to-Month"
-      ? "Month-to-month (no end date)"
-      : resolved.leaseEnd
-        ? formatLeaseDateLabel(resolved.leaseEnd)
-        : "Not set";
-  const leaseEndTitle = resolved.leaseTerm === SHORT_TERM_LEASE_TERM ? "Move-out date" : "Lease end";
-
-  const canConfirm = resolved.missing.length === 0;
-
-  return (
-    <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-7">
-      <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-        <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Final placement</p>
-          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-foreground">House, room, lease dates, and charges</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-            Auto-filled from the application and its listing. These drive the lease and resident charges — change them
-            later in the lease or payment portal, not here.
-          </p>
-        </div>
-        <span className="inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-          Auto-filled from application
-        </span>
-      </div>
-
-      {resolved.missing.length > 0 ? (
-        <div className="mt-5 rounded-2xl border portal-banner-pending px-5 py-4 text-sm leading-relaxed">
-          <span className="font-semibold">Not captured on the application yet:</span>{" "}
-          {resolved.missing.join(", ")}. Add these to the listing or application, or set them later in the lease portal.
-        </div>
-      ) : null}
-
-      <div className="mt-6 space-y-7">
-        <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Placement</p>
-          <div className="grid gap-4 md:grid-cols-3">
-            <ApplicationInfoCard label="House" value={resolved.propertyLabel || "Not set"} />
-            <ApplicationInfoCard label="Room" value={resolved.roomLabel || "Not specified"} />
-            <ApplicationInfoCard
-              label="Signed monthly rent"
-              value={resolved.signedMonthlyRent > 0 ? `$${resolved.signedMonthlyRent.toFixed(2)} / month` : "Not set"}
-            />
-          </div>
-        </section>
-
-        <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Dates</p>
-          <div className="grid gap-4 md:grid-cols-3">
-            <ApplicationInfoCard label="Stay type" value={stayTypeLabel(resolved.leaseTerm)} />
-            <ApplicationInfoCard
-              label="Move-in date"
-              value={resolved.leaseStart ? formatLeaseDateLabel(resolved.leaseStart) : "Not set"}
-            />
-            <ApplicationInfoCard label={leaseEndTitle} value={leaseEndLabel} />
-          </div>
-        </section>
-
-        <section>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-muted">Charges</p>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <ApplicationInfoCard label="Utilities" value={moneyLabel(resolved.utilities)} />
-            <ApplicationInfoCard label="Security deposit" value={moneyLabel(resolved.securityDeposit)} />
-            <ApplicationInfoCard label="Move-in cost" value={moneyLabel(resolved.moveInFee)} />
-            <ApplicationInfoCard
-              label={resolved.otherCostLabel || "Other cost"}
-              value={moneyLabel(resolved.otherCostAmount)}
-            />
-          </div>
-        </section>
-      </div>
-
-      <div className="mt-5 grid gap-4 rounded-2xl bg-accent/30 p-5 text-sm text-muted lg:grid-cols-2">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Applicant room choices</p>
-          <p className="mt-1.5 text-foreground">
-            {applicantChoices.length
-              ? applicantChoices.map((choice) => getRoomChoiceLabel(choice)).filter(Boolean).join(" · ")
-              : "No room choices saved."}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Submitted lease timing</p>
-          <p className="mt-1.5 text-foreground">
-            {resolved.leaseStart
-              ? `${formatLeaseDateLabel(resolved.leaseStart)}${
-                  resolved.leaseEnd ? ` to ${formatLeaseDateLabel(resolved.leaseEnd)}` : ""
-                }`
-              : "No lease dates submitted."}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-wrap items-center gap-2.5">
-        <Button
-          type="button"
-          variant="outline"
-          className={PORTAL_DETAIL_BTN_PRIMARY}
-          disabled={!canConfirm}
-          data-attr="application-placement-confirm"
-          onClick={() =>
-            onSave(
-              resolved.propertyId,
-              resolved.roomChoice,
-              resolved.signedMonthlyRent,
-              resolved.leaseTerm,
-              resolved.leaseStart,
-              resolved.leaseEnd,
-              resolved.utilities > 0 ? String(resolved.utilities) : "",
-              resolved.securityDeposit > 0 ? String(resolved.securityDeposit) : "",
-              resolved.moveInFee > 0 ? String(resolved.moveInFee) : "",
-              resolved.otherCostLabel,
-              resolved.otherCostAmount > 0 ? String(resolved.otherCostAmount) : "",
-            )
-          }
-        >
-          Confirm placement
-        </Button>
-        {!canConfirm ? (
-          <span className="text-xs text-muted">Complete the missing details above before confirming.</span>
-        ) : null}
-      </div>
-    </div>
-  );
 }
 
 export function ManagerApplications() {
@@ -637,69 +398,6 @@ export function ManagerApplications() {
           : "Moved to Pending.";
     showToast(msg);
   };
-
-  const savePlacement = useCallback(
-    (
-      id: string,
-      propertyId: string,
-      roomChoice: string,
-      signedMonthlyRent: number,
-      leaseTerm: string,
-      leaseStart: string,
-      leaseEnd: string,
-      utilitiesOverride: string,
-      securityDepositOverride: string,
-      moveInFeeOverride: string,
-      otherCostLabel: string,
-      otherCostAmount: string,
-    ) => {
-      const property = getPropertyById(propertyId);
-      const roomLabel = getRoomChoiceLabel(roomChoice);
-      if (!property || !roomLabel || !(signedMonthlyRent > 0) || !leaseTerm || !leaseStart || (leaseTerm !== "Month-to-Month" && !leaseEnd)) {
-        showToast("Select a valid house, room, rent, and tenancy dates.");
-        return;
-      }
-      const rentalType: "short_term" | "standard" = leaseTerm === SHORT_TERM_LEASE_TERM ? "short_term" : "standard";
-      const next = rows.map((row) =>
-        row.id === id
-          ? {
-              ...row,
-              managerUserId: row.managerUserId ?? userId ?? undefined,
-              property: property.title?.trim() || row.property,
-              propertyId,
-              assignedPropertyId: propertyId,
-              assignedRoomChoice: roomChoice,
-              signedMonthlyRent: Number(signedMonthlyRent.toFixed(2)),
-              stage: stageLabelForRow(row, row.bucket),
-              application: row.application
-                ? {
-                    ...row.application,
-                    propertyId,
-                    roomChoice1: roomChoice,
-                    rentalType,
-                    leaseTerm,
-                    leaseStart,
-                    leaseEnd: leaseTerm === "Month-to-Month" ? "" : leaseEnd,
-                    managerRentOverride: signedMonthlyRent > 0 ? String(Number(signedMonthlyRent.toFixed(2))) : "",
-                    managerUtilitiesOverride: utilitiesOverride.trim(),
-                    managerSecurityDepositOverride: securityDepositOverride.trim(),
-                    managerMoveInFeeOverride: moveInFeeOverride.trim(),
-                    managerOtherCostLabel: otherCostLabel.trim(),
-                    managerOtherCostAmount: otherCostAmount.trim(),
-                  }
-                : row.application,
-            }
-          : row,
-      );
-      persist(next);
-      const updatedRow = next.find((candidate) => candidate.id === id);
-      if (updatedRow?.bucket === "approved") {
-        recordApprovedApplicationCharges(updatedRow, userId ?? null);
-      }
-      showToast("Assigned house, room, stay type, and lease charges saved.");
-    },
-    [rows, persist, showToast, userId],
-  );
 
   const deleteApplication = async (id: string) => {
     const row = rows.find((candidate) => candidate.id === id);
@@ -935,66 +633,7 @@ export function ManagerApplications() {
                             </Button>
                           </PortalTableDetailActions>
 
-                          {row.application ? (
-                            <div className="portal-desktop-scroll-panel overscroll-contain rounded-3xl border border-border bg-accent/40 p-5 shadow-[0_2px_20px_-12px_rgba(15,23,42,0.12)] sm:p-7">
-                              <ManagerApplicationPlacementEditor
-                                key={[
-                                  row.id,
-                                  row.assignedPropertyId,
-                                  row.assignedRoomChoice,
-                                  row.signedMonthlyRent,
-                                  row.application?.rentalType,
-                                  row.application?.leaseTerm,
-                                  row.application?.leaseStart,
-                                  row.application?.leaseEnd,
-                                ].join("|")}
-                                row={row}
-                                onSave={(
-                                  propertyId,
-                                  roomChoice,
-                                  signedMonthlyRent,
-                                  leaseTerm,
-                                  leaseStart,
-                                  leaseEnd,
-                                  utilitiesOverride,
-                                  securityDepositOverride,
-                                  moveInFeeOverride,
-                                  otherCostLabel,
-                                  otherCostAmount,
-                                ) =>
-                                  savePlacement(
-                                    row.id,
-                                    propertyId,
-                                    roomChoice,
-                                    signedMonthlyRent,
-                                    leaseTerm,
-                                    leaseStart,
-                                    leaseEnd,
-                                    utilitiesOverride,
-                                    securityDepositOverride,
-                                    moveInFeeOverride,
-                                    otherCostLabel,
-                                    otherCostAmount,
-                                  )
-                                }
-                              />
-                              <ApplicationPdfPreview row={row} />
-                              <div className="mt-8 border-t border-border pt-8">
-                              <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application on file</p>
-                              <div className="mt-4">
-                                <ManagerApplicationReadonlyReview
-                                  partial={{
-                                    ...(effectiveApplicationForRow(row) ?? row.application),
-                                    ...resolveApplicationPersonalFields(row),
-                                  }}
-                                  assignedPropertyId={row.assignedPropertyId}
-                                  assignedRoomChoice={row.assignedRoomChoice}
-                                />
-                              </div>
-                              <CosignerSection applicationId={row.id} />
-                              </div>
-                            </div>
-                          ) : null}
+                          {row.application ? <ApplicationPdfPreview row={row} /> : null}
 
                           <ApplicationScreeningPanel
                             row={row}

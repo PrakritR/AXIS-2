@@ -172,7 +172,7 @@ export function ApplicationScreeningPanel({
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Screening</p>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-            Outsourced credit and background check with a plain-language summary — no need to dig through bureau PDFs.
+            Credit and background check with a plain-language summary.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -266,11 +266,11 @@ export function ApplicationScreeningPanel({
           </Link>
         ) : null}
         {configured && settings?.mode === "off" ? (
-          <p className="text-xs text-muted">Turn screening on in Applications settings to order reports.</p>
+          <p className="text-xs text-muted">Screening is off in Applications settings.</p>
         ) : settings?.mode === "auto_on_submit" ? (
-          <p className="text-xs text-muted">Auto screening on submit is enabled (${(costCents / 100).toFixed(2)} / report).</p>
+          <p className="text-xs text-muted">Auto on submit — ${(costCents / 100).toFixed(2)} / report.</p>
         ) : (
-          <p className="text-xs text-muted">Manual screening — ${(costCents / 100).toFixed(2)} per report billed to your plan card.</p>
+          <p className="text-xs text-muted">${(costCents / 100).toFixed(2)} / report.</p>
         )}
       </div>
 
@@ -279,9 +279,9 @@ export function ApplicationScreeningPanel({
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Background check</p>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-              On-demand criminal background check via Checkr — returns a plain{" "}
+              Criminal check via Checkr —{" "}
               <span className="font-semibold text-foreground">Clear</span> or{" "}
-              <span className="font-semibold text-foreground">Consider</span> result.
+              <span className="font-semibold text-foreground">Consider</span>.
             </p>
           </div>
           {bg ? (
