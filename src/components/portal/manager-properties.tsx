@@ -26,7 +26,6 @@ import {
   countManagerManagedPropertiesForUser,
   mirrorLocalPropertyPipelineToServer,
   PROPERTY_PIPELINE_EVENT,
-  readPendingManagerPropertiesForUser,
 } from "@/lib/demo-property-pipeline";
 import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
@@ -46,7 +45,6 @@ export function ManagerProperties() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userId } = useManagerUserId();
-  const [pendingCount, setPendingCount] = useState(0);
   const [skuLoaded, setSkuLoaded] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
   const [propCount, setPropCount] = useState(0);
@@ -70,7 +68,6 @@ export function ManagerProperties() {
 
   const refreshPortfolio = useCallback(async () => {
     if (!userId) {
-      setPendingCount(0);
       setPropCount(0);
       return;
     }
@@ -80,7 +77,6 @@ export function ManagerProperties() {
       /* offline or dev server recompiling */
     }
     setPropCount(countManagerManagedPropertiesForUser(userId));
-    setPendingCount(readPendingManagerPropertiesForUser(userId).length);
     setPortfolioTick((t) => t + 1);
   }, [userId]);
 
@@ -217,12 +213,6 @@ export function ManagerProperties() {
               View plans
             </Link>{" "}
             to add more.
-          </p>
-        ) : null}
-        {pendingCount > 0 ? (
-          <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-pending [html[data-native]_&]:hidden lg:mb-4">
-            <span className="font-semibold">{pendingCount}</span> propert{pendingCount === 1 ? "y" : "ies"} awaiting admin
-            approval before they go live on Axis listings.
           </p>
         ) : null}
         <ManagerHousePropertiesPanel
