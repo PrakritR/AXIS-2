@@ -62,7 +62,11 @@ export async function chargeManagerForScreening(opts: {
           manager_user_id: opts.managerUserId,
         },
       },
-      { idempotencyKey: `screening_${opts.applicationId}` },
+      // Scoped to the payment method (not just the application) so a genuine
+      // retry after the manager fixes a declined/expired card gets a fresh
+      // attempt, while accidental duplicate submits with the SAME card still
+      // dedupe against Stripe instead of double-charging.
+      { idempotencyKey: `screening_${opts.applicationId}_${paymentMethodId}` },
     );
     if (intent.status !== "succeeded" && intent.status !== "processing") {
       return {
