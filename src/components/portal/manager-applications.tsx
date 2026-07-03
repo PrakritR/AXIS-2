@@ -74,43 +74,6 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
-import {
-  applicationShowsBackgroundCheck,
-  backgroundCheckStatusClassName,
-  backgroundCheckStatusLabel,
-  resolveBackgroundCheckStatus,
-} from "@/lib/application-background-check";
-import { recommendationLabel } from "@/lib/screening/recommendation";
-
-function ApplicationBackgroundCheckStatusBadge({ row }: { row: DemoApplicantRow }) {
-  if (!applicationShowsBackgroundCheck(row)) return null;
-  const status = resolveBackgroundCheckStatus(row);
-  const screening = row.screening;
-  return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      <span
-        className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(status)}`}
-      >
-        {backgroundCheckStatusLabel(status)}
-      </span>
-      {screening?.recommendation && screening.recommendation !== "not_available" ? (
-        <span className="inline-flex max-w-full items-center rounded-full bg-foreground/5 px-2.5 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-          {recommendationLabel(screening.recommendation)}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function ApplicantIds({ axisId }: { axisId: string }) {
-  return (
-    <div className="rounded-2xl border border-border bg-accent/30 p-5 sm:p-6">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Axis ID</p>
-      <p className="mt-3 font-mono text-sm font-medium leading-relaxed text-foreground">{axisId}</p>
-    </div>
-  );
-}
-
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
   for (const r of rows) {
@@ -597,8 +560,6 @@ export function ManagerApplications() {
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
                         <p className="font-medium leading-snug text-foreground">{row.name}</p>
                         {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{row.email}</p> : null}
-                        <ApplicationBackgroundCheckStatusBadge row={row} />
-                        <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-muted">{row.id}</p>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
@@ -649,14 +610,6 @@ export function ManagerApplications() {
                               void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
                             }}
                           />
-
-                          <div className="space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6">
-                          <ApplicantIds axisId={row.id} />
-
-                          <p className="text-sm leading-relaxed text-muted">
-                            <span className="font-medium text-foreground">Manager notes</span> — {row.detail}
-                          </p>
-                          </div>
                           </div>
                         </td>
                       </tr>

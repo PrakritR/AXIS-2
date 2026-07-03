@@ -172,7 +172,9 @@ export function ApplicationScreeningPanel({
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Screening</p>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-            Credit and background check with a plain-language summary.
+            Credit and background check with a plain-language summary —{" "}
+            <span className="font-semibold text-foreground">Clear</span> or{" "}
+            <span className="font-semibold text-foreground">Consider</span>.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -186,6 +188,13 @@ export function ApplicationScreeningPanel({
               className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${recommendationClass(screening.recommendation)}`}
             >
               {recommendationLabel(screening.recommendation)}
+            </span>
+          ) : null}
+          {bg ? (
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${backgroundCheckChip(bg).className}`}
+            >
+              {backgroundCheckChip(bg).label}
             </span>
           ) : null}
         </div>
@@ -249,11 +258,42 @@ export function ApplicationScreeningPanel({
         </p>
       ) : null}
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
+      {bg?.result === "consider" ? (
+        <p className="mt-4 rounded-xl border px-3 py-2 text-xs portal-banner-pending">
+          Checkr flagged records to review. Consult the full Checkr report and applicable fair-chance rules before
+          any adverse action (FCRA).
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         {canOrder ? (
           <Button type="button" className="rounded-full px-5" disabled={busy} onClick={() => void runScreening()}>
             {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
           </Button>
+        ) : null}
+        {bgConfigured && row.application?.consentCredit && bg?.status !== "pending" ? (
+          <Button
+            type="button"
+            data-attr="run-background-check"
+            className="rounded-full px-5"
+            disabled={bgBusy}
+            onClick={runBackgroundCheck}
+          >
+            {bgBusy ? "Requesting…" : bg ? "Re-run background check" : "Run background check"}
+          </Button>
+        ) : null}
+        {bg?.status === "pending" ? (
+          <>
+            <span className="text-xs text-muted">Checkr is processing — status updates automatically.</span>
+            <button
+              type="button"
+              className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+              disabled={bgBusy}
+              onClick={() => void callBackgroundCheck("refresh")}
+            >
+              Refresh now
+            </button>
+          </>
         ) : null}
         {screening?.reportUrl ? (
           <Link
@@ -272,65 +312,11 @@ export function ApplicationScreeningPanel({
         ) : (
           <p className="text-xs text-muted">${(costCents / 100).toFixed(2)} / report.</p>
         )}
-      </div>
-
-      <div className="mt-5 border-t border-border pt-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Background check</p>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-              Criminal check via Checkr —{" "}
-              <span className="font-semibold text-foreground">Clear</span> or{" "}
-              <span className="font-semibold text-foreground">Consider</span>.
-            </p>
-          </div>
-          {bg ? (
-            <span
-              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${backgroundCheckChip(bg).className}`}
-            >
-              {backgroundCheckChip(bg).label}
-            </span>
-          ) : null}
-        </div>
-
-        {bg?.result === "consider" ? (
-          <p className="mt-4 rounded-xl border px-3 py-2 text-xs portal-banner-pending">
-            Checkr flagged records to review. Consult the full Checkr report and applicable fair-chance rules before
-            any adverse action (FCRA).
-          </p>
+        {!bgConfigured ? (
+          <p className="text-xs text-muted">Add CHECKR_API_KEY to enable background checks.</p>
+        ) : !row.application?.consentCredit ? (
+          <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
         ) : null}
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          {bgConfigured && row.application?.consentCredit && bg?.status !== "pending" ? (
-            <Button
-              type="button"
-              data-attr="run-background-check"
-              className="rounded-full px-5"
-              disabled={bgBusy}
-              onClick={runBackgroundCheck}
-            >
-              {bgBusy ? "Requesting…" : bg ? "Re-run background check" : "Run background check"}
-            </Button>
-          ) : null}
-          {bg?.status === "pending" ? (
-            <>
-              <span className="text-xs text-muted">Checkr is processing — status updates automatically.</span>
-              <button
-                type="button"
-                className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
-                disabled={bgBusy}
-                onClick={() => void callBackgroundCheck("refresh")}
-              >
-                Refresh now
-              </button>
-            </>
-          ) : null}
-          {!bgConfigured ? (
-            <p className="text-xs text-muted">Add CHECKR_API_KEY to enable background checks.</p>
-          ) : !row.application?.consentCredit ? (
-            <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
-          ) : null}
-        </div>
       </div>
     </div>
   );
