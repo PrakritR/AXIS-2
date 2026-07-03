@@ -5,7 +5,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { flushSync } from "react-dom";
 import { track } from "@/lib/analytics/track-client";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { formatPacificDate } from "@/lib/pacific-time";
@@ -131,6 +131,9 @@ export function ManagerPlan({
   const [planModal, setPlanModal] = useState<PlanModalState>(null);
   const [feedbackReason, setFeedbackReason] = useState("");
   const [feedbackBusy, setFeedbackBusy] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -239,10 +242,12 @@ export function ManagerPlan({
   );
 
   const closePlanModal = useCallback(() => {
-    if (feedbackBusy) return;
+    if (feedbackBusy || promoBusy) return;
     setPlanModal(null);
     setFeedbackReason("");
-  }, [feedbackBusy]);
+    setPromoCode("");
+    setPromoError(null);
+  }, [feedbackBusy, promoBusy]);
 
   const planModalTitle = useMemo(() => {
     if (!planModal) return "";
@@ -295,6 +300,8 @@ export function ManagerPlan({
 
   const startEmbeddedCheckout = async (tier: "pro" | "business", billingInterval: "monthly" | "annual") => {
     flushSync(() => setBusyTier(tier));
+    setPromoCode("");
+    setPromoError(null);
     setPlanModal({ kind: "checkout", tier, billing: billingInterval, clientSecret: null, loading: true });
     track("subscription_checkout_started", { tier, billing: billingInterval });
     try {
@@ -316,6 +323,40 @@ export function ManagerPlan({
       setPlanModal(null);
     } finally {
       setBusyTier(null);
+    }
+  };
+
+  const applyPromoCode = async () => {
+    if (!planModal || planModal.kind !== "checkout" || promoBusy) return;
+    const code = promoCode.trim();
+    if (!code) {
+      setPromoError("Enter a promo code.");
+      return;
+    }
+    setPromoError(null);
+    flushSync(() => setPromoBusy(true));
+    try {
+      const res = await fetch("/api/stripe/subscription/update-tier", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: planModal.tier, billing: planModal.billing, promo: code }),
+      });
+      const body = (await res.json()) as { error?: string; message?: string; waiverApplied?: boolean };
+      if (!res.ok) {
+        setPromoError(body.error ?? "Could not apply promo code.");
+        return;
+      }
+      const appliedTier = planModal.tier;
+      setPlanModal(null);
+      setPromoCode("");
+      showToast(body.message ?? `Promo code applied — you're now on ${tierLabel(appliedTier)}.`);
+      await load();
+      startTransition(() => router.refresh());
+    } catch {
+      setPromoError("Network error. Try again.");
+    } finally {
+      setPromoBusy(false);
     }
   };
 
@@ -834,6 +875,54 @@ export function ManagerPlan({
             <p className="text-sm font-medium text-foreground">
               {planPriceLabel(planTiers, planModal.tier, planModal.billing)}
             </p>
+            <div className="rounded-xl border border-border bg-accent/20 px-4 py-3">
+              <label className="text-sm font-semibold text-foreground" htmlFor="plan-promo-code">
+                Have a promo code?
+              </label>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="min-w-40 flex-1">
+                  <Input
+                    id="plan-promo-code"
+                    value={promoCode}
+                    onChange={(e) => {
+                      setPromoCode(e.target.value);
+                      if (promoError) setPromoError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void applyPromoCode();
+                      }
+                    }}
+                    placeholder="Enter code"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={promoBusy}
+                    className="uppercase placeholder:normal-case"
+                    data-attr="plan-promo-code-input"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full text-[13px]"
+                  disabled={promoBusy || !promoCode.trim()}
+                  onClick={() => void applyPromoCode()}
+                  data-attr="plan-promo-code-apply"
+                >
+                  {promoBusy ? "Applying…" : "Apply"}
+                </Button>
+              </div>
+              {promoError ? (
+                <p className="mt-2 text-xs font-medium text-[var(--status-overdue-fg)]" role="alert">
+                  {promoError}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted">
+                  A valid code activates {tierLabel(planModal.tier)} instantly — no card required.
+                </p>
+              )}
+            </div>
             {planModal.clientSecret ? (
               <EmbeddedCheckoutMount
                 clientSecret={planModal.clientSecret}
