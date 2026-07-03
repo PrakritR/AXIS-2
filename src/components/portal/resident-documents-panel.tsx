@@ -1,21 +1,220 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
+import {
+  ManagerPortalFilterRow,
+  ManagerPortalPageShell,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_SECTION_SURFACE,
+} from "@/components/portal/portal-metrics";
 import { TabNav } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
 import { FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import { ReportTable } from "@/components/portal/reports/report-table";
-import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
-import { ResidentApplicationsPanel } from "@/components/portal/resident-applications-panel";
-import { ResidentDocumentPhotos } from "@/components/portal/resident-document-photos";
+import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import {
+  ResidentAddDocumentModal,
+  ResidentOtherDocumentsTable,
+  type AddDocumentMode,
+} from "@/components/portal/resident-other-documents";
+import { useAppUi } from "@/components/providers/app-ui-provider";
+import { usePortalSession } from "@/hooks/use-portal-session";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
+import {
+  LEASE_PIPELINE_EVENT,
+  downloadLeaseFromRow,
+  findLeaseForResidentEmail,
+  hasBothLeaseSignatures,
+  printLeaseAsPdf,
+  residentCanViewLeaseRow,
+  syncLeasePipelineFromServer,
+} from "@/lib/lease-pipeline-storage";
+import {
+  MANAGER_APPLICATIONS_EVENT,
+  readManagerApplicationRows,
+  syncManagerApplicationsFromServer,
+} from "@/lib/manager-applications-storage";
+import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
+import {
+  readUploadedOwnLeases,
+  removeUploadedOwnLease,
+  syncUploadedOwnLeasesFromServer,
+  type UploadedOwnLease,
+} from "@/lib/resident-lease-upload";
 import type { ReportResult } from "@/lib/reports/types";
 
 function defaultReceiptRange() {
   const now = new Date();
   const from = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
   return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+}
+
+/** Simple downloadable-document row used by the Lease and Application tabs. */
+function DocumentEntryRow({
+  name,
+  meta,
+  actions,
+}: {
+  name: string;
+  meta: string;
+  actions: ReactNode;
+}) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3.5">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--glass-fill)] ring-1 ring-border" aria-hidden>
+          <svg className="h-5 w-5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
+            />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+          <p className="mt-0.5 truncate text-xs text-muted">{meta}</p>
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+    </li>
+  );
+}
+
+/**
+ * Documents › Lease — the lease as a plain downloadable document. The
+ * interactive review/sign experience lives in the dedicated Lease sidebar tab.
+ */
+function LeaseDocumentEntry({ basePath }: { basePath: string }) {
+  const { showToast } = useAppUi();
+  const session = usePortalSession();
+  const email = session.email?.trim() ?? "";
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const on = () => setTick((t) => t + 1);
+    void syncLeasePipelineFromServer().then(on);
+    window.addEventListener(LEASE_PIPELINE_EVENT, on);
+    window.addEventListener("storage", on);
+    return () => {
+      window.removeEventListener(LEASE_PIPELINE_EVENT, on);
+      window.removeEventListener("storage", on);
+    };
+  }, []);
+
+  const row = useMemo(() => {
+    void tick;
+    if (!email) return null;
+    return findLeaseForResidentEmail(email);
+  }, [email, tick]);
+
+  const documentReady = residentCanViewLeaseRow(row);
+  const fullySigned = Boolean(row && hasBothLeaseSignatures(row));
+
+  const onDownload = () => {
+    if (!row) return;
+    if (row.managerUploadedPdf?.dataUrl) {
+      downloadLeaseFromRow(row);
+      showToast("PDF download started.");
+      return;
+    }
+    if (row.generatedHtml) {
+      printLeaseAsPdf(row);
+      showToast("Print dialog opened — choose 'Save as PDF' to download.");
+      return;
+    }
+    showToast("Your lease document isn't ready yet.");
+  };
+
+  if (!documentReady) {
+    return (
+      <div className="space-y-4">
+        <PortalDataTableEmpty icon="lease" message="Your lease document will appear here once your manager prepares it." />
+        <p className="text-center text-sm text-muted">
+          Track progress and sign in the{" "}
+          <Link href={`${basePath}/lease`} className="font-semibold text-primary hover:underline">
+            Lease tab
+          </Link>
+          .
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-3">
+      <DocumentEntryRow
+        name="Lease agreement"
+        meta={fullySigned ? "Fully signed" : "Awaiting signature — review and sign in the Lease tab"}
+        actions={
+          <>
+            <Link
+              href={`${basePath}/lease`}
+              className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-semibold text-foreground transition hover:bg-accent/60"
+            >
+              View in Lease tab
+            </Link>
+            <Button type="button" variant="outline" className="min-h-9 rounded-full px-4 py-1.5 text-xs" onClick={onDownload}>
+              Download PDF
+            </Button>
+          </>
+        }
+      />
+    </ul>
+  );
+}
+
+function applicationStatusLabel(bucket: ManagerApplicationBucket): string {
+  if (bucket === "approved") return "Approved";
+  if (bucket === "rejected") return "Rejected";
+  return "Pending review";
+}
+
+/** Documents › Application — the resident's applications as simple entries. */
+function ApplicationDocumentEntries({ basePath }: { basePath: string }) {
+  const session = usePortalSession();
+  const email = session.email?.trim().toLowerCase() ?? "";
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const on = () => setTick((t) => t + 1);
+    void syncManagerApplicationsFromServer().then(on);
+    window.addEventListener(MANAGER_APPLICATIONS_EVENT, on);
+    return () => window.removeEventListener(MANAGER_APPLICATIONS_EVENT, on);
+  }, []);
+
+  const rows = useMemo<DemoApplicantRow[]>(() => {
+    void tick;
+    if (!email) return [];
+    return readManagerApplicationRows().filter((row) => (row.email ?? "").trim().toLowerCase() === email);
+  }, [email, tick]);
+
+  if (rows.length === 0) {
+    return <PortalDataTableEmpty icon="application" message="No applications are linked to your account yet." />;
+  }
+
+  return (
+    <ul className="space-y-3">
+      {rows.map((row) => (
+        <DocumentEntryRow
+          key={row.id}
+          name={`Rental application — ${row.property || row.id}`}
+          meta={`${applicationStatusLabel(row.bucket)} · ${row.id}`}
+          actions={
+            <Link
+              href={`${basePath}/applications?open=${encodeURIComponent(row.id)}`}
+              className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-semibold text-foreground transition hover:bg-accent/60"
+            >
+              View application
+            </Link>
+          }
+        />
+      ))}
+    </ul>
+  );
 }
 
 export function ResidentDocumentsPanel({
@@ -27,10 +226,38 @@ export function ResidentDocumentsPanel({
   basePath?: string;
   tabs: ReadonlyArray<{ id: string; label: string }>;
 }) {
+  const { showToast } = useAppUi();
+  const session = usePortalSession();
+  const navigate = usePortalNavigate();
+  const email = session.email?.trim().toLowerCase() ?? "";
+
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [range, setRange] = useState(defaultReceiptRange);
+
+  const [addMode, setAddMode] = useState<AddDocumentMode | null>(null);
+  const [uploads, setUploads] = useState<UploadedOwnLease[]>([]);
+  const [uploadsLoading, setUploadsLoading] = useState(true);
+
+  const refreshUploads = useCallback(async () => {
+    if (!email) {
+      setUploads([]);
+      setUploadsLoading(false);
+      return;
+    }
+    setUploadsLoading(true);
+    try {
+      const rows = await syncUploadedOwnLeasesFromServer(email);
+      setUploads(rows);
+    } finally {
+      setUploadsLoading(false);
+    }
+  }, [email]);
+
+  useEffect(() => {
+    queueMicrotask(() => void refreshUploads());
+  }, [refreshUploads]);
 
   const loadReceipts = useCallback(async () => {
     setLoading(true);
@@ -61,24 +288,60 @@ export function ResidentDocumentsPanel({
     [tabs, basePath],
   );
 
+  const openAddModal = (mode: AddDocumentMode) => {
+    if (!email) {
+      showToast("Sign in to upload documents.");
+      return;
+    }
+    setAddMode(mode);
+  };
+
+  const onDocumentAdded = () => {
+    setUploads(readUploadedOwnLeases(email));
+    if (tabId !== "other") navigate(`${basePath}/documents/other`);
+  };
+
+  const onRemoveUpload = (id: string) => {
+    if (!email) return;
+    removeUploadedOwnLease(email, id);
+    setUploads(readUploadedOwnLeases(email));
+    showToast("Removed.");
+  };
+
   return (
     <ManagerPortalPageShell
       title="Documents"
-      subtitle="Your active lease and official rent receipt documents."
+      subtitle="Your lease, application, rent receipts, and any documents you add yourself."
+      titleAside={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_HEADER_ACTION_BTN}
+            data-attr="resident-documents-add-photo"
+            onClick={() => openAddModal("photo")}
+          >
+            Add photo
+          </Button>
+          <Button
+            type="button"
+            className={PORTAL_HEADER_ACTION_BTN}
+            data-attr="resident-documents-add-document"
+            onClick={() => openAddModal("document")}
+          >
+            Add document
+          </Button>
+        </>
+      }
       filterRow={
         <ManagerPortalFilterRow>
           <TabNav items={tabItems} activeId={tabId} />
         </ManagerPortalFilterRow>
       }
     >
-      {tabId === "lease" ? (
-        <div className="space-y-4">
-          <ResidentLeasePanel embedded />
-          <ResidentDocumentPhotos />
-        </div>
-      ) : null}
+      {tabId === "lease" ? <LeaseDocumentEntry basePath={basePath} /> : null}
 
-      {tabId === "application" ? <ResidentApplicationsPanel embedded /> : null}
+      {tabId === "application" ? <ApplicationDocumentEntries basePath={basePath} /> : null}
 
       {tabId === "receipts" ? (
         <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>
@@ -124,6 +387,18 @@ export function ResidentDocumentsPanel({
           )}
         </div>
       ) : null}
+
+      {tabId === "other" ? (
+        <ResidentOtherDocumentsTable uploads={uploads} loading={uploadsLoading} onRemove={onRemoveUpload} />
+      ) : null}
+
+      <ResidentAddDocumentModal
+        key={addMode ?? "closed"}
+        mode={addMode}
+        email={email}
+        onClose={() => setAddMode(null)}
+        onAdded={onDocumentAdded}
+      />
     </ManagerPortalPageShell>
   );
 }

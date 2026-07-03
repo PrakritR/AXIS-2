@@ -35,6 +35,7 @@ const DOCUMENTS_TABS = [
   { id: "lease", label: "Lease" },
   { id: "application", label: "Application" },
   { id: "receipts", label: "Rent receipts" },
+  { id: "other", label: "Other documents" },
 ] as const;
 
 /** Sections shown before lease access is fully unlocked. */
