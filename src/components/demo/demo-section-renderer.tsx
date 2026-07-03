@@ -2,11 +2,15 @@
 
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
+import { useMemo } from "react";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { ResidentMoveInResolvedView } from "@/components/portal/resident-move-in-view";
+import { demoApplications, demoProperties } from "@/lib/demo/demo-data";
 import type { DemoPortalRole } from "@/lib/demo/demo-session";
 import { DEMO_MANAGER_USER_ID, DEMO_RESIDENT_EMAIL, DEMO_RESIDENT_NAME, DEMO_RESIDENT_USER_ID } from "@/lib/demo/demo-session";
 import type { PortalSection } from "@/lib/portal-types";
+import { resolveResidentMoveInFromApplications } from "@/lib/resident-move-in-resolve";
 
 const loading = () => (
   <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted">Loading…</div>
@@ -138,16 +142,19 @@ export function DemoSectionRenderer({
 }
 
 function ResidentMoveInDemo() {
+  const resolved = useMemo(() => {
+    const propertiesById = Object.fromEntries(demoProperties().map((p) => [p.id, p]));
+    return resolveResidentMoveInFromApplications(DEMO_RESIDENT_EMAIL, demoApplications(), propertiesById);
+  }, []);
+
   return (
     <ManagerPortalPageShell title="Move-in">
-      <div className="glass-card rounded-2xl px-5 py-6 sm:px-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Move-in</p>
-        <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-foreground">You&apos;re all set for The Pioneer</h2>
-        <ul className="mt-4 space-y-2 text-sm text-muted">
-          <li>• Keys ready at the Pioneer Square office after 3:00 PM on move-in day.</li>
-          <li>• First month&apos;s rent is confirmed paid.</li>
-          <li>• Building Wi-Fi and utilities activate automatically on your start date.</li>
-        </ul>
+      <div className="space-y-6 text-sm leading-relaxed text-muted">
+        {resolved ? (
+          <ResidentMoveInResolvedView resolved={resolved} />
+        ) : (
+          <PortalDataTableEmpty message="Move-in details appear here once a placement is assigned." icon="default" />
+        )}
       </div>
     </ManagerPortalPageShell>
   );

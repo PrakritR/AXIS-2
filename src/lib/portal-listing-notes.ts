@@ -20,8 +20,12 @@ export type PortalListingNote = {
   amenitiesText?: string;
   houseRulesText?: string;
   houseDescription?: string;
-  /** Resident-facing general house info (Wi-Fi, codes, tips) — stored on submission, carried here only as draft state. */
+  /** Resident-facing general house info (codes, tips) — stored on submission, carried here only as draft state. */
   generalHouseInfo?: string;
+  /** Resident-facing Wi-Fi network name — stored on submission, carried here only as draft state. */
+  wifiNetworkName?: string;
+  /** Resident-facing Wi-Fi password — stored on submission, carried here only as draft state. */
+  wifiPassword?: string;
   rooms?: Record<string, PortalRoomNote>;
 };
 

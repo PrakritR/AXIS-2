@@ -164,8 +164,12 @@ export type ManagerListingSubmissionV1 = {
   houseRulesText: string;
   /** Manager-only internal notes about the house (not shown to residents). */
   houseDescription?: string;
-  /** Resident-only general house info (Wi-Fi password, codes, tips) — shown in resident portal move-in only. */
+  /** Resident-only general house info (codes, tips) — shown in resident portal move-in only. */
   generalHouseInfo?: string;
+  /** Wi-Fi network name (SSID) — shown to placed residents on Move-in only. */
+  wifiNetworkName?: string;
+  /** Wi-Fi password — shown to placed residents on Move-in only. */
+  wifiPassword?: string;
   /** Earliest move-in for entire-home listings (YYYY-MM-DD). */
   houseMoveInAvailableDate?: string;
   /** Move-in instructions for entire-home listings (keys, parking, access). */
@@ -888,6 +892,8 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     houseRulesText: typeof sub.houseRulesText === "string" ? sub.houseRulesText : "",
     houseDescription: typeof sub.houseDescription === "string" ? sub.houseDescription : undefined,
     generalHouseInfo: typeof sub.generalHouseInfo === "string" ? sub.generalHouseInfo : "",
+    wifiNetworkName: typeof sub.wifiNetworkName === "string" ? sub.wifiNetworkName : "",
+    wifiPassword: typeof sub.wifiPassword === "string" ? sub.wifiPassword : "",
     houseMoveInAvailableDate:
       typeof sub.houseMoveInAvailableDate === "string" ? sub.houseMoveInAvailableDate.trim() : "",
     houseMoveInInstructions:
@@ -1141,6 +1147,8 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     housePhotoDataUrls: [],
     houseVideoDataUrl: null,
     houseRulesText: "",
+    wifiNetworkName: "",
+    wifiPassword: "",
     leaseTermsBody: "",
     allowedLeaseTerms: [],
     shortTermRentalsAllowed: false,

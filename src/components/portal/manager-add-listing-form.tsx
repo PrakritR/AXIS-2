@@ -2218,8 +2218,27 @@ export function ManagerAddListingForm({
                   rows={4}
                   value={sub.generalHouseInfo ?? ""}
                   onChange={(e) => setSub((s) => ({ ...s, generalHouseInfo: e.target.value }))}
-                  placeholder="Wi-Fi network & password, gate/door codes, laundry tips, trash schedule…"
+                  placeholder="Gate/door codes, laundry tips, trash schedule…"
                 />
+              </div>
+              <div>
+                <div className="mb-0.5 flex items-center gap-2">
+                  <FieldLabel>Wi-Fi</FieldLabel>
+                  <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
+                </div>
+                <p className="mb-1.5 text-[11px] text-muted">Network name and password shown to residents in their Move-in portal after approval. Leave blank to hide.</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={sub.wifiNetworkName ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, wifiNetworkName: e.target.value }))}
+                    placeholder="Wi-Fi network name (SSID)"
+                  />
+                  <Input
+                    value={sub.wifiPassword ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, wifiPassword: e.target.value }))}
+                    placeholder="Wi-Fi password"
+                  />
+                </div>
               </div>
             </ListingSubsection>
             </div>

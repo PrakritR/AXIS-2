@@ -129,6 +129,8 @@ function demoListingSubmission(input: {
     houseOverview:
       "Light-filled home minutes from downtown Seattle, with in-unit laundry, secure entry, and quick access to transit.",
     houseRulesText: "Quiet hours 10pm–8am · No smoking · Guests welcome up to 7 nights",
+    wifiNetworkName: "AxisHome-5G",
+    wifiPassword: "welcome-home-2026",
     housePhotoDataUrls: [],
     leaseTermsBody: "12-month lease standard; month-to-month available on renewal.",
     applicationFee: "$45.00",
