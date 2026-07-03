@@ -268,7 +268,55 @@ export async function syncLedgerPaymentEntry(
   if (row) await upsertLedgerEntryRow(db, row);
 }
 
+/**
+ * Read-time backfill is a repair pass for legacy/missed rows — new charges and
+ * payments are mirrored into the ledger at write time (syncLedgerChargeEntry /
+ * syncLedgerPaymentEntry). Report routes request it on every load, and running
+ * the full 2000-row charge scan + upserts per tab switch is what made the
+ * Finances panel slow. Skip repeat runs for the same scope within the TTL and
+ * collapse concurrent runs into one.
+ */
+const LEDGER_BACKFILL_TTL_MS = 5 * 60_000;
+const ledgerBackfillLastRunAt = new Map<string, number>();
+const ledgerBackfillInFlight = new Map<string, Promise<{ synced: number; removedDuplicates: number }>>();
+
+export function resetLedgerBackfillThrottleForTests(): void {
+  ledgerBackfillLastRunAt.clear();
+  ledgerBackfillInFlight.clear();
+}
+
+async function runThrottledBackfill(
+  key: string,
+  run: () => Promise<{ synced: number; removedDuplicates: number }>,
+): Promise<{ synced: number; removedDuplicates: number }> {
+  const lastRunAt = ledgerBackfillLastRunAt.get(key) ?? 0;
+  if (Date.now() - lastRunAt < LEDGER_BACKFILL_TTL_MS) return { synced: 0, removedDuplicates: 0 };
+  const inFlight = ledgerBackfillInFlight.get(key);
+  if (inFlight) return inFlight;
+  const promise = (async () => {
+    const result = await run();
+    // Only mark success — a failed run may retry on the next request.
+    ledgerBackfillLastRunAt.set(key, Date.now());
+    return result;
+  })();
+  ledgerBackfillInFlight.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    ledgerBackfillInFlight.delete(key);
+  }
+}
+
 export async function backfillLedgerFromCharges(
+  db: SupabaseClient,
+  managerUserId?: string,
+): Promise<{ synced: number; removedDuplicates: number }> {
+  return runThrottledBackfill(`manager:${managerUserId ?? "__all__"}`, () =>
+    backfillLedgerFromChargesNow(db, managerUserId),
+  );
+}
+
+async function backfillLedgerFromChargesNow(
   db: SupabaseClient,
   managerUserId?: string,
 ): Promise<{ synced: number; removedDuplicates: number }> {
@@ -295,6 +343,16 @@ export async function backfillLedgerFromCharges(
 }
 
 export async function backfillLedgerForResident(
+  db: SupabaseClient,
+  residentUserId: string,
+  residentEmail: string,
+): Promise<{ synced: number; removedDuplicates: number }> {
+  return runThrottledBackfill(`resident:${residentUserId}`, () =>
+    backfillLedgerForResidentNow(db, residentUserId, residentEmail),
+  );
+}
+
+async function backfillLedgerForResidentNow(
   db: SupabaseClient,
   residentUserId: string,
   residentEmail: string,

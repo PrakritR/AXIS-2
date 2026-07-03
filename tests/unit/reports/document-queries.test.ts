@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   queryRentReceipts,
   queryRentalDays,
   queryTaxSummary,
 } from "@/lib/reports/queries";
+import { resetManagerReportDisplayContextCacheForTests } from "@/lib/reports/display-context";
+
+beforeEach(() => {
+  resetManagerReportDisplayContextCacheForTests();
+});
 
 function emptyDisplayContextHandlers() {
   const emptyChain = {
@@ -12,6 +17,7 @@ function emptyDisplayContextHandlers() {
     limit: vi.fn().mockResolvedValue({ data: [] }),
   };
   return {
+    manager_property_records: () => emptyChain,
     portal_recurring_rent_profile_records: () => emptyChain,
     manager_application_records: () => ({ select: vi.fn().mockReturnThis(), limit: vi.fn().mockResolvedValue({ data: [] }) }),
     manager_vendor_records: () => emptyChain,
@@ -154,6 +160,11 @@ describe("document report queries", () => {
       },
       portal_recurring_rent_profile_records: () => profileChain,
       manager_application_records: () => ({ select: vi.fn().mockReturnThis(), limit: vi.fn().mockResolvedValue({ data: [] }) }),
+      manager_property_records: () => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue({ data: [] }),
+      }),
       manager_vendor_records: () => ({
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),

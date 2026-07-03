@@ -405,7 +405,9 @@ export function ManagerFinancesPanel({
 
   useEffect(() => {
     if (!ready) return;
-    void syncPropertyPipelineFromServer({ force: true }).then(() => setPropertyTick((n) => n + 1));
+    // Not forced: the pipeline sync has a session TTL + in-flight guard, so
+    // tab switches reuse fresh data instead of refetching the full snapshot.
+    void syncPropertyPipelineFromServer().then(() => setPropertyTick((n) => n + 1));
     void syncManagerVendorsFromServer();
     const onVendors = () => setVendorTick((n) => n + 1);
     window.addEventListener(MANAGER_VENDORS_EVENT, onVendors);

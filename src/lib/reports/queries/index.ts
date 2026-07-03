@@ -325,11 +325,13 @@ export async function queryExpenses(
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
-  const display = await loadManagerReportDisplayContext(db, managerUserId);
   const scope = resolveDocumentScope(filters);
   const propertyId = filters.propertyId?.trim();
   const needsWorkOrders = scope === "tenant" || scope === "room";
-  const workOrdersById = needsWorkOrders ? await loadExpenseWorkOrders(db, managerUserId) : new Map();
+  const [display, workOrdersById] = await Promise.all([
+    loadManagerReportDisplayContext(db, managerUserId),
+    needsWorkOrders ? loadExpenseWorkOrders(db, managerUserId) : Promise.resolve(new Map<string, ExpenseWorkOrderRef>()),
+  ]);
 
   let query = db
     .from("manager_expense_entries")
@@ -394,7 +396,7 @@ export async function queryRentReceipts(
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
-  const display = await loadManagerReportDisplayContext(db, managerUserId);
+  const displayPromise = loadManagerReportDisplayContext(db, managerUserId);
 
   let query = db
     .from("ledger_entries")
@@ -406,7 +408,7 @@ export async function queryRentReceipts(
     .order("posted_date", { ascending: false });
   if (filters.propertyId) query = query.eq("property_id", filters.propertyId);
 
-  const { data } = await query;
+  const [{ data }, display] = await Promise.all([query, displayPromise]);
   const rows = (data ?? [])
     .filter((row) => RENT_RECEIPT_CATEGORIES.has(String(row.category_code)))
     .map((row) => ({
@@ -520,16 +522,19 @@ export async function queryTaxSummary(
     queryExpenses(db, managerUserId, filters),
   ]);
 
-  const profiles = await loadRentProfiles(db, managerUserId, filters.propertyId);
+  const [profiles, display] = await Promise.all([
+    loadRentProfiles(db, managerUserId, filters.propertyId),
+    loadManagerReportDisplayContext(db, managerUserId),
+  ]);
   const propertyLabels = new Map<string, string>();
   for (const profile of profiles) {
     if (profile.propertyId?.trim()) {
-      propertyLabels.set(profile.propertyId.trim(), profile.propertyLabel.trim() || profile.propertyId.trim());
+      propertyLabels.set(profile.propertyId.trim(), profile.propertyLabel.trim() || display.propertyLabel(profile.propertyId));
     }
   }
   const labelForPropertyId = (propertyId: string) => {
     if (propertyId === "Unassigned") return "Unassigned";
-    return propertyLabels.get(propertyId) ?? propertyId;
+    return propertyLabels.get(propertyId) ?? display.propertyLabel(propertyId);
   };
 
   const incomeByProperty = new Map<string, number>();
