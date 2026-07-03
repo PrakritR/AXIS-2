@@ -1,3 +1,4 @@
+import { resolveRequestOrigin } from "@/lib/app-url";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
 import { clearOAuthNextCookie, readOAuthIntentFromRequest, readOAuthSurfaceFromRequest } from "@/lib/auth/oauth-next-cookie";
@@ -22,9 +23,9 @@ export type OAuthCallbackOptions = {
   ) => Promise<string>;
 };
 
-function authFailureRedirect(requestUrl: URL, reason: string): NextResponse {
+function authFailureRedirect(requestOrigin: string, reason: string): NextResponse {
   const params = new URLSearchParams({ error: "oauth", message: reason });
-  return NextResponse.redirect(new URL(`/auth/sign-in?${params.toString()}`, requestUrl.origin));
+  return NextResponse.redirect(new URL(`/auth/sign-in?${params.toString()}`, requestOrigin));
 }
 
 /** Exchange Supabase OAuth code for a session, then redirect to a same-origin path. */
@@ -33,10 +34,15 @@ export async function handleOAuthCallback(
   redirectPath: string,
   options?: OAuthCallbackOptions,
 ): Promise<NextResponse> {
+  // Never build redirects from request.url — in dev it reflects the 0.0.0.0 bind
+  // address, not the host the browser is on, which strands the user on a host
+  // where their freshly-set session cookies don't exist.
+  const requestOrigin = resolveRequestOrigin(request);
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
-    return NextResponse.redirect(new URL("/auth/sign-in", request.url));
+    return NextResponse.redirect(new URL("/auth/sign-in", requestOrigin));
   }
 
   const requestUrl = new URL(request.url);
@@ -48,15 +54,15 @@ export async function handleOAuthCallback(
     const message =
       oauthDescription?.replace(/\+/g, " ").trim() ||
       "Google sign-in could not be completed. Try again or use email and password.";
-    return authFailureRedirect(requestUrl, message);
+    return authFailureRedirect(requestOrigin, message);
   }
 
   if (!code) {
-    return authFailureRedirect(requestUrl, "Google sign-in did not return an authorization code.");
+    return authFailureRedirect(requestOrigin, "Google sign-in did not return an authorization code.");
   }
 
   const safePath = redirectPath.startsWith("/") ? redirectPath : "/auth/continue";
-  const redirectTarget = new URL(safePath, requestUrl.origin);
+  const redirectTarget = new URL(safePath, requestOrigin);
   const pendingCookies: PendingCookie[] = [];
   let response = NextResponse.redirect(redirectTarget);
 
@@ -85,7 +91,7 @@ export async function handleOAuthCallback(
   if (error) {
     console.error("OAuth callback exchange failed:", error.message);
     return authFailureRedirect(
-      requestUrl,
+      requestOrigin,
       error.message || "Google sign-in session could not be established.",
     );
   }
@@ -106,7 +112,7 @@ export async function handleOAuthCallback(
             surface: readOAuthSurfaceFromRequest(request),
           });
       if (resolvedPath !== safePath) {
-        applyRedirect(new URL(resolvedPath, requestUrl.origin));
+        applyRedirect(new URL(resolvedPath, requestOrigin));
       }
     }
   } catch (syncError) {
