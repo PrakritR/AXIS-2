@@ -385,7 +385,9 @@ function PaymentAutomationSettingsForm({
 
   const addCustomDay = () => {
     const n = Math.round(Number(customDay));
-    if (!Number.isFinite(n) || n < 0 || n > 60) return;
+    // A custom offset is "N days before due"; 0 would collide with the "Due
+    // date" toggle and is dropped by the projection, so require >= 1.
+    if (!customDay.trim() || !Number.isFinite(n) || n < 1 || n > 60) return;
     setDraft((prev) => ({
       ...prev,
       preDueReminderDays: [...new Set([...prev.preDueReminderDays, n])].sort((a, b) => b - a),
@@ -407,26 +409,39 @@ function PaymentAutomationSettingsForm({
       <div>
         <p className="text-xs font-semibold text-muted">{copy.daysBeforeLabel}</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {[7, 5, 3, 2, 1].map((day) => (
-            <Button
-              key={day}
-              type="button"
-              variant={draft.preDueReminderDays.includes(day) ? "primary" : "outline"}
-              className="rounded-full px-3 py-1 text-xs"
-              onClick={() => toggleDay(day)}
-              disabled={busy}
-            >
-              {day}d
-            </Button>
-          ))}
-          {!compact ? (
-            <div className="flex items-center gap-1">
-              <Input className="h-8 w-16 text-xs" placeholder="N" value={customDay} onChange={(e) => setCustomDay(e.target.value)} disabled={busy} />
-              <Button type="button" variant="outline" className="rounded-full px-2 py-1 text-xs" onClick={addCustomDay} disabled={busy}>
-                Add day
+          {[...new Set([7, 5, 3, 2, 1, ...draft.preDueReminderDays])]
+            .sort((a, b) => b - a)
+            .map((day) => (
+              <Button
+                key={day}
+                type="button"
+                variant={draft.preDueReminderDays.includes(day) ? "primary" : "outline"}
+                className="rounded-full px-3 py-1 text-xs"
+                onClick={() => toggleDay(day)}
+                disabled={busy}
+              >
+                {day}d
               </Button>
-            </div>
-          ) : null}
+            ))}
+          <div className="flex items-center gap-1">
+            <Input
+              className="h-8 w-16 text-xs"
+              inputMode="numeric"
+              placeholder="Day"
+              value={customDay}
+              onChange={(e) => setCustomDay(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addCustomDay();
+                }
+              }}
+              disabled={busy}
+            />
+            <Button type="button" variant="outline" className="rounded-full px-2 py-1 text-xs" onClick={addCustomDay} disabled={busy}>
+              Add day
+            </Button>
+          </div>
         </div>
       </div>
 

@@ -417,13 +417,26 @@ export function upcomingScheduledForCharge(
   return manageableRemindersForCharge(messages, chargeId, limit).filter((m) => m.status === "scheduled");
 }
 
-/** Scheduled and cancelled reminders for a charge (excludes already sent). */
+/**
+ * Upcoming scheduled and cancelled reminders for a charge (excludes already
+ * sent and past-dated sends). This reflects the manager's full default schedule
+ * for the charge and is intentionally NOT gated by the Inbox schedule-visibility
+ * window (that setting only controls what surfaces in Inbox → Schedule). Feed it
+ * the unfiltered message list (`useScheduledPaymentMessages({ includeHidden: true })`).
+ */
 export function manageableRemindersForCharge(
   messages: ScheduledPaymentMessage[],
   chargeId: string,
-  limit = 6,
+  limit = 12,
+  now = new Date(),
 ): ScheduledPaymentMessage[] {
+  const today = startOfLocalDay(now).getTime();
   return messages
-    .filter((m) => m.chargeId === chargeId && (m.status === "scheduled" || m.status === "cancelled"))
+    .filter(
+      (m) =>
+        m.chargeId === chargeId &&
+        (m.status === "scheduled" || m.status === "cancelled") &&
+        startOfLocalDay(new Date(m.sendAt)).getTime() >= today,
+    )
     .slice(0, limit);
 }
