@@ -319,6 +319,8 @@ export async function renderPortalSection(
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
     }
     const inboxTab = tabParts[0]!;
+    // Manager-only tab that used to leak into admin pills; keep old links working.
+    if (inboxTab === "schedule") redirect(`${def.basePath}/${section}/unopened`);
     if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
     return <AdminInboxClient tabId={inboxTab} />;
   }

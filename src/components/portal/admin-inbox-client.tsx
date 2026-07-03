@@ -57,6 +57,10 @@ function previewSnippet(text: string, max = 100) {
   return `${t.slice(0, max)}…`;
 }
 
+// Admin inbox has no scheduled-messages backend, so the shared "schedule" tab
+// (manager-only) must not render here — its route would 404 under /admin.
+const ADMIN_INBOX_TAB_DEFS = INBOX_TAB_DEFS.filter((t) => t.id !== "schedule");
+
 const ADMIN_COMPOSE_MODE_OPTIONS: { value: AdminComposeSendMode; label: string }[] = [
   { value: "all_portal", label: "Everyone (managers & residents)" },
   { value: "all_managers", label: "All managers" },
@@ -394,7 +398,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   }, [all]);
 
   const inboxTabs = useMemo(
-    () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
+    () => ADMIN_INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
     [folderCounts],
   );
 

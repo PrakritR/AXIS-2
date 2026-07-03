@@ -19,7 +19,6 @@ import {
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import {
-  mirrorLocalPropertyPipelineToServer,
   PROPERTY_PIPELINE_EVENT,
   approvePendingManagerProperty,
   republishManagerListingAfterReview,
@@ -361,9 +360,11 @@ export function AdminPropertiesClient() {
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
 
   useEffect(() => {
+    // No mirror-back here: the sync just overwrote the local pipeline with the
+    // server snapshot, so re-uploading it is one redundant POST per property row
+    // across every manager. Admin actions mirror individually at write time.
     void syncPropertyPipelineFromServer().then(() => {
       setTick((t) => t + 1);
-      void mirrorLocalPropertyPipelineToServer();
     });
     const on = () => setTick((t) => t + 1);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
