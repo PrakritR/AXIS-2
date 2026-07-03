@@ -1,28 +1,29 @@
 /**
- * Server-side Checkr API client. Runs a criminal background check for a rental
- * applicant: create candidate → create report → poll report.
+ * Server-side Checkr Tenant API client. Runs a rental background-check order:
+ * create applicant → create property → create order → fetch report.
  *
  * Security:
- *  - The secret key is used ONLY here, server-side, as the HTTP Basic-auth
- *    username. It is never returned to callers, never put in an error message,
- *    and never logged.
- *  - All applicant PII is assembled and sent from the server; nothing about the
- *    request is exposed to the browser.
+ *  - The secret key is used ONLY here, server-side, as the Bearer token. It is
+ *    never returned to callers, never put in an error message, and never
+ *    logged.
+ *  - All applicant PII is assembled and sent from the server; nothing about
+ *    the request is exposed to the browser.
  *
- * Async model: Checkr reports complete asynchronously (usually minutes in
- * staging). We support status polling; a webhook receiver
- * (`/api/webhooks/screening/checkr`) can push completions instead — preferred
- * once instant propagation matters.
+ * Async model: Checkr orders complete asynchronously in production (the
+ * sandbox completes them synchronously on creation). We support status
+ * polling; a webhook receiver (`/api/webhooks/screening/checkr`) can push
+ * completions instead — preferred once instant propagation matters.
  */
 import {
   checkrApiBaseUrl,
   checkrApiKey,
-  checkrPackageSlug,
+  checkrPackage,
   checkrSimulate,
 } from "@/lib/checkr/config";
 import type {
-  CheckrCandidateInput,
+  CheckrApplicantInput,
   CheckrCreateResult,
+  CheckrPropertyInput,
   CheckrReport,
   CheckrReportStatus,
   CheckrResult,
@@ -31,8 +32,7 @@ import type {
 function authHeader(): string {
   const key = checkrApiKey();
   if (!key) throw new Error("Checkr is not configured (missing CHECKR_API_KEY).");
-  // Basic auth: secret key as username, empty password → base64("key:").
-  return `Basic ${Buffer.from(`${key}:`).toString("base64")}`;
+  return `Bearer ${key}`;
 }
 
 async function checkrFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -50,29 +50,41 @@ async function checkrFetch(path: string, init?: RequestInit): Promise<Response> 
 
 /** Extract a human-safe error message without ever echoing credentials. */
 async function readError(response: Response, fallback: string): Promise<string> {
-  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-  const raw =
-    (Array.isArray(payload?.error) && payload?.error.join(", ")) ||
-    (typeof payload?.error === "string" && payload.error) ||
-    (typeof payload?.message === "string" && payload.message) ||
-    "";
-  return raw ? `Checkr: ${raw}` : `${fallback} (${response.status}).`;
+  const payload = (await response.json().catch(() => null)) as
+    | { errors?: Array<{ detail?: string }> }
+    | null;
+  const detail = payload?.errors?.[0]?.detail;
+  return detail ? `Checkr: ${detail}` : `${fallback} (${response.status}).`;
 }
 
-function normalizeStatus(value: unknown): CheckrReportStatus {
+function normalizeOrderStatus(value: unknown): CheckrReportStatus {
   const s = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (s === "complete" || s === "completed") return "complete";
-  if (s === "suspended") return "suspended";
-  if (s === "dispute") return "dispute";
   if (s === "canceled" || s === "cancelled") return "canceled";
   return "pending";
 }
 
-function normalizeResult(value: unknown): CheckrResult {
-  const s = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (s === "clear") return "clear";
-  if (s === "consider") return "consider";
-  return null;
+const REPORT_PRODUCT_KEYS = [
+  "criminal_history",
+  "credit_report",
+  "eviction_history",
+  "identity_verification",
+  "income_verification",
+  "sex_offender_registry",
+  "global_watchlist",
+] as const;
+
+/** A completed report carries one status per product; any "consider" means the whole order needs review. */
+function aggregateReportResult(report: Record<string, unknown> | null): CheckrResult {
+  if (!report) return null;
+  let sawClear = false;
+  for (const key of REPORT_PRODUCT_KEYS) {
+    const product = report[key] as { status?: string } | null | undefined;
+    if (!product?.status) continue;
+    if (product.status === "consider") return "consider";
+    if (product.status === "clear") sawClear = true;
+  }
+  return sawClear ? "clear" : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,15 +107,24 @@ function simulatedResult(ssn: string): CheckrResult {
   return last % 2 === 1 ? "consider" : "clear";
 }
 
-/** Create a candidate and kick off a report. Returns identifiers + initial status. */
-export async function createBackgroundCheck(input: CheckrCandidateInput): Promise<CheckrCreateResult> {
-  const packageSlug = (await resolvePackageSlug()) ?? "test_pro_criminal";
+async function fetchReportRaw(orderId: string): Promise<Record<string, unknown> | null> {
+  const res = await checkrFetch(`/orders/${encodeURIComponent(orderId)}/report`);
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+/** Create an applicant + property + order and return identifiers + initial status. */
+export async function createBackgroundCheck(
+  applicant: CheckrApplicantInput,
+  property: CheckrPropertyInput,
+): Promise<CheckrCreateResult> {
+  const packageSlug = checkrPackage();
 
   if (checkrSimulate() && !checkrApiKey()) {
-    const seed = stableHash(`${input.email}:${input.ssn}`);
+    const seed = stableHash(`${applicant.email}:${applicant.ssn}`);
     return {
-      candidateId: `test_cand_${seed}`,
-      reportId: `test_rpt_${seed}`,
+      applicantId: `test_applicant_${seed}`,
+      orderId: `test_order_${seed}`,
       packageSlug,
       status: "pending",
       result: null,
@@ -111,111 +132,87 @@ export async function createBackgroundCheck(input: CheckrCandidateInput): Promis
     };
   }
 
-  // 1) Candidate
-  const candidateRes = await checkrFetch("/candidates", {
+  // 1) Applicant
+  const applicantRes = await checkrFetch("/applicants", {
     method: "POST",
     body: JSON.stringify({
-      first_name: input.firstName,
-      last_name: input.lastName,
-      ...(input.middleName ? { middle_name: input.middleName } : { no_middle_name: true }),
-      email: input.email,
-      dob: input.dob ?? undefined,
-      ssn: input.ssn || undefined,
-      zipcode: input.zipcode || undefined,
-      phone: input.phone || undefined,
+      applicant: {
+        first_name: applicant.firstName,
+        last_name: applicant.lastName,
+        email: applicant.email,
+        dob: applicant.dob ?? undefined,
+        ssn: applicant.ssn || undefined,
+        phone_number: applicant.phone || undefined,
+      },
     }),
   });
-  if (!candidateRes.ok) throw new Error(await readError(candidateRes, "Failed to create candidate"));
-  const candidate = (await candidateRes.json()) as { id?: string };
-  const candidateId = candidate.id;
-  if (!candidateId) throw new Error("Checkr did not return a candidate id.");
+  if (!applicantRes.ok) throw new Error(await readError(applicantRes, "Failed to create applicant"));
+  const applicantBody = (await applicantRes.json()) as { id?: string };
+  const applicantId = applicantBody.id;
+  if (!applicantId) throw new Error("Checkr did not return an applicant id.");
 
-  // 2) Report (self-hosted: manager already collected applicant consent).
-  const reportRes = await checkrFetch("/reports", {
+  // 2) Property being screened for
+  const propertyRes = await checkrFetch("/properties", {
     method: "POST",
-    body: JSON.stringify({ candidate_id: candidateId, package: packageSlug }),
+    body: JSON.stringify({
+      property: {
+        name: property.name,
+        street: property.street,
+        unit: property.unit || undefined,
+        city: property.city,
+        state: property.state,
+        zipcode: property.zipcode,
+        country: "US",
+      },
+    }),
   });
-  if (!reportRes.ok) throw new Error(await readError(reportRes, "Failed to create report"));
-  const report = (await reportRes.json()) as {
-    id?: string;
-    status?: string;
-    result?: string;
-    assessment?: string;
-  };
-  if (!report.id) throw new Error("Checkr did not return a report id.");
+  if (!propertyRes.ok) throw new Error(await readError(propertyRes, "Failed to create property"));
+  const propertyBody = (await propertyRes.json()) as { id?: string };
+  const propertyId = propertyBody.id;
+  if (!propertyId) throw new Error("Checkr did not return a property id.");
+
+  // 3) Order (self-hosted: manager already collected applicant consent).
+  const orderRes = await checkrFetch("/orders", {
+    method: "POST",
+    body: JSON.stringify({
+      order: { applicant_id: applicantId, property_id: propertyId, package: packageSlug },
+    }),
+  });
+  if (!orderRes.ok) throw new Error(await readError(orderRes, "Failed to create order"));
+  const order = (await orderRes.json()) as { id?: string; status?: string };
+  if (!order.id) throw new Error("Checkr did not return an order id.");
+
+  const status = normalizeOrderStatus(order.status);
+  const result = status === "complete" ? aggregateReportResult(await fetchReportRaw(order.id)) : null;
 
   return {
-    candidateId,
-    reportId: report.id,
+    applicantId,
+    orderId: order.id,
     packageSlug,
-    status: normalizeStatus(report.status),
-    result: normalizeResult(report.result),
-    assessment: typeof report.assessment === "string" ? report.assessment : null,
+    status,
+    result,
     simulated: false,
   };
 }
 
-/** Fetch the current state of a report. */
+/** Fetch the current state of an order + its report. */
 export async function fetchBackgroundCheckReport(
-  reportId: string,
+  orderId: string,
   opts?: { ssn?: string },
 ): Promise<CheckrReport | null> {
   if (checkrSimulate() && !checkrApiKey()) {
     // Simulate completes on first poll so the status transition is observable.
-    return {
-      reportId,
-      status: "complete",
-      result: simulatedResult(opts?.ssn ?? reportId),
-      assessment: null,
-      simulated: true,
-    };
+    return { orderId, status: "complete", result: simulatedResult(opts?.ssn ?? orderId), simulated: true };
   }
 
-  const res = await checkrFetch(`/reports/${encodeURIComponent(reportId)}`);
-  if (!res.ok) return null;
-  const report = (await res.json()) as {
-    id?: string;
-    status?: string;
-    result?: string;
-    assessment?: string;
-  };
-  if (!report.id) return null;
-  return {
-    reportId: report.id,
-    status: normalizeStatus(report.status),
-    result: normalizeResult(report.result),
-    assessment: typeof report.assessment === "string" ? report.assessment : null,
-  };
-}
+  const orderRes = await checkrFetch(`/orders/${encodeURIComponent(orderId)}`);
+  if (!orderRes.ok) return null;
+  const order = (await orderRes.json()) as { id?: string; status?: string };
+  if (!order.id) return null;
 
-// Package resolution is cached for the process lifetime — packages rarely change.
-let cachedPackageSlug: string | null | undefined;
+  const status = normalizeOrderStatus(order.status);
+  if (status !== "complete") return { orderId, status, result: null };
 
-/**
- * Resolve which package to run: the pinned `CHECKR_PACKAGE`, else the first
- * package on the account. Returns null if neither is available (caller falls
- * back to a sensible default).
- */
-export async function resolvePackageSlug(): Promise<string | null> {
-  const pinned = checkrPackageSlug();
-  if (pinned) return pinned;
-  if (cachedPackageSlug !== undefined) return cachedPackageSlug;
-  if (checkrSimulate() && !checkrApiKey()) {
-    cachedPackageSlug = "test_pro_criminal";
-    return cachedPackageSlug;
-  }
-  try {
-    const res = await checkrFetch("/packages");
-    if (!res.ok) {
-      cachedPackageSlug = null;
-      return null;
-    }
-    const body = (await res.json()) as { data?: Array<{ slug?: string }> };
-    const slug = body.data?.find((p) => typeof p.slug === "string" && p.slug)?.slug ?? null;
-    cachedPackageSlug = slug;
-    return slug;
-  } catch {
-    cachedPackageSlug = null;
-    return null;
-  }
+  const report = await fetchReportRaw(orderId);
+  return { orderId, status, result: aggregateReportResult(report) };
 }

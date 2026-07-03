@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { track } from "@/lib/analytics/track-client";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import {
@@ -30,7 +29,7 @@ function recommendationClass(recommendation: ScreeningRecommendation): string {
   }
 }
 
-function backgroundCheckChip(bc: ApplicationBackgroundCheck): { label: string; className: string } {
+export function backgroundCheckChip(bc: ApplicationBackgroundCheck): { label: string; className: string } {
   const ring = "ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   if (bc.status !== "complete") {
     return { label: "Checkr: Pending", className: `portal-badge-info ${ring}` };
@@ -48,9 +47,12 @@ function backgroundCheckChip(bc: ApplicationBackgroundCheck): { label: string; c
 export function ApplicationScreeningPanel({
   row,
   onUpdated,
+  onOpenScreeningModal,
 }: {
   row: DemoApplicantRow;
   onUpdated?: () => void;
+  /** Opens the cost-confirmation modal (billed to the manager) to start/re-run the Checkr check. */
+  onOpenScreeningModal?: () => void;
 }) {
   const { showToast } = useAppUi();
   const [settings, setSettings] = useState<ManagerScreeningSettings | null>(null);
@@ -82,7 +84,7 @@ export function ApplicationScreeningPanel({
   }, []);
 
   const callBackgroundCheck = useCallback(
-    async (action: "run" | "refresh") => {
+    async (action: "refresh") => {
       setBgBusy(true);
       try {
         const res = await fetch("/api/screening/background-check", {
@@ -92,32 +94,18 @@ export function ApplicationScreeningPanel({
           body: JSON.stringify({ applicationId: row.id, action }),
         });
         const body = (await res.json()) as { error?: string; backgroundCheck?: ApplicationBackgroundCheck };
-        if (!res.ok) {
-          if (action === "run") showToast(body.error ?? "Could not run background check.");
-          return;
-        }
+        if (!res.ok) return;
         if (body.backgroundCheck) setBgOverride(body.backgroundCheck);
-        if (action === "run") {
-          showToast("Background check requested. Results appear when Checkr completes.");
-          onUpdated?.();
-        } else if (body.backgroundCheck?.status === "complete") {
-          onUpdated?.();
-        }
-      } catch {
-        if (action === "run") showToast("Network error running background check.");
+        if (body.backgroundCheck?.status === "complete") onUpdated?.();
       } finally {
         setBgBusy(false);
       }
     },
-    [onUpdated, row.id, showToast],
+    [onUpdated, row.id],
   );
 
-  const runBackgroundCheck = useCallback(() => {
-    track("background_check_started", { provider: "checkr" });
-    void callBackgroundCheck("run");
-  }, [callBackgroundCheck]);
-
   // Poll Checkr while a report is pending so the status resolves without a reload.
+  // Starting/re-running is billed, so it only happens via the confirmation modal.
   useEffect(() => {
     if (bg?.status !== "pending") return;
     let cancelled = false;
@@ -271,15 +259,14 @@ export function ApplicationScreeningPanel({
             {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
           </Button>
         ) : null}
-        {bgConfigured && row.application?.consentCredit && bg?.status !== "pending" ? (
+        {bgConfigured && row.application?.consentCredit && bg?.status !== "pending" && onOpenScreeningModal ? (
           <Button
             type="button"
             data-attr="run-background-check"
             className="rounded-full px-5"
-            disabled={bgBusy}
-            onClick={runBackgroundCheck}
+            onClick={onOpenScreeningModal}
           >
-            {bgBusy ? "Requesting…" : bg ? "Re-run background check" : "Run background check"}
+            {bg ? "Re-run background check" : "Run background check"}
           </Button>
         ) : null}
         {bg?.status === "pending" ? (

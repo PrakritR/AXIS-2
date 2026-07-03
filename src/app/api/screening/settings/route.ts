@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getManagerScreeningSettings, updateManagerScreeningSettings } from "@/lib/screening/settings";
 import type { ScreeningMode } from "@/lib/screening/types";
 import { screeningConfigured, screeningCostCents } from "@/lib/screening/config";
-import { backgroundCheckConfigured } from "@/lib/checkr/config";
+import { backgroundCheckConfigured, checkrScreeningCostCents } from "@/lib/checkr/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -27,6 +27,7 @@ export async function GET() {
       configured: screeningConfigured(),
       costCents: screeningCostCents(),
       backgroundCheckConfigured: backgroundCheckConfigured(),
+      checkrCostCents: checkrScreeningCostCents(),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load screening settings.";
@@ -54,6 +55,7 @@ export async function PATCH(req: Request) {
       configured: screeningConfigured(),
       costCents: screeningCostCents(),
       backgroundCheckConfigured: backgroundCheckConfigured(),
+      checkrCostCents: checkrScreeningCostCents(),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save screening settings.";

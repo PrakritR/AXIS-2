@@ -1,14 +1,24 @@
 /**
- * Orchestrates a Checkr background check against an applicant record. This is
- * the single server-side entry point the API route and webhook call — the
- * agent tool layer can reuse it too. Per-manager scoping is enforced by the
- * caller (route) and re-checked here as defense in depth.
+ * Orchestrates a Checkr Tenant API background check against an applicant
+ * record. This is the single server-side entry point the API route and
+ * webhook call — the agent tool layer can reuse it too. Per-manager scoping is
+ * enforced by the caller (route) and re-checked here as defense in depth.
+ *
+ * The manager pays for the run: `chargeManagerForScreening` charges their
+ * saved Stripe payment method (same helper the Certn credit-screening
+ * pipeline uses) before any Checkr call is made.
  */
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { ApplicationBackgroundCheckStatus } from "@/lib/application-background-check";
 import { createBackgroundCheck, fetchBackgroundCheckReport } from "@/lib/checkr/client";
-import { backgroundCheckConfigured } from "@/lib/checkr/config";
-import type { ApplicationBackgroundCheck, CheckrCandidateInput } from "@/lib/checkr/types";
+import { backgroundCheckConfigured, checkrScreeningCostCents } from "@/lib/checkr/config";
+import type {
+  ApplicationBackgroundCheck,
+  CheckrApplicantInput,
+  CheckrPropertyInput,
+} from "@/lib/checkr/types";
+import { propertyFromRecord } from "@/lib/resident-move-in-resolve";
+import { chargeManagerForScreening } from "@/lib/screening/charge-manager";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -16,14 +26,14 @@ export type BackgroundCheckResult =
   | { ok: true; row: DemoApplicantRow; backgroundCheck: ApplicationBackgroundCheck }
   | { ok: false; status: number; error: string; code?: string };
 
-/** Map a Checkr report state onto the manager-facing background-check badge. */
+/** Map a Checkr order/report state onto the manager-facing background-check badge. */
 export function backgroundCheckStatusFromCheckr(
   bc: ApplicationBackgroundCheck | null | undefined,
 ): ApplicationBackgroundCheckStatus {
   if (!bc) return "pending_review";
   if (bc.status !== "complete") return "pending_review";
   if (bc.result === "clear") return "passed";
-  // consider / suspended / dispute all need a human look.
+  // consider (or a canceled/failed order) needs a human look.
   return "flagged";
 }
 
@@ -39,21 +49,46 @@ function normalizeDob(value: string | undefined): string | null {
   return parsed.toISOString().slice(0, 10);
 }
 
-function candidateInputFromApplication(app: RentalWizardFormState): CheckrCandidateInput {
+function applicantInputFromApplication(app: RentalWizardFormState): CheckrApplicantInput {
   const parts = app.fullLegalName.trim().split(/\s+/).filter(Boolean);
   const firstName = parts[0] ?? "Applicant";
   const lastName = parts.length > 1 ? parts[parts.length - 1]! : "Unknown";
-  const middleName = parts.length > 2 ? parts.slice(1, -1).join(" ") : undefined;
   return {
     firstName,
     lastName,
-    middleName,
     email: app.email.trim().toLowerCase(),
     dob: normalizeDob(app.dateOfBirth),
     ssn: digitsOnly(app.ssn),
-    zipcode: app.currentZip.trim(),
     phone: digitsOnly(app.phone) || undefined,
   };
+}
+
+/** Best-effort parse of the manager's free-text listing address into street/city/state. */
+function propertyInputFromAddress(name: string, address: string, zip: string): CheckrPropertyInput {
+  const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
+  const street = parts[0] || address.trim() || "Unknown";
+  const city = parts[1] || "Seattle";
+  const stateRaw = parts[2] || "WA";
+  const state = (stateRaw.match(/[A-Za-z]{2}/)?.[0] ?? "WA").toUpperCase();
+  return { name, street, city, state, zipcode: zip.trim() || "98101" };
+}
+
+async function loadCheckrProperty(
+  db: SupabaseClient,
+  propertyId: string | undefined,
+): Promise<CheckrPropertyInput> {
+  if (propertyId) {
+    const { data } = await db
+      .from("manager_property_records")
+      .select("id, property_data, row_data")
+      .eq("id", propertyId)
+      .maybeSingle();
+    const property = data ? propertyFromRecord(data) : undefined;
+    if (property) {
+      return propertyInputFromAddress(property.title || property.buildingName || "Rental property", property.address, property.zip);
+    }
+  }
+  return { name: "Rental property", street: "Unknown", city: "Seattle", state: "WA", zipcode: "98101" };
 }
 
 async function loadApplicationRow(
@@ -110,7 +145,7 @@ function applyBackgroundCheck(row: DemoApplicantRow, bc: ApplicationBackgroundCh
   return { ...row, backgroundCheck: bc, backgroundCheckStatus: backgroundCheckStatusFromCheckr(bc) };
 }
 
-/** Kick off a new Checkr background check for an applicant. */
+/** Kick off a new Checkr background check for an applicant. Charges the manager first. */
 export async function runBackgroundCheck(opts: {
   db: SupabaseClient;
   applicationId: string;
@@ -145,9 +180,21 @@ export async function runBackgroundCheck(opts: {
     };
   }
 
+  const costCents = checkrScreeningCostCents();
+  const charge = await chargeManagerForScreening({
+    managerUserId: opts.managerUserId,
+    applicationId: row.id,
+    amountCents: costCents,
+  });
+  if (!charge.ok) {
+    return { ok: false, status: 402, error: charge.message, code: charge.code };
+  }
+
+  const property = await loadCheckrProperty(opts.db, row.assignedPropertyId || row.propertyId || row.application.propertyId);
+
   let created;
   try {
-    created = await createBackgroundCheck(candidateInputFromApplication(row.application));
+    created = await createBackgroundCheck(applicantInputFromApplication(row.application), property);
   } catch (e) {
     return {
       ok: false,
@@ -160,15 +207,16 @@ export async function runBackgroundCheck(opts: {
   const now = new Date().toISOString();
   const bc: ApplicationBackgroundCheck = {
     provider: "checkr",
-    candidateId: created.candidateId,
-    reportId: created.reportId,
+    candidateId: created.applicantId,
+    reportId: created.orderId,
     packageSlug: created.packageSlug,
     status: created.status,
     result: created.result,
-    assessment: created.assessment,
     orderedAt: now,
     completedAt: created.status === "complete" ? now : undefined,
     simulated: created.simulated || undefined,
+    costCents,
+    stripePaymentIntentId: charge.paymentIntentId,
   };
 
   const nextRow = applyBackgroundCheck(row, bc);
@@ -205,7 +253,6 @@ export async function refreshBackgroundCheck(opts: {
     ...existing,
     status: report.status,
     result: report.result,
-    assessment: report.assessment ?? existing.assessment,
     completedAt: report.status === "complete" ? new Date().toISOString() : existing.completedAt,
   };
   const nextRow = applyBackgroundCheck(row, bc);
@@ -217,14 +264,14 @@ export async function refreshBackgroundCheck(opts: {
 /** Apply a Checkr report (from a webhook) to whichever application it belongs to. */
 export async function applyBackgroundCheckReport(
   db: SupabaseClient,
-  reportId: string,
-  report: { status: ApplicationBackgroundCheck["status"]; result: ApplicationBackgroundCheck["result"]; assessment?: string | null },
+  orderId: string,
+  report: { status: ApplicationBackgroundCheck["status"]; result: ApplicationBackgroundCheck["result"] },
 ): Promise<DemoApplicantRow | null> {
   const { data } = await db
     .from("screening_orders")
     .select("application_id")
     .eq("provider", "checkr")
-    .eq("external_order_id", reportId)
+    .eq("external_order_id", orderId)
     .maybeSingle();
   const applicationId = data?.application_id as string | undefined;
   if (!applicationId) return null;
@@ -236,7 +283,6 @@ export async function applyBackgroundCheckReport(
     ...row.backgroundCheck,
     status: report.status,
     result: report.result,
-    assessment: report.assessment ?? row.backgroundCheck.assessment,
     completedAt: report.status === "complete" ? new Date().toISOString() : row.backgroundCheck.completedAt,
   };
   const nextRow = applyBackgroundCheck(row, bc);

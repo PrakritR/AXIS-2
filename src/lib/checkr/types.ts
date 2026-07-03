@@ -1,12 +1,9 @@
-/** Checkr report lifecycle. `complete` carries a `result`; everything else is in-flight or exceptional. */
-export type CheckrReportStatus =
-  | "pending"
-  | "complete"
-  | "suspended"
-  | "dispute"
-  | "canceled";
+import type { CheckrPackage } from "@/lib/checkr/config";
 
-/** Checkr adjudication of a completed report. `null` while pending. */
+/** Checkr Tenant API order lifecycle. `complete` carries an aggregate `result`. */
+export type CheckrReportStatus = "pending" | "complete" | "canceled";
+
+/** Aggregate adjudication across the order's report products. `null` while pending. */
 export type CheckrResult = "clear" | "consider" | null;
 
 /**
@@ -16,47 +13,56 @@ export type CheckrResult = "clear" | "consider" | null;
  */
 export type ApplicationBackgroundCheck = {
   provider: "checkr";
+  /** Checkr Tenant API applicant id (`ap_test_…` / `ap_…`). */
   candidateId: string;
+  /** Checkr Tenant API order id (`ord_test_…` / `ord_…`) — used for polling and webhook lookup. */
   reportId: string;
-  packageSlug: string;
+  packageSlug: CheckrPackage;
   status: CheckrReportStatus;
   result: CheckrResult;
-  /** Checkr Assess verdict when enabled: eligible | review | escalated. */
-  assessment?: string | null;
   orderedAt: string;
   completedAt?: string;
   /** True when produced by the deterministic simulate fallback (no live call). */
   simulated?: boolean;
+  /** Flat fee charged to the manager for this run, and the resulting Stripe PaymentIntent. */
+  costCents?: number;
+  stripePaymentIntentId?: string;
 };
 
-/** Result of creating a candidate + report with Checkr. */
+/** Result of creating an applicant + property + order with Checkr. */
 export type CheckrCreateResult = {
-  candidateId: string;
-  reportId: string;
-  packageSlug: string;
+  applicantId: string;
+  orderId: string;
+  packageSlug: CheckrPackage;
   status: CheckrReportStatus;
   result: CheckrResult;
-  assessment?: string | null;
   simulated: boolean;
 };
 
-/** Normalized view of a fetched Checkr report. */
+/** Normalized view of a fetched Checkr order + report. */
 export type CheckrReport = {
-  reportId: string;
+  orderId: string;
   status: CheckrReportStatus;
   result: CheckrResult;
-  assessment?: string | null;
   simulated?: boolean;
 };
 
-/** Minimal applicant PII the Checkr candidate needs. Assembled server-side only. */
-export type CheckrCandidateInput = {
+/** Minimal applicant PII the Checkr applicant needs. Assembled server-side only. */
+export type CheckrApplicantInput = {
   firstName: string;
   lastName: string;
-  middleName?: string;
   email: string;
   dob: string | null;
   ssn: string;
-  zipcode: string;
   phone?: string;
+};
+
+/** The rental property being screened for — required by the Tenant API `property` resource. */
+export type CheckrPropertyInput = {
+  name: string;
+  street: string;
+  unit?: string;
+  city: string;
+  state: string;
+  zipcode: string;
 };

@@ -34,6 +34,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
+import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
@@ -226,6 +227,7 @@ export function ManagerApplications() {
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
+  const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
   useEffect(() => {
     if (!authReady) return;
     const sync = () => setRows(readManagerApplicationRows());
@@ -478,6 +480,15 @@ export function ManagerApplications() {
       }
     >
       <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
+      <CheckrScreeningModal
+        key={checkrScreeningRowId ?? "none"}
+        row={rows.find((r) => r.id === checkrScreeningRowId) ?? null}
+        open={checkrScreeningRowId !== null}
+        onClose={() => setCheckrScreeningRowId(null)}
+        onUpdated={() => {
+          void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
+        }}
+      />
       {!authReady && rows.length === 0 ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
@@ -513,9 +524,20 @@ export function ManagerApplications() {
               </button>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {row.bucket === "pending" ? (
-                  <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
-                    Approve
-                  </Button>
+                  <>
+                    <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
+                      Approve
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      data-attr="open-run-screening"
+                      onClick={() => setCheckrScreeningRowId(row.id)}
+                    >
+                      Run screening
+                    </Button>
+                  </>
                 ) : null}
                 <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}>
                   {expanded ? "Less" : "Review"}
@@ -577,6 +599,15 @@ export function ManagerApplications() {
                                 <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
                                   Approve
                                 </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={PORTAL_DETAIL_BTN}
+                                  data-attr="open-run-screening"
+                                  onClick={() => setCheckrScreeningRowId(row.id)}
+                                >
+                                  Run screening
+                                </Button>
                                 <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
                                   Reject
                                 </Button>
@@ -612,6 +643,7 @@ export function ManagerApplications() {
                             onUpdated={() => {
                               void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
                             }}
+                            onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
                           />
                           </div>
                         </td>
