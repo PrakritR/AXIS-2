@@ -1046,25 +1046,21 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
               <p className="text-sm font-semibold text-foreground">{a.label}</p>
             </div>
             <p className="mt-2 text-xs text-muted">House feature · included with this listing</p>
-            <div className="mt-2">
-              <AvailabilityPill text="Included" />
-            </div>
             <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "amenity", row: a })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Amenity</span>
             <span>Info</span>
-            <span>Included</span>
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
           </div>
           {rows.map((a) => (
             <div
               key={a.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div className="flex min-w-0 items-start gap-2">
                 <span className="shrink-0 text-base text-primary" aria-hidden>
@@ -1073,7 +1069,6 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
                 <p className="min-w-0 text-sm font-semibold text-foreground">{a.label}</p>
               </div>
               <p className="text-xs text-muted sm:text-sm">With listing</p>
-              <AvailabilityPill text="Included" />
               <DetailsButton onClick={() => setModal({ kind: "amenity", row: a })} />
             </div>
           ))}
