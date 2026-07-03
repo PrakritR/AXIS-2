@@ -1,9 +1,11 @@
 /** Manager-defined application questions — applicant answer helpers shared by the wizard, validation, review, and document builders. */
 
 import {
+  listingUsesStandardApplication,
   normalizeCustomApplicationFields,
   type ManagerCustomApplicationField,
 } from "@/lib/manager-listing-submission";
+import { applicationWizardStepForSection } from "./application-sections";
 import type { RentalCustomFieldAnswer } from "./types";
 
 /** Error-map key for a custom question (RentalWizardErrors is a flat string map). */
@@ -11,11 +13,23 @@ export function customFieldErrorKey(fieldKey: string): string {
   return `custom:${fieldKey}`;
 }
 
-/** Custom questions configured on a listing submission; [] for listings without any. */
+/**
+ * Custom questions that apply to applicants for a listing; [] for listings without any
+ * and for properties set to the standard Axis application.
+ */
 export function listingCustomApplicationFields(
-  sub: { customApplicationFields?: unknown } | null | undefined,
+  sub: { customApplicationFields?: unknown; applicationConfigMode?: unknown } | null | undefined,
 ): ManagerCustomApplicationField[] {
+  if (listingUsesStandardApplication(sub)) return [];
   return normalizeCustomApplicationFields(sub?.customApplicationFields);
+}
+
+/** Custom questions asked on a given applicant wizard step (section-tagged; untagged → Additional details). */
+export function customFieldsForWizardStep(
+  fields: ManagerCustomApplicationField[],
+  step: number,
+): ManagerCustomApplicationField[] {
+  return fields.filter((f) => applicationWizardStepForSection(f.section) === step);
 }
 
 export function customFieldAnswerValue(

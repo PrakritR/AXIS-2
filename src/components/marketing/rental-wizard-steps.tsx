@@ -25,6 +25,7 @@ import { digitsOnly, formatMoneyBlur } from "@/lib/rental-application/masks";
 import {
   customFieldAnswerValue,
   customFieldErrorKey,
+  customFieldsForWizardStep,
   displayableCustomFieldAnswers,
   formatCustomFieldAnswerDisplay,
   listingCustomApplicationFields,
@@ -242,6 +243,38 @@ function CustomQuestionField({
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
   const { step, form, errors, propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
+
+  // Manager custom questions render inside their configured section's step (untagged → step 9).
+  const stepManagerQuestions = (() => {
+    if (step < 3 || step > 10) return null;
+    const stepProp = getPropertyById(form.propertyId);
+    const fields = customFieldsForWizardStep(
+      listingCustomApplicationFields(stepProp?.listingSubmission?.v === 1 ? stepProp.listingSubmission : undefined),
+      step,
+    );
+    if (fields.length === 0) return null;
+    return (
+      <div className="space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5">
+        <div>
+          <h3 className="text-base font-bold tracking-tight text-foreground">Questions from your property manager</h3>
+          <StepIntro className="mt-1.5">
+            {stepProp?.title ? `The manager of ${stepProp.title} asks all applicants:` : "The property manager asks all applicants:"}
+          </StepIntro>
+        </div>
+        {fields.map((field) => (
+          <CustomQuestionField
+            key={field.key}
+            field={field}
+            value={customFieldAnswerValue(form.customFieldAnswers, field.key)}
+            error={errors[customFieldErrorKey(field.key)]}
+            onChange={(next) =>
+              patch({ customFieldAnswers: upsertCustomFieldAnswer(form.customFieldAnswers, field, next) })
+            }
+          />
+        ))}
+      </div>
+    );
+  })();
 
   if (step === 1) {
     return (
@@ -663,6 +696,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         ) : null}
+
+        {stepManagerQuestions}
       </div>
     );
   }
@@ -768,6 +803,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         </div>
+
+        {stepManagerQuestions}
       </div>
     );
   }
@@ -885,6 +922,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             rows={3}
           />
         </div>
+
+        {stepManagerQuestions}
       </div>
     );
   }
@@ -1009,6 +1048,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </>
         ) : null}
+
+        {stepManagerQuestions}
       </div>
     );
   }
@@ -1144,6 +1185,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         </div>
+
+        {stepManagerQuestions}
       </div>
     );
   }
@@ -1228,15 +1271,13 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         </div>
+
+        {stepManagerQuestions}
       </div>
     );
   }
 
   if (step === 9) {
-    const step9Prop = getPropertyById(form.propertyId);
-    const customFields = listingCustomApplicationFields(
-      step9Prop?.listingSubmission?.v === 1 ? step9Prop.listingSubmission : undefined,
-    );
     return (
       <div className="space-y-8">
         <div>
@@ -1346,27 +1387,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           ) : null}
         </div>
 
-        {customFields.length > 0 ? (
-          <div className="space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5">
-            <div>
-              <h3 className="text-base font-bold tracking-tight text-foreground">Questions from your property manager</h3>
-              <StepIntro className="mt-1.5">
-                {step9Prop?.title ? `The manager of ${step9Prop.title} asks all applicants:` : "The property manager asks all applicants:"}
-              </StepIntro>
-            </div>
-            {customFields.map((field) => (
-              <CustomQuestionField
-                key={field.key}
-                field={field}
-                value={customFieldAnswerValue(form.customFieldAnswers, field.key)}
-                error={errors[customFieldErrorKey(field.key)]}
-                onChange={(next) =>
-                  patch({ customFieldAnswers: upsertCustomFieldAnswer(form.customFieldAnswers, field, next) })
-                }
-              />
-            ))}
-          </div>
-        ) : null}
+        {stepManagerQuestions}
       </div>
     );
   }
@@ -1433,6 +1454,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <FieldError msg={errors.dateSigned} />
           </div>
         </div>
+
+        {stepManagerQuestions}
       </div>
     );
   }

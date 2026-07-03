@@ -152,7 +152,12 @@ export function ManagerPropertyApplicationQuestionsPanel({
       return;
     }
 
-    const next: ManagerListingSubmissionV1 = { ...sub, customApplicationFields: nextFields };
+    const next: ManagerListingSubmissionV1 = {
+      ...sub,
+      customApplicationFields: nextFields,
+      // Saving questions here means the manager wants them asked — leave "standard" only when clearing all questions.
+      applicationConfigMode: nextFields.length > 0 ? "custom" : sub.applicationConfigMode,
+    };
     let ok = false;
     if (saveTarget.mode === "pending") {
       ok = updatePendingManagerProperty(saveTarget.saveId, next, managerUserId);

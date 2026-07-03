@@ -1,7 +1,7 @@
 import type { MockProperty } from "@/data/types";
 import { parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
-import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { activeCustomLeaseTerms, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
@@ -29,6 +29,28 @@ function dash(s: string | undefined | null): string {
 
 function submissionFor(prop: MockProperty | undefined): ManagerListingSubmissionV1 | undefined {
   return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+}
+
+/**
+ * Manager-authored lease clauses (Lease step of the create-listing wizard),
+ * rendered as an addendum. Plain text: paragraphs split on blank lines.
+ */
+function customTermsAddendumHtml(sub: ManagerListingSubmissionV1 | undefined, heading: string): string {
+  const terms = activeCustomLeaseTerms(sub);
+  if (!terms) return "";
+  const paragraphs = terms
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br/>")}</p>`)
+    .join("\n");
+  return `
+<div class="addendum">
+<h2>${escapeHtml(heading)}</h2>
+<p><em>The following provisions were supplied by the property manager for this property and form part of this Agreement. If a manager-supplied provision conflicts with applicable law, the law controls.</em></p>
+${paragraphs}
+</div>
+`;
 }
 
 function sharedSpacesLeaseParagraph(raw: ManagerListingSubmissionV1 | undefined): string {
@@ -371,6 +393,7 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
 
 <h2>11. Electronic Signature</h2>
 <p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the Axis portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
+${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
 </body></html>`;
   }
 
@@ -611,6 +634,7 @@ ${houseRules
 <p><strong>Dispute resolution:</strong> Residents are encouraged to resolve disputes between themselves first. If unresolved, bring concerns to Landlord in writing. Landlord's reasonable determination of house-rule disputes shall be final subject to applicable law.</p>
 <p><strong>Three-strike policy:</strong> Three documented written warnings in any 12-month period for the same or similar violations may constitute grounds for lease termination with appropriate statutory notice.</p>
 </div>
+${customTermsAddendumHtml(subNorm, "Addendum F — Additional Provisions from Property Manager")}
 `;
 
   return `<!DOCTYPE html>

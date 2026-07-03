@@ -10,6 +10,7 @@ import {
   normalizeSharedSpaceKind,
 } from "@/data/manager-listing-presets";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
+import { RENTAL_APPLICATION_SECTION_IDS } from "@/lib/rental-application/application-sections";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
 export type PaymentAtSigningOptionId =
@@ -249,6 +250,26 @@ export type ManagerListingSubmissionV1 = {
   serviceRequestOptions?: ManagerListingServiceOption[];
   /** Manager-defined application questions applicants answer for this listing (array order is display order). */
   customApplicationFields?: ManagerCustomApplicationField[];
+  /**
+   * How the rental application is configured for this property.
+   * "standard" = default Axis application only (custom questions kept but inactive);
+   * "custom" = custom questions apply. Absent (legacy) = custom questions apply if present.
+   */
+  applicationConfigMode?: "standard" | "custom";
+  /**
+   * How the lease document is produced for this property.
+   * "standard"/absent = Axis generated lease (current behavior);
+   * "custom" = manager's custom lease terms or uploaded template (see `leaseCustomKind`).
+   */
+  leaseConfigMode?: "standard" | "custom";
+  /** Which custom lease source applies when `leaseConfigMode` is "custom". Default "terms". */
+  leaseCustomKind?: "terms" | "document";
+  /** Manager-authored clauses merged into the Axis generated lease as an Additional Provisions addendum. */
+  customLeaseTerms?: string;
+  /** Uploaded lease template (PDF) — data URL while editing, storage URL once submitted. */
+  leaseTemplateDocUrl?: string | null;
+  /** Original filename of the uploaded lease template. */
+  leaseTemplateDocName?: string;
 };
 
 const LEASE_TERM_OPTION_SET = new Set<string>(LEASE_TERM_OPTIONS);
@@ -316,6 +337,8 @@ export type ManagerCustomApplicationField = {
   required: boolean;
   /** Choices for `select` fields; ignored for other types. Array order is display order. */
   options: string[];
+  /** Application section this question belongs to (RentalApplicationSectionId). Absent = Additional details. */
+  section?: string;
 };
 
 const CUSTOM_APPLICATION_FIELD_TYPES = new Set<string>(
@@ -364,6 +387,8 @@ export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApp
             .map((v) => v.trim())
         : [];
     if (type === "select" && options.length === 0) continue;
+    const section =
+      typeof o.section === "string" && RENTAL_APPLICATION_SECTION_IDS.has(o.section) ? o.section : undefined;
     out.push({
       id: typeof o.id === "string" && o.id.trim() ? o.id.trim() : rid("caf"),
       key,
@@ -371,9 +396,45 @@ export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApp
       type,
       required: o.required === true,
       options,
+      section,
     });
   }
   return out;
+}
+
+/**
+ * True when the property should use the default Axis application only.
+ * Legacy submissions (no mode saved) keep today's behavior: custom questions apply if present.
+ */
+export function listingUsesStandardApplication(
+  sub: { applicationConfigMode?: unknown } | null | undefined,
+): boolean {
+  return sub?.applicationConfigMode === "standard";
+}
+
+/** Custom lease clauses to merge into the generated lease; "" unless custom terms are active. */
+export function activeCustomLeaseTerms(
+  sub: { leaseConfigMode?: unknown; leaseCustomKind?: unknown; customLeaseTerms?: unknown } | null | undefined,
+): string {
+  if (!sub || sub.leaseConfigMode !== "custom") return "";
+  if (sub.leaseCustomKind === "document") return "";
+  return typeof sub.customLeaseTerms === "string" ? sub.customLeaseTerms.trim() : "";
+}
+
+/** Uploaded lease template to use instead of the Axis generated lease, or null. */
+export function activeLeaseTemplateDoc(
+  sub:
+    | { leaseConfigMode?: unknown; leaseCustomKind?: unknown; leaseTemplateDocUrl?: unknown; leaseTemplateDocName?: unknown }
+    | null
+    | undefined,
+): { url: string; name: string } | null {
+  if (!sub || sub.leaseConfigMode !== "custom" || sub.leaseCustomKind !== "document") return null;
+  const url = typeof sub.leaseTemplateDocUrl === "string" ? sub.leaseTemplateDocUrl.trim() : "";
+  if (!url) return null;
+  const name = typeof sub.leaseTemplateDocName === "string" && sub.leaseTemplateDocName.trim()
+    ? sub.leaseTemplateDocName.trim()
+    : "Lease template.pdf";
+  return { url, name };
 }
 
 /** Legacy persisted shapes (optional fields). */
@@ -916,6 +977,16 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     customApplicationFields: normalizeCustomApplicationFields(
       (sub as { customApplicationFields?: unknown }).customApplicationFields,
     ),
+    applicationConfigMode:
+      sub.applicationConfigMode === "standard" || sub.applicationConfigMode === "custom"
+        ? sub.applicationConfigMode
+        : undefined,
+    leaseConfigMode:
+      sub.leaseConfigMode === "standard" || sub.leaseConfigMode === "custom" ? sub.leaseConfigMode : undefined,
+    leaseCustomKind: sub.leaseCustomKind === "document" ? "document" : sub.leaseCustomKind === "terms" ? "terms" : undefined,
+    customLeaseTerms: typeof sub.customLeaseTerms === "string" ? sub.customLeaseTerms : "",
+    leaseTemplateDocUrl: typeof sub.leaseTemplateDocUrl === "string" ? sub.leaseTemplateDocUrl || null : null,
+    leaseTemplateDocName: typeof sub.leaseTemplateDocName === "string" ? sub.leaseTemplateDocName : "",
     applicationFeeStripeEnabled,
     applicationFeeZelleEnabled,
     applicationFeeVenmoEnabled,
@@ -980,7 +1051,7 @@ export function emptyQuickFactRow(): ManagerQuickFactRow {
   };
 }
 
-export function emptyCustomApplicationField(): ManagerCustomApplicationField {
+export function emptyCustomApplicationField(section?: string): ManagerCustomApplicationField {
   return {
     id: rid("caf"),
     key: "",
@@ -988,6 +1059,7 @@ export function emptyCustomApplicationField(): ManagerCustomApplicationField {
     type: "text",
     required: false,
     options: [],
+    section,
   };
 }
 
@@ -1187,6 +1259,12 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     quickFacts: [],
     serviceRequestOptions: [],
     customApplicationFields: [],
+    applicationConfigMode: "standard",
+    leaseConfigMode: "standard",
+    leaseCustomKind: "terms",
+    customLeaseTerms: "",
+    leaseTemplateDocUrl: null,
+    leaseTemplateDocName: "",
   };
 }
 

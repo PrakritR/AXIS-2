@@ -7,7 +7,7 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { type ManagerLeaseBucket, type ManagerLeaseTab } from "@/data/demo-portal";
-import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
+import { buildAiGeneratedLeaseHtml, leaseContextFromApplication, leaseTemplateDocForContext } from "@/lib/generated-lease";
 import {
   isLeaseGenerationSupported,
   resolveLeaseJurisdiction,
@@ -1025,6 +1025,8 @@ export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: tru
     return { ok: false, error: "No application data on file." };
   }
   const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+  // Properties with a manager-uploaded lease template can generate anywhere.
+  if (leaseTemplateDocForContext(ctx)) return { ok: true };
   const jurisdiction = resolveLeaseJurisdiction(ctx);
   if (!isLeaseGenerationSupported(jurisdiction)) {
     return { ok: false, error: unsupportedJurisdictionMessage(jurisdiction) };
@@ -1143,7 +1145,7 @@ export function regenerateAllLeaseHtml(managerUserId?: string | null): {
     if (signed) {
       try {
         const ctx = leaseContextFromApplication(app as RentalWizardFormState);
-        if (!isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
+        if (!leaseTemplateDocForContext(ctx) && !isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
           skipped++;
           continue;
         }
@@ -1173,7 +1175,7 @@ export function regenerateAllLeaseHtml(managerUserId?: string | null): {
     }
     try {
       const ctx = leaseContextFromApplication(app as RentalWizardFormState);
-      if (!isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
+      if (!leaseTemplateDocForContext(ctx) && !isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
         skipped++;
         continue;
       }
