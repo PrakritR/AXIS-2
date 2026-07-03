@@ -60,6 +60,12 @@ function scrollToSection(id: string, mode: "page" | "modal", subnavEl: HTMLEleme
     const root = getScrollRootFromSubnav(subnavEl);
     if (!root || !subnavEl) return;
     syncListingScrollStack(mode, subnavEl);
+    // Below the desktop breakpoint the preview panel is not its own scroller
+    // (the page/portal scroller moves instead) — defer to scrollIntoView there.
+    if (root.scrollHeight <= root.clientHeight + 1) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     const subnavH = subnavEl.getBoundingClientRect().height;
     const y = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
     root.scrollTo({ top: Math.max(0, y - subnavH - 10), behavior: "smooth" });
@@ -73,7 +79,11 @@ function scrollToSection(id: string, mode: "page" | "modal", subnavEl: HTMLEleme
 /** Sticky section tabs: full marketing pages use the public navbar offset; preview modal pins to top of its scroller. */
 export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal" }) {
   const rootRef = useRef<HTMLElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const tabRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
+  // While a click-initiated smooth scroll is in flight, the spy would flap
+  // through intermediate sections — pin the clicked tab until it settles.
+  const clickLockRef = useRef<{ id: string; until: number } | null>(null);
   const [stickyTopPx, setStickyTopPx] = useState(mode === "modal" ? 0 : 64);
   const [pageScrolled, setPageScrolled] = useState(false);
   const [activeId, setActiveId] = useState<string>(nav[0].id);
@@ -85,28 +95,19 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
     if (mode === "modal") {
       const scrollRoot = getScrollRootFromSubnav(subEl);
       syncListingScrollStack(mode, subEl);
-
       setStickyTopPx(0);
       setPageScrolled(scrollRoot ? scrollRoot.scrollTop > 8 : false);
-
-      const line = subEl.getBoundingClientRect().bottom + 6;
-      let next: (typeof nav)[number]["id"] = nav[0].id;
-      for (const item of nav) {
-        const sec = getSectionElement(item.id, mode, subEl);
-        if (sec && sec.getBoundingClientRect().top <= line) {
-          next = item.id;
-        }
-      }
-      setActiveId(next);
-      return;
+    } else {
+      const navEl = document.getElementById(NAVBAR_ID);
+      const navH = navEl?.getBoundingClientRect().height ?? 0;
+      setStickyTopPx(navH);
+      syncListingScrollStack(mode, subEl);
+      setPageScrolled(window.scrollY > 20);
     }
 
-    const navEl = document.getElementById(NAVBAR_ID);
-    const navH = navEl?.getBoundingClientRect().height ?? 0;
-    setStickyTopPx(navH);
-    syncListingScrollStack(mode, subEl);
-
-    const line = subEl.getBoundingClientRect().bottom + 6;
+    // Slightly below where a clicked section lands (subnav + 10/12px offset),
+    // so the spy agrees with the tab that was just clicked.
+    const line = subEl.getBoundingClientRect().bottom + 16;
     let next: (typeof nav)[number]["id"] = nav[0].id;
     for (const item of nav) {
       const sec = getSectionElement(item.id, mode, subEl);
@@ -114,8 +115,15 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
         next = item.id;
       }
     }
+    const lock = clickLockRef.current;
+    if (lock) {
+      if (next === lock.id || Date.now() > lock.until) {
+        clickLockRef.current = null;
+      } else {
+        next = lock.id as (typeof nav)[number]["id"];
+      }
+    }
     setActiveId(next);
-    setPageScrolled(window.scrollY > 20);
   }, [mode]);
 
   useLayoutEffect(() => {
@@ -154,13 +162,16 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
       ro.observe(subEl);
 
       const onScroll = () => publishStackAndSpy();
-      scrollRoot?.addEventListener("scroll", onScroll, { passive: true });
+      // The preview panel scrolls itself on desktop, but below the desktop
+      // breakpoint the page/portal scroller moves instead — capture scrolls
+      // from any container so the spy works in both layouts.
+      document.addEventListener("scroll", onScroll, { capture: true, passive: true });
       window.addEventListener("resize", publishStackAndSpy, { passive: true });
       queueMicrotask(() => publishStackAndSpy());
 
       return () => {
         ro.disconnect();
-        scrollRoot?.removeEventListener("scroll", onScroll);
+        document.removeEventListener("scroll", onScroll, { capture: true });
         window.removeEventListener("resize", publishStackAndSpy);
         scrollRoot?.style.removeProperty("--listing-sticky-stack");
       };
@@ -190,7 +201,14 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
 
   useEffect(() => {
     const node = tabRefs.current.get(activeId);
-    node?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    const list = listRef.current;
+    if (!node || !list || list.scrollWidth <= list.clientWidth + 1) return;
+    // Center the active tab by scrolling only the strip — scrollIntoView would
+    // also scroll ancestor containers and cancel an in-flight section scroll.
+    const nodeRect = node.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    const left = list.scrollLeft + (nodeRect.left - listRect.left) - (list.clientWidth - nodeRect.width) / 2;
+    list.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
   }, [activeId]);
 
   useEffect(() => {
@@ -200,6 +218,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
     const id = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (cancelled) return;
+        clickLockRef.current = { id: hash, until: Date.now() + 1500 };
         scrollToSection(hash, mode, rootRef.current);
         setActiveId(hash);
       });
@@ -227,7 +246,10 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
       }}
       aria-label="Listing sections"
     >
-      <ul className="-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]">
+      <ul
+        ref={listRef}
+        className="-mx-1 flex flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain px-1 py-0.5 text-[12px] font-semibold [-webkit-overflow-scrolling:touch] sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:text-[13px]"
+      >
         {nav.map((item) => {
           const active = activeId === item.id;
           return (
@@ -237,6 +259,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
                   tabRefs.current.set(item.id, el);
                 }}
                 type="button"
+                data-attr="listing-section-tab"
                 aria-current={active ? "true" : undefined}
                 className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
                   active
@@ -244,6 +267,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
                     : "bg-transparent text-muted hover:bg-accent/40 hover:text-foreground [html[data-theme=dark]_&]:hover:bg-white/10"
                 }`}
                 onClick={() => {
+                  clickLockRef.current = { id: item.id, until: Date.now() + 1500 };
                   setActiveId(item.id);
                   scrollToSection(item.id, mode, rootRef.current);
                   if (mode === "page") {

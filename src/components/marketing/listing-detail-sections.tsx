@@ -16,6 +16,11 @@ import {
   LeaseBasicsTableInteractive,
   SharedTableInteractive,
 } from "@/components/marketing/listing-detail-tables-client";
+import {
+  ListingPreviewNewTabContext,
+  listingLinkTargetProps,
+  useListingPreviewNewTab,
+} from "@/components/marketing/listing-preview-context";
 import { listingFallbackMapCenter } from "@/lib/listing-map";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
@@ -135,6 +140,7 @@ function Sidebar({
 }) {
   const primaryPrice = rich.estimatedMonthlyTotalLabel ?? rich.startingRentLabel;
   const showsEstimatedTotal = Boolean(rich.estimatedMonthlyTotalLabel);
+  const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
   return (
     <aside
       className={`order-1 space-y-6 lg:order-2 lg:sticky lg:top-[calc(env(safe-area-inset-top,0px)+7.5rem)] lg:self-start ${className}`}
@@ -148,14 +154,18 @@ function Sidebar({
           {showsEstimatedTotal ? `Includes rent + utilities estimate. Base rent from ${rich.startingRentLabel}.` : "Before utilities and other fees."}
         </p>
         <Link
-          href="/rent/tours-contact"
+          href={`/rent/tours-contact?propertyId=${encodeURIComponent(property.id)}`}
+          data-attr="listing-check-availability"
           className={`${primaryCtaClass} min-h-[48px]`}
+          {...newTabProps}
         >
           Check availability
         </Link>
         <Link
           href={buildRentalApplyHref({ propertyId: property.id })}
+          data-attr="listing-apply-online"
           className={secondaryCtaClass}
+          {...newTabProps}
         >
           Apply online
         </Link>
@@ -230,6 +240,7 @@ export function ListingDetailSections({
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
   const heroUrls = rich.heroHousePhotoUrls ?? [];
   return (
+    <ListingPreviewNewTabContext.Provider value={previewModal}>
     <div className="bg-background text-foreground" data-listing-sections-root>
       <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>
         {previewModal ? (
@@ -439,5 +450,6 @@ export function ListingDetailSections({
         </div>
       </div>
     </div>
+    </ListingPreviewNewTabContext.Provider>
   );
 }

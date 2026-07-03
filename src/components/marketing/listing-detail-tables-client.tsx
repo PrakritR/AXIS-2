@@ -13,6 +13,10 @@ import type {
   ListingRoomRow,
   ListingSharedRow,
 } from "@/data/listing-rich-content";
+import {
+  listingLinkTargetProps,
+  useListingPreviewNewTab,
+} from "@/components/marketing/listing-preview-context";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
@@ -78,6 +82,7 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
   return (
     <button
       type="button"
+      data-attr="listing-row-details"
       onClick={onClick}
       className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary [html[data-theme=dark]_&]:border-white/18 [html[data-theme=dark]_&]:bg-white/10 sm:min-h-0 ${className}`}
     >
@@ -267,6 +272,8 @@ function ListingDetailModal({
 }) {
   const stop = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
   const isClient = useIsClient();
+  const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
+  const toursContactHref = `/rent/tours-contact?propertyId=${encodeURIComponent(listingPropertyId)}`;
 
   useEffect(() => {
     if (!state) return;
@@ -437,12 +444,13 @@ function ListingDetailModal({
                   roomPrice: state.room.price,
                 })}
                 className="flex-1"
+                {...newTabProps}
               >
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply for this room
                 </span>
               </Link>
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
@@ -498,12 +506,12 @@ function ListingDetailModal({
               )}
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Ask about this bathroom
                 </span>
               </Link>
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Apply
                 </span>
@@ -553,12 +561,12 @@ function ListingDetailModal({
               </div>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply
                 </span>
               </Link>
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
@@ -596,12 +604,12 @@ function ListingDetailModal({
               <p className="mt-2 text-sm leading-relaxed text-muted">{state.row.body}</p>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply
                 </span>
               </Link>
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask about lease terms
                 </span>
@@ -645,12 +653,12 @@ function ListingDetailModal({
             </div>
             <p className="mt-4 text-xs text-muted">Confirm availability, utilities, and final rent with leasing before applying.</p>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply for this bundle
                 </span>
               </Link>
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
@@ -675,12 +683,12 @@ function ListingDetailModal({
               </p>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Ask a question
                 </span>
               </Link>
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Apply
                 </span>

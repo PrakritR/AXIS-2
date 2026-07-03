@@ -50,6 +50,7 @@ export function ListingPublicPreviewModal({
                 href={publicHref}
                 target="_blank"
                 rel="noopener noreferrer"
+                data-attr="listing-open-public-page"
                 className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent/30"
               >
                 Open public page

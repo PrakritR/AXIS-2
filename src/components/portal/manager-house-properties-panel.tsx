@@ -270,7 +270,7 @@ function ManagerPropertyInlineDetails({
       ) : null}
 
       {bucket === 2 && listingId ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2">
           <Button
             type="button"
             variant="outline"
@@ -328,6 +328,11 @@ function ManagerPropertyInlineDetails({
           >
             Delete listing
           </Button>
+          {displaySub && portalSub ? (
+            <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
+              Edit listing
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -394,7 +399,7 @@ function ManagerPropertyInlineDetails({
         </div>
       ) : null}
 
-      {displaySub && portalSub ? (
+      {displaySub && portalSub && !(bucket === 2 && listingId) ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
             Edit listing
@@ -417,6 +422,7 @@ function ManagerPropertyInlineDetails({
             href={publicHref}
             target="_blank"
             rel="noopener noreferrer"
+            data-attr="listing-open-public-page"
             className="text-xs font-semibold text-muted underline-offset-2 hover:underline"
           >
             Open public page
