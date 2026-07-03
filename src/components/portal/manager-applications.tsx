@@ -151,6 +151,9 @@ function downloadApplicationPdf(row: DemoApplicantRow): void {
  * clean styled HTML in an srcDoc iframe (no browser PDF-viewer chrome). The document page is
  * always white like the lease, so it reads clearly on the themed card frame in both light and
  * dark mode; the Download PDF action in the detail toolbar produces the official PDF file.
+ * Rendered for every bucket (pending/approved/rejected) and also for rows without a stored
+ * application payload (e.g. manually added applicants), mirroring buildApplicationPdf which
+ * falls back to row-level fields.
  */
 function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
   const documentHtml = useMemo(
@@ -602,7 +605,7 @@ export function ManagerApplications() {
                             </Button>
                           </PortalTableDetailActions>
 
-                          {row.application ? <ApplicationDocumentPreview row={row} /> : null}
+                          <ApplicationDocumentPreview row={row} />
 
                           <ApplicationScreeningPanel
                             row={row}
