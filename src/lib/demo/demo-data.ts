@@ -317,6 +317,30 @@ export function demoApplications(): DemoApplicantRow[] {
       }),
     mk("demo-app-8", "Tyler Brooks", "tyler.brooks@example.com", PROP.pioneer, "Declined", "rejected",
       "Did not meet income requirement", { backgroundCheckStatus: "flagged" }),
+    // Former Pioneer 12A tenant, moved out just before Jordan's incoming lease
+    // — gives the manager Residents › Previous tab a real row.
+    mk("demo-app-9", "Maya Torres", "maya.torres@example.com", PROP.pioneer, "Moved out", "approved",
+      "Lease ended — relocated out of state", {
+        signedMonthlyRent: 2300,
+        assignedRoomChoice: demoRoomChoice(PROP.pioneer),
+        backgroundCheckStatus: "passed",
+        manualResidentDetails: {
+          moveInDate: dateLabel(-410),
+          moveOutDate: dateLabel(-20),
+          monthlyUtilities: 85,
+          moveInFee: 150,
+          securityDeposit: 500,
+          roomNumber: "12A",
+          leaseTerm: "12 months",
+          notes: "Relocated out of state. Deposit returned in full after move-out inspection.",
+        },
+        application: demoApplicationData({
+          propertyId: PROP.pioneer,
+          roomChoice1: demoRoomChoice(PROP.pioneer),
+          leaseStart: dateLabel(-410),
+          leaseEnd: dateLabel(-20),
+        }),
+      }),
   ];
 }
 
@@ -360,22 +384,80 @@ export function demoCharges(): HouseholdCharge[] {
     mk("demo-hc-2", "Omar Haddad", "omar.haddad@example.com", PROP.cascade, 1950, "pending", { rentMonth: monthKey(-1) }),
     // Upcoming (due within a week so the Payments views actually show them).
     // Jordan's first month rent lines up with the lease awaiting signature.
+    // `applicationId` is required on every one-time charge below (first month
+    // rent, deposit, move-in fee, application fee) — the Payments tab
+    // reconciles pending schedules for every approved application on mount
+    // (`reconcileApprovedResidentPaymentSchedules`), and without a matching
+    // `applicationId` it can't tell an already-paid charge apart from a
+    // missing one, so it silently synthesizes a duplicate pending line.
     mk("demo-hc-3", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 2400, "pending", { dueDateLabel: dateLabel(5) }, DEMO_RESIDENT_USER_ID, {
       kind: "first_month_rent",
       title: "First month rent",
+      applicationId: "AXIS-DEMOAPP4",
     }),
-    mk("demo-hc-4", "Grace Kim", "grace.kim@example.com", PROP.lakeview, 1700, "pending", { dueDateLabel: dateLabel(6) }),
+    mk("demo-hc-4", "Grace Kim", "grace.kim@example.com", PROP.lakeview, 1700, "pending", { dueDateLabel: dateLabel(6) }, null, {
+      kind: "first_month_rent",
+      title: "First month rent",
+      applicationId: "AXIS-DEMOAPP7",
+    }),
+    // Grace's pre-move-in fees, already paid — mirrors Jordan's paid trail so
+    // both incoming residents read the same way before their lease starts.
+    mk("demo-hc-14", "Grace Kim", "grace.kim@example.com", PROP.lakeview, 500, "paid", { dueDateLabel: dateLabel(-5) }, null, {
+      kind: "security_deposit",
+      title: "Security deposit",
+      applicationId: "AXIS-DEMOAPP7",
+      createdAt: isoDaysFromNow(-8),
+      paidAt: isoDaysFromNow(-5),
+    }),
+    mk("demo-hc-17", "Grace Kim", "grace.kim@example.com", PROP.lakeview, 150, "paid", { dueDateLabel: dateLabel(-5) }, null, {
+      kind: "move_in_fee",
+      title: "Move-in fee",
+      applicationId: "AXIS-DEMOAPP7",
+      createdAt: isoDaysFromNow(-8),
+      paidAt: isoDaysFromNow(-5),
+    }),
+    mk("demo-hc-15", "Grace Kim", "grace.kim@example.com", PROP.lakeview, 45, "paid", { dueDateLabel: dateLabel(-22) }, null, {
+      kind: "application_fee",
+      title: "Application fee",
+      applicationId: "AXIS-DEMOAPP7",
+      createdAt: isoDaysFromNow(-24),
+      paidAt: isoDaysFromNow(-22),
+    }),
+    // Long-standing active tenants also paid their application fee back when
+    // they applied — otherwise the Payments reconcile step above invents a
+    // bogus "pending application fee" for an active, fully-signed resident.
+    mk("demo-hc-18", "Dana Whitfield", "dana.whitfield@example.com", PROP.emerald, 45, "paid", { dueDateLabel: dateLabel(-95) }, null, {
+      kind: "application_fee",
+      title: "Application fee",
+      applicationId: "AXIS-DEMOAPP5",
+      createdAt: isoDaysFromNow(-97),
+      paidAt: isoDaysFromNow(-95),
+    }),
+    mk("demo-hc-19", "Omar Haddad", "omar.haddad@example.com", PROP.cascade, 45, "paid", { dueDateLabel: dateLabel(-150) }, null, {
+      kind: "application_fee",
+      title: "Application fee",
+      applicationId: "AXIS-DEMOAPP6",
+      createdAt: isoDaysFromNow(-152),
+      paidAt: isoDaysFromNow(-150),
+    }),
+    // Former Pioneer tenant's final rent payment before moving out.
+    mk("demo-hc-16", "Maya Torres", "maya.torres@example.com", PROP.pioneer, 2300, "paid", { dueDateLabel: dateLabel(-48) }, null, {
+      createdAt: isoDaysFromNow(-51),
+      paidAt: isoDaysFromNow(-48),
+    }),
     // Paid history — the incoming demo resident already paid the move-in
     // charges, so the Paid tab and rent receipts have a real trail.
     mk("demo-hc-5", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 500, "paid", { dueDateLabel: dateLabel(-6) }, DEMO_RESIDENT_USER_ID, {
       kind: "security_deposit",
       title: "Security deposit",
+      applicationId: "AXIS-DEMOAPP4",
       createdAt: isoDaysFromNow(-9),
       paidAt: isoDaysFromNow(-6),
     }),
     mk("demo-hc-8", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 150, "paid", { dueDateLabel: dateLabel(-6) }, DEMO_RESIDENT_USER_ID, {
       kind: "move_in_fee",
       title: "Move-in fee",
+      applicationId: "AXIS-DEMOAPP4",
       createdAt: isoDaysFromNow(-9),
       paidAt: isoDaysFromNow(-6),
     }),
@@ -385,7 +467,7 @@ export function demoCharges(): HouseholdCharge[] {
       { dueDateLabel: dateLabel(-24) }, DEMO_RESIDENT_USER_ID, {
         kind: "application_fee",
         title: "Application fee",
-        applicationId: "demo-app-4",
+        applicationId: "AXIS-DEMOAPP4",
         createdAt: isoDaysFromNow(-26),
         paidAt: isoDaysFromNow(-24),
       }),
@@ -610,6 +692,18 @@ export function demoLeases(): LeasePipelineRow[] {
       ...signatures("Omar Haddad", -92, -91),
       signedRentLabel: "$1,950/mo",
     }),
+    // Maya's concluded lease — an explicit row here (matched by email+property)
+    // stops the pipeline from synthesizing a fresh "Draft" row for her approved
+    // application, which would otherwise misread as an in-progress lease.
+    mk("demo-lease-7", "Maya Torres", "maya.torres@example.com", PROP.pioneer, "signed", "Fully Signed", {
+      generatedHtml: leaseHtml("Maya Torres", PROP.pioneer, "$2,300.00 per month", -410, -20),
+      generatedAtIso: isoDaysFromNow(-410),
+      sentToResidentAt: isoDaysFromNow(-409),
+      ...signatures("Maya Torres", -408, -407),
+      signedRentLabel: "$2,300/mo",
+      updated: dateLabel(-20),
+      updatedAtIso: isoDaysFromNow(-20),
+    }),
   ];
 }
 
@@ -664,7 +758,12 @@ export function demoWorkOrders(): DemoManagerWorkOrderRow[] {
         workDoneSummary: "Two-coat repaint, living room + hallway.",
       }),
     mk("demo-wo-4", PROP.lakeview, "Replace smoke detector", "Medium", "Open", "open",
-      "Battery warning on hallway smoke detector.", { category: "electrical", managerInitiated: true }),
+      "Battery warning on hallway smoke detector — flagged during pre-move-in walkthrough.", {
+        residentName: "Grace Kim",
+        residentEmail: "grace.kim@example.com",
+        category: "electrical",
+        managerInitiated: true,
+      }),
   ];
 }
 
@@ -775,6 +874,37 @@ export function demoPromotions(): ManagerPromotionRow[] {
       createdAt: isoDaysFromNow(0),
       updatedAt: isoDaysFromNow(0),
     },
+    {
+      id: "demo-promo-4",
+      managerUserId: DEMO_MANAGER_USER_ID,
+      propertyId: PROP.lakeview,
+      propertyLabel: "Lakeview Flats — South Lake Union",
+      title: "South Lake Union studio",
+      theme: "slate",
+      flyerSize: "ig_story",
+      template: "minimal",
+      status: "generated",
+      inputs: {
+        headline: "Studio living in South Lake Union",
+        sellingPoints: "Steps from Amazon campus\nIn-unit laundry\nSecure bike storage",
+        price: "$1,700/mo",
+        promo: "Waived application fee",
+        cta: "Apply today",
+        contact: "leasing@axis.com",
+        tone: "Clean & minimal",
+        customDetails: "",
+      },
+      copy: {
+        headline: "Your South Lake Union Studio",
+        subheadline: "Lakeview Flats — South Lake Union · $1,700/mo",
+        sellingPoints: ["Steps from Amazon campus", "In-unit laundry", "Secure bike storage"],
+        promoLine: "Waived application fee",
+        ctaText: "Apply today",
+        closingLine: "Contact us: leasing@axis.com",
+      },
+      createdAt: isoDaysFromNow(-2),
+      updatedAt: isoDaysFromNow(-2),
+    },
   ];
 }
 
@@ -812,6 +942,22 @@ export function demoServiceRequests(): ServiceRequest[] {
     mk("demo-sr-2", "Extra storage unit", "Omar Haddad", "omar.haddad@example.com", PROP.cascade, "approved", "$45.00", {
       approvedAt: isoDaysFromNow(-1),
     }),
+    mk("demo-sr-3", "Deep-clean visit", "Dana Whitfield", "dana.whitfield@example.com", PROP.emerald, "denied", "$150.00", {
+      requestedAt: isoDaysFromNow(-6),
+      deniedAt: isoDaysFromNow(-5),
+      managerNote: "Vendor fully booked this month — please re-request next cycle.",
+    }),
+    mk("demo-sr-4", "Pet registration", "Grace Kim", "grace.kim@example.com", PROP.lakeview, "returned", "$35.00", {
+      deposit: "$150.00",
+      returnByDate: isoDateOnly(200),
+      requestedAt: isoDaysFromNow(-35),
+      approvedAt: isoDaysFromNow(-34),
+      servicePaid: true,
+      servicePaidAt: isoDaysFromNow(-34),
+      depositPaid: true,
+      depositPaidAt: isoDaysFromNow(-34),
+      returnedAt: isoDaysFromNow(-2),
+    }),
   ];
 }
 
@@ -838,6 +984,17 @@ export function demoManagerInbox(): PersistedInboxThread[] {
       body: "Hi,\n\nThe leak under the kitchen sink is getting worse. Could someone take a look this week?\n\nThanks,\nJordan",
       time: dateLabel(-1),
       unread: true,
+    },
+    {
+      id: "demo-mi-5",
+      folder: "inbox",
+      from: "Omar Haddad",
+      email: "omar.haddad@example.com",
+      subject: "Storage unit — thanks!",
+      preview: "Appreciate the quick approval on the storage unit…",
+      body: "Hi Alex,\n\nThanks for approving the extra storage unit so quickly — moved my bike gear in this weekend.\n\nOmar",
+      time: dateLabel(-2),
+      unread: false,
     },
     {
       id: "demo-mi-3",
