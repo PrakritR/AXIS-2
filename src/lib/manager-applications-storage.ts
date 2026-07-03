@@ -331,6 +331,8 @@ export async function syncManagerApplicationsFromServer(opts?: {
 
 export async function syncPublicApprovedApplicationsFromServer(opts?: { force?: boolean }): Promise<DemoApplicantRow[]> {
   if (!canUseStorage()) return [];
+  // Demo sandbox is browser-local: never merge server rows into the seed.
+  if (isDemoModeActive()) return readManagerApplicationRows();
   const force = opts?.force === true;
   if (!force && publicApprovedApplicationsSyncPromise) return publicApprovedApplicationsSyncPromise;
   if (!force && publicApprovedApplicationsLastSyncedAt > 0 && Date.now() - publicApprovedApplicationsLastSyncedAt < MANAGER_APPLICATIONS_SYNC_TTL_MS) {

@@ -403,6 +403,10 @@ function SignedLeaseDocumentsTable() {
 
   useEffect(() => {
     if (!session.userId) return;
+    // Demo sandbox: never resolve an axis id from the real Supabase browser
+    // session — a visitor signed in to a real account would resolve THEIR id,
+    // which mismatches the seeded demo lease and hides it after first paint.
+    if (isDemoModeActive()) return;
     let cancelled = false;
     void (async () => {
       try {

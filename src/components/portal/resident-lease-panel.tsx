@@ -46,6 +46,7 @@ import {
 import { resolveResidentPortalAxisId } from "@/lib/manager-applications-storage";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 /**
  * Self-contained resident Lease tab: review + sign the lease, then — once both
@@ -69,6 +70,10 @@ export function ResidentLeasePanel() {
 
   useEffect(() => {
     if (!session.userId) return;
+    // Demo sandbox: never resolve an axis id from the real Supabase browser
+    // session — a visitor signed in to a real account would resolve THEIR id,
+    // which mismatches the seeded demo lease and hides it after first paint.
+    if (isDemoModeActive()) return;
     let cancelled = false;
     void (async () => {
       try {
