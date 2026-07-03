@@ -38,10 +38,10 @@ import { usePortalSession } from "@/hooks/use-portal-session";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 /**
- * Self-contained resident Lease tab: review + sign the lease, then — once both
- * parties have signed — download it and message the manager. Until the lease is
- * fully executed only the signing flow is offered. General document uploads
- * live in Documents › Other documents, not here.
+ * Self-contained resident Lease tab: review + sign the lease, message the
+ * manager about it at any point, and — once both parties have signed —
+ * download the final document. General document uploads live in
+ * Documents › Other documents, not here.
  */
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
@@ -124,7 +124,7 @@ export function ResidentLeasePanel() {
     return gatherLeaseGenerationContext();
   }, [pipelineRow]);
 
-  /** Both manager AND resident signatures present — unlocks download/upload/feedback. */
+  /** Both manager AND resident signatures present — unlocks the final download. */
   const leaseFullyExecuted = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow) && leaseAuthorized;
   const usesElectronicSigning = Boolean(
@@ -378,12 +378,12 @@ export function ResidentLeasePanel() {
           <Card className="glass-card border-border p-5">
             <PortalDataTableEmpty
               icon="lease"
-              message="Download and messages to your manager unlock once both you and your manager have signed the lease."
+              message="Download unlocks once both you and your manager have signed the lease."
             />
           </Card>
         ) : null}
 
-        {leaseFullyExecuted && leaseVisibleToResident && pipelineRow && email ? (
+        {leaseVisibleToResident && pipelineRow && email ? (
           <Card className="glass-card border-border p-5">
             <p className="text-xs font-bold uppercase tracking-wide text-muted">Messages</p>
             <textarea

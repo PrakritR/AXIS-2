@@ -19,51 +19,29 @@ export function ResidentMoveInResolvedView({ resolved }: { resolved: ResidentMov
           <p className="mt-1 text-sm font-semibold text-foreground">{resolved.earliestMoveInDateLabel ?? "Not set yet"}</p>
         </div>
       </div>
-      {resolved.generalHouseInfo ? (
+      {resolved.generalHouseInfo || resolved.houseRulesText ? (
         <div className="mb-5">
-          <h2 className="text-base font-semibold text-foreground">General info</h2>
-          <div className="mt-3 whitespace-pre-wrap text-muted">{resolved.generalHouseInfo}</div>
+          <h2 className="text-base font-semibold text-foreground">General info &amp; house rules</h2>
+          {resolved.generalHouseInfo ? (
+            <div className="mt-3 whitespace-pre-wrap text-muted">{resolved.generalHouseInfo}</div>
+          ) : null}
+          {resolved.houseRulesText ? (
+            <div className="mt-3 whitespace-pre-wrap text-muted">{resolved.houseRulesText}</div>
+          ) : null}
         </div>
       ) : null}
-      {resolved.houseRulesText ? (
-        <div className="mb-5">
-          <h2 className="text-base font-semibold text-foreground">House rules</h2>
-          <div className="mt-3 whitespace-pre-wrap text-muted">{resolved.houseRulesText}</div>
-        </div>
-      ) : null}
-      {resolved.wifiNetworkName || resolved.wifiPassword || resolved.amenities.length > 0 ? (
+      {resolved.wifiNetworkName || resolved.wifiPassword ? (
         <div className="mb-5">
           <h2 className="text-base font-semibold text-foreground">House info</h2>
-          {resolved.wifiNetworkName || resolved.wifiPassword ? (
-            <div className="mt-3 grid gap-3 rounded-xl border border-border bg-accent/30 p-4 sm:grid-cols-2">
-              {resolved.wifiNetworkName ? (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">WiFi network</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">{resolved.wifiNetworkName}</p>
-                </div>
-              ) : null}
-              {resolved.wifiPassword ? (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">WiFi password</p>
-                  <p className="mt-1 font-mono text-sm font-semibold text-foreground">{resolved.wifiPassword}</p>
-                </div>
-              ) : null}
-            </div>
+          {resolved.wifiNetworkName ? (
+            <p className="mt-3 text-muted">
+              <span className="font-semibold text-foreground">WiFi network:</span> {resolved.wifiNetworkName}
+            </p>
           ) : null}
-          {resolved.amenities.length > 0 ? (
-            <div className="mt-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Amenities offered</p>
-              <ul className="mt-2 flex flex-wrap gap-2">
-                {resolved.amenities.map((amenity) => (
-                  <li
-                    key={amenity}
-                    className="rounded-full border border-border bg-accent/30 px-3 py-1 text-xs font-medium text-foreground"
-                  >
-                    {amenity}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {resolved.wifiPassword ? (
+            <p className="mt-1 text-muted">
+              <span className="font-semibold text-foreground">WiFi password:</span> {resolved.wifiPassword}
+            </p>
           ) : null}
         </div>
       ) : null}
