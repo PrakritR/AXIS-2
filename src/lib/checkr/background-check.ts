@@ -9,7 +9,7 @@
  * pipeline uses) before any Checkr call is made.
  */
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import type { ApplicationBackgroundCheckStatus } from "@/lib/application-background-check";
+import { backgroundCheckStatusFromCheckr } from "@/lib/application-background-check";
 import { createBackgroundCheck, fetchBackgroundCheckReport } from "@/lib/checkr/client";
 import { backgroundCheckConfigured, checkrScreeningCostCents } from "@/lib/checkr/config";
 import type {
@@ -25,17 +25,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type BackgroundCheckResult =
   | { ok: true; row: DemoApplicantRow; backgroundCheck: ApplicationBackgroundCheck }
   | { ok: false; status: number; error: string; code?: string };
-
-/** Map a Checkr order/report state onto the manager-facing background-check badge. */
-export function backgroundCheckStatusFromCheckr(
-  bc: ApplicationBackgroundCheck | null | undefined,
-): ApplicationBackgroundCheckStatus {
-  if (!bc) return "pending_review";
-  if (bc.status !== "complete") return "pending_review";
-  if (bc.result === "clear") return "passed";
-  // consider (or a canceled/failed order) needs a human look.
-  return "flagged";
-}
 
 function digitsOnly(value: string | undefined): string {
   return (value ?? "").replace(/\D/g, "");

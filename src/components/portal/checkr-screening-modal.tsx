@@ -1,17 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { track } from "@/lib/analytics/track-client";
 import { backgroundCheckChip } from "@/components/portal/application-screening-panel";
+import { backgroundCheckStatusFromCheckr } from "@/lib/application-background-check";
+import { buildDemoBackgroundCheck } from "@/lib/checkr/demo-simulate";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { replaceManagerApplicationRowInCache } from "@/lib/manager-applications-storage";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+
+const DEMO_SCREENING_RESOLVE_DELAY_MS = 1800;
 
 /**
  * Confirms cost + manager-pays billing, then starts (or re-runs) a real Checkr
  * screening and shows live status until it resolves to Clear/Consider.
+ *
+ * In the `/demo` sandbox (no authenticated Supabase user, so the auth-gated
+ * `/api/screening/*` routes 401) this runs a client-side simulated screening
+ * instead: no Checkr call, no Stripe charge, deterministic Clear/Consider
+ * result persisted into the demo store.
  */
 export function CheckrScreeningModal({
   row,
@@ -25,17 +36,20 @@ export function CheckrScreeningModal({
   onUpdated?: () => void;
 }) {
   const { showToast } = useAppUi();
-  const [costCents, setCostCents] = useState(2999);
-  const [configured, setConfigured] = useState(false);
+  // Demo sandbox has no authenticated user, so the real settings route always
+  // 401s — treat screening as available and free (no real charge) from the start.
+  const [costCents, setCostCents] = useState(() => (isDemoModeActive() ? 0 : 2999));
+  const [configured, setConfigured] = useState(() => isDemoModeActive());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Lazy init from the row prop — the parent remounts this component (via a
   // `key`) each time it opens for a (possibly different) applicant, so this
   // only ever runs once per open.
   const [bg, setBg] = useState<ApplicationBackgroundCheck | undefined>(() => row?.backgroundCheck);
+  const demoResolveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || isDemoModeActive()) return;
     void fetch("/api/screening/settings", { credentials: "include" })
       .then(async (res) => {
         if (!res.ok) return;
@@ -50,8 +64,9 @@ export function CheckrScreeningModal({
   }, [open, row]);
 
   // Poll while pending so the modal (and the applicant's row) resolve without a reload.
+  // In demo mode the simulated result resolves on a local timer instead (see `confirm`).
   useEffect(() => {
-    if (!open || !row || bg?.status !== "pending") return;
+    if (!open || !row || bg?.status !== "pending" || isDemoModeActive()) return;
     let cancelled = false;
     const timer = setInterval(() => {
       void fetch("/api/screening/background-check", {
@@ -75,11 +90,49 @@ export function CheckrScreeningModal({
     };
   }, [open, row, bg?.status, onUpdated]);
 
+  // Clear any pending demo resolve timer on unmount (the parent remounts this
+  // component via `key` on every open, so this also guards against overlap).
+  useEffect(() => {
+    return () => {
+      if (demoResolveTimer.current) clearTimeout(demoResolveTimer.current);
+    };
+  }, []);
+
   const confirm = useCallback(async () => {
     if (!row) return;
     setBusy(true);
     setError(null);
     track("background_check_started", { provider: "checkr" });
+
+    if (isDemoModeActive()) {
+      const pending: ApplicationBackgroundCheck = {
+        provider: "checkr",
+        candidateId: `demo_applicant_${row.id}`,
+        reportId: `demo_order_${row.id}`,
+        packageSlug: "essential",
+        status: "pending",
+        result: null,
+        orderedAt: new Date().toISOString(),
+        simulated: true,
+        costCents: 0,
+      };
+      setBg(pending);
+      setBusy(false);
+      showToast("Demo screening started — no real charge. Results resolve in a few seconds.");
+      if (demoResolveTimer.current) clearTimeout(demoResolveTimer.current);
+      demoResolveTimer.current = setTimeout(() => {
+        const resolved = buildDemoBackgroundCheck(row);
+        setBg(resolved);
+        replaceManagerApplicationRowInCache({
+          ...row,
+          backgroundCheck: resolved,
+          backgroundCheckStatus: backgroundCheckStatusFromCheckr(resolved),
+        });
+        onUpdated?.();
+      }, DEMO_SCREENING_RESOLVE_DELAY_MS);
+      return;
+    }
+
     try {
       const res = await fetch("/api/screening/background-check", {
         method: "POST",
@@ -108,6 +161,7 @@ export function CheckrScreeningModal({
 
   if (!row) return null;
 
+  const isDemo = isDemoModeActive();
   const canRun = configured && Boolean(row.application?.consentCredit) && bg?.status !== "pending";
   const chip = bg ? backgroundCheckChip(bg) : null;
 
@@ -127,10 +181,22 @@ export function CheckrScreeningModal({
               consider results need a manual look before any adverse action (FCRA).
             </p>
             <div className="rounded-xl border border-border bg-foreground/5 p-3">
-              <p className="font-semibold text-foreground">${(costCents / 100).toFixed(2)} per run</p>
-              <p className="mt-1 text-xs text-muted">
-                Billed to your saved payment method on the Plan page — not charged to the applicant.
-              </p>
+              {isDemo ? (
+                <>
+                  <p className="font-semibold text-foreground">Demo mode — no real charge</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Simulated screening for this sandbox. In the real portal this is billed to your saved
+                    payment method, never to the applicant.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold text-foreground">${(costCents / 100).toFixed(2)} per run</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Billed to your saved payment method on the Plan page — not charged to the applicant.
+                  </p>
+                </>
+              )}
             </div>
           </>
         )}

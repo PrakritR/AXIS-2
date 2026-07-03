@@ -1,3 +1,5 @@
+import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
+
 export type ApplicationBackgroundCheckStatus = "pending_review" | "passed" | "flagged" | "not_applicable";
 
 export const APPLICATION_BACKGROUND_CHECK_STATUSES: ApplicationBackgroundCheckStatus[] = [
@@ -85,4 +87,15 @@ export function applicationShowsBackgroundCheck(row: {
   backgroundCheckStatus?: ApplicationBackgroundCheckStatus;
 }): boolean {
   return resolveBackgroundCheckStatus(row) !== "not_applicable";
+}
+
+/** Map a Checkr order/report state onto the manager-facing background-check badge. */
+export function backgroundCheckStatusFromCheckr(
+  bc: ApplicationBackgroundCheck | null | undefined,
+): ApplicationBackgroundCheckStatus {
+  if (!bc) return "pending_review";
+  if (bc.status !== "complete") return "pending_review";
+  if (bc.result === "clear") return "passed";
+  // consider (or a canceled/failed order) needs a human look.
+  return "flagged";
 }

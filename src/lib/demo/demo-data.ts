@@ -261,11 +261,40 @@ export function demoApplications(): DemoApplicantRow[] {
   });
   return [
     mk("demo-app-1", "Priya Sharma", "priya.sharma@example.com", PROP.cascade, "Screening", "pending",
-      "Applied 2 days ago · credit check in progress", { backgroundCheckStatus: "pending_review" }),
+      "Applied 2 days ago · credit check in progress", {
+        backgroundCheckStatus: "pending_review",
+        // Even final SSN digit → the Checkr demo simulation resolves this one Clear.
+        application: demoApplicationData({
+          propertyId: PROP.cascade,
+          fullLegalName: "Priya Sharma",
+          email: "priya.sharma@example.com",
+          ssn: "123-45-6784",
+          consentCredit: true,
+        }),
+      }),
     mk("demo-app-2", "Marcus Chen", "marcus.chen@example.com", PROP.emerald, "New application", "pending",
-      "Submitted application, awaiting first review"),
+      "Submitted application, awaiting first review", {
+        // Even final SSN digit → the Checkr demo simulation resolves this one Clear.
+        application: demoApplicationData({
+          propertyId: PROP.emerald,
+          fullLegalName: "Marcus Chen",
+          email: "marcus.chen@example.com",
+          ssn: "123-45-6782",
+          consentCredit: true,
+        }),
+      }),
     mk("demo-app-3", "Sofia Rossi", "sofia.rossi@example.com", PROP.pioneer, "Documents requested", "pending",
-      "Income verification requested"),
+      "Income verification requested", {
+        // Odd final SSN digit → the Checkr demo simulation resolves this one to
+        // Consider, so the sandbox always has a live FCRA-banner example.
+        application: demoApplicationData({
+          propertyId: PROP.pioneer,
+          fullLegalName: "Sofia Rossi",
+          email: "sofia.rossi@example.com",
+          ssn: "123-45-6787",
+          consentCredit: true,
+        }),
+      }),
     mk("demo-app-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "Approved · lease sent", "approved",
       "Lease sent — awaiting signature", {
         signedMonthlyRent: 2400,

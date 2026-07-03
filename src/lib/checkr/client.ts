@@ -20,6 +20,7 @@ import {
   checkrPackage,
   checkrSimulate,
 } from "@/lib/checkr/config";
+import { simulatedResult, stableHash } from "@/lib/checkr/simulate";
 import type {
   CheckrApplicantInput,
   CheckrCreateResult,
@@ -85,26 +86,6 @@ function aggregateReportResult(report: Record<string, unknown> | null): CheckrRe
     if (product.status === "clear") sawClear = true;
   }
   return sawClear ? "clear" : null;
-}
-
-// ---------------------------------------------------------------------------
-// Simulate fallback — deterministic, no network. Lets the flow be exercised on
-// localhost without a live key or Checkr's exact mocked candidate data.
-// Rule: odd final SSN digit → "consider", otherwise → "clear".
-// ---------------------------------------------------------------------------
-
-function stableHash(input: string): string {
-  let h = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    h = (h * 31 + input.charCodeAt(i)) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
-}
-
-function simulatedResult(ssn: string): CheckrResult {
-  const digits = ssn.replace(/\D/g, "");
-  const last = digits.length ? Number(digits[digits.length - 1]) : 0;
-  return last % 2 === 1 ? "consider" : "clear";
 }
 
 async function fetchReportRaw(orderId: string): Promise<Record<string, unknown> | null> {

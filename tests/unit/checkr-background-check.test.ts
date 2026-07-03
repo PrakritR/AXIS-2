@@ -26,7 +26,7 @@ describe("checkr background check", () => {
   });
 
   it("maps report state onto the manager-facing badge", async () => {
-    const { backgroundCheckStatusFromCheckr } = await import("@/lib/checkr/background-check");
+    const { backgroundCheckStatusFromCheckr } = await import("@/lib/application-background-check");
     const base: ApplicationBackgroundCheck = {
       provider: "checkr",
       candidateId: "c",
