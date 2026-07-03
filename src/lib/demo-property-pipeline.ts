@@ -188,7 +188,11 @@ async function upsertPropertyRecordToServer(input: {
   propertyData?: unknown;
   editRequestNote?: string | null;
 }): Promise<boolean> {
-  if (typeof window === "undefined" || isDemoModeActive()) return false;
+  if (typeof window === "undefined") return false;
+  // /demo is browser-local — there is no real record to mirror, but the local
+  // write in the caller (updatePendingManagerPropertyOnServer etc.) is the
+  // actual save, so this must report success rather than aborting it.
+  if (isDemoModeActive()) return true;
   try {
     const res = await fetch("/api/property-records", {
       method: "POST",

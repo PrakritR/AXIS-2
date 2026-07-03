@@ -13,6 +13,7 @@ import {
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
   BUSINESS_MAX_PROPERTIES,
@@ -690,6 +691,9 @@ function extToMime(ext: string): string {
 
 async function uploadDataUrl(dataUrl: string): Promise<string> {
   if (!dataUrl.startsWith("data:")) return dataUrl;
+  // /demo has no signed-in Supabase session to upload against — keep the
+  // data URL as-is so demo photos and lease templates round-trip locally.
+  if (isDemoModeActive()) return dataUrl;
   return uploadToBucket(dataUrl);
 }
 
@@ -1854,7 +1858,8 @@ export function ManagerAddListingForm({
       let uploadedSubmission: typeof submission;
       try {
         uploadedSubmission = await uploadSubmissionMedia(submission);
-      } catch {
+      } catch (err) {
+        console.error("manager-add-listing-form: uploadSubmissionMedia failed", err);
         showToast("Could not upload photos. Check your connection and try again.");
         return;
       }
@@ -1862,6 +1867,7 @@ export function ManagerAddListingForm({
       if (editPendingId) {
         const ok = await updatePendingManagerPropertyOnServer(editPendingId, uploadedSubmission, userId);
         if (!ok) {
+          console.error("manager-add-listing-form: updatePendingManagerPropertyOnServer returned false", { editPendingId, userId });
           showToast("Could not save changes.");
           return;
         }
@@ -1871,6 +1877,7 @@ export function ManagerAddListingForm({
       if (editRequestChangeId) {
         const ok = updateRequestChangeProperty(editRequestChangeId, userId, uploadedSubmission);
         if (!ok) {
+          console.error("manager-add-listing-form: updateRequestChangeProperty returned false", { editRequestChangeId, userId });
           showToast("Could not save changes.");
           return;
         }
@@ -1882,6 +1889,7 @@ export function ManagerAddListingForm({
         const saveUserId = editListingOwnerUserId?.trim() || userId;
         const ok = await updateExtraListingFromSubmissionOnServer(editListingId, saveUserId, uploadedSubmission);
         if (!ok) {
+          console.error("manager-add-listing-form: updateExtraListingFromSubmissionOnServer returned false", { editListingId, saveUserId });
           showToast("Could not save changes.");
           return;
         }
