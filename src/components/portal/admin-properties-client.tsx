@@ -140,7 +140,7 @@ function AdminPropertyInlineDetails({
   const footer = (
     <div className="flex flex-col gap-2">
       {bucket === 1 && row.editRequestNote?.trim() ? (
-        <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
+        <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm">
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Requested changes</p>
           <p className="mt-1.5 whitespace-pre-wrap text-muted">{row.editRequestNote.trim()}</p>
         </div>
@@ -356,10 +356,10 @@ function AdminPropertyInlineDetails({
           </Link>
         ) : null}
       </div>
-      <ListingPreviewScrollShell className="portal-desktop-scroll-panel max-h-[min(70vh,640px)] rounded-2xl border border-border">
+<ListingPreviewScrollShell className="portal-desktop-scroll-panel max-h-[min(70vh,640px)] rounded-2xl border border-border">
         <ListingDetailSections property={mock} rich={rich} previewModal hidePreviewSubnav />
       </ListingPreviewScrollShell>
-      <div className="rounded-2xl border border-border bg-accent/30 px-4 py-4 sm:px-5">{footer}</div>
+      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5">{footer}</div>
     </div>
   );
 }
