@@ -9,17 +9,6 @@ import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
-import {
-  ResidentAddDocumentModal,
-  ResidentOtherDocumentsTable,
-  type AddDocumentMode,
-} from "@/components/portal/resident-other-documents";
-import {
-  readUploadedOwnLeases,
-  removeUploadedOwnLease,
-  syncUploadedOwnLeasesFromServer,
-  type UploadedOwnLease,
-} from "@/lib/resident-lease-upload";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import {
   shortToLongTermUpgradeBreakdown,
@@ -50,8 +39,9 @@ import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 /**
  * Self-contained resident Lease tab: review + sign the lease, then — once both
- * parties have signed — download it, message the manager, and upload documents.
- * Until the lease is fully executed only the signing flow is offered.
+ * parties have signed — download it and message the manager. Until the lease is
+ * fully executed only the signing flow is offered. General document uploads
+ * live in Documents › Other documents, not here.
  */
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
@@ -63,9 +53,6 @@ export function ResidentLeasePanel() {
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
   const [residentAxisId, setResidentAxisId] = useState("");
-  const [addMode, setAddMode] = useState<AddDocumentMode | null>(null);
-  const [uploads, setUploads] = useState<UploadedOwnLease[]>([]);
-  const [uploadsLoading, setUploadsLoading] = useState(true);
   const email = session.email?.trim() || null;
 
   useEffect(() => {
@@ -143,28 +130,6 @@ export function ResidentLeasePanel() {
   const usesElectronicSigning = Boolean(
     pipelineRow?.generatedHtml || pipelineRow?.managerUploadedPdf?.dataUrl,
   );
-
-  const normalizedEmail = email?.toLowerCase() ?? "";
-
-  const refreshUploads = useCallback(async () => {
-    if (!normalizedEmail) {
-      setUploads([]);
-      setUploadsLoading(false);
-      return;
-    }
-    setUploadsLoading(true);
-    try {
-      const rows = await syncUploadedOwnLeasesFromServer(normalizedEmail);
-      setUploads(rows);
-    } finally {
-      setUploadsLoading(false);
-    }
-  }, [normalizedEmail]);
-
-  useEffect(() => {
-    if (!leaseFullyExecuted) return;
-    queueMicrotask(() => void refreshUploads());
-  }, [leaseFullyExecuted, refreshUploads]);
 
   const upgradeBreakdown = useMemo(() => {
     const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
@@ -270,25 +235,6 @@ export function ResidentLeasePanel() {
     setPipelineTick((t) => t + 1);
   }, []);
 
-  const openAddModal = (mode: AddDocumentMode) => {
-    if (!normalizedEmail) {
-      showToast("Sign in to upload documents.");
-      return;
-    }
-    setAddMode(mode);
-  };
-
-  const onDocumentAdded = () => {
-    setUploads(readUploadedOwnLeases(normalizedEmail));
-  };
-
-  const onRemoveUpload = (id: string) => {
-    if (!normalizedEmail) return;
-    removeUploadedOwnLease(normalizedEmail, id);
-    setUploads(readUploadedOwnLeases(normalizedEmail));
-    showToast("Removed.");
-  };
-
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
     const preparing = (
       <div className="flex flex-col items-center gap-4 py-16 text-center">
@@ -352,15 +298,6 @@ export function ResidentLeasePanel() {
                 onClick={() => setShowMoveOutModal(true)}
               >
                 Renew or extend lease
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0 rounded-full"
-                data-attr="resident-lease-upload-document"
-                onClick={() => openAddModal("document")}
-              >
-                Upload document
               </Button>
               <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
                 Download PDF
@@ -441,7 +378,7 @@ export function ResidentLeasePanel() {
           <Card className="glass-card border-border p-5">
             <PortalDataTableEmpty
               icon="lease"
-              message="Download, document uploads, and messages to your manager unlock once both you and your manager have signed the lease."
+              message="Download and messages to your manager unlock once both you and your manager have signed the lease."
             />
           </Card>
         ) : null}
@@ -492,18 +429,6 @@ export function ResidentLeasePanel() {
               </>
             ) : null}
           </Card>
-        ) : null}
-
-        {leaseFullyExecuted && leaseVisibleToResident ? (
-          <div className="mt-6">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Your uploaded documents</p>
-            <ResidentOtherDocumentsTable
-              uploads={uploads}
-              loading={uploadsLoading}
-              onRemove={onRemoveUpload}
-              emptyMessage="No documents yet — use Upload document above to keep files with your lease."
-            />
-          </div>
         ) : null}
 
         {upgradeBreakdown ? (
@@ -560,14 +485,6 @@ export function ResidentLeasePanel() {
           </Card>
         ) : null}
       </ManagerPortalPageShell>
-
-      <ResidentAddDocumentModal
-        key={addMode ?? "closed"}
-        mode={addMode}
-        email={normalizedEmail}
-        onClose={() => setAddMode(null)}
-        onAdded={onDocumentAdded}
-      />
     </>
   );
 }
