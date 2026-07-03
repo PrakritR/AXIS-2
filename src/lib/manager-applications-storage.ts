@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import {
@@ -187,12 +188,15 @@ function canUseStorage() {
 }
 
 function managerApplicationsSessionKey(scopeUserId?: string | null): string {
+  // Demo sandbox: one shared store for every scope so the demo manager and
+  // demo resident act on the same application rows (mirrors the lease store).
+  if (isDemoModeActive()) return `${MANAGER_APPLICATIONS_SESSION_KEY_PREFIX}:shared`;
   if (scopeUserId) return `${MANAGER_APPLICATIONS_SESSION_KEY_PREFIX}:${scopeUserId}`;
   return `${MANAGER_APPLICATIONS_SESSION_KEY_PREFIX}:shared`;
 }
 
 function ensureApplicationsScope(scopeUserId?: string | null) {
-  const nextScope = scopeUserId ?? undefined;
+  const nextScope = isDemoModeActive() ? undefined : scopeUserId ?? undefined;
   if (activeApplicationsScopeUserId !== nextScope) {
     activeApplicationsScopeUserId = nextScope;
     memoryRows = [];
@@ -232,7 +236,7 @@ function emit() {
 }
 
 function mirrorApplicationsToServer(rows: DemoApplicantRow[]) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/manager-applications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -242,7 +246,7 @@ function mirrorApplicationsToServer(rows: DemoApplicantRow[]) {
 }
 
 function mirrorApplicationRowToServer(row: DemoApplicantRow) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/manager-applications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -277,6 +281,7 @@ export async function upsertApplicationRowToServerAwait(
 
 export async function deleteManagerApplicationFromServer(id: string): Promise<{ ok: boolean; error?: string }> {
   if (typeof window === "undefined" || !id.trim()) return { ok: false, error: "Application ID is required." };
+  if (isDemoModeActive()) return { ok: true };
   try {
     const res = await fetch("/api/manager-applications", {
       method: "POST",
@@ -300,6 +305,7 @@ export async function syncManagerApplicationsFromServer(opts?: {
   const managerUserId = opts?.managerUserId ?? undefined;
   ensureApplicationsScope(managerUserId);
   hydrateManagerApplicationsFromSession(managerUserId);
+  if (isDemoModeActive()) return readManagerApplicationRows();
   const force = opts?.force === true;
   if (!force && managerApplicationsSyncPromise) return managerApplicationsSyncPromise;
   if (!force && managerApplicationsLastSyncedAt > 0 && Date.now() - managerApplicationsLastSyncedAt < MANAGER_APPLICATIONS_SYNC_TTL_MS) {
@@ -328,6 +334,8 @@ export async function syncManagerApplicationsFromServer(opts?: {
 
 export async function syncPublicApprovedApplicationsFromServer(opts?: { force?: boolean }): Promise<DemoApplicantRow[]> {
   if (!canUseStorage()) return [];
+  // Demo sandbox is browser-local: never merge server rows into the seed.
+  if (isDemoModeActive()) return readManagerApplicationRows();
   const force = opts?.force === true;
   if (!force && publicApprovedApplicationsSyncPromise) return publicApprovedApplicationsSyncPromise;
   if (!force && publicApprovedApplicationsLastSyncedAt > 0 && Date.now() - publicApprovedApplicationsLastSyncedAt < MANAGER_APPLICATIONS_SYNC_TTL_MS) {
@@ -381,6 +389,16 @@ export function writeManagerApplicationRows(rows: DemoApplicantRow[]): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Demo seed: load application rows into the local store without server mirror. */
+export function seedDemoManagerApplicationRows(rows: DemoApplicantRow[], scopeUserId: string): void {
+  if (!canUseStorage()) return;
+  ensureApplicationsScope(scopeUserId);
+  memoryRows = normalizeApplicationRows(rows);
+  persistManagerApplicationsToSession(memoryRows, scopeUserId);
+  managerApplicationsLastSyncedAt = Date.now();
+  emit();
 }
 
 export function resetManagerApplicationRowsToDemo(): void {

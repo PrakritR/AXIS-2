@@ -29,7 +29,6 @@ import {
 } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
-import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
 import {
@@ -79,9 +78,6 @@ const STEP_META = [
 ] as const;
 
 function rentalApplicationExitPath(): string {
-  if (typeof window !== "undefined" && detectNativePlatformSync()) {
-    return "/auth/sign-in?mode=create&role=resident";
-  }
   return "/auth/sign-in";
 }
 
@@ -244,6 +240,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           roomChoice1: room1 || prev.roomChoice1,
           roomChoice2: "",
           roomChoice3: "",
+          // A restored draft may hold answers for a different listing's questions.
+          ...(prev.propertyId && prev.propertyId !== pid ? { customFieldAnswers: [] } : {}),
         };
       });
     });
@@ -252,6 +250,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   const patchForm = useCallback((p: Partial<RentalWizardFormState>) => {
     setForm((f) => {
       const merged: RentalWizardFormState = { ...f, ...p };
+      // Custom application answers belong to one listing — drop them if the property changes.
+      if ("propertyId" in p && (p.propertyId ?? "") !== f.propertyId && !("customFieldAnswers" in p)) {
+        merged.customFieldAnswers = [];
+      }
       if ("leaseStart" in p) merged.leaseStart = normalizeIsoDateInput(p.leaseStart);
       if ("leaseEnd" in p) merged.leaseEnd = p.leaseEnd ? normalizeIsoDateInput(p.leaseEnd) : "";
       if ("leaseTerm" in p && p.leaseTerm === "Month-to-Month") merged.leaseEnd = "";
@@ -272,6 +274,9 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     setErrors((e) => {
       const next = { ...e };
       for (const k of Object.keys(p)) delete next[k];
+      if ("customFieldAnswers" in p) {
+        for (const k of Object.keys(next)) if (k.startsWith("custom:")) delete next[k];
+      }
       return next;
     });
   }, []);
@@ -808,7 +813,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                               ? "bg-primary/15 text-primary"
                               : reachable
                                 ? "bg-accent/30 text-muted hover:bg-accent/40"
-                                : "cursor-not-allowed bg-accent/30 text-slate-300"
+                                : "cursor-not-allowed bg-accent/30 text-foreground/30"
                         }`}
                       >
                         {completed ? "✓" : s.n}

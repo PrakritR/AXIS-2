@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { emitAdminUi } from "@/lib/demo-admin-ui";
 import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 
@@ -50,6 +51,37 @@ export const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] 
 
 /** Half-hour slots across the full day (index 0 = 12:00–12:30 AM; last slot ends at midnight). */
 export const SLOTS_PER_DAY = 48;
+
+/** Minutes represented by one availability slot; also the default event length. */
+export const SLOT_DURATION_MINUTES = 30;
+
+/** Common event lengths offered when a manager schedules an event/tour. */
+export const EVENT_DURATION_PRESET_MINUTES = [15, 30, 45, 60, 90] as const;
+
+export const DEFAULT_EVENT_DURATION_MINUTES = SLOT_DURATION_MINUTES;
+export const MIN_EVENT_DURATION_MINUTES = 5;
+export const MAX_EVENT_DURATION_MINUTES = 480;
+
+/** Coerce arbitrary input to a usable event duration (whole minutes, sane bounds). */
+export function clampEventDurationMinutes(raw: number): number {
+  if (!Number.isFinite(raw)) return DEFAULT_EVENT_DURATION_MINUTES;
+  return Math.min(MAX_EVENT_DURATION_MINUTES, Math.max(MIN_EVENT_DURATION_MINUTES, Math.round(raw)));
+}
+
+/** Whole-minute length of an ISO window; defaults to 30 min for missing/invalid ranges. */
+export function durationMinutesBetweenIso(startIso: string, endIso: string): number {
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return DEFAULT_EVENT_DURATION_MINUTES;
+  return Math.max(1, Math.round((end - start) / 60_000));
+}
+
+/** End ISO for a start plus a chosen duration (clamped); falls back to the start on bad input. */
+export function endIsoForDuration(startIso: string, durationMinutes: number): string {
+  const start = new Date(startIso);
+  if (Number.isNaN(start.getTime())) return startIso;
+  return new Date(start.getTime() + clampEventDurationMinutes(durationMinutes) * 60_000).toISOString();
+}
 
 function isBrowser() {
   return typeof window !== "undefined";
@@ -210,6 +242,7 @@ async function deleteJsonRecordFromServer(id: string): Promise<boolean> {
 
 export async function syncScheduleRecordsFromServer(opts?: { force?: boolean }): Promise<boolean> {
   if (!isBrowser()) return false;
+  if (isDemoModeActive()) return true;
   const force = opts?.force === true;
   const lastSyncedAt = readScheduleSyncedAt();
   if (!force && scheduleSyncPromise) return scheduleSyncPromise;
@@ -569,6 +602,32 @@ export async function deletePlannedEventFromServer(id: string): Promise<boolean>
   return writeJsonToServer(PLANNED_KEY, readPlannedEvents());
 }
 
+/**
+ * Demo seed: load calendar data (confirmed events, pending tour requests, and
+ * per-storage-key availability slot sets) into the local store without the
+ * server mirror. Full overwrite per key, matching the other `seedDemo…` helpers.
+ */
+export function seedDemoScheduleData(input: {
+  plannedEvents?: PlannedEvent[];
+  partnerInquiries?: PartnerInquiry[];
+  availabilityByStorageKey?: Record<string, string[]>;
+}): void {
+  if (!isBrowser()) return;
+  if (input.plannedEvents) {
+    memoryStore.set(PLANNED_KEY, input.plannedEvents);
+    writeSessionJson(PLANNED_KEY, input.plannedEvents);
+  }
+  if (input.partnerInquiries) {
+    memoryStore.set(INQ_KEY, input.partnerInquiries);
+    writeSessionJson(INQ_KEY, input.partnerInquiries);
+  }
+  for (const [key, slots] of Object.entries(input.availabilityByStorageKey ?? {})) {
+    memoryStore.set(key, slots);
+    writeSessionJson(key, slots);
+  }
+  emitAdminUi();
+}
+
 export function pendingInquiryCount() {
   return readPartnerInquiries().filter((r) => {
     if (r.status !== "pending") return false;
@@ -588,7 +647,11 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
   const instructions = opts?.instructions?.trim() || undefined;
   const start = opts?.start ?? row.proposedStart;
   const end = opts?.end ?? row.proposedEnd;
-  const selectedWindow = getPartnerInquiryWindows(row).find((window) => window.start === start && window.end === end);
+  const windows = getPartnerInquiryWindows(row);
+  // A custom duration changes the end, so fall back to matching the window by start alone.
+  const selectedWindow =
+    windows.find((window) => window.start === start && window.end === end) ??
+    windows.find((window) => window.start === start);
   updatePartnerInquiry(id, { status: "accepted" });
   appendPlannedEvent({
     id: crypto.randomUUID(),

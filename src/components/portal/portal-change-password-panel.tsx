@@ -7,13 +7,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { passwordResetCallbackUrl, resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-export function PortalChangePasswordPanel({
-  accountEmail,
-  accountLabel = "this account",
-}: {
-  accountEmail: string;
-  accountLabel?: string;
-}) {
+export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: string }) {
   const { showToast } = useAppUi();
   const email = accountEmail.trim();
   const [oldPassword, setOldPassword] = useState("");
@@ -97,11 +91,17 @@ export function PortalChangePasswordPanel({
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-foreground">Change password</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted">
-          Update the password used for {accountLabel}. Enter your current password, or use the email reset link below.
-        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          disabled={passwordBusy || resetBusy}
+          onClick={() => void changePassword()}
+        >
+          {passwordBusy ? "Updating…" : "Update password"}
+        </Button>
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -143,36 +143,17 @@ export function PortalChangePasswordPanel({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-        <Button
+      <p className="mt-4 text-xs leading-relaxed text-muted">
+        Forgot your current password?{" "}
+        <button
           type="button"
-          variant="outline"
-          className="rounded-full"
-          disabled={passwordBusy || resetBusy}
-          onClick={() => void changePassword()}
+          className="font-semibold text-foreground underline underline-offset-2 transition hover:opacity-80 disabled:opacity-60"
+          disabled={resetBusy || passwordBusy || !email}
+          onClick={() => void sendResetLink()}
         >
-          {passwordBusy ? "Updating…" : "Update password"}
-        </Button>
-      </div>
-
-      <div className="mt-6 border-t border-border pt-5">
-        <p className="text-xs font-semibold text-muted">Forgot your current password?</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted">
-          We&apos;ll email a secure link to <span className="font-medium text-muted">{email || "your account email"}</span> so you
-          can choose a new password.
-        </p>
-        <div className="mt-3 flex justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full"
-            disabled={resetBusy || passwordBusy || !email}
-            onClick={() => void sendResetLink()}
-          >
-            {resetBusy ? "Sending…" : "Send reset link to email"}
-          </Button>
-        </div>
-      </div>
+          {resetBusy ? "Sending…" : "Send a reset link to your email"}
+        </button>
+      </p>
     </div>
   );
 }

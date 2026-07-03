@@ -1,4 +1,8 @@
-/** Sole Axis admin identity — keep in sync with scripts/ensure-admin-account.mjs */
+/**
+ * Primary Axis admin (ops) identity — keep in sync with scripts/ensure-admin-account.mjs.
+ * Admin access itself is role-based (any `admin`-role account; see admin-role.ts);
+ * this email is an always-admin fallback and the self-registration/provisioning gate.
+ */
 export const PRIMARY_ADMIN_EMAIL = "prakritramachandran@gmail.com";
 
 export function normalizeAdminEmail(email: string | null | undefined): string {

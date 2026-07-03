@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   createManagerCharge,
   deleteHouseholdCharge,
@@ -81,6 +82,11 @@ function writeAll(requests: ServiceRequest[]): void {
   window.dispatchEvent(new Event(SERVICE_REQUESTS_EVENT));
 }
 
+/** Demo seed: load service requests into the local store (local-only, no mirror). */
+export function seedDemoServiceRequests(requests: ServiceRequest[]): void {
+  writeAll(requests);
+}
+
 /**
  * Server mirroring. Service requests persist to `portal_service_request_records`
  * via the service-role API route so they survive across devices/browsers and so
@@ -89,7 +95,7 @@ function writeAll(requests: ServiceRequest[]): void {
  * optimistic local update already drove the UI.
  */
 function mirrorServiceRequestToServer(row: ServiceRequest): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-service-requests", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -99,7 +105,7 @@ function mirrorServiceRequestToServer(row: ServiceRequest): void {
 }
 
 function deleteServiceRequestFromServer(id: string): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || isDemoModeActive()) return;
   void fetch("/api/portal-service-requests", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -111,6 +117,7 @@ function deleteServiceRequestFromServer(id: string): void {
 /** Pull the authoritative server set into the local cache and notify listeners. */
 export async function syncServiceRequestsFromServer(opts?: { force?: boolean }): Promise<ServiceRequest[]> {
   if (typeof window === "undefined") return [];
+  if (isDemoModeActive()) return readAll();
   const force = opts?.force === true;
   if (!force && serviceRequestsSyncPromise) return serviceRequestsSyncPromise;
   if (!force && serviceRequestsLastSyncedAt > 0 && Date.now() - serviceRequestsLastSyncedAt < SERVICE_REQUESTS_SYNC_TTL_MS) {

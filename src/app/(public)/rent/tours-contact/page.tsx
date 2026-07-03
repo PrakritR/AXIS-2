@@ -674,7 +674,7 @@ function Step2({
                     ? "bg-primary text-white shadow-sm"
                     : isAvailable && !isPast
                     ? "bg-card text-foreground hover:bg-primary/[0.08] hover:text-primary"
-                    : "cursor-not-allowed text-slate-300"
+                    : "cursor-not-allowed text-foreground/30"
                 }`}
               >
                 {day}

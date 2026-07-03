@@ -18,6 +18,7 @@ import {
 } from "./application-fee-channel";
 import type { RentalWizardErrors, RentalWizardFormState } from "./types";
 import { digitsOnly, parseMoneyInput } from "./masks";
+import { customFieldsForWizardStep, listingCustomApplicationFields, validateCustomFieldAnswers } from "./custom-fields";
 
 function startOfTodayUTC(): Date {
   const n = new Date();
@@ -52,6 +53,20 @@ function hasIncomeValue(monthly: string, annual: string, other: string): boolean
 }
 
 export function validateRentalWizardStep(step: number, f: RentalWizardFormState): RentalWizardErrors {
+  const e = validateStandardWizardStep(step, f);
+  // Manager custom questions are asked inside their configured section's step (untagged → step 9).
+  const prop = getPropertyById(f.propertyId);
+  const stepCustomFields = customFieldsForWizardStep(
+    listingCustomApplicationFields(prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined),
+    step,
+  );
+  if (stepCustomFields.length > 0) {
+    Object.assign(e, validateCustomFieldAnswers(stepCustomFields, f.customFieldAnswers));
+  }
+  return e;
+}
+
+function validateStandardWizardStep(step: number, f: RentalWizardFormState): RentalWizardErrors {
   const e: RentalWizardErrors = {};
 
   if (step === 1) {

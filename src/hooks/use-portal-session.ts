@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  demoSessionForRole,
+  getDemoRole,
+  isDemoModeActive,
+  subscribeDemoRole,
+} from "@/lib/demo/demo-session";
 
 type PortalSessionSnapshot = {
   userId: string | null;
@@ -82,7 +88,13 @@ export function usePortalSession(initial?: {
     ready: snapshot.ready || Boolean(initial?.userId),
   }));
 
+  // On the public `/demo` sandbox, report a fixed synthetic session for the
+  // active demo role so the real portal panels render their seeded data. This
+  // never touches Supabase and is scoped to `/demo` by pathname.
+  const demoRole = useSyncExternalStore(subscribeDemoRole, getDemoRole, () => "manager" as const);
+
   useEffect(() => {
+    if (isDemoModeActive()) return;
     ensurePortalSessionStore();
     const sync = () => {
       setState({
@@ -102,6 +114,8 @@ export function usePortalSession(initial?: {
       }
     };
   }, [initial?.email, initial?.userId]);
+
+  if (isDemoModeActive()) return demoSessionForRole(demoRole);
 
   return state;
 }

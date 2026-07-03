@@ -207,7 +207,7 @@ export function ManagerPortalStatusPills({
   /** `primary` = blue active pill (inbox-style); default = white active chip (leases/applications). */
   activeTone = "default",
 }: {
-  tabs: { id: string; label: string; count: number }[];
+  tabs: { id: string; label: string; count: number; alert?: boolean }[];
   activeId: string;
   onChange: (id: string) => void;
   activeTone?: "default" | "primary";
@@ -230,6 +230,9 @@ export function ManagerPortalStatusPills({
                 : "text-muted hover:text-foreground [html[data-theme=dark]_&]:text-white/78"
             }`}
           >
+            {tab.alert ? (
+              <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[var(--status-overdue-fg)]" />
+            ) : null}
             {tab.label}
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
@@ -282,18 +285,26 @@ export function PortalDashboardSectionHeader({
   title,
   href,
   linkLabel,
+  badge,
 }: {
   title: string;
   href?: string;
   linkLabel?: string;
+  /** Stable notification indicator rendered on the right, next to the section link (e.g. overdue count). */
+  badge?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
-      {href && linkLabel ? (
-        <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
-          {linkLabel}
-        </Link>
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="truncate text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
+      {badge || (href && linkLabel) ? (
+        <div className="flex shrink-0 items-center gap-2.5">
+          {badge ?? null}
+          {href && linkLabel ? (
+            <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
+              {linkLabel}
+            </Link>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

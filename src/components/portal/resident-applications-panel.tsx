@@ -70,7 +70,7 @@ function sortApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] {
   });
 }
 
-export function ResidentApplicationsPanel() {
+export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const { email: sessionEmail, ready: sessionReady } = usePortalSession();
   const searchParams = useSearchParams();
   const residentEmail = (sessionEmail ?? "").trim().toLowerCase();
@@ -123,11 +123,8 @@ export function ResidentApplicationsPanel() {
     });
   }, [rows, searchParams]);
 
-  return (
-    <ManagerPortalPageShell
-      title="Applications"
-      subtitle="View and update rental applications tied to your account email."
-    >
+  const body = (
+    <>
       <ManagerPortalFilterRow>
         <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
       </ManagerPortalFilterRow>
@@ -241,6 +238,17 @@ export function ResidentApplicationsPanel() {
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (embedded) return body;
+
+  return (
+    <ManagerPortalPageShell
+      title="Applications"
+      subtitle="View and update rental applications tied to your account email."
+    >
+      {body}
     </ManagerPortalPageShell>
   );
 }

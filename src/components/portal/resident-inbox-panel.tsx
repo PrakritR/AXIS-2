@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
+import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDateTime } from "@/lib/pacific-time";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
@@ -83,6 +85,25 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const persistInboxRef = useRef(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  // Individually-selectable recipients (this resident's own manager[s] + co-managers),
+  // scoped server-side by /api/portal/inbox-eligible-contacts.
+  const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
+
+  useEffect(() => {
+    if (isDemoModeActive()) return;
+    let active = true;
+    void fetch("/api/portal/inbox-eligible-contacts?portal=resident", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : { contacts: [] }))
+      .then((data: { contacts?: InboxScopedContact[] }) => {
+        if (active) setEligibleContacts(Array.isArray(data.contacts) ? data.contacts : []);
+      })
+      .catch(() => {
+        if (active) setEligibleContacts([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     persistInboxRef.current = false;
@@ -118,8 +139,16 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const counts = useMemo(() => countThreads(local), [local]);
 
+  // Residents have no scheduled-messages feature (that's manager-only), and the
+  // resident inbox route rejects the "schedule" tab with a 404. Drop that pill so
+  // residents can't navigate to a route that doesn't exist for them.
   const tabs = useMemo(
-    () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: counts[id as keyof typeof counts] })),
+    () =>
+      INBOX_TAB_DEFS.filter(({ id }) => id !== "schedule").map(({ id, label }) => ({
+        id,
+        label,
+        count: counts[id as keyof typeof counts],
+      })),
     [counts],
   );
 
@@ -477,6 +506,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         portal="resident"
         senderName="Resident"
         senderEmail="resident@example.com"
+        liveContacts={eligibleContacts}
       />
 
       {rowsForTab.length === 0 ? (

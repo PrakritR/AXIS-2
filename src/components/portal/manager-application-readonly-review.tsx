@@ -6,6 +6,10 @@ import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import {
+  displayableCustomFieldAnswers,
+  formatCustomFieldAnswerDisplay,
+} from "@/lib/rental-application/custom-fields";
 import { digitsOnly } from "@/lib/rental-application/masks";
 
 function displayOrDash(v: string | null | undefined) {
@@ -25,7 +29,7 @@ function ReviewSection({ title, children }: { title: string; children: ReactNode
       <div className="border-b border-border bg-accent/30 px-4 py-3.5 sm:px-5">
         <h3 className="text-[0.8125rem] font-semibold text-muted">{title}</h3>
       </div>
-      <dl className="divide-y divide-slate-100 text-sm">{children}</dl>
+      <dl className="divide-y divide-border text-sm">{children}</dl>
     </section>
   );
 }
@@ -153,6 +157,13 @@ export function ManagerApplicationReadonlyReview({
         <Row k="Bankruptcy" v={form.bankruptcyHistory === "yes" ? `Yes — ${form.bankruptcyDetails}` : form.bankruptcyHistory === "no" ? "No" : "—"} />
         <Row k="Criminal history" v={form.criminalHistory === "yes" ? `Yes — ${form.criminalDetails}` : form.criminalHistory === "no" ? "No" : "—"} />
       </ReviewSection>
+      {displayableCustomFieldAnswers(form.customFieldAnswers).length > 0 ? (
+        <ReviewSection title="Manager questions">
+          {displayableCustomFieldAnswers(form.customFieldAnswers).map((answer) => (
+            <Row key={answer.key} k={answer.label} v={displayOrDash(formatCustomFieldAnswerDisplay(answer))} />
+          ))}
+        </ReviewSection>
+      ) : null}
       <ReviewSection title="Consent & signature">
         <Row k="Credit / background" v={form.consentCredit ? "Authorized" : "Not checked"} />
         <Row k="Accuracy confirmed" v={form.consentTruth ? "Yes" : "Not checked"} />

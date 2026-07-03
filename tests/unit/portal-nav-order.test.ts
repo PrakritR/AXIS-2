@@ -58,7 +58,7 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
 describe("pro portal nav grouping (free → resident block → paid workspace → account → settings)", () => {
   const sections = sectionIds(proPortal.sections);
   const residentBlock = ["residents", "leases", "payments"];
-  const paidBlock = ["services", "inbox", "documents", "financials", "relationships"];
+  const paidBlock = ["services", "inbox", "documents", "financials", "relationships", "promotion"];
 
   it("places residents and leases before payments", () => {
     expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("leases"));
@@ -74,7 +74,7 @@ describe("pro portal nav grouping (free → resident block → paid workspace �
   });
 
   it("places feedback after co-managers and before settings", () => {
-    expect(sections.slice(-3)).toEqual(["relationships", "bugs-feedback", "profile"]);
+    expect(sections.slice(-4)).toEqual(["relationships", "promotion", "bugs-feedback", "profile"]);
   });
 
   it("does not expose plan as a top-level nav section", () => {

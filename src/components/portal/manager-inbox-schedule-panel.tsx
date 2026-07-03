@@ -60,7 +60,14 @@ function rowId(row: ScheduleRow): string {
   return row.kind === "manual" ? row.message.id : row.message.id;
 }
 
-export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }) {
+export function ManagerInboxSchedulePanel({
+  portalBase,
+  filterResidentEmail,
+}: {
+  portalBase: string;
+  /** When set, only show scheduled messages addressed to this resident (case-insensitive). */
+  filterResidentEmail?: string;
+}) {
   void portalBase;
   const { showToast } = useAppUi();
   const { userId } = useManagerUserId();
@@ -113,10 +120,16 @@ export function ManagerInboxSchedulePanel({ portalBase }: { portalBase: string }
       .filter((message) => isUpcomingScheduledInboxMessage(message.sendAt, message.status))
       .map((message) => ({ kind: "manual", message }));
     const automation: ScheduleRow[] = automationMessages.map((message) => ({ kind: "automation", message }));
+    const targetEmail = filterResidentEmail?.trim().toLowerCase();
     return [...manual, ...automation]
       .filter((row) => sendAtWithinScheduleHorizon(row.message.sendAt, horizonDays))
+      .filter((row) => {
+        if (!targetEmail) return true;
+        const recipientEmail = row.kind === "manual" ? row.message.recipientEmail : row.message.residentEmail;
+        return (recipientEmail ?? "").trim().toLowerCase() === targetEmail;
+      })
       .sort((a, b) => a.message.sendAt.localeCompare(b.message.sendAt));
-  }, [manualMessages, automationMessages, horizonDays]);
+  }, [manualMessages, automationMessages, horizonDays, filterResidentEmail]);
 
   const scheduledCount = useMemo(
     () => rows.filter((row) => row.message.status === "scheduled").length,

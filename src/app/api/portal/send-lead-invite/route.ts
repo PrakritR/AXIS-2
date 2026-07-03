@@ -10,16 +10,18 @@ import {
   buildManagerApplyUrl,
   buildManagerListingUrl,
   buildManagerTourUrl,
-  managerCanSharePropertyForUser,
 } from "@/lib/manager-property-links";
 import { buildListingShareSummary } from "@/lib/listing-share-summary";
-import { readAllExtraListings } from "@/lib/demo-property-pipeline";
+import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Domain is matched as dot-separated labels (no char class overlaps the "." delimiter)
+// so there is exactly one way to parse a match — avoids polynomial backtracking on
+// attacker-controlled input.
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 function canSendLeadInvite(role: string | null | undefined): boolean {
   return role === "admin" || role === "manager" || role === "owner" || role === "pro";
@@ -83,11 +85,14 @@ export async function POST(req: Request) {
     if (!canSendLeadInvite(requestor.role)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
-    if (!managerCanSharePropertyForUser(user.id, propertyId)) {
+    // Server-side authorization: the manager may only share a property they own
+    // (or are assigned as co-manager), verified against the Supabase source of
+    // truth — never trust the client-supplied propertyId. Also yields the live
+    // listing used to build the invite below.
+    const listing = await getShareablePropertyForUser(user.id, propertyId);
+    if (!listing) {
       return NextResponse.json({ error: "You cannot share links for this property." }, { status: 403 });
     }
-
-    const listing = readAllExtraListings().find((p) => p.id === propertyId);
     const propertyTitle = (listing?.title || listing?.buildingName || listing?.address || propertyId).trim();
     const origin = appOrigin(req);
     const applyUrl = buildManagerApplyUrl(origin, {

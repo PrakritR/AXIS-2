@@ -2,6 +2,7 @@ import { AdminDashboard } from "@/components/portal/admin-dashboard";
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 import { ManagerLeases } from "@/components/portal/manager-leases";
 import { ManagerPayments } from "@/components/portal/manager-payments";
+import { ManagerPromotion } from "@/components/portal/manager-promotion";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
@@ -318,6 +319,8 @@ export async function renderPortalSection(
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
     }
     const inboxTab = tabParts[0]!;
+    // Manager-only tab that used to leak into admin pills; keep old links working.
+    if (inboxTab === "schedule") redirect(`${def.basePath}/${section}/unopened`);
     if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
     return <AdminInboxClient tabId={inboxTab} />;
   }
@@ -472,6 +475,9 @@ export async function renderPortalSection(
         managerOwnerSubscriptionTier,
       );
     }
+    if (section === "promotion") {
+      return subscriptionGated(<ManagerPromotion />, kind, "promotion", managerOwnerSubscriptionTier);
+    }
     if (section === "bugs-feedback") {
       return subscriptionGated(
         <PortalBugFeedbackPanel reporterRole={reporterRole} />,
@@ -512,6 +518,15 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "payments") {
     if (tabParts?.length) notFound();
+    const paymentsEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
+    const paymentsLeaseSigned = paymentsEmail ? await loadResidentLeaseSignedStatus(paymentsEmail) : false;
+    if (!paymentsLeaseSigned) {
+      return (
+        <ManagerPortalPageShell title="Payments">
+          <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
+        </ManagerPortalPageShell>
+      );
+    }
     return <ResidentPaymentsPanel />;
   }
 
@@ -524,24 +539,19 @@ export async function renderPortalSection(
     if (tierGate) return tierGate;
     const allowedTabs = meta.tabs.map((t) => t.id);
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "receipts"}`);
+      redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "application"}`);
     }
     if (tabParts.length > 1) notFound();
     const docTab = tabParts[0]!;
     if (!allowedTabs.includes(docTab)) notFound();
-    if (docTab === "lease" && !residentWorkspaceUnlocked && !(residentAccess?.leaseAccessUnlocked ?? false)) {
-      return <ResidentFreeTierFeatureNotice title="Documents — Lease" />;
-    }
     return <ResidentDocumentsPanel tabId={docTab} basePath={def.basePath} tabs={meta.tabs} />;
   }
 
   if (kind === "resident" && section === "lease") {
     if (tabParts?.length) notFound();
-    return (
-      <ManagerPortalPageShell title="Lease">
-        <ResidentLeasePanel />
-      </ManagerPortalPageShell>
-    );
+    // ResidentLeasePanel renders its own "Lease" page shell (title + actions);
+    // don't wrap it in a second shell or the header stacks twice.
+    return <ResidentLeasePanel />;
   }
 
   if (kind === "resident" && section === "move-in") {
@@ -561,6 +571,15 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "inbox") {
     const tierGate = residentManagerTierGate("inbox", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
+    const inboxEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
+    const inboxLeaseSigned = inboxEmail ? await loadResidentLeaseSignedStatus(inboxEmail) : false;
+    if (!inboxLeaseSigned) {
+      return (
+        <ManagerPortalPageShell title="Inbox">
+          <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
+        </ManagerPortalPageShell>
+      );
+    }
     if (!meta.tabs.length) notFound();
     if (!tabParts?.length) {
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);

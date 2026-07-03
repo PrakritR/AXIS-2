@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PaymentReminderKind = "pre_due" | "same_day" | "overdue_daily" | "late_fee";
+export type PaymentReminderKind = "pre_due" | "same_day" | "overdue_daily" | "late_fee" | "set_date";
 
 export type ScheduleVisibilityMode = "all" | "days_before_send";
 
@@ -11,6 +11,8 @@ export type ReminderTemplate = {
 
 export type ManagerAutomationSettings = {
   preDueReminderDays: number[];
+  /** One-off reminders sent on specific calendar dates (ISO YYYY-MM-DD), for every eligible charge. */
+  setDateReminders: string[];
   scheduleVisibilityMode: ScheduleVisibilityMode;
   scheduleVisibilityDays: number;
   overdueDailyEnabled: boolean;
@@ -31,6 +33,7 @@ export const PAYMENT_AUTOMATION_SETTINGS_EVENT = "axis:payment-automation-settin
 
 export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   preDueReminderDays: [...DEFAULT_PRE_DUE_REMINDER_DAYS],
+  setDateReminders: [],
   scheduleVisibilityMode: "days_before_send",
   scheduleVisibilityDays: 2,
   overdueDailyEnabled: true,
@@ -106,6 +109,35 @@ function normalizePreDueDays(raw: unknown): number[] {
   return unique.length ? unique : [...DEFAULT_PRE_DUE_REMINDER_DAYS];
 }
 
+function normalizeSetDateReminders(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const dates = raw
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v))
+    .filter((v) => {
+      const [year, month, day] = v.split("-").map(Number);
+      const d = new Date(year!, month! - 1, day!);
+      return d.getFullYear() === year && d.getMonth() === month! - 1 && d.getDate() === day;
+    });
+  return [...new Set(dates)].sort().slice(0, 24);
+}
+
+/** Encode an ISO date (YYYY-MM-DD) as the numeric key stored in days_before_due for set_date reminders. */
+export function setDateReminderKey(isoDate: string): number | null {
+  const normalized = normalizeSetDateReminders([isoDate]);
+  if (!normalized.length) return null;
+  return Number(normalized[0]!.replaceAll("-", ""));
+}
+
+/** Decode a set_date numeric key (YYYYMMDD) back to an ISO date, or null when malformed. */
+export function setDateReminderIsoFromKey(key: number | null | undefined): string | null {
+  if (key == null || !Number.isFinite(key)) return null;
+  const raw = String(Math.round(key));
+  if (!/^\d{8}$/.test(raw)) return null;
+  const iso = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  return normalizeSetDateReminders([iso])[0] ?? null;
+}
+
 function normalizeTemplate(raw: unknown, fallback: ReminderTemplate): ReminderTemplate {
   if (!raw || typeof raw !== "object") return fallback;
   const row = raw as Record<string, unknown>;
@@ -128,6 +160,7 @@ export function normalizeManagerAutomationSettings(raw: unknown): ManagerAutomat
 
   return {
     preDueReminderDays: normalizePreDueDays(row.preDueReminderDays),
+    setDateReminders: normalizeSetDateReminders(row.setDateReminders),
     scheduleVisibilityMode: visibilityMode,
     scheduleVisibilityDays: visibilityDays,
     overdueDailyEnabled: row.overdueDailyEnabled !== false,
@@ -276,6 +309,9 @@ export function paymentReminderDedupId(input: {
   }
   if (input.kind === "late_fee") {
     return `late_fee_notice_${input.chargeId}`;
+  }
+  if (input.kind === "set_date") {
+    return `payment_reminder_setdate_${input.daysBeforeDue ?? 0}_${input.chargeId}`;
   }
   const days = input.daysBeforeDue ?? 0;
   const modern = `payment_reminder_pre_${days}d_${input.chargeId}`;

@@ -36,6 +36,7 @@ import {
   type ScheduledInboxMessageRecord,
 } from "@/lib/scheduled-inbox-messages";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 
 type InboxThread = {
@@ -87,6 +88,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   const [manualScheduledMessages, setManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
 
   useEffect(() => {
+    if (isDemoModeActive()) return;
     let cancelled = false;
     void (async () => {
       const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });

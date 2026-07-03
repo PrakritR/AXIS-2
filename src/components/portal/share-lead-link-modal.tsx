@@ -303,7 +303,7 @@ export function ShareLeadLinkModal({
                     placeholder="Add context for the prospect…"
                   />
                 </div>
-                <div className="mt-4 flex justify-end gap-2">
+                <div className="mt-4 flex justify-start gap-2">
                   <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
                     Close
                   </Button>

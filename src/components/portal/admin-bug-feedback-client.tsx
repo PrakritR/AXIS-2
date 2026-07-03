@@ -164,9 +164,9 @@ export function AdminBugFeedbackClient() {
           <p className="font-semibold">Feedback storage is not set up in Supabase yet.</p>
           <p className="mt-1 leading-relaxed">
             Manager and resident submissions cannot be saved until the{" "}
-            <code className="rounded bg-white/70 px-1 py-0.5 text-xs">portal_bug_feedback_records</code> table exists.
+            <code className="rounded bg-black/[0.06] px-1 py-0.5 text-xs [html[data-theme=dark]_&]:bg-white/15">portal_bug_feedback_records</code> table exists.
             Run the migration in Supabase SQL Editor, or use the button below if{" "}
-            <code className="rounded bg-white/70 px-1 py-0.5 text-xs">DATABASE_URL</code> is configured on the server.
+            <code className="rounded bg-black/[0.06] px-1 py-0.5 text-xs [html[data-theme=dark]_&]:bg-white/15">DATABASE_URL</code> is configured on the server.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button type="button" variant="outline" className="rounded-full" disabled={applyingSchema} onClick={() => void applySchema()}>

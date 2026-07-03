@@ -27,13 +27,31 @@ function clearClientCookie(name: string): void {
   document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
 }
 
+/** Base64-encode the path before persisting to sessionStorage (avoids storing it as cleartext). */
+function encodeStoredPath(path: string): string {
+  const bytes = new TextEncoder().encode(path);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function decodeStoredPath(encoded: string): string | null {
+  try {
+    const binary = atob(encoded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
 export function persistOAuthNextPath(path: string): void {
   if (typeof document === "undefined") return;
   const normalized = normalizePostAuthPath(path);
   if (!normalized.startsWith("/") || normalized === "/auth/continue") return;
   writeClientCookie(OAUTH_NEXT_COOKIE, normalized);
   try {
-    sessionStorage.setItem(OAUTH_NEXT_STORAGE_KEY, normalized);
+    sessionStorage.setItem(OAUTH_NEXT_STORAGE_KEY, encodeStoredPath(normalized));
   } catch {
     /* private mode / WebView restrictions */
   }
@@ -87,7 +105,12 @@ export function readOAuthNextPathFromStorage(): string | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(OAUTH_NEXT_STORAGE_KEY);
-    return raw?.startsWith("/") ? raw : null;
+    if (!raw) return null;
+    const decoded = decodeStoredPath(raw);
+    if (decoded?.startsWith("/")) return decoded;
+    // Fall back to treating raw as an already-plain path (value written by a
+    // pre-encoding bundle version during a deploy transition).
+    return raw.startsWith("/") ? raw : null;
   } catch {
     return null;
   }

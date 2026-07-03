@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
-import { WORK_ORDER_CATEGORY_TO_EXPENSE, type WorkOrderCategory } from "@/lib/reports/categories";
+import { isCategoryDeductible, WORK_ORDER_CATEGORY_TO_EXPENSE, type WorkOrderCategory } from "@/lib/reports/categories";
 
 export type WorkOrderCompleteInput = {
   workOrderId: string;
@@ -36,6 +36,7 @@ export async function createExpensesFromWorkOrder(
         expense_date: expenseDate,
         memo: memoBase,
         vendor_id: input.vendorId?.trim() || null,
+        tax_deductible: isCategoryDeductible(laborCategory),
         source_work_order_id: input.workOrderId,
         updated_at: now,
       })
@@ -56,6 +57,7 @@ export async function createExpensesFromWorkOrder(
         expense_date: expenseDate,
         memo: input.materialsMemo?.trim() || `${memoBase} — materials`,
         vendor_id: input.vendorId?.trim() || null,
+        tax_deductible: isCategoryDeductible("materials"),
         source_work_order_id: input.workOrderId,
         updated_at: now,
       })

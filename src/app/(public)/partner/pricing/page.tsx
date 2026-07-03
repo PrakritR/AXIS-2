@@ -1,61 +1,36 @@
 "use client";
 
-import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
-import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
-import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
+import { ManagerSignupPanel } from "@/components/auth/manager-signup-panel";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
-import { useAppUi } from "@/components/providers/app-ui-provider";
-import {
-  buildPricingOffer,
-  continuePartnerPricingWithOffer,
-  fetchPartnerPricingSession,
-  handleGoogleSignedInReturn,
-  type PartnerPricingSession,
-} from "@/lib/auth/partner-pricing-google-flow";
-import { clearManagerPricingOffer, persistManagerPricingOffer, readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
-import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
+import { persistManagerPricingOffer, readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { MANAGER_PLAN_TIERS, isPlanTierId, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
-import {
-  normalizeProMonthlyPromoInput,
-  PRO_MONTHLY_FIRST_FREE_PROMO_CODE,
-} from "@/lib/stripe-promos";
 import { loadManagerPlanTiers } from "@/lib/site-content";
-import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
-  return tiers.find((t) => t.id === id) ?? tiers[0]!;
-}
-
+/**
+ * Pricing with FULLY INTEGRATED signup: the plan cards select a plan, and the
+ * "Get started" section directly below them creates the account (Google or manual
+ * details) and continues straight into payment — all on this one page. This is the
+ * only manager signup surface on the web; /auth/create-account redirects here.
+ * Google OAuth for a paid plan returns here (?google_signed_in=1) and resumes the
+ * stored offer in the same section. Sign-in is its own page, linked below.
+ */
 export default function PartnerPricingPage() {
   const router = useRouter();
   const { isNative } = useIsNativeApp();
-  const { showToast } = useAppUi();
+
+  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
+  const [planTiers, setPlanTiers] = useState<ManagerPlanTierDefinition[]>(MANAGER_PLAN_TIERS);
+  const [selectedTier, setSelectedTier] = useState<PlanTierId>("free");
+  const [googleReturn, setGoogleReturn] = useState(false);
+  const signupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isNative !== true) return;
-    router.replace(`/auth/manager/plan${window.location.search}`);
+    router.replace("/auth/manager/plan");
   }, [isNative, router]);
-
-  /** Default monthly so Pro shows $20/mo and optional first-month promo applies. */
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
-  const [selectedTierId, setSelectedTierId] = useState<PlanTierId>("pro");
-  const [planTiers, setPlanTiers] = useState<ManagerPlanTierDefinition[]>(MANAGER_PLAN_TIERS);
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
-  const [googleCheckoutBusy, setGoogleCheckoutBusy] = useState(false);
-  const [googleSession, setGoogleSession] = useState<PartnerPricingSession | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(true);
-
-  const googleSignedIn = Boolean(googleSession?.authenticated && googleSession.isGoogle !== false);
-  const pricingAccountComplete = googleSignedIn && googleSession != null && !googleSession.needsPricing;
-  const showGoogleAccountPanel = googleSignedIn;
 
   useEffect(() => {
     let cancelled = false;
@@ -70,249 +45,49 @@ export default function PartnerPricingPage() {
   }, []);
 
   useEffect(() => {
-    void Promise.resolve().then(() => {
-      const params = new URLSearchParams(window.location.search);
-      const tier = params.get("tier");
-      if (tier && isPlanTierId(tier)) {
-        setSelectedTierId(tier);
-      }
-
-      const billing = params.get("billing");
-      if (billing === "monthly" || billing === "annual") {
-        setBilling(billing);
-      }
-
-      const promo = params.get("promo")?.trim();
-      if (promo) setCode(promo);
-    });
-  }, []);
-
-  const selected = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
-  const price = billing === "monthly" ? selected.monthly : selected.annual;
-  const showAnnualDiscountNote = billing === "annual" && selectedTierId !== "free";
-
-  const onEmbeddedError = useCallback(
-    (message: string) => {
-      showToast(message);
-      setCheckoutClientSecret(null);
-    },
-    [showToast],
-  );
-
-  const startManagerSignupIntent = useCallback(
-    async (opts: {
-      tier: PlanTierId;
-      billing: "monthly" | "annual";
-      promo?: string;
-    }): Promise<"redirected" | "needs-checkout" | "error"> => {
-      setCheckoutBusy(true);
-      try {
-        const res = await fetch("/api/manager/signup-intent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            tier: opts.tier,
-            billing: opts.billing,
-            email: typeof email === "string" ? email.trim() : "",
-            fullName: typeof fullName === "string" ? fullName.trim() : "",
-            phone: typeof phone === "string" ? phone.trim() : "",
-            promo: opts.promo,
-          }),
-        });
-        let payload: { sessionId?: string; action?: string; error?: string; code?: string };
-        try {
-          payload = (await res.json()) as { sessionId?: string; action?: string; error?: string; code?: string };
-        } catch {
-          showToast("Invalid response from server. Try again.");
-          return "error";
-        }
-        if (!res.ok) {
-          // Server is the sole authority on whether a promo waives payment.
-          // When it declines, fall back to Stripe checkout instead of toasting.
-          if (payload.code === "REQUIRES_CHECKOUT") {
-            return "needs-checkout";
-          }
-          showToast(typeof payload.error === "string" ? payload.error : "Could not start signup.");
-          return "error";
-        }
-        if (payload.action === "portal") {
-          router.push("/portal/dashboard");
-          return "redirected";
-        }
-        if (payload.sessionId) {
-          router.push(`/auth/manager-id?session_id=${encodeURIComponent(payload.sessionId)}`);
-          return "redirected";
-        }
-        showToast("Unexpected signup response.");
-        return "error";
-      } catch {
-        showToast("Network error.");
-        return "error";
-      } finally {
-        setCheckoutBusy(false);
-      }
-    },
-    [email, fullName, phone, router, showToast],
-  );
-
-  useEffect(() => {
-    void Promise.resolve().then(() => {
-      void fetchPartnerPricingSession().then((session) => {
-        setGoogleSession(session);
-        setSessionLoading(false);
-        if (session.authenticated && session.email) {
-          setEmail(session.email);
-          if (session.fullName) setFullName(session.fullName);
-        }
-      });
-    });
-  }, []);
-
-  useEffect(() => {
-    persistManagerPricingOffer(
-      buildPricingOffer({
-        tier: selectedTierId,
-        billing,
-        promo: code.trim() || undefined,
-      }),
-    );
-  }, [selectedTierId, billing, code]);
-
-  useEffect(() => {
-    void Promise.resolve().then(() => {
-      setCheckoutClientSecret(null);
-    });
-  }, [selectedTierId, billing, code]);
-
-  useEffect(() => {
+    // Honor ?tier= / ?billing= deep links (e.g. from an ad), and resume a Google OAuth
+    // return (?google_signed_in=1) with the stored plan selection.
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("google_signed_in") !== "1" && params.get("google_checkout") !== "1") return;
+    const b = params.get("billing");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from the URL after mount
+    if (b === "monthly" || b === "annual") setBilling(b);
+    const t = params.get("tier");
+    if (t && isPlanTierId(t)) setSelectedTier(t);
 
-    let cancelled = false;
-    void (async () => {
-      setGoogleCheckoutBusy(true);
-      try {
-        const stored = readManagerPricingOffer();
-        if (stored) {
-          setSelectedTierId(stored.tier);
-          setBilling(stored.billing);
-          if (stored.promo) setCode(stored.promo);
-        }
-
-        const result = await handleGoogleSignedInReturn();
-        if (cancelled) return;
-
-        const session = await fetchPartnerPricingSession();
-        if (cancelled) return;
-        setGoogleSession(session);
-        if (session.email) setEmail(session.email);
-        if (session.fullName) setFullName(session.fullName);
-
-        if (result.status !== "provisioned") {
-          if (result.status === "error") {
-            showToast(result.message);
-          }
-          return;
-        }
-
-        const offer =
-          stored ??
-          buildPricingOffer({
-            tier: selectedTierId,
-            billing,
-            promo: code.trim() || undefined,
-          });
-
-        const pricingResult = await continuePartnerPricingWithOffer(offer);
-        if (cancelled) return;
-        if (pricingResult.status === "checkout") {
-          setCheckoutClientSecret(pricingResult.clientSecret);
-          return;
-        }
-        if (pricingResult.status === "portal") {
-          router.replace("/portal/dashboard");
-          return;
-        }
-        if (pricingResult.status === "finish") {
-          router.push(partnerPricingFinishPath(pricingResult.sessionId));
-          return;
-        }
-        if (pricingResult.status === "error") {
-          showToast(pricingResult.message);
-          return;
-        }
-
-        showToast("Signed in with Google. Complete checkout below to activate your plan.");
-      } finally {
-        if (!cancelled) setGoogleCheckoutBusy(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [router, showToast, selectedTierId, billing, code]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const sid = params.get("session_id");
-    if (sid) {
-      clearManagerPricingOffer();
-      window.history.replaceState({}, "", "/partner/pricing");
-      router.replace(`/auth/manager-id?session_id=${encodeURIComponent(sid)}`);
+    if (params.get("google_signed_in") === "1" || params.get("google_checkout") === "1") {
+      const stored = readManagerPricingOffer();
+      // Free-tier Google returns go straight to the portal from the OAuth callback; landing
+      // here means a paid offer (or a lost one — fall back to Free, which is always safe).
+      setSelectedTier(stored?.tier ?? "free");
+      if (stored) setBilling(stored.billing);
+      setGoogleReturn(true);
+      window.setTimeout(() => signupRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
     }
-  }, [router]);
+  }, []);
 
-  const checkoutLocked = checkoutBusy || googleCheckoutBusy || Boolean(checkoutClientSecret);
-
-  const continueSignedInPricing = useCallback(async () => {
-    setCheckoutBusy(true);
-    try {
-      const offer = buildPricingOffer({
-        tier: selectedTierId,
-        billing,
-        promo: code.trim() || undefined,
-      });
-      const result = await continuePartnerPricingWithOffer(offer);
-      if (result.status === "checkout") {
-        setCheckoutClientSecret(result.clientSecret);
-        return;
-      }
-      if (result.status === "finish") {
-        router.push(partnerPricingFinishPath(result.sessionId));
-        return;
-      }
-      if (result.status === "portal") {
-        router.push("/portal/dashboard");
-        return;
-      }
-      if (result.status === "error") {
-        showToast(result.message);
-      }
-    } finally {
-      setCheckoutBusy(false);
-    }
-  }, [
-    billing,
-    code,
-    router,
-    selectedTierId,
-    showToast,
-  ]);
+  const choosePlan = useCallback(
+    (tier: PlanTierId) => {
+      // Remember the choice (survives the Google OAuth round trip), update the integrated
+      // signup section below, and bring it into view — the user never leaves this page.
+      persistManagerPricingOffer({ tier, billing, returnSurface: "partner-pricing" });
+      setSelectedTier(tier);
+      signupRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    [billing],
+  );
 
   if (isNative) return null;
+
+  const selectedTierDef = planTiers.find((t) => t.id === selectedTier) ?? planTiers[0]!;
 
   return (
     <div className="min-h-screen px-4 py-14 sm:px-5 sm:py-20">
       <div className="mx-auto max-w-3xl text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Partner pricing</p>
-        <h1 className="mt-3 text-4xl font-bold tracking-[-0.03em] text-foreground sm:text-5xl md:text-[3.25rem]">Start with Axis.</h1>
+        <h1 className="text-4xl font-bold tracking-[-0.03em] text-foreground sm:text-5xl md:text-[3.25rem]">Start with Axis.</h1>
         <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted">
-          Choose a tier and sign in with Google to create your account instantly. Free starts right away; Pro and
-          Business upgrade through secure checkout when you are ready.
+          Pick a plan, then create your account right below. Free starts immediately; Pro and Business continue to
+          payment in the same step, with a free trial before you&apos;re charged.
         </p>
 
         <div className="glass-card mt-8 inline-flex items-center gap-1 rounded-full p-1">
@@ -347,11 +122,12 @@ export default function PartnerPricingPage() {
       <div className="mx-auto mt-10 grid max-w-5xl gap-5 lg:grid-cols-3 lg:items-stretch">
         {planTiers.map((t) => {
           const pb = billing === "monthly" ? t.monthly : t.annual;
-          const isSelected = selectedTierId === t.id;
           const isProFeatured = t.id === "pro";
+          const isSelected = t.id === selectedTier;
+          const cta = t.id === "free" ? "Get started free" : `Choose ${t.label}`;
           const cardInner = (
             <>
-              <div className="min-h-[28px]">
+              <div className="flex min-h-[28px] items-start justify-between gap-2">
                 {isProFeatured ? (
                   <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
                     Popular
@@ -361,6 +137,11 @@ export default function PartnerPricingPage() {
                     {t.label}
                   </span>
                 )}
+                {isSelected ? (
+                  <span className="inline-flex rounded-full bg-[var(--status-confirmed-bg)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--status-confirmed-fg)]">
+                    Selected
+                  </span>
+                ) : null}
               </div>
 
               <div className="mt-3 flex flex-wrap items-baseline gap-x-1 gap-y-0">
@@ -372,16 +153,13 @@ export default function PartnerPricingPage() {
 
               <button
                 type="button"
-                onClick={() => setSelectedTierId(t.id)}
+                onClick={() => choosePlan(isPlanTierId(t.id) ? t.id : "free")}
+                data-attr={`pricing-choose-${t.id}`}
                 className={`mt-5 min-h-[52px] w-full rounded-2xl py-3 text-sm font-semibold transition-all duration-150 active:scale-[0.98] ${
-                  isSelected
-                    ? isProFeatured
-                      ? "btn-cobalt"
-                      : "bg-foreground text-background shadow-inner"
-                    : "btn-metallic text-foreground"
+                  isProFeatured ? "btn-cobalt" : "btn-metallic text-foreground"
                 }`}
               >
-                {isSelected ? "Selected" : `Choose ${t.label}`}
+                {cta}
               </button>
 
               <ul className="mt-5 space-y-2.5 border-t border-border/60 pt-5">
@@ -404,13 +182,7 @@ export default function PartnerPricingPage() {
                 className="rounded-3xl p-[2px]"
                 style={{ background: "linear-gradient(135deg, var(--primary) 0%, var(--sky) 50%, var(--steel-light) 100%)" }}
               >
-                <div
-                  className={`flex h-full flex-col rounded-[calc(1.5rem-2px)] glass-card p-7 transition-all duration-200 ${
-                    isSelected ? "ring-2 ring-primary/20 shadow-[var(--shadow-card-hover)]" : ""
-                  }`}
-                >
-                  {cardInner}
-                </div>
+                <div className="flex h-full flex-col rounded-[calc(1.5rem-2px)] glass-card p-7">{cardInner}</div>
               </div>
             );
           }
@@ -418,9 +190,7 @@ export default function PartnerPricingPage() {
           return (
             <div
               key={t.id}
-              className={`flex flex-col glass-card rounded-3xl p-7 transition-all duration-200 ${
-                isSelected ? "ring-2 ring-primary/25 shadow-[var(--shadow-card-hover)]" : ""
-              }`}
+              className={`flex flex-col glass-card rounded-3xl p-7 ${isSelected ? "ring-2 ring-primary/50" : ""}`}
             >
               {cardInner}
             </div>
@@ -428,312 +198,28 @@ export default function PartnerPricingPage() {
         })}
       </div>
 
-      <div className="glass-card mx-auto mt-10 max-w-5xl rounded-3xl p-1 sm:p-2">
-        <div className="rounded-[1.35rem] border border-border/60 bg-card p-6 sm:p-8">
-          <div className="flex flex-wrap gap-2 border-b border-border/60 pb-5">
-            {planTiers.map((t) => {
-              const active = selectedTierId === t.id;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setSelectedTierId(t.id)}
-                  className={`rounded-full px-4 py-2 text-xs font-semibold transition-all sm:text-sm ${
-                    active ? "btn-cobalt shadow-sm" : "border border-border bg-accent/40 text-muted hover:text-foreground"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
+      <div ref={signupRef} className="mx-auto mt-12 max-w-md scroll-mt-24" id="get-started">
+        <div className="glass-card rounded-3xl p-7">
+          <h2 className="text-center text-sm font-bold uppercase tracking-[0.12em] text-primary">
+            Get started — {selectedTierDef.label}
+          </h2>
+          <div className="mt-4">
+            <ManagerSignupPanel
+              tier={selectedTier}
+              billing={billing}
+              planTiers={planTiers}
+              returnSurface="partner-pricing"
+              googleReturn={googleReturn}
+            />
           </div>
-
-          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-bold uppercase tracking-wide text-foreground">
-              Get started — {selected.label}
-            </p>
-            <div className="text-right">
-              <p className="text-2xl font-black tracking-tight text-foreground">
-                {price.headline}
-                {price.period ? <span className="text-base font-semibold text-muted">{price.period}</span> : null}
-              </p>
-              {selectedTierId !== "free" ? (
-                <p className="text-xs text-muted">{billing === "annual" ? "Billed annually" : "Billed monthly"}</p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="mt-8">
-            {showGoogleAccountPanel && googleSession?.email ? (
-              <>
-                <GoogleSignedInBanner
-                  email={googleSession.email}
-                  fullName={googleSession.fullName}
-                  subtitle={
-                    pricingAccountComplete
-                      ? "You're signed in. Browse plans below or use Portal in the nav to open your dashboard."
-                      : selectedTierId === "free"
-                        ? "Your free Axis account is ready. Continue below to open your portal — upgrade anytime."
-                        : `Choose ${selected.label} below. Payment updates your account; you stay signed in across Axis.`
-                  }
-                />
-                <p className="mt-4 text-center text-sm text-muted sm:text-left">
-                  Switch tiers above anytime — checkout updates to match your selection.
-                </p>
-              </>
-            ) : (
-              <>
-                <PricingGoogleContinueButton
-                  tier={selectedTierId}
-                  billing={billing}
-                  promo={code.trim() || undefined}
-                  disabled={checkoutLocked || sessionLoading}
-                />
-                <p className="mt-2 text-center text-xs text-muted sm:text-left">
-                  {googleCheckoutBusy
-                    ? "Creating your account…"
-                    : selectedTierId === "free"
-                      ? "Sign in with Google to create your account instantly — no form required."
-                      : "Choose your plan and complete checkout to get started."}
-                </p>
-              </>
-            )}
-          </div>
-
-          {!showGoogleAccountPanel ? (
-            <>
-              <div className="my-6 flex items-center gap-3">
-                <div className="h-px flex-1 bg-border" aria-hidden />
-                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">or enter details manually</span>
-                <div className="h-px flex-1 bg-border" aria-hidden />
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="text-xs font-semibold text-foreground" htmlFor="partner-name">
-                Full name
-              </label>
-              <Input
-                id="partner-name"
-                className="mt-1.5"
-                placeholder="Your name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                autoComplete="name"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-foreground" htmlFor="partner-email">
-                Email
-              </label>
-              <Input
-                id="partner-email"
-                className="mt-1.5"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-foreground" htmlFor="partner-phone">
-                Phone
-              </label>
-              <Input
-                id="partner-phone"
-                className="mt-1.5"
-                type="tel"
-                placeholder="(206) 555-0100"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                autoComplete="tel"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs font-semibold text-foreground" htmlFor="partner-code">
-                Code <span className="font-normal text-muted">(optional)</span>
-              </label>
-              <Input
-                id="partner-code"
-                className="mt-1.5"
-                placeholder="Promo or referral code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-              />
-              {normalizeProMonthlyPromoInput(typeof code === "string" ? code : "") === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
-                selectedTierId !== "free" &&
-                (selectedTierId !== "pro" || billing !== "monthly") ? (
-                <p className="mt-1.5 text-xs text-amber-800">
-                  {PRO_MONTHLY_FIRST_FREE_PROMO_CODE} only applies to <span className="font-semibold">Pro</span> with{" "}
-                  <span className="font-semibold">monthly</span> billing.
-                </p>
-              ) : null}
-            </div>
-          </div>
-            </>
-          ) : null}
-
-          {checkoutClientSecret ? (
-            <div className="glass-card mt-8 rounded-2xl p-4 sm:p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-semibold text-foreground">Complete payment below</p>
-                <button
-                  type="button"
-                  className="btn-metallic self-start rounded-full px-4 py-2 text-sm font-semibold text-foreground"
-                  onClick={() => setCheckoutClientSecret(null)}
-                >
-                  Cancel
-                </button>
-              </div>
-              <div className="mt-4">
-                <EmbeddedCheckoutMount clientSecret={checkoutClientSecret} onError={onEmbeddedError} />
-              </div>
-            </div>
-          ) : null}
-
-          <div className="mt-8 flex flex-col items-stretch justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row sm:items-center">
-            <p
-              className={`text-sm ${
-                showAnnualDiscountNote ? "font-medium text-[var(--status-confirmed-fg)]" : "text-muted"
-              }`}
-            >
-              {showAnnualDiscountNote
-                ? "20% off applied."
-                : selectedTierId === "free"
-                  ? "No payment required for the free tier."
-                  : billing === "monthly"
-                    ? "Switch to annual for 20% off."
-                    : ""}
-            </p>
-            <button
-              type="button"
-              disabled={checkoutLocked}
-              onClick={() => {
-                if (pricingAccountComplete) {
-                  router.push("/portal/dashboard");
-                  return;
-                }
-                if (showGoogleAccountPanel) {
-                  void continueSignedInPricing();
-                  return;
-                }
-                void (async () => {
-                  try {
-                    const emailSafe = typeof email === "string" ? email : "";
-                    const fullNameSafe = typeof fullName === "string" ? fullName : "";
-                    const codeSafe = typeof code === "string" ? code : "";
-                    if (!emailSafe.trim() || !fullNameSafe.trim()) {
-                      showToast("Enter your full name and email before checkout.");
-                      return;
-                    }
-                    const normalizedPromo = normalizeProMonthlyPromoInput(codeSafe);
-                    const isProMonthly = selectedTierId === "pro" && billing === "monthly";
-                    const hasPromo = codeSafe.trim().length > 0;
-
-                    if (
-                      normalizedPromo === PRO_MONTHLY_FIRST_FREE_PROMO_CODE &&
-                      selectedTierId !== "free" &&
-                      !isProMonthly
-                    ) {
-                      showToast(
-                        `${PRO_MONTHLY_FIRST_FREE_PROMO_CODE} is only valid for Pro monthly. Switch tier or billing, or clear the code.`,
-                      );
-                      return;
-                    }
-
-                    if (selectedTierId === "free") {
-                      await startManagerSignupIntent({
-                        tier: selectedTierId,
-                        billing,
-                      });
-                      return;
-                    }
-
-                    // Paid tier with a promo entered: let the server decide whether the
-                    // code waives payment. If it does, we redirect; otherwise we fall
-                    // through to Stripe checkout. The waiver code is never on the client.
-                    if (hasPromo) {
-                      const outcome = await startManagerSignupIntent({
-                        tier: selectedTierId,
-                        billing,
-                        promo: codeSafe.trim(),
-                      });
-                      if (outcome !== "needs-checkout") {
-                        return;
-                      }
-                    }
-
-                    setCheckoutBusy(true);
-                    try {
-                      const res = await fetch("/api/stripe/checkout", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                        body: JSON.stringify({
-                          tier: selectedTierId,
-                          billing,
-                          email: emailSafe.trim(),
-                          fullName: fullNameSafe.trim(),
-                          phone: typeof phone === "string" ? phone.trim() : "",
-                          embedded: true,
-                          ...(isProMonthly && codeSafe.trim() ? { promo: normalizedPromo } : {}),
-                        }),
-                      });
-                      const payload = (await res.json()) as { clientSecret?: string; url?: string; error?: string; alreadyComplete?: boolean; redirectTo?: string };
-                      if (!res.ok) {
-                        if (payload.alreadyComplete && payload.redirectTo) {
-                          router.push(payload.redirectTo);
-                          return;
-                        }
-                        showToast(payload.error ?? "Could not start checkout. Ask your admin to configure billing.");
-                        return;
-                      }
-                      if (payload.clientSecret) {
-                        setCheckoutClientSecret(payload.clientSecret);
-                        return;
-                      }
-                      if (payload.url) {
-                        window.location.href = payload.url;
-                        return;
-                      }
-                      showToast("Unexpected checkout response.");
-                    } catch {
-                      showToast("Network error starting checkout.");
-                    } finally {
-                      setCheckoutBusy(false);
-                    }
-                  } catch (e) {
-                    const msg = e instanceof Error ? e.message : "Something went wrong. Try again.";
-                    showToast(msg);
-                  }
-                })();
-              }}
-              className="btn-cobalt inline-flex shrink-0 items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-all duration-150 hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
-            >
-              {checkoutBusy
-                ? "Starting…"
-                : checkoutClientSecret
-                  ? "Checkout open"
-                  : pricingAccountComplete
-                    ? "Go to portal"
-                    : showGoogleAccountPanel
-                      ? selectedTierId === "free"
-                        ? "Open free portal"
-                        : `Pay for ${selected.label}`
-                    : selectedTierId === "free"
-                      ? "Create free account"
-                      : `Continue with ${selected.label}`}
-            </button>
-          </div>
-
-          <p className="mt-6 text-center text-sm text-muted sm:text-left">
-            Already have an account?{" "}
-            <Link href="/auth/sign-in" className="font-semibold text-primary hover:underline">
-              Sign in
-            </Link>
-          </p>
         </div>
+
+        <p className="mt-6 text-center text-sm text-muted">
+          Already have an account?{" "}
+          <Link href="/auth/sign-in" className="font-semibold text-primary hover:underline" data-attr="pricing-sign-in-link">
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { managerOwnsResident } from "@/lib/auth/resident-relationship";
+import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -224,35 +224,29 @@ export async function POST(req: Request) {
       }
     }
 
-    // Restrict outbound relay: residents (and other non-staff) may only message
-    // a manager/owner who actually manages them. Managers/owners/admins (trusted
-    // staff) keep their existing reach so compose-to-resident/applicant/admin is
-    // unchanged. Broadcast recipients above are already resolved from the
-    // sender's own relationships, so this only meaningfully restricts toEmails/toUserIds.
+    // Enforce role scope on the SERVER (the compose UI only hides people; it is
+    // not a boundary). Residents may message only their own manager(s)/owner(s);
+    // managers may message only their own residents/co-managers; both may reach
+    // Axis admin ops. Admins are unrestricted. Broadcast recipients above are
+    // already resolved from the sender's own relationships, so they pass through;
+    // this meaningfully restricts arbitrary toEmails/toUserIds. See
+    // src/lib/inbox-recipient-scope.ts for the authoritative rules.
     const senderIsAdmin = senderRole === "admin" || (await isAdminUser(user.id));
-    const senderIsStaff =
-      senderIsAdmin || senderRole === "manager" || senderRole === "pro";
 
     let recipients = [...recipientsByEmail.values()];
-    if (!senderIsStaff) {
-      const allowed = await Promise.all(
-        recipients.map(async (recipient) => {
-          let recipientUserId = recipient.userId;
-          if (!recipientUserId && recipient.email) {
-            const { data } = await db.from("profiles").select("id").eq("email", recipient.email).maybeSingle();
-            recipientUserId = data?.id ?? null;
-          }
-          if (!recipientUserId) return false;
-          return managerOwnsResident(db, recipientUserId, { email: senderEmail });
-        }),
+    if (!senderIsAdmin) {
+      const { allowed } = await filterRecipientsBySenderScope(
+        db,
+        { id: user.id, email: senderEmail, role: senderRole, isAdmin: false },
+        recipients,
       );
-      recipients = recipients.filter((_, index) => allowed[index]);
-      if (recipients.length === 0) {
+      if (allowed.length === 0) {
         return NextResponse.json(
-          { ok: false, error: "You can only message a manager who manages your account." },
+          { ok: false, error: "You can only message people connected to your account." },
           { status: 403 },
         );
       }
+      recipients = allowed;
     }
 
     const toEmails = recipients

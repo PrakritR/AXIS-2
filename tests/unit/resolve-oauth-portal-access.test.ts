@@ -68,13 +68,8 @@ describe("resolveOAuthPortalRedirect", () => {
     vi.clearAllMocks();
   });
 
-  it("provisions a free manager and routes unknown accounts to portal", async () => {
+  it("never auto-provisions a free manager; unknown manager-intent goes to the plan picker", async () => {
     const { resolveOAuthPortalRedirect } = await import("@/lib/auth/resolve-oauth-portal-access");
-    ensureFreeManagerPortalAccess.mockResolvedValue({
-      status: "portal_ready",
-      managerId: "AXIS-NEW",
-      provisioned: true,
-    });
 
     const user = { id: "user-1", email: "new@test.com" } as User;
     const path = await resolveOAuthPortalRedirect(mockSupabase() as never, user, "/auth/continue", {
@@ -82,8 +77,18 @@ describe("resolveOAuthPortalRedirect", () => {
       surface: "native",
     });
 
-    expect(ensureFreeManagerPortalAccess).toHaveBeenCalled();
-    expect(path).toBe("/portal/dashboard");
+    expect(ensureFreeManagerPortalAccess).not.toHaveBeenCalled();
+    expect(path).toBe("/auth/manager/plan");
+  });
+
+  it("routes an unknown, no-intent account to the get-started role chooser", async () => {
+    const { resolveOAuthPortalRedirect } = await import("@/lib/auth/resolve-oauth-portal-access");
+
+    const user = { id: "user-1", email: "mystery@test.com" } as User;
+    const path = await resolveOAuthPortalRedirect(mockSupabase() as never, user, "/auth/continue");
+
+    expect(ensureFreeManagerPortalAccess).not.toHaveBeenCalled();
+    expect(path).toBe("/auth/get-started");
   });
 
   it("routes failed approved resident signup to create-account with error", async () => {

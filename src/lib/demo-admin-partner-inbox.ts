@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { emitAdminUi } from "@/lib/demo-admin-ui";
 import { deleteInboxThreadIds } from "@/lib/portal-inbox-storage";
 
@@ -103,6 +104,14 @@ export function readInboxMessages(): InboxMessage[] {
   return readAll();
 }
 
+/** Demo seed: load admin inbox messages into the local store (local-only, no server). */
+export function seedDemoAdminInbox(rows: InboxMessage[]): void {
+  if (!isBrowser()) return;
+  inboxMessages = rows;
+  syncedFromServer = true;
+  emitAdminUi();
+}
+
 function looksLikeInboxMessage(row: unknown): row is InboxMessage {
   if (!row || typeof row !== "object") return false;
   const r = row as Record<string, unknown>;
@@ -114,6 +123,7 @@ let syncedFromServer = false;
 /** Hydrate the in-memory admin inbox from the server (admin inbox is otherwise lost on every fresh page load). */
 export async function syncInboxMessagesFromServer(opts?: { force?: boolean; excludeIds?: Set<string> }): Promise<InboxMessage[]> {
   if (!isBrowser()) return readAll();
+  if (isDemoModeActive()) return readAll();
   if (syncedFromServer && !opts?.force) return readAll();
   try {
     const res = await fetch("/api/portal-inbox-threads?scope=admin", { credentials: "include", cache: "no-store" });

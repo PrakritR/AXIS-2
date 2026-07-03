@@ -1,6 +1,6 @@
 /** Opaque modal shell — solid card surface so background content does not bleed through. */
 export const MODAL_PANEL_CLASS =
-  "modal-panel relative w-full max-w-lg overflow-hidden rounded-2xl border border-border p-5 shadow-[var(--shadow-card)] sm:p-6";
+  "modal-panel relative flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border p-5 shadow-[var(--shadow-card)] sm:p-6";
 
 /** Bordered inset panel for message previews, link URLs, and read-only blocks inside modals. */
 export const MODAL_INSET_BOX_CLASS =

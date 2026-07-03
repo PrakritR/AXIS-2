@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signInAsManager, mockStripeAllRoutes } from "../helpers/auth";
+import { pathToUrlRegExp } from "../helpers/url-match";
 import { MANAGER_PORTAL_SMOKE_PATHS } from "@/lib/portals/pro";
 import { RESIDENT_PORTAL_SMOKE_PATHS } from "@/lib/portals/resident-sections";
 import { ADMIN_PORTAL_SMOKE_PATHS } from "@/lib/portals/admin";
@@ -24,7 +25,7 @@ test.describe("Mobile portal layout", () => {
 
     for (const { path } of MANAGER_PORTAL_SMOKE_PATHS) {
       await page.goto(path);
-      await expect(page).toHaveURL(new RegExp(path.replace(/\//g, "\\/")));
+      await expect(page).toHaveURL(pathToUrlRegExp(path));
       await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
 
       const overflow = await page.evaluate(() => {

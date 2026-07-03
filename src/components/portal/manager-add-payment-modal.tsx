@@ -414,7 +414,7 @@ export function ManagerAddPaymentModal({
               <option value="paid">Paid</option>
             </Select>
           </label>
-          <div className="mt-2 flex justify-end gap-2 sm:col-span-2">
+          <div className="mt-2 flex justify-start gap-2 sm:col-span-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={handleClose}>
               Cancel
             </Button>

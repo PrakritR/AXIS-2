@@ -56,11 +56,13 @@ export async function GET(
     const filenameBase = `${report.id}-${new Date().toISOString().slice(0, 10)}`;
 
     if (format === "pdf") {
+      // disposition=inline lets same-origin preview frames render the PDF instead of downloading it.
+      const disposition = searchParams.get("disposition") === "inline" ? "inline" : "attachment";
       const bytes = await reportToPdf(report);
       return new NextResponse(Buffer.from(bytes), {
         headers: {
           "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="${filenameBase}.pdf"`,
+          "Content-Disposition": `${disposition}; filename="${filenameBase}.pdf"`,
         },
       });
     }

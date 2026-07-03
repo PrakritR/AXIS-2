@@ -36,7 +36,7 @@ export async function ensurePartnerPricingFreeAccount(): Promise<{ ok: true } | 
     const supabase = createSupabaseBrowserClient();
     const user = await waitForAuthUser(supabase);
     if (!user) {
-      return { ok: false, error: "Sign in with Google first." };
+      return { ok: false, error: "Your session isn't ready yet — try again in a moment." };
     }
 
     const res = await fetch("/api/auth/provision-pending-manager", {
@@ -60,23 +60,25 @@ export async function ensurePartnerPricingFreeAccount(): Promise<{ ok: true } | 
   }
 }
 
-function offerToRequestBody(offer: ManagerPricingOffer) {
+function offerToRequestBody(offer: ManagerPricingOffer, extras?: { phone?: string }) {
   return {
     tier: offer.tier,
     billing: offer.billing,
     promo: offer.promo,
+    phone: extras?.phone,
   };
 }
 
 export async function continuePartnerPricingWithOffer(
   offer: ManagerPricingOffer,
+  extras?: { phone?: string },
 ): Promise<ContinuePartnerPricingResult> {
   persistManagerPricingOffer(offer);
 
   const supabase = createSupabaseBrowserClient();
   const user = await waitForAuthUser(supabase);
   if (!user) {
-    return { status: "error", message: "Sign in with Google first." };
+    return { status: "error", message: "Your session isn't ready yet — try again in a moment." };
   }
 
   const session = await fetchPartnerPricingSession();
@@ -87,7 +89,11 @@ export async function continuePartnerPricingWithOffer(
     return { status: "portal" };
   }
 
-  if (session.authenticated && session.needsPricing) {
+  // Only the FREE tier may be finalized up-front. For a paid signup we must NOT provision a
+  // completed free manager here — that would grant portal access before the payment method is
+  // added. pricing-oauth-continue provisions a PENDING account and returns the Stripe checkout;
+  // the account is completed only once payment succeeds.
+  if (session.authenticated && session.needsPricing && offer.tier === "free") {
     const provision = await ensurePartnerPricingFreeAccount();
     if (!provision.ok) {
       return { status: "error", message: provision.error };
@@ -105,7 +111,7 @@ export async function continuePartnerPricingWithOffer(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify(offerToRequestBody(offer)),
+    body: JSON.stringify(offerToRequestBody(offer, extras)),
   });
 
   const body = (await res.json()) as {
@@ -151,16 +157,22 @@ export function buildPricingOffer(opts: {
   };
 }
 
-export async function handleGoogleSignedInReturn(): Promise<{ status: "provisioned" } | { status: "error"; message: string }> {
-  const provision = await ensurePartnerPricingFreeAccount();
-  if (!provision.ok) {
-    return { status: "error", message: provision.error };
+export async function handleGoogleSignedInReturn(
+  offer?: ManagerPricingOffer,
+): Promise<{ status: "provisioned" } | { status: "error"; message: string }> {
+  if (!offer || offer.tier === "free") {
+    const provision = await ensurePartnerPricingFreeAccount();
+    if (!provision.ok) {
+      return { status: "error", message: provision.error };
+    }
   }
 
   if (typeof window !== "undefined") {
     const stored = readManagerPricingOffer();
     const onMobilePlan =
-      stored?.returnSurface === "mobile-plan" || window.location.pathname.startsWith("/auth/manager/plan");
+      offer?.returnSurface === "mobile-plan" ||
+      stored?.returnSurface === "mobile-plan" ||
+      window.location.pathname.startsWith("/auth/manager/plan");
     if (onMobilePlan) {
       window.history.replaceState({}, "", "/auth/manager/plan");
     } else {

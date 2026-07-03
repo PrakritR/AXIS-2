@@ -7,8 +7,8 @@ import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
+import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
-import { ManagerPropertySubmissionSummary } from "@/components/portal/manager-property-submission-summary";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
@@ -54,7 +54,6 @@ import {
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
-import { PRIMARY_AXIS_ADMIN_LABEL } from "@/data/inbox-scoped-directory";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -224,11 +223,11 @@ function ManagerPropertyInlineDetails({
 
       {bucket === 0 ? (
         <>
-          <p className="text-xs text-muted">
-            {row.adminRefId.startsWith("mgr-")
-              ? "This listing was edited and is pending admin re-approval. Edit sections below."
-              : `Listing approval is handled by ${PRIMARY_AXIS_ADMIN_LABEL}. Edit sections below while your submission is reviewed.`}
-          </p>
+          {row.adminRefId.startsWith("mgr-") ? (
+            <p className="text-xs text-muted">
+              This listing was edited and is pending admin re-approval. Edit sections below.
+            </p>
+          ) : null}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <Button
               type="button"
@@ -270,7 +269,7 @@ function ManagerPropertyInlineDetails({
       ) : null}
 
       {bucket === 2 && listingId ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2">
           <Button
             type="button"
             variant="outline"
@@ -317,6 +316,11 @@ function ManagerPropertyInlineDetails({
           >
             Unlist
           </Button>
+          {displaySub && portalSub ? (
+            <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
+              Edit listing
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -394,7 +398,7 @@ function ManagerPropertyInlineDetails({
         </div>
       ) : null}
 
-      {displaySub && portalSub ? (
+      {displaySub && portalSub && !(bucket === 2 && listingId) ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
             Edit listing
@@ -406,10 +410,6 @@ function ManagerPropertyInlineDetails({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">
-        <ManagerPropertySubmissionSummary sub={managerSubmission} listingId={listingId} />
-      </div>
-
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Preview</p>
         {publicHref ? (
@@ -417,6 +417,7 @@ function ManagerPropertyInlineDetails({
             href={publicHref}
             target="_blank"
             rel="noopener noreferrer"
+            data-attr="listing-open-public-page"
             className="text-xs font-semibold text-muted underline-offset-2 hover:underline"
           >
             Open public page
@@ -428,8 +429,7 @@ function ManagerPropertyInlineDetails({
       {mock && rich ? (
         <div
           data-listing-preview-scroll
-          data-surface="light"
-          className="portal-desktop-scroll-panel overscroll-contain rounded-2xl border border-border bg-[#f5f8fd]"
+          className="portal-desktop-scroll-panel overscroll-contain rounded-2xl border border-border bg-background"
         >
           <ListingDetailSections property={mock} rich={rich} previewModal />
         </div>
@@ -437,6 +437,14 @@ function ManagerPropertyInlineDetails({
 
       <ManagerPropertyHouseDetailsPanel
         noteKey={noteKey}
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+      />
+
+      <ManagerPropertyApplicationQuestionsPanel
         sub={managerSubmission}
         saveTarget={houseSaveTarget}
         managerUserId={managerUserId}

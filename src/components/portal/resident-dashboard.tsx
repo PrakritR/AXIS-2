@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ManagerPortalPageShell,
@@ -17,6 +16,7 @@ import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
+  isHouseholdChargeOverdue,
   readChargesForResident,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
@@ -85,25 +85,6 @@ function StatusBadge({ label, tone }: { label: string; tone: string }) {
     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${cls[tone] ?? cls.slate}`}>
       {label}
     </span>
-  );
-}
-
-function NotifBanner({
-  tone,
-  children,
-}: {
-  tone: "amber" | "blue" | "rose";
-  children: React.ReactNode;
-}) {
-  const cls = {
-    amber: "portal-banner-pending",
-    blue: "portal-banner-info",
-    rose: "portal-banner-danger",
-  }[tone];
-  return (
-    <div className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${cls}`}>
-      {children}
-    </div>
   );
 }
 
@@ -256,7 +237,14 @@ export function ResidentDashboard({
     const inbox = countUnopenedPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK);
 
     const charges = email ? readChargesForResident(email, residentUserId) : [];
-    const pendingCharges = charges.filter((c) => c.status === "pending");
+    const pendingCharges = charges
+      .filter((c) => c.status === "pending")
+      .sort((a, b) => {
+        const aOverdue = isHouseholdChargeOverdue(a);
+        const bOverdue = isHouseholdChargeOverdue(b);
+        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+        return 0;
+      });
     const pendingTotal = pendingCharges.reduce((s, c) => {
       const n = Number(c.balanceLabel.replace(/[^\d.]/g, ""));
       return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
@@ -289,56 +277,13 @@ export function ResidentDashboard({
   }
 
   const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
+  const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
     <ManagerPortalPageShell title={welcomeTitle} subtitle={propertySubtitle} hideTitleOnNative>
       <div className={PORTAL_DASHBOARD_STACK}>
 
         <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>{statusCopy}</div>
-
-        {(pendingCharges.length > 0 || lease.cta || inbox > 0 || (canUseFullPortal && openWO > 0)) && (
-          <div className="space-y-2">
-            {pendingCharges.length > 0 && (
-              <NotifBanner tone="amber">
-                <span>
-                  <span className="font-semibold">{dollars(pendingTotal)}</span>{" "}
-                  outstanding balance — {pendingCharges.length} pending charge{pendingCharges.length === 1 ? "" : "s"}
-                </span>
-                <Link href={`${BASE}/payments`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Payments →
-                </Link>
-              </NotifBanner>
-            )}
-            {lease.cta && (
-              <NotifBanner tone="blue">
-                <span>Your lease is ready — <span className="font-semibold">signature required</span></span>
-                <Link href={`${BASE}/lease`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Lease →
-                </Link>
-              </NotifBanner>
-            )}
-            {inbox > 0 && (
-              <NotifBanner tone="blue">
-                <span>
-                  <span className="font-semibold">{inbox}</span> unread message{inbox === 1 ? "" : "s"} in your inbox
-                </span>
-                <Link href={`${BASE}/inbox/unopened`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Inbox →
-                </Link>
-              </NotifBanner>
-            )}
-            {canUseFullPortal && openWO > 0 && (
-              <NotifBanner tone="rose">
-                <span>
-                  <span className="font-semibold">{openWO}</span> open maintenance request{openWO === 1 ? "" : "s"} awaiting scheduling
-                </span>
-                <Link href={`${BASE}/services/work-orders`} className="shrink-0 font-semibold text-primary hover:underline underline-offset-2">
-                  Work orders →
-                </Link>
-              </NotifBanner>
-            )}
-          </div>
-        )}
 
         {appStatus === "approved" ? (
           <>
@@ -361,23 +306,42 @@ export function ResidentDashboard({
 
             <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
               <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-                <PortalDashboardSectionHeader title="Payments" href={`${BASE}/payments`} linkLabel="Payments →" />
+                <PortalDashboardSectionHeader
+                  title="Payments"
+                  href={`${BASE}/payments`}
+                  linkLabel="Payments →"
+                  badge={
+                    overdueChargeCount > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                        {overdueChargeCount} overdue
+                      </span>
+                    ) : null
+                  }
+                />
                 <PortalDashboardPreviewList
                   items={pendingCharges}
                   href={`${BASE}/payments`}
                   emptyMessage="No outstanding charges."
                   keyForItem={(charge) => charge.id}
-                  renderRow={(charge) => (
-                    <PortalDashboardCompactRow
-                      title={charge.title || "Charge"}
-                      subtitle={formatCompactChargeLine(charge.title || "Charge", charge.balanceLabel, chargeDueLabel(charge))}
-                      badge={
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                          {charge.balanceLabel}
-                        </span>
-                      }
-                    />
-                  )}
+                  renderRow={(charge) => {
+                    const overdue = isHouseholdChargeOverdue(charge);
+                    return (
+                      <PortalDashboardCompactRow
+                        title={charge.title || "Charge"}
+                        subtitle={formatCompactChargeLine(charge.title || "Charge", charge.balanceLabel, chargeDueLabel(charge))}
+                        badge={
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {overdue ? `${charge.balanceLabel} · Overdue` : charge.balanceLabel}
+                          </span>
+                        }
+                      />
+                    );
+                  }}
                 />
               </div>
 

@@ -2,7 +2,6 @@
 
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
@@ -22,10 +21,12 @@ import {
 } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
-import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import { LeaseEditRequestModal, LEASE_EDIT_REQUEST_TEMPLATE_INTRO } from "@/components/portal/lease-edit-request-modal";
+import { LeaseReportIssueModal } from "@/components/portal/lease-report-issue-modal";
+import { PRIMARY_AXIS_ADMIN_EMAIL, PRIMARY_AXIS_ADMIN_LABEL } from "@/data/inbox-scoped-directory";
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
@@ -47,33 +48,6 @@ import {
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
 
-function ThreadView({ row }: { row: LeasePipelineRow }) {
-  if (!row.thread.length) {
-    return <p className="text-xs text-muted">No messages yet.</p>;
-  }
-  return (
-    <div className="mt-3 max-h-40 space-y-2 overflow-y-auto rounded-xl border border-border bg-accent/30 px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">Thread</p>
-      <ul className="space-y-2">
-        {row.thread.map((m) => (
-          <li
-            key={m.id}
-            className={`rounded-lg px-2.5 py-1.5 text-xs shadow-sm ring-1 ${
-              m.role === "admin"
-                ? "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-                : "bg-card ring-slate-100"
-            }`}
-          >
-            <span className="font-semibold capitalize text-muted">{m.role}</span>
-            <span className="text-muted"> · {formatPacificDateTime(m.at)}</span>
-            <p className="mt-1 whitespace-pre-wrap text-muted">{m.body}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 export function ManagerLeasesPipelinePanel({
   rows,
   tab,
@@ -91,7 +65,8 @@ export function ManagerLeasesPipelinePanel({
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [adminNoteById, setAdminNoteById] = useState<Record<string, string>>({});
+  const [editRequestRow, setEditRequestRow] = useState<LeasePipelineRow | null>(null);
+  const [editRequestBusy, setEditRequestBusy] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
   const [generatingRowId, setGeneratingRowId] = useState<string | null>(null);
@@ -112,7 +87,8 @@ export function ManagerLeasesPipelinePanel({
     body: string;
   } | null>(null);
   const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
-  const [regenerateConfirmRow, setRegenerateConfirmRow] = useState<LeasePipelineRow | null>(null);
+  const [reportIssueRow, setReportIssueRow] = useState<LeasePipelineRow | null>(null);
+  const [reportIssueBusy, setReportIssueBusy] = useState(false);
 
   const handleAmendLeaseSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(managerUserId, { force: true });
@@ -245,6 +221,7 @@ export function ManagerLeasesPipelinePanel({
     const gate = generationGate(row);
     return gate.ok ? undefined : gate.error;
   };
+  const hasLeaseDocument = (row: LeasePipelineRow) => Boolean(row.generatedHtml || row.managerUploadedPdf?.dataUrl);
   void refreshKey;
   const bucketRows = useMemo(() => rows.filter((r) => leaseRowMatchesManagerTab(r, tab)), [rows, tab]);
 
@@ -259,14 +236,47 @@ export function ManagerLeasesPipelinePanel({
         } else showToast(res.error ?? "Could not generate.");
       } finally {
         setGeneratingRowId(null);
-        setRegenerateConfirmRow(null);
       }
     }, 0);
   };
 
-  const onGeneratePdf = (row: LeasePipelineRow) => {
-    if (generatingRowId || !generationGate(row).ok || !leaseAllowsManagerDocumentEdits(row)) return;
-    setRegenerateConfirmRow(row);
+  function leaseReportIssueLabel(row: LeasePipelineRow): string {
+    const unit = row.unit.trim() || "unit";
+    return [row.residentName || "Resident", unit].filter(Boolean).join(" — ");
+  }
+
+  const onSubmitReportIssue = async (subject: string, message: string) => {
+    const row = reportIssueRow;
+    if (!row || reportIssueBusy) return;
+    const recipient = row.residentEmail.trim();
+    if (!recipient || !recipient.includes("@")) {
+      showToast("Resident email is missing or invalid.");
+      return;
+    }
+    setReportIssueBusy(true);
+    try {
+      const fullSubject = `Lease issue — ${leaseReportIssueLabel(row)}: ${subject}`;
+      const body = [`Lease: ${leaseReportIssueLabel(row)}`, "", message, "", "Property Manager"].join("\n");
+      const delivery = await deliverPortalInboxMessage({
+        fromName: "Property Manager",
+        toEmails: [recipient],
+        subject: fullSubject,
+        text: body,
+      });
+      appendLeaseThreadMessage(row.id, "manager", `${subject}\n\n${message}`, managerUserId);
+      if (delivery.ok) {
+        showToast(
+          delivery.skipped
+            ? "Message sent to resident's Axis inbox."
+            : "Message sent to resident's Axis inbox and email.",
+        );
+        setReportIssueRow(null);
+      } else {
+        showToast(delivery.error ?? "Could not send message.");
+      }
+    } finally {
+      setReportIssueBusy(false);
+    }
   };
 
   const onDownload = (row: LeasePipelineRow) => {
@@ -345,20 +355,70 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onRequestAdminEdits = (row: LeasePipelineRow) => {
-    const text = adminNoteById[row.id]?.trim();
-    if (!text) {
-      showToast("Add a message for the admin team.");
-      return;
+    setEditRequestRow(row);
+  };
+
+  function leaseEditRequestSubject(row: LeasePipelineRow): string {
+    const unit = row.unit.trim() || "unit";
+    return `Lease edits requested — ${row.residentName || "Resident"} (${unit})`;
+  }
+
+  function leaseEditRequestBody(row: LeasePipelineRow, note: string): string {
+    const unit = row.unit.trim() || "the unit";
+    const details = note.trim() || "(No additional details provided.)";
+    const lines = [
+      LEASE_EDIT_REQUEST_TEMPLATE_INTRO,
+      "",
+      `Lease: ${row.residentName || "Resident"} — ${unit}`,
+      "",
+      "Issue described by the property manager:",
+      details,
+      "",
+      "Property Manager",
+    ];
+    return lines.join("\n");
+  }
+
+  const onSubmitEditRequest = async (note: string) => {
+    const row = editRequestRow;
+    if (!row || editRequestBusy) return;
+    setEditRequestBusy(true);
+    try {
+      const subject = leaseEditRequestSubject(row);
+      const body = leaseEditRequestBody(row, note);
+
+      const result = sendLeaseToAdminReview(row.id, managerUserId);
+      if (!result.ok) {
+        showToast(result.error);
+        return;
+      }
+      appendLeaseThreadMessage(row.id, "manager", body, managerUserId);
+
+      // Notify admin via BOTH the Axis portal inbox and a Resend email, only
+      // after the state transition above succeeded. The shared helper posts
+      // to /api/portal/send-inbox-message with deliverToPortalInbox +
+      // deliverViaEmail, matching the other send-* routes.
+      const delivery = await deliverPortalInboxMessage({
+        fromName: "Property Manager",
+        toEmails: [PRIMARY_AXIS_ADMIN_EMAIL],
+        subject,
+        text: body,
+      });
+
+      if (delivery.ok) {
+        showToast(
+          delivery.skipped
+            ? "Sent to Admin Review — admin inbox updated."
+            : "Sent to Admin Review — admin notified by inbox and email.",
+        );
+      } else {
+        showToast(`Sent to Admin Review, but admin notification failed: ${delivery.error ?? "unknown error"}`);
+      }
+      setEditRequestRow(null);
+      setExpandedId(null);
+    } finally {
+      setEditRequestBusy(false);
     }
-    const result = sendLeaseToAdminReview(row.id, managerUserId);
-    if (!result.ok) {
-      showToast(result.error);
-      return;
-    }
-    appendLeaseThreadMessage(row.id, "manager", text, managerUserId);
-    setAdminNoteById((s) => ({ ...s, [row.id]: "" }));
-    showToast("Sent to Admin Review.");
-    setExpandedId(null);
   };
 
   const onMoveToManagerReview = (row: LeasePipelineRow) => {
@@ -434,16 +494,28 @@ export function ManagerLeasesPipelinePanel({
           onClose={() => setSigningRow(null)}
         />
       ) : null}
-      <LeaseRegenerateConfirmModal
-        open={regenerateConfirmRow !== null}
-        busy={Boolean(regenerateConfirmRow && generatingRowId === regenerateConfirmRow.id)}
+      <LeaseEditRequestModal
+        open={editRequestRow !== null}
+        residentName={editRequestRow?.residentName ?? ""}
+        unit={editRequestRow?.unit ?? ""}
+        recipientLabel={`${PRIMARY_AXIS_ADMIN_LABEL} (${PRIMARY_AXIS_ADMIN_EMAIL})`}
+        busy={editRequestBusy}
         onClose={() => {
-          if (generatingRowId) return;
-          setRegenerateConfirmRow(null);
+          if (editRequestBusy) return;
+          setEditRequestRow(null);
         }}
-        onConfirm={() => {
-          if (regenerateConfirmRow) runGenerateLease(regenerateConfirmRow);
+        onSubmit={onSubmitEditRequest}
+      />
+      <LeaseReportIssueModal
+        open={reportIssueRow !== null}
+        recipientLabel={reportIssueRow ? `${reportIssueRow.residentName || "the resident"}` : ""}
+        leaseLabel={reportIssueRow ? leaseReportIssueLabel(reportIssueRow) : ""}
+        busy={reportIssueBusy}
+        onClose={() => {
+          if (reportIssueBusy) return;
+          setReportIssueRow(null);
         }}
+        onSubmit={(subject, message) => void onSubmitReportIssue(subject, message)}
       />
       <PortalNotificationPreviewModal
         open={leaseSentPreview !== null}
@@ -563,23 +635,6 @@ export function ManagerLeasesPipelinePanel({
                         </div>
                       ) : null}
 
-                      {tab === "manager" ? (
-                        <div className="mt-3 space-y-3">
-                          <Textarea
-                            rows={2}
-                            placeholder="Message for admin when requesting edits…"
-                            value={adminNoteById[row.id] ?? ""}
-                            onChange={(e) =>
-                              setAdminNoteById((s) => ({
-                                ...s,
-                                [row.id]: e.target.value,
-                              }))
-                            }
-                            className="max-w-xl rounded-xl border border-border bg-card text-sm"
-                          />
-                        </div>
-                      ) : null}
-
                       <PortalTableDetailActions placement="top">
                         {row.status === "Admin Review" ? (
                           <>
@@ -590,16 +645,6 @@ export function ManagerLeasesPipelinePanel({
                               onClick={() => onDownload(row)}
                             >
                               Download lease
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              disabled={generatingRowId === row.id || !generationGate(row).ok || !leaseAllowsManagerDocumentEdits(row)}
-                              title={generationGateTitle(row)}
-                              onClick={() => onGeneratePdf(row)}
-                            >
-                              {generatingRowId === row.id ? "Generating..." : "Regenerate lease"}
                             </Button>
                             {leaseAllowsManagerDocumentEdits(row) ? (
                             <Button
@@ -621,6 +666,14 @@ export function ManagerLeasesPipelinePanel({
                             <Button
                               type="button"
                               variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => setReportIssueRow(row)}
+                            >
+                              Report issue
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
                               className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
                               onClick={() => onDeleteLease(row)}
                             >
@@ -629,16 +682,18 @@ export function ManagerLeasesPipelinePanel({
                           </>
                         ) : (
                           <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              disabled={generatingRowId === row.id || !generationGate(row).ok || !leaseAllowsManagerDocumentEdits(row)}
-                              title={generationGateTitle(row)}
-                              onClick={() => onGeneratePdf(row)}
-                            >
-                              {generatingRowId === row.id ? "Generating..." : "Regenerate lease"}
-                            </Button>
+                            {!hasLeaseDocument(row) && leaseAllowsManagerDocumentEdits(row) ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                disabled={generatingRowId === row.id || !generationGate(row).ok}
+                                title={generationGateTitle(row)}
+                                onClick={() => runGenerateLease(row)}
+                              >
+                                {generatingRowId === row.id ? "Generating..." : "Generate lease"}
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               variant="outline"
@@ -646,6 +701,14 @@ export function ManagerLeasesPipelinePanel({
                               onClick={() => onDownload(row)}
                             >
                               Download lease
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={PORTAL_DETAIL_BTN}
+                              onClick={() => setReportIssueRow(row)}
+                            >
+                              Report issue
                             </Button>
                             {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
                               <Button
@@ -775,29 +838,14 @@ export function ManagerLeasesPipelinePanel({
                         <>
                           <LeaseDocumentPreview
                             row={row}
-                            emptyHint="No lease document yet — regenerate from application data or upload a corrected lease."
+                            emptyHint="No lease document yet — upload a corrected lease."
                           />
-                          <div className="mt-4">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                              Internal comments (read-only)
-                            </p>
-                            <ThreadView row={row} />
-                          </div>
                           <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted">
                             Admin review is paused for resident actions. Correct the single lease document here, then send it back to the manager.
                           </p>
                         </>
                       ) : (
-                        <>
-                          <LeaseDocumentPreview row={row} />
-                          <ThreadView row={row} />
-                          {(row.status === "Manager Review" || row.status === "Draft") && row.thread.some((m) => m.role === "admin") ? (
-                            <p className="mt-2 text-xs font-medium text-sky-900/90">
-                              Admin feedback appears in the thread above — address it before sending to the resident or requesting another
-                              admin pass.
-                            </p>
-                          ) : null}
-                        </>
+                        <LeaseDocumentPreview row={row} />
                       )}
                     </td>
                   </tr>

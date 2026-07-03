@@ -15,6 +15,7 @@ import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras
 import { Button } from "@/components/ui/button";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 export function ResidentProfilePanel() {
   const { showToast } = useAppUi();
@@ -29,6 +30,26 @@ export function ResidentProfilePanel() {
 
   useEffect(() => {
     if (!session.userId) return;
+    // Demo sandbox: populate from the browser-local demo stores only — the
+    // Supabase session belongs to whoever is signed in (if anyone), and the
+    // backfill POST below must never run against a real profile.
+    if (isDemoModeActive()) {
+      const demoUserId = session.userId;
+      const demoEmail = session.email ?? "";
+      queueMicrotask(() => {
+        const normalizedEmail = demoEmail.trim().toLowerCase();
+        const matchingApplication = readManagerApplicationRows()
+          .slice()
+          .reverse()
+          .find((row) => row.email?.trim().toLowerCase() === normalizedEmail);
+        setUserId(demoUserId);
+        setEmail(demoEmail);
+        setName((current) => current || matchingApplication?.name?.trim() || "");
+        setPhone((current) => current || matchingApplication?.application?.phone?.trim() || "");
+        setAxisId(resolveResidentPortalAxisId({ applicationRowId: matchingApplication?.id }));
+      });
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -118,6 +139,10 @@ export function ResidentProfilePanel() {
       showToast("Name is required.");
       return;
     }
+    if (isDemoModeActive()) {
+      showToast("Profile changes are simulated in this demo.");
+      return;
+    }
     try {
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase
@@ -172,7 +197,7 @@ export function ResidentProfilePanel() {
 
         <NotificationsToggle />
 
-        <PortalChangePasswordPanel accountEmail={email} accountLabel="this resident account" />
+        <PortalChangePasswordPanel accountEmail={email} />
 
         <PortalSettingsExtras currentKind="resident" />
       </div>

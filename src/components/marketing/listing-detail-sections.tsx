@@ -16,6 +16,11 @@ import {
   LeaseBasicsTableInteractive,
   SharedTableInteractive,
 } from "@/components/marketing/listing-detail-tables-client";
+import {
+  ListingPreviewNewTabContext,
+  listingLinkTargetProps,
+  useListingPreviewNewTab,
+} from "@/components/marketing/listing-preview-context";
 import { listingFallbackMapCenter } from "@/lib/listing-map";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
@@ -45,7 +50,7 @@ function ListingHeroPhotoGrid({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm">
+      <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm [html[data-theme=dark]_&]:from-slate-800 [html[data-theme=dark]_&]:to-slate-900">
         {mainUrl ? (
           <Image src={mainUrl} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 100vw, 60vw" />
         ) : null}
@@ -58,7 +63,7 @@ function ListingHeroPhotoGrid({
             Gallery
           </div>
         )}
-        <div className="absolute bottom-3 right-3 max-w-[min(100%,14rem)] truncate rounded-full bg-card px-3 py-1.5 text-xs font-bold text-foreground shadow-md backdrop-blur-sm sm:bottom-4 sm:right-4 sm:max-w-none sm:px-4 sm:py-2 sm:text-sm">
+        <div className="listing-photo-chip absolute bottom-3 right-3 max-w-[min(100%,14rem)] truncate rounded-full bg-card px-3 py-1.5 text-xs font-bold text-foreground shadow-md backdrop-blur-sm sm:bottom-4 sm:right-4 sm:max-w-none sm:px-4 sm:py-2 sm:text-sm">
           {priceRangeLabel}
         </div>
         <div className="aspect-[4/3] w-full" />
@@ -67,7 +72,7 @@ function ListingHeroPhotoGrid({
             <button
               type="button"
               aria-label="Previous photo"
-              className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
+              className="listing-photo-chip absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
               onClick={() => go(-1)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -77,7 +82,7 @@ function ListingHeroPhotoGrid({
             <button
               type="button"
               aria-label="Next photo"
-              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
+              className="listing-photo-chip absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
               onClick={() => go(1)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -135,6 +140,7 @@ function Sidebar({
 }) {
   const primaryPrice = rich.estimatedMonthlyTotalLabel ?? rich.startingRentLabel;
   const showsEstimatedTotal = Boolean(rich.estimatedMonthlyTotalLabel);
+  const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
   return (
     <aside
       className={`order-1 space-y-6 lg:order-2 lg:sticky lg:top-[calc(env(safe-area-inset-top,0px)+7.5rem)] lg:self-start ${className}`}
@@ -148,14 +154,18 @@ function Sidebar({
           {showsEstimatedTotal ? `Includes rent + utilities estimate. Base rent from ${rich.startingRentLabel}.` : "Before utilities and other fees."}
         </p>
         <Link
-          href="/rent/tours-contact"
+          href={`/rent/tours-contact?propertyId=${encodeURIComponent(property.id)}`}
+          data-attr="listing-check-availability"
           className={`${primaryCtaClass} min-h-[48px]`}
+          {...newTabProps}
         >
           Check availability
         </Link>
         <Link
           href={buildRentalApplyHref({ propertyId: property.id })}
+          data-attr="listing-apply-online"
           className={secondaryCtaClass}
+          {...newTabProps}
         >
           Apply online
         </Link>
@@ -230,9 +240,20 @@ export function ListingDetailSections({
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
   const heroUrls = rich.heroHousePhotoUrls ?? [];
   return (
+    <ListingPreviewNewTabContext.Provider value={previewModal}>
     <div className="bg-background text-foreground" data-listing-sections-root>
       <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>
-        {previewModal ? <ListingStickySubnav mode="modal" /> : null}
+        {previewModal ? (
+          <ListingStickySubnav mode="modal" />
+        ) : (
+          <Link
+            href="/rent/browse"
+            data-attr="listing-detail-back"
+            className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:opacity-90"
+          >
+            ← Back to homes
+          </Link>
+        )}
         <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
 
         <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -429,5 +450,6 @@ export function ListingDetailSections({
         </div>
       </div>
     </div>
+    </ListingPreviewNewTabContext.Provider>
   );
 }

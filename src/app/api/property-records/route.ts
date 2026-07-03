@@ -114,6 +114,18 @@ export async function POST(req: Request) {
     }
 
     if (!body.status) return NextResponse.json({ error: "status required" }, { status: 400 });
+
+    if (!admin) {
+      const { data: existing } = await db
+        .from("manager_property_records")
+        .select("manager_user_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (existing && existing.manager_user_id !== user.id) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+    }
+
     const { error } = await db.from("manager_property_records").upsert(
       {
         id,

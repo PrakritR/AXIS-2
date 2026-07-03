@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureFreeManagerPortalAccess } from "@/lib/auth/manager-portal-provision";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
 import { reconcileAuthAccountsByEmail } from "@/lib/auth/reconcile-auth-accounts-by-email";
 import { resolveOAuthPortalRedirect } from "@/lib/auth/resolve-oauth-portal-access";
@@ -26,8 +25,9 @@ export async function GET(req: NextRequest) {
     const intendedPath = normalizePostAuthPath(rawNext.startsWith("/") ? rawNext : "/auth/continue");
 
     const service = createSupabaseServiceRoleClient();
+    // Password sign-in reaches this resolver without an OAuth callback, so keep
+    // email/password and OAuth portal rows merged before choosing a destination.
     await reconcileAuthAccountsByEmail(service, user);
-    await ensureFreeManagerPortalAccess(service, user);
     const redirectTo = normalizePostAuthPath(
       await resolveOAuthPortalRedirect(service, user, intendedPath, {
         intent: readOAuthIntentFromRequest(req),

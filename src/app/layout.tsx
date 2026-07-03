@@ -1,6 +1,7 @@
 import { AppUiProvider } from "@/components/providers/app-ui-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { AuthOAuthErrorHandler } from "@/components/auth/auth-oauth-error-handler";
+import { GeneralAssistant } from "@/components/general/general-assistant";
 import { NativeAppGate } from "@/components/native/native-app-gate";
 import { NativeBridge } from "@/components/native/native-bridge";
 import type { Metadata, Viewport } from "next";
@@ -48,6 +49,10 @@ export default function RootLayout({
             <AuthOAuthErrorHandler />
             <NativeBridge />
             <NativeAppGate>{children}</NativeAppGate>
+            {/* Site-wide general AI assistant — pinned bottom-right on every page
+                (public, auth, portal). Distinct from the portal-scoped Axis
+                Assistant; it lifts above that FAB when both are on screen. */}
+            <GeneralAssistant />
           </AppUiProvider>
         </ThemeProvider>
       </body>

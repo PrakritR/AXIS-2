@@ -15,6 +15,8 @@ import {
   legacyPaymentReminderDedupIds,
   paymentReminderDedupId,
   scheduledOverrideId,
+  setDateReminderIsoFromKey,
+  setDateReminderKey,
 } from "@/lib/payment-automation-settings";
 import { buildReminderContent } from "@/lib/payment-reminder-email";
 
@@ -73,6 +75,15 @@ export function computePreDueSendAt(dueDate: Date, daysBeforeDue: number): Date 
   return addDays(dueDate, -daysBeforeDue);
 }
 
+function formatSetDateIso(iso: string | null): string | null {
+  if (!iso) return null;
+  const [year, month, day] = iso.split("-").map(Number);
+  const d = new Date(year!, month! - 1, day!, 12, 0, 0, 0);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
 function typeLabel(kind: PaymentReminderKind, daysBeforeDue: number | null): string {
   if (kind === "pre_due") {
     const d = daysBeforeDue ?? 0;
@@ -80,6 +91,10 @@ function typeLabel(kind: PaymentReminderKind, daysBeforeDue: number | null): str
   }
   if (kind === "same_day") return "Due day";
   if (kind === "overdue_daily") return "Overdue daily";
+  if (kind === "set_date") {
+    const formatted = formatSetDateIso(setDateReminderIsoFromKey(daysBeforeDue));
+    return formatted ? `On ${formatted}` : "On set date";
+  }
   return "Late fee notice";
 }
 
@@ -90,6 +105,7 @@ export function scheduledReminderShortLabel(kind: PaymentReminderKind, daysBefor
   }
   if (kind === "same_day") return "Due date";
   if (kind === "overdue_daily") return "Follow-up";
+  if (kind === "set_date") return "Set date";
   return "Notice";
 }
 
@@ -101,6 +117,7 @@ export function inboxScheduleTypeLabel(kind: PaymentReminderKind, daysBeforeDue:
   }
   if (kind === "same_day") return "Send on due date";
   if (kind === "overdue_daily") return "Daily follow-up";
+  if (kind === "set_date") return "On set date";
   return "Notice";
 }
 
@@ -187,11 +204,10 @@ export function projectScheduledPaymentMessages(input: {
     if (charge.residentEmail.trim().toLowerCase().endsWith("@axis.local")) continue;
 
     const dueDate = householdChargeDueDate(charge);
-    if (!dueDate) continue;
 
     const dueDateLabel = chargeDueLabel(charge);
-    const dueStart = startOfLocalDay(dueDate);
-    const daysUntilDue = daysBetween(startOfLocalDay(now), dueStart);
+    const dueStart = dueDate ? startOfLocalDay(dueDate) : null;
+    const daysUntilDue = dueStart ? daysBetween(startOfLocalDay(now), dueStart) : 0;
 
     const baseParams = {
       residentName: charge.residentName || "Resident",
@@ -205,6 +221,7 @@ export function projectScheduledPaymentMessages(input: {
       graceDays: settings.lateFeeNoticeDaysAfterDue,
     };
 
+    if (dueStart) {
     for (const daysBeforeDue of settings.preDueReminderDays) {
       if (daysBeforeDue <= 0) continue;
 
@@ -386,6 +403,101 @@ export function projectScheduledPaymentMessages(input: {
         }
       }
     }
+    } else if (settings.overdueDailyEnabled) {
+      // Charges without a parseable due date (e.g. "Before lease signing",
+      // "Before approval") are payable immediately — give them the daily
+      // follow-up stream, anchored to when the charge was created.
+      const createdRaw = new Date(charge.createdAt);
+      const createdStart = Number.isNaN(createdRaw.getTime()) ? startOfLocalDay(now) : startOfLocalDay(createdRaw);
+      const firstSend = addDays(createdStart, Math.max(0, settings.overdueDailyStartDays));
+      const sendAt = firstSend.getTime() > startOfLocalDay(now).getTime() ? firstSend : startOfLocalDay(now);
+      const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
+      if (input.includeHidden || isVisible(settings, sendAt, visibleFrom, now)) {
+        const override = resolveOverride(overrides, input.managerUserId, charge.id, "overdue_daily", null);
+        const cancelled =
+          override?.cancelled === true || isLegacyReminderCancelled(charge.cancelledReminders, "overdue_daily");
+        const sent = isSent(sentIds, "overdue_daily", charge.id, null, todayKey);
+        const content = buildReminderContent({
+          kind: "overdue_daily",
+          settings,
+          override,
+          params: { ...baseParams, daysUntilDue: 0 },
+        });
+        rows.push({
+          id: scheduledMessageListId({ chargeId: charge.id, kind: "overdue_daily", daysBeforeDue: null, sendAt }),
+          chargeId: charge.id,
+          kind: "overdue_daily",
+          daysBeforeDue: null,
+          sendAt: sendAt.toISOString(),
+          visibleFrom: visibleFrom.toISOString(),
+          dueDate: null,
+          dueDateLabel,
+          residentName: charge.residentName || "Resident",
+          residentEmail: charge.residentEmail.trim().toLowerCase(),
+          chargeTitle: charge.title,
+          propertyLabel: charge.propertyLabel,
+          balanceDue: charge.balanceLabel,
+          subject: content.subject,
+          body: content.body,
+          status: sent ? "sent" : cancelled ? "cancelled" : "scheduled",
+          managerUserId: input.managerUserId,
+          typeLabel: typeLabel("overdue_daily", null),
+        });
+      }
+    }
+
+    // One-off reminders on specific calendar dates: the manager-wide dates from
+    // settings plus any dates added for this charge (stored as overrides).
+    const setDateKeys = new Set<number>();
+    for (const iso of settings.setDateReminders) {
+      const key = setDateReminderKey(iso);
+      if (key != null) setDateKeys.add(key);
+    }
+    const chargeOverridePrefix = `smo_${input.managerUserId.slice(0, 8)}_${charge.id}_set_date_`;
+    for (const overrideKey of overrides.keys()) {
+      if (!overrideKey.startsWith(chargeOverridePrefix)) continue;
+      const parsedKey = Number(overrideKey.slice(chargeOverridePrefix.length));
+      if (setDateReminderIsoFromKey(parsedKey)) setDateKeys.add(parsedKey);
+    }
+    for (const dateNumKey of [...setDateKeys].sort((a, b) => a - b)) {
+      const iso = setDateReminderIsoFromKey(dateNumKey);
+      if (!iso) continue;
+      const [year, month, day] = iso.split("-").map(Number);
+      const sendAt = new Date(year!, month! - 1, day!, 0, 0, 0, 0);
+      if (!input.includeHidden && sendAt.getTime() < startOfLocalDay(now).getTime()) continue;
+      const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
+      if (!input.includeHidden && !isVisible(settings, sendAt, visibleFrom, now)) continue;
+
+      const override = resolveOverride(overrides, input.managerUserId, charge.id, "set_date", dateNumKey);
+      const cancelled = override?.cancelled === true;
+      const sent = isSent(sentIds, "set_date", charge.id, dateNumKey, todayKey);
+      const content = buildReminderContent({
+        kind: "set_date",
+        settings,
+        override,
+        params: { ...baseParams, daysUntilDue: dueStart ? Math.max(0, daysBetween(sendAt, dueStart)) : 0 },
+      });
+      rows.push({
+        id: scheduledMessageListId({ chargeId: charge.id, kind: "set_date", daysBeforeDue: dateNumKey, sendAt }),
+        chargeId: charge.id,
+        kind: "set_date",
+        daysBeforeDue: dateNumKey,
+        sendAt: sendAt.toISOString(),
+        visibleFrom: visibleFrom.toISOString(),
+        dueDate: dueStart ? dueStart.toISOString() : null,
+        dueDateLabel,
+        residentName: charge.residentName || "Resident",
+        residentEmail: charge.residentEmail.trim().toLowerCase(),
+        chargeTitle: charge.title,
+        propertyLabel: charge.propertyLabel,
+        balanceDue: charge.balanceLabel,
+        subject: content.subject,
+        body: content.body,
+        status: sent ? "sent" : cancelled ? "cancelled" : "scheduled",
+        managerUserId: input.managerUserId,
+        typeLabel: typeLabel("set_date", dateNumKey),
+      });
+    }
   }
 
   const visibleRows = input.includeHidden ? rows : rows.filter((row) => isUpcomingScheduleMessage(row, now));
@@ -417,13 +529,26 @@ export function upcomingScheduledForCharge(
   return manageableRemindersForCharge(messages, chargeId, limit).filter((m) => m.status === "scheduled");
 }
 
-/** Scheduled and cancelled reminders for a charge (excludes already sent). */
+/**
+ * Upcoming scheduled and cancelled reminders for a charge (excludes already
+ * sent and past-dated sends). This reflects the manager's full default schedule
+ * for the charge and is intentionally NOT gated by the Inbox schedule-visibility
+ * window (that setting only controls what surfaces in Inbox → Schedule). Feed it
+ * the unfiltered message list (`useScheduledPaymentMessages({ includeHidden: true })`).
+ */
 export function manageableRemindersForCharge(
   messages: ScheduledPaymentMessage[],
   chargeId: string,
-  limit = 6,
+  limit = 12,
+  now = new Date(),
 ): ScheduledPaymentMessage[] {
+  const today = startOfLocalDay(now).getTime();
   return messages
-    .filter((m) => m.chargeId === chargeId && (m.status === "scheduled" || m.status === "cancelled"))
+    .filter(
+      (m) =>
+        m.chargeId === chargeId &&
+        (m.status === "scheduled" || m.status === "cancelled") &&
+        startOfLocalDay(new Date(m.sendAt)).getTime() >= today,
+    )
     .slice(0, limit);
 }

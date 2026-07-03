@@ -75,17 +75,47 @@ export function leaseVisibleToPortalUser(row: LeaseVisibilityRow, userId: string
 
 export type ManagerPropertyFilterOption = { id: string; label: string };
 
+/**
+ * True when a label is really a raw property id / seed-run token rather than a
+ * human name — e.g. `test-prop-seed-1782590281847` or a title like
+ * "Seed Property seed-1782590281847" left behind by an older seed. These must
+ * never reach a user-facing dropdown.
+ */
+function looksLikeRawPropertyId(value: string, id: string): boolean {
+  const v = value.trim();
+  if (!v) return true;
+  if (v === id.trim()) return true;
+  return /(?:^|[\s(])(?:seed|test)[-_]prop\b|\bseed-\d{6,}\b|\bseedwf[_-]|\bmgr-[a-z0-9]{4,}-[a-z0-9]{4,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-|\d{12,}/i.test(v);
+}
+
+/**
+ * First human-friendly candidate that is not a raw id / seed token. Falls back
+ * to any non-id candidate, then a generic label — never the bare id. Shared by
+ * every property picker so labels stay consistent and clean across surfaces.
+ */
+export function safePropertyOptionLabel(candidates: Array<string | null | undefined>, id: string): string {
+  for (const c of candidates) {
+    const v = (c ?? "").trim();
+    if (v && !looksLikeRawPropertyId(v, id)) return v;
+  }
+  for (const c of candidates) {
+    const v = (c ?? "").trim();
+    if (v && v !== id.trim()) return v;
+  }
+  return "Untitled property";
+}
+
 /** Labels for Applications / Payments property dropdowns. */
 export function buildManagerPropertyFilterOptions(userId: string | null): ManagerPropertyFilterOption[] {
   if (!userId) return [];
   const labelById = new Map<string, string>();
 
   for (const p of readExtraListingsForUser(userId)) {
-    labelById.set(p.id, (p.title || p.buildingName || p.address).trim() || p.id);
+    labelById.set(p.id, safePropertyOptionLabel([p.title, p.buildingName, p.address], p.id));
   }
   for (const r of readPendingManagerPropertiesForUser(userId)) {
-    const label = [r.buildingName, r.address].filter(Boolean).join(" · ").trim() || r.id;
-    labelById.set(r.id, label);
+    const joined = [r.buildingName, r.address].filter(Boolean).join(" · ");
+    labelById.set(r.id, safePropertyOptionLabel([joined, r.buildingName, r.address], r.id));
   }
 
   const allExtras = readAllExtraListings();
@@ -93,7 +123,7 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
     for (const pid of rel.assignedPropertyIds) {
       if (!pid.trim() || labelById.has(pid)) continue;
       const found = allExtras.find((x) => x.id === pid);
-      labelById.set(pid, found ? (found.title || found.address).trim() || pid : pid);
+      labelById.set(pid, safePropertyOptionLabel([found?.title, found?.buildingName, found?.address], pid));
     }
   }
 
@@ -101,7 +131,7 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
     if (!applicationVisibleToPortalUser(row, userId)) continue;
     const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim();
     if (pid && !labelById.has(pid)) {
-      labelById.set(pid, row.property.trim() || pid);
+      labelById.set(pid, safePropertyOptionLabel([row.property], pid));
     }
   }
 

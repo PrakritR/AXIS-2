@@ -1,4 +1,3 @@
-import { AdminNotificationBanners } from "@/components/portal/admin-notification-banners";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
@@ -39,7 +38,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             />
             <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
               <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
-                <AdminNotificationBanners />
                 {children}
               </div>
             </main>

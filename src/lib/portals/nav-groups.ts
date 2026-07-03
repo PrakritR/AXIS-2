@@ -20,6 +20,7 @@ const PRO_GROUPS: NavGroupConfig[] = [
   { id: "properties", label: "Properties", sections: ["properties", "applications", "residents", "leases"] },
   { id: "financials", label: "Financials", sections: ["payments", "financials", "documents"] },
   { id: "operations", label: "Operations", sections: ["calendar", "services", "inbox"] },
+  { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
   { id: "account", label: null, sections: ["bugs-feedback"] },
 ];
@@ -34,8 +35,8 @@ const ADMIN_GROUPS: NavGroupConfig[] = [
 
 const RESIDENT_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "living", label: "Living", sections: ["applications", "move-in", "services"] },
-  { id: "financials", label: "Financials", sections: ["payments", "financials", "documents"] },
+  { id: "living", label: "Living", sections: ["lease", "move-in", "services"] },
+  { id: "financials", label: "Financials", sections: ["payments", "documents"] },
   { id: "operations", label: "Operations", sections: ["inbox"] },
   { id: "account", label: null, sections: ["bugs-feedback"] },
 ];

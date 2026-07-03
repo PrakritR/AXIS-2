@@ -19,13 +19,13 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
   countManagerManagedPropertiesForUser,
   mirrorLocalPropertyPipelineToServer,
   PROPERTY_PIPELINE_EVENT,
-  readPendingManagerPropertiesForUser,
 } from "@/lib/demo-property-pipeline";
 import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
@@ -45,7 +45,6 @@ export function ManagerProperties() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userId } = useManagerUserId();
-  const [pendingCount, setPendingCount] = useState(0);
   const [skuLoaded, setSkuLoaded] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
   const [propCount, setPropCount] = useState(0);
@@ -69,7 +68,6 @@ export function ManagerProperties() {
 
   const refreshPortfolio = useCallback(async () => {
     if (!userId) {
-      setPendingCount(0);
       setPropCount(0);
       return;
     }
@@ -79,13 +77,16 @@ export function ManagerProperties() {
       /* offline or dev server recompiling */
     }
     setPropCount(countManagerManagedPropertiesForUser(userId));
-    setPendingCount(readPendingManagerPropertiesForUser(userId).length);
     setPortfolioTick((t) => t + 1);
   }, [userId]);
 
   const refreshPending = refreshPortfolio;
 
   const loadSku = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setSkuLoaded(true);
+      return;
+    }
     try {
       const res = await fetch("/api/manager/subscription", { credentials: "include" });
       const body = (await res.json()) as { tier?: string | null };
@@ -212,12 +213,6 @@ export function ManagerProperties() {
               View plans
             </Link>{" "}
             to add more.
-          </p>
-        ) : null}
-        {pendingCount > 0 ? (
-          <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-pending [html[data-native]_&]:hidden lg:mb-4">
-            <span className="font-semibold">{pendingCount}</span> propert{pendingCount === 1 ? "y" : "ies"} awaiting admin
-            approval before they go live on Axis listings.
           </p>
         ) : null}
         <ManagerHousePropertiesPanel

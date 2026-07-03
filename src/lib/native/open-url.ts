@@ -19,6 +19,19 @@ function isPortalDestinationPath(pathname: string): boolean {
   return PORTAL_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+/**
+ * Non-reversible fingerprint of the OAuth callback code — only used to detect a
+ * duplicate callback delivery, never to recover the code, so we avoid persisting
+ * the single-use authorization code itself in cleartext sessionStorage.
+ */
+function fingerprintOAuthCode(code: string): string {
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    hash = (Math.imul(hash, 31) + code.charCodeAt(i)) | 0;
+  }
+  return `${code.length}.${(hash >>> 0).toString(36)}`;
+}
+
 async function redirectSignedInUserToContinue(): Promise<boolean> {
   try {
     const { createSupabaseBrowserClient } = await import("@/lib/supabase/browser");
@@ -85,14 +98,15 @@ function navigateToNativeOAuthCallback(pathAndQuery: string): void {
     const parsed = new URL(pathAndQuery, window.location.origin);
     const code = parsed.searchParams.get("code");
     if (code) {
+      const fingerprint = fingerprintOAuthCode(code);
       const seen = sessionStorage.getItem(NATIVE_OAUTH_CALLBACK_CODE_KEY);
-      if (seen === code) {
+      if (seen === fingerprint) {
         const path = window.location.pathname;
         if (isPortalDestinationPath(path) || path.startsWith("/auth/continue")) return;
         void redirectSignedInUserToContinue();
         return;
       }
-      sessionStorage.setItem(NATIVE_OAUTH_CALLBACK_CODE_KEY, code);
+      sessionStorage.setItem(NATIVE_OAUTH_CALLBACK_CODE_KEY, fingerprint);
     }
   } catch {
     /* ignore */

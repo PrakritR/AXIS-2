@@ -4,17 +4,15 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
-import { managerPricingOauthPath } from "@/lib/auth/manager-pricing-oauth-path";
+import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import {
   clearManagerPricingOffer,
   persistManagerPricingOffer,
   readManagerPricingOffer,
 } from "@/lib/auth/manager-pricing-oauth-storage";
-import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
-import { persistOAuthNextPath } from "@/lib/auth/oauth-next-cookie";
-import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
-import { openAppUrl, openOAuthUrl } from "@/lib/native/open-url";
+import { openAppUrl } from "@/lib/native/open-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -27,34 +25,6 @@ function parseTier(raw: string | null, fallback: PlanTierId | null): PlanTierId 
 
 function parseBilling(raw: string | null, fallback: "monthly" | "annual"): "monthly" | "annual" {
   return raw === "annual" ? "annual" : fallback;
-}
-
-import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
-
-async function restartGoogleForPricingOffer(offer: {
-  tier: PlanTierId;
-  billing: "monthly" | "annual";
-  promo?: string;
-}) {
-  persistManagerPricingOffer(offer);
-  const supabase = createSupabaseBrowserClient();
-  const nextPath = managerPricingOauthPath(offer);
-  persistOAuthNextPath(nextPath);
-  const redirectTo = resolveOAuthCallbackRedirectUrl(
-    resolveOAuthBrowserOrigin(),
-    "/auth/callback/partner-pricing",
-  );
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo,
-      skipBrowserRedirect: true,
-      queryParams: { prompt: "select_account" },
-    },
-  });
-  if (error) throw new Error(error.message);
-  if (!data?.url) throw new Error("Could not start Google sign-in.");
-  await openOAuthUrl(data.url);
 }
 
 function ManagerPricingOauthContent() {
@@ -87,9 +57,11 @@ function ManagerPricingOauthContent() {
         const user = await waitForAuthUser(supabase);
 
         if (!user) {
-          setStatusText("Redirecting to Google…");
-          didRunRef.current = false;
-          await restartGoogleForPricingOffer(offer);
+          // No session here means OAuth never completed. Rather than re-launching Google
+          // from this legacy route (a double account-chooser), hand off to the plan picker,
+          // which owns the single sign-in entry. The offer is already persisted above.
+          setStatusText("Opening plan selection…");
+          window.location.replace(MANAGER_PRICING_ENTRY_PATH);
           return;
         }
 

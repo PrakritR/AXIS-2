@@ -7,11 +7,6 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 const SUPPORT_EMAIL = "info@axis-seattle-housing.com";
-const SUPPORT_PHONE_DISPLAY = "(510) 309-8345";
-const SUPPORT_PHONE_TEL = "+15103098345";
-const ADDRESS_LINES = ["Axis Seattle Housing", "5259 Brooklyn Ave NE", "Seattle, WA 98105"];
-const MAPS_URL =
-  "https://www.google.com/maps/search/?api=1&query=5259+Brooklyn+Ave+NE%2C+Seattle%2C+WA+98105";
 
 const TOPICS = [
   "General question",
@@ -55,8 +50,7 @@ function ContactInner() {
     <div className="min-h-screen px-4 py-16 sm:py-20">
       <div className="mx-auto max-w-2xl">
         <div className="glass-card rounded-3xl p-8">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/80">Contact</p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Connect with Axis Team</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Connect with Axis Team</h1>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
             Schedule a meeting with our team or send us a message — whatever works best for you.
           </p>
@@ -78,45 +72,7 @@ function ContactInner() {
             )}
           </div>
         </div>
-
-        <ContactInfo />
       </div>
-    </div>
-  );
-}
-
-function ContactInfo() {
-  return (
-    <div className="mt-6 grid gap-3 sm:grid-cols-3">
-      <a
-        href={`mailto:${SUPPORT_EMAIL}`}
-        className="flex items-center gap-2 rounded-xl border border-border bg-[var(--glass-fill)] px-4 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
-      >
-        <MailIcon />
-        <span className="min-w-0 break-all">{SUPPORT_EMAIL}</span>
-      </a>
-      <a
-        href={`tel:${SUPPORT_PHONE_TEL}`}
-        className="flex items-center gap-2 rounded-xl border border-border bg-[var(--glass-fill)] px-4 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
-      >
-        <PhoneIcon />
-        <span>{SUPPORT_PHONE_DISPLAY}</span>
-      </a>
-      <a
-        href={MAPS_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="flex items-start gap-2 rounded-xl border border-border bg-[var(--glass-fill)] px-4 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
-      >
-        <MapPinIcon />
-        <span className="min-w-0 leading-snug">
-          {ADDRESS_LINES.map((line, i) => (
-            <span key={line} className={i === 0 ? "block font-semibold" : "block text-muted"}>
-              {line}
-            </span>
-          ))}
-        </span>
-      </a>
     </div>
   );
 }
@@ -223,29 +179,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputCls =
   "w-full rounded-xl border border-border/60 bg-auth-input-bg px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/25 hover:border-primary/25";
-
-function MailIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-primary" aria-hidden>
-      <rect width="20" height="16" x="2" y="4" rx="2" />
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-    </svg>
-  );
-}
-
-function PhoneIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-primary" aria-hidden>
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  );
-}
-
-function MapPinIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0 text-primary" aria-hidden>
-      <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}

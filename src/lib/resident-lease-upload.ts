@@ -1,6 +1,7 @@
 /**
  * Demo: resident-uploaded lease PDF (data URL) scoped by email in localStorage.
  */
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 function canUseStorage() {
   return typeof window !== "undefined";
@@ -48,6 +49,7 @@ function normalizeUpload(raw: unknown, fallbackEmail: string, fallbackIndex: num
 export async function syncUploadedOwnLeasesFromServer(email: string, opts?: { force?: boolean }): Promise<UploadedOwnLease[]> {
   const key = email.trim().toLowerCase();
   if (!canUseStorage() || !key) return [];
+  if (isDemoModeActive()) return memoryByEmail.get(key) ?? [];
   const force = opts?.force === true;
   const inFlight = leaseUploadsSyncPromise.get(key);
   if (!force && inFlight) return inFlight;
@@ -94,6 +96,14 @@ export function readUploadedOwnLease(email: string): UploadedOwnLease | null {
   return readUploadedOwnLeases(email)[0] ?? null;
 }
 
+/** Demo seed: load resident documents into the local store without server mirror (full overwrite). */
+export function seedDemoUploadedOwnLeases(email: string, rows: UploadedOwnLease[]): void {
+  const key = email.trim().toLowerCase();
+  if (!canUseStorage() || !key) return;
+  memoryByEmail.set(key, sortUploads(rows));
+  leaseUploadsLastSyncedAt.set(key, Date.now());
+}
+
 export function addUploadedOwnLease(email: string, payload: Omit<UploadedOwnLease, "id">): UploadedOwnLease | null {
   const key = email.trim().toLowerCase();
   if (!canUseStorage() || !key) return null;
@@ -103,12 +113,14 @@ export function addUploadedOwnLease(email: string, payload: Omit<UploadedOwnLeas
   };
   const next = sortUploads([...(memoryByEmail.get(key) ?? []), row]);
   memoryByEmail.set(key, next);
-  void fetch("/api/portal-resident-lease-uploads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ action: "upsert", row: { email: key, ...row } }),
-  }).catch(() => undefined);
+  if (!isDemoModeActive()) {
+    void fetch("/api/portal-resident-lease-uploads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "upsert", row: { email: key, ...row } }),
+    }).catch(() => undefined);
+  }
   return row;
 }
 
@@ -125,12 +137,14 @@ export function removeUploadedOwnLease(email: string, uploadId: string): void {
   const id = uploadId.trim();
   if (!canUseStorage() || !key || !id) return;
   memoryByEmail.set(key, (memoryByEmail.get(key) ?? []).filter((row) => row.id !== id));
-  void fetch("/api/portal-resident-lease-uploads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ action: "delete", id }),
-  }).catch(() => undefined);
+  if (!isDemoModeActive()) {
+    void fetch("/api/portal-resident-lease-uploads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action: "delete", id }),
+    }).catch(() => undefined);
+  }
 }
 
 export function clearUploadedOwnLease(email: string): void {

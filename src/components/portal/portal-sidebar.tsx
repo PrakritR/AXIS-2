@@ -1,6 +1,7 @@
 "use client";
 
 import { AxisAssistantNavButton, useHasAxisAssistant } from "@/components/portal/axis-assistant";
+import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import {
@@ -35,23 +36,6 @@ function hrefForSection(def: PortalDefinition, section: string) {
   if (!meta) return def.basePath;
   if (!meta.tabs.length) return `${def.basePath}/${section}`;
   return `${def.basePath}/${section}/${meta.tabs[0].id}`;
-}
-
-function SidebarBrandMark() {
-  return (
-    <span
-      className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[linear-gradient(150deg,var(--primary,#2f6bff),var(--cobalt-deep,#16233f))] text-[15px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
-      aria-hidden
-    >
-      A
-    </span>
-  );
-}
-
-function sidebarBrandHref(definition: PortalDefinition): string {
-  const dashboard = definition.sections.find((s) => s.section === "dashboard");
-  if (dashboard) return `${definition.basePath}/dashboard`;
-  return definition.basePath;
 }
 
 function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: string } {
@@ -110,7 +94,6 @@ export function PortalSidebar({
   const router = useRouter();
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
-  const brandHref = useMemo(() => sidebarBrandHref(definition), [definition]);
   const hasAssistant = useHasAxisAssistant();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
@@ -374,7 +357,9 @@ export function PortalSidebar({
   };
 
   const brand = portalBrandCopy(definition.kind);
-  const headerSubtitle = subtitle?.trim() || brand.subtitle;
+  const rawSubtitle = subtitle?.trim() || brand.subtitle;
+  // Property portal: show the portal name instead of the billing tier.
+  const headerSubtitle = rawSubtitle === "Pro" || rawSubtitle === "Business" ? "Property" : rawSubtitle;
 
   const desktopAside = (
     <aside
@@ -398,13 +383,12 @@ export function PortalSidebar({
       ) : (
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-3">
           <Link
-            href={brandHref}
+            href="/"
             prefetch
-            aria-label={brand.ariaLabel}
-            onClick={portalNavClick(router, brandHref)}
+            aria-label="Axis home"
             className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90"
           >
-            <SidebarBrandMark />
+            <AxisLogoMark size="compact" />
             <span className="min-w-0 leading-tight">
               <span className="block text-[14px] font-semibold text-foreground">Axis</span>
               <span className="mt-0.5 inline-block rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
@@ -462,13 +446,23 @@ export function PortalSidebar({
 
       <div className="shrink-0 lg:hidden">
         <div className={PORTAL_MOBILE_CHROME_CLASS}>
-          <nav
-            ref={topNavScrollRef}
-            className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
-            aria-label="Portal sections"
-          >
-            {navItems.map((s) => renderMobileNavLink(s, "top"))}
-          </nav>
+          <div className="flex items-center gap-2 px-3 py-2 sm:px-4">
+            <Link
+              href="/"
+              prefetch
+              aria-label="Axis home"
+              className="shrink-0 transition-opacity hover:opacity-90"
+            >
+              <AxisLogoMark size="compact" />
+            </Link>
+            <nav
+              ref={topNavScrollRef}
+              className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              aria-label="Portal sections"
+            >
+              {navItems.map((s) => renderMobileNavLink(s, "top"))}
+            </nav>
+          </div>
         </div>
       </div>
 
@@ -476,6 +470,7 @@ export function PortalSidebar({
         open={sectionsSheetOpen}
         onOpenChange={setSectionsSheetOpen}
         items={moreSheetItems}
+        kind={definition.kind}
         activeSection={activeSection}
         showNavIcons={showNavIcons}
       />

@@ -7,6 +7,8 @@ export type ChartAccount = {
   scheduleELine?: number;
   scheduleERef?: string;
   scheduleELabel?: string;
+  /** Tax classification for expense accounts: deductible on Schedule E vs non-deductible. */
+  deductible?: boolean;
 };
 
 export const SYSTEM_CHART_ACCOUNTS: ChartAccount[] = [
@@ -15,22 +17,23 @@ export const SYSTEM_CHART_ACCOUNTS: ChartAccount[] = [
   { code: "pet_rent", name: "Pet Rent", accountType: "income", scheduleELine: 3, scheduleERef: "Sch. E, Line 3", scheduleELabel: "Rents Received" },
   { code: "application_fee", name: "Application Fee", accountType: "income", scheduleELine: 3, scheduleERef: "Sch. E, Line 3", scheduleELabel: "Rents Received" },
   { code: "other_income", name: "Other Income", accountType: "income", scheduleELine: 3, scheduleERef: "Sch. E, Line 3", scheduleELabel: "Rents Received" },
-  { code: "maintenance", name: "Maintenance", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs" },
-  { code: "cleaning", name: "Cleaning", accountType: "expense", scheduleELine: 7, scheduleERef: "Sch. E, Line 7", scheduleELabel: "Cleaning and Maintenance" },
-  { code: "plumbing", name: "Plumbing", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs" },
-  { code: "mold_remediation", name: "Mold Remediation", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs" },
-  { code: "materials", name: "Materials / Equipment", accountType: "expense", scheduleELine: 15, scheduleERef: "Sch. E, Line 15", scheduleELabel: "Supplies" },
-  { code: "mortgage", name: "Mortgage", accountType: "expense", scheduleELine: 12, scheduleERef: "Sch. E, Line 12", scheduleELabel: "Mortgage Interest" },
-  { code: "utilities", name: "Utilities", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities" },
-  { code: "electricity", name: "Electricity", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities" },
-  { code: "heating", name: "Heating / HVAC", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities" },
-  { code: "wifi", name: "Wi‑Fi / Internet", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities" },
-  { code: "property_tax", name: "Property Tax", accountType: "expense", scheduleELine: 16, scheduleERef: "Sch. E, Line 16", scheduleELabel: "Taxes" },
-  { code: "taxes", name: "Taxes", accountType: "expense", scheduleELine: 16, scheduleERef: "Sch. E, Line 16", scheduleELabel: "Taxes" },
-  { code: "insurance", name: "Insurance", accountType: "expense", scheduleELine: 9, scheduleERef: "Sch. E, Line 9", scheduleELabel: "Insurance" },
-  { code: "management", name: "Management", accountType: "expense", scheduleELine: 11, scheduleERef: "Sch. E, Line 11", scheduleELabel: "Management Fees" },
-  { code: "service_fees", name: "Service Fees", accountType: "expense", scheduleELine: 10, scheduleERef: "Sch. E, Line 10", scheduleELabel: "Legal and Professional Fees" },
-  { code: "other_expense", name: "Other Expense", accountType: "expense", scheduleELine: 19, scheduleERef: "Sch. E, Line 19", scheduleELabel: "Other" },
+  { code: "maintenance", name: "Maintenance", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs", deductible: true },
+  { code: "cleaning", name: "Cleaning", accountType: "expense", scheduleELine: 7, scheduleERef: "Sch. E, Line 7", scheduleELabel: "Cleaning and Maintenance", deductible: true },
+  { code: "plumbing", name: "Plumbing", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs", deductible: true },
+  { code: "mold_remediation", name: "Mold Remediation", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs", deductible: true },
+  { code: "materials", name: "Materials / Equipment", accountType: "expense", scheduleELine: 15, scheduleERef: "Sch. E, Line 15", scheduleELabel: "Supplies", deductible: true },
+  { code: "mortgage", name: "Mortgage", accountType: "expense", scheduleELine: 12, scheduleERef: "Sch. E, Line 12", scheduleELabel: "Mortgage Interest", deductible: true },
+  { code: "utilities", name: "Utilities", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities", deductible: true },
+  { code: "electricity", name: "Electricity", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities", deductible: true },
+  { code: "heating", name: "Heating / HVAC", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities", deductible: true },
+  { code: "wifi", name: "Wi‑Fi / Internet", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities", deductible: true },
+  { code: "property_tax", name: "Property Tax", accountType: "expense", scheduleELine: 16, scheduleERef: "Sch. E, Line 16", scheduleELabel: "Taxes", deductible: true },
+  { code: "taxes", name: "Taxes", accountType: "expense", scheduleELine: 16, scheduleERef: "Sch. E, Line 16", scheduleELabel: "Taxes", deductible: true },
+  { code: "insurance", name: "Insurance", accountType: "expense", scheduleELine: 9, scheduleERef: "Sch. E, Line 9", scheduleELabel: "Insurance", deductible: true },
+  { code: "management", name: "Management", accountType: "expense", scheduleELine: 11, scheduleERef: "Sch. E, Line 11", scheduleELabel: "Management Fees", deductible: true },
+  { code: "service_fees", name: "Service Fees", accountType: "expense", scheduleELine: 10, scheduleERef: "Sch. E, Line 10", scheduleELabel: "Legal and Professional Fees", deductible: true },
+  { code: "other_expense", name: "Other Expense", accountType: "expense", scheduleELine: 19, scheduleERef: "Sch. E, Line 19", scheduleELabel: "Other", deductible: true },
+  { code: "capital_improvement", name: "Capital Improvement", accountType: "expense", scheduleERef: "Capitalize (Form 4562)", scheduleELabel: "Capital Improvements", deductible: false },
 ];
 
 export type WorkOrderCategory = "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
@@ -74,4 +77,27 @@ export function chartAccountScheduleE(code: string): { ref: string; label: strin
   const acct = SYSTEM_CHART_ACCOUNTS.find((a) => a.code === code);
   if (!acct?.scheduleERef) return null;
   return { ref: acct.scheduleERef, label: acct.scheduleELabel ?? acct.name };
+}
+
+/**
+ * Rule-based tax classification: is an expense in this category deductible on
+ * Schedule E? Unknown/custom codes default to deductible (Sch. E, Line 19 "Other").
+ */
+export function isCategoryDeductible(code: string | null | undefined): boolean {
+  const acct = SYSTEM_CHART_ACCOUNTS.find((a) => a.code === code);
+  if (!acct) return true;
+  if (typeof acct.deductible === "boolean") return acct.deductible;
+  return acct.accountType === "expense";
+}
+
+/** Stored per-expense override (or the value captured at create) wins; otherwise fall back to the category rule. */
+export function resolveExpenseTaxDeductible(
+  categoryCode: string | null | undefined,
+  stored: boolean | null | undefined,
+): boolean {
+  return typeof stored === "boolean" ? stored : isCategoryDeductible(categoryCode);
+}
+
+export function expenseTaxStatusLabel(deductible: boolean): string {
+  return deductible ? "Deductible" : "Non-deductible";
 }

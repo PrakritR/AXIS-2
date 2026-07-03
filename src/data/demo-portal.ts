@@ -4,6 +4,7 @@
 
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { ApplicationBackgroundCheckStatus } from "@/lib/application-background-check";
+import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import type { ApplicationScreeningReport } from "@/lib/screening/types";
 
 export const demoKpis = {
@@ -56,6 +57,8 @@ export type DemoApplicantRow = {
   backgroundCheckStatus?: ApplicationBackgroundCheckStatus;
   /** Vendor screening report (Certn) with manager-facing pros/cons summary. */
   screening?: ApplicationScreeningReport;
+  /** Checkr criminal background check (clear/consider) — run per-applicant on demand. */
+  backgroundCheck?: ApplicationBackgroundCheck;
   /** Extra fields only present on manually-added residents. */
   manualResidentDetails?: {
     moveInDate?: string;
@@ -159,6 +162,8 @@ export type DemoManagerWorkOrderRow = {
   vendorId?: string;
   vendorName?: string;
   vendorAssignedAt?: string;
+  /** Manager handles the work themselves — no vendor assigned, no vendor email sent. */
+  selfAssigned?: boolean;
   category?: "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
   vendorCostCents?: number;
   materialsCostCents?: number;

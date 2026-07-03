@@ -36,6 +36,7 @@ import {
   type AdminComposeSendMode,
   type InboxMessage,
 } from "@/lib/demo-admin-partner-inbox";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 function formatWhen(iso: string) {
   try {
@@ -55,6 +56,10 @@ function previewSnippet(text: string, max = 100) {
   if (t.length <= max) return t;
   return `${t.slice(0, max)}…`;
 }
+
+// Admin inbox has no scheduled-messages backend, so the shared "schedule" tab
+// (manager-only) must not render here — its route would 404 under /admin.
+const ADMIN_INBOX_TAB_DEFS = INBOX_TAB_DEFS.filter((t) => t.id !== "schedule");
 
 const ADMIN_COMPOSE_MODE_OPTIONS: { value: AdminComposeSendMode; label: string }[] = [
   { value: "all_portal", label: "Everyone (managers & residents)" },
@@ -307,7 +312,7 @@ function ComposeModal({
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <div className="mt-5 flex flex-wrap justify-start gap-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
@@ -347,6 +352,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   }, []);
 
   useEffect(() => {
+    if (isDemoModeActive()) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -392,7 +398,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   }, [all]);
 
   const inboxTabs = useMemo(
-    () => INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
+    () => ADMIN_INBOX_TAB_DEFS.map(({ id, label }) => ({ id, label, count: folderCounts[id as keyof typeof folderCounts] })),
     [folderCounts],
   );
 
@@ -524,7 +530,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                           </td>
                           <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{formatWhen(row.createdAt)}</td>
                           <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
-                            <div className="flex flex-wrap justify-end gap-1.5">
+                            <div className="flex flex-wrap justify-start gap-1.5">
                               {tabId === "trash" ? (
                                 <>
                                   <Button

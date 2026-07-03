@@ -105,6 +105,11 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
 
     // Pre-save a pending manager_purchases row so manager-checkout-preview can find the session
     // from the DB fallback even if Stripe API retrieval fails (key mismatch, webhook delay, etc.).
+    // Deliberately do NOT persist `tier`/`billing` here: for a paid plan those are what flip
+    // `isManagerOnboardingComplete` to true (paid_at defaults to now()), which would grant portal
+    // access before the payment method is added. They are written from the Stripe session metadata
+    // only once payment actually completes (recordPaidManagerCheckoutSession), so a reserved-but-
+    // unpaid paid signup stays incomplete until then.
     try {
       const db = createSupabaseServiceRoleClient();
       await db.from("manager_purchases").upsert(
@@ -112,8 +117,6 @@ export async function createManagerCheckoutSession(input: ManagerCheckoutInput):
           stripe_checkout_session_id: session.id,
           email: email || null,
           manager_id: metadata.manager_id,
-          tier,
-          billing,
           full_name: fullName || null,
           ...(userId ? { user_id: userId } : {}),
         },

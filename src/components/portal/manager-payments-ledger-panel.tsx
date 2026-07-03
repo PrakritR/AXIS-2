@@ -24,7 +24,7 @@ import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markMana
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
-import { ChargeRemindersModal, patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
+import { ChargeRemindersModal, addChargeSetDateReminder, patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 
@@ -340,25 +340,12 @@ export function ManagerPaymentsLedgerPanel({
               </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN_PRIMARY}
-                  onClick={() => recordPaid(row, "Marked as paid.")}
-                >
-                  Mark as paid
-                </Button>
-              ) : null}
               <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}>
                 {expanded ? "Less" : "More"}
               </Button>
             </div>
             {expanded ? (
               <div className="mt-3 border-t border-border pt-3">
-                <p className="mb-3 text-sm text-muted">
-                  <span className="font-medium text-foreground">{row.residentName}</span> · {row.notes}
-                </p>
                 {renderDetailActions(row)}
               </div>
             ) : null}
@@ -368,7 +355,7 @@ export function ManagerPaymentsLedgerPanel({
     </div>
     <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
       <div className="relative z-0 max-w-full overflow-x-auto">
-        <table className="min-w-[880px] w-full border-collapse text-left text-sm">
+        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
@@ -378,8 +365,6 @@ export function ManagerPaymentsLedgerPanel({
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount paid</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount owed</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Due date</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-              <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -417,30 +402,10 @@ export function ManagerPaymentsLedgerPanel({
                       );
                     })() : null}
                   </td>
-                  <td className={PORTAL_TABLE_TD}>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}>
-                      {row.statusLabel}
-                    </span>
-                  </td>
-                  <td className={`${PORTAL_TABLE_TD} text-right`}>
-                    {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={PORTAL_DETAIL_BTN_PRIMARY}
-                        onClick={() => recordPaid(row, "Marked as paid.")}
-                      >
-                        Mark as paid
-                      </Button>
-                    ) : null}
-                  </td>
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
-                      <p className="text-sm leading-relaxed text-muted">
-                        <span className="font-medium text-foreground">{row.residentName}</span> · {row.notes}
-                      </p>
+                    <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
                       {renderDetailActions(row)}
                     </td>
                   </tr>
@@ -470,6 +435,15 @@ export function ManagerPaymentsLedgerPanel({
             onScheduleChanged?.();
           } catch (e) {
             showToast(e instanceof Error ? e.message : "Could not update reminder.");
+          }
+        }}
+        onAddSetDate={async (iso) => {
+          try {
+            await addChargeSetDateReminder(chargeRemindersRow.householdChargeId!, iso);
+            showToast("Reminder scheduled.");
+            onScheduleChanged?.();
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "Could not add reminder.");
           }
         }}
         onOpenSettings={

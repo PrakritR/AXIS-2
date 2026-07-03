@@ -12,6 +12,12 @@ describe("report display names", () => {
     expect(humanizePropertyId("4709A 8th Ave NE - 10 rooms")).toBe("4709A 8th Ave NE - 10 rooms");
   });
 
+  it("humanizes demo and workflow-seed property ids instead of leaking them", () => {
+    expect(humanizePropertyId("mgr-demo-pioneer")).toBe("Pioneer");
+    expect(humanizePropertyId("mgr-test-birch")).toBe("Test Birch");
+    expect(humanizePropertyId("seedwf_f707ad54_prop-birch")).toBe("Birch");
+  });
+
   it("humanizes internal seed room ids into readable room labels", () => {
     expect(humanizeUnitLabel("seed-4709b-room-3")).toBe("Room 3");
     expect(humanizeUnitLabel("mgr-seed-4709b-8th-ave-ne::seed-4709b-room-3")).toBe("Room 3");

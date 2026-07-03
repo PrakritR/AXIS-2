@@ -4,7 +4,7 @@ function trimOrigin(url: string | undefined): string {
 
 function isLocalHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
-  return host === "localhost" || host === "127.0.0.1";
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
 }
 
 function isVercelDeploymentHost(hostname: string): boolean {
@@ -45,6 +45,27 @@ export function resolveShareableAppOrigin(browserOrigin?: string): string {
 }
 
 /**
+ * Origin the browser actually requested, derived from the Host header.
+ *
+ * The dev server binds 0.0.0.0 (`next dev --hostname 0.0.0.0`) and `request.url`
+ * reflects that bind address, not the Host header — so absolute URLs built from
+ * `request.url` bounce a localhost user to 0.0.0.0, a different cookie host where
+ * their session doesn't exist. Trust `x-forwarded-*` first (Vercel), then Host,
+ * falling back to the request URL's own origin.
+ */
+export function resolveRequestOrigin(req: Request): string {
+  const url = new URL(req.url);
+  const host =
+    req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    req.headers.get("host")?.trim();
+  if (!host) return url.origin;
+  const proto =
+    req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
+    url.protocol.replace(/:$/, "");
+  return `${proto}://${host}`;
+}
+
+/**
  * Resolve the app origin for Stripe return URLs.
  *
  * When the request comes from localhost, always use that origin so local checkout
@@ -54,10 +75,10 @@ export function resolveShareableAppOrigin(browserOrigin?: string): string {
  * falling back to the request origin for production deployments.
  */
 export function resolveAppOrigin(req: Request): string {
-  const requestOrigin = new URL(req.url).origin.replace(/\/$/, "");
+  const requestOrigin = resolveRequestOrigin(req).replace(/\/$/, "");
   try {
     const requestHost = new URL(requestOrigin).hostname.toLowerCase();
-    if (requestHost === "localhost" || requestHost === "127.0.0.1") {
+    if (isLocalHost(requestHost)) {
       return requestOrigin;
     }
   } catch {

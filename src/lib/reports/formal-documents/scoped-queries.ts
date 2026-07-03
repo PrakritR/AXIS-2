@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { humanizePropertyId, humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
+import { humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import type { RecurringRentProfile } from "@/lib/household-charges";
 import { chartAccountLabel, chartAccountScheduleE, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
 import {
@@ -107,12 +107,13 @@ export async function queryFormalPropertyRentReceipts(
   const scope = resolveScope(filters);
   const rangeStart = new Date(from);
   const rangeEnd = new Date(to);
-  const landlord = await loadManagerTaxProfile(db, managerUserId);
-  const display = await loadManagerReportDisplayContext(db, managerUserId);
-  const profiles = await loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined)
-    .then((rows) =>
+  const [landlord, display, profiles] = await Promise.all([
+    loadManagerTaxProfile(db, managerUserId),
+    loadManagerReportDisplayContext(db, managerUserId),
+    loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined).then((rows) =>
       rows.filter((p) => p.active !== false).filter((p) => profileMatchesScope(p, scope, filters)),
-    );
+    ),
+  ]);
 
   let ledgerQuery = db
     .from("ledger_entries")
@@ -168,7 +169,7 @@ export async function queryFormalPropertyRentReceipts(
       ) ?? profiles.find((p) => (p.propertyId?.trim() || "unassigned") === propertyId && p.residentEmail?.toLowerCase() === email);
 
     if (profile) {
-      propertyLabels.set(propertyId, profile.propertyLabel?.trim() || propertyId);
+      propertyLabels.set(propertyId, profile.propertyLabel?.trim() || display.propertyLabel(propertyId));
     }
 
     const unitKey = profile
@@ -218,7 +219,7 @@ export async function queryFormalPropertyRentReceipts(
       0,
     );
     const receiptCount = units.reduce((sum, u) => sum + u.receiptCount, 0);
-    const propertyLabel = propertyLabels.get(propertyId) ?? humanizePropertyId(propertyId);
+    const propertyLabel = propertyLabels.get(propertyId) ?? display.propertyLabel(propertyId);
 
     const catMap = incomeByCategoryMap.get(propertyId);
     const incomeByCategory: IncomeCategoryRow[] = catMap
@@ -298,7 +299,12 @@ export async function queryFormalPropertyRentReceipts(
       from,
       to,
       scope,
-      scopeLabel: scopeLabel(scope, filters.propertyId, filters.residentEmail, filters.roomLabel),
+      scopeLabel: scopeLabel(
+        scope,
+        filters.propertyId ? display.propertyLabel(filters.propertyId) : undefined,
+        filters.residentEmail ? display.residentLabel(filters.residentEmail) : undefined,
+        filters.roomLabel,
+      ),
     },
   };
 
@@ -314,9 +320,11 @@ export async function queryFormalRentReceipts(
   const scope = resolveScope(filters);
   const rangeStart = new Date(from);
   const rangeEnd = new Date(to);
-  const landlord = await loadManagerTaxProfile(db, managerUserId);
-  const display = await loadManagerReportDisplayContext(db, managerUserId);
-  const profiles = await loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined);
+  const [landlord, display, profiles] = await Promise.all([
+    loadManagerTaxProfile(db, managerUserId),
+    loadManagerReportDisplayContext(db, managerUserId),
+    loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined),
+  ]);
   const profileByEmail = new Map(profiles.map((p) => [p.residentEmail?.toLowerCase(), p]));
 
   let query = db
@@ -405,7 +413,12 @@ export async function queryFormalRentReceipts(
       from,
       to,
       scope,
-      scopeLabel: scopeLabel(scope, filters.propertyId, filters.residentEmail, filters.roomLabel),
+      scopeLabel: scopeLabel(
+        scope,
+        filters.propertyId ? display.propertyLabel(filters.propertyId) : undefined,
+        filters.residentEmail ? display.residentLabel(filters.residentEmail) : undefined,
+        filters.roomLabel,
+      ),
     },
   };
 
@@ -502,13 +515,16 @@ export async function loadFormalDocumentScopeOptions(
   managerUserId: string,
   propertyId?: string,
 ) {
-  const profiles = await loadRentProfiles(db, managerUserId, propertyId);
+  const [profiles, display] = await Promise.all([
+    loadRentProfiles(db, managerUserId, propertyId),
+    loadManagerReportDisplayContext(db, managerUserId),
+  ]);
   const tenants = new Map<string, string>();
   const rooms = new Set<string>();
   const properties = new Map<string, string>();
 
   for (const p of profiles) {
-    if (p.propertyId) properties.set(p.propertyId, p.propertyLabel || p.propertyId);
+    if (p.propertyId) properties.set(p.propertyId, p.propertyLabel || display.propertyLabel(p.propertyId));
     if (p.residentEmail) tenants.set(p.residentEmail.toLowerCase(), p.residentName || p.residentEmail);
     if (p.roomLabel?.trim()) rooms.add(p.roomLabel.trim());
   }
@@ -524,7 +540,7 @@ export async function loadFormalDocumentScopeOptions(
           return { id, label: unit };
         }
         const propId = id.split("::")[0]?.trim() ?? "";
-        const propLabel = properties.get(propId) ?? humanizePropertyId(propId);
+        const propLabel = properties.get(propId) ?? display.propertyLabel(propId);
         return { id, label: `${propLabel} · ${unit}` };
       }),
   };
@@ -539,15 +555,18 @@ export async function queryOccupancyReport(
   const scope = resolveScope(filters);
   const rangeStart = new Date(from);
   const rangeEnd = new Date(to);
-  const landlord = await loadManagerTaxProfile(db, managerUserId);
-  const allProfiles = await loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined);
+  const [landlord, display, allProfiles] = await Promise.all([
+    loadManagerTaxProfile(db, managerUserId),
+    loadManagerReportDisplayContext(db, managerUserId),
+    loadRentProfiles(db, managerUserId, scope === "property" ? filters.propertyId : undefined),
+  ]);
   const profiles = allProfiles.filter((p) => profileMatchesScope(p, scope, filters));
 
   const propertyGroups = new Map<string, { label: string; units: import("./spec").OccupancyUnitRow[] }>();
 
   for (const p of profiles) {
     const propertyId = p.propertyId?.trim() || "unassigned";
-    const propertyLabel = p.propertyLabel?.trim() || humanizePropertyId(propertyId);
+    const propertyLabel = p.propertyLabel?.trim() || display.propertyLabel(propertyId);
     const { daysRented, daysAvailable } = daysRentedForProfile(p, rangeStart, rangeEnd);
     const leaseStartRaw = p.startMonth?.trim() ? `${p.startMonth.trim()}-01` : from;
     const occupancyPct = daysAvailable > 0 ? Math.round((daysRented / daysAvailable) * 1000) / 10 : 0;

@@ -13,7 +13,12 @@ import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/
 import { loadRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { resolvePlacementLeaseDates } from "@/lib/rental-application/lease-dates";
 import { resolveApplicationPersonalFields } from "@/lib/application-personal-fields";
-import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import {
+  activeLeaseTemplateDoc,
+  normalizeManagerListingSubmissionV1,
+  type ManagerListingSubmissionV1,
+} from "@/lib/manager-listing-submission";
+import { leaseCss } from "@/lib/lease-templates/types";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import { resolveLeaseJurisdiction } from "@/lib/lease-jurisdiction";
 import { buildSanFranciscoLeaseHtml } from "@/lib/lease-templates/san-francisco";
@@ -172,8 +177,65 @@ export function gatherLeaseGenerationContext(): LeaseGenerationContext {
   return leaseContextFromApplication(application);
 }
 
+/** Uploaded lease template for the application's property (Lease step of the create-listing wizard), or null. */
+export function leaseTemplateDocForContext(ctx: LeaseGenerationContext): { url: string; name: string } | null {
+  return activeLeaseTemplateDoc(ctx.submission);
+}
+
+/**
+ * Lease document for properties whose manager uploaded their own lease template:
+ * an Axis summary of the placement (parties, room, rent, dates) followed by the
+ * manager's template document, which is the lease text itself.
+ */
+function buildManagerTemplateLeaseHtml(ctx: LeaseGenerationContext, doc: { url: string; name: string }): string {
+  const a = ctx.application;
+  const sub = ctx.submission ? normalizeManagerListingSubmissionV1(ctx.submission) : undefined;
+  const prop = ctx.leasedRoom ?? ctx.listingProperty;
+  const tenantName = dash(a.fullLegalName || "Resident");
+  const generatedDate = escapeHtml(
+    new Date(ctx.generatedAtIso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }),
+  );
+  const address = dash(prop?.address ?? sub?.address);
+  const cityZip = dash([prop?.neighborhood ?? sub?.neighborhood, prop?.zip ?? sub?.zip].filter(Boolean).join(", "));
+  const roomLabel = dash(prop?.unitLabel);
+  const rent = rentSummaryFromApplication(a) ?? "As set forth in the lease document below";
+  const leaseEnd = a.leaseTerm === "Month-to-Month" ? dash(a.leaseEnd || "N/A (month-to-month)") : dash(a.leaseEnd);
+  const isPdf = /\.pdf(\?|$)/i.test(doc.url) || doc.url.startsWith("data:application/pdf") || /\.pdf$/i.test(doc.name);
+  const docUrl = escapeHtml(doc.url);
+  const docName = escapeHtml(doc.name);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lease Agreement — ${tenantName}</title><style>${leaseCss()}
+.doc-embed{width:100%;height:75vh;min-height:640px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc}
+.doc-link{display:inline-block;margin:6px 0 14px;font-weight:600}</style></head><body>
+<h1>LEASE AGREEMENT</h1>
+<p class="sub">Prepared from the property manager's lease template · Generated ${generatedDate} via Axis</p>
+
+<h2>1. Placement Summary</h2>
+<p>This summary is compiled by Axis from the resident's application and the listing for convenience. The manager's lease document in Section 2 is the lease text.</p>
+<table>
+  <tr><th width="35%">Resident / Tenant</th><td><strong>${tenantName}</strong><br/>Phone: ${dash(a.phone)} &nbsp;·&nbsp; Email: ${dash(a.email)}</td></tr>
+  <tr><th>Property</th><td>${address}${cityZip !== "—" ? `<br/>${cityZip}` : ""}</td></tr>
+  <tr><th>Room / unit</th><td>${roomLabel}</td></tr>
+  <tr><th>Lease term</th><td>${dash(a.leaseTerm)}</td></tr>
+  <tr><th>Lease start</th><td>${dash(a.leaseStart)}</td></tr>
+  <tr><th>Lease end</th><td>${leaseEnd}</td></tr>
+  <tr><th>Monthly rent</th><td>${escapeHtml(rent)}</td></tr>
+</table>
+
+<h2>2. Lease Document (Manager Template)</h2>
+<p>The property manager provided the following lease document for this property. If it does not display below, open it directly:</p>
+<a class="doc-link" href="${docUrl}" target="_blank" rel="noopener">Open lease document — ${docName}</a>
+${isPdf ? `<object class="doc-embed" data="${docUrl}" type="application/pdf"><p>The document preview could not be shown here. <a href="${docUrl}" target="_blank" rel="noopener">Open ${docName}</a>.</p></object>` : `<iframe class="doc-embed" src="${docUrl}" title="Lease document"></iframe>`}
+
+<h2>3. Electronic Signature</h2>
+<p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the Axis portal. The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties and applies to the manager's lease document above.</p>
+</body></html>`;
+}
+
 /** Full HTML document suitable for download and "Print to PDF". */
 export function buildAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): string {
+  const templateDoc = leaseTemplateDocForContext(ctx);
+  if (templateDoc) return buildManagerTemplateLeaseHtml(ctx, templateDoc);
   const jurisdiction = resolveLeaseJurisdiction(ctx);
   if (jurisdiction === "san_francisco") return buildSanFranciscoLeaseHtml(ctx);
   if (jurisdiction === "seattle") return buildSeattleLeaseHtml(ctx);

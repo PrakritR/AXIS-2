@@ -69,8 +69,22 @@ export async function POST(req: Request) {
       fullName,
     });
 
-    if (prepared.kind === "complete" && tierRaw === "free") {
-      return NextResponse.json({ action: "portal" });
+    // Free tier NEVER touches Stripe: an account already exists (complete) just enters the
+    // portal, and a pending account is finalized as Free right here, then enters the portal.
+    // (There is no STRIPE_PRICE_FREE_MONTHLY, so routing Free through checkout would fail.)
+    if (tierRaw === "free") {
+      if (prepared.kind === "complete") {
+        return NextResponse.json({ action: "portal" });
+      }
+      const { managerId: finalizedId } = await completeFreeManagerTierForUser(supabase, {
+        userId: user.id,
+        email,
+        fullName,
+        tier: "free",
+        billing: billingRaw,
+        promo,
+      });
+      return NextResponse.json({ action: "portal", managerId: finalizedId });
     }
 
     let managerId: string;

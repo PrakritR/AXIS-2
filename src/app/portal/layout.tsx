@@ -4,7 +4,6 @@ import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
-import { PortalTopBanners } from "@/components/portal/portal-top-banners";
 import { PublicHomePrefetch } from "@/components/layout/public-home-prefetch";
 import { SurfaceThemeDefault } from "@/components/providers/theme-provider";
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
@@ -15,7 +14,6 @@ import {
   PORTAL_SHELL_ROOT_CLASS,
 } from "@/lib/portal-layout-classes";
 import { buildProPortalDefinition } from "@/lib/portals/pro-nav";
-import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 
 export default async function PropertyPortalLayout({ children }: { children: React.ReactNode }) {
@@ -32,14 +30,6 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
         <PublicHomePrefetch />
         <PortalDataPrefetch kind="pro" />
         <AccountLinksSync />
-        <div className="shrink-0">
-          <PortalTopBanners
-            planHref={MANAGER_PLAN_PORTAL_URL}
-            showPreviewBanner={nav.showPreviewBanner}
-            previewLabel={nav.previewLabel}
-            showPlanBanner={nav.showPlanBanner}
-          />
-        </div>
         <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
           <PortalSkipLink />
           <PortalSidebar

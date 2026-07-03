@@ -61,6 +61,17 @@ function sameTourSlot(row: Record<string, unknown>, managerUserId: string, start
   );
 }
 
+const MAX_EVENT_DURATION_MS = 480 * 60_000;
+
+/** The manager may confirm with a custom duration; the end just has to be a sane time after the window's start. */
+function resolveConfirmedEnd(start: string, windowEnd: string, requestedEnd: string): string {
+  const startMs = new Date(start).getTime();
+  const requestedMs = requestedEnd ? new Date(requestedEnd).getTime() : Number.NaN;
+  if (!Number.isFinite(startMs) || !Number.isFinite(requestedMs)) return windowEnd;
+  if (requestedMs <= startMs || requestedMs - startMs > MAX_EVENT_DURATION_MS) return windowEnd;
+  return requestedEnd;
+}
+
 function formatRangeLabel(isoStart: string, isoEnd: string): string {
   const start = new Date(isoStart);
   const end = new Date(isoEnd);
@@ -110,14 +121,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
     }
 
+    const windows = windowsFromInquiry(row);
     const selectedWindow =
-      windowsFromInquiry(row).find((window) => sameInstant(window.start, requestedStart) && sameInstant(window.end, requestedEnd)) ??
-      windowsFromInquiry(row)[0];
+      windows.find((window) => sameInstant(window.start, requestedStart) && sameInstant(window.end, requestedEnd)) ??
+      windows.find((window) => sameInstant(window.start, requestedStart)) ??
+      windows[0];
     if (!selectedWindow) return NextResponse.json({ error: "Tour window not found." }, { status: 400 });
 
     const groupId = textField(row, "tourGroupId");
     const start = selectedWindow.start;
-    const end = selectedWindow.end;
+    // Competing inquiries booked the original 30-min window, so slot clearing keys off windowEnd, not the custom end.
+    const windowEnd = selectedWindow.end;
+    const end = resolveConfirmedEnd(start, windowEnd, requestedEnd);
     const plannedEvent = {
       id: crypto.randomUUID(),
       title: `Tour · ${textField(row, "name") || "Guest"}`,
@@ -142,7 +157,7 @@ export async function POST(req: Request) {
     const nextInquiries = inquiries.filter((candidate) => {
       if (textField(candidate, "id") === id) return false;
       if (groupId && textField(candidate, "tourGroupId") === groupId) return false;
-      return !sameTourSlot(candidate, managerUserId, start, end);
+      return !sameTourSlot(candidate, managerUserId, start, windowEnd);
     });
 
     const { data: plannedRecord, error: plannedReadError } = await db
@@ -194,7 +209,7 @@ export async function POST(req: Request) {
       .filter((candidate) => {
         if (textField(candidate, "id") === id) return true;
         if (groupId && textField(candidate, "tourGroupId") === groupId) return true;
-        return sameTourSlot(candidate, managerUserId, start, end);
+        return sameTourSlot(candidate, managerUserId, start, windowEnd);
       })
       .map((candidate) => `${INQUIRY_EVENT_RECORD_TYPE}_${textField(candidate, "id")}_0`)
       .filter(Boolean);

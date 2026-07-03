@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { emitAdminUi } from "@/lib/demo-admin-ui";
 import { normalizeBugFeedbackRow } from "@/lib/portal-bug-feedback-utils";
 
@@ -44,6 +45,9 @@ function writeLocal(rows: PortalBugFeedbackRow[]) {
 
 async function persistRow(row: PortalBugFeedbackRow) {
   if (!isBrowser()) return;
+  // Demo sandbox is local-only: the cached-row update already drove the UI;
+  // never write feedback to the real backend.
+  if (isDemoModeActive()) return;
   const res = await fetch("/api/portal-bug-feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -60,6 +64,13 @@ export function readBugFeedbackRows(): PortalBugFeedbackRow[] {
   return cachedRows;
 }
 
+/** Demo seed: load feedback rows into the local cache (local-only, no server). */
+export function seedDemoBugFeedback(rows: PortalBugFeedbackRow[]): void {
+  cachedRows = rows;
+  syncedFromServer = true;
+  if (isBrowser()) emitAdminUi();
+}
+
 export type BugFeedbackSyncResult = {
   rows: PortalBugFeedbackRow[];
   error?: string;
@@ -70,6 +81,7 @@ export async function syncBugFeedbackFromServer(opts?: {
   force?: boolean;
 }): Promise<BugFeedbackSyncResult> {
   if (!isBrowser()) return { rows: [] };
+  if (isDemoModeActive()) return { rows: cachedRows };
   if (syncedFromServer && !opts?.force) return { rows: cachedRows };
   try {
     const res = await fetch("/api/portal-bug-feedback", { credentials: "include" });
@@ -149,6 +161,11 @@ export async function deleteBugFeedbackRow(id: string, opts?: { admin?: boolean 
   if (!isBrowser()) return;
   const trimmedId = id.trim();
   if (!trimmedId) throw new Error("Missing feedback id.");
+  // Demo sandbox is local-only: delete from the cache without touching the server.
+  if (isDemoModeActive()) {
+    writeLocal(cachedRows.filter((r) => r.id !== trimmedId));
+    return;
+  }
   const endpoint = opts?.admin ? "/api/admin/portal-bug-feedback" : "/api/portal-bug-feedback";
   const res = await fetch(endpoint, {
     method: "POST",

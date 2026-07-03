@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PORTAL_TOOLBAR_GROUP } from "@/components/portal/portal-metrics";
@@ -24,6 +25,7 @@ export function ReportFilterBar({
   loading,
   runLabel = "Generate report",
   showRunButton = true,
+  leading,
 }: {
   showProperty?: boolean;
   showDateRange?: boolean;
@@ -36,9 +38,12 @@ export function ReportFilterBar({
   loading?: boolean;
   runLabel?: string;
   showRunButton?: boolean;
+  /** Extra controls rendered at the start of the row (e.g. a document scope selector). */
+  leading?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-end gap-3">
+      {leading}
       {showProperty && propertyOptions && propertyOptions.length > 0 ? (
         <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
           Property

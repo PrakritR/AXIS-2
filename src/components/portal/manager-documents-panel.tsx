@@ -10,8 +10,7 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   PORTAL_FILTER_ACTIONS_MOBILE,
-  PORTAL_KPI_LABEL,
-  PORTAL_KPI_VALUE,
+  PORTAL_HEADER_ACTION_BTN,
   PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import {
@@ -48,6 +47,7 @@ import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-acces
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import type { OccupancyReport, PropertyRentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import type { ReportResult } from "@/lib/reports/types";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 export const DOCUMENT_TABS = [
   { id: "income-documents", label: "Income documents" },
@@ -87,26 +87,6 @@ function w9StatusTone(status: string) {
   return "bg-accent/30 text-foreground ring-1 ring-border";
 }
 
-function TaxSummaryCards({ report }: { report: ReportResult | null }) {
-  if (!report?.meta) return null;
-  const cards = [
-    { label: "Rent earned", value: String(report.meta.totalEarned ?? "—") },
-    { label: "Repairs & expenses", value: String(report.meta.totalSpent ?? "—") },
-    { label: "Days rented", value: String(report.meta.totalDaysRented ?? "—") },
-    { label: "Net income", value: String(report.meta.netIncome ?? "—") },
-  ];
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {cards.map((card) => (
-        <div key={card.label} className="rounded-2xl border border-border bg-card px-4 py-3">
-          <p className={PORTAL_KPI_VALUE}>{card.value}</p>
-          <p className={PORTAL_KPI_LABEL}>{card.label}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function ManagerDocumentsPanel({
   tabId,
   basePath = "/portal",
@@ -135,12 +115,41 @@ export function ManagerDocumentsPanel({
 
   useEffect(() => {
     if (!ready) return;
-    void syncPropertyPipelineFromServer({ force: true }).then(() => setPropertyTick((n) => n + 1));
+    // Not forced: the pipeline sync has a session TTL + in-flight guard, so
+    // tab switches reuse fresh data instead of refetching the full snapshot.
+    void syncPropertyPipelineFromServer().then(() => setPropertyTick((n) => n + 1));
   }, [ready, userId]);
 
   const runReport = useCallback(async () => {
     setLoading(true);
     try {
+      // Demo sandbox: build every report from the browser-local demo data —
+      // the reports API needs auth and knows nothing about the demo account.
+      if (isDemoModeActive()) {
+        const demo = await import("@/lib/demo/demo-finance-reports");
+        const demoPropertyId = scopeFilters.propertyId || filters.propertyId || undefined;
+        if (tabId === "expense-documents") {
+          setPropertyDocuments(null);
+          setReport(demo.buildDemoFinanceReport("expenses", demoPropertyId));
+        } else if (tabId === "income-documents") {
+          const { documents, preview } = demo.buildDemoRentReceiptDocuments(demoPropertyId);
+          setPropertyDocuments(documents);
+          setReport(preview);
+        } else if (tabId === "1099") {
+          setPropertyDocuments(null);
+          setReport(demo.buildDemo1099Report(filters.taxYear));
+        } else if (tabId === "tax-summary") {
+          setPropertyDocuments(null);
+          setReport(demo.buildDemoTaxSummaryReport(demoPropertyId));
+        } else if (tabId === "occupancy") {
+          setPropertyDocuments(null);
+          setReport(null);
+          setOccupancyReport(demo.buildDemoOccupancyReport(demoPropertyId));
+        }
+        setGenerated(true);
+        setLoading(false);
+        return;
+      }
       if (tabId === "expense-documents") {
         const qs = buildScopedReportQuery(
           { from: filters.from, to: filters.to },
@@ -212,6 +221,13 @@ export function ManagerDocumentsPanel({
     });
   }, [tabId]);
 
+  // Demo sandbox: generate immediately so every Documents tab opens populated
+  // instead of waiting for a "Generate report" click (re-runs on filter change).
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    queueMicrotask(() => void runReport());
+  }, [tabId, runReport]);
+
   const incomeReceiptExportHref =
     tabId === "income-documents"
       ? `/api/reports/formal-documents/export?${buildFormalDocumentQuery("property_rent_receipt", { from: filters.from, to: filters.to }, scopeFilters)}`
@@ -255,16 +271,32 @@ export function ManagerDocumentsPanel({
     </>
   );
 
+  // Export routes are server-side PDFs behind auth — hidden in the demo.
   const hasExportActions =
-    tabId === "1099" ||
-    (tabId === "expense-documents" && generated) ||
-    Boolean(incomeReceiptExportHref && generated);
+    !isDemoModeActive() &&
+    (tabId === "1099" ||
+      (tabId === "expense-documents" && generated) ||
+      Boolean(incomeReceiptExportHref && generated));
 
   return (
     <ManagerPortalPageShell
       title="Documents"
       titleAside={
-        hasExportActions ? <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div> : undefined
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {hasExportActions ? (
+            <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div>
+          ) : null}
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_HEADER_ACTION_BTN}
+            onClick={() => void runReport()}
+            disabled={loading}
+            data-attr="documents-generate-report"
+          >
+            {loading ? "Generating…" : "Generate report"}
+          </Button>
+        </div>
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -274,26 +306,27 @@ export function ManagerDocumentsPanel({
       }
     >
       <div className="space-y-4">
-        {tabId === "income-documents" || tabId === "expense-documents" ? (
-          <FormalDocumentScopeBar
-            filters={scopeFilters}
-            onChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
-          />
-        ) : null}
-
         <ReportFilterBar
           showProperty={showProperty}
           showDateRange={showDateRange}
           showDaysAhead={false}
           showTaxYear={showTaxYear}
+          showRunButton={false}
           propertyOptions={propertyOptions}
           filters={filters}
           onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
           onRun={() => void runReport()}
           loading={loading}
+          leading={
+            tabId === "income-documents" || tabId === "expense-documents" ? (
+              <FormalDocumentScopeBar
+                inline
+                filters={scopeFilters}
+                onChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
+              />
+            ) : null
+          }
         />
-
-        {tabId === "tax-summary" && generated ? <TaxSummaryCards report={report} /> : null}
 
         {tabId === "income-documents" ? (
           <div>

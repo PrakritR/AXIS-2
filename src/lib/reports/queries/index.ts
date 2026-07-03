@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import type { RecurringRentProfile } from "@/lib/household-charges";
-import { chartAccountLabel, chartAccountScheduleE } from "@/lib/reports/categories";
+import {
+  chartAccountLabel,
+  chartAccountScheduleE,
+  expenseTaxStatusLabel,
+  resolveExpenseTaxDeductible,
+} from "@/lib/reports/categories";
 import { humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import { scopeLabel } from "@/lib/reports/formal-documents/spec";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
@@ -320,11 +325,13 @@ export async function queryExpenses(
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
-  const display = await loadManagerReportDisplayContext(db, managerUserId);
   const scope = resolveDocumentScope(filters);
   const propertyId = filters.propertyId?.trim();
   const needsWorkOrders = scope === "tenant" || scope === "room";
-  const workOrdersById = needsWorkOrders ? await loadExpenseWorkOrders(db, managerUserId) : new Map();
+  const [display, workOrdersById] = await Promise.all([
+    loadManagerReportDisplayContext(db, managerUserId),
+    needsWorkOrders ? loadExpenseWorkOrders(db, managerUserId) : Promise.resolve(new Map<string, ExpenseWorkOrderRef>()),
+  ]);
 
   let query = db
     .from("manager_expense_entries")
@@ -338,17 +345,22 @@ export async function queryExpenses(
 
   const { data } = await query;
   const filtered = (data ?? []).filter((expense) => expenseMatchesScope(expense, scope, filters, workOrdersById));
-  const rows = filtered.map((e) => ({
-    id: e.id,
-    date: e.expense_date,
-    category: chartAccountLabel(e.category_code),
-    scheduleERef: chartAccountScheduleE(e.category_code)?.ref ?? "Sch. E, Line 19",
-    amount: centsToUsd(Number(e.amount_cents)),
-    vendor: display.vendorLabel(e.vendor_id),
-    memo: e.memo ?? "",
-    property: display.propertyLabel(e.property_id),
-    workOrderId: e.source_work_order_id ?? "",
-  }));
+  const rows = filtered.map((e) => {
+    const taxDeductible = resolveExpenseTaxDeductible(e.category_code, e.tax_deductible);
+    return {
+      id: e.id,
+      date: e.expense_date,
+      category: chartAccountLabel(e.category_code),
+      scheduleERef: chartAccountScheduleE(e.category_code)?.ref ?? "Sch. E, Line 19",
+      taxStatus: expenseTaxStatusLabel(taxDeductible),
+      taxDeductible,
+      amount: centsToUsd(Number(e.amount_cents)),
+      vendor: display.vendorLabel(e.vendor_id),
+      memo: e.memo ?? "",
+      property: display.propertyLabel(e.property_id),
+      workOrderId: e.source_work_order_id ?? "",
+    };
+  });
 
   const totalCents = filtered.reduce((sum, e) => sum + Number(e.amount_cents), 0);
   const propertyLabel = propertyId ? display.propertyLabel(propertyId) : undefined;
@@ -361,13 +373,14 @@ export async function queryExpenses(
       { key: "date", label: "Date", format: "date" },
       { key: "category", label: "Category" },
       { key: "scheduleERef", label: "Sch. E Line" },
+      { key: "taxStatus", label: "Tax status" },
       { key: "amount", label: "Amount", align: "right", format: "money" },
       { key: "vendor", label: "Vendor" },
       { key: "memo", label: "Description" },
       { key: "property", label: "Property" },
     ],
     rows,
-    totals: { date: "Total expenses", category: "", scheduleERef: "", amount: centsToUsd(totalCents), vendor: "", memo: "", property: "" },
+    totals: { date: "Total expenses", category: "", scheduleERef: "", taxStatus: "", amount: centsToUsd(totalCents), vendor: "", memo: "", property: "" },
     meta: {
       from,
       to,
@@ -383,7 +396,7 @@ export async function queryRentReceipts(
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
   const { from, to } = defaultDateRange(filters.from, filters.to);
-  const display = await loadManagerReportDisplayContext(db, managerUserId);
+  const displayPromise = loadManagerReportDisplayContext(db, managerUserId);
 
   let query = db
     .from("ledger_entries")
@@ -395,7 +408,7 @@ export async function queryRentReceipts(
     .order("posted_date", { ascending: false });
   if (filters.propertyId) query = query.eq("property_id", filters.propertyId);
 
-  const { data } = await query;
+  const [{ data }, display] = await Promise.all([query, displayPromise]);
   const rows = (data ?? [])
     .filter((row) => RENT_RECEIPT_CATEGORIES.has(String(row.category_code)))
     .map((row) => ({
@@ -509,16 +522,19 @@ export async function queryTaxSummary(
     queryExpenses(db, managerUserId, filters),
   ]);
 
-  const profiles = await loadRentProfiles(db, managerUserId, filters.propertyId);
+  const [profiles, display] = await Promise.all([
+    loadRentProfiles(db, managerUserId, filters.propertyId),
+    loadManagerReportDisplayContext(db, managerUserId),
+  ]);
   const propertyLabels = new Map<string, string>();
   for (const profile of profiles) {
     if (profile.propertyId?.trim()) {
-      propertyLabels.set(profile.propertyId.trim(), profile.propertyLabel.trim() || profile.propertyId.trim());
+      propertyLabels.set(profile.propertyId.trim(), profile.propertyLabel.trim() || display.propertyLabel(profile.propertyId));
     }
   }
   const labelForPropertyId = (propertyId: string) => {
     if (propertyId === "Unassigned") return "Unassigned";
-    return propertyLabels.get(propertyId) ?? propertyId;
+    return propertyLabels.get(propertyId) ?? display.propertyLabel(propertyId);
   };
 
   const incomeByProperty = new Map<string, number>();
@@ -538,9 +554,13 @@ export async function queryTaxSummary(
   }
 
   const expenseByProperty = new Map<string, number>();
+  const deductibleByProperty = new Map<string, number>();
+  const nonDeductibleByProperty = new Map<string, number>();
+  let deductibleCents = 0;
+  let nonDeductibleCents = 0;
   let expenseQuery = db
     .from("manager_expense_entries")
-    .select("property_id, amount_cents")
+    .select("property_id, amount_cents, category_code, tax_deductible")
     .eq("manager_user_id", managerUserId)
     .gte("expense_date", from)
     .lte("expense_date", to);
@@ -549,6 +569,13 @@ export async function queryTaxSummary(
   for (const row of expenseRows ?? []) {
     const key = labelForPropertyId(String(row.property_id ?? "Unassigned"));
     expenseByProperty.set(key, (expenseByProperty.get(key) ?? 0) + Number(row.amount_cents));
+    if (resolveExpenseTaxDeductible(row.category_code as string | null, row.tax_deductible as boolean | null)) {
+      deductibleByProperty.set(key, (deductibleByProperty.get(key) ?? 0) + Number(row.amount_cents));
+      deductibleCents += Number(row.amount_cents);
+    } else {
+      nonDeductibleByProperty.set(key, (nonDeductibleByProperty.get(key) ?? 0) + Number(row.amount_cents));
+      nonDeductibleCents += Number(row.amount_cents);
+    }
   }
 
   const daysByProperty = new Map<string, number>();
@@ -571,6 +598,8 @@ export async function queryTaxSummary(
       daysRented: daysByProperty.get(propertyKey) ?? 0,
       rentEarned: centsToUsd(earnedCents),
       houseSpent: centsToUsd(spentCents),
+      deductibleExpenses: centsToUsd(deductibleByProperty.get(propertyKey) ?? 0),
+      nonDeductibleExpenses: centsToUsd(nonDeductibleByProperty.get(propertyKey) ?? 0),
       netIncome: centsToUsd(earnedCents - spentCents),
     };
   });
@@ -587,6 +616,8 @@ export async function queryTaxSummary(
       { key: "daysRented", label: "Days rented", align: "right", format: "number" },
       { key: "rentEarned", label: "Rent earned", align: "right", format: "money" },
       { key: "houseSpent", label: "Repairs & expenses", align: "right", format: "money" },
+      { key: "deductibleExpenses", label: "Deductible", align: "right", format: "money" },
+      { key: "nonDeductibleExpenses", label: "Non-deductible", align: "right", format: "money" },
       { key: "netIncome", label: "Net", align: "right", format: "money" },
     ],
     rows,
@@ -595,6 +626,8 @@ export async function queryTaxSummary(
       daysRented: totalDays,
       rentEarned: centsToUsd(totalIncomeCents),
       houseSpent: centsToUsd(totalExpenseCents),
+      deductibleExpenses: centsToUsd(deductibleCents),
+      nonDeductibleExpenses: centsToUsd(nonDeductibleCents),
       netIncome: centsToUsd(totalIncomeCents - totalExpenseCents),
     },
     meta: {
@@ -606,6 +639,8 @@ export async function queryTaxSummary(
       netIncome: centsToUsd(totalIncomeCents - totalExpenseCents),
       totalIncome: incomeStatement.meta?.totalIncome ?? centsToUsd(totalIncomeCents),
       totalExpense: incomeStatement.meta?.totalExpense ?? centsToUsd(totalExpenseCents),
+      totalDeductibleExpenses: centsToUsd(deductibleCents),
+      totalNonDeductibleExpenses: centsToUsd(nonDeductibleCents),
       expenseCount: expensesReport.rows.length,
     },
   };

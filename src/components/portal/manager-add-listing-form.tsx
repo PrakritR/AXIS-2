@@ -13,6 +13,7 @@ import {
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
   BUSINESS_MAX_PROPERTIES,
@@ -26,7 +27,10 @@ import {
   applyEntireHomeListingPricing,
   applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
+  CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS,
+  customApplicationFieldKeyFromLabel,
   LISTING_SERVICE_QUICK_ADDS,
+  emptyCustomApplicationField,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
@@ -42,6 +46,8 @@ import {
   type ManagerBathroomRoomAccessKind,
   type ManagerBathroomSubmission,
   type ManagerBundleRow,
+  type ManagerCustomApplicationField,
+  type ManagerCustomApplicationFieldType,
   type ManagerListingSubmissionV1,
   type ManagerListingServiceOption,
   type ManagerQuickFactRow,
@@ -49,6 +55,7 @@ import {
   type ManagerSharedSpaceSubmission,
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
+import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
   HOUSE_WIDE_AMENITY_PRESETS,
@@ -93,6 +100,7 @@ import {
   buildListingStepFieldOrder,
   firstInvalidListingStep,
   listingBathroomNameKey,
+  listingCustomQuestionErrorKey,
   listingRoomNameKey,
   listingRoomRentKey,
   listingSharedSpaceNameKey,
@@ -105,9 +113,23 @@ import {
 } from "@/lib/wizard-field-errors";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/data";
 import { Modal } from "@/components/ui/modal";
+import { usePortalContainer } from "@/components/ui/portal-container-context";
 
 const selectInputCls =
   "min-h-[44px] w-full rounded-xl border border-border bg-auth-input-bg px-3.5 py-2.5 text-[14px] text-foreground outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/20";
+
+/** Comma/newline-separated dropdown options → clean deduped list. */
+function parseQuestionOptionsText(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(/[\n,]/)) {
+    const t = part.trim();
+    if (!t || seen.has(t.toLowerCase())) continue;
+    seen.add(t.toLowerCase());
+    out.push(t);
+  }
+  return out;
+}
 
 function dedupeByLabel<T extends { label: string }>(items: readonly T[]): T[] {
   const seen = new Set<string>();
@@ -485,28 +507,35 @@ const SHARED_SPACE_TEMPLATES = [
 ] as const;
 
 const LISTING_FORM_STEPS = [
-  { id: "home",      label: "Home",           icon: "🏠" },
-  { id: "rooms",     label: "Rooms",          icon: "🛏" },
-  { id: "bathrooms", label: "Bathrooms",      icon: "🚿" },
-  { id: "spaces",    label: "Shared spaces",  icon: "🪑" },
-  { id: "lease",     label: "Pricing",        icon: "💰" },
-  { id: "move",      label: "Move info",      icon: "📦" },
-  { id: "services",  label: "Services",       icon: "🛎" },
-  { id: "finish",    label: "Submit",         icon: "✅" },
+  { id: "home",        label: "Home",           icon: "🏠" },
+  { id: "rooms",       label: "Rooms",          icon: "🛏" },
+  { id: "bathrooms",   label: "Bathrooms",      icon: "🚿" },
+  { id: "spaces",      label: "Shared spaces",  icon: "🪑" },
+  { id: "lease",       label: "Pricing",        icon: "💰" },
+  { id: "move",        label: "Move info",      icon: "📦" },
+  { id: "services",    label: "Services",       icon: "🛎" },
+  { id: "application", label: "Application",    icon: "📋" },
+  { id: "leasedoc",    label: "Lease",          icon: "📄" },
+  { id: "finish",      label: "Submit",         icon: "✅" },
 ] as const;
 
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
-  home:      "Property type, address, layout, building amenities, house details, and full-house photos.",
-  rooms:     "Bedroom names, floor, furnishing, and amenities — pricing is set on Pricing.",
-  bathrooms: "Bathroom name, location, and amenities for the public listing.",
-  spaces:    "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
-  lease:     "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
-  move:      "Move-in access instructions for residents.",
-  services:  "Optional paid or free services residents can request from their portal.",
-  finish:    "Sidebar quick facts and final submit.",
+  home:        "Property type, address, layout, building amenities, house details, and full-house photos.",
+  rooms:       "Bedroom names, floor, furnishing, and amenities — pricing is set on Pricing.",
+  bathrooms:   "Bathroom name, location, and amenities for the public listing.",
+  spaces:      "Shared areas — name, location, and amenities (kitchen, laundry, lounge, outdoor).",
+  lease:       "How the home is rented (by room or entire place), rent, utilities, proration, deposits, and fees.",
+  move:        "Move-in access instructions for residents.",
+  services:    "Optional paid or free services residents can request from their portal.",
+  application: "Review the rental application applicants complete for this property, and add your own questions to any section.",
+  leasedoc:    "Use the Axis standard generated lease, or provide your own lease terms or template for this property.",
+  finish:      "Sidebar quick facts and final submit.",
 };
+
+/** Max uploaded lease template size (PDF). Kept small: stored via the listing media bucket. */
+const LEASE_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
 
 /** Reads a file and returns a compressed JPEG data URL. Falls back to raw data URL for non-image files. */
 /** Yields control back to the browser so it can paint/handle input before heavy work. */
@@ -662,6 +691,9 @@ function extToMime(ext: string): string {
 
 async function uploadDataUrl(dataUrl: string): Promise<string> {
   if (!dataUrl.startsWith("data:")) return dataUrl;
+  // /demo has no signed-in Supabase session to upload against — keep the
+  // data URL as-is so demo photos and lease templates round-trip locally.
+  if (isDemoModeActive()) return dataUrl;
   return uploadToBucket(dataUrl);
 }
 
@@ -676,9 +708,10 @@ async function uploadSubmissionMedia(
     return uploadDataUrl(url);
   }
 
-  const [housePhotos, houseVideo, rooms, bathrooms, sharedSpaces] = await Promise.all([
+  const [housePhotos, houseVideo, leaseTemplateDocUrl, rooms, bathrooms, sharedSpaces] = await Promise.all([
     uploadAll(sub.housePhotoDataUrls ?? []),
     uploadOne(sub.houseVideoDataUrl),
+    uploadOne(sub.leaseTemplateDocUrl),
     Promise.all(
       sub.rooms.map(async (r) => ({
         ...r,
@@ -706,6 +739,7 @@ async function uploadSubmissionMedia(
     ...sub,
     housePhotoDataUrls: housePhotos,
     houseVideoDataUrl: houseVideo,
+    leaseTemplateDocUrl,
     rooms,
     bathrooms,
     sharedSpaces,
@@ -843,6 +877,7 @@ export function ManagerAddListingForm({
   // Portal to document.body once mounted, so this modal can't get visually trapped by an
   // ancestor that creates a containing block for fixed-position descendants (e.g. transform/filter).
   const mounted = useIsClient();
+  const portalContainer = usePortalContainer();
   const [listingPresets, setListingPresets] = useState<ListingPresetConfig>(DEFAULT_LISTING_PRESETS);
   const [activeDropZone, setActiveDropZone] = useState<string | null>(null);
   const [serviceOffers, setServiceOffers] = useState<ManagerListingServiceOption[]>(() => {
@@ -852,6 +887,8 @@ export function ManagerAddListingForm({
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<ManagerListingServiceOption | null>(null);
   const [serviceForm, setServiceForm] = useState({ name: "", description: "", price: "", deposit: "" });
+  // Application step — free-text drafts for dropdown options so typing commas feels natural.
+  const [questionOptionsDrafts, setQuestionOptionsDrafts] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
   // Keyed by a stable id like "room-<id>", "bath-<id>", "space-<id>", "house".
@@ -1042,6 +1079,71 @@ export function ManagerAddListingForm({
       sharedSpaces[i] = { ...sharedSpaces[i]!, ...patch };
       return { ...s, sharedSpaces };
     });
+  };
+
+  // ── Application step (custom questions per application section) ──────────
+  const applicationMode: "standard" | "custom" =
+    sub.applicationConfigMode ?? ((sub.customApplicationFields?.length ?? 0) > 0 ? "custom" : "standard");
+
+  const patchCustomQuestion = (id: string, patch: Partial<ManagerCustomApplicationField>) => {
+    clearListingFieldError(listingCustomQuestionErrorKey(id));
+    clearListingFieldError("customApplicationFields");
+    setSub((s) => ({
+      ...s,
+      customApplicationFields: (s.customApplicationFields ?? []).map((f) => (f.id === id ? { ...f, ...patch } : f)),
+    }));
+  };
+
+  const addCustomQuestion = (section: string) => {
+    setSub((s) => ({
+      ...s,
+      customApplicationFields: [...(s.customApplicationFields ?? []), emptyCustomApplicationField(section)],
+    }));
+  };
+
+  const removeCustomQuestion = (id: string) => {
+    clearListingFieldError(listingCustomQuestionErrorKey(id));
+    setSub((s) => ({
+      ...s,
+      customApplicationFields: (s.customApplicationFields ?? []).filter((f) => f.id !== id),
+    }));
+  };
+
+  const questionOptionsText = (field: ManagerCustomApplicationField): string =>
+    questionOptionsDrafts[field.id] ?? field.options.join(", ");
+
+  const setQuestionOptionsText = (id: string, text: string) => {
+    setQuestionOptionsDrafts((d) => ({ ...d, [id]: text }));
+    patchCustomQuestion(id, { options: parseQuestionOptionsText(text) });
+  };
+
+  // ── Lease step (custom lease terms / uploaded template) ───────────────────
+  const leaseMode: "standard" | "custom" = sub.leaseConfigMode ?? "standard";
+  const leaseKind: "terms" | "document" = sub.leaseCustomKind === "document" ? "document" : "terms";
+
+  const onPickLeaseTemplateDoc = (file: File | null) => {
+    if (!file) return;
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    if (!isPdf) {
+      showToast("Upload the lease template as a PDF.");
+      return;
+    }
+    if (file.size > LEASE_TEMPLATE_MAX_BYTES) {
+      showToast("Lease template is too large — keep it under 8 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : null;
+      if (!dataUrl) {
+        showToast("Could not read that file. Try again.");
+        return;
+      }
+      clearListingFieldError("leaseTemplateDoc");
+      setSub((s) => ({ ...s, leaseTemplateDocUrl: dataUrl, leaseTemplateDocName: file.name }));
+    };
+    reader.onerror = () => showToast("Could not read that file. Try again.");
+    reader.readAsDataURL(file);
   };
 
   const addRoom = () => {
@@ -1668,8 +1770,26 @@ export function ManagerAddListingForm({
     void onPickSharedSpaceVideo(spaceId, event.dataTransfer.files?.[0] ?? null);
   };
 
+  /** Assign stable answer keys and drop blank drafts before persisting. */
+  const finalizeCustomApplicationFields = (
+    fields: ManagerCustomApplicationField[] | undefined,
+  ): ManagerCustomApplicationField[] => {
+    const out: ManagerCustomApplicationField[] = [];
+    const usedKeys = new Set<string>();
+    for (const field of fields ?? []) {
+      const label = field.label.trim();
+      if (!label) continue;
+      if (field.type === "select" && field.options.length === 0) continue;
+      const key = field.key.trim() || customApplicationFieldKeyFromLabel(label, usedKeys);
+      if (usedKeys.has(key)) continue;
+      usedKeys.add(key);
+      out.push({ ...field, key, label });
+    }
+    return out;
+  };
+
   const submitListing = async () => {
-    const invalid = firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 4);
+    const invalid = firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 8);
     if (invalid) {
       setStepIndex(invalid.stepIndex);
       setMaxStepReached((m) => Math.max(m, invalid.stepIndex));
@@ -1688,6 +1808,7 @@ export function ManagerAddListingForm({
     const submission: ManagerListingSubmissionV1 = {
       ...sub,
       serviceRequestOptions: serviceOffers,
+      customApplicationFields: finalizeCustomApplicationFields(sub.customApplicationFields),
       rooms: sub.rooms.map((room) => ({
         ...room,
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
@@ -1737,7 +1858,8 @@ export function ManagerAddListingForm({
       let uploadedSubmission: typeof submission;
       try {
         uploadedSubmission = await uploadSubmissionMedia(submission);
-      } catch {
+      } catch (err) {
+        console.error("manager-add-listing-form: uploadSubmissionMedia failed", err);
         showToast("Could not upload photos. Check your connection and try again.");
         return;
       }
@@ -1745,6 +1867,7 @@ export function ManagerAddListingForm({
       if (editPendingId) {
         const ok = await updatePendingManagerPropertyOnServer(editPendingId, uploadedSubmission, userId);
         if (!ok) {
+          console.error("manager-add-listing-form: updatePendingManagerPropertyOnServer returned false", { editPendingId, userId });
           showToast("Could not save changes.");
           return;
         }
@@ -1754,6 +1877,7 @@ export function ManagerAddListingForm({
       if (editRequestChangeId) {
         const ok = updateRequestChangeProperty(editRequestChangeId, userId, uploadedSubmission);
         if (!ok) {
+          console.error("manager-add-listing-form: updateRequestChangeProperty returned false", { editRequestChangeId, userId });
           showToast("Could not save changes.");
           return;
         }
@@ -1765,6 +1889,7 @@ export function ManagerAddListingForm({
         const saveUserId = editListingOwnerUserId?.trim() || userId;
         const ok = await updateExtraListingFromSubmissionOnServer(editListingId, saveUserId, uploadedSubmission);
         if (!ok) {
+          console.error("manager-add-listing-form: updateExtraListingFromSubmissionOnServer returned false", { editListingId, saveUserId });
           showToast("Could not save changes.");
           return;
         }
@@ -2216,8 +2341,27 @@ export function ManagerAddListingForm({
                   rows={4}
                   value={sub.generalHouseInfo ?? ""}
                   onChange={(e) => setSub((s) => ({ ...s, generalHouseInfo: e.target.value }))}
-                  placeholder="Wi-Fi network & password, gate/door codes, laundry tips, trash schedule…"
+                  placeholder="Gate/door codes, laundry tips, trash schedule…"
                 />
+              </div>
+              <div>
+                <div className="mb-0.5 flex items-center gap-2">
+                  <FieldLabel>Wi-Fi</FieldLabel>
+                  <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
+                </div>
+                <p className="mb-1.5 text-[11px] text-muted">Network name and password shown to residents in their Move-in portal after approval. Leave blank to hide.</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={sub.wifiNetworkName ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, wifiNetworkName: e.target.value }))}
+                    placeholder="Wi-Fi network name (SSID)"
+                  />
+                  <Input
+                    value={sub.wifiPassword ?? ""}
+                    onChange={(e) => setSub((s) => ({ ...s, wifiPassword: e.target.value }))}
+                    placeholder="Wi-Fi password"
+                  />
+                </div>
               </div>
             </ListingSubsection>
             </div>
@@ -3935,8 +4079,318 @@ export function ManagerAddListingForm({
           </FormSection>
           ) : null}
 
-          {/* ── Step 7: Highlights ── */}
+          {/* ── Step 7: Application ── */}
           {stepIndex === 7 ? (
+          <FormSection
+            id="edit-application"
+            title="Rental application"
+            description="Review — this is the application every applicant completes for this property. Add any extra information you want applicants to provide."
+          >
+            <div className="space-y-6">
+              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-card p-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+                  data-attr="listing-application-standard-toggle"
+                  checked={applicationMode === "standard"}
+                  onChange={(e) => {
+                    setStepFieldErrors({});
+                    setSub((s) => ({ ...s, applicationConfigMode: e.target.checked ? "standard" : "custom" }));
+                  }}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">Use Axis standard system</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                    Applicants complete the standard Axis rental application below. Uncheck to add your own questions to
+                    any section.
+                  </span>
+                </span>
+              </label>
+
+              {applicationMode === "standard" && (sub.customApplicationFields?.length ?? 0) > 0 ? (
+                <p className="rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs leading-relaxed text-muted">
+                  Your {sub.customApplicationFields!.length} saved custom question
+                  {sub.customApplicationFields!.length === 1 ? "" : "s"} are kept but won&apos;t be asked while the
+                  standard application is selected.
+                </p>
+              ) : null}
+
+              {stepFieldErrors.customApplicationFields ? (
+                <div data-wizard-field="customApplicationFields">
+                  <StepFieldError msg={stepFieldErrors.customApplicationFields} />
+                </div>
+              ) : null}
+
+              <div className="space-y-4">
+                {RENTAL_APPLICATION_SECTIONS.map((section, sectionIdx) => {
+                  const sectionQuestions =
+                    applicationMode === "custom"
+                      ? (sub.customApplicationFields ?? []).filter(
+                          (f) => (f.section ?? "additional") === section.id,
+                        )
+                      : [];
+                  return (
+                    <div key={section.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          <span className="mr-2 text-xs font-bold text-muted">{sectionIdx + 1}.</span>
+                          {section.title}
+                        </p>
+                        {applicationMode === "custom" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 rounded-full px-3 text-xs"
+                            data-attr="listing-application-add-question"
+                            onClick={() => addCustomQuestion(section.id)}
+                          >
+                            + Add custom question
+                          </Button>
+                        ) : null}
+                      </div>
+                      <div className="space-y-3 px-4 py-3">
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+                            Standard questions
+                          </p>
+                          <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                            {section.standardFields.map((f) => (
+                              <li
+                                key={f}
+                                className="rounded-full bg-accent/40 px-2.5 py-1 text-[11px] font-medium text-muted"
+                              >
+                                {f}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        {sectionQuestions.length > 0 ? (
+                          <div className="space-y-3 border-t border-border pt-3">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+                              Your custom questions
+                            </p>
+                            {sectionQuestions.map((field) => {
+                              const err = stepFieldErrors[listingCustomQuestionErrorKey(field.id)];
+                              return (
+                                <div
+                                  key={field.id}
+                                  data-wizard-field={listingCustomQuestionErrorKey(field.id)}
+                                  className={`space-y-3 rounded-xl border p-3 ${err ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
+                                >
+                                  <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                                    <div>
+                                      <FieldLabel>Question</FieldLabel>
+                                      <Input
+                                        value={field.label}
+                                        onChange={(e) => patchCustomQuestion(field.id, { label: e.target.value })}
+                                        placeholder="e.g. Do you smoke?"
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="pb-2 text-xs font-semibold text-rose-600 hover:underline"
+                                      onClick={() => removeCustomQuestion(field.id)}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                      <FieldLabel>Answer type</FieldLabel>
+                                      <Select
+                                        value={field.type}
+                                        onChange={(e) =>
+                                          patchCustomQuestion(field.id, {
+                                            type: e.target.value as ManagerCustomApplicationFieldType,
+                                          })
+                                        }
+                                      >
+                                        {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
+                                          <option key={o.id} value={o.id}>
+                                            {o.label}
+                                          </option>
+                                        ))}
+                                      </Select>
+                                    </div>
+                                    <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
+                                      <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-border text-primary"
+                                        checked={field.required}
+                                        onChange={(e) => patchCustomQuestion(field.id, { required: e.target.checked })}
+                                      />
+                                      <span className="text-sm font-medium text-foreground">Required</span>
+                                    </label>
+                                  </div>
+                                  {field.type === "select" ? (
+                                    <div>
+                                      <FieldLabel>Dropdown options</FieldLabel>
+                                      <Input
+                                        value={questionOptionsText(field)}
+                                        onChange={(e) => setQuestionOptionsText(field.id, e.target.value)}
+                                        placeholder="Comma-separated, e.g. Yes, No, Occasionally"
+                                      />
+                                    </div>
+                                  ) : null}
+                                  <StepFieldError msg={err} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </FormSection>
+          ) : null}
+
+          {/* ── Step 8: Lease ── */}
+          {stepIndex === 8 ? (
+          <FormSection
+            id="edit-leasedoc"
+            title="Lease"
+            description="Choose how the lease document is created when you place a resident at this property."
+          >
+            <div className="space-y-6">
+              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-card p-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+                  data-attr="listing-lease-standard-toggle"
+                  checked={leaseMode === "standard"}
+                  onChange={(e) => {
+                    setStepFieldErrors({});
+                    setSub((s) => ({ ...s, leaseConfigMode: e.target.checked ? "standard" : "custom" }));
+                  }}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">Use Axis standard system</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                    Axis generates a complete room-rental lease from the approved application and this listing — rent,
+                    deposits, house rules, and local disclosures included. Uncheck to add your own lease terms or upload
+                    a lease template.
+                  </span>
+                </span>
+              </label>
+
+              {leaseMode === "custom" ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {([
+                      {
+                        kind: "terms" as const,
+                        title: "Add custom lease information",
+                        detail: "Write the clauses you want. Axis adds them to the generated lease as an addendum.",
+                      },
+                      {
+                        kind: "document" as const,
+                        title: "Upload a lease template (PDF)",
+                        detail: "Your document becomes the lease text. Axis adds a placement summary and e-signatures.",
+                      },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.kind}
+                        type="button"
+                        data-attr={`listing-lease-kind-${opt.kind}`}
+                        onClick={() => setSub((s) => ({ ...s, leaseCustomKind: opt.kind }))}
+                        className={`rounded-2xl border p-4 text-left transition ${
+                          leaseKind === opt.kind
+                            ? "border-primary bg-primary/10 ring-1 ring-primary/25"
+                            : "border-border bg-card hover:border-primary/30"
+                        }`}
+                      >
+                        <p className="text-sm font-semibold text-foreground">{opt.title}</p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted">{opt.detail}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {leaseKind === "terms" ? (
+                    <div data-wizard-field="customLeaseTerms">
+                      <FieldLabel hint="One clause per paragraph. These appear in the generated lease as “Additional Provisions from Property Manager”." required>
+                        Custom lease information
+                      </FieldLabel>
+                      <textarea
+                        rows={8}
+                        value={sub.customLeaseTerms ?? ""}
+                        onChange={(e) => {
+                          clearListingFieldError("customLeaseTerms");
+                          setSub((s) => ({ ...s, customLeaseTerms: e.target.value }));
+                        }}
+                        placeholder={"e.g. Parking: one assigned spot in the rear lot is included.\n\nSmoking is prohibited everywhere on the property, including balconies."}
+                        className={wizardFieldErrorClass(
+                          Boolean(stepFieldErrors.customLeaseTerms),
+                          "w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20",
+                        )}
+                      />
+                      <StepFieldError msg={stepFieldErrors.customLeaseTerms} />
+                    </div>
+                  ) : (
+                    <div data-wizard-field="leaseTemplateDoc">
+                      <FieldLabel hint="PDF up to 8 MB. Used as the lease document for every placement at this property." required>
+                        Lease template
+                      </FieldLabel>
+                      {sub.leaseTemplateDocUrl ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3.5 py-3">
+                          <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                            📄 {sub.leaseTemplateDocName?.trim() || "Lease template.pdf"}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            {!sub.leaseTemplateDocUrl.startsWith("data:") ? (
+                              <a
+                                href={sub.leaseTemplateDocUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-semibold text-primary hover:underline"
+                              >
+                                View
+                              </a>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-rose-600 hover:underline"
+                              onClick={() =>
+                                setSub((s) => ({ ...s, leaseTemplateDocUrl: null, leaseTemplateDocName: "" }))
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <label
+                          className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-dashed px-4 py-8 text-center transition hover:border-primary/40 ${
+                            stepFieldErrors.leaseTemplateDoc ? "border-red-400 ring-2 ring-red-100" : "border-border bg-accent/20"
+                          }`}
+                        >
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            className="hidden"
+                            data-attr="listing-lease-template-upload"
+                            onChange={(e) => {
+                              onPickLeaseTemplateDoc(e.target.files?.[0] ?? null);
+                              e.target.value = "";
+                            }}
+                          />
+                          <span className="text-sm font-semibold text-foreground">Upload lease template (PDF)</span>
+                          <span className="text-xs text-muted">Click to choose a file · up to 8 MB</span>
+                        </label>
+                      )}
+                      <StepFieldError msg={stepFieldErrors.leaseTemplateDoc} />
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </FormSection>
+          ) : null}
+
+          {/* ── Step 9: Highlights ── */}
+          {stepIndex === 9 ? (
           <FormSection
             id="edit-highlights"
             title="Highlights & submit"
@@ -4037,12 +4491,12 @@ export function ManagerAddListingForm({
             <textarea rows={3} value={serviceForm.description} onChange={(e) => setServiceForm((f) => ({ ...f, description: e.target.value }))} placeholder="What's included, how it works…" className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-200" />
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <div className="mt-4 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setServiceModalOpen(false)}>Cancel</Button>
           <Button type="button" className="rounded-full" onClick={handleSaveService} disabled={!serviceForm.name.trim()}>{editingOffer ? "Save changes" : "Add request"}</Button>
         </div>
       </Modal>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }

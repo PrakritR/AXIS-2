@@ -4,9 +4,10 @@
  * Signing order: manager prepares/sends → resident signs → manager countersigns → fully signed.
  */
 
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { type ManagerLeaseBucket, type ManagerLeaseTab } from "@/data/demo-portal";
-import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
+import { buildAiGeneratedLeaseHtml, leaseContextFromApplication, leaseTemplateDocForContext } from "@/lib/generated-lease";
 import {
   isLeaseGenerationSupported,
   resolveLeaseJurisdiction,
@@ -331,12 +332,16 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
 }
 
 function leasePipelineSessionKey(scopeUserId?: string | null): string {
+  // Demo sandbox: one shared store for every scope, so the demo manager and
+  // demo resident read/write the SAME lease rows (a resident signature is
+  // immediately visible on the manager side and vice versa).
+  if (isDemoModeActive()) return `${LEASE_PIPELINE_SESSION_KEY_PREFIX}:shared`;
   if (scopeUserId) return `${LEASE_PIPELINE_SESSION_KEY_PREFIX}:${scopeUserId}`;
   return `${LEASE_PIPELINE_SESSION_KEY_PREFIX}:shared`;
 }
 
 function ensureLeasePipelineScope(scopeUserId?: string | null) {
-  const nextScope = scopeUserId ?? undefined;
+  const nextScope = isDemoModeActive() ? undefined : scopeUserId ?? undefined;
   if (activeLeasePipelineScopeUserId !== nextScope) {
     activeLeasePipelineScopeUserId = nextScope;
     memoryRows = [];
@@ -441,6 +446,16 @@ function approvedLeasePlacementLabel(input: {
   return [propertyTitle, roomLabel].filter(Boolean).join(" · ") || propertyTitle || "—";
 }
 
+/** Demo seed: load lease-pipeline rows into the local store without server mirror. */
+export function seedDemoLeasePipeline(rows: LeasePipelineRow[], scopeUserId: string): void {
+  if (!canUseStorage()) return;
+  ensureLeasePipelineScope(scopeUserId);
+  memoryRows = rows.map(normalizeLeasePipelineRow);
+  persistLeasePipelineToSession(memoryRows, scopeUserId);
+  leasePipelineLastSyncedAt = Date.now();
+  emit();
+}
+
 function readRaw(scopeUserId?: string | null): LeasePipelineRow[] | null {
   ensureLeasePipelineScope(scopeUserId);
   hydrateLeasePipelineFromSession(scopeUserId ?? activeLeasePipelineScopeUserId);
@@ -455,6 +470,9 @@ function write(rows: LeasePipelineRow[], scopeUserId?: string | null) {
   persistLeasePipelineToSession(rows, scopeUserId ?? activeLeasePipelineScopeUserId);
   leasePipelineLastSyncedAt = Date.now();
   emit();
+  // Demo sandbox is local-only: keep the in-memory/session write but never
+  // mirror to the server.
+  if (isDemoModeActive()) return;
   const payload = JSON.stringify({ action: "replace", rows });
   const byteLength = new TextEncoder().encode(payload).length;
   const shouldUseRowUpserts = byteLength > 3_500_000 || rows.some((row) => Boolean(row.managerUploadedPdf?.dataUrl));
@@ -506,7 +524,7 @@ function findRawLeaseRowIndex(rowId: string, managerUserId?: string | null): num
 export type LeasePipelineActionResult = { ok: true } | { ok: false; error: string };
 
 function persistLeaseRowToServer(row: LeasePipelineRow) {
-  if (!canUseStorage()) return;
+  if (!canUseStorage() || isDemoModeActive()) return;
   void fetch("/api/portal-lease-pipeline", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -517,6 +535,7 @@ function persistLeaseRowToServer(row: LeasePipelineRow) {
 
 async function persistLeaseRowToServerAwait(row: LeasePipelineRow): Promise<boolean> {
   if (!canUseStorage()) return false;
+  if (isDemoModeActive()) return true;
   try {
     const res = await fetch("/api/portal-lease-pipeline", {
       method: "POST",
@@ -714,6 +733,7 @@ export async function syncLeasePipelineFromServer(managerUserId?: string | null,
   if (!canUseStorage()) return [];
   ensureLeasePipelineScope(managerUserId);
   hydrateLeasePipelineFromSession(managerUserId);
+  if (isDemoModeActive()) return readLeasePipeline(managerUserId);
   const force = opts?.force === true;
   if (!force && leasePipelineSyncPromise) return leasePipelineSyncPromise;
   if (!force && leasePipelineLastSyncedAt > 0 && Date.now() - leasePipelineLastSyncedAt < LEASE_PIPELINE_SYNC_TTL_MS) {
@@ -1005,6 +1025,8 @@ export function leaseGenerationSupportedForRow(row: LeasePipelineRow): { ok: tru
     return { ok: false, error: "No application data on file." };
   }
   const ctx = leaseContextFromApplication(app as RentalWizardFormState);
+  // Properties with a manager-uploaded lease template can generate anywhere.
+  if (leaseTemplateDocForContext(ctx)) return { ok: true };
   const jurisdiction = resolveLeaseJurisdiction(ctx);
   if (!isLeaseGenerationSupported(jurisdiction)) {
     return { ok: false, error: unsupportedJurisdictionMessage(jurisdiction) };
@@ -1123,7 +1145,7 @@ export function regenerateAllLeaseHtml(managerUserId?: string | null): {
     if (signed) {
       try {
         const ctx = leaseContextFromApplication(app as RentalWizardFormState);
-        if (!isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
+        if (!leaseTemplateDocForContext(ctx) && !isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
           skipped++;
           continue;
         }
@@ -1153,7 +1175,7 @@ export function regenerateAllLeaseHtml(managerUserId?: string | null): {
     }
     try {
       const ctx = leaseContextFromApplication(app as RentalWizardFormState);
-      if (!isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
+      if (!leaseTemplateDocForContext(ctx) && !isLeaseGenerationSupported(resolveLeaseJurisdiction(ctx))) {
         skipped++;
         continue;
       }

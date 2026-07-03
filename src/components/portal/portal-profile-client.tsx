@@ -10,7 +10,7 @@ import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { useIsNativeApp, useNativeChrome } from "@/hooks/use-is-native-app";
+import { useNativeChrome } from "@/hooks/use-is-native-app";
 import type { PortalKind } from "@/lib/portal-types";
 
 function dashToEmpty(v: string) {
@@ -235,16 +235,10 @@ export function PortalProfileClient({
         <div className="space-y-3 [html[data-native]_&]:space-y-2.5">
           <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">{inner}</Card>
           <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">
-            <h2 className="text-base font-semibold tracking-tight text-foreground">Billing</h2>
-            <div className="mt-4">
-              <ManagerPlan embedded />
-            </div>
+            <ManagerPlan embedded showCurrentPlan={false} />
           </Card>
           <NotificationsToggle />
-          <PortalChangePasswordPanel
-            accountEmail={dashToEmpty(initialEmail) || initialEmail}
-            accountLabel="your property portal account"
-          />
+          <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
           <PortalSettingsExtras currentKind={portalKind} />
         </div>
       </ManagerPortalPageShell>
@@ -275,10 +269,7 @@ export function PortalProfileClient({
         <NotificationsToggle />
       </div>
       <div className="mt-6">
-        <PortalChangePasswordPanel
-          accountEmail={dashToEmpty(initialEmail) || initialEmail}
-          accountLabel="your admin account"
-        />
+        <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
       </div>
       <div className="mt-6">
         <PortalSettingsExtras currentKind={portalKind} />

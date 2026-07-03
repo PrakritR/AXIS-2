@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Link2,
   LogIn,
+  Megaphone,
   MessageSquare,
   ScrollText,
   Settings,
@@ -42,6 +43,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   plan: CreditCard,
   relationships: Link2,
   "move-in": LogIn,
+  promotion: Megaphone,
 };
 
 export function PortalNavIcon({ section, className }: { section: string; className?: string }) {

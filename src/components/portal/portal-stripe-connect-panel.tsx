@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { openAppUrl, shouldUseInAppConnectFlow } from "@/lib/native/open-url";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 type ConnectStatus = {
   connected: boolean;
@@ -45,6 +46,10 @@ export function PortalStripeConnectPanel({
   const handledConnectParam = useRef(false);
 
   const loadStatus = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setStatusLoaded(true);
+      return;
+    }
     try {
       const res = await fetch("/api/stripe/connect/status", { credentials: "include" });
       const body = (await res.json()) as ConnectStatus & { error?: string };
@@ -207,7 +212,7 @@ export function PortalStripeConnectPanel({
           className={`flex min-h-9 shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 disabled:opacity-60 ${
             ready
               ? "border border-border bg-card/80 text-foreground shadow-[var(--shadow-sm)] hover:border-primary/30"
-              : "bg-[var(--btn-primary)] text-white hover:opacity-90"
+              : "btn-cobalt hover:opacity-90"
           }`}
           disabled={busy}
           onClick={() => void startConnect()}
@@ -267,7 +272,7 @@ export function PortalStripeConnectPanel({
         >
           {ready ? (
             <div className="flex w-full flex-wrap items-center justify-between gap-3">
-              <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold portal-badge-success">
+              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                 Bank linked
               </span>
               <Button
@@ -282,7 +287,7 @@ export function PortalStripeConnectPanel({
             </div>
           ) : (
             <div className="flex w-full flex-wrap items-center justify-between gap-3">
-              <span className="inline-flex items-center rounded-full border border-border bg-accent/30 px-3 py-1 text-xs font-semibold text-muted">
+              <span className="inline-flex items-center rounded-full border border-border bg-accent/30 px-2.5 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                 {status?.connected ? "Finish setup" : "Not connected"}
               </span>
               <Button

@@ -284,7 +284,7 @@ export function filterRoomListings(
           title: formatRoomListingSubtitle({ floorLabel: floor.floorLabel, room, neighborhood: p.neighborhood }),
           streetUpper: streetUpperFromProperty(p),
           neighborhood: p.neighborhood,
-          priceLabel: room.price.includes("/mo") ? room.price : room.price.replace("/month", "/month"),
+          priceLabel: room.price,
           rentNumeric,
           availabilityLabel: availabilityLabel(room),
           bathroomHint: bathroomHintFromRoom(room),

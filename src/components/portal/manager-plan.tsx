@@ -5,7 +5,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { flushSync } from "react-dom";
 import { track } from "@/lib/analytics/track-client";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { formatPacificDate } from "@/lib/pacific-time";
@@ -110,7 +110,10 @@ type PlanModalState =
       fromTier: ManagerSkuTier;
     };
 
-export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
+export function ManagerPlan({
+  embedded = false,
+  showCurrentPlan = true,
+}: { embedded?: boolean; showCurrentPlan?: boolean } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const planBasePath = "/portal";
@@ -128,6 +131,9 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
   const [planModal, setPlanModal] = useState<PlanModalState>(null);
   const [feedbackReason, setFeedbackReason] = useState("");
   const [feedbackBusy, setFeedbackBusy] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -236,10 +242,12 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
   );
 
   const closePlanModal = useCallback(() => {
-    if (feedbackBusy) return;
+    if (feedbackBusy || promoBusy) return;
     setPlanModal(null);
     setFeedbackReason("");
-  }, [feedbackBusy]);
+    setPromoCode("");
+    setPromoError(null);
+  }, [feedbackBusy, promoBusy]);
 
   const planModalTitle = useMemo(() => {
     if (!planModal) return "";
@@ -292,6 +300,8 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
 
   const startEmbeddedCheckout = async (tier: "pro" | "business", billingInterval: "monthly" | "annual") => {
     flushSync(() => setBusyTier(tier));
+    setPromoCode("");
+    setPromoError(null);
     setPlanModal({ kind: "checkout", tier, billing: billingInterval, clientSecret: null, loading: true });
     track("subscription_checkout_started", { tier, billing: billingInterval });
     try {
@@ -313,6 +323,40 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
       setPlanModal(null);
     } finally {
       setBusyTier(null);
+    }
+  };
+
+  const applyPromoCode = async () => {
+    if (!planModal || planModal.kind !== "checkout" || promoBusy) return;
+    const code = promoCode.trim();
+    if (!code) {
+      setPromoError("Enter a promo code.");
+      return;
+    }
+    setPromoError(null);
+    flushSync(() => setPromoBusy(true));
+    try {
+      const res = await fetch("/api/stripe/subscription/update-tier", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: planModal.tier, billing: planModal.billing, promo: code }),
+      });
+      const body = (await res.json()) as { error?: string; message?: string; waiverApplied?: boolean };
+      if (!res.ok) {
+        setPromoError(body.error ?? "Could not apply promo code.");
+        return;
+      }
+      const appliedTier = planModal.tier;
+      setPlanModal(null);
+      setPromoCode("");
+      showToast(body.message ?? `Promo code applied — you're now on ${tierLabel(appliedTier)}.`);
+      await load();
+      startTransition(() => router.refresh());
+    } catch {
+      setPromoError("Network error. Try again.");
+    } finally {
+      setPromoBusy(false);
     }
   };
 
@@ -532,7 +576,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
       id={embedded ? MANAGER_PLAN_PORTAL_SECTION_ID : undefined}
     >
         {/* Current plan summary */}
-        {!sub ? (
+        {showCurrentPlan && (!sub ? (
           <div className="h-36 animate-pulse rounded-2xl border border-border bg-accent/30" aria-hidden />
         ) : (
           <section className="surface-panel overflow-hidden rounded-2xl border border-border shadow-[var(--shadow-card)]">
@@ -575,7 +619,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
                 )}
               </div>
 
-              <div className="flex flex-wrap items-end gap-2 sm:justify-end">
+              <div className="flex flex-wrap items-end gap-2 sm:justify-start">
                 {sub.stripeManaged && currentTier !== "free" ? (
                   <Button
                     type="button"
@@ -675,7 +719,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
               </div>
             ) : null}
           </section>
-        )}
+        ))}
 
         {/* Compare plans */}
         <section>
@@ -831,6 +875,54 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
             <p className="text-sm font-medium text-foreground">
               {planPriceLabel(planTiers, planModal.tier, planModal.billing)}
             </p>
+            <div className="rounded-xl border border-border bg-accent/20 px-4 py-3">
+              <label className="text-sm font-semibold text-foreground" htmlFor="plan-promo-code">
+                Have a promo code?
+              </label>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="min-w-40 flex-1">
+                  <Input
+                    id="plan-promo-code"
+                    value={promoCode}
+                    onChange={(e) => {
+                      setPromoCode(e.target.value);
+                      if (promoError) setPromoError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void applyPromoCode();
+                      }
+                    }}
+                    placeholder="Enter code"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={promoBusy}
+                    className="uppercase placeholder:normal-case"
+                    data-attr="plan-promo-code-input"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full text-[13px]"
+                  disabled={promoBusy || !promoCode.trim()}
+                  onClick={() => void applyPromoCode()}
+                  data-attr="plan-promo-code-apply"
+                >
+                  {promoBusy ? "Applying…" : "Apply"}
+                </Button>
+              </div>
+              {promoError ? (
+                <p className="mt-2 text-xs font-medium text-[var(--status-overdue-fg)]" role="alert">
+                  {promoError}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted">
+                  A valid code activates {tierLabel(planModal.tier)} instantly — no card required.
+                </p>
+              )}
+            </div>
             {planModal.clientSecret ? (
               <EmbeddedCheckoutMount
                 clientSecret={planModal.clientSecret}
@@ -849,7 +941,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
               Upgrade to <span className="font-semibold text-foreground">{tierLabel(planModal.target)}</span> now? Your
               saved card will be charged with proration. Changes apply immediately in your Axis portal.
             </p>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Cancel
               </Button>
@@ -873,7 +965,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
               )}
               .
             </p>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Keep {tierLabel(currentTier)}
               </Button>
@@ -897,7 +989,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
               )}
               , you can switch back to monthly billing if you prefer.
             </p>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Keep monthly
               </Button>
@@ -934,7 +1026,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
               />
               <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closePlanModal}>
                 Keep annual
               </Button>
@@ -977,7 +1069,7 @@ export function ManagerPlan({ embedded = false }: { embedded?: boolean } = {}) {
               />
               <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closePlanModal}>
                 Keep my plan
               </Button>

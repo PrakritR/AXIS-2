@@ -54,6 +54,16 @@ function allLabelForCategory(category: InboxRecipientCategory): string {
 
 const CATEGORY_ORDER: InboxRecipientCategory[] = ["admin", "management", "resident"];
 
+/**
+ * Categories the sender may actually reach. Residents can only message Axis admin
+ * and their own managers — never other residents — so the Resident bucket is
+ * hidden for them (the server enforces the same scope regardless).
+ */
+function visibleCategoriesForPortal(portal: "resident" | "manager"): InboxRecipientCategory[] {
+  if (portal === "resident") return ["admin", "management"];
+  return CATEGORY_ORDER;
+}
+
 export function ScopedInboxComposeModal({
   open,
   onClose,
@@ -75,6 +85,7 @@ export function ScopedInboxComposeModal({
   liveContacts?: InboxScopedContact[];
 }) {
   const { showToast } = useAppUi();
+  const visibleCategories = useMemo(() => visibleCategoriesForPortal(portal), [portal]);
   const contacts = useMemo(() => contactsForPortal(portal, liveContacts), [portal, liveContacts]);
   const [broadcastCats, setBroadcastCats] = useState<Set<InboxRecipientCategory>>(new Set());
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
@@ -299,7 +310,7 @@ export function ScopedInboxComposeModal({
         </div>
 
         <div className="space-y-3">
-          {CATEGORY_ORDER.map((category) => {
+          {visibleCategories.map((category) => {
             const titleCase =
               category === "admin" ? "Admin" : category === "management" ? "Management" : "Resident";
             const subtitle = categoryHint(portal, category);
@@ -416,7 +427,7 @@ export function ScopedInboxComposeModal({
           )}
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2 pt-2">
+        <div className="flex flex-wrap justify-start gap-2 pt-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Cancel
           </Button>

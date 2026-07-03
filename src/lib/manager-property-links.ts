@@ -1,7 +1,8 @@
 import type { AdminPropertyRow } from "@/lib/demo-admin-property-inventory";
+import type { MockProperty } from "@/data/types";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
-import { readExtraListingsForUser, readAllExtraListings } from "@/lib/demo-property-pipeline";
-import { collectAccessiblePropertyIds, readLinkedListingsForUser, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
+import { readExtraListingsForUser } from "@/lib/demo-property-pipeline";
+import { readLinkedListingsForUser, safePropertyOptionLabel, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 
 export type ManagerApplyLinkParams = {
   propertyId: string;
@@ -37,33 +38,67 @@ export function managerPropertyIdForLinks(row: Pick<AdminPropertyRow, "listingId
   return id;
 }
 
+/** Matches a raw demo seed key, e.g. "seed-1782590281847". */
+const RAW_SEED_KEY = /seed-[a-z0-9]{6,}/i;
+
+/**
+ * Clean, human display name for a property option — never the raw seed key.
+ * Prefers a real name (title / building name), falls back to the address, and
+ * only as a last resort strips the seed key out of whatever text exists.
+ */
+export function cleanPropertyDisplayName(p: Pick<MockProperty, "title" | "buildingName" | "unitLabel" | "address">): string {
+  const title = p.title?.trim() ?? "";
+  const building = p.buildingName?.trim() ?? "";
+  const unit = p.unitLabel?.trim() ?? "";
+  const address = p.address?.trim() ?? "";
+  if (title && !RAW_SEED_KEY.test(title)) return title;
+  if (building && !RAW_SEED_KEY.test(building)) return unit ? `${building} · ${unit}` : building;
+  if (address) return address;
+  const stripped = (title || building).replace(RAW_SEED_KEY, "").trim();
+  return stripped || "Property";
+}
+
+export type ManagerPromotionPropertyOption = { id: string; label: string; property: MockProperty };
+
+/**
+ * Owner-scoped property options for the Promotion flyer form. Mirrors
+ * {@link buildManagerShareablePropertyOptions} scoping (the manager's OWN live
+ * listings plus properties assigned via an accepted co-manager link) but returns
+ * the full property so the form can prefill facts, and uses a clean display name
+ * instead of the raw seed key.
+ */
+export function buildManagerPromotionPropertyOptions(userId: string | null): ManagerPromotionPropertyOption[] {
+  if (!userId) return [];
+  const byId = new Map<string, MockProperty>();
+  for (const p of readExtraListingsForUser(userId)) {
+    if (p.adminPublishLive !== true) continue;
+    if (!byId.has(p.id)) byId.set(p.id, p);
+  }
+  for (const { listing } of readLinkedListingsForUser(userId)) {
+    if (listing.adminPublishLive !== true) continue;
+    if (!byId.has(listing.id)) byId.set(listing.id, listing);
+  }
+  return [...byId.values()]
+    .map((property) => ({ id: property.id, label: cleanPropertyDisplayName(property), property }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+}
+
 /** Active listed properties managers can share apply/tour links for. */
 export function buildManagerShareablePropertyOptions(userId: string | null): ManagerPropertyFilterOption[] {
   if (!userId) return [];
   const labelById = new Map<string, string>();
   for (const p of readExtraListingsForUser(userId)) {
     if (p.adminPublishLive !== true) continue;
-    labelById.set(p.id, (p.title || p.buildingName || p.address).trim() || p.id);
+    labelById.set(p.id, safePropertyOptionLabel([p.title, p.buildingName, p.address], p.id));
   }
   for (const { listing } of readLinkedListingsForUser(userId)) {
     if (listing.adminPublishLive !== true) continue;
     if (labelById.has(listing.id)) continue;
-    labelById.set(listing.id, (listing.title || listing.buildingName || listing.address).trim() || listing.id);
+    labelById.set(listing.id, safePropertyOptionLabel([listing.title, listing.buildingName, listing.address], listing.id));
   }
   return [...labelById.entries()]
     .map(([id, label]) => ({ id, label }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-}
-
-export function managerCanSharePropertyForUser(userId: string | null, propertyId: string): boolean {
-  if (!userId) return false;
-  const id = propertyId.trim();
-  if (!id || !collectAccessiblePropertyIds(userId).has(id)) return false;
-  const listing =
-    readExtraListingsForUser(userId).find((p) => p.id === id) ??
-    readAllExtraListings().find((p) => p.id === id);
-  if (!listing) return false;
-  return listing.adminPublishLive === true;
 }
 
 export async function copyTextToClipboard(text: string): Promise<boolean> {

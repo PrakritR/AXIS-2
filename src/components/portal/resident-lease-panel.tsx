@@ -6,9 +6,11 @@ import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseReportIssueModal } from "@/components/portal/lease-report-issue-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { formatPacificDate, safeFormatDateTime } from "@/lib/pacific-time";
+import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
+import { safeFormatDateTime } from "@/lib/pacific-time";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
@@ -34,21 +36,33 @@ import {
 import { resolveResidentPortalAxisId } from "@/lib/manager-applications-storage";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
+/**
+ * Self-contained resident Lease tab: review + sign the lease, report an issue
+ * to the manager at any point (delivered to their inbox and email), and
+ * download or upload the document. General document uploads live in
+ * Documents › Other documents, not here.
+ */
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
   const session = usePortalSession();
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pipelineTick, setPipelineTick] = useState(0);
-  const [editRequestDraft, setEditRequestDraft] = useState("");
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
+  const [reportIssueOpen, setReportIssueOpen] = useState(false);
+  const [reportIssueBusy, setReportIssueBusy] = useState(false);
   const [residentAxisId, setResidentAxisId] = useState("");
   const email = session.email?.trim() || null;
 
   useEffect(() => {
     if (!session.userId) return;
+    // Demo sandbox: never resolve an axis id from the real Supabase browser
+    // session — a visitor signed in to a real account would resolve THEIR id,
+    // which mismatches the seeded demo lease and hides it after first paint.
+    if (isDemoModeActive()) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -112,11 +126,9 @@ export function ResidentLeasePanel() {
     return gatherLeaseGenerationContext();
   }, [pipelineRow]);
 
-  const leaseLocked = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
+  /** Both manager AND resident signatures present. */
+  const leaseFullyExecuted = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow) && leaseAuthorized;
-  const usesElectronicSigning = Boolean(
-    pipelineRow?.generatedHtml || pipelineRow?.managerUploadedPdf?.dataUrl,
-  );
 
   const upgradeBreakdown = useMemo(() => {
     const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
@@ -135,15 +147,6 @@ export function ResidentLeasePanel() {
     if (!isShortTerm) return null;
     return shortToLongTermUpgradeBreakdown(propertyId, true);
   }, [pipelineRow, leaseCtx.application]);
-
-  const canSignElectronically = Boolean(
-    usesElectronicSigning && pipelineRow?.status === "Resident Signature Pending" && !pipelineRow.residentSignature && !leaseLocked,
-  );
-  const residentLeaseActions = Boolean(pipelineRow?.status === "Resident Signature Pending" && !leaseLocked);
-  const canRequestMoveOutChange = leaseLocked;
-  const canUseManualPdfFlow = Boolean(
-    pipelineRow?.managerUploadedPdf?.dataUrl && pipelineRow?.status === "Resident Signature Pending" && !leaseLocked,
-  );
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
@@ -169,7 +172,7 @@ export function ResidentLeasePanel() {
   }, [pipelineRow, onDownloadAiLease, showToast]);
 
   const onSignLease = () => {
-    if (!email || leaseLocked) return;
+    if (!email || leaseFullyExecuted) return;
     if (pipelineRow?.bucket !== "resident") {
       showToast("Signing opens when your manager sends the lease to you for resident signature.");
       return;
@@ -224,25 +227,54 @@ export function ResidentLeasePanel() {
     setPipelineTick((t) => t + 1);
   }, []);
 
+  const onSubmitReportIssue = async (subject: string, message: string) => {
+    if (!pipelineRow || !email || reportIssueBusy) return;
+    setReportIssueBusy(true);
+    try {
+      const leaseLabel = `${pipelineRow.residentName || "Resident"} — ${pipelineRow.unit || "unit"}`;
+      const fullSubject = `Lease issue — ${leaseLabel}: ${subject}`;
+      const body = [`Lease: ${leaseLabel}`, "", message, "", pipelineRow.residentName || "Resident"].join("\n");
+      const delivery = await deliverPortalInboxMessage({
+        fromName: pipelineRow.residentName || "Resident",
+        toBroadcast: ["management"],
+        subject: fullSubject,
+        text: body,
+      });
+      appendLeaseThreadMessage(pipelineRow.id, "resident", `${subject}\n\n${message}`);
+      if (delivery.ok) {
+        showToast(
+          delivery.skipped
+            ? "Message sent to your manager's Axis inbox."
+            : "Message sent to your manager's Axis inbox and email.",
+        );
+        setReportIssueOpen(false);
+        setPipelineTick((t) => t + 1);
+      } else {
+        showToast(delivery.error ?? "Could not send message.");
+      }
+    } finally {
+      setReportIssueBusy(false);
+    }
+  };
+
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
-    return (
-      <ManagerPortalPageShell title="Lease">
-        <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--glass-fill)] ring-1 ring-border">
-            <svg className="h-8 w-8 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-lg font-bold text-foreground">Your lease is being prepared</p>
-            <p className="mt-1.5 max-w-sm text-sm text-muted">
-              Once your manager finalises and sends your lease to you, it will appear here ready for review and signature.
-            </p>
-          </div>
-          <p className="text-xs text-muted">Check back soon — this page updates automatically.</p>
+    const preparing = (
+      <div className="flex flex-col items-center gap-4 py-16 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--glass-fill)] ring-1 ring-border">
+          <svg className="h-8 w-8 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+          </svg>
         </div>
-      </ManagerPortalPageShell>
+        <div>
+          <p className="text-lg font-bold text-foreground">Your lease is being prepared</p>
+          <p className="mt-1.5 max-w-sm text-sm text-muted">
+            Once your manager finalises and sends your lease to you, it will appear here ready for review and signature.
+          </p>
+        </div>
+        <p className="text-xs text-muted">Check back soon — this page updates automatically.</p>
+      </div>
     );
+    return <ManagerPortalPageShell title="Lease">{preparing}</ManagerPortalPageShell>;
   }
 
   return (
@@ -276,50 +308,48 @@ export function ResidentLeasePanel() {
         onSuccess={() => void handleMoveOutSuccess()}
       />
 
+      <LeaseReportIssueModal
+        open={reportIssueOpen}
+        recipientLabel="your property manager"
+        leaseLabel={pipelineRow ? `${pipelineRow.residentName || "You"} — ${pipelineRow.unit || "unit"}` : ""}
+        busy={reportIssueBusy}
+        onClose={() => {
+          if (reportIssueBusy) return;
+          setReportIssueOpen(false);
+        }}
+        onSubmit={(subject, message) => void onSubmitReportIssue(subject, message)}
+      />
+
       <ManagerPortalPageShell
         title="Lease"
         titleAside={
           <>
-            {canRequestMoveOutChange ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0 rounded-full"
-                onClick={() => setShowMoveOutModal(true)}
-              >
-                Renew or extend lease
-              </Button>
-            ) : null}
-            {canUseManualPdfFlow ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="shrink-0 rounded-full"
-                  onClick={() => uploadRef.current?.click()}
-                  disabled={uploadingPdf}
-                >
-                  {uploadingPdf ? "Uploading PDF..." : "Upload PDF"}
-                </Button>
-                <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
-                  Send to manager
-                </Button>
-              </>
-            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              onClick={() => setShowMoveOutModal(true)}
+            >
+              Renew or extend lease
+            </Button>
             <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
               Download PDF
             </Button>
-            {usesElectronicSigning ? (
-              <Button
-                type="button"
-                variant="primary"
-                className="shrink-0 rounded-full"
-                disabled={!canSignElectronically}
-                onClick={() => onSignLease()}
-              >
-                {pipelineRow?.residentSignature ? "Resident signed" : "Sign lease"}
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              onClick={() => uploadRef.current?.click()}
+              disabled={uploadingPdf}
+            >
+              {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
+            </Button>
+            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
+              Send to manager
+            </Button>
+            <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => onSignLease()}>
+              {pipelineRow?.residentSignature ? "Resident signed" : "Sign lease"}
+            </Button>
           </>
         }
       >
@@ -363,49 +393,15 @@ export function ResidentLeasePanel() {
 
         {leaseVisibleToResident && pipelineRow && email ? (
           <Card className="glass-card border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted">Messages</p>
-            <textarea
-              rows={3}
-              value={editRequestDraft}
-              onChange={(e) => setEditRequestDraft(e.target.value)}
-              placeholder={residentLeaseActions ? "Ask for changes, or send a message to your manager…" : "Send a message to your manager…"}
-              className="mt-3 w-full resize-none rounded-2xl border border-border bg-[var(--glass-fill)] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/25"
-            />
-            <div className="mt-2.5">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={() => {
-                  if (!editRequestDraft.trim()) { showToast("Enter a message first."); return; }
-                  if (!pipelineRow) return;
-                  if (appendLeaseThreadMessage(pipelineRow.id, "resident", editRequestDraft.trim())) {
-                    showToast("Message sent.");
-                    setEditRequestDraft("");
-                    setPipelineTick((t) => t + 1);
-                  } else showToast("Could not send message.");
-                }}
-              >
-                Send message
+            <p className="text-xs font-bold uppercase tracking-wide text-muted">Have a question or issue with this lease?</p>
+            <p className="mt-1.5 text-sm text-muted">
+              Send a message to your property manager. It&apos;s delivered to their Axis inbox and by email.
+            </p>
+            <div className="mt-3">
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setReportIssueOpen(true)}>
+                Report issue
               </Button>
             </div>
-            {pipelineRow.thread?.length ? (
-              <>
-                <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">History</p>
-                <ul className="mt-2 space-y-2">
-                  {pipelineRow.thread.map((m) => (
-                    <li
-                      key={m.id}
-                      className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border portal-banner-info" : "border border-border bg-accent/30"}`}
-                    >
-                      <span className="font-semibold text-foreground">{m.role === "resident" ? "You" : "Manager"}</span>
-                      <span className="ml-1.5 text-xs text-muted">{safeFormatDateTime(m.at)}</span>
-                      <p className="mt-1 whitespace-pre-wrap text-muted">{m.body}</p>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
           </Card>
         ) : null}
 

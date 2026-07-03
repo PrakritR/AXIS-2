@@ -8,12 +8,14 @@ export type PortalMessageDeliveryResult = {
 
 export async function deliverPortalInboxMessage(input: {
   fromName?: string;
-  toEmails: string[];
+  toEmails?: string[];
+  /** Resolve recipients from the sender's own relationships instead of explicit emails (e.g. a resident messaging "their manager"). */
+  toBroadcast?: ("management" | "resident")[];
   subject: string;
   text: string;
 }): Promise<PortalMessageDeliveryResult> {
-  const toEmails = input.toEmails.map((e) => e.trim()).filter((e) => e.includes("@"));
-  if (toEmails.length === 0) {
+  const toEmails = (input.toEmails ?? []).map((e) => e.trim()).filter((e) => e.includes("@"));
+  if (toEmails.length === 0 && !input.toBroadcast?.length) {
     return { ok: false, error: "A valid recipient email is required." };
   }
   try {
@@ -24,6 +26,7 @@ export async function deliverPortalInboxMessage(input: {
       body: JSON.stringify({
         fromName: input.fromName ?? "Property Manager",
         toEmails,
+        toBroadcast: input.toBroadcast,
         subject: input.subject.trim(),
         text: input.text.trim(),
         deliverToPortalInbox: true,

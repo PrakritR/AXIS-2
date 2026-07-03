@@ -421,7 +421,7 @@ export function CosignerApplyFlow({
                         ? "bg-primary/15 text-primary"
                         : reachable
                           ? "bg-accent/30 text-muted hover:bg-accent/40"
-                          : "cursor-not-allowed bg-accent/30 text-slate-300"
+                          : "cursor-not-allowed bg-accent/30 text-foreground/30"
                   }`}
                 >
                   {completed ? "✓" : s.n}

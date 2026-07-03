@@ -85,7 +85,7 @@ export function PortalNotificationPreviewModal({
         {skipMessage ? (
           <p className="text-xs text-muted">The action will complete without sending this message.</p>
         ) : null}
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-start gap-2 pt-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             {cancelLabel}
           </Button>

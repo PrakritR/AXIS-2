@@ -3,6 +3,7 @@ import { cache } from "react";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { generateManagerId } from "@/lib/manager-id";
 import {
+  normalizeManagerSkuTier,
   pickBestManagerPurchaseRow,
   resolveManagerSubscriptionTierFromPurchase,
   type ManagerSkuTier,
@@ -83,24 +84,35 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
 });
 
 /**
- * Returns "free" if the manager's purchase row is tier free; "paid" if any paid tier;
- * null if no purchase row (legacy / unknown — treat as full access).
+ * The single authoritative manager access tier, sourced from the manager's OWN
+ * `manager_purchases` row — the SAME source and logic the Settings "Compare plans"
+ * page uses via `/api/manager/subscription`. Every portal surface (sidebar brand
+ * badge, sidebar feature-gating, page paywalls, reports) must resolve tier through
+ * here so they can never disagree with Settings.
+ *
+ * Authorization + expiry are enforced at WRITE time by `syncManagerPurchaseTierState`
+ * (revoke unauthorized self-assigned paid tiers, downgrade lapsed admin grants), which
+ * runs first here exactly as the Settings route does. We then TRUST the committed SKU:
+ * a pro/business row is paid, free is free, no row is legacy-unlimited. This mirrors
+ * Settings' `subscriptionJson` so the two are consistent by construction — no separate
+ * read-time downgrade that would show "Free" while Settings shows "Business".
+ *
+ * Returns "free" for the free tier, "paid" for pro/business, null when there is no
+ * purchase row (legacy / unknown — treat as full access).
  */
 const getManagerSubscriptionTierCached = cache(async (userId: string): Promise<ManagerSubscriptionTier> => {
   try {
     const { syncManagerPurchaseTierState } = await import("@/lib/manager-tier-sync");
     await syncManagerPurchaseTierState(userId);
-    const purchase = await getManagerPurchaseRowByUserId(userId);
     const rows = await loadManagerPurchaseRowsForUser(userId);
-    return resolveManagerSubscriptionTierFromPurchase({
-      tier: purchase.tier,
-      billing: purchase.billing,
-      stripeSubscriptionId: purchase.stripeSubscriptionId,
-      stripeCheckoutSessionId: purchase.stripeCheckoutSessionId,
-      promoCode: purchase.promoCode,
-      paidAt: purchase.paidAt,
-      hasPurchaseRow: rows.length > 0,
-    });
+    if (rows.length === 0) return null;
+    const purchase = await getManagerPurchaseRowByUserId(userId);
+    const sku = normalizeManagerSkuTier(purchase.tier);
+    if (sku === "free") return "free";
+    if (sku === "pro" || sku === "business") return "paid";
+    // Row exists but tier is missing/unrecognized — mirror Settings: Free unless a
+    // live Stripe subscription backs it.
+    return purchase.stripeSubscriptionId ? "paid" : "free";
   } catch {
     return null;
   }
@@ -158,20 +170,23 @@ export async function getManagerPurchaseSku(userId: string): Promise<{
 /**
  * Sets `manager_purchases.tier` for the account (service role). Creates a row if needed (same rules as checkout completion).
  * Admin overrides use `billing: "admin"` and clear any stale Stripe subscription id.
+ * Waiver grants (server-validated payment-waiver promo code) record `promo_code` so
+ * tier-sync treats the paid tier as authorized comp access without a Stripe subscription.
  */
 export async function setManagerPurchaseTier(
   userId: string,
   tier: ManagerSkuTier,
-  opts?: { adminOverride?: boolean },
+  opts?: { adminOverride?: boolean; waiver?: { promoCode: string; billing: "monthly" | "annual" } },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!opts?.adminOverride && tier !== "free") {
+  const waiver = tier !== "free" ? opts?.waiver : undefined;
+  if (!opts?.adminOverride && !waiver && tier !== "free") {
     return { ok: false, error: "Paid plans require Stripe checkout or an admin assignment." };
   }
 
   const supabase = createSupabaseServiceRoleClient();
   const billing =
-    tier === "free" ? "free" : opts?.adminOverride ? "admin" : "portal";
-  const clearStripeSubscription = tier === "free" || opts?.adminOverride || billing === "portal";
+    tier === "free" ? "free" : opts?.adminOverride ? "admin" : waiver ? waiver.billing : "portal";
+  const clearStripeSubscription = tier === "free" || opts?.adminOverride || Boolean(waiver) || billing === "portal";
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -190,6 +205,10 @@ export async function setManagerPurchaseTier(
     billing,
     user_id: userId,
   };
+  if (waiver) {
+    updatePatch.promo_code = waiver.promoCode;
+    updatePatch.paid_at = new Date().toISOString();
+  }
   if (clearStripeSubscription) {
     updatePatch.stripe_subscription_id = null;
   }
@@ -212,7 +231,7 @@ export async function setManagerPurchaseTier(
     if (profileErr) return { ok: false, error: profileErr.message };
   }
 
-  const sessionId = `admin_portal_${tier}_${userId}`;
+  const sessionId = waiver ? `axis_waiver_${tier}_${userId}` : `admin_portal_${tier}_${userId}`;
   const { error: insErr } = await supabase.from("manager_purchases").insert({
     stripe_checkout_session_id: sessionId,
     email,
@@ -220,6 +239,7 @@ export async function setManagerPurchaseTier(
     tier,
     billing,
     user_id: userId,
+    ...(waiver ? { promo_code: waiver.promoCode, paid_at: new Date().toISOString() } : {}),
   });
 
   if (insErr) {

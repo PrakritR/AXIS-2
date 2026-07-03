@@ -21,7 +21,7 @@ export function LeaseRegenerateConfirmModal({
         <p className={MODAL_WARNING_BOX_CLASS}>
           <strong>AI-generated draft.</strong> {LEASE_AI_REVIEW_DISCLAIMER}
         </p>
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-start gap-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
             Cancel
           </Button>

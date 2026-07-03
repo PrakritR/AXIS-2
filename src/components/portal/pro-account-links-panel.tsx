@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ManagerPortalFilterRow, ManagerPortalPageShell, MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT } from "@/components/portal/portal-metrics";
+import { Modal } from "@/components/ui/modal";
+import { ManagerPortalPageShell, MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -16,7 +17,6 @@ import {
 } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
-import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import {
   CO_MANAGER_PERMISSION_OPTIONS,
   EMPTY_CO_MANAGER_PERMISSIONS,
@@ -44,8 +44,6 @@ import {
   type ProRelationshipRecord,
 } from "@/lib/pro-relationships";
 import { maxAccountLinksForTier, normalizeManagerSkuTier } from "@/lib/manager-access";
-import Link from "next/link";
-import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 
 const CO_MANAGER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -181,7 +179,6 @@ function AddPropertyToCoManager({
 
 export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const { showToast } = useAppUi();
-  const planBase = usePaidPortalBasePath();
 
   const [localTick, setLocalTick] = useState(0);
   const refreshLocal = useCallback(() => setLocalTick((n) => n + 1), []);
@@ -319,6 +316,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   }, [userId, localTick]);
 
   const [axisInput, setAxisInput] = useState("");
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [lookupBusy, setLookupBusy] = useState(false);
   const [draftAxisId, setDraftAxisId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState<string | null>(null);
@@ -367,11 +365,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             ? skuTier
             : null;
 
-  const lookup = async () => {
+  const lookup = async (): Promise<boolean> => {
     const raw = axisInput.trim();
     if (!raw) {
       showToast(`Enter an ${AXIS_ID_LABEL}.`);
-      return;
+      return false;
     }
     setLookupBusy(true);
     setInviteeAtCap(false);
@@ -389,17 +387,24 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       if (!res.ok || !body.ok) {
         showToast(body.error ?? "Lookup failed.");
         setDraftAxisId(null);
-        return;
+        return false;
       }
       setDraftAxisId(raw);
       setDraftName(body.displayName ?? raw);
       setDraftUserId(body.userId ?? null);
       showToast("Account verified — assign properties, then send invite.");
+      return true;
     } catch {
       showToast("Network error.");
+      return false;
     } finally {
       setLookupBusy(false);
     }
+  };
+
+  const submitLinkAccount = async () => {
+    const ok = await lookup();
+    if (ok) setLinkModalOpen(false);
   };
 
   const toggleProp = (id: string) => {
@@ -827,29 +832,18 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   return (
     <ManagerPortalPageShell
       title="Co-managers"
-      filterRow={
-        <ManagerPortalFilterRow>
-          <label className="block min-w-0 flex-1 text-xs font-semibold text-muted sm:min-w-[16rem] sm:max-w-md">
-            {AXIS_ID_LABEL}
-            <input
-              type="text"
-              value={axisInput}
-              onChange={(e) => setAxisInput(e.target.value)}
-              placeholder="e.g. AXIS-1A2B3C4D"
-              className={`mt-1 h-10 w-full font-mono text-sm ${PORTAL_TOOLBAR_SELECT}`}
-            />
-          </label>
-          <Button
-            type="button"
-            variant="primary"
-            className={PORTAL_HEADER_ACTION_BTN}
-            disabled={lookupBusy || atLinkCap}
-            onClick={() => void lookup()}
-            title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
-          >
-            {lookupBusy ? "Checking…" : "Link account"}
-          </Button>
-        </ManagerPortalFilterRow>
+      titleAside={
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_HEADER_ACTION_BTN}
+          disabled={atLinkCap}
+          onClick={() => setLinkModalOpen(true)}
+          title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
+          data-attr="co-manager-link-account"
+        >
+          Link account
+        </Button>
       }
     >
       <div className="space-y-6">
@@ -874,9 +868,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 </span>
               ) : null}
             </div>
-            <Link href={MANAGER_PLAN_PORTAL_URL} className="text-sm font-semibold text-primary underline-offset-2 hover:underline">
-              Billing
-            </Link>
           </div>
         ) : null}
 
@@ -951,7 +942,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
               {incomingPending.map((inv) => (
                 <li
                   key={inv.id}
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3"
+                  className="flex flex-wrap items-start justify-start gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3"
                 >
                   <div>
                     <p className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
@@ -1133,7 +1124,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                       ) : (
                                         draft.assignedPropertyIds.map((pid) => (
                                           <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
-                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div className="flex flex-wrap items-start justify-start gap-3">
                                               <div>
                                                 <p className="text-sm font-semibold text-foreground">
                                                   {resolvePropertyLabel(pid, pid)}
@@ -1237,7 +1228,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                       ) : (
                                       r.assignedPropertyIds.map((pid) => (
                                         <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
-                                          <div className="flex flex-wrap items-start justify-between gap-3">
+                                          <div className="flex flex-wrap items-start justify-start gap-3">
                                             <div>
                                               <p className="text-sm font-semibold text-foreground">{resolvePropertyLabel(pid, pid)}</p>
                                               <p className="mt-1 text-xs text-muted">Permissions for this property</p>
@@ -1306,6 +1297,42 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             </div>
           )}
 
+        <Modal open={linkModalOpen} title="Link account" onClose={() => setLinkModalOpen(false)}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitLinkAccount();
+            }}
+            className="space-y-4"
+          >
+            <label className="block text-xs font-semibold text-muted">
+              {AXIS_ID_LABEL}
+              <input
+                type="text"
+                value={axisInput}
+                onChange={(e) => setAxisInput(e.target.value)}
+                placeholder="e.g. AXIS-1A2B3C4D"
+                autoFocus
+                className={`mt-1 h-10 w-full font-mono text-sm ${PORTAL_TOOLBAR_SELECT}`}
+              />
+            </label>
+            <div className="flex justify-start gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                disabled={lookupBusy}
+                onClick={() => setLinkModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" className="rounded-full" disabled={lookupBusy || atLinkCap}>
+                {lookupBusy ? "Checking…" : "Link account"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+
         {transferPropertyId ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 [html[data-theme=dark]_&]:bg-black/65">
             <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-lg">
@@ -1340,7 +1367,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-2">
+              <div className="mt-6 flex justify-start gap-2">
                 <Button
                   type="button"
                   variant="outline"

@@ -60,14 +60,16 @@ export function PublicNavbar() {
     [pathname],
   );
   const contactActive = useMemo(() => pathname === "/contact", [pathname]);
+  const demoActive = useMemo(() => pathname === "/demo" || pathname.startsWith("/demo/"), [pathname]);
 
   const menu: NavbarMenuItem[] = useMemo(
     () => [
       { title: "Partners", url: "/partner", active: partnerActive },
+      { title: "Demo", url: "/demo", active: demoActive },
       { title: "Pricing", url: "/partner/pricing", active: pricingActive },
       { title: "Contact", url: "/contact", active: contactActive },
     ],
-    [partnerActive, pricingActive, contactActive],
+    [demoActive, partnerActive, pricingActive, contactActive],
   );
 
   if (hideOnNative) return null;
@@ -82,7 +84,7 @@ export function PublicNavbar() {
         menu={menu}
         auth={{
           login: { text: "Log in", url: "/auth/sign-in" },
-          signup: { text: "Get started", url: "/auth/create-account" },
+          signup: { text: "Get started", url: "/partner/pricing" },
         }}
         portalLink={signedIn ? { text: "Portal", url: "/portal/dashboard" } : undefined}
         actionsSlot={<ThemeToggle />}

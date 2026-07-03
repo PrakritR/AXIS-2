@@ -1,3 +1,4 @@
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 /** Persist portal inbox threads (demo localStorage) so actions survive navigation and reloads. */
 
 export type InboxThreadMessage = {
@@ -144,6 +145,7 @@ export async function syncPersistedInboxFromServer(
 ): Promise<PersistedInboxThread[]> {
   if (!canUse()) return [];
   hydrateInboxFromSession(key);
+  if (isDemoModeActive()) return memoryByKey.get(key) ?? [];
   const force = opts?.force === true;
   const inflight = inboxSyncPromiseByKey.get(key);
   if (!force && inflight) return inflight;
@@ -189,6 +191,8 @@ export function loadPersistedInbox(key: string, fallback: PersistedInboxThread[]
 export async function deleteInboxThreadIds(ids: string[]): Promise<boolean> {
   const clean = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
   if (!canUse() || clean.length === 0) return true;
+  // Demo sandbox is local-only: pretend the server delete succeeded.
+  if (isDemoModeActive()) return true;
   try {
     const res = await fetch("/api/portal-inbox-threads", {
       method: "POST",
@@ -214,6 +218,8 @@ async function postInboxRows(
   key: string,
   rows: PersistedInboxThread[],
 ): Promise<boolean> {
+  // Demo sandbox is local-only: pretend the server write succeeded.
+  if (isDemoModeActive()) return true;
   try {
     const res = await fetch("/api/portal-inbox-threads", {
       method: "POST",
@@ -270,6 +276,15 @@ export async function persistInboxAwait(key: string, threads: PersistedInboxThre
   return postInboxRows("replace", key, threads);
 }
 
+/** Demo seed: load inbox threads into the local store without server mirror. */
+export function seedDemoInbox(key: string, threads: PersistedInboxThread[]): void {
+  if (!canUse()) return;
+  memoryByKey.set(key, threads);
+  persistInboxToSession(key, threads);
+  inboxLastSyncedAtByKey.set(key, Date.now());
+  window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
+}
+
 export function persistInbox(key: string, threads: PersistedInboxThread[]): void {
   if (!canUse() || inboxMutationInFlight()) return;
   const existing = memoryByKey.get(key) ?? [];
@@ -280,6 +295,7 @@ export function persistInbox(key: string, threads: PersistedInboxThread[]): void
   persistInboxToSession(key, threads);
   inboxLastSyncedAtByKey.set(key, Date.now());
   window.dispatchEvent(new CustomEvent<{ key: string }>(PORTAL_INBOX_CHANGED_EVENT, { detail: { key } }));
+  if (isDemoModeActive()) return;
   void (async () => {
     if (inboxMutationInFlight()) return;
     if (removedIds.length > 0) {

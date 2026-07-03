@@ -60,4 +60,31 @@ describe("handleOAuthCallback", () => {
     const setCookie = response.headers.get("set-cookie") ?? "";
     expect(setCookie).toContain("sb-access-token=token-value");
   });
+
+  it("redirects to the Host header origin, not the 0.0.0.0 bind address in request.url", async () => {
+    const { handleOAuthCallback } = await import("@/lib/auth/oauth-callback-handler");
+
+    // `next dev --hostname 0.0.0.0` reports request.url on the bind address even
+    // when the browser is on localhost — redirects must follow the Host header.
+    const request = new NextRequest("http://0.0.0.0:3000/auth/callback/partner-pricing?code=abc123", {
+      headers: { host: "localhost:3000" },
+    });
+    const response = await handleOAuthCallback(request, "/partner/pricing?google_signed_in=1");
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/partner/pricing");
+  });
+
+  it("uses the Host header origin for auth failure redirects", async () => {
+    const { handleOAuthCallback } = await import("@/lib/auth/oauth-callback-handler");
+
+    const request = new NextRequest("http://0.0.0.0:3000/auth/callback?error=access_denied", {
+      headers: { host: "localhost:3000" },
+    });
+    const response = await handleOAuthCallback(request, "/auth/continue");
+
+    expect(response.status).toBe(307);
+    const location = response.headers.get("location") ?? "";
+    expect(location.startsWith("http://localhost:3000/auth/sign-in?")).toBe(true);
+  });
 });

@@ -13,6 +13,10 @@ import type {
   ListingRoomRow,
   ListingSharedRow,
 } from "@/data/listing-rich-content";
+import {
+  listingLinkTargetProps,
+  useListingPreviewNewTab,
+} from "@/components/marketing/listing-preview-context";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
@@ -78,6 +82,7 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
   return (
     <button
       type="button"
+      data-attr="listing-row-details"
       onClick={onClick}
       className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary [html[data-theme=dark]_&]:border-white/18 [html[data-theme=dark]_&]:bg-white/10 sm:min-h-0 ${className}`}
     >
@@ -238,7 +243,7 @@ function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: 
       {caps.map((cap) => (
         <div
           key={cap}
-          className="flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 p-2"
+          className="flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 p-2 [html[data-theme=dark]_&]:from-slate-700 [html[data-theme=dark]_&]:to-slate-800"
         >
           <p className="text-[11px] font-semibold text-foreground">{cap}</p>
         </div>
@@ -267,6 +272,8 @@ function ListingDetailModal({
 }) {
   const stop = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
   const isClient = useIsClient();
+  const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
+  const toursContactHref = `/rent/tours-contact?propertyId=${encodeURIComponent(listingPropertyId)}`;
 
   useEffect(() => {
     if (!state) return;
@@ -437,12 +444,13 @@ function ListingDetailModal({
                   roomPrice: state.room.price,
                 })}
                 className="flex-1"
+                {...newTabProps}
               >
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply for this room
                 </span>
               </Link>
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
@@ -498,12 +506,12 @@ function ListingDetailModal({
               )}
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Ask about this bathroom
                 </span>
               </Link>
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Apply
                 </span>
@@ -553,12 +561,12 @@ function ListingDetailModal({
               </div>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply
                 </span>
               </Link>
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
@@ -596,12 +604,12 @@ function ListingDetailModal({
               <p className="mt-2 text-sm leading-relaxed text-muted">{state.row.body}</p>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply
                 </span>
               </Link>
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask about lease terms
                 </span>
@@ -645,12 +653,12 @@ function ListingDetailModal({
             </div>
             <p className="mt-4 text-xs text-muted">Confirm availability, utilities, and final rent with leasing before applying.</p>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Apply for this bundle
                 </span>
               </Link>
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Ask a question
                 </span>
@@ -675,12 +683,12 @@ function ListingDetailModal({
               </p>
             </div>
             <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href="/rent/tours-contact" className="flex-1">
+              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
                   Ask a question
                 </span>
               </Link>
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1">
+              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
                 <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
                   Apply
                 </span>
@@ -1038,25 +1046,21 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
               <p className="text-sm font-semibold text-foreground">{a.label}</p>
             </div>
             <p className="mt-2 text-xs text-muted">House feature · included with this listing</p>
-            <div className="mt-2">
-              <AvailabilityPill text="Included" />
-            </div>
             <DetailsButton className="mt-2.5 w-full" onClick={() => setModal({ kind: "amenity", row: a })} />
           </div>
         ))}
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
             <span>Amenity</span>
             <span>Info</span>
-            <span>Included</span>
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
           </div>
           {rows.map((a) => (
             <div
               key={a.id}
-              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
+              className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border py-3 last:border-0 sm:gap-3 sm:py-3.5"
             >
               <div className="flex min-w-0 items-start gap-2">
                 <span className="shrink-0 text-base text-primary" aria-hidden>
@@ -1065,7 +1069,6 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
                 <p className="min-w-0 text-sm font-semibold text-foreground">{a.label}</p>
               </div>
               <p className="text-xs text-muted sm:text-sm">With listing</p>
-              <AvailabilityPill text="Included" />
               <DetailsButton onClick={() => setModal({ kind: "amenity", row: a })} />
             </div>
           ))}

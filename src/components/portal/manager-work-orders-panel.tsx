@@ -15,16 +15,13 @@ import {
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import {
-  findPendingWorkOrderCharge,
   findWorkOrderCharge,
   HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
   HOUSEHOLD_CHARGES_EVENT,
@@ -49,11 +46,11 @@ function priorityClass(p: string) {
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
 
-type BillDraft = { cost: string; email: string; name: string; paymentStatus: "pending" | "paid" };
+type BillDraft = { cost: string; paymentStatus: "pending" | "paid" };
 
 function defaultBillDraft(row: DemoManagerWorkOrderRow): BillDraft {
   const cost = row.cost !== "—" && row.cost.trim() ? row.cost : "";
-  return { cost, email: row.residentEmail ?? "", name: row.residentName ?? "", paymentStatus: "pending" };
+  return { cost, paymentStatus: "pending" };
 }
 
 function pad2(n: number) {
@@ -79,13 +76,11 @@ function formatScheduledLabel(iso: string): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-/** Restrict photo links to http(s) or inline image data URLs (CodeQL xss-through-dom). */
-function safePhotoHref(src: string): string | null {
-  const trimmed = src.trim();
-  if (trimmed.startsWith("data:image/")) return trimmed;
-  if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) return trimmed;
-  return null;
-}
+// Restrict photo links to http(s) or inline image data URLs before they reach an
+// <a href> / <Image src> sink — inlined as a guard clause at each call site (rather
+// than routed through a helper's return value) so CodeQL's xss-through-dom barrier
+// recognition sees the check (see commit 924bd45 for the same fix elsewhere).
+const SAFE_PHOTO_HREF_RE = /^(?:data:image\/|https?:\/\/)/;
 
 export function ManagerWorkOrdersPanel({
   allRows,
@@ -159,7 +154,7 @@ export function ManagerWorkOrdersPanel({
       const draft = billDraftById[row.id] ?? defaultBillDraft(row);
       const amountInput = draft.cost.trim() ? draft.cost : row.cost;
       const amt = parseMoneyAmount(amountInput);
-      const email = (draft.email || row.residentEmail || "").trim().toLowerCase();
+      const email = (row.residentEmail ?? "").trim().toLowerCase();
       if (amt <= 0 || !email.includes("@")) continue;
       const created = recordWorkOrderResidentCharge({
         managerUserId: effectiveManagerId,
@@ -169,8 +164,8 @@ export function ManagerWorkOrdersPanel({
         unit: row.unit,
         workOrderTitle: row.title,
         amountInput,
-        residentEmail: draft.email.trim() || (row.residentEmail ?? ""),
-        residentName: draft.name.trim() || row.residentName || "",
+        residentEmail: row.residentEmail ?? "",
+        residentName: row.residentName ?? "",
         initialStatus: draft.paymentStatus,
       });
       if (created) {
@@ -194,8 +189,40 @@ export function ManagerWorkOrdersPanel({
     return m;
   }, [rows, hcTick]);
 
-  /** Schedule the visit (date required). Cost + email optional — only creates a billing charge if both are provided. */
-  const saveScheduleFromOpen = (row: DemoManagerWorkOrderRow) => {
+  /** Email the assigned vendor the visit details. Returns true if a send was attempted and accepted. */
+  const sendVendorVisitEmail = useCallback(
+    async (row: DemoManagerWorkOrderRow, iso: string): Promise<boolean> => {
+      if (row.selfAssigned || !row.vendorId) return false;
+      const vendor = activeVendors.find((v) => v.id === row.vendorId);
+      const vendorEmail = vendor?.email?.trim() ?? "";
+      if (!vendor || !vendorEmail.includes("@")) return false;
+      try {
+        const res = await fetch("/api/portal/send-vendor-visit-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            workOrderId: row.id,
+            vendorEmail,
+            vendorName: vendor.name,
+            workOrderTitle: row.title,
+            propertyLabel: row.propertyName,
+            unit: row.unit,
+            visitLabel: formatScheduledLabel(iso),
+            description: row.description,
+            preferredArrival: row.preferredArrival,
+          }),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    },
+    [activeVendors],
+  );
+
+  /** Schedule the visit (date required). Billing is optional — a charge is only created when a cost is set and a resident is linked. */
+  const saveScheduleFromOpen = async (row: DemoManagerWorkOrderRow) => {
     const visitAt = visitAtById[row.id] ?? "";
     const iso = fromDatetimeLocalValue(visitAt);
     if (!iso) {
@@ -205,7 +232,7 @@ export function ManagerWorkOrdersPanel({
     const draft = billDraftById[row.id] ?? defaultBillDraft(row);
     const costTrimmed = draft.cost.trim();
     const amt = costTrimmed ? parseMoneyAmount(costTrimmed) : 0;
-    const email = draft.email.trim().toLowerCase();
+    const residentEmail = (row.residentEmail ?? "").trim();
 
     updateManagerWorkOrder(row.id, (r) => ({
       ...r,
@@ -214,12 +241,10 @@ export function ManagerWorkOrdersPanel({
       scheduledAtIso: iso,
       scheduled: formatScheduledLabel(iso),
       ...(costTrimmed && Number.isFinite(amt) && amt >= 0 ? { cost: `$${amt.toFixed(2)}` } : {}),
-      ...(email && email.includes("@") ? { residentEmail: draft.email.trim() } : {}),
-      ...(draft.name.trim() ? { residentName: draft.name.trim() } : {}),
     }));
 
     let created = null;
-    if (email && email.includes("@") && Number.isFinite(amt) && amt > 0) {
+    if (residentEmail.includes("@") && Number.isFinite(amt) && amt > 0) {
       created = recordWorkOrderResidentCharge({
         managerUserId: effectiveManagerId,
         workOrderId: row.id,
@@ -228,24 +253,24 @@ export function ManagerWorkOrdersPanel({
         unit: row.unit,
         workOrderTitle: row.title,
         amountInput: draft.cost,
-        residentEmail: draft.email,
-        residentName: draft.name,
+        residentEmail,
+        residentName: row.residentName ?? "",
         initialStatus: draft.paymentStatus,
       });
     }
     if (created) setHcTick((n) => n + 1);
-    showToast(
-      created
-        ? created.status === "paid"
-          ? "Work order scheduled and payment recorded as paid."
-          : "Work order scheduled and pending payment created."
-        : "Work order scheduled. Add cost and resident email in Details to bill the resident.",
-    );
+    const vendorEmailed = await sendVendorVisitEmail(row, iso);
+    const billingPart = created
+      ? created.status === "paid"
+        ? " Payment recorded as paid."
+        : " Pending payment created."
+      : "";
+    showToast(`Work order scheduled.${billingPart}${vendorEmailed ? " Vendor emailed with the visit details." : ""}`);
     setExpandedId(null);
     onAfterSchedule?.();
   };
 
-  const rescheduleVisit = (row: DemoManagerWorkOrderRow) => {
+  const rescheduleVisit = async (row: DemoManagerWorkOrderRow) => {
     const visitAt = visitAtById[row.id] ?? "";
     const iso = fromDatetimeLocalValue(visitAt);
     if (!iso) {
@@ -257,7 +282,8 @@ export function ManagerWorkOrdersPanel({
       scheduledAtIso: iso,
       scheduled: formatScheduledLabel(iso),
     }));
-    showToast("Visit time updated.");
+    const vendorEmailed = await sendVendorVisitEmail(row, iso);
+    showToast(vendorEmailed ? "Visit time updated. Vendor emailed with the new time." : "Visit time updated.");
   };
 
   const openCompleteModal = (row: DemoManagerWorkOrderRow) => {
@@ -325,13 +351,13 @@ export function ManagerWorkOrdersPanel({
     }
     const draft = billDraftById[row.id] ?? defaultBillDraft(row);
     const amt = parseMoneyAmount(draft.cost);
-    const email = draft.email.trim().toLowerCase();
+    const residentEmail = (row.residentEmail ?? "").trim();
     if (!draft.cost.trim() || !Number.isFinite(amt) || amt <= 0) {
       showToast("Enter a valid cost first.");
       return;
     }
-    if (!email.includes("@")) {
-      showToast("Enter the resident email.");
+    if (!residentEmail.includes("@")) {
+      showToast("No resident is linked to this work order, so it can't be billed.");
       return;
     }
     const created = recordWorkOrderResidentCharge({
@@ -342,15 +368,15 @@ export function ManagerWorkOrdersPanel({
       unit: row.unit,
       workOrderTitle: row.title,
       amountInput: draft.cost,
-      residentEmail: draft.email,
-      residentName: draft.name,
+      residentEmail,
+      residentName: row.residentName ?? "",
       initialStatus: draft.paymentStatus,
     });
     if (!created) {
       showToast("Could not create payment line.");
       return;
     }
-    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}`, residentEmail: draft.email.trim(), residentName: draft.name.trim() || r.residentName }));
+    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
     setHcTick((n) => n + 1);
     showToast(created.status === "paid" ? "Payment recorded as paid." : "Pending payment line created.");
   };
@@ -387,18 +413,30 @@ export function ManagerWorkOrdersPanel({
     } else showToast("Could not delete work order.");
   };
 
-  const assignVendor = (row: DemoManagerWorkOrderRow, vendorId: string) => {
-    if (!vendorId) {
+  const assignVendor = (row: DemoManagerWorkOrderRow, choice: string) => {
+    if (choice === "self") {
       updateManagerWorkOrder(row.id, (r) => ({
         ...r,
         vendorId: undefined,
         vendorName: undefined,
         vendorAssignedAt: undefined,
+        selfAssigned: true,
+      }));
+      showToast("You're handling this yourself — no vendor email will be sent.");
+      return;
+    }
+    if (!choice) {
+      updateManagerWorkOrder(row.id, (r) => ({
+        ...r,
+        vendorId: undefined,
+        vendorName: undefined,
+        vendorAssignedAt: undefined,
+        selfAssigned: false,
       }));
       showToast("Vendor unassigned.");
       return;
     }
-    const vendor = activeVendors.find((v) => v.id === vendorId);
+    const vendor = activeVendors.find((v) => v.id === choice);
     if (!vendor) {
       showToast("Vendor not found.");
       return;
@@ -408,6 +446,7 @@ export function ManagerWorkOrdersPanel({
       vendorId: vendor.id,
       vendorName: vendor.name,
       vendorAssignedAt: new Date().toISOString(),
+      selfAssigned: false,
     }));
     showToast(`Assigned ${vendor.name}.`);
   };
@@ -424,16 +463,13 @@ export function ManagerWorkOrdersPanel({
   return (
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="min-w-[820px] w-full border-collapse text-left text-sm">
+        <table className="min-w-[640px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Scheduled</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
-              <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -442,6 +478,11 @@ export function ManagerWorkOrdersPanel({
               const linkedCharge = chargeByWoId.get(row.id);
               const visitAt = visitAtById[row.id] ?? "";
               const isExpanded = expandedId === row.id;
+              const assignedVendor =
+                !row.selfAssigned && row.vendorId
+                  ? activeVendors.find((v) => v.id === row.vendorId) ?? null
+                  : null;
+              const assignedVendorEmail = assignedVendor?.email?.trim() ?? "";
 
               return (
                 <Fragment key={row.id}>
@@ -465,16 +506,6 @@ export function ManagerWorkOrdersPanel({
                         {row.priority}
                       </span>
                     </td>
-                    <td className={PORTAL_TABLE_TD}>{row.status}</td>
-                    <td className={PORTAL_TABLE_TD}>
-                      {row.bucket === "open" ? (
-                        <span className="text-muted text-xs">Not scheduled</span>
-                      ) : row.scheduled && row.scheduled !== "—" ? (
-                        <span className="text-muted text-xs">{row.scheduled}</span>
-                      ) : (
-                        <span className="text-muted text-xs">—</span>
-                      )}
-                    </td>
                     <td className={PORTAL_TABLE_TD}>
                       <div className="flex flex-col gap-1">
                         <span>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
@@ -489,64 +520,37 @@ export function ManagerWorkOrdersPanel({
                         ) : null}
                       </div>
                     </td>
-                    <td className={`${PORTAL_TABLE_TD} text-right`}>
-                      <div className="flex justify-end gap-1.5 flex-wrap">
-                        {row.bucket === "open" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
-                            onClick={() => openExpand(row)}
-                          >
-                            Schedule
-                          </Button>
-                        ) : null}
-                        {row.bucket === "scheduled" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
-                            onClick={() => markComplete(row)}
-                          >
-                            Complete
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-                          onClick={() => onDeleteWorkOrder(row)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </td>
                   </tr>
                   {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                         <p className="text-sm leading-relaxed text-muted">{row.description}</p>
                         <p className="mt-1.5 text-xs text-muted">
                           Resident preferred arrival:{" "}
                           <span className="font-medium text-muted">{row.preferredArrival?.trim() || "Anytime"}</span>
                         </p>
+                        {row.bucket !== "open" && row.scheduled && row.scheduled !== "—" ? (
+                          <p className="mt-1.5 text-xs text-muted">
+                            Visit scheduled for <span className="font-medium text-foreground">{row.scheduled}</span>
+                          </p>
+                        ) : null}
                         {row.photoDataUrls?.length ? (
                           <div className="mt-4">
                             <p className="text-xs font-medium uppercase tracking-wide text-muted">Photos</p>
                             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                               {row.photoDataUrls.map((src, index) => {
-                                const href = safePhotoHref(src);
-                                if (!href) return null;
+                                const trimmed = src.trim();
+                                if (!SAFE_PHOTO_HREF_RE.test(trimmed)) return null;
                                 return (
                                 <a
                                   key={`${row.id}-photo-${index}`}
-                                  href={href}
+                                  href={trimmed}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="block overflow-hidden rounded-xl border border-border bg-accent/30"
                                 >
                                   <Image
-                                    src={href}
+                                    src={trimmed}
                                     alt={`Work order photo ${index + 1}`}
                                     width={240}
                                     height={180}
@@ -560,184 +564,112 @@ export function ManagerWorkOrdersPanel({
                           </div>
                         ) : null}
 
-                        {/* Schedule section */}
-                        {row.bucket !== "completed" ? (
-                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-foreground">
-                              {row.bucket === "open" ? "Schedule visit" : "Reschedule visit"}
-                            </p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              {row.bucket === "open"
-                                ? "Pick a date and time and click Schedule. Billing is optional and can be added after."
-                                : "Update the visit date and time. Billing is managed separately in Payments."}
-                            </p>
-                            <div className="mt-2 flex flex-wrap items-end gap-2">
-                              <div>
-                                <p className="mb-1 text-[11px] font-medium text-muted">Visit date &amp; time</p>
-                                <Input
-                                  type="datetime-local"
-                                  value={visitAt}
-                                  onChange={(e) =>
-                                    setVisitAtById((prev) => ({ ...prev, [row.id]: e.target.value }))
-                                  }
-                                  className="h-9 rounded-md text-sm"
-                                />
-                              </div>
-                              {row.bucket === "open" ? (
-                                <Button
-                                  type="button"
-                                  variant="primary"
-                                  className="h-9 rounded-full px-4 text-sm"
-                                  onClick={() => saveScheduleFromOpen(row)}
-                                >
-                                  Schedule visit
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-9 rounded-full px-4 text-sm"
-                                  onClick={() => rescheduleVisit(row)}
-                                >
-                                  Save new time
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {/* Vendor assignment */}
-                        {row.bucket !== "completed" ? (
-                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-foreground">Assigned vendor</p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              Pick from your vendor directory. Add vendors under Services → Vendors.
-                            </p>
-                            <div className="mt-2 flex flex-wrap items-end gap-2">
+                        <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-2">
+                          <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                            Cost
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="$0"
+                              value={draft.cost}
+                              onChange={(e) =>
+                                setBillDraftById((prev) => ({
+                                  ...prev,
+                                  [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
+                                }))
+                              }
+                              className="h-8 w-24 rounded-md text-sm"
+                            />
+                          </label>
+                          {!linkedCharge ? (
+                            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                              Payment
                               <Select
-                                className="h-9 min-w-[200px] rounded-md text-sm"
-                                value={row.vendorId ?? ""}
+                                className="h-8 rounded-md text-xs"
+                                value={draft.paymentStatus}
+                                onChange={(e) =>
+                                  setBillDraftById((prev) => ({
+                                    ...prev,
+                                    [row.id]: {
+                                      ...(prev[row.id] ?? defaultBillDraft(row)),
+                                      paymentStatus: e.target.value as "pending" | "paid",
+                                    },
+                                  }))
+                                }
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="paid">Paid</option>
+                              </Select>
+                            </label>
+                          ) : (
+                            <span className="pb-1.5 text-xs text-muted">
+                              {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel}
+                            </span>
+                          )}
+                          {row.bucket !== "completed" ? (
+                            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                              Visit date
+                              <Input
+                                type="datetime-local"
+                                value={visitAt}
+                                onChange={(e) =>
+                                  setVisitAtById((prev) => ({ ...prev, [row.id]: e.target.value }))
+                                }
+                                className="h-8 rounded-md text-sm"
+                              />
+                            </label>
+                          ) : null}
+                          {row.bucket !== "completed" ? (
+                            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                              Vendor
+                              <Select
+                                className="h-8 min-w-[150px] rounded-md text-xs"
+                                value={row.selfAssigned ? "self" : row.vendorId ?? ""}
                                 onChange={(e) => assignVendor(row, e.target.value)}
                               >
-                                <option value="">No vendor assigned</option>
+                                <option value="">None</option>
+                                <option value="self">Self</option>
                                 {activeVendors.map((v) => (
                                   <option key={v.id} value={v.id}>
-                                    {v.name}{v.trade ? ` · ${v.trade}` : ""}
+                                    {v.name}
                                   </option>
                                 ))}
                               </Select>
-                              {row.vendorId ? (
-                                <>
-                                  {activeVendors.find((v) => v.id === row.vendorId)?.phone ? (
-                                    <a
-                                      href={`tel:${activeVendors.find((v) => v.id === row.vendorId)!.phone}`}
-                                      className="text-xs font-medium text-primary hover:underline"
-                                    >
-                                      Call vendor
-                                    </a>
-                                  ) : null}
-                                  {activeVendors.find((v) => v.id === row.vendorId)?.email ? (
-                                    <a
-                                      href={`mailto:${activeVendors.find((v) => v.id === row.vendorId)!.email}`}
-                                      className="text-xs font-medium text-primary hover:underline"
-                                    >
-                                      Email vendor
-                                    </a>
-                                  ) : null}
-                                </>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : row.vendorName ? (
-                          <p className="mt-4 text-xs text-muted">
-                            Vendor: <span className="font-medium text-foreground">{row.vendorName}</span>
-                          </p>
-                        ) : null}
-
-                        {/* Billing section */}
-                        {!linkedCharge ? (
-                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              Bill the resident for pass-through costs. Choose paid if they already paid you (e.g. lockout fee).
-                            </p>
-                            <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
-                              <div>
-                                <p className="mb-1 text-[11px] font-medium text-muted">Cost</p>
-                                <Input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="e.g. 75 or $75"
-                                  value={draft.cost}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
-                                    }))
-                                  }
-                                  className="h-8 rounded-md text-sm"
-                                />
-                              </div>
-                              <div>
-                                <p className="mb-1 text-[11px] font-medium text-muted">Payment status</p>
-                                <Select
-                                  className="h-8 rounded-md text-sm"
-                                  value={draft.paymentStatus}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: {
-                                        ...(prev[row.id] ?? defaultBillDraft(row)),
-                                        paymentStatus: e.target.value as "pending" | "paid",
-                                      },
-                                    }))
-                                  }
-                                >
-                                  <option value="pending">Pending</option>
-                                  <option value="paid">Paid</option>
-                                </Select>
-                              </div>
-                              <div className="sm:col-span-1">
-                                <p className="mb-1 text-[11px] font-medium text-muted">Resident email</p>
-                                <Input
-                                  type="email"
-                                  autoComplete="email"
-                                  placeholder="resident@email.com"
-                                  value={draft.email}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), email: e.target.value },
-                                    }))
-                                  }
-                                  className="h-8 rounded-md text-sm"
-                                />
-                              </div>
-                              <div className="sm:col-span-3">
-                                <p className="mb-1 text-[11px] font-medium text-muted">Resident name (optional)</p>
-                                <Input
-                                  type="text"
-                                  autoComplete="name"
-                                  placeholder="Shown on the payment line"
-                                  value={draft.name}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), name: e.target.value },
-                                    }))
-                                  }
-                                  className="h-8 rounded-md text-sm"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="mt-4 text-xs text-muted">
-                            Payment: {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel} · {linkedCharge.residentEmail}
-                          </p>
-                        )}
+                            </label>
+                          ) : row.vendorName ? (
+                            <span className="pb-1.5 text-xs text-muted">
+                              Vendor: <span className="font-medium text-foreground">{row.vendorName}</span>
+                            </span>
+                          ) : row.selfAssigned ? (
+                            <span className="pb-1.5 text-xs text-muted">Self-handled</span>
+                          ) : null}
+                          {assignedVendor?.phone ? (
+                            <a href={`tel:${assignedVendor.phone}`} className="pb-1.5 text-xs font-medium text-primary hover:underline">
+                              Call
+                            </a>
+                          ) : null}
+                          {assignedVendorEmail ? (
+                            <a href={`mailto:${assignedVendorEmail}`} className="pb-1.5 text-xs font-medium text-primary hover:underline">
+                              Email
+                            </a>
+                          ) : null}
+                        </div>
 
                         <PortalTableDetailActions>
+                          {row.bucket === "open" ? (
+                            <Button
+                              type="button"
+                              variant="primary"
+                              className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                              onClick={() => void saveScheduleFromOpen(row)}
+                            >
+                              Schedule visit
+                            </Button>
+                          ) : row.bucket === "scheduled" ? (
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => void rescheduleVisit(row)}>
+                              Save new time
+                            </Button>
+                          ) : null}
                           {!linkedCharge ? (
                             <>
                               <Button
@@ -836,7 +768,7 @@ export function ManagerWorkOrdersPanel({
                 disabled={completeBusy}
               />
             </label>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-start gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
                 Cancel
               </Button>

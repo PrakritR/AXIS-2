@@ -47,20 +47,27 @@ export async function chargeManagerForScreening(opts: {
   }
 
   try {
-    const intent = await stripe.paymentIntents.create({
-      amount: opts.amountCents,
-      currency: "usd",
-      customer: stripeCustomerId,
-      payment_method: paymentMethodId,
-      confirm: true,
-      off_session: true,
-      description: `Applicant screening — ${opts.applicationId}`,
-      metadata: {
-        purpose: "application_screening",
-        application_id: opts.applicationId,
-        manager_user_id: opts.managerUserId,
+    const intent = await stripe.paymentIntents.create(
+      {
+        amount: opts.amountCents,
+        currency: "usd",
+        customer: stripeCustomerId,
+        payment_method: paymentMethodId,
+        confirm: true,
+        off_session: true,
+        description: `Applicant screening — ${opts.applicationId}`,
+        metadata: {
+          purpose: "application_screening",
+          application_id: opts.applicationId,
+          manager_user_id: opts.managerUserId,
+        },
       },
-    });
+      // Scoped to the payment method (not just the application) so a genuine
+      // retry after the manager fixes a declined/expired card gets a fresh
+      // attempt, while accidental duplicate submits with the SAME card still
+      // dedupe against Stripe instead of double-charging.
+      { idempotencyKey: `screening_${opts.applicationId}_${paymentMethodId}` },
+    );
     if (intent.status !== "succeeded" && intent.status !== "processing") {
       return {
         ok: false,

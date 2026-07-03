@@ -1,5 +1,6 @@
 "use client";
 
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -52,7 +53,7 @@ const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
 const PAYMENT_ACCOUNT_EXCLUSIONS = ["sharad ramachandran", "sharad"] as const;
 
 function shouldExcludePaymentAccount(residentName: string, residentEmail?: string): boolean {
-  const name = residentName.trim().toLowerCase();
+  const name = (residentName ?? "").trim().toLowerCase();
   const email = (residentEmail ?? "").trim().toLowerCase();
   return PAYMENT_ACCOUNT_EXCLUSIONS.some((token) => name.includes(token) || email.includes(token));
 }
@@ -79,7 +80,9 @@ export function ManagerPayments() {
   const [propertyTick, setPropertyTick] = useState(0);
   const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
-  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages();
+  // Per-payment reminder lists show the full saved default schedule, so bypass
+  // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
+  const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
   const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
 
   useEffect(() => {
@@ -110,7 +113,7 @@ export function ManagerPayments() {
   }, [authReady, userId]);
 
   useEffect(() => {
-    if (!authReady || !userId) return;
+    if (!authReady || !userId || isDemoModeActive()) return;
     let cancelled = false;
     void fetch("/api/portal/purge-orphaned-records", {
       method: "POST",
@@ -202,7 +205,7 @@ export function ManagerPayments() {
       })
       .map((charge) => {
         const ledgerRow = householdChargeToLedgerRow(charge);
-        const chargeEmail = charge.residentEmail.trim().toLowerCase();
+        const chargeEmail = charge.residentEmail?.trim().toLowerCase() ?? "";
         const application = applications.find((row) => {
           if (charge.applicationId && row.id === charge.applicationId) return true;
           const rowEmail = row.email?.trim().toLowerCase();
@@ -269,7 +272,13 @@ export function ManagerPayments() {
   }, [rowsForCounts]);
 
   const tabs = useMemo(
-    () => PAY_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
+    () =>
+      PAY_LABELS.map(({ id, label }) => ({
+        id,
+        label,
+        count: counts[id],
+        alert: id === "overdue" && counts.overdue > 0,
+      })),
     [counts],
   );
   const rowsForBucket = useMemo(() => {

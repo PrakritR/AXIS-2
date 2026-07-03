@@ -101,14 +101,11 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
                 </a>
                 <a
                   href="mailto:info@axis-seattle-housing.com"
-                  className="inline-flex max-w-full items-center gap-2 text-[15px] font-normal text-muted transition-colors hover:text-primary"
+                  className="max-w-full break-words text-[15px] font-normal leading-snug text-muted transition-colors hover:text-primary"
                 >
-                  <MailIcon />
-                  <span className="min-w-0 break-all leading-snug">info@axis-seattle-housing.com</span>
+                  <MailIcon className="mr-2 inline-block align-[-2px]" />
+                  <span>info@axis-seattle-housing.com</span>
                 </a>
-                <Link href="/contact" className={footerLinkClass}>
-                  Contact us
-                </Link>
               </div>
             </div>
           </div>

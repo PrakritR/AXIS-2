@@ -10,6 +10,7 @@ import {
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   LEASE_PIPELINE_EVENT,
   countManagerLeaseTabs,
@@ -111,6 +112,12 @@ export function ManagerLeases() {
       if (cancelled) return;
       if (emails.length === 0) {
         setResidentAccountEmails(new Set());
+        return;
+      }
+      // Demo sandbox: every demo resident already has an Axis account, so
+      // leases are sendable/signable instead of blocked on account creation.
+      if (isDemoModeActive()) {
+        setResidentAccountEmails(new Set(emails));
         return;
       }
       return fetch("/api/manager/resident-account-emails", {

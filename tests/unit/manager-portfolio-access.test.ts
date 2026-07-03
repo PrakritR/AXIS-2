@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { collectLinkedPropertyIds, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
+import {
+  collectLinkedPropertyIds,
+  readLinkedListingsForUser,
+  safePropertyOptionLabel,
+} from "@/lib/manager-portfolio-access";
 import * as proRelationships from "@/lib/pro-relationships";
 import * as propertyPipeline from "@/lib/demo-property-pipeline";
 
@@ -80,5 +84,41 @@ describe("manager portfolio access", () => {
     expect(rows.map((r) => r.listing.id).sort()).toEqual(["mgr-live-1", "pend-1"]);
     expect(rows.every((r) => r.ownerUserId === "owner-user")).toBe(true);
     expect(rows[0]?.canEdit).toBe(true);
+  });
+});
+
+describe("safePropertyOptionLabel", () => {
+  it("prefers the first human-friendly candidate", () => {
+    expect(safePropertyOptionLabel(["Magnolia House — 5 rooms", "ignored"], "seedwf_x_prop-magnolia")).toBe(
+      "Magnolia House — 5 rooms",
+    );
+  });
+
+  it("skips a raw seed-id title and falls back to the building name", () => {
+    // Regression: an older seed left title = "Seed Property seed-1782590281847".
+    expect(
+      safePropertyOptionLabel(
+        ["Seed Property seed-1782590281847", "Seed Building", "123 Seed St"],
+        "test-prop-seed-1782590281847",
+      ),
+    ).toBe("Seed Building");
+  });
+
+  it("never returns the bare property id", () => {
+    expect(safePropertyOptionLabel(["test-prop-seed-1782590281847"], "test-prop-seed-1782590281847")).toBe(
+      "Untitled property",
+    );
+    expect(safePropertyOptionLabel([undefined, "", null], "mgr-abcd-efgh-123456")).toBe("Untitled property");
+  });
+
+  it("rejects id-shaped tokens (uuid, seedwf key, long digit runs)", () => {
+    expect(safePropertyOptionLabel(["a1b2c3d4-0000-1111-2222-333344445555", "Real Name"], "id")).toBe("Real Name");
+    expect(safePropertyOptionLabel(["seedwf_f707ad54_prop-cedar", "Cedar Flat 2B"], "seedwf_f707ad54_prop-cedar")).toBe(
+      "Cedar Flat 2B",
+    );
+  });
+
+  it("keeps ordinary names and addresses that merely contain the word seed", () => {
+    expect(safePropertyOptionLabel(["123 Seed St, Austin, TX"], "p1")).toBe("123 Seed St, Austin, TX");
   });
 });
