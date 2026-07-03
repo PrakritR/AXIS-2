@@ -1,19 +1,10 @@
-import { AuthCard } from "@/components/auth/auth-card";
-import { AuthLoadingCard } from "@/components/auth/auth-mobile-primitives";
-import { PortalAuthForm } from "@/components/auth/portal-auth-form";
-import { Suspense } from "react";
+import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 
-/** The single portal sign-in screen for every account type (web + native). */
+/**
+ * The single universal auth surface for every account type (web + native): one page with
+ * the Manager/Resident choice and the Sign in / Create account toggle, Google + email in
+ * one place — the same unified hub the native app uses. Defaults to Sign in.
+ */
 export default function SignInPage() {
-  return (
-    <Suspense
-      fallback={
-        <AuthCard>
-          <AuthLoadingCard />
-        </AuthCard>
-      }
-    >
-      <PortalAuthForm mode="sign-in" />
-    </Suspense>
-  );
+  return <NativeAuthHub defaultMode="sign-in" />;
 }

@@ -3,6 +3,7 @@ import { cache } from "react";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { generateManagerId } from "@/lib/manager-id";
 import {
+  normalizeManagerSkuTier,
   pickBestManagerPurchaseRow,
   resolveManagerSubscriptionTierFromPurchase,
   type ManagerSkuTier,
@@ -83,24 +84,35 @@ const getManagerPurchaseRowByUserId = cache(async (userId: string): Promise<{
 });
 
 /**
- * Returns "free" if the manager's purchase row is tier free; "paid" if any paid tier;
- * null if no purchase row (legacy / unknown — treat as full access).
+ * The single authoritative manager access tier, sourced from the manager's OWN
+ * `manager_purchases` row — the SAME source and logic the Settings "Compare plans"
+ * page uses via `/api/manager/subscription`. Every portal surface (sidebar brand
+ * badge, sidebar feature-gating, page paywalls, reports) must resolve tier through
+ * here so they can never disagree with Settings.
+ *
+ * Authorization + expiry are enforced at WRITE time by `syncManagerPurchaseTierState`
+ * (revoke unauthorized self-assigned paid tiers, downgrade lapsed admin grants), which
+ * runs first here exactly as the Settings route does. We then TRUST the committed SKU:
+ * a pro/business row is paid, free is free, no row is legacy-unlimited. This mirrors
+ * Settings' `subscriptionJson` so the two are consistent by construction — no separate
+ * read-time downgrade that would show "Free" while Settings shows "Business".
+ *
+ * Returns "free" for the free tier, "paid" for pro/business, null when there is no
+ * purchase row (legacy / unknown — treat as full access).
  */
 const getManagerSubscriptionTierCached = cache(async (userId: string): Promise<ManagerSubscriptionTier> => {
   try {
     const { syncManagerPurchaseTierState } = await import("@/lib/manager-tier-sync");
     await syncManagerPurchaseTierState(userId);
-    const purchase = await getManagerPurchaseRowByUserId(userId);
     const rows = await loadManagerPurchaseRowsForUser(userId);
-    return resolveManagerSubscriptionTierFromPurchase({
-      tier: purchase.tier,
-      billing: purchase.billing,
-      stripeSubscriptionId: purchase.stripeSubscriptionId,
-      stripeCheckoutSessionId: purchase.stripeCheckoutSessionId,
-      promoCode: purchase.promoCode,
-      paidAt: purchase.paidAt,
-      hasPurchaseRow: rows.length > 0,
-    });
+    if (rows.length === 0) return null;
+    const purchase = await getManagerPurchaseRowByUserId(userId);
+    const sku = normalizeManagerSkuTier(purchase.tier);
+    if (sku === "free") return "free";
+    if (sku === "pro" || sku === "business") return "paid";
+    // Row exists but tier is missing/unrecognized — mirror Settings: Free unless a
+    // live Stripe subscription backs it.
+    return purchase.stripeSubscriptionId ? "paid" : "free";
   } catch {
     return null;
   }

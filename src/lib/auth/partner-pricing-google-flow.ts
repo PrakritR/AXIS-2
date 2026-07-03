@@ -87,7 +87,11 @@ export async function continuePartnerPricingWithOffer(
     return { status: "portal" };
   }
 
-  if (session.authenticated && session.needsPricing) {
+  // Only the FREE tier may be finalized up-front. For a paid signup we must NOT provision a
+  // completed free manager here — that would grant portal access before the payment method is
+  // added. pricing-oauth-continue provisions a PENDING account and returns the Stripe checkout;
+  // the account is completed only once payment succeeds.
+  if (session.authenticated && session.needsPricing && offer.tier === "free") {
     const provision = await ensurePartnerPricingFreeAccount();
     if (!provision.ok) {
       return { status: "error", message: provision.error };

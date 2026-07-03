@@ -49,9 +49,12 @@ export default function PartnerPricingPage() {
 
   const getStarted = useCallback(
     (tier: PlanTierId) => {
-      // Remember the choice for the post-signup plan step, then send them to the portal.
+      // Remember the choice, then ONE clean redirect to the universal create-account hub with
+      // the plan preselected. The hub reveals the payment step for paid tiers on Continue;
+      // Free continues straight to the portal.
       persistManagerPricingOffer({ tier, billing });
-      router.push("/auth/create-account");
+      const params = new URLSearchParams({ mode: "create", role: "manager", tier, billing });
+      router.push(`/auth/create-account?${params.toString()}`);
     },
     [billing, router],
   );

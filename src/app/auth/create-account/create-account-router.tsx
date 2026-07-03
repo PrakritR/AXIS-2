@@ -1,14 +1,15 @@
 "use client";
 
-import { PortalAuthForm } from "@/components/auth/portal-auth-form";
+import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 import { useSearchParams } from "next/navigation";
 import CreateAccountClient from "./create-account-client";
 
 /**
- * Default sign-up is the unified portal form (email/password + Google, role/plan chosen
- * after auth). The legacy CreateAccountClient is kept ONLY for in-flight post-payment
- * links that still carry a checkout session_id or a resident application axis_id, so any
- * already-issued Stripe/return URLs keep working.
+ * Default sign-up is the unified auth hub (Manager/Resident + Sign in/Create, Google +
+ * email, plan selection all in one place — identical to the native app). The legacy
+ * CreateAccountClient is kept ONLY for in-flight post-payment links that still carry a
+ * checkout session_id or a resident application axis_id, so already-issued Stripe/return
+ * URLs keep working.
  */
 export default function CreateAccountRouter() {
   const searchParams = useSearchParams();
@@ -18,5 +19,5 @@ export default function CreateAccountRouter() {
   if (hasLegacyContext) {
     return <CreateAccountClient />;
   }
-  return <PortalAuthForm mode="create" />;
+  return <NativeAuthHub defaultMode="create" />;
 }
