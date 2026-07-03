@@ -12,8 +12,14 @@
  * test.axis.local), carries a full listingSubmission (v:1), and has at least one
  * application (manager_application_records) and one lease
  * (portal_lease_pipeline_records) in its pipeline — no orphaned properties.
- * Superseded live rows from older seeds (seedwf_ / mgr- prefixes) owned by the
- * test managers are deleted so the browse list stays exactly the canonical set.
+ * Superseded rows from older seeds (seedwf_ / mgr- prefixes, ANY status) owned
+ * by the test managers are deleted — a non-live row like a `review` loft still
+ * reaches the Calendar property picker (propertyRowsToSnapshot puts review rows
+ * in extras) while never reaching the Properties tab (which needs a `mgr-`
+ * prefix), so leftovers make tabs disagree. Dependent rows that reference a
+ * non-canonical property, calendar events pointing at missing properties, and
+ * runtime drift on non-approved applicants are cleaned for the same reason:
+ * every tab must show the same coherent catalog.
  *
  * Reference implementation for column names / row shapes:
  * scripts/seed-demo-manager-workflow.mjs
@@ -709,6 +715,21 @@ try {
       ],
     },
     {
+      id: "mgr-test-fir",
+      name: "Fir Lofts",
+      address: "77 Fir Loft Rd, Seattle, WA 98109",
+      zip: "98109",
+      neighborhood: "South Lake Union",
+      tagline: "Industrial loft with skyline views.",
+      overview:
+        "A sunlit top-floor loft in South Lake Union with exposed brick, 16-foot ceilings, skyline views, and a five-minute walk to the streetcar and Lake Union Park.",
+      structureNote: "Top-floor loft in a converted warehouse",
+      petFriendly: false,
+      deposit: 2100,
+      ownerUserId: managerUserId,
+      rooms: [{ id: "room-1", name: "Loft 3", floor: "3rd floor", rent: 2100, detail: "Open-plan loft with exposed brick and skyline views." }],
+    },
+    {
       id: "mgr-test-cedar",
       name: "Cedar Flat 2B",
       address: "455 Cedar Way, Seattle, WA 98103",
@@ -788,6 +809,38 @@ try {
   });
   await must(supabase.from("manager_property_records").upsert(propertyRows, { onConflict: "id" }), "manager_property_records(catalog)");
 
+  // Calendar tours for catalog properties (idempotent: stable ids + upsert).
+  // Each references a canonical seeded property id so the SAME property shows
+  // in the Calendar and the Properties tab — never a dangling/foreign id.
+  const catalogTours = [
+    { id: "test-tour-fir", propId: "mgr-test-fir", managerUserId, title: "Fir Lofts Tour", daysOut: 3 },
+    { id: "test-tour-cedar", propId: "mgr-test-cedar", managerUserId: manager2UserId, title: "Cedar Flat 2B Tour", daysOut: 5 },
+  ];
+  for (const tour of catalogTours) {
+    const startsAt = daysFromNow(tour.daysOut).toISOString();
+    await must(
+      supabase.from("portal_schedule_records").upsert(
+        {
+          id: tour.id,
+          manager_user_id: tour.managerUserId,
+          record_type: "event",
+          starts_at: startsAt,
+          ends_at: new Date(daysFromNow(tour.daysOut).getTime() + 60 * 60 * 1000).toISOString(),
+          row_data: {
+            id: tour.id,
+            title: tour.title,
+            type: "tour",
+            propertyId: tour.propId,
+            managerUserId: tour.managerUserId,
+            testRunId,
+          },
+        },
+        { onConflict: "id" },
+      ),
+      `portal_schedule_records(${tour.id})`,
+    );
+  }
+
   const propById = new Map(catalog.map((p) => [p.id, p]));
 
   // ── Applicants: every catalog property gets ≥1 approved application (which
@@ -801,6 +854,7 @@ try {
     { axisId: "AXIS-TESTSOFIAD", first: "Sofia", last: "Diaz", propId: "mgr-test-magnolia", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 104000 },
     { axisId: "AXIS-TESTNOAHPA", first: "Noah", last: "Park", propId: "mgr-test-magnolia", roomId: "room-2", bucket: "approved", leaseStage: "manager_sign", income: 79000 },
     { axisId: "AXIS-TESTLUCASK", first: "Lucas", last: "Kim", propId: "mgr-test-magnolia", roomId: "room-3", bucket: "rejected", income: 40000, rejectReason: "Income below 2.5x rent." },
+    { axisId: "AXIS-TESTLIAMFO", first: "Liam", last: "Foster", propId: "mgr-test-fir", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 98000 },
     { axisId: "AXIS-TESTISABEN", first: "Isabella", last: "Nguyen", propId: "mgr-test-cedar", roomId: "room-1", bucket: "approved", leaseStage: "manager", income: 120000 },
     { axisId: "AXIS-TESTMASONC", first: "Mason", last: "Clark", propId: "mgr-test-cedar", roomId: "room-1", bucket: "pending", income: 88000 },
     { axisId: "AXIS-TESTAVAROS", first: "Ava", last: "Rossi", propId: "mgr-test-spruce", roomId: "room-1", bucket: "approved", leaseStage: "admin", income: 82000 },
@@ -1124,37 +1178,138 @@ try {
   });
   await must(supabase.from("portal_lease_pipeline_records").upsert(leaseRows, { onConflict: "id" }), "portal_lease_pipeline_records(catalog)");
 
-  // ── Cleanup: superseded LIVE rows from older seeds (seedwf_*/mgr-*) owned by
-  //    the test managers duplicate the canonical catalog in browse (same homes,
-  //    no listingSubmission, no applications). Delete them and their dependents
-  //    so the browse list is exactly the coherent set. Non-live rows (pending/
-  //    review/unlisted/rejected) are kept for manager-portal bucket variety. ──
+  // ── Cleanup: make every tab agree on the canonical catalog. ───────────────
   const canonicalIds = new Set([propertyId, ...catalog.map((p) => p.id)]);
   const testManagerIds = [managerUserId, manager2UserId];
-  const { data: liveProps, error: livePropsErr } = await supabase
+
+  // 1. Superseded property rows from older seeds — ANY status, not just live.
+  //    A leftover `review` row (e.g. the old seedwf_ "Fir Loft 3") reaches the
+  //    Calendar property picker (review rows land in extras) but never the
+  //    Properties tab (which needs a `mgr-` id prefix) — the tabs disagree.
+  const { data: ownedProps, error: ownedPropsErr } = await supabase
     .from("manager_property_records")
     .select("id, status, manager_user_id")
-    .in("manager_user_id", testManagerIds)
-    .eq("status", "live");
-  if (livePropsErr) throw new Error(`select live properties: ${livePropsErr.message}`);
-  const staleIds = (liveProps ?? []).map((r) => r.id).filter((id) => !canonicalIds.has(id));
+    .in("manager_user_id", testManagerIds);
+  if (ownedPropsErr) throw new Error(`select owned properties: ${ownedPropsErr.message}`);
+  const staleIds = (ownedProps ?? []).map((r) => r.id).filter((id) => !canonicalIds.has(id));
   if (staleIds.length) {
-    for (const table of [
-      "manager_application_records",
-      "portal_lease_pipeline_records",
-      "portal_household_charge_records",
-      "portal_recurring_rent_profile_records",
-    ]) {
-      const { error: depErr } = await supabase
-        .from(table)
-        .delete()
-        .in("property_id", staleIds)
-        .in("manager_user_id", testManagerIds);
-      if (depErr) throw new Error(`cleanup ${table}: ${depErr.message}`);
-    }
     await must(supabase.from("manager_property_records").delete().in("id", staleIds), "cleanup manager_property_records");
-    console.error(`Cleaned ${staleIds.length} superseded live properties: ${staleIds.join(", ")}`);
+    console.error(`Cleaned ${staleIds.length} superseded properties: ${staleIds.join(", ")}`);
   }
+
+  // 2. Applications, leases, charges, and rent profiles must reference a
+  //    canonical property. This also removes rows whose property no longer
+  //    exists at all (e.g. charges pointing at a deleted demo property).
+  for (const table of [
+    "manager_application_records",
+    "portal_lease_pipeline_records",
+    "portal_household_charge_records",
+    "portal_recurring_rent_profile_records",
+  ]) {
+    const { data: depRows, error: depSelErr } = await supabase
+      .from(table)
+      .select("id, property_id")
+      .in("manager_user_id", testManagerIds);
+    if (depSelErr) throw new Error(`select ${table}: ${depSelErr.message}`);
+    const orphanIds = (depRows ?? [])
+      .filter((r) => r.property_id && !canonicalIds.has(r.property_id))
+      .map((r) => r.id);
+    if (orphanIds.length) {
+      await must(supabase.from(table).delete().in("id", orphanIds), `cleanup ${table}`);
+      console.error(`Cleaned ${orphanIds.length} ${table} rows referencing non-canonical properties`);
+    }
+  }
+
+  // 3. Calendar events must reference canonical properties too.
+  const { data: eventRows, error: eventSelErr } = await supabase
+    .from("portal_schedule_records")
+    .select("id, row_data")
+    .eq("record_type", "event")
+    .in("manager_user_id", testManagerIds);
+  if (eventSelErr) throw new Error(`select schedule events: ${eventSelErr.message}`);
+  const danglingEventIds = (eventRows ?? [])
+    .filter((r) => {
+      const pid = typeof r.row_data?.propertyId === "string" ? r.row_data.propertyId.trim() : "";
+      return pid && !canonicalIds.has(pid);
+    })
+    .map((r) => r.id);
+  if (danglingEventIds.length) {
+    await must(
+      supabase.from("portal_schedule_records").delete().in("id", danglingEventIds),
+      "cleanup portal_schedule_records(events)",
+    );
+    console.error(`Cleaned ${danglingEventIds.length} calendar events referencing non-canonical properties`);
+  }
+
+  // 4. Tour-host registry (global KV record): prune entries whose property no
+  //    longer exists in manager_property_records at all.
+  const { data: registryRec, error: registryErr } = await supabase
+    .from("portal_schedule_records")
+    .select("id, row_data")
+    .eq("id", "axis_property_mgr_registry_v1")
+    .maybeSingle();
+  if (registryErr) throw new Error(`select tour-host registry: ${registryErr.message}`);
+  const registryPayload = registryRec?.row_data?.payload;
+  if (registryPayload && typeof registryPayload === "object" && !Array.isArray(registryPayload)) {
+    const { data: allProps, error: allPropsErr } = await supabase.from("manager_property_records").select("id");
+    if (allPropsErr) throw new Error(`select all property ids: ${allPropsErr.message}`);
+    const existingIds = new Set((allProps ?? []).map((r) => r.id));
+    const prunedKeys = Object.keys(registryPayload).filter((pid) => !existingIds.has(pid));
+    if (prunedKeys.length) {
+      const nextPayload = { ...registryPayload };
+      for (const key of prunedKeys) delete nextPayload[key];
+      await must(
+        supabase
+          .from("portal_schedule_records")
+          .update({ row_data: { ...registryRec.row_data, payload: nextPayload } })
+          .eq("id", "axis_property_mgr_registry_v1"),
+        "prune tour-host registry",
+      );
+      console.error(`Pruned ${prunedKeys.length} dangling tour-host registry entries: ${prunedKeys.join(", ")}`);
+    }
+  }
+
+  // 5. Runtime drift on NON-approved seeded applicants: approving one in the
+  //    portal mints a lease, move-in charges, and an approved resident profile.
+  //    The upserts above reset the application bucket, so those leftovers would
+  //    contradict it (a pending applicant with a signed lease). Remove them.
+  const nonApproved = people.filter((p) => p.bucket !== "approved");
+  const nonApprovedAxisIds = nonApproved.map((p) => p.axisId);
+  const nonApprovedEmails = new Set(nonApproved.map((p) => p.email));
+  const { data: driftLeases, error: driftLeaseErr } = await supabase
+    .from("portal_lease_pipeline_records")
+    .select("id")
+    .in("id", nonApprovedAxisIds.map((axisId) => `lease_app_${axisId}`));
+  if (driftLeaseErr) throw new Error(`select drift leases: ${driftLeaseErr.message}`);
+  if (driftLeases?.length) {
+    await must(
+      supabase.from("portal_lease_pipeline_records").delete().in("id", driftLeases.map((r) => r.id)),
+      "cleanup portal_lease_pipeline_records(non-approved)",
+    );
+    console.error(`Cleaned ${driftLeases.length} leases for non-approved applicants`);
+  }
+  for (const table of ["portal_household_charge_records", "portal_recurring_rent_profile_records"]) {
+    const { data: driftRows, error: driftSelErr } = await supabase
+      .from(table)
+      .select("id, row_data")
+      .in("manager_user_id", testManagerIds);
+    if (driftSelErr) throw new Error(`select ${table} drift: ${driftSelErr.message}`);
+    const driftIds = (driftRows ?? [])
+      .filter((r) => {
+        const appId = typeof r.row_data?.applicationId === "string" ? r.row_data.applicationId : "";
+        const email = typeof r.row_data?.residentEmail === "string" ? r.row_data.residentEmail.toLowerCase() : "";
+        return nonApprovedAxisIds.includes(appId) || nonApprovedEmails.has(email);
+      })
+      .map((r) => r.id);
+    if (driftIds.length) {
+      await must(supabase.from(table).delete().in("id", driftIds), `cleanup ${table}(non-approved)`);
+      console.error(`Cleaned ${driftIds.length} ${table} rows for non-approved applicants`);
+    }
+  }
+  await must(
+    supabase.from("profiles").update({ application_approved: false }).in("manager_id", nonApprovedAxisIds),
+    "reset non-approved resident profiles",
+  );
 
   console.log(
     JSON.stringify({
@@ -1173,10 +1328,12 @@ try {
       applicationId: residentAxisId,
       chargeId,
       tourId,
+      catalogTours: catalogTours.map((t) => t.id),
       catalogProperties: catalog.map((p) => p.id),
       catalogApplications: people.length,
       catalogLeases: leaseRows.length,
-      cleanedStaleLiveProperties: staleIds,
+      cleanedStaleProperties: staleIds,
+      cleanedDanglingCalendarEvents: danglingEventIds,
     }),
   );
 } catch (err) {
