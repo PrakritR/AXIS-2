@@ -6,9 +6,10 @@ import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
+import { LeaseReportIssueModal } from "@/components/portal/lease-report-issue-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import {
   shortToLongTermUpgradeBreakdown,
@@ -38,9 +39,9 @@ import { usePortalSession } from "@/hooks/use-portal-session";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 /**
- * Self-contained resident Lease tab: review + sign the lease, message the
- * manager about it at any point, and — once both parties have signed —
- * download the final document. General document uploads live in
+ * Self-contained resident Lease tab: review + sign the lease, report an issue
+ * to the manager at any point (delivered to their inbox and email), and
+ * download or upload the document. General document uploads live in
  * Documents › Other documents, not here.
  */
 export function ResidentLeasePanel() {
@@ -48,10 +49,11 @@ export function ResidentLeasePanel() {
   const session = usePortalSession();
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pipelineTick, setPipelineTick] = useState(0);
-  const [editRequestDraft, setEditRequestDraft] = useState("");
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
+  const [reportIssueOpen, setReportIssueOpen] = useState(false);
+  const [reportIssueBusy, setReportIssueBusy] = useState(false);
   const [residentAxisId, setResidentAxisId] = useState("");
   const email = session.email?.trim() || null;
 
@@ -124,12 +126,9 @@ export function ResidentLeasePanel() {
     return gatherLeaseGenerationContext();
   }, [pipelineRow]);
 
-  /** Both manager AND resident signatures present — unlocks the final download. */
+  /** Both manager AND resident signatures present. */
   const leaseFullyExecuted = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow) && leaseAuthorized;
-  const usesElectronicSigning = Boolean(
-    pipelineRow?.generatedHtml || pipelineRow?.managerUploadedPdf?.dataUrl,
-  );
 
   const upgradeBreakdown = useMemo(() => {
     const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
@@ -148,13 +147,6 @@ export function ResidentLeasePanel() {
     if (!isShortTerm) return null;
     return shortToLongTermUpgradeBreakdown(propertyId, true);
   }, [pipelineRow, leaseCtx.application]);
-
-  const canSignElectronically = Boolean(
-    usesElectronicSigning && pipelineRow?.status === "Resident Signature Pending" && !pipelineRow.residentSignature && !leaseFullyExecuted,
-  );
-  const canUseManualPdfFlow = Boolean(
-    pipelineRow?.managerUploadedPdf?.dataUrl && pipelineRow?.status === "Resident Signature Pending" && !leaseFullyExecuted,
-  );
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
@@ -235,6 +227,36 @@ export function ResidentLeasePanel() {
     setPipelineTick((t) => t + 1);
   }, []);
 
+  const onSubmitReportIssue = async (subject: string, message: string) => {
+    if (!pipelineRow || !email || reportIssueBusy) return;
+    setReportIssueBusy(true);
+    try {
+      const leaseLabel = `${pipelineRow.residentName || "Resident"} — ${pipelineRow.unit || "unit"}`;
+      const fullSubject = `Lease issue — ${leaseLabel}: ${subject}`;
+      const body = [`Lease: ${leaseLabel}`, "", message, "", pipelineRow.residentName || "Resident"].join("\n");
+      const delivery = await deliverPortalInboxMessage({
+        fromName: pipelineRow.residentName || "Resident",
+        toBroadcast: ["management"],
+        subject: fullSubject,
+        text: body,
+      });
+      appendLeaseThreadMessage(pipelineRow.id, "resident", `${subject}\n\n${message}`);
+      if (delivery.ok) {
+        showToast(
+          delivery.skipped
+            ? "Message sent to your manager's Axis inbox."
+            : "Message sent to your manager's Axis inbox and email.",
+        );
+        setReportIssueOpen(false);
+        setPipelineTick((t) => t + 1);
+      } else {
+        showToast(delivery.error ?? "Could not send message.");
+      }
+    } finally {
+      setReportIssueBusy(false);
+    }
+  };
+
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
     const preparing = (
       <div className="flex flex-col items-center gap-4 py-16 text-center">
@@ -286,54 +308,49 @@ export function ResidentLeasePanel() {
         onSuccess={() => void handleMoveOutSuccess()}
       />
 
+      <LeaseReportIssueModal
+        open={reportIssueOpen}
+        recipientLabel="your property manager"
+        leaseLabel={pipelineRow ? `${pipelineRow.residentName || "You"} — ${pipelineRow.unit || "unit"}` : ""}
+        busy={reportIssueBusy}
+        onClose={() => {
+          if (reportIssueBusy) return;
+          setReportIssueOpen(false);
+        }}
+        onSubmit={(subject, message) => void onSubmitReportIssue(subject, message)}
+      />
+
       <ManagerPortalPageShell
         title="Lease"
         titleAside={
-          leaseFullyExecuted ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0 rounded-full"
-                onClick={() => setShowMoveOutModal(true)}
-              >
-                Renew or extend lease
-              </Button>
-              <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
-                Download PDF
-              </Button>
-            </>
-          ) : (
-            <>
-              {canUseManualPdfFlow ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="shrink-0 rounded-full"
-                    onClick={() => uploadRef.current?.click()}
-                    disabled={uploadingPdf}
-                  >
-                    {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
-                  </Button>
-                  <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
-                    Send to manager
-                  </Button>
-                </>
-              ) : null}
-              {usesElectronicSigning ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="shrink-0 rounded-full"
-                  disabled={!canSignElectronically}
-                  onClick={() => onSignLease()}
-                >
-                  {pipelineRow?.residentSignature ? "Resident signed" : "Sign lease"}
-                </Button>
-              ) : null}
-            </>
-          )
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              onClick={() => setShowMoveOutModal(true)}
+            >
+              Renew or extend lease
+            </Button>
+            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
+              Download PDF
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              onClick={() => uploadRef.current?.click()}
+              disabled={uploadingPdf}
+            >
+              {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
+            </Button>
+            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
+              Send to manager
+            </Button>
+            <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => onSignLease()}>
+              {pipelineRow?.residentSignature ? "Resident signed" : "Sign lease"}
+            </Button>
+          </>
         }
       >
         {leaseVisibleToResident && pipelineRow ? (
@@ -374,60 +391,17 @@ export function ResidentLeasePanel() {
           </div>
         ) : null}
 
-        {leaseVisibleToResident && pipelineRow && !leaseFullyExecuted ? (
-          <Card className="glass-card border-border p-5">
-            <PortalDataTableEmpty
-              icon="lease"
-              message="Download unlocks once both you and your manager have signed the lease."
-            />
-          </Card>
-        ) : null}
-
         {leaseVisibleToResident && pipelineRow && email ? (
           <Card className="glass-card border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted">Messages</p>
-            <textarea
-              rows={3}
-              value={editRequestDraft}
-              onChange={(e) => setEditRequestDraft(e.target.value)}
-              placeholder="Send a message to your manager…"
-              className="mt-3 w-full resize-none rounded-2xl border border-border bg-[var(--glass-fill)] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/25"
-            />
-            <div className="mt-2.5">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={() => {
-                  if (!editRequestDraft.trim()) { showToast("Enter a message first."); return; }
-                  if (!pipelineRow) return;
-                  if (appendLeaseThreadMessage(pipelineRow.id, "resident", editRequestDraft.trim())) {
-                    showToast("Message sent.");
-                    setEditRequestDraft("");
-                    setPipelineTick((t) => t + 1);
-                  } else showToast("Could not send message.");
-                }}
-              >
-                Send message
+            <p className="text-xs font-bold uppercase tracking-wide text-muted">Have a question or issue with this lease?</p>
+            <p className="mt-1.5 text-sm text-muted">
+              Send a message to your property manager. It&apos;s delivered to their Axis inbox and by email.
+            </p>
+            <div className="mt-3">
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setReportIssueOpen(true)}>
+                Report issue
               </Button>
             </div>
-            {pipelineRow.thread?.length ? (
-              <>
-                <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">History</p>
-                <ul className="mt-2 space-y-2">
-                  {pipelineRow.thread.map((m) => (
-                    <li
-                      key={m.id}
-                      className={`rounded-xl px-3 py-2 text-sm ${m.role === "resident" ? "border portal-banner-info" : "border border-border bg-accent/30"}`}
-                    >
-                      <span className="font-semibold text-foreground">{m.role === "resident" ? "You" : "Manager"}</span>
-                      <span className="ml-1.5 text-xs text-muted">{safeFormatDateTime(m.at)}</span>
-                      <p className="mt-1 whitespace-pre-wrap text-muted">{m.body}</p>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
           </Card>
         ) : null}
 
