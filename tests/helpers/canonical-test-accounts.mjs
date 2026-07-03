@@ -1,0 +1,67 @@
+/**
+ * Canonical test-DB account registry shared by the two seeds
+ * (tests/helpers/seed-test-db.mjs and scripts/seed-demo-manager-workflow.mjs).
+ *
+ * The test Supabase project must contain ONLY the accounts both seeds create:
+ * anything else (OAuth-test artifacts, one-off signups, the production admin)
+ * is pruned by seed-test-db.mjs on every run. Keep this list in sync with the
+ * demo workflow seed's applicant list — seed-demo-manager-workflow.mjs fails
+ * loudly if an applicant email is missing here, because the prune would
+ * otherwise delete that resident's account on the next E2E seed run.
+ */
+
+/** Dedicated dev/test Supabase project (docs/database-environments.md). */
+export const TEST_SUPABASE_PROJECT_REF = "emstjswhotsnyksqhqyf";
+
+/**
+ * The production ops admin (src/lib/auth/primary-admin.ts). This account lives
+ * ONLY in the production project — it must never be provisioned into, or kept
+ * canonical in, the test DB.
+ */
+export const PRODUCTION_ADMIN_EMAIL = "prakritramachandran@gmail.com";
+
+/**
+ * Residents created by scripts/seed-demo-manager-workflow.mjs
+ * (`<first>.<last>.seed@example.com`, only approved applicants get accounts).
+ * Pending/rejected applicants are listed too so a bucket change there never
+ * requires touching this file.
+ */
+export const DEMO_WORKFLOW_RESIDENT_EMAILS = [
+  ["Maya", "Chen"],
+  ["Liam", "Novak"],
+  ["Ava", "Rossi"],
+  ["Noah", "Park"],
+  ["Sofia", "Diaz"],
+  ["Diego", "Morales"],
+  ["Grace", "Hall"],
+  ["Owen", "Bennett"],
+  ["Ethan", "Wright"],
+  ["Olivia", "Brooks"],
+  ["Isabella", "Nguyen"],
+  ["Mason", "Clark"],
+  ["Lucas", "Kim"],
+  ["Chloe", "Adams"],
+].map(([first, last]) => `${first}.${last}.seed@example.com`.toLowerCase());
+
+/**
+ * Abort unless the Supabase URL points at the dedicated test project. Both
+ * seeds create test accounts and seed-test-db.mjs DELETES non-canonical ones,
+ * so running either against any other project (especially production) must be
+ * impossible by accident. Override via SEED_SUPABASE_PROJECT_REF only if the
+ * test project is ever migrated.
+ */
+export function assertTestProjectUrl(url) {
+  const allowedRef = process.env.SEED_SUPABASE_PROJECT_REF?.trim() || TEST_SUPABASE_PROJECT_REF;
+  let ref = "";
+  try {
+    ref = new URL(url).hostname.split(".")[0] ?? "";
+  } catch {
+    ref = "";
+  }
+  if (ref !== allowedRef) {
+    throw new Error(
+      `Refusing to seed ${url}: not the dedicated test Supabase project (${allowedRef}). ` +
+        `Test seeds must never run against production (docs/database-environments.md).`,
+    );
+  }
+}

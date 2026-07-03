@@ -25,6 +25,11 @@
  * scripts/seed-demo-manager-workflow.mjs
  */
 import { createClient } from "@supabase/supabase-js";
+import {
+  assertTestProjectUrl,
+  DEMO_WORKFLOW_RESIDENT_EMAILS,
+  PRODUCTION_ADMIN_EMAIL,
+} from "./canonical-test-accounts.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -45,6 +50,20 @@ const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID ?? "AXIS-TESTRSID";
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
   process.exit(1);
+}
+// This seed both creates test accounts and PRUNES non-canonical ones — it must
+// only ever touch the dedicated test project, and the production ops admin
+// must never be part of the canonical test set.
+assertTestProjectUrl(url);
+for (const [label, email] of [
+  ["E2E_ADMIN_EMAIL", adminEmail],
+  ["E2E_MANAGER_EMAIL", managerEmail],
+  ["E2E_RESIDENT_EMAIL", residentEmail],
+]) {
+  if (email === PRODUCTION_ADMIN_EMAIL) {
+    console.error(`${label} is the production admin (${PRODUCTION_ADMIN_EMAIL}) — that account lives only in production.`);
+    process.exit(1);
+  }
 }
 
 const supabase = createClient(url, serviceKey, {
@@ -429,6 +448,19 @@ try {
           name: "Test Resident",
           property: propertyName,
           application,
+          backgroundCheck: {
+            provider: "checkr",
+            candidateId: `seed-cand-${residentAxisId.toLowerCase()}`,
+            reportId: `seed-report-${residentAxisId.toLowerCase()}`,
+            packageSlug: "test_pro_criminal",
+            status: "complete",
+            result: "clear",
+            assessment: "eligible",
+            orderedAt: daysFromNow(-2).toISOString(),
+            completedAt: daysFromNow(-1).toISOString(),
+            simulated: true,
+          },
+          backgroundCheckStatus: "passed",
           managerUserId,
           propertyId,
           assignedPropertyId: propertyId,
@@ -846,17 +878,21 @@ try {
   // ── Applicants: every catalog property gets ≥1 approved application (which
   //    drives a lease) plus pending/rejected spread for realistic buckets. ────
   const AUTO_RESIDENT_PASSWORD = "123Password$"; // mirrors provision-approved-resident.ts
+  // `screen: "consider"` = completed Checkr report that did NOT auto-pass
+  // (result "consider" → badge "flagged"), so Applications → Screening shows a
+  // mix of passed vs needs-manual-review and the manual screening flow is
+  // demonstrable. Everyone else gets a clear (passed) report.
   const people = [
     { axisId: "AXIS-TESTMAYACH", first: "Maya", last: "Chen", propId: "mgr-test-alder", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 96000 },
-    { axisId: "AXIS-TESTETHANW", first: "Ethan", last: "Wright", propId: "mgr-test-alder", roomId: "room-2", bucket: "pending", income: 71000 },
+    { axisId: "AXIS-TESTETHANW", first: "Ethan", last: "Wright", propId: "mgr-test-alder", roomId: "room-2", bucket: "pending", income: 71000, screen: "consider" },
     { axisId: "AXIS-TESTDIEGOM", first: "Diego", last: "Morales", propId: "mgr-test-birch", roomId: "room-1", bucket: "approved", leaseStage: "resident_sign", income: 91000 },
     { axisId: "AXIS-TESTOLIVIB", first: "Olivia", last: "Brooks", propId: "mgr-test-birch", roomId: "room-2", bucket: "pending", income: 68000 },
     { axisId: "AXIS-TESTSOFIAD", first: "Sofia", last: "Diaz", propId: "mgr-test-magnolia", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 104000 },
     { axisId: "AXIS-TESTNOAHPA", first: "Noah", last: "Park", propId: "mgr-test-magnolia", roomId: "room-2", bucket: "approved", leaseStage: "manager_sign", income: 79000 },
-    { axisId: "AXIS-TESTLUCASK", first: "Lucas", last: "Kim", propId: "mgr-test-magnolia", roomId: "room-3", bucket: "rejected", income: 40000, rejectReason: "Income below 2.5x rent." },
+    { axisId: "AXIS-TESTLUCASK", first: "Lucas", last: "Kim", propId: "mgr-test-magnolia", roomId: "room-3", bucket: "rejected", income: 40000, rejectReason: "Income below 2.5x rent.", screen: "consider" },
     { axisId: "AXIS-TESTLIAMFO", first: "Liam", last: "Foster", propId: "mgr-test-fir", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 98000 },
     { axisId: "AXIS-TESTISABEN", first: "Isabella", last: "Nguyen", propId: "mgr-test-cedar", roomId: "room-1", bucket: "approved", leaseStage: "manager", income: 120000 },
-    { axisId: "AXIS-TESTMASONC", first: "Mason", last: "Clark", propId: "mgr-test-cedar", roomId: "room-1", bucket: "pending", income: 88000 },
+    { axisId: "AXIS-TESTMASONC", first: "Mason", last: "Clark", propId: "mgr-test-cedar", roomId: "room-1", bucket: "pending", income: 88000, screen: "consider" },
     { axisId: "AXIS-TESTAVAROS", first: "Ava", last: "Rossi", propId: "mgr-test-spruce", roomId: "room-1", bucket: "approved", leaseStage: "admin", income: 82000 },
   ].map((p, i) => {
     const prop = propById.get(p.propId);
@@ -959,6 +995,27 @@ try {
     };
   }
 
+  // Completed (simulated) Checkr report stored the same way
+  // runBackgroundCheck persists it (src/lib/checkr/background-check.ts):
+  // `backgroundCheck` is the Checkr object, `backgroundCheckStatus` the badge
+  // backgroundCheckStatusFromCheckr derives — "passed" for clear, "flagged"
+  // (needs manual review) for consider. Stable ids keep re-runs idempotent.
+  function buildSeedBackgroundCheck(p) {
+    const consider = p.screen === "consider";
+    return {
+      provider: "checkr",
+      candidateId: `seed-cand-${p.axisId.toLowerCase()}`,
+      reportId: `seed-report-${p.axisId.toLowerCase()}`,
+      packageSlug: "test_pro_criminal",
+      status: "complete",
+      result: consider ? "consider" : "clear",
+      assessment: consider ? "review" : "eligible",
+      orderedAt: daysFromNow(-2).toISOString(),
+      completedAt: daysFromNow(-1).toISOString(),
+      simulated: true,
+    };
+  }
+
   const applicationRows = people.map((p) => {
     const approved = p.bucket === "approved";
     const stage = approved ? "Approved - placed" : p.bucket === "rejected" ? "Rejected" : "Submitted";
@@ -967,6 +1024,7 @@ try {
       : p.bucket === "rejected"
         ? p.rejectReason
         : `Submitted ${isoDate(daysFromNow(-1))}`;
+    const backgroundCheck = buildSeedBackgroundCheck(p);
     return {
       id: p.axisId,
       manager_user_id: p.prop.ownerUserId,
@@ -983,6 +1041,8 @@ try {
         name: p.name,
         property: p.prop.name,
         application: buildCatalogApplication(p),
+        backgroundCheck,
+        backgroundCheckStatus: backgroundCheck.result === "clear" ? "passed" : "flagged",
         managerUserId: p.prop.ownerUserId,
         propertyId: p.propId,
         ...(approved
@@ -1311,6 +1371,107 @@ try {
     "reset non-approved resident profiles",
   );
 
+  // 6. Account prune: the test DB contains ONLY canonical test accounts — the
+  //    E2E accounts this seed creates plus the demo-workflow residents
+  //    (scripts/seed-demo-manager-workflow.mjs). Anything else (OAuth-test
+  //    artifacts, one-off signups, the production admin) is deleted together
+  //    with its rows, so strays never accumulate and prod accounts never live
+  //    here. assertTestProjectUrl above guarantees this only ever runs against
+  //    the dedicated test project.
+  const canonicalEmails = new Set([
+    adminEmail,
+    managerEmail,
+    manager2Email,
+    residentEmail,
+    ...people.map((p) => p.email),
+    ...DEMO_WORKFLOW_RESIDENT_EMAILS,
+  ]);
+  if (canonicalEmails.has(PRODUCTION_ADMIN_EMAIL)) {
+    throw new Error(`The production admin (${PRODUCTION_ADMIN_EMAIL}) can never be a canonical test account.`);
+  }
+  // Tables owning rows keyed by user id (uuid) — kept in sync with the schema;
+  // must() fails loudly if a table disappears so the prune never rots silently.
+  const PRUNE_USER_ID_TABLES = [
+    ["agent_sessions", ["user_id"]],
+    ["device_push_tokens", ["user_id"]],
+    ["manager_purchases", ["user_id"]],
+    ["chart_of_accounts", ["manager_user_id"]],
+    ["cosigner_submission_records", ["manager_user_id"]],
+    ["ledger_entries", ["manager_user_id", "resident_user_id"]],
+    ["manager_application_records", ["manager_user_id"]],
+    ["manager_automation_settings", ["manager_user_id"]],
+    ["manager_expense_entries", ["manager_user_id"]],
+    ["manager_promotion_records", ["manager_user_id"]],
+    ["manager_property_records", ["manager_user_id"]],
+    ["manager_tax_profiles", ["manager_user_id"]],
+    ["manager_vendor_records", ["manager_user_id"]],
+    ["portal_household_charge_records", ["manager_user_id", "resident_user_id"]],
+    ["portal_inbox_thread_records", ["owner_user_id"]],
+    ["portal_lease_pipeline_records", ["manager_user_id", "resident_user_id"]],
+    ["portal_pro_relationship_records", ["manager_user_id"]],
+    ["portal_recurring_rent_profile_records", ["manager_user_id", "resident_user_id"]],
+    ["portal_resident_lease_upload_records", ["resident_user_id"]],
+    ["portal_schedule_records", ["manager_user_id"]],
+    ["portal_scheduled_inbox_message_records", ["manager_user_id"]],
+    ["portal_service_request_records", ["manager_user_id"]],
+    ["portal_work_order_records", ["manager_user_id"]],
+    ["scheduled_message_overrides", ["manager_user_id"]],
+    ["screening_orders", ["manager_user_id"]],
+    ["vendor_tax_profiles", ["manager_user_id"]],
+    ["profile_roles", ["user_id"]],
+    ["profiles", ["id"]],
+  ];
+  // Tables referencing accounts by email.
+  const PRUNE_EMAIL_TABLES = [
+    ["ledger_entries", "resident_email"],
+    ["manager_application_records", "resident_email"],
+    ["manager_purchases", "email"],
+    ["portal_bug_feedback_records", "reporter_email"],
+    ["portal_household_charge_records", "resident_email"],
+    ["portal_inbox_thread_records", "participant_email"],
+    ["portal_lease_pipeline_records", "resident_email"],
+    ["portal_outbound_mail_records", "recipient_email"],
+    ["portal_recurring_rent_profile_records", "resident_email"],
+    ["portal_resident_lease_upload_records", "resident_email"],
+    ["portal_service_request_records", "resident_email"],
+    ["portal_work_order_records", "resident_email"],
+  ];
+  const { data: allUsersData, error: allUsersErr } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  if (allUsersErr) throw new Error(`listUsers(prune): ${allUsersErr.message}`);
+  const strayUsers = (allUsersData?.users ?? []).filter(
+    (u) => !canonicalEmails.has((u.email ?? "").trim().toLowerCase()),
+  );
+  const prunedAccounts = [];
+  for (const stray of strayUsers) {
+    const strayEmail = (stray.email ?? "").trim().toLowerCase();
+    for (const [table, cols] of PRUNE_USER_ID_TABLES) {
+      for (const col of cols) {
+        await must(supabase.from(table).delete().eq(col, stray.id), `prune ${table}.${col}(${strayEmail || stray.id})`);
+      }
+    }
+    if (strayEmail) {
+      for (const [table, col] of PRUNE_EMAIL_TABLES) {
+        await must(supabase.from(table).delete().eq(col, strayEmail), `prune ${table}.${col}(${strayEmail})`);
+      }
+    }
+    const { error: delUserErr } = await supabase.auth.admin.deleteUser(stray.id);
+    if (delUserErr) throw new Error(`deleteUser(${strayEmail || stray.id}): ${delUserErr.message}`);
+    prunedAccounts.push(strayEmail || stray.id);
+    console.error(`Pruned non-canonical account: ${strayEmail || stray.id}`);
+  }
+  // Orphan profiles (no auth user, e.g. a half-deleted account) are pruned by
+  // email the same way so the admin Accounts view can never resurrect them.
+  const { data: allProfiles, error: allProfilesErr } = await supabase.from("profiles").select("id, email");
+  if (allProfilesErr) throw new Error(`select profiles(prune): ${allProfilesErr.message}`);
+  const orphanProfileIds = (allProfiles ?? [])
+    .filter((p) => !canonicalEmails.has((p.email ?? "").trim().toLowerCase()))
+    .map((p) => p.id);
+  if (orphanProfileIds.length) {
+    await must(supabase.from("profile_roles").delete().in("user_id", orphanProfileIds), "prune orphan profile_roles");
+    await must(supabase.from("profiles").delete().in("id", orphanProfileIds), "prune orphan profiles");
+    console.error(`Pruned ${orphanProfileIds.length} orphan profiles`);
+  }
+
   console.log(
     JSON.stringify({
       ok: true,
@@ -1334,6 +1495,7 @@ try {
       catalogLeases: leaseRows.length,
       cleanedStaleProperties: staleIds,
       cleanedDanglingCalendarEvents: danglingEventIds,
+      prunedAccounts,
     }),
   );
 } catch (err) {

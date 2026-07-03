@@ -33,6 +33,10 @@
 
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import {
+  assertTestProjectUrl,
+  DEMO_WORKFLOW_RESIDENT_EMAILS,
+} from "../tests/helpers/canonical-test-accounts.mjs";
 
 // ---------------------------------------------------------------------------
 // Config / env
@@ -49,6 +53,8 @@ if (!url || !serviceKey) {
   console.error("Run with:  node --env-file=.env.test scripts/seed-demo-manager-workflow.mjs");
   process.exit(1);
 }
+// Test accounts must never be created in any other project (esp. production).
+assertTestProjectUrl(url);
 
 const sb = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -331,14 +337,16 @@ function buildApplicants() {
     { first: "Grace", last: "Hall", propId: MAGNOLIA, propLabel: "Magnolia House — 5 rooms", room: "Room 2", rent: 1200, leaseStage: "signed", income: 76000, previous: true, movedOutMonthsAgo: 3 },
     { first: "Owen", last: "Bennett", propId: BIRCH, propLabel: "Birch Court — 4 rooms", room: "Room 2", rent: 1150, leaseStage: "signed", income: 70000, previous: true, movedOutMonthsAgo: 5 },
   ];
+  // `screen: "consider"` = completed Checkr report that did NOT auto-pass, so
+  // the Screening section shows a mix of passed vs needs-manual-review.
   const pending = [
-    { first: "Ethan", last: "Wright", propId: MAGNOLIA, propLabel: "Magnolia House — 5 rooms", room: "Room 2", rent: 1250, income: 71000 },
+    { first: "Ethan", last: "Wright", propId: MAGNOLIA, propLabel: "Magnolia House — 5 rooms", room: "Room 2", rent: 1250, income: 71000, screen: "consider" },
     { first: "Olivia", last: "Brooks", propId: BIRCH, propLabel: "Birch Court — 4 rooms", room: "Room 3", rent: 1200, income: 68000 },
     { first: "Isabella", last: "Nguyen", propId: () => key("prop-cedar"), propLabel: "Cedar Flat 2B", room: "Unit 2B", rent: 2400, income: 120000 },
-    { first: "Mason", last: "Clark", propId: MAGNOLIA, propLabel: "Magnolia House — 5 rooms", room: "Room 4", rent: 1150, income: 64000 },
+    { first: "Mason", last: "Clark", propId: MAGNOLIA, propLabel: "Magnolia House — 5 rooms", room: "Room 4", rent: 1150, income: 64000, screen: "consider" },
   ].map((a) => ({ ...a, bucket: "pending" }));
   const rejected = [
-    { first: "Lucas", last: "Kim", propId: MAGNOLIA, propLabel: "Magnolia House — 5 rooms", room: "Room 3", rent: 1200, income: 40000, rejectReason: "Income below 2.5x rent." },
+    { first: "Lucas", last: "Kim", propId: MAGNOLIA, propLabel: "Magnolia House — 5 rooms", room: "Room 3", rent: 1200, income: 40000, rejectReason: "Income below 2.5x rent.", screen: "consider" },
     { first: "Chloe", last: "Adams", propId: BIRCH, propLabel: "Birch Court — 4 rooms", room: "Room 4", rent: 1150, income: 0, rejectReason: "Incomplete application / no income docs." },
   ].map((a) => ({ ...a, bucket: "rejected" }));
 
@@ -350,12 +358,22 @@ function buildApplicants() {
   ];
 
   // Derive stable ids, emails, and the full application object.
-  return all.map((a, i) => {
+  const derived = all.map((a, i) => {
     const name = `${a.first} ${a.last}`;
     const email = `${a.first}.${a.last}.seed@example.com`.toLowerCase();
     const axisId = `AXIS-SEEDWF${managerShort.toUpperCase()}${String(i + 1).padStart(2, "0")}${a.last.toUpperCase().slice(0, 4)}`;
     return { ...a, index: i, name, email, axisId, application: buildApplication(a, name, email) };
   });
+  // The E2E seed (tests/helpers/seed-test-db.mjs) prunes accounts not in the
+  // shared canonical registry — an applicant missing there would have their
+  // resident account deleted on the next E2E seed run.
+  const unknown = derived.filter((a) => !DEMO_WORKFLOW_RESIDENT_EMAILS.includes(a.email));
+  if (unknown.length) {
+    throw new Error(
+      `Applicants missing from tests/helpers/canonical-test-accounts.mjs: ${unknown.map((a) => a.email).join(", ")} — add them there.`,
+    );
+  }
+  return derived;
 }
 
 function buildApplication(a, name, email) {
@@ -453,10 +471,33 @@ function stageLabelForApplicant(a) {
   return "Submitted";
 }
 
+/**
+ * Completed (simulated) Checkr report, persisted the same way
+ * runBackgroundCheck does (src/lib/checkr/background-check.ts): "consider"
+ * maps to the "flagged" badge and demos the manual screening flow; everyone
+ * else is "clear"/passed. Stable ids keep re-runs idempotent.
+ */
+function buildBackgroundCheck(a) {
+  const consider = a.screen === "consider";
+  return {
+    provider: "checkr",
+    candidateId: `seed-cand-${a.axisId.toLowerCase()}`,
+    reportId: `seed-report-${a.axisId.toLowerCase()}`,
+    packageSlug: "test_pro_criminal",
+    status: "complete",
+    result: consider ? "consider" : "clear",
+    assessment: consider ? "review" : "eligible",
+    orderedAt: iso(daysFromNow(-2)),
+    completedAt: iso(daysFromNow(-1)),
+    simulated: true,
+  };
+}
+
 async function seedApplications(applicants) {
   const rows = applicants.map((a) => {
     const propId = a.propId();
     const approved = a.bucket === "approved";
+    const backgroundCheck = buildBackgroundCheck(a);
     const rowData = {
       id: a.axisId,
       name: a.name,
@@ -473,6 +514,8 @@ async function seedApplications(applicants) {
             ? a.rejectReason || "Rejected"
             : `Submitted ${isoDate(daysFromNow(-1))}`,
       application: a.application,
+      backgroundCheck,
+      backgroundCheckStatus: backgroundCheck.result === "clear" ? "passed" : "flagged",
       propertyId: propId,
       assignedPropertyId: approved ? propId : undefined,
       assignedRoomChoice: approved ? a.room : undefined,
