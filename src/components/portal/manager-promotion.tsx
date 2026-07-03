@@ -27,12 +27,17 @@ import {
   type ManagerPromotionPropertyOption,
 } from "@/lib/manager-property-links";
 import {
+  FLYER_IMAGE_LIMIT,
+  normalizePromotionTemplate,
+  PROMOTION_TEMPLATE_DEFAULT,
+  PROMOTION_TEMPLATE_OPTIONS,
   PROMOTION_THEME_OPTIONS,
   PROMOTION_TONE_OPTIONS,
   PROMOTION_SIZE_OPTIONS,
   type FlyerSize,
   type ManagerPromotionRow,
   type PromotionInputs,
+  type PromotionTemplate,
   type PromotionTheme,
 } from "@/lib/promotion-flyer";
 import {
@@ -62,7 +67,10 @@ type PromotionDraft = {
   contact: string;
   theme: PromotionTheme;
   flyerSize: FlyerSize;
+  template: PromotionTemplate;
   tone: string;
+  /** Uploaded property photos as downscaled data URLs. */
+  images: string[];
 };
 
 const CUSTOM_PROPERTY_KEY = "__custom__";
@@ -80,7 +88,9 @@ const EMPTY_DRAFT: PromotionDraft = {
   contact: "",
   theme: "cobalt",
   flyerSize: "letter",
+  template: PROMOTION_TEMPLATE_DEFAULT,
   tone: PROMOTION_TONE_OPTIONS[0]!,
+  images: [],
 };
 
 function draftInputs(draft: PromotionDraft): PromotionInputs {
@@ -93,7 +103,48 @@ function draftInputs(draft: PromotionDraft): PromotionInputs {
     contact: draft.contact.trim(),
     tone: draft.tone.trim(),
     customDetails: draft.customDetails.trim(),
+    images: draft.images.slice(0, FLYER_IMAGE_LIMIT),
   };
+}
+
+/** Longest edge of a stored flyer photo — keeps data URLs small enough to persist. */
+const FLYER_IMAGE_MAX_DIM = 1280;
+
+/**
+ * Read an uploaded photo and downscale it client-side (canvas → JPEG) so the
+ * stored data URL stays a reasonable size. Returns null for non-images or
+ * unreadable files.
+ */
+async function fileToFlyerImage(file: File): Promise<string | null> {
+  if (!file.type.startsWith("image/") || file.size > 15 * 1024 * 1024) return null;
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = dataUrl;
+    });
+    if (!img.width || !img.height) return null;
+    const scale = Math.min(1, FLYER_IMAGE_MAX_DIM / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    // JPEG has no alpha — flatten transparent PNGs onto white, not black.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.78);
+  } catch {
+    return null;
+  }
 }
 
 function formatDate(iso: string): string {
@@ -173,7 +224,9 @@ export function ManagerPromotion() {
         contact: row.inputs.contact,
         theme: row.theme,
         flyerSize: row.flyerSize,
+        template: normalizePromotionTemplate(row.template),
         tone: row.inputs.tone || PROMOTION_TONE_OPTIONS[0]!,
+        images: row.inputs.images ?? [],
       });
       setEditingId(row.id);
       setShowForm(true);
@@ -212,9 +265,14 @@ export function ManagerPromotion() {
     const editing = editingId ? promotions.find((p) => p.id === editingId) ?? null : null;
     setGenerating(true);
     if (editing) {
-      track("promotion_regenerated", { theme: draft.theme });
+      track("promotion_regenerated", { theme: draft.theme, template: draft.template });
     } else {
-      track("promotion_generation_started", { theme: draft.theme, flyer_size: draft.flyerSize });
+      track("promotion_generation_started", {
+        theme: draft.theme,
+        flyer_size: draft.flyerSize,
+        template: draft.template,
+        photo_count: draft.images.length,
+      });
     }
     try {
       const inputs = draftInputs(draft);
@@ -232,6 +290,7 @@ export function ManagerPromotion() {
         title,
         theme: draft.theme,
         flyerSize: draft.flyerSize,
+        template: draft.template,
         status: "generated",
         inputs,
         copy,
@@ -255,7 +314,7 @@ export function ManagerPromotion() {
 
   async function regenerate(row: ManagerPromotionRow) {
     setRegeneratingId(row.id);
-    track("promotion_regenerated", { theme: row.theme });
+    track("promotion_regenerated", { theme: row.theme, template: normalizePromotionTemplate(row.template) });
     try {
       const { copy, source } = await generateFlyerCopy(row.inputs, row.propertyLabel, row.propertyId);
       if (source === "forbidden") {
@@ -420,6 +479,72 @@ export function ManagerPromotion() {
   );
 }
 
+/**
+ * Tiny abstract sketch of each template's layout so the picker reads visually
+ * (photo areas = tinted blocks, text = hairlines) without rendering real flyers.
+ */
+function TemplateThumb({ id }: { id: PromotionTemplate }) {
+  const photo = "rounded-[3px] bg-primary/50";
+  const bar = "rounded-[2px] bg-foreground/60";
+  const line = "rounded-[2px] bg-foreground/25";
+  const frame = "flex h-16 w-full flex-col gap-1 rounded-md border border-border bg-card p-1.5";
+  if (id === "photo_hero") {
+    return (
+      <div className={frame} aria-hidden="true">
+        <div className={`${photo} h-7 w-full`} />
+        <div className={`${bar} h-1.5 w-3/4`} />
+        <div className={`${line} h-1 w-full`} />
+        <div className={`${line} h-1 w-2/3`} />
+      </div>
+    );
+  }
+  if (id === "split") {
+    return (
+      <div className={`${frame} flex-row`} aria-hidden="true">
+        <div className={`${photo} h-full w-2/5`} />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className={`${bar} h-1.5 w-3/4`} />
+          <div className={`${line} h-1 w-full`} />
+          <div className={`${line} h-1 w-5/6`} />
+          <div className={`${line} h-1 w-2/3`} />
+        </div>
+      </div>
+    );
+  }
+  if (id === "feature_grid") {
+    return (
+      <div className={frame} aria-hidden="true">
+        <div className={`${bar} h-1.5 w-full`} />
+        <div className={`${photo} h-4 w-full`} />
+        <div className="grid flex-1 grid-cols-2 gap-1">
+          <div className={`${line} h-full`} />
+          <div className={`${line} h-full`} />
+          <div className={`${line} h-full`} />
+          <div className={`${line} h-full`} />
+        </div>
+      </div>
+    );
+  }
+  if (id === "bold_banner") {
+    return (
+      <div className={frame} aria-hidden="true">
+        <div className={`${bar} h-4 w-full`} />
+        <div className={`${photo} h-3 w-full`} />
+        <div className={`${line} h-1 w-full`} />
+        <div className={`${bar} h-2 w-full`} />
+      </div>
+    );
+  }
+  return (
+    <div className={`${frame} items-center`} aria-hidden="true">
+      <div className={`${line} h-1 w-1/3`} />
+      <div className={`${bar} h-1.5 w-2/3`} />
+      <div className={`${photo} h-5 w-1/2`} />
+      <div className={`${line} h-1 w-1/2`} />
+    </div>
+  );
+}
+
 function PromotionForm({
   draft,
   setDraft,
@@ -431,7 +556,35 @@ function PromotionForm({
   listings: ManagerPromotionPropertyOption[];
   onSelectProperty: (key: string) => void;
 }) {
+  const { showToast } = useAppUi();
+  const [readingPhotos, setReadingPhotos] = useState(false);
   const isCustom = draft.propertyKey === CUSTOM_PROPERTY_KEY;
+  const selectedTemplate =
+    PROMOTION_TEMPLATE_OPTIONS.find((t) => t.id === draft.template) ?? PROMOTION_TEMPLATE_OPTIONS[0]!;
+
+  async function onPhotoFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    const room = FLYER_IMAGE_LIMIT - draft.images.length;
+    const files = Array.from(list).slice(0, Math.max(0, room));
+    setReadingPhotos(true);
+    try {
+      const results = await Promise.all(files.map(fileToFlyerImage));
+      const added = results.filter((src): src is string => Boolean(src));
+      if (added.length) {
+        setDraft((d) => ({ ...d, images: [...d.images, ...added].slice(0, FLYER_IMAGE_LIMIT) }));
+      }
+      if (added.length < list.length) {
+        showToast(
+          added.length < files.length
+            ? "Some files couldn't be read as images."
+            : `Up to ${FLYER_IMAGE_LIMIT} photos per flyer.`,
+        );
+      }
+    } finally {
+      setReadingPhotos(false);
+    }
+  }
+
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <div>
@@ -575,6 +728,84 @@ function PromotionForm({
             </option>
           ))}
         </Select>
+      </div>
+      <div className="sm:col-span-2">
+        <label className="text-xs font-semibold text-muted">Flyer template</label>
+        <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5" role="radiogroup" aria-label="Flyer template">
+          {PROMOTION_TEMPLATE_OPTIONS.map((t) => {
+            const active = draft.template === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                title={t.description}
+                onClick={() => setDraft((d) => ({ ...d, template: t.id }))}
+                className={`rounded-xl border p-2 text-left outline-none transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-primary/25 ${
+                  active ? "border-primary/60 ring-2 ring-primary/20" : "border-border hover:border-primary/30"
+                }`}
+                data-attr="promotion-template-option"
+              >
+                <TemplateThumb id={t.id} />
+                <div className={`mt-1.5 truncate text-[11px] font-semibold ${active ? "text-primary" : "text-foreground"}`}>
+                  {t.label}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1 text-[11px] text-muted">{selectedTemplate.description}</p>
+      </div>
+      <div className="sm:col-span-2">
+        <label className="text-xs font-semibold text-muted">
+          Property photos <span className="font-normal">(up to {FLYER_IMAGE_LIMIT})</span>
+        </label>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          {draft.images.map((src, i) => (
+            <div key={i} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element -- small local data-URL thumbnail */}
+              <img
+                src={src}
+                alt={`Uploaded property photo ${i + 1}`}
+                className="h-16 w-20 rounded-lg border border-border object-cover"
+              />
+              <button
+                type="button"
+                aria-label={`Remove photo ${i + 1}`}
+                onClick={() => setDraft((d) => ({ ...d, images: d.images.filter((_, j) => j !== i) }))}
+                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[11px] font-bold leading-none text-background shadow"
+                data-attr="promotion-photo-remove"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {draft.images.length < FLYER_IMAGE_LIMIT ? (
+            <label
+              className="flex h-16 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border text-muted transition-colors hover:border-primary/40 hover:text-primary"
+              data-attr="promotion-photo-add"
+            >
+              <span className="text-lg leading-none">+</span>
+              <span className="text-[10px] font-semibold">{readingPhotos ? "Adding…" : "Add photo"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                disabled={readingPhotos}
+                onChange={(e) => {
+                  void onPhotoFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          ) : null}
+        </div>
+        <p className="mt-1 text-[11px] text-muted">
+          Shown in the flyer&apos;s photo slots (hero, sidebar, photo band). Photos are downscaled automatically;
+          templates without a photo still render cleanly.
+        </p>
       </div>
     </div>
   );

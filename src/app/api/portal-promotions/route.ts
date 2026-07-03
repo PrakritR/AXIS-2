@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import type { ManagerPromotionRow } from "@/lib/promotion-flyer";
+import {
+  normalizePromotionTemplate,
+  sanitizeFlyerImages,
+  type ManagerPromotionRow,
+} from "@/lib/promotion-flyer";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -23,6 +27,9 @@ function normalizeRow(row: ManagerPromotionRow, managerUserId: string): ManagerP
     propertyLabel: String(row.propertyLabel ?? "").trim(),
     title: String(row.title ?? "").trim(),
     flyerSize: row.flyerSize ?? "letter",
+    template: normalizePromotionTemplate(row.template),
+    // Re-validate uploaded photos server-side: data:image/* base64 only, capped.
+    inputs: { ...row.inputs, images: sanitizeFlyerImages(row.inputs?.images) },
     status: row.status === "generated" ? "generated" : "draft",
     updatedAt: new Date().toISOString(),
   };

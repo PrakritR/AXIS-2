@@ -171,11 +171,15 @@ export async function generateFlyerCopy(
     return { copy: composeFallbackFlyerCopy(inputs, propertyLabel), source: "fallback" };
   }
   try {
+    // Uploaded photos are embedded into the flyer HTML client-side; never ship
+    // the (large) data URLs to the copy-generation route.
+    const textInputs = { ...inputs };
+    delete textInputs.images;
     const res = await fetch("/api/portal/promotion-generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ inputs, propertyLabel, propertyId: propertyId ?? null }),
+      body: JSON.stringify({ inputs: textInputs, propertyLabel, propertyId: propertyId ?? null }),
     });
     // Server rejected an unowned property — surface it, don't silently compose.
     if (res.status === 403) {

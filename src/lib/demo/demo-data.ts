@@ -376,6 +376,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
       title: "Belltown loft feature",
       theme: "sunset",
       flyerSize: "ig_post",
+      template: "bold_banner",
       status: "generated",
       inputs: {
         headline: "Belltown loft living",
@@ -406,6 +407,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
       title: "First Hill family unit (draft)",
       theme: "forest",
       flyerSize: "letter",
+      template: "feature_grid",
       status: "draft",
       inputs: {
         headline: "Spacious First Hill 3-bed",
