@@ -516,6 +516,15 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "payments") {
     if (tabParts?.length) notFound();
+    const paymentsEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
+    const paymentsLeaseSigned = paymentsEmail ? await loadResidentLeaseSignedStatus(paymentsEmail) : false;
+    if (!paymentsLeaseSigned) {
+      return (
+        <ManagerPortalPageShell title="Payments">
+          <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
+        </ManagerPortalPageShell>
+      );
+    }
     return <ResidentPaymentsPanel />;
   }
 
@@ -560,6 +569,15 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "inbox") {
     const tierGate = residentManagerTierGate("inbox", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
+    const inboxEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
+    const inboxLeaseSigned = inboxEmail ? await loadResidentLeaseSignedStatus(inboxEmail) : false;
+    if (!inboxLeaseSigned) {
+      return (
+        <ManagerPortalPageShell title="Inbox">
+          <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
+        </ManagerPortalPageShell>
+      );
+    }
     if (!meta.tabs.length) notFound();
     if (!tabParts?.length) {
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);

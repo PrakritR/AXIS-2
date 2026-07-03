@@ -33,6 +33,7 @@ const SERVICES_TABS = [
 
 const DOCUMENTS_TABS = [
   { id: "application", label: "Application" },
+  { id: "lease", label: "Lease" },
   { id: "receipts", label: "Rent receipts" },
   { id: "other", label: "Other documents" },
 ] as const;
