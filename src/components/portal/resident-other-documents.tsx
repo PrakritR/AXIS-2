@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -11,13 +11,94 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
+  PORTAL_TABLE_TR_EXPANDABLE,
   PortalDataTableEmpty,
 } from "@/components/portal/portal-data-table";
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
 const MAX_UPLOAD_BYTES = 3.5 * 1024 * 1024;
+
+/** Trigger a browser download without opening a blank tab. */
+export function triggerDocumentDownload(href: string, fileName?: string): void {
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  if (fileName) anchor.download = fileName;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+/**
+ * Inline document view rendered BELOW a Documents table when a row is clicked —
+ * the lease/application-style presentation (rendered document in an embedded
+ * frame with a Download action alongside), never a modal or a new tab.
+ */
+export function DocumentInlineViewer({
+  title,
+  src,
+  srcDoc,
+  onClose,
+  onDownload,
+  extraActions,
+  children,
+}: {
+  title: string;
+  /** Same-origin PDF URL (or data URL) rendered via iframe src. */
+  src?: string | null;
+  /** Clean document HTML rendered via iframe srcDoc. */
+  srcDoc?: string | null;
+  onClose: () => void;
+  onDownload: () => void;
+  /** Optional extra buttons rendered before Close/Download (e.g. Remove). */
+  extraActions?: ReactNode;
+  /** Custom frame content (e.g. an image) used instead of the iframe. */
+  children?: ReactNode;
+}) {
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [title, src, srcDoc]);
+
+  return (
+    <section ref={sectionRef} className="mt-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground" title={title}>
+          {title}
+        </p>
+        <div className="flex items-center gap-2">
+          {extraActions}
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Close
+          </Button>
+          <Button type="button" className="rounded-full" data-attr="resident-document-download" onClick={onDownload}>
+            Download
+          </Button>
+        </div>
+      </div>
+      <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+        {children ? (
+          children
+        ) : src ? (
+          <iframe src={src} title={title} className="h-[720px] w-full border-0 bg-white" />
+        ) : srcDoc ? (
+          <iframe
+            srcDoc={srcDoc}
+            title={title}
+            sandbox="allow-same-origin"
+            loading="lazy"
+            className="h-[720px] w-full border-0 bg-white"
+          />
+        ) : (
+          <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
+            This document isn&apos;t available yet.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -192,7 +273,12 @@ export function ResidentAddDocumentModal({
   );
 }
 
-/** Documents › Other documents — table of the resident's own uploads. */
+/** Mime type parsed from the upload's data URL. */
+function uploadedMimeType(row: UploadedOwnLease): string {
+  return /^data:([^;,]+)/.exec(row.dataUrl)?.[1] ?? "";
+}
+
+/** Documents › Other documents — table of the resident's own uploads; clicking a row opens it inline below. */
 export function ResidentOtherDocumentsTable({
   uploads,
   loading,
@@ -204,6 +290,12 @@ export function ResidentOtherDocumentsTable({
   onRemove: (id: string) => void;
   emptyMessage?: string;
 }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = useMemo(
+    () => (selectedId ? uploads.find((row) => row.id === selectedId) ?? null : null),
+    [uploads, selectedId],
+  );
+
   if (loading) {
     return (
       <div className={PORTAL_DATA_TABLE_WRAP}>
@@ -214,59 +306,73 @@ export function ResidentOtherDocumentsTable({
   if (uploads.length === 0) {
     return <PortalDataTableEmpty icon="default" message={emptyMessage} />;
   }
+
+  const selectedMime = selected ? uploadedMimeType(selected) : "";
+  const selectedIsImage = selectedMime.startsWith("image/");
+  const selectedIsFramable = selectedIsImage || selectedMime === "application/pdf" || selectedMime.startsWith("text/");
+
   return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
-      <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-          <thead>
-            <tr className={PORTAL_TABLE_HEAD_ROW}>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Date added</th>
-              <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {uploads.map((row) => (
-              <tr key={row.id} className={PORTAL_TABLE_TR}>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground" title={row.fileName}>
-                    {row.fileName}
-                  </p>
-                </td>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>{uploadedDocumentKind(row)}</td>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(row.uploadedAt)}</td>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <div className="flex items-center justify-end gap-3 whitespace-nowrap">
-                    <a
-                      href={row.dataUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      View
-                    </a>
-                    <a
-                      href={row.dataUrl}
-                      download={row.fileName}
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      Download
-                    </a>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-danger hover:underline"
-                      onClick={() => onRemove(row.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </td>
+    <>
+      <div className={PORTAL_DATA_TABLE_WRAP}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Date added</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {uploads.map((row) => (
+                <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setSelectedId(row.id)}>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                    <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground" title={row.fileName}>
+                      {row.fileName}
+                    </p>
+                  </td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{uploadedDocumentKind(row)}</td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(row.uploadedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+      {selected ? (
+        <DocumentInlineViewer
+          title={selected.fileName}
+          src={selectedIsFramable && !selectedIsImage ? selected.dataUrl : null}
+          onClose={() => setSelectedId(null)}
+          onDownload={() => triggerDocumentDownload(selected.dataUrl, selected.fileName)}
+          extraActions={
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-danger"
+              onClick={() => {
+                setSelectedId(null);
+                onRemove(selected.id);
+              }}
+            >
+              Remove
+            </Button>
+          }
+        >
+          {selectedIsImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={selected.dataUrl}
+              alt={selected.fileName}
+              className="max-h-[720px] w-full bg-white object-contain"
+            />
+          ) : selectedIsFramable ? null : (
+            <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
+              Preview isn&apos;t available for this file type — use Download to open it.
+            </div>
+          )}
+        </DocumentInlineViewer>
+      ) : null}
+    </>
   );
 }

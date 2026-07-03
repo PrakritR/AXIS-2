@@ -9,7 +9,6 @@ import {
 } from "@/components/portal/portal-metrics";
 import { TabNav } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
 import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import {
@@ -21,10 +20,14 @@ import {
   PortalDataTableEmpty,
 } from "@/components/portal/portal-data-table";
 import {
+  DocumentInlineViewer,
   ResidentAddDocumentModal,
   ResidentOtherDocumentsTable,
+  triggerDocumentDownload,
   type AddDocumentMode,
 } from "@/components/portal/resident-other-documents";
+import { buildApplicationHtml } from "@/lib/manager-application-html";
+import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
@@ -63,71 +66,6 @@ function defaultReceiptRange() {
   return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
 }
 
-/** Trigger a browser download without opening a blank tab. */
-function triggerDownload(href: string, fileName?: string): void {
-  const anchor = document.createElement("a");
-  anchor.href = href;
-  if (fileName) anchor.download = fileName;
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
-/**
- * Inline document viewer for the Documents tabs — the PDF (or lease HTML)
- * renders in an embedded frame inside the portal, never a new tab, with a
- * Download action alongside.
- */
-function DocumentPreviewModal({
-  open,
-  title,
-  src,
-  srcDoc,
-  onClose,
-  onDownload,
-}: {
-  open: boolean;
-  title: string;
-  /** Same-origin PDF URL (or data URL) rendered via iframe src. */
-  src?: string | null;
-  /** Lease HTML rendered via iframe srcDoc when there is no PDF. */
-  srcDoc?: string | null;
-  onClose: () => void;
-  onDownload: () => void;
-}) {
-  return (
-    <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-4xl">
-      <div className="space-y-4">
-        <div className="overflow-hidden rounded-2xl border border-border bg-[#525659] shadow-sm">
-          {src ? (
-            <iframe src={src} title={title} className="h-[min(62vh,600px)] w-full border-0 bg-white" />
-          ) : srcDoc ? (
-            <iframe
-              srcDoc={srcDoc}
-              title={title}
-              sandbox="allow-same-origin"
-              className="h-[min(62vh,600px)] w-full border-0 bg-white"
-            />
-          ) : (
-            <div className="flex h-[min(40vh,320px)] items-center justify-center px-4 text-center text-sm text-white/80">
-              This document isn&apos;t available yet.
-            </div>
-          )}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Close
-          </Button>
-          <Button type="button" className="rounded-full" data-attr="resident-document-download" onClick={onDownload}>
-            Download
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 /** Shared table shell so every Documents tab matches the Other documents layout. */
 function DocumentsTableShell({ head, children }: { head: ReactNode; children: ReactNode }) {
   return (
@@ -144,62 +82,37 @@ function DocumentsTableShell({ head, children }: { head: ReactNode; children: Re
   );
 }
 
-/** Inline View / Download text actions used in each table's Actions column. */
-function RowActions({ onView, onDownload }: { onView: () => void; onDownload: () => void }) {
-  return (
-    <div className="flex items-center justify-end gap-3 whitespace-nowrap">
-      <button
-        type="button"
-        className="text-xs font-semibold text-primary hover:underline"
-        onClick={(e) => {
-          e.stopPropagation();
-          onView();
-        }}
-      >
-        View
-      </button>
-      <button
-        type="button"
-        className="text-xs font-semibold text-primary hover:underline"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDownload();
-        }}
-      >
-        Download
-      </button>
-    </div>
-  );
-}
-
 function applicationStatusLabel(bucket: ManagerApplicationBucket): string {
   if (bucket === "approved") return "Approved";
   if (bucket === "rejected") return "Rejected";
   return "Pending review";
 }
 
-/** Server PDF endpoint for an application (residents may fetch their own). */
-function applicationPdfHref(row: DemoApplicantRow, opts?: { inline?: boolean }): string {
+/** Human room label for an application row, resolved from the listing catalog. */
+function applicationRoomLabel(row: DemoApplicantRow): string {
   const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  const roomLabel = getRoomChoiceLabel(roomChoice);
+  return getRoomChoiceLabel(roomChoice);
+}
+
+/** Server PDF endpoint for an application (residents may fetch their own). */
+function applicationPdfHref(row: DemoApplicantRow): string {
+  const roomLabel = applicationRoomLabel(row);
   const params = new URLSearchParams();
   if (roomLabel) params.set("roomLabel", roomLabel);
-  if (opts?.inline) params.set("disposition", "inline");
   const query = params.toString();
   return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query ? `?${query}` : ""}`;
 }
 
-/** Documents › Application — the resident's applications as table rows with inline PDF preview. */
+/** Documents › Application — the resident's applications as table rows with an inline document view below. */
 function ApplicationDocumentsTable() {
   const session = usePortalSession();
   const email = session.email?.trim().toLowerCase() ?? "";
   const [tick, setTick] = useState(0);
   const [preview, setPreview] = useState<DemoApplicantRow | null>(null);
   // Demo sandbox: the PDF route requires auth, so build the same PDF in the
-  // browser and feed it to the preview/download as a data URL.
+  // browser and feed it to the download as a data URL.
   const demoMode = isDemoModeActive();
   const demoPdfCache = useRef(new Map<string, string>());
-  const [demoPdfSrc, setDemoPdfSrc] = useState<string | null>(null);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -218,32 +131,27 @@ function ApplicationDocumentsTable() {
     const cached = demoPdfCache.current.get(row.id);
     if (cached) return cached;
     const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-    const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-    const url = await buildDemoApplicationPdfDataUrl(row, getRoomChoiceLabel(roomChoice) || undefined);
+    const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined);
     demoPdfCache.current.set(row.id, url);
     return url;
   }, []);
 
-  const openPreview = useCallback(
+  const downloadRow = useCallback(
     (row: DemoApplicantRow) => {
-      setPreview(row);
       if (demoMode) {
-        setDemoPdfSrc(demoPdfCache.current.get(row.id) ?? null);
-        void buildDemoPdf(row).then(setDemoPdfSrc);
+        void buildDemoPdf(row).then((url) => triggerDocumentDownload(url, `rental-application-${row.id}.pdf`));
+        return;
       }
+      triggerDocumentDownload(applicationPdfHref(row));
     },
     [demoMode, buildDemoPdf],
   );
 
-  const downloadRow = useCallback(
-    (row: DemoApplicantRow) => {
-      if (demoMode) {
-        void buildDemoPdf(row).then((url) => triggerDownload(url, `rental-application-${row.id}.pdf`));
-        return;
-      }
-      triggerDownload(applicationPdfHref(row));
-    },
-    [demoMode, buildDemoPdf],
+  // Rendered-document HTML (same as the manager Applications preview) — the
+  // application data is already client-side, so this works in demo mode too.
+  const previewHtml = useMemo(
+    () => (preview ? buildApplicationHtml(preview, { roomLabel: applicationRoomLabel(preview) || undefined }) : null),
+    [preview],
   );
 
   if (rows.length === 0) {
@@ -258,12 +166,11 @@ function ApplicationDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-            <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
           </>
         }
       >
         {rows.map((row) => (
-          <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => openPreview(row)}>
+          <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setPreview(row)}>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
               <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">
                 Rental application — {row.id}
@@ -273,24 +180,17 @@ function ApplicationDocumentsTable() {
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
               <p className="min-w-0 max-w-[280px] truncate">{row.property || "—"}</p>
             </td>
-            <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <RowActions
-                onView={() => openPreview(row)}
-                onDownload={() => downloadRow(row)}
-              />
-            </td>
           </tr>
         ))}
       </DocumentsTableShell>
-      <DocumentPreviewModal
-        open={preview !== null}
-        title={preview ? `Rental application — ${preview.id}` : "Rental application"}
-        src={preview ? (demoMode ? demoPdfSrc : applicationPdfHref(preview, { inline: true })) : null}
-        onClose={() => setPreview(null)}
-        onDownload={() => {
-          if (preview) downloadRow(preview);
-        }}
-      />
+      {preview ? (
+        <DocumentInlineViewer
+          title={`Rental application — ${preview.id}`}
+          srcDoc={previewHtml}
+          onClose={() => setPreview(null)}
+          onDownload={() => downloadRow(preview)}
+        />
+      ) : null}
     </>
   );
 }
@@ -298,13 +198,12 @@ function ApplicationDocumentsTable() {
 type ReceiptRow = { date: string; description: string; amount: string };
 
 /** Ledger-statement PDF scoped to a single day — serves as the receipt for that payment. */
-function receiptPdfHref(date: string, opts?: { inline?: boolean }): string {
+function receiptPdfHref(date: string): string {
   const params = new URLSearchParams({ from: date, to: date, format: "pdf" });
-  if (opts?.inline) params.set("disposition", "inline");
   return `/api/reports/resident-ledger/export?${params.toString()}`;
 }
 
-/** Documents › Rent receipts — one row per recorded payment, with inline receipt PDF preview. */
+/** Documents › Rent receipts — one row per recorded payment, with an inline receipt document below. */
 function RentReceiptsTab() {
   const session = usePortalSession();
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
@@ -316,7 +215,6 @@ function RentReceiptsTab() {
   // seeded local charges and build receipt PDFs in the browser.
   const demoMode = isDemoModeActive();
   const demoPdfCache = useRef(new Map<string, string>());
-  const [demoPdfSrc, setDemoPdfSrc] = useState<string | null>(null);
   const sessionEmail = session.email?.trim().toLowerCase() ?? "";
   const sessionUserId = session.userId ?? null;
 
@@ -383,26 +281,30 @@ function RentReceiptsTab() {
     return url;
   }, []);
 
-  const openReceipt = useCallback(
+  const downloadReceipt = useCallback(
     (row: ReceiptRow) => {
-      setPreview(row);
       if (demoMode) {
-        setDemoPdfSrc(demoPdfCache.current.get(`${row.date}:${row.amount}`) ?? null);
-        void buildDemoReceipt(row).then(setDemoPdfSrc);
+        void buildDemoReceipt(row).then((url) => triggerDocumentDownload(url, `rent-receipt-${row.date}.pdf`));
+        return;
       }
+      triggerDocumentDownload(receiptPdfHref(row.date));
     },
     [demoMode, buildDemoReceipt],
   );
 
-  const downloadReceipt = useCallback(
-    (row: ReceiptRow) => {
-      if (demoMode) {
-        void buildDemoReceipt(row).then((url) => triggerDownload(url, `rent-receipt-${row.date}.pdf`));
-        return;
-      }
-      triggerDownload(receiptPdfHref(row.date));
-    },
-    [demoMode, buildDemoReceipt],
+  // Rendered receipt document (white serif page, like the lease/application) —
+  // everything the receipt shows is already in the row, so no extra fetch.
+  const previewHtml = useMemo(
+    () =>
+      preview
+        ? buildRentReceiptHtml({
+            residentName: demoMode ? DEMO_RESIDENT_NAME : sessionEmail || undefined,
+            description: preview.description,
+            amountLabel: preview.amount,
+            dateLabel: preview.date,
+          })
+        : null,
+    [preview, demoMode, sessionEmail],
   );
 
   return (
@@ -453,7 +355,6 @@ function RentReceiptsTab() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
-                <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               </>
             }
           >
@@ -461,7 +362,7 @@ function RentReceiptsTab() {
               <tr
                 key={`${row.date}-${i}`}
                 className={PORTAL_TABLE_TR_EXPANDABLE}
-                onClick={() => openReceipt(row)}
+                onClick={() => setPreview(row)}
               >
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>
                   <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">
@@ -470,26 +371,19 @@ function RentReceiptsTab() {
                 </td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <RowActions
-                    onView={() => openReceipt(row)}
-                    onDownload={() => downloadReceipt(row)}
-                  />
-                </td>
               </tr>
             ))}
           </DocumentsTableShell>
         )}
+        {preview ? (
+          <DocumentInlineViewer
+            title={`Rent receipt — ${preview.date}`}
+            srcDoc={previewHtml}
+            onClose={() => setPreview(null)}
+            onDownload={() => downloadReceipt(preview)}
+          />
+        ) : null}
       </div>
-      <DocumentPreviewModal
-        open={preview !== null}
-        title={preview ? `Rent receipt — ${preview.date}` : "Rent receipt"}
-        src={preview ? (demoMode ? demoPdfSrc : receiptPdfHref(preview.date, { inline: true })) : null}
-        onClose={() => setPreview(null)}
-        onDownload={() => {
-          if (preview) downloadReceipt(preview);
-        }}
-      />
     </>
   );
 }
@@ -582,7 +476,6 @@ function SignedLeaseDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Date signed</th>
-            <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
           </>
         }
       >
@@ -592,19 +485,17 @@ function SignedLeaseDocumentsTable() {
           </td>
           <td className={`${PORTAL_TABLE_TD} align-middle`}>Fully signed</td>
           <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(signedAt)}</td>
-          <td className={`${PORTAL_TABLE_TD} align-middle`}>
-            <RowActions onView={() => setPreviewOpen(true)} onDownload={onDownload} />
-          </td>
         </tr>
       </DocumentsTableShell>
-      <DocumentPreviewModal
-        open={previewOpen}
-        title={leaseName}
-        src={pdfSrc}
-        srcDoc={leaseHtml}
-        onClose={() => setPreviewOpen(false)}
-        onDownload={onDownload}
-      />
+      {previewOpen ? (
+        <DocumentInlineViewer
+          title={leaseName}
+          src={pdfSrc}
+          srcDoc={leaseHtml}
+          onClose={() => setPreviewOpen(false)}
+          onDownload={onDownload}
+        />
+      ) : null}
     </>
   );
 }
