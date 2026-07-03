@@ -28,7 +28,74 @@ export function formatAutomationScheduleSummary(settings: ManagerAutomationSetti
   if (days.length) parts.push(days.map((d) => `${d}d`).join(", "));
   if (settings.sameDayReminderEnabled) parts.push("due date");
   if (settings.overdueDailyEnabled) parts.push("overdue");
+  if (settings.setDateReminders.length) {
+    parts.push(settings.setDateReminders.length === 1 ? "1 set date" : `${settings.setDateReminders.length} set dates`);
+  }
   return parts.length ? parts.join(" · ") : "Off";
+}
+
+/** Persist a one-off reminder for a single charge on a specific calendar date. */
+export async function addChargeSetDateReminder(chargeId: string, isoDate: string): Promise<void> {
+  const res = await fetch("/api/portal/scheduled-messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ chargeId, date: isoDate }),
+  });
+  if (!res.ok) {
+    const payload = (await res.json()) as { error?: string };
+    throw new Error(payload.error ?? "Could not add reminder.");
+  }
+}
+
+function formatIsoDateLabel(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const d = new Date(year!, (month ?? 1) - 1, day ?? 1, 12, 0, 0, 0);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+/** Compact date picker + button that adds a one-off set-date reminder. */
+export function AddSetDateReminderControl({
+  onAdd,
+  label = "Add date",
+  disabled,
+}: {
+  onAdd: (isoDate: string) => void | Promise<void>;
+  label?: string;
+  disabled?: boolean;
+}) {
+  const [date, setDate] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="date"
+        className="h-8 w-36 text-xs"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        disabled={disabled || busy}
+        aria-label="Reminder date"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        className="rounded-full px-2 py-1 text-xs"
+        disabled={disabled || busy || !date}
+        onClick={async () => {
+          if (!date) return;
+          setBusy(true);
+          try {
+            await onAdd(date);
+            setDate("");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Adding…" : label}
+      </Button>
+    </div>
+  );
 }
 
 export function ChargeReminderList({
@@ -92,6 +159,7 @@ export function ChargeRemindersModal({
   onEdit,
   onToggleCancel,
   onOpenSettings,
+  onAddSetDate,
 }: {
   open: boolean;
   onClose: () => void;
@@ -102,6 +170,7 @@ export function ChargeRemindersModal({
   onEdit: (message: ScheduledPaymentMessage) => void;
   onToggleCancel: (message: ScheduledPaymentMessage, cancelled: boolean) => void | Promise<void>;
   onOpenSettings?: () => void;
+  onAddSetDate?: (isoDate: string) => void | Promise<void>;
 }) {
   return (
     <Modal open={open} onClose={onClose} title="Automated reminders">
@@ -149,6 +218,14 @@ export function ChargeRemindersModal({
             })}
           </ul>
         )}
+        {onAddSetDate ? (
+          <div>
+            <p className="text-xs font-semibold text-muted">Add a reminder on a specific date</p>
+            <div className="mt-2">
+              <AddSetDateReminderControl onAdd={onAddSetDate} label="Add reminder" />
+            </div>
+          </div>
+        ) : null}
         {onOpenSettings ? (
           <Button type="button" variant="outline" className="w-full rounded-full" onClick={onOpenSettings}>
             Default schedule for all payments
@@ -444,6 +521,43 @@ function PaymentAutomationSettingsForm({
           </div>
         </div>
       </div>
+
+      {variant === "payments" ? (
+        <div>
+          <p className="text-xs font-semibold text-muted">Send on specific dates</p>
+          <p className="mt-0.5 text-[11px] text-muted">One-off reminders sent to every pending charge on the chosen date.</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {draft.setDateReminders.map((iso) => (
+              <span
+                key={iso}
+                className="inline-flex items-center overflow-hidden rounded-full border border-primary/20 bg-primary/5 text-[11px] leading-none text-foreground"
+              >
+                <span className="px-2 py-1 font-medium">{formatIsoDateLabel(iso)}</span>
+                <button
+                  type="button"
+                  className="border-l border-border px-1.5 py-1 text-muted hover:bg-accent/50 hover:text-foreground"
+                  aria-label={`Remove ${formatIsoDateLabel(iso)} reminder`}
+                  disabled={busy}
+                  onClick={() =>
+                    setDraft((prev) => ({ ...prev, setDateReminders: prev.setDateReminders.filter((d) => d !== iso) }))
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <AddSetDateReminderControl
+              disabled={busy}
+              onAdd={(iso) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  setDateReminders: [...new Set([...prev.setDateReminders, iso])].sort(),
+                }))
+              }
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className={compact ? "flex flex-wrap gap-2" : "grid gap-3 sm:grid-cols-2"}>
         <label

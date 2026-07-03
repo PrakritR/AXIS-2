@@ -37,8 +37,10 @@ import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
+  ChargeRemindersModal,
   ReminderSettingsModal,
   ScheduledMessageEditModal,
+  addChargeSetDateReminder,
   patchScheduledMessage,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
@@ -319,6 +321,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
   const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
+  const [chargeRemindersFor, setChargeRemindersFor] = useState<HouseholdCharge | null>(null);
   const [hcTick, setHcTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [leaseTick, setLeaseTick] = useState(0);
@@ -2111,23 +2114,32 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           <td className="py-2 pr-4 text-xs text-muted">{chargeDueLabel(c)}</td>
                                           <td className="py-2 pr-4 align-top">
                                             {c.status === "pending" ? (
-                                              chargeReminders.length > 0 ? (
-                                                <ChargeReminderList
-                                                  messages={chargeReminders}
-                                                  onEdit={setScheduleEdit}
-                                                  onToggleCancel={async (msg, cancelled) => {
-                                                    try {
-                                                      await patchScheduledMessage(msg.id, { cancelled });
-                                                      showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
-                                                      void reloadSchedule();
-                                                    } catch (e) {
-                                                      showToast(e instanceof Error ? e.message : "Could not update reminder.");
-                                                    }
-                                                  }}
-                                                />
-                                              ) : (
-                                                <span className="text-xs text-muted">None scheduled</span>
-                                              )
+                                              <div>
+                                                {chargeReminders.length > 0 ? (
+                                                  <ChargeReminderList
+                                                    messages={chargeReminders}
+                                                    onEdit={setScheduleEdit}
+                                                    onToggleCancel={async (msg, cancelled) => {
+                                                      try {
+                                                        await patchScheduledMessage(msg.id, { cancelled });
+                                                        showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
+                                                        void reloadSchedule();
+                                                      } catch (e) {
+                                                        showToast(e instanceof Error ? e.message : "Could not update reminder.");
+                                                      }
+                                                    }}
+                                                  />
+                                                ) : (
+                                                  <span className="text-xs text-muted">None scheduled</span>
+                                                )}
+                                                <button
+                                                  type="button"
+                                                  className="mt-1 block text-[11px] font-semibold text-primary hover:underline"
+                                                  onClick={() => setChargeRemindersFor(c)}
+                                                >
+                                                  + Add date
+                                                </button>
+                                              </div>
                                             ) : (
                                               <span className="text-xs text-muted">—</span>
                                             )}
@@ -2202,8 +2214,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                                 <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Requests</p>
-                                  <p className="mt-1 text-sm text-muted">All requests and maintenance work orders from this resident.</p>
+                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Services</p>
+                                  <p className="mt-1 text-sm text-muted">All service requests and maintenance work orders from this resident.</p>
                                 </div>
                                 {residentServiceRequests.filter((r) => r.status === "pending").length > 0 ? (
                                   <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-300/60">
@@ -2985,6 +2997,42 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           void reloadSchedule();
         }}
       />
+      {chargeRemindersFor ? (
+        <ChargeRemindersModal
+          open
+          onClose={() => setChargeRemindersFor(null)}
+          residentName={chargeRemindersFor.residentName || "Resident"}
+          chargeTitle={chargeRemindersFor.title}
+          dueDate={chargeDueLabel(chargeRemindersFor)}
+          messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersFor.id)}
+          onEdit={(message) => {
+            setChargeRemindersFor(null);
+            setScheduleEdit(message);
+          }}
+          onToggleCancel={async (msg, cancelled) => {
+            try {
+              await patchScheduledMessage(msg.id, { cancelled });
+              showToast(cancelled ? "Reminder cancelled." : "Reminder restored.");
+              void reloadSchedule();
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : "Could not update reminder.");
+            }
+          }}
+          onOpenSettings={() => {
+            setChargeRemindersFor(null);
+            setReminderSettingsOpen(true);
+          }}
+          onAddSetDate={async (iso) => {
+            try {
+              await addChargeSetDateReminder(chargeRemindersFor.id, iso);
+              showToast("Reminder scheduled.");
+              void reloadSchedule();
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : "Could not add reminder.");
+            }
+          }}
+        />
+      ) : null}
     </>
   );
 }

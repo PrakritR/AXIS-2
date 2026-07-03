@@ -24,7 +24,7 @@ import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markMana
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
-import { ChargeRemindersModal, patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
+import { ChargeRemindersModal, addChargeSetDateReminder, patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 
@@ -464,6 +464,15 @@ export function ManagerPaymentsLedgerPanel({
             onScheduleChanged?.();
           } catch (e) {
             showToast(e instanceof Error ? e.message : "Could not update reminder.");
+          }
+        }}
+        onAddSetDate={async (iso) => {
+          try {
+            await addChargeSetDateReminder(chargeRemindersRow.householdChargeId!, iso);
+            showToast("Reminder scheduled.");
+            onScheduleChanged?.();
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "Could not add reminder.");
           }
         }}
         onOpenSettings={

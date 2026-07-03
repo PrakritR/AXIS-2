@@ -121,7 +121,7 @@ export function parseScheduledMessageListId(id: string): {
   if (parts.length !== 5 || parts[0] !== "sched") return null;
   const chargeId = parts[1]!;
   const kind = parts[2] as PaymentReminderKind;
-  if (!["pre_due", "same_day", "overdue_daily", "late_fee"].includes(kind)) return null;
+  if (!["pre_due", "same_day", "overdue_daily", "late_fee", "set_date"].includes(kind)) return null;
   const dayPart = parts[3]!;
   const daysBeforeDue = dayPart === "na" ? null : Number(dayPart);
   return { chargeId, kind, daysBeforeDue: Number.isFinite(daysBeforeDue) ? daysBeforeDue : null };
