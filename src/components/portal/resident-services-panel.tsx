@@ -29,7 +29,7 @@ import {
   PortalTableDetailActions,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { TabNav } from "@/components/ui/tabs";
+import { PillTabs, TabNav } from "@/components/ui/tabs";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -72,6 +72,37 @@ const STATUS_TABS: { id: ResidentWorkBucket; label: string }[] = [
   { id: "scheduled", label: "Scheduled" },
   { id: "completed", label: "Completed" },
 ];
+
+type RequestStatusBucket = "pending" | "approved" | "completed";
+
+const REQUEST_STATUS_TABS: { id: RequestStatusBucket; label: string }[] = [
+  { id: "pending", label: "Pending" },
+  { id: "approved", label: "Approved" },
+  { id: "completed", label: "Completed" },
+];
+
+/** Bucket a pill label with its count, e.g. "Open · 3" — omits the count when zero. */
+function pillLabelWithCount(label: string, count: number): string {
+  return count > 0 ? `${label} · ${count}` : label;
+}
+
+type UnifiedItem =
+  | { kind: "request"; req: ServiceRequest; sortKey: number }
+  | { kind: "work-order"; row: DemoManagerWorkOrderRow; sortKey: number };
+
+// Maps the resident's actual request/work-order statuses onto the shared
+// Pending / Approved / Completed filter — denied and returned requests both
+// read as closed-out, so they bucket under Completed alongside finished work orders.
+function unifiedItemStatusBucket(item: UnifiedItem): RequestStatusBucket {
+  if (item.kind === "request") {
+    if (item.req.status === "pending") return "pending";
+    if (item.req.status === "approved") return "approved";
+    return "completed";
+  }
+  if (item.row.bucket === "open") return "pending";
+  if (item.row.bucket === "scheduled") return "approved";
+  return "completed";
+}
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -317,7 +348,7 @@ function ServiceRequestCard({
         </div>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-border pt-3">
+      <div className="mt-3 flex flex-wrap justify-start gap-2 border-t border-border pt-3">
         {req.status === "pending" || req.status === "approved" ? (
           <Button
             type="button"
@@ -421,6 +452,7 @@ export function ResidentServicesPanel({
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [bucket, setBucket] = useState<ResidentWorkBucket>("open");
+  const [requestsFilter, setRequestsFilter] = useState<RequestStatusBucket>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const activeTab = tabId;
 
@@ -579,10 +611,6 @@ export function ResidentServicesPanel({
 
   // Unified Services list: the resident's service requests AND maintenance
   // work orders together, labeled by type, newest first.
-  type UnifiedItem =
-    | { kind: "request"; req: ServiceRequest; sortKey: number }
-    | { kind: "work-order"; row: DemoManagerWorkOrderRow; sortKey: number };
-
   const unifiedItems = useMemo<UnifiedItem[]>(() => {
     const items: UnifiedItem[] = [];
     for (const req of serviceRequests) {
@@ -599,6 +627,17 @@ export function ResidentServicesPanel({
     items.sort((a, b) => b.sortKey - a.sortKey);
     return items;
   }, [serviceRequests, myRows]);
+
+  const requestsCounts = useMemo(() => {
+    const c: Record<RequestStatusBucket, number> = { pending: 0, approved: 0, completed: 0 };
+    for (const item of unifiedItems) c[unifiedItemStatusBucket(item)] += 1;
+    return c;
+  }, [unifiedItems]);
+
+  const filteredUnifiedItems = useMemo(
+    () => unifiedItems.filter((item) => unifiedItemStatusBucket(item) === requestsFilter),
+    [unifiedItems, requestsFilter],
+  );
 
   function openRequestEdit(req: ServiceRequest) {
     setEditingRequest(req);
@@ -952,9 +991,24 @@ export function ResidentServicesPanel({
       ) : null}
 
       {activeTab === "requests" ? (
-        unifiedItems.length === 0 ? (
-          <PortalDataTableEmpty message="No service requests or work orders yet." icon="service" />
-        ) : (
+        <div>
+          <div className="mb-3 flex items-center gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Requests</p>
+            <PillTabs
+              items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
+                id,
+                label: pillLabelWithCount(label, requestsCounts[id]),
+              }))}
+              activeId={requestsFilter}
+              onChange={(id) => setRequestsFilter(id as RequestStatusBucket)}
+            />
+          </div>
+
+          {unifiedItems.length === 0 ? (
+            <PortalDataTableEmpty message="No service requests or work orders yet." icon="service" />
+          ) : filteredUnifiedItems.length === 0 ? (
+            <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
+          ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
               <table className="min-w-[860px] w-full border-collapse text-left text-sm">
@@ -968,7 +1022,7 @@ export function ResidentServicesPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {unifiedItems.map((item) => {
+                  {filteredUnifiedItems.map((item) => {
                     if (item.kind === "request") {
                       const req = item.req;
                       const rowId = `request-${req.id}`;
@@ -1041,28 +1095,17 @@ export function ResidentServicesPanel({
               </table>
             </div>
         </div>
-        )
+          )}
+        </div>
       ) : (
         <div>
           <div className="mb-3 flex items-center gap-3">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Work orders</p>
-            <div className="flex gap-1">
-              {statusTabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setBucket(tab.id)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                    bucket === tab.id
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-accent/30 text-muted hover:bg-accent/40"
-                  }`}
-                >
-                  {tab.label}
-                  {tab.count > 0 ? ` · ${tab.count}` : ""}
-                </button>
-              ))}
-            </div>
+            <PillTabs
+              items={statusTabs.map(({ id, label, count }) => ({ id, label: pillLabelWithCount(label, count) }))}
+              activeId={bucket}
+              onChange={(id) => setBucket(id as ResidentWorkBucket)}
+            />
           </div>
 
           {rows.length === 0 ? (
