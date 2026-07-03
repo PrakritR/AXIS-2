@@ -172,7 +172,7 @@ export function ResidentProfilePanel() {
 
         <NotificationsToggle />
 
-        <PortalChangePasswordPanel accountEmail={email} accountLabel="this resident account" />
+        <PortalChangePasswordPanel accountEmail={email} />
 
         <PortalSettingsExtras currentKind="resident" />
       </div>

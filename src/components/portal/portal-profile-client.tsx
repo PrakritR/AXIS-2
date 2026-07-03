@@ -238,10 +238,7 @@ export function PortalProfileClient({
             <ManagerPlan embedded showCurrentPlan={false} />
           </Card>
           <NotificationsToggle />
-          <PortalChangePasswordPanel
-            accountEmail={dashToEmpty(initialEmail) || initialEmail}
-            accountLabel="your property portal account"
-          />
+          <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
           <PortalSettingsExtras currentKind={portalKind} />
         </div>
       </ManagerPortalPageShell>
@@ -272,10 +269,7 @@ export function PortalProfileClient({
         <NotificationsToggle />
       </div>
       <div className="mt-6">
-        <PortalChangePasswordPanel
-          accountEmail={dashToEmpty(initialEmail) || initialEmail}
-          accountLabel="your admin account"
-        />
+        <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
       </div>
       <div className="mt-6">
         <PortalSettingsExtras currentKind={portalKind} />
