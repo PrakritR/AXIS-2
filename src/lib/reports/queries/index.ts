@@ -554,6 +554,8 @@ export async function queryTaxSummary(
   }
 
   const expenseByProperty = new Map<string, number>();
+  const deductibleByProperty = new Map<string, number>();
+  const nonDeductibleByProperty = new Map<string, number>();
   let deductibleCents = 0;
   let nonDeductibleCents = 0;
   let expenseQuery = db
@@ -568,8 +570,10 @@ export async function queryTaxSummary(
     const key = labelForPropertyId(String(row.property_id ?? "Unassigned"));
     expenseByProperty.set(key, (expenseByProperty.get(key) ?? 0) + Number(row.amount_cents));
     if (resolveExpenseTaxDeductible(row.category_code as string | null, row.tax_deductible as boolean | null)) {
+      deductibleByProperty.set(key, (deductibleByProperty.get(key) ?? 0) + Number(row.amount_cents));
       deductibleCents += Number(row.amount_cents);
     } else {
+      nonDeductibleByProperty.set(key, (nonDeductibleByProperty.get(key) ?? 0) + Number(row.amount_cents));
       nonDeductibleCents += Number(row.amount_cents);
     }
   }
@@ -594,6 +598,8 @@ export async function queryTaxSummary(
       daysRented: daysByProperty.get(propertyKey) ?? 0,
       rentEarned: centsToUsd(earnedCents),
       houseSpent: centsToUsd(spentCents),
+      deductibleExpenses: centsToUsd(deductibleByProperty.get(propertyKey) ?? 0),
+      nonDeductibleExpenses: centsToUsd(nonDeductibleByProperty.get(propertyKey) ?? 0),
       netIncome: centsToUsd(earnedCents - spentCents),
     };
   });
@@ -610,6 +616,8 @@ export async function queryTaxSummary(
       { key: "daysRented", label: "Days rented", align: "right", format: "number" },
       { key: "rentEarned", label: "Rent earned", align: "right", format: "money" },
       { key: "houseSpent", label: "Repairs & expenses", align: "right", format: "money" },
+      { key: "deductibleExpenses", label: "Deductible", align: "right", format: "money" },
+      { key: "nonDeductibleExpenses", label: "Non-deductible", align: "right", format: "money" },
       { key: "netIncome", label: "Net", align: "right", format: "money" },
     ],
     rows,
@@ -618,6 +626,8 @@ export async function queryTaxSummary(
       daysRented: totalDays,
       rentEarned: centsToUsd(totalIncomeCents),
       houseSpent: centsToUsd(totalExpenseCents),
+      deductibleExpenses: centsToUsd(deductibleCents),
+      nonDeductibleExpenses: centsToUsd(nonDeductibleCents),
       netIncome: centsToUsd(totalIncomeCents - totalExpenseCents),
     },
     meta: {

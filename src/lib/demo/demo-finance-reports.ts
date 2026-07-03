@@ -306,6 +306,9 @@ export function buildDemoTaxSummaryReport(propertyId?: string): ReportResult {
       daysRented: t.daysRented,
       rentEarned: centsToUsd(earned),
       houseSpent: centsToUsd(spent),
+      // Demo expense seed data is all deductible.
+      deductibleExpenses: centsToUsd(spent),
+      nonDeductibleExpenses: centsToUsd(0),
       netIncome: centsToUsd(earned - spent),
     };
   });
@@ -320,6 +323,8 @@ export function buildDemoTaxSummaryReport(propertyId?: string): ReportResult {
       { key: "daysRented", label: "Days rented", align: "right", format: "number" },
       { key: "rentEarned", label: "Rent earned", align: "right", format: "money" },
       { key: "houseSpent", label: "Repairs & expenses", align: "right", format: "money" },
+      { key: "deductibleExpenses", label: "Deductible", align: "right", format: "money" },
+      { key: "nonDeductibleExpenses", label: "Non-deductible", align: "right", format: "money" },
       { key: "netIncome", label: "Net", align: "right", format: "money" },
     ],
     rows,
@@ -328,6 +333,8 @@ export function buildDemoTaxSummaryReport(propertyId?: string): ReportResult {
       daysRented: totalDays,
       rentEarned: centsToUsd(totalEarned),
       houseSpent: centsToUsd(totalSpent),
+      deductibleExpenses: centsToUsd(deductibleCents),
+      nonDeductibleExpenses: centsToUsd(0),
       netIncome: centsToUsd(totalEarned - totalSpent),
     },
     meta: {

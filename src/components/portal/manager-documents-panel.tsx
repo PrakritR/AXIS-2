@@ -11,8 +11,6 @@ import {
   MANAGER_TABLE_TH,
   PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_KPI_LABEL,
-  PORTAL_KPI_VALUE,
   PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import {
@@ -87,28 +85,6 @@ function w9StatusTone(status: string) {
   if (s.includes("missing")) return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   if (s.includes("pending")) return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-foreground ring-1 ring-border";
-}
-
-function TaxSummaryCards({ report }: { report: ReportResult | null }) {
-  if (!report?.meta) return null;
-  const cards = [
-    { label: "Rent earned", value: String(report.meta.totalEarned ?? "—") },
-    { label: "Repairs & expenses", value: String(report.meta.totalSpent ?? "—") },
-    { label: "Deductible expenses", value: String(report.meta.totalDeductibleExpenses ?? "—") },
-    { label: "Non-deductible expenses", value: String(report.meta.totalNonDeductibleExpenses ?? "—") },
-    { label: "Days rented", value: String(report.meta.totalDaysRented ?? "—") },
-    { label: "Net income", value: String(report.meta.netIncome ?? "—") },
-  ];
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {cards.map((card) => (
-        <div key={card.label} className="rounded-2xl border border-border bg-card px-4 py-3">
-          <p className={PORTAL_KPI_VALUE}>{card.value}</p>
-          <p className={PORTAL_KPI_LABEL}>{card.label}</p>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function ManagerDocumentsPanel({
@@ -351,8 +327,6 @@ export function ManagerDocumentsPanel({
             ) : null
           }
         />
-
-        {tabId === "tax-summary" && generated ? <TaxSummaryCards report={report} /> : null}
 
         {tabId === "income-documents" ? (
           <div>
