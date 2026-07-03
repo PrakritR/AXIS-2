@@ -60,7 +60,7 @@ export function Modal({
       />
       <div className="relative z-[71] flex min-h-screen items-center justify-center px-2 py-4 sm:px-4 sm:py-6">
         <div ref={panelRef} className={cn(MODAL_PANEL_CLASS, panelClassName)} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-          <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border pb-4">
             <h3 id="modal-title" className="min-w-0 text-lg font-semibold text-foreground">{title}</h3>
             <button
               type="button"
@@ -70,7 +70,7 @@ export function Modal({
               Close
             </button>
           </div>
-          <div className="max-h-[calc(100vh-8rem)] overflow-y-auto pt-4 sm:max-h-[calc(100vh-9rem)]">{children}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto pt-4">{children}</div>
         </div>
       </div>
     </div>,

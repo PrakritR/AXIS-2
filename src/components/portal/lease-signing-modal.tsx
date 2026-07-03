@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { useIsClient } from "@/hooks/use-is-client";
+import { usePortalContainer } from "@/components/ui/portal-container-context";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
@@ -20,6 +23,8 @@ export function LeaseSigningModal({
   onSign: (signatureName: string) => boolean | Promise<boolean>;
   onClose: () => void;
 }) {
+  const isClient = useIsClient();
+  const portalContainer = usePortalContainer();
   const [sigName, setSigName] = useState(signerName);
   const [agreed, setAgreed] = useState(false);
   const [signed, setSigned] = useState(false);
@@ -42,7 +47,9 @@ export function LeaseSigningModal({
     window.setTimeout(() => onClose(), 700);
   };
 
-  return (
+  if (!isClient) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[200] flex items-end justify-center p-2 sm:items-center sm:p-4">
       <button type="button" aria-label="Close" className="modal-overlay fixed inset-0" onClick={onClose} />
       <div className="modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border shadow-2xl">
@@ -154,6 +161,7 @@ export function LeaseSigningModal({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    portalContainer ?? document.body,
   );
 }
