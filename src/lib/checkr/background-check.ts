@@ -1,0 +1,246 @@
+/**
+ * Orchestrates a Checkr background check against an applicant record. This is
+ * the single server-side entry point the API route and webhook call — the
+ * agent tool layer can reuse it too. Per-manager scoping is enforced by the
+ * caller (route) and re-checked here as defense in depth.
+ */
+import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { ApplicationBackgroundCheckStatus } from "@/lib/application-background-check";
+import { createBackgroundCheck, fetchBackgroundCheckReport } from "@/lib/checkr/client";
+import { backgroundCheckConfigured } from "@/lib/checkr/config";
+import type { ApplicationBackgroundCheck, CheckrCandidateInput } from "@/lib/checkr/types";
+import type { RentalWizardFormState } from "@/lib/rental-application/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type BackgroundCheckResult =
+  | { ok: true; row: DemoApplicantRow; backgroundCheck: ApplicationBackgroundCheck }
+  | { ok: false; status: number; error: string; code?: string };
+
+/** Map a Checkr report state onto the manager-facing background-check badge. */
+export function backgroundCheckStatusFromCheckr(
+  bc: ApplicationBackgroundCheck | null | undefined,
+): ApplicationBackgroundCheckStatus {
+  if (!bc) return "pending_review";
+  if (bc.status !== "complete") return "pending_review";
+  if (bc.result === "clear") return "passed";
+  // consider / suspended / dispute all need a human look.
+  return "flagged";
+}
+
+function digitsOnly(value: string | undefined): string {
+  return (value ?? "").replace(/\D/g, "");
+}
+
+function normalizeDob(value: string | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return trimmed;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function candidateInputFromApplication(app: RentalWizardFormState): CheckrCandidateInput {
+  const parts = app.fullLegalName.trim().split(/\s+/).filter(Boolean);
+  const firstName = parts[0] ?? "Applicant";
+  const lastName = parts.length > 1 ? parts[parts.length - 1]! : "Unknown";
+  const middleName = parts.length > 2 ? parts.slice(1, -1).join(" ") : undefined;
+  return {
+    firstName,
+    lastName,
+    middleName,
+    email: app.email.trim().toLowerCase(),
+    dob: normalizeDob(app.dateOfBirth),
+    ssn: digitsOnly(app.ssn),
+    zipcode: app.currentZip.trim(),
+    phone: digitsOnly(app.phone) || undefined,
+  };
+}
+
+async function loadApplicationRow(
+  db: SupabaseClient,
+  applicationId: string,
+): Promise<DemoApplicantRow | null> {
+  const { data, error } = await db
+    .from("manager_application_records")
+    .select("row_data")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (error || !data?.row_data) return null;
+  return data.row_data as DemoApplicantRow;
+}
+
+async function persistApplicationRow(db: SupabaseClient, row: DemoApplicantRow): Promise<void> {
+  const { error } = await db.from("manager_application_records").upsert(
+    {
+      id: row.id,
+      manager_user_id: row.managerUserId || null,
+      resident_email: row.email?.trim().toLowerCase() || null,
+      property_id: row.propertyId || row.application?.propertyId || null,
+      assigned_property_id: row.assignedPropertyId || null,
+      row_data: row,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Audit trail + webhook lookup key (reuses the shared screening_orders table). */
+async function upsertBackgroundCheckOrder(
+  db: SupabaseClient,
+  row: DemoApplicantRow,
+  bc: ApplicationBackgroundCheck,
+): Promise<void> {
+  const { error } = await db.from("screening_orders").upsert(
+    {
+      application_id: row.id,
+      manager_user_id: row.managerUserId || null,
+      provider: bc.provider,
+      external_order_id: bc.reportId,
+      status: bc.status,
+      row_data: bc,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "provider,external_order_id" },
+  );
+  if (error) throw new Error(error.message);
+}
+
+function applyBackgroundCheck(row: DemoApplicantRow, bc: ApplicationBackgroundCheck): DemoApplicantRow {
+  return { ...row, backgroundCheck: bc, backgroundCheckStatus: backgroundCheckStatusFromCheckr(bc) };
+}
+
+/** Kick off a new Checkr background check for an applicant. */
+export async function runBackgroundCheck(opts: {
+  db: SupabaseClient;
+  applicationId: string;
+  managerUserId: string;
+}): Promise<BackgroundCheckResult> {
+  if (!backgroundCheckConfigured()) {
+    return {
+      ok: false,
+      status: 503,
+      error: "Background checks are not configured. Add CHECKR_API_KEY.",
+      code: "not_configured",
+    };
+  }
+
+  const row = await loadApplicationRow(opts.db, opts.applicationId);
+  if (!row) return { ok: false, status: 404, error: "Application not found." };
+  if (row.managerUserId && row.managerUserId !== opts.managerUserId) {
+    return { ok: false, status: 403, error: "Forbidden." };
+  }
+  if (!row.application) {
+    return { ok: false, status: 400, error: "This record has no rental application to check." };
+  }
+  if (!row.application.consentCredit) {
+    return { ok: false, status: 400, error: "Applicant did not authorize a background check." };
+  }
+  if (row.backgroundCheck && row.backgroundCheck.status === "pending") {
+    return {
+      ok: false,
+      status: 409,
+      error: "A background check is already in progress for this applicant.",
+      code: "in_progress",
+    };
+  }
+
+  let created;
+  try {
+    created = await createBackgroundCheck(candidateInputFromApplication(row.application));
+  } catch (e) {
+    return {
+      ok: false,
+      status: 502,
+      error: e instanceof Error ? e.message : "Checkr request failed.",
+      code: "provider_error",
+    };
+  }
+
+  const now = new Date().toISOString();
+  const bc: ApplicationBackgroundCheck = {
+    provider: "checkr",
+    candidateId: created.candidateId,
+    reportId: created.reportId,
+    packageSlug: created.packageSlug,
+    status: created.status,
+    result: created.result,
+    assessment: created.assessment,
+    orderedAt: now,
+    completedAt: created.status === "complete" ? now : undefined,
+    simulated: created.simulated || undefined,
+  };
+
+  const nextRow = applyBackgroundCheck(row, bc);
+  await persistApplicationRow(opts.db, nextRow);
+  await upsertBackgroundCheckOrder(opts.db, nextRow, bc);
+  return { ok: true, row: nextRow, backgroundCheck: bc };
+}
+
+/** Poll Checkr for the latest state of an in-flight check and persist it. */
+export async function refreshBackgroundCheck(opts: {
+  db: SupabaseClient;
+  applicationId: string;
+  managerUserId: string;
+}): Promise<BackgroundCheckResult> {
+  const row = await loadApplicationRow(opts.db, opts.applicationId);
+  if (!row) return { ok: false, status: 404, error: "Application not found." };
+  if (row.managerUserId && row.managerUserId !== opts.managerUserId) {
+    return { ok: false, status: 403, error: "Forbidden." };
+  }
+  const existing = row.backgroundCheck;
+  if (!existing) {
+    return { ok: false, status: 404, error: "No background check has been run for this applicant." };
+  }
+  if (existing.status === "complete") {
+    return { ok: true, row, backgroundCheck: existing };
+  }
+
+  const report = await fetchBackgroundCheckReport(existing.reportId, {
+    ssn: digitsOnly(row.application?.ssn),
+  });
+  if (!report) return { ok: true, row, backgroundCheck: existing };
+
+  const bc: ApplicationBackgroundCheck = {
+    ...existing,
+    status: report.status,
+    result: report.result,
+    assessment: report.assessment ?? existing.assessment,
+    completedAt: report.status === "complete" ? new Date().toISOString() : existing.completedAt,
+  };
+  const nextRow = applyBackgroundCheck(row, bc);
+  await persistApplicationRow(opts.db, nextRow);
+  await upsertBackgroundCheckOrder(opts.db, nextRow, bc);
+  return { ok: true, row: nextRow, backgroundCheck: bc };
+}
+
+/** Apply a Checkr report (from a webhook) to whichever application it belongs to. */
+export async function applyBackgroundCheckReport(
+  db: SupabaseClient,
+  reportId: string,
+  report: { status: ApplicationBackgroundCheck["status"]; result: ApplicationBackgroundCheck["result"]; assessment?: string | null },
+): Promise<DemoApplicantRow | null> {
+  const { data } = await db
+    .from("screening_orders")
+    .select("application_id")
+    .eq("provider", "checkr")
+    .eq("external_order_id", reportId)
+    .maybeSingle();
+  const applicationId = data?.application_id as string | undefined;
+  if (!applicationId) return null;
+
+  const row = await loadApplicationRow(db, applicationId);
+  if (!row?.backgroundCheck) return null;
+
+  const bc: ApplicationBackgroundCheck = {
+    ...row.backgroundCheck,
+    status: report.status,
+    result: report.result,
+    assessment: report.assessment ?? row.backgroundCheck.assessment,
+    completedAt: report.status === "complete" ? new Date().toISOString() : row.backgroundCheck.completedAt,
+  };
+  const nextRow = applyBackgroundCheck(row, bc);
+  await persistApplicationRow(db, nextRow);
+  await upsertBackgroundCheckOrder(db, nextRow, bc);
+  return nextRow;
+}
