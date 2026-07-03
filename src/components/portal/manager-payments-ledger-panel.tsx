@@ -375,7 +375,6 @@ export function ManagerPaymentsLedgerPanel({
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount paid</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount owed</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Due date</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
               <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
             </tr>
           </thead>
@@ -414,11 +413,6 @@ export function ManagerPaymentsLedgerPanel({
                       );
                     })() : null}
                   </td>
-                  <td className={PORTAL_TABLE_TD}>
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}>
-                      {row.statusLabel}
-                    </span>
-                  </td>
                   <td className={`${PORTAL_TABLE_TD} text-right`}>
                     {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
                       <Button
@@ -434,7 +428,7 @@ export function ManagerPaymentsLedgerPanel({
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
+                    <td colSpan={8} className={PORTAL_TABLE_DETAIL_CELL}>
                       {renderDetailActions(row)}
                     </td>
                   </tr>
