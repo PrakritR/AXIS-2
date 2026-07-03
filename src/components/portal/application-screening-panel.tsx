@@ -1,32 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
-import {
-  applicationShowsBackgroundCheck,
-  backgroundCheckStatusClassName,
-  backgroundCheckStatusLabel,
-  resolveBackgroundCheckStatus,
-} from "@/lib/application-background-check";
+import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { recommendationLabel } from "@/lib/screening/recommendation";
-import type { ManagerScreeningSettings, ScreeningRecommendation } from "@/lib/screening/types";
+import { buildBackgroundCheckReportHtml } from "@/lib/background-check-report-html";
+import type { ManagerScreeningSettings } from "@/lib/screening/types";
 
-function recommendationClass(recommendation: ScreeningRecommendation): string {
-  switch (recommendation) {
-    case "strong_yes":
-      return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-    case "concerns":
-      return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-    case "not_available":
-      return "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-    case "review":
-    default:
-      return "bg-foreground/5 text-muted ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  }
+/**
+ * Inline rendered-document view of the applicant's credit/background
+ * screening, matching the application document presentation (clean styled
+ * HTML in an srcDoc iframe). Renders nothing when there is no screening or
+ * background check to show yet.
+ */
+function BackgroundCheckReportPreview({ row }: { row: DemoApplicantRow }) {
+  const reportHtml = useMemo(() => buildBackgroundCheckReportHtml(row), [row]);
+  if (!reportHtml) return null;
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border border-border shadow-sm">
+      <iframe
+        srcDoc={reportHtml}
+        title="Background check report preview"
+        sandbox="allow-same-origin"
+        loading="lazy"
+        className="h-[560px] w-full border-0 bg-white"
+      />
+    </div>
+  );
 }
 
 export function backgroundCheckChip(bc: ApplicationBackgroundCheck): { label: string; className: string } {
@@ -144,7 +147,6 @@ export function ApplicationScreeningPanel({
 
   if (!applicationShowsBackgroundCheck(row)) return null;
 
-  const legacyStatus = resolveBackgroundCheckStatus(row);
   const screening = row.screening;
   const canOrder =
     configured &&
@@ -156,89 +158,9 @@ export function ApplicationScreeningPanel({
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Screening</p>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-            Credit and background check with a plain-language summary —{" "}
-            <span className="font-semibold text-foreground">Clear</span> or{" "}
-            <span className="font-semibold text-foreground">Consider</span>.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${backgroundCheckStatusClassName(legacyStatus)}`}
-          >
-            {backgroundCheckStatusLabel(legacyStatus)}
-          </span>
-          {screening?.recommendation ? (
-            <span
-              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${recommendationClass(screening.recommendation)}`}
-            >
-              {recommendationLabel(screening.recommendation)}
-            </span>
-          ) : null}
-          {bg ? (
-            <span
-              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${backgroundCheckChip(bg).className}`}
-            >
-              {backgroundCheckChip(bg).label}
-            </span>
-          ) : null}
-        </div>
-      </div>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Screening</p>
 
-      {screening?.summary ? <p className="mt-4 text-sm leading-relaxed text-foreground">{screening.summary}</p> : null}
-
-      {screening?.status === "complete" ? (
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border p-4 portal-banner-success">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-900">Pros</p>
-            <ul className="mt-2 space-y-1.5 text-sm text-emerald-950">
-              {(screening.pros.length ? screening.pros : ["No standout positives flagged."]).map((item) => (
-                <li key={item}>• {item}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-xl border p-4 portal-banner-pending">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-900">Cons</p>
-            <ul className="mt-2 space-y-1.5 text-sm text-amber-950">
-              {(screening.cons.length ? screening.cons : ["No major concerns flagged."]).map((item) => (
-                <li key={item}>• {item}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-
-      {screening ? (
-        <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          {screening.creditScore != null ? (
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Credit score</dt>
-              <dd className="mt-1 font-semibold text-foreground">{screening.creditScore}</dd>
-            </div>
-          ) : null}
-          {screening.criminalFlags != null ? (
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Criminal flags</dt>
-              <dd className="mt-1 font-semibold text-foreground">{screening.criminalFlags}</dd>
-            </div>
-          ) : null}
-          {screening.evictionFlags != null ? (
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Eviction flags</dt>
-              <dd className="mt-1 font-semibold text-foreground">{screening.evictionFlags}</dd>
-            </div>
-          ) : null}
-          {screening.costCents != null ? (
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Report cost</dt>
-              <dd className="mt-1 font-semibold text-foreground">${(screening.costCents / 100).toFixed(2)}</dd>
-            </div>
-          ) : null}
-        </dl>
-      ) : null}
+      <BackgroundCheckReportPreview row={row} />
 
       {screening?.adverseActionRequired ? (
         <p className="mt-4 rounded-xl border px-3 py-2 text-xs portal-banner-pending">

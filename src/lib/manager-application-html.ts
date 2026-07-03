@@ -7,13 +7,13 @@ import {
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
 import { leaseCss } from "@/lib/lease-templates/types";
 
-type Field = { label: string; value: string };
+export type Field = { label: string; value: string };
 
-function clean(value: unknown): string {
+export function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -44,7 +44,7 @@ function statusLabel(row: DemoApplicantRow): string {
 }
 
 /** `<h2>` + label/value table for the populated fields; empty string when nothing is populated. */
-function section(title: string, fields: Field[]): string {
+export function section(title: string, fields: Field[]): string {
   const populated = fields.filter((f) => f.value.trim());
   if (populated.length === 0) return "";
   const rows = populated
@@ -57,7 +57,7 @@ function section(title: string, fields: Field[]): string {
 </table>`;
 }
 
-function freeTextSection(title: string, body: string): string {
+export function freeTextSection(title: string, body: string): string {
   const text = body.trim();
   if (!text) return "";
   return `
