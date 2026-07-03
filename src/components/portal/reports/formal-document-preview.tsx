@@ -95,7 +95,8 @@ export function RentReceiptDocumentView({ doc }: { doc: RentReceiptDocument }) {
         />
 
         <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
-          <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
+          <div className="max-w-full overflow-x-auto">
+          <table className="w-full min-w-max border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
             <tbody>
               <tr className="border-b border-[#e5e7eb] bg-[#f8fafc]">
                 <td className="px-4 py-2.5 font-semibold text-[#475569]">Payment date</td>
@@ -119,6 +120,7 @@ export function RentReceiptDocumentView({ doc }: { doc: RentReceiptDocument }) {
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
 
         <p className="text-sm leading-relaxed text-[#334155]">
@@ -169,7 +171,8 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
               Income breakdown — Schedule E, Part I (Rents Received)
             </p>
             <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
-              <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
+              <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-max border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
                 <thead>
                   <tr className="border-b border-[#e5e7eb] bg-[#f1f5f9] text-left text-xs uppercase tracking-wide text-[#475569]">
                     <th className="px-4 py-2.5 font-semibold">Income category</th>
@@ -195,6 +198,7 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
           </div>
         ) : null}
@@ -204,7 +208,8 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
             Unit detail
           </p>
           <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
-            <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
+            <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-max border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
               <thead>
                 <tr className="border-b border-[#e5e7eb] bg-[#f1f5f9] text-left text-xs uppercase tracking-wide text-[#475569]">
                   <th className="px-4 py-2.5 font-semibold">Unit</th>
@@ -238,6 +243,7 @@ export function PropertyRentReceiptDocumentView({ doc }: { doc: PropertyRentRece
                 </tr>
               </tfoot>
             </table>
+            </div>
           </div>
         </div>
 
@@ -293,7 +299,8 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
       <DocHeader title={report.title} subtitle={subtitle || undefined} />
       <div className="px-8 py-6">
         <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
-          <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
+          <div className="max-w-full overflow-x-auto">
+          <table className="w-full min-w-max border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
             <thead>
               <tr className="border-b border-[#e5e7eb] bg-[#f1f5f9] text-left text-xs uppercase tracking-wide text-[#475569]">
                 {dataColumns.map((col) => (
@@ -369,6 +376,7 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
               </tfoot>
             ) : null}
           </table>
+          </div>
         </div>
       </div>
       <DocFooter certification="Prepared from Axis ledger records. This report is provided for property management and Schedule E (Form 1040) tax record-keeping. Verify totals against bank statements and consult your tax advisor." />
@@ -411,7 +419,8 @@ export function OccupancyDocumentView({ report }: { report: OccupancyReport }) {
               </div>
             </div>
             <div className="overflow-hidden rounded-lg border border-[#e5e7eb]">
-              <table className="w-full border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
+              <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-max border-collapse text-sm" style={{ fontFamily: "system-ui, sans-serif" }}>
                 <thead>
                   <tr className="border-b border-[#e5e7eb] bg-[#f1f5f9] text-left text-xs uppercase tracking-wide text-[#475569]">
                     <th className="px-4 py-2.5 font-semibold">Unit</th>
@@ -460,6 +469,7 @@ export function OccupancyDocumentView({ report }: { report: OccupancyReport }) {
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
           </div>
         ))}

@@ -1468,149 +1468,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
-  return (
-    <>
-      <LeaseRegenerateConfirmModal
-        open={regenerateConfirmLeaseId !== null}
-        busy={Boolean(regenerateConfirmLeaseId && generatingLeaseRowId === regenerateConfirmLeaseId)}
-        onClose={() => {
-          if (generatingLeaseRowId) return;
-          setRegenerateConfirmLeaseId(null);
-        }}
-        onConfirm={() => {
-          if (regenerateConfirmLeaseId) runGenerateLease(regenerateConfirmLeaseId);
-        }}
-      />
-      {signingLease ? (
-        <LeaseSigningModal
-          row={signingLease}
-          signerName=""
-          signerRoleLabel="Manager / authorized agent name"
-          agreementLabel="Residential Room Rental Agreement"
-          onSign={handleManagerModalSign}
-          onClose={() => setSigningLease(null)}
-        />
-      ) : null}
-      <ManagerPortalPageShell
-        title="Residents"
-        titleAside={
-          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
-            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-              + Add resident
-            </Button>
-          </div>
-        }
-        filterRow={
-          <ManagerPortalFilterRow>
-            <ManagerPortalStatusPills
-              tabs={[
-                { id: "current", label: "Current", count: currentResidentsCount },
-                { id: "previous", label: "Previous", count: previousResidentsCount },
-              ]}
-              activeId={residentsTab}
-              onChange={(id) => {
-                const next = id as ResidentsTabId;
-                setResidentsTab(next);
-                navigate(`${portalBase}/residents/${next}`);
-              }}
-            />
-            <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
-              <PortalPropertyFilterPill
-                propertyOptions={propertyOptions}
-                propertyValue={propertyFilter}
-                onPropertyChange={setPropertyFilter}
-              />
-              <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setAddResidentOpen(true)}>
-                + Add
-              </Button>
-            </div>
-          </ManagerPortalFilterRow>
-        }
-      >
-      {filtered.length === 0 ? (
-        <PortalDataTableEmpty
-          icon="residents"
-          message={
-            residents.length === 0
-              ? "No residents yet."
-              : residentsTab === "current"
-                ? "No current residents yet."
-                : "No previous residents yet."
-          }
-        />
-      ) : (
-      <>
-      <div className="space-y-2 lg:hidden">
-        {filtered.map((res) => (
-          <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
-            <button
-              type="button"
-              className="w-full text-left"
-              onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
-            >
-              <p className="truncate font-semibold text-foreground">{res.name || "—"}</p>
-              <p className="mt-0.5 truncate text-xs text-muted">
-                {[res.roomLabel, res.signedMonthlyRent ? `$${res.signedMonthlyRent.toFixed(2)}/mo` : null]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-              {!propertyFilter && res.propertyLabel ? (
-                <p className="mt-0.5 truncate text-[11px] text-muted/90">{res.propertyLabel}</p>
-              ) : null}
-            </button>
-            <div className="mt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
-              >
-                {selectedId === res.id ? "Less" : "Details"}
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="min-w-[680px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Email</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((res) => (
-                  <Fragment key={res.id}>
-                    <tr
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() =>
-                        setSelectedId((cur) => (cur === res.id ? null : res.id)),
-                      )}
-                      aria-expanded={selectedId === res.id}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        {res.name || "—"}
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>{res.email}</td>
-                      <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
-                      <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
-                    </tr>
-                    {selectedId === res.id && selected ? (
-                      <tr>
-                        <td colSpan={6} className="bg-accent/30 px-4 py-5">
+  const residentDetailPanel =
+    selectedId && selected ? (
                           <div className="flex flex-col gap-4">
                             <div className="rounded-2xl border border-border bg-card p-4">
                               <div className="flex flex-wrap items-center gap-2">
@@ -2189,6 +2048,155 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               )}
                             </div>
                           </div>
+    ) : null;
+
+  return (
+    <>
+      <LeaseRegenerateConfirmModal
+        open={regenerateConfirmLeaseId !== null}
+        busy={Boolean(regenerateConfirmLeaseId && generatingLeaseRowId === regenerateConfirmLeaseId)}
+        onClose={() => {
+          if (generatingLeaseRowId) return;
+          setRegenerateConfirmLeaseId(null);
+        }}
+        onConfirm={() => {
+          if (regenerateConfirmLeaseId) runGenerateLease(regenerateConfirmLeaseId);
+        }}
+      />
+      {signingLease ? (
+        <LeaseSigningModal
+          row={signingLease}
+          signerName=""
+          signerRoleLabel="Manager / authorized agent name"
+          agreementLabel="Residential Room Rental Agreement"
+          onSign={handleManagerModalSign}
+          onClose={() => setSigningLease(null)}
+        />
+      ) : null}
+      <ManagerPortalPageShell
+        title="Residents"
+        titleAside={
+          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
+            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+              + Add resident
+            </Button>
+          </div>
+        }
+        filterRow={
+          <ManagerPortalFilterRow>
+            <ManagerPortalStatusPills
+              tabs={[
+                { id: "current", label: "Current", count: currentResidentsCount },
+                { id: "previous", label: "Previous", count: previousResidentsCount },
+              ]}
+              activeId={residentsTab}
+              onChange={(id) => {
+                const next = id as ResidentsTabId;
+                setResidentsTab(next);
+                navigate(`${portalBase}/residents/${next}`);
+              }}
+            />
+            <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
+              <PortalPropertyFilterPill
+                propertyOptions={propertyOptions}
+                propertyValue={propertyFilter}
+                onPropertyChange={setPropertyFilter}
+              />
+              <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setAddResidentOpen(true)}>
+                + Add
+              </Button>
+            </div>
+          </ManagerPortalFilterRow>
+        }
+      >
+      {filtered.length === 0 ? (
+        <PortalDataTableEmpty
+          icon="residents"
+          message={
+            residents.length === 0
+              ? "No residents yet."
+              : residentsTab === "current"
+                ? "No current residents yet."
+                : "No previous residents yet."
+          }
+        />
+      ) : (
+      <>
+      <div className="space-y-2 lg:hidden">
+        {filtered.map((res) => (
+          <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
+            <button
+              type="button"
+              className="w-full text-left"
+              onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
+            >
+              <p className="truncate font-semibold text-foreground">{res.name || "—"}</p>
+              <p className="mt-0.5 truncate text-xs text-muted">
+                {[res.roomLabel, res.signedMonthlyRent ? `$${res.signedMonthlyRent.toFixed(2)}/mo` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              {!propertyFilter && res.propertyLabel ? (
+                <p className="mt-0.5 truncate text-[11px] text-muted/90">{res.propertyLabel}</p>
+              ) : null}
+            </button>
+            <div className="mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
+              >
+                {selectedId === res.id ? "Less" : "Details"}
+              </Button>
+            </div>
+            {selectedId === res.id && selected ? (
+              <div className="mt-3 border-t border-border pt-3">{residentDetailPanel}</div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+            <table className="min-w-[680px] w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className={PORTAL_TABLE_HEAD_ROW}>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Email</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((res) => (
+                  <Fragment key={res.id}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        setSelectedId((cur) => (cur === res.id ? null : res.id)),
+                      )}
+                      aria-expanded={selectedId === res.id}
+                    >
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                        {res.name || "—"}
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>{res.email}</td>
+                      <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
+                      <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
+                      <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
+                    </tr>
+                    {selectedId === res.id && selected ? (
+                      <tr>
+                        <td colSpan={6} className="bg-accent/30 px-4 py-5">
+                          {residentDetailPanel}
                         </td>
                       </tr>
                     ) : null}

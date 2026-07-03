@@ -26,6 +26,7 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER = [
   "documents",
   "financials",
   "relationships",
+  "promotion",
   "bugs-feedback",
 ] as const;
 

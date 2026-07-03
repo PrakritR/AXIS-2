@@ -439,6 +439,63 @@ export function ManagerApplications() {
     );
   };
 
+  const renderApplicationDetail = (row: DemoApplicantRow) => (
+    <div className="mx-auto max-w-5xl space-y-8">
+      <PortalTableDetailActions placement="top">
+        {row.bucket === "pending" ? (
+          <>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
+              Approve
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              data-attr="open-run-screening"
+              onClick={() => setCheckrScreeningRowId(row.id)}
+            >
+              Run screening
+            </Button>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
+              Reject
+            </Button>
+          </>
+        ) : (
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "pending")}>
+            Move to pending
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          data-attr="application-pdf-download"
+          onClick={() => downloadApplicationPdf(row)}
+        >
+          Download PDF
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+          onClick={() => void deleteApplication(row.id)}
+        >
+          Delete application
+        </Button>
+      </PortalTableDetailActions>
+
+      <ApplicationDocumentPreview row={row} />
+
+      <ApplicationScreeningPanel
+        row={row}
+        onUpdated={() => {
+          void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
+        }}
+        onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
+      />
+    </div>
+  );
+
   return (
     <>
     <ManagerPortalPageShell
@@ -553,9 +610,7 @@ export function ManagerApplications() {
                 </Button>
               </div>
               {expanded ? (
-                <div className="mt-3 border-t border-border pt-3 text-xs text-muted">
-                  Application ID {row.id}
-                </div>
+                <div className="mt-3 border-t border-border pt-3">{renderApplicationDetail(row)}</div>
               ) : null}
             </div>
           );
@@ -592,60 +647,7 @@ export function ManagerApplications() {
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
                         <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                          <div className="mx-auto max-w-5xl space-y-8">
-                          <PortalTableDetailActions placement="top">
-                            {row.bucket === "pending" ? (
-                              <>
-                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
-                                  Approve
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={PORTAL_DETAIL_BTN}
-                                  data-attr="open-run-screening"
-                                  onClick={() => setCheckrScreeningRowId(row.id)}
-                                >
-                                  Run screening
-                                </Button>
-                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
-                                  Reject
-                                </Button>
-                              </>
-                            ) : (
-                              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "pending")}>
-                                Move to pending
-                              </Button>
-                            )}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              data-attr="application-pdf-download"
-                              onClick={() => downloadApplicationPdf(row)}
-                            >
-                              Download PDF
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                              onClick={() => void deleteApplication(row.id)}
-                            >
-                              Delete application
-                            </Button>
-                          </PortalTableDetailActions>
-
-                          <ApplicationDocumentPreview row={row} />
-
-                          <ApplicationScreeningPanel
-                            row={row}
-                            onUpdated={() => {
-                              void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
-                            }}
-                            onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
-                          />
-                          </div>
+                          {renderApplicationDetail(row)}
                         </td>
                       </tr>
                     ) : null}
