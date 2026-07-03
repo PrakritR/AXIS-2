@@ -47,13 +47,8 @@ export async function POST(req: Request) {
     }
     if (!admin && managerUserId !== user.id) {
       const linked = await collectLinkedPropertyIdsForUser(db, user.id);
-      const rowData = (record?.row_data ?? {}) as {
-        propertyId?: string;
-        assignedPropertyId?: string;
-        application?: { propertyId?: string };
-      };
-      const propertyId = String(record?.property_id ?? rowData.propertyId ?? rowData.application?.propertyId ?? "").trim();
-      const assignedPropertyId = String(record?.assigned_property_id ?? rowData.assignedPropertyId ?? "").trim();
+      const propertyId = String(record?.property_id ?? "").trim();
+      const assignedPropertyId = String(record?.assigned_property_id ?? "").trim();
       if (!((propertyId && linked.has(propertyId)) || (assignedPropertyId && linked.has(assignedPropertyId)))) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
