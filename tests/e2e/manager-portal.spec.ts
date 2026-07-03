@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { signInAsManager, mockStripeAllRoutes } from "../helpers/auth";
+import { pathToUrlRegExp } from "../helpers/url-match";
 
 const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 
@@ -34,7 +35,7 @@ test.describe("Manager portal", () => {
   test("all manager sections load via direct navigation", async ({ page }) => {
     for (const { path } of PAID_MANAGER_NAV) {
       await page.goto(path);
-      await expect(page).toHaveURL(new RegExp(`${path.replace(/\//g, "\\/")}`));
+      await expect(page).toHaveURL(pathToUrlRegExp(path));
       await expect(page.getByRole("heading").first()).toBeVisible();
     }
   });

@@ -76,13 +76,11 @@ function formatScheduledLabel(iso: string): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-/** Restrict photo links to http(s) or inline image data URLs (CodeQL xss-through-dom). */
-function safePhotoHref(src: string): string | null {
-  const trimmed = src.trim();
-  if (trimmed.startsWith("data:image/")) return trimmed;
-  if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) return trimmed;
-  return null;
-}
+// Restrict photo links to http(s) or inline image data URLs before they reach an
+// <a href> / <Image src> sink — inlined as a guard clause at each call site (rather
+// than routed through a helper's return value) so CodeQL's xss-through-dom barrier
+// recognition sees the check (see commit 924bd45 for the same fix elsewhere).
+const SAFE_PHOTO_HREF_RE = /^(?:data:image\/|https?:\/\/)/;
 
 export function ManagerWorkOrdersPanel({
   allRows,
@@ -541,18 +539,18 @@ export function ManagerWorkOrdersPanel({
                             <p className="text-xs font-medium uppercase tracking-wide text-muted">Photos</p>
                             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                               {row.photoDataUrls.map((src, index) => {
-                                const href = safePhotoHref(src);
-                                if (!href) return null;
+                                const trimmed = src.trim();
+                                if (!SAFE_PHOTO_HREF_RE.test(trimmed)) return null;
                                 return (
                                 <a
                                   key={`${row.id}-photo-${index}`}
-                                  href={href}
+                                  href={trimmed}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="block overflow-hidden rounded-xl border border-border bg-accent/30"
                                 >
                                   <Image
-                                    src={href}
+                                    src={trimmed}
                                     alt={`Work order photo ${index + 1}`}
                                     width={240}
                                     height={180}

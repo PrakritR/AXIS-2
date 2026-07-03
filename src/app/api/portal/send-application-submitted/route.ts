@@ -11,7 +11,10 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Domain is matched as dot-separated labels (no char class overlaps the "." delimiter)
+// so there is exactly one way to parse a match — avoids polynomial backtracking on
+// attacker-controlled input.
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 function idVariants(id: string): string[] {
   const trimmed = id.trim();

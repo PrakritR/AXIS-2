@@ -104,6 +104,12 @@ export function unifiedItemStatusBucket(item: UnifiedItem): RequestStatusBucket 
   return "completed";
 }
 
+// Restrict photo links to http(s) or inline image data URLs before they reach an
+// <a href> / <Image src> sink — inlined as a guard clause at each call site so
+// CodeQL's xss-through-dom barrier recognition sees the check (see commit 924bd45
+// for the same fix pattern elsewhere).
+const SAFE_PHOTO_HREF_RE = /^(?:data:image\/|https?:\/\/)/;
+
 function priorityClass(p: string) {
   const x = p.toLowerCase();
   if (x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -407,11 +413,15 @@ export function WorkOrderDetail({
         <>
           <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Photos</p>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {row.photoDataUrls.map((src, i) => (
-              <a key={i} href={src} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-border bg-accent/30">
-                <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-28 w-full object-cover" unoptimized />
-              </a>
-            ))}
+            {row.photoDataUrls.map((src, i) => {
+              const trimmed = src.trim();
+              if (!SAFE_PHOTO_HREF_RE.test(trimmed)) return null;
+              return (
+                <a key={i} href={trimmed} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-border bg-accent/30">
+                  <Image src={trimmed} alt={`Photo ${i + 1}`} width={240} height={180} className="h-28 w-full object-cover" unoptimized />
+                </a>
+              );
+            })}
           </div>
         </>
       ) : null}
