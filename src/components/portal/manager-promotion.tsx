@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { ManagerPortalPageShell, ManagerPortalFilterRow, ManagerPortalStatusPills, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -16,6 +16,7 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -82,12 +83,6 @@ const EMPTY_DRAFT: PromotionDraft = {
   tone: PROMOTION_TONE_OPTIONS[0]!,
 };
 
-const STATUS_TABS: { id: "all" | "generated" | "draft"; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "generated", label: "Generated" },
-  { id: "draft", label: "Drafts" },
-];
-
 function draftInputs(draft: PromotionDraft): PromotionInputs {
   return {
     headline: draft.headline.trim(),
@@ -112,7 +107,6 @@ export function ManagerPromotion() {
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
-  const [bucket, setBucket] = useState<"all" | "generated" | "draft">("all");
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
   const [generating, setGenerating] = useState(false);
@@ -148,20 +142,6 @@ export function ManagerPromotion() {
     void propertyTick;
     return buildManagerPromotionPropertyOptions(userId);
   }, [userId, propertyTick]);
-
-  const counts = useMemo(
-    () => ({
-      all: promotions.length,
-      generated: promotions.filter((p) => p.status === "generated").length,
-      draft: promotions.filter((p) => p.status === "draft").length,
-    }),
-    [promotions],
-  );
-
-  const visible = useMemo(
-    () => (bucket === "all" ? promotions : promotions.filter((p) => p.status === bucket)),
-    [promotions, bucket],
-  );
 
   const previewPromotion = useMemo(
     () => promotions.find((p) => p.id === previewId) ?? null,
@@ -260,16 +240,6 @@ export function ManagerPromotion() {
     showToast("Promotion deleted.");
   }
 
-  const filterRow = (
-    <ManagerPortalFilterRow>
-      <ManagerPortalStatusPills
-        tabs={STATUS_TABS.map((t) => ({ ...t, count: counts[t.id] }))}
-        activeId={bucket}
-        onChange={(id) => setBucket(id as "all" | "generated" | "draft")}
-      />
-    </ManagerPortalFilterRow>
-  );
-
   return (
     <ManagerPortalPageShell
       title="Promotion"
@@ -278,35 +248,36 @@ export function ManagerPromotion() {
           New promotion
         </Button>
       }
-      filterRow={filterRow}
     >
-      {showForm ? (
-        <div className="mb-6 rounded-2xl border border-border bg-card p-5">
-          <p className="text-sm font-semibold text-foreground">New promotion</p>
-          <PromotionForm draft={draft} setDraft={setDraft} listings={listings} onSelectProperty={onSelectProperty} />
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button type="button" onClick={generate} disabled={generating} data-attr="promotion-generate">
-              {generating ? "Generating…" : "Generate flyer"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setShowForm(false);
-                setDraft(EMPTY_DRAFT);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
+      <Modal
+        open={showForm}
+        title="New promotion"
+        onClose={() => {
+          setShowForm(false);
+          setDraft(EMPTY_DRAFT);
+        }}
+        panelClassName="max-w-2xl"
+      >
+        <PromotionForm draft={draft} setDraft={setDraft} listings={listings} onSelectProperty={onSelectProperty} />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" onClick={generate} disabled={generating} data-attr="promotion-generate">
+            {generating ? "Generating…" : "Generate flyer"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setShowForm(false);
+              setDraft(EMPTY_DRAFT);
+            }}
+          >
+            Cancel
+          </Button>
         </div>
-      ) : null}
+      </Modal>
 
-      {visible.length === 0 ? (
-        <PortalDataTableEmpty
-          message={promotions.length === 0 ? "No promotions yet." : "No promotions in this view."}
-          icon="data"
-        />
+      {promotions.length === 0 ? (
+        <PortalDataTableEmpty message="No promotions yet." icon="data" />
       ) : (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
@@ -319,7 +290,7 @@ export function ManagerPromotion() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((row) => {
+                {promotions.map((row) => {
                   const isOpen = expandedId === row.id;
                   return (
                     <Fragment key={row.id}>
