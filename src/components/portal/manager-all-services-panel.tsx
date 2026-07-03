@@ -17,7 +17,6 @@ import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import {
   readManagerWorkOrderRows,
   syncManagerWorkOrdersFromServer,
-  updateManagerWorkOrder,
   MANAGER_WORK_ORDERS_EVENT,
 } from "@/lib/manager-work-orders-storage";
 import {
@@ -44,35 +43,27 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
+  PORTAL_DETAIL_BTN,
+  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  PortalTableDetailActions,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 
 type FilterType = "requests" | "work-orders" | "vendors";
 
-const STATUS_PILL: Record<string, string> = {
-  pending: "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-  approved: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-  denied: "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-  returned: "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-  open: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-  scheduled: "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-  completed: "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]",
-};
+/** Requests get the same Pending / Scheduled / Completed buckets as work orders. */
+type RequestBucket = "pending" | "scheduled" | "completed";
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: "Pending",
-  approved: "Approved",
-  denied: "Denied",
-  returned: "Returned",
-  open: "Open",
-  scheduled: "Scheduled",
-  completed: "Completed",
-};
+function requestBucket(status: ServiceRequest["status"]): RequestBucket {
+  if (status === "pending") return "pending";
+  if (status === "approved") return "scheduled";
+  return "completed"; // denied or returned — closed either way
+}
 
 function hasDeposit(dep: string) {
   return dep.trim() !== "" && dep.trim() !== "0" && dep.trim() !== "$0";
@@ -92,6 +83,7 @@ export function ManagerAllServicesPanel({
   const [propertyFilter, setPropertyFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
+  const [reqBucket, setReqBucket] = useState<RequestBucket>("pending");
   const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
   const typeFilter: FilterType = tabId;
 
@@ -166,26 +158,14 @@ export function ManagerAllServicesPanel({
     return rows;
   }, [serviceRequests, propertyFilter]);
 
-  type UnifiedItem =
-    | { kind: "request"; data: ServiceRequest; sortKey: number }
-    | { kind: "work-order"; data: DemoManagerWorkOrderRow; sortKey: number };
-
-  const unified = useMemo<UnifiedItem[]>(() => {
-    const items: UnifiedItem[] = [];
-    if (typeFilter !== "work-orders") {
-      for (const r of filteredRequests) {
-        items.push({ kind: "request", data: r, sortKey: new Date(r.requestedAt).getTime() });
-      }
-    }
-    if (typeFilter !== "requests") {
-      for (const w of filteredWorkOrders) {
-        const t = w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : 0;
-        items.push({ kind: "work-order", data: w, sortKey: t });
-      }
-    }
-    items.sort((a, b) => b.sortKey - a.sortKey);
-    return items;
-  }, [filteredRequests, filteredWorkOrders, typeFilter]);
+  const bucketedRequests = useMemo(
+    () =>
+      filteredRequests
+        .filter((r) => requestBucket(r.status) === reqBucket)
+        .slice()
+        .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()),
+    [filteredRequests, reqBucket],
+  );
 
   const pendingCount = filteredRequests.filter((r) => r.status === "pending").length;
   const openCount = filteredWorkOrders.filter((w) => w.bucket === "open").length;
@@ -202,6 +182,20 @@ export function ManagerAllServicesPanel({
         count: woCounts[id],
       })),
     [woCounts],
+  );
+  const reqCounts = useMemo(() => {
+    const c: Record<RequestBucket, number> = { pending: 0, scheduled: 0, completed: 0 };
+    for (const r of filteredRequests) c[requestBucket(r.status)] += 1;
+    return c;
+  }, [filteredRequests]);
+  const reqTabs = useMemo(
+    () =>
+      (["pending", "scheduled", "completed"] as const).map((id) => ({
+        id,
+        label: id === "pending" ? "Pending" : id === "scheduled" ? "Scheduled" : "Completed",
+        count: reqCounts[id],
+      })),
+    [reqCounts],
   );
 
   return (
@@ -279,9 +273,21 @@ export function ManagerAllServicesPanel({
               onAfterSchedule={() => setWoBucket("scheduled")}
             />
           </>
-        ) : unified.length === 0 ? (
-          <PortalDataTableEmpty message="No service requests yet." icon="service" />
         ) : (
+          <>
+            <div className="mb-4">
+              <ManagerPortalStatusPills
+                tabs={reqTabs}
+                activeId={reqBucket}
+                onChange={(id) => setReqBucket(id as RequestBucket)}
+              />
+            </div>
+            {bucketedRequests.length === 0 ? (
+              <PortalDataTableEmpty
+                message={filteredRequests.length === 0 ? "No service requests yet." : "No requests in this bucket yet."}
+                icon="service"
+              />
+            ) : (
           <div className={PORTAL_DATA_TABLE_WRAP}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
               <table className="min-w-[920px] w-full border-collapse text-left text-sm">
@@ -291,19 +297,15 @@ export function ManagerAllServicesPanel({
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
                   </tr>
                 </thead>
                 <tbody>
-            {unified.map((item) => {
-              const id = item.kind === "request" ? `request-${item.data.id}` : `work-order-${item.data.id}`;
+            {bucketedRequests.map((req) => {
+              const id = `request-${req.id}`;
               const isExpanded = expandedId === id;
-
-              if (item.kind === "request") {
-                const req = item.data;
-                const needsReturn = hasDeposit(req.deposit);
-                return (
+              const needsReturn = hasDeposit(req.deposit);
+              return (
                   <Fragment key={`req-${req.id}`}>
                     <tr
                       className={PORTAL_TABLE_TR_EXPANDABLE}
@@ -319,38 +321,14 @@ export function ManagerAllServicesPanel({
                           : "—"}
                       </td>
                       <td className={PORTAL_TABLE_TD}>
-                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[req.status] ?? "bg-accent/40 text-muted ring-border"}`}>
-                          {STATUS_LABEL[req.status] ?? req.status}
-                        </span>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
                         {[req.price, needsReturn ? `Deposit ${req.deposit}` : null].filter(Boolean).join(" · ") || "—"}
                       </td>
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                           <div className="space-y-3">
                             {req.notes ? <p className="text-xs italic text-muted">&ldquo;{req.notes}&rdquo;</p> : null}
-                        {req.status === "pending" ? (
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              className="h-8 rounded-full bg-emerald-600 px-4 text-xs font-semibold text-white hover:bg-emerald-700"
-                              onClick={() => { approveServiceRequest(req.id); setDataTick((t) => t + 1); showToast(`Approved "${req.offerName}".`); }}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-8 rounded-full border-rose-200 px-4 text-xs font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]"
-                              onClick={() => { denyServiceRequest(req.id); setDataTick((t) => t + 1); showToast("Request denied."); }}
-                            >
-                              Deny
-                            </Button>
-                          </div>
-                        ) : null}
 
                         {(req.status === "approved" || req.status === "returned") ? (
                           <div className="rounded-xl bg-accent/40 p-3 ring-1 ring-border">
@@ -378,11 +356,40 @@ export function ManagerAllServicesPanel({
                           </div>
                         ) : null}
 
-                        <div className="flex justify-end">
+                        <PortalTableDetailActions>
+                          {req.status === "pending" ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN_PRIMARY}
+                                onClick={() => {
+                                  approveServiceRequest(req.id);
+                                  setDataTick((t) => t + 1);
+                                  setReqBucket("scheduled");
+                                  showToast(`Approved "${req.offerName}".`);
+                                }}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => {
+                                  denyServiceRequest(req.id);
+                                  setDataTick((t) => t + 1);
+                                  showToast("Request denied.");
+                                }}
+                              >
+                                Deny
+                              </Button>
+                            </>
+                          ) : null}
                           <Button
                             type="button"
                             variant="outline"
-                            className="h-8 rounded-full border-rose-200 px-4 text-xs font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]"
+                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
                             onClick={() => {
                               if (!window.confirm("Delete this request? This cannot be undone.")) return;
                               deleteServiceRequest(req.id);
@@ -393,83 +400,20 @@ export function ManagerAllServicesPanel({
                           >
                             Delete request
                           </Button>
-                        </div>
+                        </PortalTableDetailActions>
                           </div>
                         </td>
                       </tr>
                     ) : null}
                   </Fragment>
-                );
-              }
-
-              // Work order
-              const wo = item.data;
-              return (
-                <Fragment key={`wo-${wo.id}`}>
-                  <tr
-                    className={PORTAL_TABLE_TR_EXPANDABLE}
-                    onClick={createPortalRowExpandClick(() => setExpandedId(isExpanded ? null : id))}
-                    aria-expanded={isExpanded}
-                  >
-                    <td className={PORTAL_TABLE_TD}>Work order</td>
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{wo.title}</td>
-                    <td className={PORTAL_TABLE_TD}>{wo.residentName ?? wo.residentEmail ?? "Resident"}</td>
-                    <td className={PORTAL_TABLE_TD}>
-                      {[wo.propertyName, wo.unit].filter(Boolean).join(" · ") || "—"}
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${STATUS_PILL[wo.bucket] ?? "bg-accent/40 text-muted ring-border"}`}>
-                        {STATUS_LABEL[wo.bucket] ?? wo.status}
-                      </span>
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>{wo.priority}</td>
-                  </tr>
-                  {isExpanded ? (
-                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
-                        {wo.description ? (
-                          <p className="mb-3 text-sm leading-relaxed text-muted">{wo.description}</p>
-                        ) : null}
-                      <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Preferred arrival</p>
-                          <p className="mt-1 text-foreground">{wo.preferredArrival?.trim() || "Anytime"}</p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Visit</p>
-                          <p className="mt-1 text-foreground">{wo.scheduled && wo.scheduled !== "—" ? wo.scheduled : "Not scheduled"}</p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Cost</p>
-                          <p className="mt-1 text-foreground">{wo.cost !== "—" && wo.cost?.trim() ? wo.cost : "—"}</p>
-                        </div>
-                      </div>
-                      {wo.bucket !== "completed" ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 rounded-full text-xs"
-                            onClick={() => {
-                              updateManagerWorkOrder(wo.id, (r) => ({ ...r, bucket: "completed", status: "Completed" }));
-                              setDataTick((t) => t + 1);
-                              showToast("Work order marked complete.");
-                            }}
-                          >
-                            Mark complete
-                          </Button>
-                        </div>
-                      ) : null}
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
               );
             })}
                 </tbody>
               </table>
             </div>
           </div>
+            )}
+          </>
         )}
       </div>
     </ManagerPortalPageShell>

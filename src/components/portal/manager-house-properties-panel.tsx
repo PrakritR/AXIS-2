@@ -317,6 +317,11 @@ function ManagerPropertyInlineDetails({
           >
             Unlist
           </Button>
+          {displaySub && portalSub ? (
+            <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
+              Edit listing
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -328,11 +333,6 @@ function ManagerPropertyInlineDetails({
           >
             Delete listing
           </Button>
-          {displaySub && portalSub ? (
-            <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
-              Edit listing
-            </Button>
-          ) : null}
         </div>
       ) : null}
 
