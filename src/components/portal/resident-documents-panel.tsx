@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { ManagerPortalPageShell, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { TabNav } from "@/components/ui/tabs";
 import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
 import { FinancialReportDocumentView } from "@/components/portal/reports/formal-document-preview";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
@@ -56,32 +56,29 @@ export function ResidentDocumentsPanel({
 
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
-  return (
-    <ManagerPortalPageShell title="Documents" subtitle="Your active lease and official rent receipt documents.">
-      <div className="mb-4 flex flex-wrap gap-2">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.id}
-            href={`${basePath}/documents/${tab.id}`}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-              tabId === tab.id
-                ? "bg-foreground text-background"
-                : "border border-border bg-card text-foreground/80 hover:bg-accent/40"
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
+  const tabItems = useMemo(
+    () => tabs.map((tab) => ({ id: tab.id, label: tab.label, href: `${basePath}/documents/${tab.id}` })),
+    [tabs, basePath],
+  );
 
+  return (
+    <ManagerPortalPageShell
+      title="Documents"
+      subtitle="Your active lease and official rent receipt documents."
+      filterRow={
+        <ManagerPortalFilterRow>
+          <TabNav items={tabItems} activeId={tabId} />
+        </ManagerPortalFilterRow>
+      }
+    >
       {tabId === "lease" ? (
-        <>
-          <ResidentLeasePanel />
+        <div className="space-y-4">
+          <ResidentLeasePanel embedded />
           <ResidentDocumentPhotos />
-        </>
+        </div>
       ) : null}
 
-      {tabId === "application" ? <ResidentApplicationsPanel /> : null}
+      {tabId === "application" ? <ResidentApplicationsPanel embedded /> : null}
 
       {tabId === "receipts" ? (
         <div className={`${PORTAL_SECTION_SURFACE} space-y-4 p-4 sm:p-5`}>

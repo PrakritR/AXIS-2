@@ -35,6 +35,7 @@ import {
 } from "@/lib/household-charges";
 import { syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment-eligibility";
 import {
   residentPaymentMethodLabel,
@@ -242,6 +243,12 @@ export function ResidentPaymentsPanel() {
     async (chargeIds: string[], method: ResidentAxisPaymentMethod) => {
       const ids = [...new Set(chargeIds.map((id) => id.trim()).filter(Boolean))];
       if (ids.length === 0) return;
+      // In the public /demo sandbox there is no real Stripe session and the
+      // checkout route requires auth — keep the visitor inside the demo.
+      if (isDemoModeActive()) {
+        showToast("Payments are simulated in this demo.");
+        return;
+      }
       const key = checkoutKey(ids, method);
       setCheckout({ key, chargeIds: ids, paymentMethod: method, clientSecret: null, loading: true, error: null });
       track("household_charge_payment_started", { method, charge_count: ids.length });
@@ -303,7 +310,7 @@ export function ResidentPaymentsPanel() {
         });
       }
     },
-    [nativePlatform],
+    [nativePlatform, showToast],
   );
 
   useEffect(() => {

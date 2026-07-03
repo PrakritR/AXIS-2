@@ -541,11 +541,9 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "lease") {
     if (tabParts?.length) notFound();
-    return (
-      <ManagerPortalPageShell title="Lease">
-        <ResidentLeasePanel />
-      </ManagerPortalPageShell>
-    );
+    // ResidentLeasePanel renders its own "Lease" page shell (title + actions);
+    // don't wrap it in a second shell or the header stacks twice.
+    return <ResidentLeasePanel />;
   }
 
   if (kind === "resident" && section === "move-in") {

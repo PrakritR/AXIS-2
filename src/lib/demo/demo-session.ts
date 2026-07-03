@@ -30,6 +30,14 @@ export function isDemoModeActive(): boolean {
   return typeof window !== "undefined" && window.location.pathname.startsWith("/demo");
 }
 
+/**
+ * Window event a reused portal panel dispatches (instead of a real router push)
+ * when it wants to navigate while inside the demo sandbox. `DemoPortalShell`
+ * listens for it and translates the target href into an in-demo section switch,
+ * so programmatic navigations never escape to a real auth-gated route.
+ */
+export const DEMO_NAVIGATE_EVENT = "axis-demo:navigate";
+
 let role: DemoPortalRole = "manager";
 const listeners = new Set<() => void>();
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -35,7 +35,38 @@ import { resolveResidentPortalAxisId } from "@/lib/manager-applications-storage"
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
-export function ResidentLeasePanel() {
+/**
+ * Wraps the lease view. Standalone (the /resident/lease section) it renders the
+ * standard portal page shell with a title + action buttons in the header. When
+ * `embedded` (inside the Documents › Lease tab) it drops the shell/title so it
+ * doesn't stack a second header under the Documents shell, and lays the action
+ * buttons out in a right-aligned row instead.
+ */
+function LeaseSectionShell({
+  embedded,
+  actions,
+  children,
+}: {
+  embedded: boolean;
+  actions: ReactNode;
+  children: ReactNode;
+}) {
+  if (embedded) {
+    return (
+      <>
+        {actions ? <div className="mb-4 flex flex-wrap justify-end gap-2">{actions}</div> : null}
+        {children}
+      </>
+    );
+  }
+  return (
+    <ManagerPortalPageShell title="Lease" titleAside={actions}>
+      {children}
+    </ManagerPortalPageShell>
+  );
+}
+
+export function ResidentLeasePanel({ embedded = false }: { embedded?: boolean } = {}) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -225,24 +256,24 @@ export function ResidentLeasePanel() {
   }, []);
 
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
-    return (
-      <ManagerPortalPageShell title="Lease">
-        <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--glass-fill)] ring-1 ring-border">
-            <svg className="h-8 w-8 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-lg font-bold text-foreground">Your lease is being prepared</p>
-            <p className="mt-1.5 max-w-sm text-sm text-muted">
-              Once your manager finalises and sends your lease to you, it will appear here ready for review and signature.
-            </p>
-          </div>
-          <p className="text-xs text-muted">Check back soon — this page updates automatically.</p>
+    const preparing = (
+      <div className="flex flex-col items-center gap-4 py-16 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--glass-fill)] ring-1 ring-border">
+          <svg className="h-8 w-8 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+          </svg>
         </div>
-      </ManagerPortalPageShell>
+        <div>
+          <p className="text-lg font-bold text-foreground">Your lease is being prepared</p>
+          <p className="mt-1.5 max-w-sm text-sm text-muted">
+            Once your manager finalises and sends your lease to you, it will appear here ready for review and signature.
+          </p>
+        </div>
+        <p className="text-xs text-muted">Check back soon — this page updates automatically.</p>
+      </div>
     );
+    if (embedded) return preparing;
+    return <ManagerPortalPageShell title="Lease">{preparing}</ManagerPortalPageShell>;
   }
 
   return (
@@ -276,9 +307,9 @@ export function ResidentLeasePanel() {
         onSuccess={() => void handleMoveOutSuccess()}
       />
 
-      <ManagerPortalPageShell
-        title="Lease"
-        titleAside={
+      <LeaseSectionShell
+        embedded={embedded}
+        actions={
           <>
             {canRequestMoveOutChange ? (
               <Button
@@ -462,7 +493,7 @@ export function ResidentLeasePanel() {
             </p>
           </Card>
         ) : null}
-      </ManagerPortalPageShell>
+      </LeaseSectionShell>
     </>
   );
 }

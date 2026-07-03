@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
@@ -11,6 +11,7 @@ import { RESIDENT_APPROVED_PORTAL_SECTIONS, RESIDENT_PORTAL_BASE_PATH } from "@/
 import type { PortalDefinition, PortalSection } from "@/lib/portal-types";
 import { closeAxisAssistant, sendAxisAssistantPrompt } from "@/lib/axis-assistant/open-store";
 import {
+  DEMO_NAVIGATE_EVENT,
   getDemoRole,
   setDemoRole,
   subscribeDemoRole,
@@ -19,6 +20,23 @@ import {
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
 import { DemoFrameAssistant } from "@/components/demo/demo-frame-assistant";
 import { DemoShowcaseOverlay, type ShowcaseKind } from "@/components/demo/demo-showcase-overlay";
+
+/** App routes a reused portal panel might try to navigate to. In the demo these
+ * must never reach the real (auth-gated) router — either they map to an in-demo
+ * section switch or they are swallowed so the visitor stays in the sandbox. */
+const DEMO_INTERCEPT_HREF = /^\/(portal|resident|admin|auth|rent)(\/|$)/;
+
+/** Parse an in-app portal href (`/resident/documents/receipts`) into the demo's
+ * section + tab. Returns null for routes with no in-demo equivalent
+ * (`/auth/...`, `/rent/...`, `/admin/...`). */
+function parseDemoTarget(href: string): { section: string; tab: string | null } | null {
+  const path = href.split(/[?#]/)[0] ?? "";
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+  const [prefix, section, tab] = parts;
+  if (prefix !== "portal" && prefix !== "resident") return null;
+  return { section: section!, tab: tab ?? null };
+}
 
 function definitionForRole(role: DemoPortalRole): PortalDefinition {
   if (role === "resident") {
@@ -135,6 +153,47 @@ export function DemoPortalShell() {
     setTab(nextTab);
     scrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, []);
+
+  // Resolve an intercepted in-app href to an in-demo section switch. Unknown
+  // sections (or auth/rent routes) are swallowed so the visitor never leaves.
+  const navigateInDemo = useCallback(
+    (href: string) => {
+      const target = parseDemoTarget(href);
+      if (target && def.sections.some((s) => s.section === target.section)) {
+        selectSection(target.section, target.tab);
+      }
+    },
+    [def, selectSection],
+  );
+
+  // The reused portal panels render real <Link>/<a> elements pointing at
+  // /portal, /resident, etc. A capture-phase handler on the demo frame catches
+  // those clicks before Next's Link navigates, so nothing escapes the sandbox.
+  const onFrameClickCapture = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      if (e.defaultPrevented) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      const anchor = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") ?? "";
+      if (!DEMO_INTERCEPT_HREF.test(href)) return;
+      e.preventDefault();
+      navigateInDemo(href);
+    },
+    [navigateInDemo],
+  );
+
+  // Programmatic navigations (router.push via usePortalNavigate / portalNavClick)
+  // can't be caught by a click handler, so those code paths dispatch this event
+  // in demo mode instead of pushing a route.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const href = (e as CustomEvent<{ href?: string }>).detail?.href;
+      if (typeof href === "string") navigateInDemo(href);
+    };
+    window.addEventListener(DEMO_NAVIGATE_EVENT, handler);
+    return () => window.removeEventListener(DEMO_NAVIGATE_EVENT, handler);
+  }, [navigateInDemo]);
 
   // --- Run demo auto-play ----------------------------------------------------
   const steps: Step[] = useMemo(() => buildSteps(def), [def]);
@@ -265,6 +324,7 @@ export function DemoPortalShell() {
       {/* Portal window */}
       <div
         ref={setFrameEl}
+        onClickCapture={onFrameClickCapture}
         className="demo-portal-frame relative flex min-h-[70vh] overflow-hidden rounded-2xl border border-border bg-background shadow-[var(--shadow-lg,0_20px_60px_-30px_rgba(15,23,42,0.5))]"
       >
         {/* Sidebar */}
@@ -384,28 +444,10 @@ export function DemoPortalShell() {
 
         {/* Content */}
         <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto px-3 pb-8 pt-14 sm:px-5 md:pt-5">
-          {/* Sub-tabs for the active section */}
-          {meta && meta.tabs.length > 1 ? (
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {meta.tabs.map((t) => {
-                const activeTab = (tab ?? meta.tabs[0]?.id) === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setTab(t.id)}
-                    className={cn(
-                      "rounded-full px-3 py-1 text-xs font-medium transition",
-                      activeTab ? "bg-primary/12 text-primary" : "text-muted hover:text-foreground",
-                    )}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
+          {/* No generic sub-tab strip here: every multi-tab panel renders its own
+              tab row (TabNav / status pills) in its page-shell header, and those
+              tab clicks are intercepted (onFrameClickCapture / DEMO_NAVIGATE_EVENT)
+              to switch the demo tab. A strip here would duplicate that row. */}
           <DemoSectionRenderer key={`${role}:${section}`} role={role} section={section} tab={tab} meta={meta} />
         </div>
 
