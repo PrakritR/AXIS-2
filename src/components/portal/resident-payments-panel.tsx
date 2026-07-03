@@ -608,7 +608,7 @@ export function ResidentPaymentsPanel() {
                                 {row.blocksLeaseUntilPaid && row.status === "pending" ? (
                                   <p className="mt-3 text-sm text-amber-900">
                                     Pay this before signing your lease.{" "}
-                                    <Link href="/resident/documents/lease" className="font-semibold text-primary underline underline-offset-2">
+                                    <Link href="/resident/lease" className="font-semibold text-primary underline underline-offset-2">
                                       Open lease tab
                                     </Link>
                                     .
@@ -627,7 +627,7 @@ export function ResidentPaymentsPanel() {
                                     Copy balance
                                   </Button>
                                   <Link
-                                    href="/resident/documents/lease"
+                                    href="/resident/lease"
                                     className={`inline-flex items-center justify-center ${PORTAL_DETAIL_BTN}`}
                                   >
                                     Lease tab

@@ -197,10 +197,12 @@ export function ResidentOtherDocumentsTable({
   uploads,
   loading,
   onRemove,
+  emptyMessage = "No documents yet — use Add photo or Add document above.",
 }: {
   uploads: UploadedOwnLease[];
   loading: boolean;
   onRemove: (id: string) => void;
+  emptyMessage?: string;
 }) {
   if (loading) {
     return (
@@ -210,7 +212,7 @@ export function ResidentOtherDocumentsTable({
     );
   }
   if (uploads.length === 0) {
-    return <PortalDataTableEmpty icon="default" message="No documents yet — use Add photo or Add document above." />;
+    return <PortalDataTableEmpty icon="default" message={emptyMessage} />;
   }
   return (
     <div className={PORTAL_DATA_TABLE_WRAP}>

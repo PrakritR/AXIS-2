@@ -528,14 +528,11 @@ export async function renderPortalSection(
     if (tierGate) return tierGate;
     const allowedTabs = meta.tabs.map((t) => t.id);
     if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "receipts"}`);
+      redirect(`${def.basePath}/${section}/${allowedTabs[0] ?? "application"}`);
     }
     if (tabParts.length > 1) notFound();
     const docTab = tabParts[0]!;
     if (!allowedTabs.includes(docTab)) notFound();
-    if (docTab === "lease" && !residentWorkspaceUnlocked && !(residentAccess?.leaseAccessUnlocked ?? false)) {
-      return <ResidentFreeTierFeatureNotice title="Documents — Lease" />;
-    }
     return <ResidentDocumentsPanel tabId={docTab} basePath={def.basePath} tabs={meta.tabs} />;
   }
 

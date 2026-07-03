@@ -32,7 +32,6 @@ const SERVICES_TABS = [
 ] as const;
 
 const DOCUMENTS_TABS = [
-  { id: "lease", label: "Lease" },
   { id: "application", label: "Application" },
   { id: "receipts", label: "Rent receipts" },
   { id: "other", label: "Other documents" },
@@ -99,7 +98,7 @@ export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },
   { label: "Move-in", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
   { label: "Inbox", path: `${RESIDENT_PORTAL_BASE_PATH}/inbox/unopened` },
-  { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/lease` },
+  { label: "Documents", path: `${RESIDENT_PORTAL_BASE_PATH}/documents/application` },
 ] as const;
 
 export function residentSectionHref(section: string, tabId?: string): string {

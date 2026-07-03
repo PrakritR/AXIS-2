@@ -24,15 +24,6 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
-  LEASE_PIPELINE_EVENT,
-  downloadLeaseFromRow,
-  findLeaseForResidentEmail,
-  hasBothLeaseSignatures,
-  printLeaseAsPdf,
-  residentCanViewLeaseRow,
-  syncLeasePipelineFromServer,
-} from "@/lib/lease-pipeline-storage";
-import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
@@ -52,7 +43,7 @@ function defaultReceiptRange() {
   return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
 }
 
-/** Simple downloadable-document row used by the Lease and Application tabs. */
+/** Simple downloadable-document row used by the Application tab. */
 function DocumentEntryRow({
   name,
   meta,
@@ -81,89 +72,6 @@ function DocumentEntryRow({
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
     </li>
-  );
-}
-
-/**
- * Documents › Lease — the lease as a plain downloadable document. The
- * interactive review/sign experience lives in the dedicated Lease sidebar tab.
- */
-function LeaseDocumentEntry({ basePath }: { basePath: string }) {
-  const { showToast } = useAppUi();
-  const session = usePortalSession();
-  const email = session.email?.trim() ?? "";
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const on = () => setTick((t) => t + 1);
-    void syncLeasePipelineFromServer().then(on);
-    window.addEventListener(LEASE_PIPELINE_EVENT, on);
-    window.addEventListener("storage", on);
-    return () => {
-      window.removeEventListener(LEASE_PIPELINE_EVENT, on);
-      window.removeEventListener("storage", on);
-    };
-  }, []);
-
-  const row = useMemo(() => {
-    void tick;
-    if (!email) return null;
-    return findLeaseForResidentEmail(email);
-  }, [email, tick]);
-
-  const documentReady = residentCanViewLeaseRow(row);
-  const fullySigned = Boolean(row && hasBothLeaseSignatures(row));
-
-  const onDownload = () => {
-    if (!row) return;
-    if (row.managerUploadedPdf?.dataUrl) {
-      downloadLeaseFromRow(row);
-      showToast("PDF download started.");
-      return;
-    }
-    if (row.generatedHtml) {
-      printLeaseAsPdf(row);
-      showToast("Print dialog opened — choose 'Save as PDF' to download.");
-      return;
-    }
-    showToast("Your lease document isn't ready yet.");
-  };
-
-  if (!documentReady) {
-    return (
-      <div className="space-y-4">
-        <PortalDataTableEmpty icon="lease" message="Your lease document will appear here once your manager prepares it." />
-        <p className="text-center text-sm text-muted">
-          Track progress and sign in the{" "}
-          <Link href={`${basePath}/lease`} className="font-semibold text-primary hover:underline">
-            Lease tab
-          </Link>
-          .
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <ul className="space-y-3">
-      <DocumentEntryRow
-        name="Lease agreement"
-        meta={fullySigned ? "Fully signed" : "Awaiting signature — review and sign in the Lease tab"}
-        actions={
-          <>
-            <Link
-              href={`${basePath}/lease`}
-              className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-semibold text-foreground transition hover:bg-accent/60"
-            >
-              View in Lease tab
-            </Link>
-            <Button type="button" variant="outline" className="min-h-9 rounded-full px-4 py-1.5 text-xs" onClick={onDownload}>
-              Download PDF
-            </Button>
-          </>
-        }
-      />
-    </ul>
   );
 }
 
@@ -311,7 +219,6 @@ export function ResidentDocumentsPanel({
   return (
     <ManagerPortalPageShell
       title="Documents"
-      subtitle="Your lease, application, rent receipts, and any documents you add yourself."
       titleAside={
         <>
           <Button
@@ -339,8 +246,6 @@ export function ResidentDocumentsPanel({
         </ManagerPortalFilterRow>
       }
     >
-      {tabId === "lease" ? <LeaseDocumentEntry basePath={basePath} /> : null}
-
       {tabId === "application" ? <ApplicationDocumentEntries basePath={basePath} /> : null}
 
       {tabId === "receipts" ? (
