@@ -19,11 +19,11 @@ import { safeFormatDateTime } from "@/lib/pacific-time";
 
 const MAX_UPLOAD_BYTES = 3.5 * 1024 * 1024;
 
-// `URL.createObjectURL()` always returns a `blob:` URL and the native camera
-// plugin always returns a `capacitor:`/`file:` URI — reject anything else
-// before it reaches the live upload preview's <img src>, so this can never
-// become a sink for an untrusted/remote URL.
-const SAFE_PREVIEW_URL_RE = /^(?:blob|capacitor|file):/i;
+// `URL.createObjectURL()` returns a `blob:` URL, while Capacitor camera previews
+// may be custom schemes or WebView-local `http(s)://localhost` file URLs.
+// Reject anything else before it reaches the live upload preview's <img src>,
+// so this can never become a sink for an untrusted/remote URL.
+const SAFE_PREVIEW_URL_RE = /^(?:(?:blob|capacitor|file):|https?:\/\/localhost(?::\d+)?(?:[/?#]|$))/i;
 function safePreviewUrl(url: string | null): string | null {
   return url && SAFE_PREVIEW_URL_RE.test(url) ? url : null;
 }
