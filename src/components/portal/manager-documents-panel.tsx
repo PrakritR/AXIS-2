@@ -49,6 +49,7 @@ import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-acces
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import type { OccupancyReport, PropertyRentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import type { ReportResult } from "@/lib/reports/types";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 export const DOCUMENT_TABS = [
   { id: "income-documents", label: "Income documents" },
@@ -146,6 +147,33 @@ export function ManagerDocumentsPanel({
   const runReport = useCallback(async () => {
     setLoading(true);
     try {
+      // Demo sandbox: build every report from the browser-local demo data —
+      // the reports API needs auth and knows nothing about the demo account.
+      if (isDemoModeActive()) {
+        const demo = await import("@/lib/demo/demo-finance-reports");
+        const demoPropertyId = scopeFilters.propertyId || filters.propertyId || undefined;
+        if (tabId === "expense-documents") {
+          setPropertyDocuments(null);
+          setReport(demo.buildDemoFinanceReport("expenses", demoPropertyId));
+        } else if (tabId === "income-documents") {
+          const { documents, preview } = demo.buildDemoRentReceiptDocuments(demoPropertyId);
+          setPropertyDocuments(documents);
+          setReport(preview);
+        } else if (tabId === "1099") {
+          setPropertyDocuments(null);
+          setReport(demo.buildDemo1099Report(filters.taxYear));
+        } else if (tabId === "tax-summary") {
+          setPropertyDocuments(null);
+          setReport(demo.buildDemoTaxSummaryReport(demoPropertyId));
+        } else if (tabId === "occupancy") {
+          setPropertyDocuments(null);
+          setReport(null);
+          setOccupancyReport(demo.buildDemoOccupancyReport(demoPropertyId));
+        }
+        setGenerated(true);
+        setLoading(false);
+        return;
+      }
       if (tabId === "expense-documents") {
         const qs = buildScopedReportQuery(
           { from: filters.from, to: filters.to },
@@ -217,6 +245,13 @@ export function ManagerDocumentsPanel({
     });
   }, [tabId]);
 
+  // Demo sandbox: generate immediately so every Documents tab opens populated
+  // instead of waiting for a "Generate report" click (re-runs on filter change).
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    queueMicrotask(() => void runReport());
+  }, [tabId, runReport]);
+
   const incomeReceiptExportHref =
     tabId === "income-documents"
       ? `/api/reports/formal-documents/export?${buildFormalDocumentQuery("property_rent_receipt", { from: filters.from, to: filters.to }, scopeFilters)}`
@@ -260,10 +295,12 @@ export function ManagerDocumentsPanel({
     </>
   );
 
+  // Export routes are server-side PDFs behind auth — hidden in the demo.
   const hasExportActions =
-    tabId === "1099" ||
-    (tabId === "expense-documents" && generated) ||
-    Boolean(incomeReceiptExportHref && generated);
+    !isDemoModeActive() &&
+    (tabId === "1099" ||
+      (tabId === "expense-documents" && generated) ||
+      Boolean(incomeReceiptExportHref && generated));
 
   return (
     <ManagerPortalPageShell

@@ -332,12 +332,16 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
 }
 
 function leasePipelineSessionKey(scopeUserId?: string | null): string {
+  // Demo sandbox: one shared store for every scope, so the demo manager and
+  // demo resident read/write the SAME lease rows (a resident signature is
+  // immediately visible on the manager side and vice versa).
+  if (isDemoModeActive()) return `${LEASE_PIPELINE_SESSION_KEY_PREFIX}:shared`;
   if (scopeUserId) return `${LEASE_PIPELINE_SESSION_KEY_PREFIX}:${scopeUserId}`;
   return `${LEASE_PIPELINE_SESSION_KEY_PREFIX}:shared`;
 }
 
 function ensureLeasePipelineScope(scopeUserId?: string | null) {
-  const nextScope = scopeUserId ?? undefined;
+  const nextScope = isDemoModeActive() ? undefined : scopeUserId ?? undefined;
   if (activeLeasePipelineScopeUserId !== nextScope) {
     activeLeasePipelineScopeUserId = nextScope;
     memoryRows = [];

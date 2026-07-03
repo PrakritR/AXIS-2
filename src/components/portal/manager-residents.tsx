@@ -505,6 +505,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         setPortalSetupMap(new Map());
         return;
       }
+      // Demo sandbox: every demo resident already has an Axis account with
+      // their portal set up — no "no Axis account yet" badges.
+      if (isDemoModeActive()) {
+        setResidentAccountEmails(new Set(emails));
+        setPortalSetupMap(new Map(emails.map((email) => [email, true])));
+        return;
+      }
       const opts = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails }) };
       const [accountRes, portalRes] = await Promise.allSettled([
         fetch("/api/manager/resident-account-emails", opts),

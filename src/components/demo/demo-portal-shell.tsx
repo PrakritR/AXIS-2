@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
+import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
+import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { PortalContainerProvider } from "@/components/ui/portal-container-context";
 import { groupNavItems } from "@/lib/portals/nav-groups";
 import { proPortal } from "@/lib/portals/pro";
@@ -121,6 +123,8 @@ function RestartIcon() {
 export function DemoPortalShell() {
   const role = useSyncExternalStore(subscribeDemoRole, getDemoRole, () => "manager" as const);
   const def = useMemo(() => definitionForRole(role), [role]);
+  // Same nav count badges as the real portal sidebar, fed by the seeded stores.
+  const navCounts = usePortalNavCounts(def.kind);
   const navGroups = useMemo(
     () => groupNavItems(def.kind, def.sections.map((s) => ({ section: s.section, meta: s }))),
     [def],
@@ -389,6 +393,7 @@ export function DemoPortalShell() {
                 {collapsed && i > 0 ? <div className="my-1 h-px w-6 bg-border" aria-hidden /> : null}
                 {group.items.map((item) => {
                   const active = section === item.section;
+                  const count = navCounts[item.section] ?? 0;
                   return (
                     <button
                       key={item.section}
@@ -409,7 +414,12 @@ export function DemoPortalShell() {
                       <span className={active ? "text-primary" : "opacity-80"} aria-hidden>
                         <PortalNavIcon section={item.section} className="h-[17px] w-[17px] shrink-0" />
                       </span>
-                      {collapsed ? null : <span className="min-w-0 truncate">{item.meta.label}</span>}
+                      {collapsed ? null : (
+                        <>
+                          <span className="min-w-0 flex-1 truncate">{item.meta.label}</span>
+                          <PortalNavCountBadge count={count} />
+                        </>
+                      )}
                     </button>
                   );
                 })}

@@ -98,7 +98,8 @@ export function DemoSectionRenderer({
       case "promotion":
         return <ManagerPromotion />;
       case "bugs-feedback":
-        return <PortalBugFeedbackPanel reporterRole="manager" />;
+        // The demo manager portal mirrors the real "pro" portal definition.
+        return <PortalBugFeedbackPanel reporterRole="pro" />;
       case "profile":
         return <Placeholder title="Settings" message="Profile settings appear here for your real account." />;
       default:
@@ -141,6 +142,11 @@ export function DemoSectionRenderer({
   }
 }
 
+/**
+ * Same Move-in tab as the real resident portal: the shared presentational
+ * view fed by the shared resolver, over the browser-local demo data
+ * (the real portal resolves the identical shape server-side).
+ */
 function ResidentMoveInDemo() {
   const resolved = useMemo(() => {
     const propertiesById = Object.fromEntries(demoProperties().map((p) => [p.id, p]));

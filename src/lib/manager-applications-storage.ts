@@ -188,12 +188,15 @@ function canUseStorage() {
 }
 
 function managerApplicationsSessionKey(scopeUserId?: string | null): string {
+  // Demo sandbox: one shared store for every scope so the demo manager and
+  // demo resident act on the same application rows (mirrors the lease store).
+  if (isDemoModeActive()) return `${MANAGER_APPLICATIONS_SESSION_KEY_PREFIX}:shared`;
   if (scopeUserId) return `${MANAGER_APPLICATIONS_SESSION_KEY_PREFIX}:${scopeUserId}`;
   return `${MANAGER_APPLICATIONS_SESSION_KEY_PREFIX}:shared`;
 }
 
 function ensureApplicationsScope(scopeUserId?: string | null) {
-  const nextScope = scopeUserId ?? undefined;
+  const nextScope = isDemoModeActive() ? undefined : scopeUserId ?? undefined;
   if (activeApplicationsScopeUserId !== nextScope) {
     activeApplicationsScopeUserId = nextScope;
     memoryRows = [];

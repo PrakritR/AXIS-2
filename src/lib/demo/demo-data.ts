@@ -64,9 +64,11 @@ export function isoDateOnly(days: number): string {
   return isoDaysFromNow(days).slice(0, 10);
 }
 
-// The demo lease term: started ~5 months ago on a 12-month agreement.
-export const DEMO_LEASE_START_DAYS = -150;
-export const DEMO_LEASE_END_DAYS = 215;
+// The demo resident's lease term: a 12-month agreement starting in two weeks.
+// The lease seeds awaiting the resident's signature so a visitor can play the
+// signing flow (resident signs → manager countersigns) inside the sandbox.
+export const DEMO_LEASE_START_DAYS = 14;
+export const DEMO_LEASE_END_DAYS = 379;
 
 // Manager-created listings are keyed with an `mgr-` id prefix — the property
 // inventory helpers (`adminKpiCounts`, the Properties tab buckets) only count and
@@ -90,12 +92,23 @@ export function demoRoomChoice(propertyId: string): string {
   return `${propertyId}::room-1`;
 }
 
+// Generic house illustrations bundled under `public/demo/` (no remote URLs, so
+// they always render). Flow through `listingSubmission.housePhotoDataUrls`
+// into browse cards, property pickers, and the listing hero gallery.
+export const DEMO_HOUSE_IMAGE: Record<string, string> = {
+  [PROP.pioneer]: "/demo/house-pioneer.svg",
+  [PROP.cascade]: "/demo/house-cascade.svg",
+  [PROP.emerald]: "/demo/house-emerald.svg",
+  [PROP.lakeview]: "/demo/house-lakeview.svg",
+};
+
 /**
  * Minimal-but-valid listing submission so listing-backed features light up in
  * the demo: resident service-request offers, Axis ACH pay eligibility, and
  * room-choice label resolution all read `property.listingSubmission`.
  */
 function demoListingSubmission(input: {
+  id: string;
   title: string;
   address: string;
   neighborhood: string;
@@ -131,7 +144,9 @@ function demoListingSubmission(input: {
     houseRulesText: "Quiet hours 10pm–8am · No smoking · Guests welcome up to 7 nights",
     wifiNetworkName: "AxisHome-5G",
     wifiPassword: "welcome-home-2026",
-    housePhotoDataUrls: [],
+    generalHouseInfo:
+      "Trash & recycling pickup is Tuesday morning — bins live in the alley.\nBuilding entry code is shared at key pickup.",
+    housePhotoDataUrls: DEMO_HOUSE_IMAGE[input.id] ? [DEMO_HOUSE_IMAGE[input.id]!] : [],
     leaseTermsBody: "12-month lease standard; month-to-month available on renewal.",
     applicationFee: "$45.00",
     securityDeposit: "$500.00",
@@ -202,7 +217,7 @@ export function demoProperties(): MockProperty[] {
     unitLabel: unit,
     managerUserId: DEMO_MANAGER_USER_ID,
     adminPublishLive: true,
-    listingSubmission: demoListingSubmission({ title, address, neighborhood, rent, unit }),
+    listingSubmission: demoListingSubmission({ id, title, address, neighborhood, rent, unit }),
   });
   return [
     base(PROP.pioneer, "The Pioneer", "12 Pike St", "Pioneer Square", 2, 1, 2400, "Unit 12A"),
@@ -251,8 +266,8 @@ export function demoApplications(): DemoApplicantRow[] {
       "Submitted application, awaiting first review"),
     mk("demo-app-3", "Sofia Rossi", "sofia.rossi@example.com", PROP.pioneer, "Documents requested", "pending",
       "Income verification requested"),
-    mk("demo-app-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "Approved · active", "approved",
-      "Moved in · lease fully signed", {
+    mk("demo-app-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "Approved · lease sent", "approved",
+      "Lease sent — awaiting signature", {
         signedMonthlyRent: 2400,
         assignedRoomChoice: demoRoomChoice(PROP.pioneer),
         backgroundCheckStatus: "passed",
@@ -343,33 +358,36 @@ export function demoCharges(): HouseholdCharge[] {
     // Overdue (last month, unpaid) — powers "who is late on rent"
     mk("demo-hc-1", "Dana Whitfield", "dana.whitfield@example.com", PROP.emerald, 3200, "pending", { rentMonth: monthKey(-1) }),
     mk("demo-hc-2", "Omar Haddad", "omar.haddad@example.com", PROP.cascade, 1950, "pending", { rentMonth: monthKey(-1) }),
-    // Upcoming (due within a week so the Payments views actually show them)
-    mk("demo-hc-3", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 2400, "pending", { dueDateLabel: dateLabel(5) }, DEMO_RESIDENT_USER_ID),
+    // Upcoming (due within a week so the Payments views actually show them).
+    // Jordan's first month rent lines up with the lease awaiting signature.
+    mk("demo-hc-3", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 2400, "pending", { dueDateLabel: dateLabel(5) }, DEMO_RESIDENT_USER_ID, {
+      kind: "first_month_rent",
+      title: "First month rent",
+    }),
     mk("demo-hc-4", "Grace Kim", "grace.kim@example.com", PROP.lakeview, 1700, "pending", { dueDateLabel: dateLabel(6) }),
-    // Paid history — the demo resident has a real receipt trail
-    mk("demo-hc-5", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 2400, "paid", { rentMonth: monthKey(0) }, DEMO_RESIDENT_USER_ID),
-    mk("demo-hc-8", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 2400, "paid", { rentMonth: monthKey(-1) }, DEMO_RESIDENT_USER_ID, {
-      paidAt: isoDaysFromNow(-33),
-      createdAt: isoDaysFromNow(-70),
+    // Paid history — the incoming demo resident already paid the move-in
+    // charges, so the Paid tab and rent receipts have a real trail.
+    mk("demo-hc-5", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 500, "paid", { dueDateLabel: dateLabel(-6) }, DEMO_RESIDENT_USER_ID, {
+      kind: "security_deposit",
+      title: "Security deposit",
+      createdAt: isoDaysFromNow(-9),
+      paidAt: isoDaysFromNow(-6),
     }),
-    mk("demo-hc-9", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 2400, "paid", { rentMonth: monthKey(-2) }, DEMO_RESIDENT_USER_ID, {
-      paidAt: isoDaysFromNow(-63),
-      createdAt: isoDaysFromNow(-100),
-    }),
-    mk("demo-hc-10", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 85, "paid", { rentMonth: monthKey(0) }, DEMO_RESIDENT_USER_ID, {
-      kind: "utilities",
-      title: "Utilities",
-      paidAt: isoDaysFromNow(-3),
+    mk("demo-hc-8", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 150, "paid", { dueDateLabel: dateLabel(-6) }, DEMO_RESIDENT_USER_ID, {
+      kind: "move_in_fee",
+      title: "Move-in fee",
+      createdAt: isoDaysFromNow(-9),
+      paidAt: isoDaysFromNow(-6),
     }),
     // Paid at application time — also stops the portal from synthesizing a
-    // pending application-fee line for an already-moved-in resident.
+    // pending application-fee line for an approved applicant.
     mk("demo-hc-11", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, 45, "paid",
-      { dueDateLabel: dateLabel(DEMO_LEASE_START_DAYS - 10) }, DEMO_RESIDENT_USER_ID, {
+      { dueDateLabel: dateLabel(-24) }, DEMO_RESIDENT_USER_ID, {
         kind: "application_fee",
         title: "Application fee",
         applicationId: "demo-app-4",
-        createdAt: isoDaysFromNow(DEMO_LEASE_START_DAYS - 10),
-        paidAt: isoDaysFromNow(DEMO_LEASE_START_DAYS - 8),
+        createdAt: isoDaysFromNow(-26),
+        paidAt: isoDaysFromNow(-24),
       }),
     mk("demo-hc-6", "Dana Whitfield", "dana.whitfield@example.com", PROP.emerald, 3200, "paid", { rentMonth: monthKey(0) }, null, {
       paidAt: isoDaysFromNow(-2),
@@ -549,17 +567,20 @@ export function demoLeases(): LeasePipelineRow[] {
       generatedAtIso: isoDaysFromNow(-1),
     }),
     mk("demo-lease-3", "Priya Sharma", "priya.sharma@example.com", PROP.cascade, "manager", "Manager Review"),
-    // The demo resident's lease: fully executed with a viewable agreement, so
-    // the resident Lease tab shows the signed document (not "being prepared").
-    mk("demo-lease-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "signed", "Fully Signed", {
+    // The demo resident's lease: ONE shared row both portals act on (the
+    // lease store collapses to a single scope in demo). It seeds UNSIGNED but
+    // with the generated agreement attached, so the resident Lease tab shows
+    // the document immediately (never "being prepared") with signing open —
+    // the visitor signs as the resident, toggles roles, and countersigns as
+    // the manager to complete it. A page refresh re-seeds and resets the flow.
+    mk("demo-lease-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "resident", "Resident Signature Pending", {
       residentUserId: DEMO_RESIDENT_USER_ID,
       generatedHtml: leaseHtml(DEMO_RESIDENT_NAME, PROP.pioneer, "$2,400.00 per month", DEMO_LEASE_START_DAYS, DEMO_LEASE_END_DAYS),
-      generatedAtIso: isoDaysFromNow(DEMO_LEASE_START_DAYS - 6),
-      sentToResidentAt: isoDaysFromNow(DEMO_LEASE_START_DAYS - 5),
-      ...signatures(DEMO_RESIDENT_NAME, DEMO_LEASE_START_DAYS - 3, DEMO_LEASE_START_DAYS - 2),
+      generatedAtIso: isoDaysFromNow(-3),
+      sentToResidentAt: isoDaysFromNow(-2),
       signedRentLabel: "$2,400/mo",
-      updated: dateLabel(DEMO_LEASE_START_DAYS - 2),
-      updatedAtIso: isoDaysFromNow(DEMO_LEASE_START_DAYS - 2),
+      updated: dateLabel(-2),
+      updatedAtIso: isoDaysFromNow(-2),
       application: {
         propertyId: PROP.pioneer,
         roomChoice1: PROP.pioneer,
@@ -569,15 +590,9 @@ export function demoLeases(): LeasePipelineRow[] {
       thread: [
         {
           id: "demo-lease-4-msg-1",
-          at: isoDaysFromNow(DEMO_LEASE_START_DAYS - 3),
-          role: "resident",
-          body: "Signed! Excited for move-in day.",
-        },
-        {
-          id: "demo-lease-4-msg-2",
-          at: isoDaysFromNow(DEMO_LEASE_START_DAYS - 2),
+          at: isoDaysFromNow(-2),
           role: "manager",
-          body: "Welcome aboard, Jordan — keys will be ready at the office after 3pm.",
+          body: "Hi Jordan — your lease is ready. Review and sign when you're ready.",
         },
       ],
     }),
@@ -1121,6 +1136,10 @@ export function demoExpenseRows(): DemoExpenseRow[] {
     mk("demo-exp-4", 25, "Insurance", "Line 9", "$310.00", "Evergreen Mutual", "Quarterly landlord policy premium", PROP.pioneer),
     mk("demo-exp-5", 32, "Cleaning & maintenance", "Line 7", "$140.00", "Sound Cleaning Co.", "Move-out deep clean", PROP.lakeview),
     mk("demo-exp-6", 41, "Repairs", "Line 14", "$220.00", "Cascade Mechanical", "HVAC filter + coil service", PROP.cascade),
+    // Larger vendor invoices — push Cascade Mechanical and Emerald Painters
+    // over the $600 1099-NEC threshold so the 1099 tab has candidates.
+    mk("demo-exp-7", 52, "Repairs", "Line 14", "$1,850.00", "Cascade Mechanical", "Furnace replacement — Unit 4B", PROP.cascade),
+    mk("demo-exp-8", 58, "Repairs", "Line 14", "$640.00", "Emerald Painters", "Exterior trim repaint", PROP.emerald),
   ];
 }
 

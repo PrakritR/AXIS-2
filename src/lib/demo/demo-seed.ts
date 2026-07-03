@@ -29,7 +29,6 @@ import { seedDemoUploadedOwnLeases } from "@/lib/resident-lease-upload";
 import {
   DEMO_MANAGER_USER_ID,
   DEMO_RESIDENT_EMAIL,
-  DEMO_RESIDENT_USER_ID,
   isDemoModeActive,
 } from "@/lib/demo/demo-session";
 import {
@@ -58,23 +57,19 @@ export function seedDemoPortalData(): void {
 
   seedDemoManagerProperties(DEMO_MANAGER_USER_ID, demoProperties());
 
-  const applications = demoApplications();
-  // Seed the shared scope (resident-side panels read the store unscoped, which
-  // hydrates from the `:shared` session key), the resident scope, and finally
-  // the manager scope so it stays active for subsequent manager reads.
-  seedDemoManagerApplicationRows(applications, "");
-  seedDemoManagerApplicationRows(
-    applications.filter((a) => a.email?.toLowerCase() === DEMO_RESIDENT_EMAIL),
-    DEMO_RESIDENT_USER_ID,
-  );
-  seedDemoManagerApplicationRows(applications, DEMO_MANAGER_USER_ID);
+  // In demo mode the application and lease stores collapse every scope onto
+  // the shared session key, so ONE seed call is read by both the manager and
+  // resident panels — and a signature written from either role is the same
+  // object the other role sees.
+  seedDemoManagerApplicationRows(demoApplications(), DEMO_MANAGER_USER_ID);
 
   // Seed explicit charges only — no recurring rent profiles, which would
   // auto-generate back-dated monthly charges and inflate the overdue count.
   seedDemoHouseholdCharges(demoCharges());
-  // Same shared-then-manager dance as applications: `findLeaseForResidentEmail`
-  // (resident Lease tab / dashboard / documents) reads the unscoped store.
-  seedDemoLeasePipeline(demoLeases(), "");
+  // The demo resident's lease seeds UNSIGNED so a visitor can play the whole
+  // signing flow (resident signs → manager countersigns); a page refresh
+  // re-runs this seed and resets it. Full overwrite discards any signatures
+  // from the previous session.
   seedDemoLeasePipeline(demoLeases(), DEMO_MANAGER_USER_ID);
 
   // Calendar: confirmed tours, pending tour requests, and weekday availability
