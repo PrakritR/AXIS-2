@@ -54,7 +54,6 @@ import {
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
-import { PRIMARY_AXIS_ADMIN_LABEL } from "@/data/inbox-scoped-directory";
 
 function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListingSubmissionV1 {
   const raw = row.submission ? row.submission : legacyAdminFieldsToSubmission(row);
@@ -224,11 +223,11 @@ function ManagerPropertyInlineDetails({
 
       {bucket === 0 ? (
         <>
-          <p className="text-xs text-muted">
-            {row.adminRefId.startsWith("mgr-")
-              ? "This listing was edited and is pending admin re-approval. Edit sections below."
-              : `Listing approval is handled by ${PRIMARY_AXIS_ADMIN_LABEL}. Edit sections below while your submission is reviewed.`}
-          </p>
+          {row.adminRefId.startsWith("mgr-") ? (
+            <p className="text-xs text-muted">
+              This listing was edited and is pending admin re-approval. Edit sections below.
+            </p>
+          ) : null}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <Button
               type="button"

@@ -356,9 +356,6 @@ export function ManagerPaymentsLedgerPanel({
             </div>
             {expanded ? (
               <div className="mt-3 border-t border-border pt-3">
-                <p className="mb-3 text-sm text-muted">
-                  <span className="font-medium text-foreground">{row.residentName}</span> · {row.notes}
-                </p>
                 {renderDetailActions(row)}
               </div>
             ) : null}
@@ -438,9 +435,6 @@ export function ManagerPaymentsLedgerPanel({
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
                     <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
-                      <p className="text-sm leading-relaxed text-muted">
-                        <span className="font-medium text-foreground">{row.residentName}</span> · {row.notes}
-                      </p>
                       {renderDetailActions(row)}
                     </td>
                   </tr>

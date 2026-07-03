@@ -25,7 +25,7 @@ function ReviewSection({ title, children }: { title: string; children: ReactNode
       <div className="border-b border-border bg-accent/30 px-4 py-3.5 sm:px-5">
         <h3 className="text-[0.8125rem] font-semibold text-muted">{title}</h3>
       </div>
-      <dl className="divide-y divide-slate-100 text-sm">{children}</dl>
+      <dl className="divide-y divide-border text-sm">{children}</dl>
     </section>
   );
 }

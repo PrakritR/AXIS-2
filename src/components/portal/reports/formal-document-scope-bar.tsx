@@ -19,9 +19,12 @@ type ScopeOptions = {
 export function FormalDocumentScopeBar({
   filters,
   onChange,
+  inline = false,
 }: {
   filters: FormalDocumentFilterState;
   onChange: (next: Partial<FormalDocumentFilterState>) => void;
+  /** Render bare controls (no card) that sit inline in a shared portal filter row. */
+  inline?: boolean;
 }) {
   const [options, setOptions] = useState<ScopeOptions>({ properties: [], tenants: [], rooms: [] });
 
@@ -33,84 +36,98 @@ export function FormalDocumentScopeBar({
       .catch(() => setOptions({ properties: [], tenants: [], rooms: [] }));
   }, [filters.propertyId]);
 
-  return (
-    <div className="rounded-2xl border border-border bg-accent/15 p-4">
-      <div className="flex flex-wrap gap-3">
-        <label className="flex min-w-[8rem] flex-col gap-1 text-xs font-medium text-muted">
-          Scope
+  // Match the shared portal filter-row control styling used by ReportFilterBar.
+  const labelClass = inline
+    ? "flex flex-col gap-1.5 text-xs font-medium text-muted"
+    : "flex flex-col gap-1 text-xs font-medium text-muted";
+  const selectClass = inline
+    ? "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
+    : "h-9 rounded-xl border border-border bg-card px-3 text-sm";
+
+  const controls = (
+    <>
+      <label className={`min-w-[9rem] ${labelClass}`}>
+        Scope
+        <select
+          className={selectClass}
+          value={filters.scope}
+          onChange={(e) =>
+            onChange({
+              scope: e.target.value as DocumentScope,
+              propertyId: "",
+              residentEmail: "",
+              roomLabel: "",
+            })
+          }
+        >
+          <option value="portfolio">All properties</option>
+          <option value="property">Per property</option>
+          <option value="tenant">Per tenant</option>
+          <option value="room">Per room</option>
+        </select>
+      </label>
+
+      {filters.scope === "property" || filters.scope === "tenant" || filters.scope === "room" ? (
+        <label className={`min-w-[10rem] ${labelClass}`}>
+          Property
           <select
-            className="h-9 rounded-xl border border-border bg-card px-3 text-sm"
-            value={filters.scope}
-            onChange={(e) =>
-              onChange({
-                scope: e.target.value as DocumentScope,
-                propertyId: "",
-                residentEmail: "",
-                roomLabel: "",
-              })
-            }
+            className={selectClass}
+            value={filters.propertyId}
+            onChange={(e) => onChange({ propertyId: e.target.value, residentEmail: "", roomLabel: "" })}
           >
-            <option value="portfolio">All properties</option>
-            <option value="property">Per property</option>
-            <option value="tenant">Per tenant</option>
-            <option value="room">Per room</option>
+            <option value="">Select property</option>
+            {options.properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
           </select>
         </label>
+      ) : null}
 
-        {filters.scope === "property" || filters.scope === "tenant" || filters.scope === "room" ? (
-          <label className="flex min-w-[10rem] flex-col gap-1 text-xs font-medium text-muted">
-            Property
-            <select
-              className="h-9 rounded-xl border border-border bg-card px-3 text-sm"
-              value={filters.propertyId}
-              onChange={(e) => onChange({ propertyId: e.target.value, residentEmail: "", roomLabel: "" })}
-            >
-              <option value="">Select property</option>
-              {options.properties.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+      {filters.scope === "tenant" ? (
+        <label className={`min-w-[10rem] ${labelClass}`}>
+          Tenant
+          <select
+            className={selectClass}
+            value={filters.residentEmail}
+            onChange={(e) => onChange({ residentEmail: e.target.value })}
+          >
+            <option value="">Select tenant</option>
+            {options.tenants.map((t) => (
+              <option key={t.email} value={t.email}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
-        {filters.scope === "tenant" ? (
-          <label className="flex min-w-[10rem] flex-col gap-1 text-xs font-medium text-muted">
-            Tenant
-            <select
-              className="h-9 rounded-xl border border-border bg-card px-3 text-sm"
-              value={filters.residentEmail}
-              onChange={(e) => onChange({ residentEmail: e.target.value })}
-            >
-              <option value="">Select tenant</option>
-              {options.tenants.map((t) => (
-                <option key={t.email} value={t.email}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+      {filters.scope === "room" ? (
+        <label className={`min-w-[9rem] ${labelClass}`}>
+          Room / unit
+          <select
+            className={selectClass}
+            value={filters.roomLabel}
+            onChange={(e) => onChange({ roomLabel: e.target.value })}
+          >
+            <option value="">Select room</option>
+            {options.rooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+    </>
+  );
 
-        {filters.scope === "room" ? (
-          <label className="flex min-w-[8rem] flex-col gap-1 text-xs font-medium text-muted">
-            Room / unit
-            <select
-              className="h-9 rounded-xl border border-border bg-card px-3 text-sm"
-              value={filters.roomLabel}
-              onChange={(e) => onChange({ roomLabel: e.target.value })}
-            >
-              <option value="">Select room</option>
-              {options.rooms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-      </div>
+  if (inline) return controls;
+
+  return (
+    <div className="rounded-2xl border border-border bg-accent/15 p-4">
+      <div className="flex flex-wrap gap-3">{controls}</div>
     </div>
   );
 }

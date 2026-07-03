@@ -67,6 +67,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const row = record.row_data as DemoApplicantRow;
     const url = new URL(req.url);
     const roomLabel = url.searchParams.get("roomLabel")?.trim() || undefined;
+    // Inline disposition lets the manager UI embed the PDF in a preview frame instead of downloading it.
+    const inline = url.searchParams.get("disposition") === "inline";
 
     const pdf = await buildApplicationPdf(row, { roomLabel });
     const filename = applicationPdfFilename(row);
@@ -74,7 +76,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     return new NextResponse(Buffer.from(pdf), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       },
     });
