@@ -34,7 +34,6 @@ import {
   readActiveManagerVendorRows,
   syncManagerVendorsFromServer,
 } from "@/lib/manager-vendors-storage";
-import { buildVendorVisitEmail } from "@/lib/vendor-visit-email";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-documents/spec";
 import type { WorkOrderCategory } from "@/lib/reports/categories";
@@ -485,19 +484,6 @@ export function ManagerWorkOrdersPanel({
                   ? activeVendors.find((v) => v.id === row.vendorId) ?? null
                   : null;
               const assignedVendorEmail = assignedVendor?.email?.trim() ?? "";
-              const previewIso = fromDatetimeLocalValue(visitAt) ?? row.scheduledAtIso ?? null;
-              const vendorEmailPreview =
-                assignedVendor && assignedVendorEmail.includes("@")
-                  ? buildVendorVisitEmail({
-                      vendorName: assignedVendor.name,
-                      workOrderTitle: row.title,
-                      propertyLabel: row.propertyName,
-                      unit: row.unit,
-                      visitLabel: previewIso ? formatScheduledLabel(previewIso) : "(pick a visit date above)",
-                      description: row.description,
-                      preferredArrival: row.preferredArrival,
-                    })
-                  : null;
 
               return (
                 <Fragment key={row.id}>
@@ -579,182 +565,112 @@ export function ManagerWorkOrdersPanel({
                           </div>
                         ) : null}
 
-                        {/* Billing — bills the resident already linked to this work order */}
-                        {!linkedCharge ? (
-                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-foreground">Billing (optional)</p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              {row.residentEmail?.trim()
-                                ? `Bills ${row.residentName?.trim() || "the resident"} on this work order. Choose Paid if they already paid you.`
-                                : "No resident is linked to this work order — you can log a cost, but it can't be billed."}
-                            </p>
-                            <div className="mt-3 grid max-w-md gap-2.5 sm:grid-cols-2">
-                              <div>
-                                <p className="mb-1 text-[11px] font-medium text-muted">Cost</p>
-                                <Input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="e.g. 75 or $75"
-                                  value={draft.cost}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
-                                    }))
-                                  }
-                                  className="h-8 rounded-md text-sm"
-                                />
-                              </div>
-                              <div>
-                                <p className="mb-1 text-[11px] font-medium text-muted">Payment status</p>
-                                <Select
-                                  className="h-8 rounded-md text-sm"
-                                  value={draft.paymentStatus}
-                                  onChange={(e) =>
-                                    setBillDraftById((prev) => ({
-                                      ...prev,
-                                      [row.id]: {
-                                        ...(prev[row.id] ?? defaultBillDraft(row)),
-                                        paymentStatus: e.target.value as "pending" | "paid",
-                                      },
-                                    }))
-                                  }
-                                >
-                                  <option value="pending">Pending</option>
-                                  <option value="paid">Paid</option>
-                                </Select>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="mt-4 text-xs text-muted">
-                            Payment: {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel} · {linkedCharge.residentEmail}
-                          </p>
-                        )}
-
-                        {/* Visit date */}
-                        {row.bucket !== "completed" ? (
-                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-foreground">Visit date</p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              {row.bucket === "open"
-                                ? "Pick when the visit should happen."
-                                : "Update the visit date and time, then save it below."}
-                            </p>
-                            <div className="mt-2">
+                        <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-2">
+                          <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                            Cost
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="$0"
+                              value={draft.cost}
+                              onChange={(e) =>
+                                setBillDraftById((prev) => ({
+                                  ...prev,
+                                  [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
+                                }))
+                              }
+                              className="h-8 w-24 rounded-md text-sm"
+                            />
+                          </label>
+                          {!linkedCharge ? (
+                            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                              Payment
+                              <Select
+                                className="h-8 rounded-md text-xs"
+                                value={draft.paymentStatus}
+                                onChange={(e) =>
+                                  setBillDraftById((prev) => ({
+                                    ...prev,
+                                    [row.id]: {
+                                      ...(prev[row.id] ?? defaultBillDraft(row)),
+                                      paymentStatus: e.target.value as "pending" | "paid",
+                                    },
+                                  }))
+                                }
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="paid">Paid</option>
+                              </Select>
+                            </label>
+                          ) : (
+                            <span className="pb-1.5 text-xs text-muted">
+                              {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel}
+                            </span>
+                          )}
+                          {row.bucket !== "completed" ? (
+                            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                              Visit date
                               <Input
                                 type="datetime-local"
                                 value={visitAt}
                                 onChange={(e) =>
                                   setVisitAtById((prev) => ({ ...prev, [row.id]: e.target.value }))
                                 }
-                                className="h-9 rounded-md text-sm"
+                                className="h-8 rounded-md text-sm"
                               />
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {/* Vendor assignment (or handle it yourself) */}
-                        {row.bucket !== "completed" ? (
-                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-foreground">Assigned vendor</p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              Pick from your vendor directory (add vendors under Services → Vendors), or choose to handle
-                              the work yourself.
-                            </p>
-                            <div className="mt-2 flex flex-wrap items-end gap-2">
+                            </label>
+                          ) : null}
+                          {row.bucket !== "completed" ? (
+                            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                              Vendor
                               <Select
-                                className="h-9 min-w-[220px] rounded-md text-sm"
+                                className="h-8 min-w-[150px] rounded-md text-xs"
                                 value={row.selfAssigned ? "self" : row.vendorId ?? ""}
                                 onChange={(e) => assignVendor(row, e.target.value)}
                               >
-                                <option value="">No vendor assigned</option>
-                                <option value="self">Do it myself — no vendor</option>
+                                <option value="">None</option>
+                                <option value="self">Self</option>
                                 {activeVendors.map((v) => (
                                   <option key={v.id} value={v.id}>
-                                    {v.name}{v.trade ? ` · ${v.trade}` : ""}
+                                    {v.name}
                                   </option>
                                 ))}
                               </Select>
-                              {assignedVendor?.phone ? (
-                                <a
-                                  href={`tel:${assignedVendor.phone}`}
-                                  className="text-xs font-medium text-primary hover:underline"
-                                >
-                                  Call vendor
-                                </a>
-                              ) : null}
-                              {assignedVendorEmail ? (
-                                <a
-                                  href={`mailto:${assignedVendorEmail}`}
-                                  className="text-xs font-medium text-primary hover:underline"
-                                >
-                                  Email vendor
-                                </a>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : row.vendorName ? (
-                          <p className="mt-4 text-xs text-muted">
-                            Vendor: <span className="font-medium text-foreground">{row.vendorName}</span>
-                          </p>
-                        ) : row.selfAssigned ? (
-                          <p className="mt-4 text-xs text-muted">Handled by you — no vendor.</p>
-                        ) : null}
-
-                        {/* Schedule visit — last, once billing, date, and vendor are set */}
-                        {row.bucket !== "completed" ? (
-                          <div className="mt-4 rounded-lg border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-foreground">
-                              {row.bucket === "open" ? "Schedule visit" : "Reschedule visit"}
-                            </p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                              {vendorEmailPreview
-                                ? row.bucket === "open"
-                                  ? "Scheduling emails the assigned vendor the visit details below."
-                                  : "Saving a new time emails the assigned vendor the updated details below."
-                                : row.selfAssigned
-                                  ? "You're handling this yourself — no vendor email will be sent."
-                                  : row.vendorId
-                                    ? "The assigned vendor has no email on file, so no email will be sent."
-                                    : "No vendor assigned — no vendor email will be sent."}
-                            </p>
-                            {vendorEmailPreview ? (
-                              <div className="mt-2 rounded-md border border-border bg-accent/20 p-2.5">
-                                <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
-                                  Email preview · to {assignedVendor?.name} ({assignedVendorEmail})
-                                </p>
-                                <p className="mt-1.5 text-xs font-semibold text-foreground">{vendorEmailPreview.subject}</p>
-                                <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted">
-                                  {vendorEmailPreview.body}
-                                </p>
-                              </div>
-                            ) : null}
-                            <div className="mt-3">
-                              {row.bucket === "open" ? (
-                                <Button
-                                  type="button"
-                                  variant="primary"
-                                  className="h-9 rounded-full px-4 text-sm"
-                                  onClick={() => void saveScheduleFromOpen(row)}
-                                >
-                                  Schedule visit
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-9 rounded-full px-4 text-sm"
-                                  onClick={() => void rescheduleVisit(row)}
-                                >
-                                  Save new time
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
+                            </label>
+                          ) : row.vendorName ? (
+                            <span className="pb-1.5 text-xs text-muted">
+                              Vendor: <span className="font-medium text-foreground">{row.vendorName}</span>
+                            </span>
+                          ) : row.selfAssigned ? (
+                            <span className="pb-1.5 text-xs text-muted">Self-handled</span>
+                          ) : null}
+                          {assignedVendor?.phone ? (
+                            <a href={`tel:${assignedVendor.phone}`} className="pb-1.5 text-xs font-medium text-primary hover:underline">
+                              Call
+                            </a>
+                          ) : null}
+                          {assignedVendorEmail ? (
+                            <a href={`mailto:${assignedVendorEmail}`} className="pb-1.5 text-xs font-medium text-primary hover:underline">
+                              Email
+                            </a>
+                          ) : null}
+                        </div>
 
                         <PortalTableDetailActions>
+                          {row.bucket === "open" ? (
+                            <Button
+                              type="button"
+                              variant="primary"
+                              className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                              onClick={() => void saveScheduleFromOpen(row)}
+                            >
+                              Schedule visit
+                            </Button>
+                          ) : row.bucket === "scheduled" ? (
+                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => void rescheduleVisit(row)}>
+                              Save new time
+                            </Button>
+                          ) : null}
                           {!linkedCharge ? (
                             <>
                               <Button
