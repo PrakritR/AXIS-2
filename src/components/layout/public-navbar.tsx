@@ -84,7 +84,7 @@ export function PublicNavbar() {
         menu={menu}
         auth={{
           login: { text: "Log in", url: "/auth/sign-in" },
-          signup: { text: "Get started", url: "/auth/create-account" },
+          signup: { text: "Get started", url: "/partner/pricing" },
         }}
         portalLink={signedIn ? { text: "Portal", url: "/portal/dashboard" } : undefined}
         actionsSlot={<ThemeToggle />}

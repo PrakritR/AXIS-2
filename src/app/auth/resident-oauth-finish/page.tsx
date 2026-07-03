@@ -65,7 +65,7 @@ function ResidentOauthFinishContent() {
       <AuthCard>
         <p className="text-center text-sm text-rose-600">{errorText}</p>
         <div className="mt-6 flex justify-center">
-          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/create-account">
+          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/create-account?role=resident&mode=create">
             Back to create account
           </Link>
         </div>

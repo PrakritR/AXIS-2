@@ -36,7 +36,7 @@ export async function ensurePartnerPricingFreeAccount(): Promise<{ ok: true } | 
     const supabase = createSupabaseBrowserClient();
     const user = await waitForAuthUser(supabase);
     if (!user) {
-      return { ok: false, error: "Sign in with Google first." };
+      return { ok: false, error: "Your session isn't ready yet — try again in a moment." };
     }
 
     const res = await fetch("/api/auth/provision-pending-manager", {
@@ -60,23 +60,25 @@ export async function ensurePartnerPricingFreeAccount(): Promise<{ ok: true } | 
   }
 }
 
-function offerToRequestBody(offer: ManagerPricingOffer) {
+function offerToRequestBody(offer: ManagerPricingOffer, extras?: { phone?: string }) {
   return {
     tier: offer.tier,
     billing: offer.billing,
     promo: offer.promo,
+    phone: extras?.phone,
   };
 }
 
 export async function continuePartnerPricingWithOffer(
   offer: ManagerPricingOffer,
+  extras?: { phone?: string },
 ): Promise<ContinuePartnerPricingResult> {
   persistManagerPricingOffer(offer);
 
   const supabase = createSupabaseBrowserClient();
   const user = await waitForAuthUser(supabase);
   if (!user) {
-    return { status: "error", message: "Sign in with Google first." };
+    return { status: "error", message: "Your session isn't ready yet — try again in a moment." };
   }
 
   const session = await fetchPartnerPricingSession();
@@ -109,7 +111,7 @@ export async function continuePartnerPricingWithOffer(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify(offerToRequestBody(offer)),
+    body: JSON.stringify(offerToRequestBody(offer, extras)),
   });
 
   const body = (await res.json()) as {

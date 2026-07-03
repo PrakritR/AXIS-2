@@ -9,20 +9,14 @@ import {
 } from "@/components/auth/auth-mobile-primitives";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { ManagerPlanBillingToggle, ManagerPlanTierCards } from "@/components/auth/manager-plan-tier-cards";
-import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
-import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
+import { ManagerSignupPanel } from "@/components/auth/manager-signup-panel";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
-import {
-  buildPricingOffer,
-  continuePartnerPricingWithOffer,
-  type ContinuePartnerPricingResult,
-} from "@/lib/auth/partner-pricing-google-flow";
-import { partnerPricingFinishPath } from "@/lib/auth/resume-partner-pricing-oauth";
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { ResidentApplyPropertyPicker } from "@/components/auth/resident-apply-property-picker";
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
@@ -32,18 +26,12 @@ import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { isNativeOAuthInProgress } from "@/lib/native/open-url";
 import { getNativeInfo } from "@/lib/native/push-client";
 import { loadManagerPlanTiers } from "@/lib/site-content";
-import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
-import { stripeLiveJsBlockedMessage } from "@/lib/stripe/stripe-js-client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 type AuthMode = "sign-in" | "create";
 type AccountRole = "resident" | "manager";
-
-function tierById(tiers: ManagerPlanTierDefinition[], id: PlanTierId) {
-  return tiers.find((t) => t.id === id) ?? tiers[0]!;
-}
 
 async function tryResidentAutoConfirm(email: string): Promise<boolean> {
   try {
@@ -147,37 +135,33 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
   const initialTier: PlanTierId =
     tierParam === "pro" || tierParam === "business" || tierParam === "free" ? tierParam : "free";
   const initialBilling: "monthly" | "annual" = searchParams.get("billing") === "annual" ? "annual" : "monthly";
+  const { isNative } = useIsNativeApp();
 
   const [checkingSession, setCheckingSession] = useState(true);
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AccountRole>(initialRole);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [applicationLink, setApplicationLink] = useState("");
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
-  const [stripeCheckoutBlocked, setStripeCheckoutBlocked] = useState<string | null>(null);
 
+  // Native-only manager signup state — the webview keeps plan selection in this hub,
+  // while the web sends managers to the pricing page instead.
   const [billing, setBilling] = useState<"monthly" | "annual">(initialBilling);
   const [selectedTierId, setSelectedTierId] = useState<PlanTierId>(initialTier);
-  const [planTiers, setPlanTiers] = useState(MANAGER_PLAN_TIERS);
-  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
-
-  const selectedTier = useMemo(() => tierById(planTiers, selectedTierId), [planTiers, selectedTierId]);
-  const selectedPrice = billing === "monthly" ? selectedTier.monthly : selectedTier.annual;
+  const [planTiers, setPlanTiers] = useState<ManagerPlanTierDefinition[]>(MANAGER_PLAN_TIERS);
 
   useEffect(() => {
     const remembered = readRememberedLoginEmail();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from stored login on mount
     if (remembered) setEmail(remembered);
-    setStripeCheckoutBlocked(stripeLiveJsBlockedMessage());
   }, []);
 
   useEffect(() => {
-    // If we arrived without an explicit ?tier= (e.g. the pricing redirect only persisted the
-    // offer), preselect the plan the user picked on the pricing page.
+    // If we arrived without an explicit ?tier= (e.g. a pricing redirect only persisted the
+    // offer), preselect the plan the user picked earlier.
     if (tierParam) return;
     const stored = readManagerPricingOffer();
     if (!stored) return;
@@ -198,11 +182,6 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset checkout when selection changes
-    setCheckoutClientSecret(null);
-  }, [selectedTierId, billing, role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,29 +223,6 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [checkingSession]);
-
-  const applyPricingResult = useCallback(
-    (result: ContinuePartnerPricingResult) => {
-      if (result.status === "checkout") {
-        if (stripeLiveJsBlockedMessage()) {
-          showToast(stripeLiveJsBlockedMessage()!);
-          return;
-        }
-        setCheckoutClientSecret(result.clientSecret);
-        return;
-      }
-      if (result.status === "finish") {
-        router.push(partnerPricingFinishPath(result.sessionId));
-        return;
-      }
-      if (result.status === "portal") {
-        window.location.replace("/portal/dashboard");
-        return;
-      }
-      if (result.status === "error") showToast(result.message);
-    },
-    [router, showToast],
-  );
 
   const signIn = async () => {
     if (!email.trim() || !password) {
@@ -310,46 +266,6 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
     }
   };
 
-  const createManager = async () => {
-    if (!fullName.trim() || !email.trim() || password.length < 8) {
-      showToast("Enter your name, email, and an 8+ character password.");
-      return;
-    }
-    setErrorText(null);
-    setBusy(true);
-    try {
-      const res = await fetch("/api/auth/manager-register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, fullName: fullName.trim() }),
-      });
-      const body = (await res.json()) as { error?: string; redirectTo?: string; existingAccount?: boolean };
-      if (!res.ok) {
-        setErrorText(body.error ?? "Could not create account.");
-        showToast(body.error ?? "Could not create account.");
-        return;
-      }
-      const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (error) {
-        showToast("Account created. Sign in to continue.");
-        setMode("sign-in");
-        setRole("manager");
-        return;
-      }
-      if (body.existingAccount || body.redirectTo === "/portal/dashboard") {
-        window.location.replace("/portal/dashboard");
-        return;
-      }
-      const offer = buildPricingOffer({ tier: selectedTierId, billing, returnSurface: "mobile-plan" });
-      applyPricingResult(await continuePartnerPricingWithOffer(offer));
-    } catch {
-      showToast("Network error.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const startResidentApplication = () => {
     if (selectedPropertyId) {
       router.push(buildRentalApplyHref({ propertyId: selectedPropertyId }));
@@ -375,7 +291,6 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
 
   const locked = busy;
   const isCreate = mode === "create";
-  const managerCta = selectedTierId === "free" ? "Continue" : "Continue to payment";
 
   return (
     <AuthCard wide={isCreate}>
@@ -478,7 +393,9 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
                   </Link>
                 </p>
               </>
-            ) : (
+            ) : isNative ? (
+              // Native keeps the full plan + signup flow inside this hub; the web's single
+              // manager signup surface is the pricing page.
               <>
                 <ManagerPlanBillingToggle billing={billing} onChange={setBilling} disabled={locked} />
                 <ManagerPlanTierCards
@@ -489,84 +406,40 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
                   disabled={locked}
                   compact
                 />
-                {selectedTierId !== "free" ? (
-                  <p className="text-center text-[11px] text-muted">
-                    {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then {selectedPrice.headline}
-                    {selectedPrice.period ?? ""}
-                  </p>
-                ) : null}
-                {stripeCheckoutBlocked && selectedTierId !== "free" ? (
-                  <p className="auth-stripe-dev-notice px-3 py-2 text-xs">{stripeCheckoutBlocked}</p>
-                ) : null}
-                <PricingGoogleContinueButton
+                <ManagerSignupPanel
                   tier={selectedTierId}
                   billing={billing}
-                  disabled={locked || Boolean(stripeCheckoutBlocked && selectedTierId !== "free")}
+                  planTiers={planTiers}
                   returnSurface="mobile-plan"
+                  initialEmail={email}
                 />
-                <AuthDivider label="or email" />
-                <Input
-                  placeholder="Full name"
-                  autoComplete="name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+              </>
+            ) : (
+              <>
+                <p className="pt-1 text-center text-sm leading-relaxed text-muted">
+                  Manager accounts start with a plan — pick Free, Pro, or Business and sign up in one step.
+                </p>
+                <Button
+                  type="button"
+                  data-attr="auth-hub-manager-get-started"
+                  className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
                   disabled={locked}
-                />
-                <Input
-                  type="email"
-                  autoComplete="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={locked}
-                />
-                <PasswordInput
-                  autoComplete="new-password"
-                  placeholder="Password (8+ characters)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={locked}
-                />
-                {checkoutClientSecret ? (
-                  <div className="native-auth-payment-reveal mt-1 rounded-2xl border border-border bg-card/50 p-3">
-                    <p className="mb-2 text-center text-xs font-semibold text-foreground">
-                      Add a payment method to finish
-                    </p>
-                    <p className="mb-3 text-center text-[11px] text-muted">
-                      {selectedTier.label} · {MANAGER_SUBSCRIPTION_TRIAL_DAYS}-day free trial, then{" "}
-                      {selectedPrice.headline}
-                      {selectedPrice.period ?? ""}
-                    </p>
-                    <EmbeddedCheckoutMount
-                      clientSecret={checkoutClientSecret}
-                      onError={(message) => {
-                        showToast(message);
-                        setCheckoutClientSecret(null);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="mt-3 block w-full text-center text-[13px] font-semibold text-primary/90"
-                      onClick={() => setCheckoutClientSecret(null)}
-                    >
-                      ← Change plan
-                    </button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                    disabled={locked || Boolean(stripeCheckoutBlocked && selectedTierId !== "free")}
-                    onClick={() => void createManager()}
-                  >
-                    {busy ? "Creating…" : managerCta}
-                  </Button>
-                )}
+                  onClick={() => router.push("/partner/pricing")}
+                >
+                  Choose a plan & get started
+                </Button>
               </>
             )}
-            {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
           </div>
         )}
+
+        {!isNative ? (
+          <p className="mt-5 text-center text-[12px] text-muted">
+            <Link className="font-semibold text-muted transition hover:text-foreground" href="/" data-attr="auth-back-to-home">
+              ← Back to home
+            </Link>
+          </p>
+        ) : null}
       </div>
     </AuthCard>
   );
