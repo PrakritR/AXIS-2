@@ -272,7 +272,7 @@ export function PortalStripeConnectPanel({
         >
           {ready ? (
             <div className="flex w-full flex-wrap items-center justify-between gap-3">
-              <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold portal-badge-success">
+              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                 Bank linked
               </span>
               <Button
@@ -287,7 +287,7 @@ export function PortalStripeConnectPanel({
             </div>
           ) : (
             <div className="flex w-full flex-wrap items-center justify-between gap-3">
-              <span className="inline-flex items-center rounded-full border border-border bg-accent/30 px-3 py-1 text-xs font-semibold text-muted">
+              <span className="inline-flex items-center rounded-full border border-border bg-accent/30 px-2.5 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                 {status?.connected ? "Finish setup" : "Not connected"}
               </span>
               <Button
