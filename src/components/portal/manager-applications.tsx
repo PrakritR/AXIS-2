@@ -51,6 +51,7 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
+import { buildApplicationHtml } from "@/lib/manager-application-html";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   recordApprovedApplicationCharges,
@@ -157,14 +158,17 @@ function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucke
   return "Submitted";
 }
 
-/** Server PDF endpoint for an application, with the client-resolved room label as a display hint. */
-function applicationPdfHref(row: DemoApplicantRow, opts?: { inline?: boolean }): string {
+/** Client-resolved room label used by both the PDF download and the inline document view. */
+function applicationRoomLabel(row: DemoApplicantRow): string {
   const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  const roomLabel = getRoomChoiceLabel(roomChoice);
+  return getRoomChoiceLabel(roomChoice);
+}
+
+/** Server PDF endpoint for an application, with the client-resolved room label as a display hint. */
+function applicationPdfHref(row: DemoApplicantRow): string {
   const params = new URLSearchParams();
+  const roomLabel = applicationRoomLabel(row);
   if (roomLabel) params.set("roomLabel", roomLabel);
-  // Ask the route for an inline disposition so the browser renders (not downloads) the PDF in a preview frame.
-  if (opts?.inline) params.set("disposition", "inline");
   const query = params.toString();
   return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query ? `?${query}` : ""}`;
 }
@@ -180,20 +184,24 @@ function downloadApplicationPdf(row: DemoApplicantRow): void {
 }
 
 /**
- * Inline preview of the official application PDF, embedded via an authenticated same-origin
- * iframe so managers can read the document without downloading. The white PDF page reads
- * clearly on the themed card frame in both light and dark mode; the Download PDF action in
- * the detail toolbar produces the same file.
+ * Inline rendered-document view of the application, matching the lease-document presentation:
+ * clean styled HTML in an srcDoc iframe (no browser PDF-viewer chrome). The document page is
+ * always white like the lease, so it reads clearly on the themed card frame in both light and
+ * dark mode; the Download PDF action in the detail toolbar produces the official PDF file.
  */
-function ApplicationPdfPreview({ row }: { row: DemoApplicantRow }) {
-  const previewSrc = applicationPdfHref(row, { inline: true });
+function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
+  const documentHtml = useMemo(
+    () => buildApplicationHtml(row, { roomLabel: applicationRoomLabel(row) || undefined }),
+    [row],
+  );
   return (
     <section>
       <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application</p>
-      <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-[#525659] shadow-sm">
+      <div className="mt-3 overflow-hidden rounded-2xl border border-border shadow-sm">
         <iframe
-          src={previewSrc}
+          srcDoc={documentHtml}
           title="Application document preview"
+          sandbox="allow-same-origin"
           loading="lazy"
           className="h-[720px] w-full border-0 bg-white"
         />
@@ -633,7 +641,7 @@ export function ManagerApplications() {
                             </Button>
                           </PortalTableDetailActions>
 
-                          {row.application ? <ApplicationPdfPreview row={row} /> : null}
+                          {row.application ? <ApplicationDocumentPreview row={row} /> : null}
 
                           <ApplicationScreeningPanel
                             row={row}
