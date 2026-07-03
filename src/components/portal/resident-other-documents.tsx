@@ -24,9 +24,6 @@ const MAX_UPLOAD_BYTES = 3.5 * 1024 * 1024;
 // Reject anything else before it reaches the live upload preview's <img src>,
 // so this can never become a sink for an untrusted/remote URL.
 const SAFE_PREVIEW_URL_RE = /^(?:(?:blob|capacitor|file):|https?:\/\/localhost(?::\d+)?(?:[/?#]|$))/i;
-function safePreviewUrl(url: string | null): string | null {
-  return url && SAFE_PREVIEW_URL_RE.test(url) ? url : null;
-}
 
 /** Trigger a browser download without opening a blank tab. */
 export function triggerDocumentDownload(href: string, fileName?: string): void {
@@ -166,7 +163,16 @@ export function ResidentAddDocumentModal({
       return;
     }
     setFile(next);
-    setPreviewUrl(next.type.startsWith("image/") ? safePreviewUrl(URL.createObjectURL(next)) : null);
+    if (!next.type.startsWith("image/")) {
+      setPreviewUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(next);
+    if (!SAFE_PREVIEW_URL_RE.test(objectUrl)) {
+      setPreviewUrl(null);
+      return;
+    }
+    setPreviewUrl(objectUrl);
   };
 
   const onCapturePhoto = async () => {
@@ -178,7 +184,11 @@ export function ResidentAddDocumentModal({
         return;
       }
       setFile(photo.file);
-      setPreviewUrl(safePreviewUrl(photo.previewUrl));
+      if (!SAFE_PREVIEW_URL_RE.test(photo.previewUrl)) {
+        setPreviewUrl(null);
+        return;
+      }
+      setPreviewUrl(photo.previewUrl);
     } catch {
       showToast("Could not capture photo.");
     }
