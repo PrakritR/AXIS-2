@@ -406,7 +406,7 @@ export function PortalCalendar({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setCopyModalOpen(false)}>
             Cancel
           </Button>

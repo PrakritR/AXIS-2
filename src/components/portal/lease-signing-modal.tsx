@@ -150,7 +150,7 @@ export function LeaseSigningModal({
 
         {!signed ? (
           <div className="shrink-0 border-t border-border px-5 py-3">
-            <div className="flex flex-wrap justify-end gap-3">
+            <div className="flex flex-wrap justify-start gap-3">
               <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
                 Cancel
               </Button>

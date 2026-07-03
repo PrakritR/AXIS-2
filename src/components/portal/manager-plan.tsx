@@ -619,7 +619,7 @@ export function ManagerPlan({
                 )}
               </div>
 
-              <div className="flex flex-wrap items-end gap-2 sm:justify-end">
+              <div className="flex flex-wrap items-end gap-2 sm:justify-start">
                 {sub.stripeManaged && currentTier !== "free" ? (
                   <Button
                     type="button"
@@ -941,7 +941,7 @@ export function ManagerPlan({
               Upgrade to <span className="font-semibold text-foreground">{tierLabel(planModal.target)}</span> now? Your
               saved card will be charged with proration. Changes apply immediately in your Axis portal.
             </p>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Cancel
               </Button>
@@ -965,7 +965,7 @@ export function ManagerPlan({
               )}
               .
             </p>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Keep {tierLabel(currentTier)}
               </Button>
@@ -989,7 +989,7 @@ export function ManagerPlan({
               )}
               , you can switch back to monthly billing if you prefer.
             </p>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
                 Keep monthly
               </Button>
@@ -1026,7 +1026,7 @@ export function ManagerPlan({
               />
               <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closePlanModal}>
                 Keep annual
               </Button>
@@ -1069,7 +1069,7 @@ export function ManagerPlan({
               />
               <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closePlanModal}>
                 Keep my plan
               </Button>

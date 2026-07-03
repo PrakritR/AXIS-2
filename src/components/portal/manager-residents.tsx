@@ -1659,7 +1659,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                         <td colSpan={6} className="bg-accent/30 px-4 py-5">
                           <div className="flex flex-col gap-4">
                             <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center justify-start gap-2">
                                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Account</p>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Button
@@ -1756,7 +1756,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             </div>
 
                             <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-wrap items-center justify-start gap-3">
                                 <div>
                                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Lease</p>
                                   <p className="mt-1 text-sm text-muted">
@@ -1945,7 +1945,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             </div>
 
                             <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center justify-start gap-3">
                                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Charges</p>
                                 <div className="flex flex-wrap items-center gap-2">
                                   {chargeCounts.pending > 0 ? (
@@ -2071,7 +2071,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             </span>
                                           </td>
                                           <td className="py-2 text-right">
-                                            <div className="flex justify-end gap-2">
+                                            <div className="flex justify-start gap-2">
                                               {c.status === "pending" ? (
                                                 <>
                                                   <Button
@@ -2573,7 +2573,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               />
             </label>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-start gap-2 pt-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)}>Cancel</Button>
             <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident}>Add resident</Button>
           </div>
@@ -2710,7 +2710,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               />
             </label>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-start gap-2 pt-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditResidentOpen(false)}>
               Cancel
             </Button>
@@ -2755,7 +2755,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             />
             <span className="font-medium text-muted">Block lease signing until paid</span>
           </label>
-          <div className="mt-2 flex justify-end gap-2">
+          <div className="mt-2 flex justify-start gap-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddChargeOpen(false)}>
               Cancel
             </Button>
@@ -2889,7 +2889,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               placeholder="Write your message..."
             />
           </label>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-start gap-2 pt-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setMessageOpen(false)}>
               Cancel
             </Button>

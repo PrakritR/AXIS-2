@@ -63,7 +63,7 @@ export function DocumentInlineViewer({
 
   return (
     <section ref={sectionRef} className="mt-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-start gap-3">
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground" title={title}>
           {title}
         </p>
@@ -260,7 +260,7 @@ export function ResidentAddDocumentModal({
           />
         </label>
 
-        <div className="flex justify-end gap-2 border-t border-border pt-4">
+        <div className="flex justify-start gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
             Cancel
           </Button>

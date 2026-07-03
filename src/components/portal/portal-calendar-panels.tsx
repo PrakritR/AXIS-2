@@ -990,7 +990,7 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+          <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
@@ -1031,7 +1031,7 @@ export function PortalCalendarPanels({
             </p>
           </div>
           <p className="text-sm text-muted">Delete this slot if you no longer want applicants to book it.</p>
-          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+          <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
@@ -1341,7 +1341,7 @@ export function PortalCalendarPanels({
               </div>
             </div>
 
-            <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+            <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
               <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
                 Cancel
               </Button>
@@ -1395,7 +1395,7 @@ export function PortalCalendarPanels({
                   </label>
                 ))}
               </div>
-              <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+              <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
                 <Button type="button" variant="outline" className="rounded-full" onClick={() => setUpdateToHousesOpen(false)}>
                   Cancel
                 </Button>
@@ -1788,7 +1788,7 @@ export function PortalCalendarPanels({
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+          <div className="flex flex-wrap justify-start gap-2 border-t border-border pt-4">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setBlockModalOpen(false)}>
               Cancel
             </Button>

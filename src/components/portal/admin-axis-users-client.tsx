@@ -358,7 +358,7 @@ function SimpleAccountDetailRow({
   return (
     <tr className={PORTAL_TABLE_DETAIL_ROW}>
       <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+        <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
             <StatusPill active={row.active} />

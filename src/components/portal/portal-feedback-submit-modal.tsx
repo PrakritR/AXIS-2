@@ -180,7 +180,7 @@ export function PortalFeedbackSubmitModal({
             {attachments.length}/{BUG_FEEDBACK_MAX_ATTACHMENTS} images selected
           </p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2 pt-2">
+        <div className="flex flex-wrap justify-start gap-2 pt-2">
           <Button type="button" variant="outline" className="rounded-full" disabled={busy} onClick={handleClose}>
             Cancel
           </Button>

@@ -74,7 +74,7 @@ export function LeaseEditRequestModal({
             className="mt-1 w-full rounded-xl border border-border bg-card text-sm"
           />
         </div>
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="flex justify-start gap-2 pt-1">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
             Cancel
           </Button>

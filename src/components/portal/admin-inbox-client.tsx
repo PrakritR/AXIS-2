@@ -312,7 +312,7 @@ function ComposeModal({
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <div className="mt-5 flex flex-wrap justify-start gap-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
@@ -530,7 +530,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                           </td>
                           <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{formatWhen(row.createdAt)}</td>
                           <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
-                            <div className="flex flex-wrap justify-end gap-1.5">
+                            <div className="flex flex-wrap justify-start gap-1.5">
                               {tabId === "trash" ? (
                                 <>
                                   <Button

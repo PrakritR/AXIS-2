@@ -853,7 +853,7 @@ export function ManagerWorkOrdersPanel({
                 disabled={completeBusy}
               />
             </label>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-start gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setCompleteRow(null)} disabled={completeBusy}>
                 Cancel
               </Button>

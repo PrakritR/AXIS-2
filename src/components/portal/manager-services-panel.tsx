@@ -261,7 +261,7 @@ export function ManagerServicesPanel() {
             />
           </div>
         </div>
-        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <div className="mt-5 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setModalOpen(false)}>
             Cancel
           </Button>

@@ -1210,7 +1210,7 @@ export function ResidentServicesPanel({
               {mPhotos.map((src, i) => (
                 <div key={i} className="overflow-hidden rounded-xl border border-border bg-accent/30">
                   <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-24 w-full object-cover" unoptimized />
-                  <div className="flex justify-end p-2">
+                  <div className="flex justify-start p-2">
                     <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-[11px]" onClick={() => setMPhotos((p) => p.filter((_, j) => j !== i))}>
                       Remove
                     </Button>
@@ -1220,7 +1220,7 @@ export function ResidentServicesPanel({
             </div>
           ) : null}
         </div>
-        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => { setModalMode("none"); resetMaintenance(); }}>Cancel</Button>
           <Button type="button" className="rounded-full" onClick={() => { void submitMaintenance(); }} disabled={maintenanceSubmitting}>
             {maintenanceSubmitting ? "Submitting…" : "Submit"}
@@ -1298,7 +1298,7 @@ export function ResidentServicesPanel({
             ) : null}
           </>
         )}
-        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => { setModalMode("none"); resetService(); }}>Cancel</Button>
           {availableOffers.length > 0 ? (
             <Button type="button" className="rounded-full" onClick={() => { void submitService(); }} disabled={!selectedOffer || serviceSubmitting}>
@@ -1349,7 +1349,7 @@ export function ResidentServicesPanel({
             </div>
           </>
         ) : null}
-        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditingRequest(null)}>Cancel</Button>
           <Button type="button" className="rounded-full" data-attr="resident-service-request-edit-save" onClick={saveRequestEdit}>
             Save changes
@@ -1395,7 +1395,7 @@ export function ResidentServicesPanel({
             />
           </div>
         </div>
-        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditingWorkOrder(null)}>Cancel</Button>
           <Button type="button" className="rounded-full" data-attr="resident-work-order-edit-save" onClick={saveWorkOrderEdit}>
             Save changes

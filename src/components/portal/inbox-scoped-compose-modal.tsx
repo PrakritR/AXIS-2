@@ -427,7 +427,7 @@ export function ScopedInboxComposeModal({
           )}
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2 pt-2">
+        <div className="flex flex-wrap justify-start gap-2 pt-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Cancel
           </Button>

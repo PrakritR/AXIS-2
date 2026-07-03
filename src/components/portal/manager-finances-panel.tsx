@@ -706,7 +706,7 @@ export function ManagerFinancesPanel({
             <Input value={expenseDraft.memo} onChange={(e) => setExpenseDraft({ ...expenseDraft, memo: e.target.value })} />
           </label>
         </div>
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="mt-6 flex justify-start gap-2">
           <Button variant="outline" onClick={() => setExpenseModal(false)}>
             Cancel
           </Button>

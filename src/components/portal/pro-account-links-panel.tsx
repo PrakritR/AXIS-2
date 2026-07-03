@@ -942,7 +942,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
               {incomingPending.map((inv) => (
                 <li
                   key={inv.id}
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3"
+                  className="flex flex-wrap items-start justify-start gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3"
                 >
                   <div>
                     <p className="font-semibold text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
@@ -1124,7 +1124,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                       ) : (
                                         draft.assignedPropertyIds.map((pid) => (
                                           <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
-                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div className="flex flex-wrap items-start justify-start gap-3">
                                               <div>
                                                 <p className="text-sm font-semibold text-foreground">
                                                   {resolvePropertyLabel(pid, pid)}
@@ -1228,7 +1228,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                       ) : (
                                       r.assignedPropertyIds.map((pid) => (
                                         <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
-                                          <div className="flex flex-wrap items-start justify-between gap-3">
+                                          <div className="flex flex-wrap items-start justify-start gap-3">
                                             <div>
                                               <p className="text-sm font-semibold text-foreground">{resolvePropertyLabel(pid, pid)}</p>
                                               <p className="mt-1 text-xs text-muted">Permissions for this property</p>
@@ -1316,7 +1316,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 className={`mt-1 h-10 w-full font-mono text-sm ${PORTAL_TOOLBAR_SELECT}`}
               />
             </label>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-start gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -1367,7 +1367,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-2">
+              <div className="mt-6 flex justify-start gap-2">
                 <Button
                   type="button"
                   variant="outline"

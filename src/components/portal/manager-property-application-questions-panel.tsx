@@ -207,7 +207,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
               key={row.id}
               className={`space-y-3 rounded-xl border p-3 ${rowErrors[row.id] ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
             >
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-start gap-2">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Question {idx + 1}</p>
                 <div className="flex items-center gap-1">
                   <Button
