@@ -28,3 +28,13 @@ export function stripeInvoiceSubscriptionId(inv: Stripe.Invoice): string | null 
   }
   return null;
 }
+
+/** Invoice → the Stripe Price id of its first line item, across API shape differences. */
+export function stripeInvoiceLinePriceId(inv: Stripe.Invoice): string | null {
+  const price = (inv as unknown as { lines?: { data?: Array<{ price?: unknown }> } }).lines?.data?.[0]?.price;
+  if (typeof price === "string" && price.trim()) return price.trim();
+  if (price && typeof price === "object" && "id" in price && typeof (price as { id: unknown }).id === "string") {
+    return String((price as { id: string }).id).trim();
+  }
+  return null;
+}

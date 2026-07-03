@@ -9,7 +9,15 @@ import {
   reconcileManagerPurchaseWithStripe,
 } from "@/lib/manager-stripe-subscription-sync";
 import { recordPaidManagerCheckoutSession } from "@/lib/manager-purchase-from-session";
-import { stripeInvoiceSubscriptionId } from "@/lib/stripe-subscription-helpers";
+import { recordAutoExpense } from "@/lib/reports/auto-expense";
+import {
+  inferPaidTierFromStripePriceId,
+  inferBillingFromStripePriceId,
+} from "@/lib/stripe-price-ids";
+import {
+  stripeInvoiceLinePriceId,
+  stripeInvoiceSubscriptionId,
+} from "@/lib/stripe-subscription-helpers";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { markApplicationFeePaidFromStripeSession } from "@/lib/stripe-application-fee";
 import {
@@ -58,6 +66,58 @@ async function enrichCheckoutLedgerFees(stripe: Stripe, session: Stripe.Checkout
   const db = createSupabaseServiceRoleClient();
   await enrichLedgerFromCheckoutSession(db, stripe, session).catch((e) => {
     console.error("[stripe webhook] ledger fee enrichment", e);
+  });
+}
+
+/**
+ * Auto-records a manager subscription invoice payment as a business expense.
+ * Only for renewal/change invoices (`billing_reason !== "subscription_create"`)
+ * — the first invoice of a new subscription is recorded from
+ * `checkout.session.completed` instead, since `manager_purchases` may not yet
+ * have `stripe_subscription_id` populated when that first `invoice.paid`
+ * event races the checkout-completed webhook.
+ */
+async function recordSubscriptionInvoiceExpense(inv: Stripe.Invoice, subscriptionId: string): Promise<void> {
+  const db = createSupabaseServiceRoleClient();
+  const { data: purchase } = await db
+    .from("manager_purchases")
+    .select("user_id")
+    .eq("stripe_subscription_id", subscriptionId)
+    .maybeSingle();
+  const managerUserId = purchase?.user_id ? String(purchase.user_id) : "";
+  if (!managerUserId) return;
+
+  const priceId = stripeInvoiceLinePriceId(inv);
+  const tier = inferPaidTierFromStripePriceId(priceId);
+  const billing = inferBillingFromStripePriceId(priceId);
+  const planLabel = tier ? `${tier}${billing ? ` (${billing})` : ""}` : "subscription";
+
+  await recordAutoExpense(db, managerUserId, {
+    categoryCode: "management",
+    amountCents: inv.amount_paid,
+    expenseDate: new Date(inv.created * 1000).toISOString().slice(0, 10),
+    memo: `Axis platform subscription — ${planLabel}`,
+    sourceStripePaymentId: inv.id,
+  });
+}
+
+/** Auto-records the first subscription payment (from Checkout) as a business expense. */
+async function recordCheckoutSubscriptionExpense(session: Stripe.Checkout.Session): Promise<void> {
+  const uid = session.metadata?.userId?.trim();
+  const amountCents = session.amount_total ?? 0;
+  if (!uid || amountCents <= 0) return;
+
+  const tier = session.metadata?.tier?.trim();
+  const billing = session.metadata?.billing?.trim();
+  const planLabel = tier ? `${tier}${billing ? ` (${billing})` : ""}` : "subscription";
+
+  const db = createSupabaseServiceRoleClient();
+  await recordAutoExpense(db, uid, {
+    categoryCode: "management",
+    amountCents,
+    expenseDate: new Date().toISOString().slice(0, 10),
+    memo: `Axis platform subscription — ${planLabel}`,
+    sourceStripePaymentId: session.id,
   });
 }
 
@@ -138,6 +198,11 @@ export async function POST(req: Request) {
             } catch (reconcileErr) {
               console.error("[stripe webhook] reconcileManagerPurchaseWithStripe", reconcileErr);
             }
+            try {
+              await recordCheckoutSubscriptionExpense(session);
+            } catch (expenseErr) {
+              console.error("[stripe webhook] recordCheckoutSubscriptionExpense", expenseErr);
+            }
           }
         } catch (e) {
           console.error("[stripe webhook] recordPaidManagerCheckoutSession", e);
@@ -163,6 +228,13 @@ export async function POST(req: Request) {
           await applyScheduledDowngradeAfterInvoicePaid(subId, inv.billing_reason ?? null);
         } catch (e) {
           console.error("[stripe webhook] invoice.paid scheduled downgrade", e);
+        }
+        if (inv.billing_reason !== "subscription_create" && inv.amount_paid > 0) {
+          try {
+            await recordSubscriptionInvoiceExpense(inv, subId);
+          } catch (e) {
+            console.error("[stripe webhook] invoice.paid auto-expense", e);
+          }
         }
       }
     }

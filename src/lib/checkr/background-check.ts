@@ -20,6 +20,7 @@ import type {
 } from "@/lib/checkr/types";
 import { managerScreeningAllowedForTier } from "@/lib/manager-access";
 import { getManagerSubscriptionTier } from "@/lib/manager-access-server";
+import { recordAutoExpense } from "@/lib/reports/auto-expense";
 import { propertyFromRecord } from "@/lib/resident-move-in-resolve";
 import { chargeManagerForScreening } from "@/lib/screening/charge-manager";
 import { getStripe } from "@/lib/stripe";
@@ -298,6 +299,27 @@ export async function runBackgroundCheck(opts: {
   const nextRow = applyBackgroundCheck(row, bc);
   await persistApplicationRow(opts.db, nextRow);
   await upsertBackgroundCheckOrder(opts.db, nextRow, bc);
+
+  try {
+    await recordAutoExpense(opts.db, opts.managerUserId, {
+      categoryCode: "service_fees",
+      amountCents: costCents,
+      expenseDate: now.slice(0, 10),
+      memo: `Applicant background check (Checkr) — ${row.application.fullLegalName || row.id}`,
+      propertyId: row.assignedPropertyId || row.propertyId || row.application.propertyId,
+      sourceStripePaymentId: charge.paymentIntentId,
+    });
+  } catch (e) {
+    // The manager was already charged; a bookkeeping failure here must not
+    // fail the background check itself — log for manual reconciliation.
+    console.error("checkr background check: failed to record auto-expense", {
+      applicationId: row.id,
+      managerUserId: opts.managerUserId,
+      paymentIntentId: charge.paymentIntentId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
   return { ok: true, row: nextRow, backgroundCheck: bc };
 }
 
