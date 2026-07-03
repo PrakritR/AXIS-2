@@ -82,10 +82,10 @@ const nextConfig: NextConfig = {
       { source: "/admin/bugs-feedback/feedback", destination: "/admin/bugs-feedback", permanent: false },
       { source: "/resident/home", destination: "/resident/properties", permanent: false },
       { source: "/resident/home/:path*", destination: "/resident/properties", permanent: false },
-      { source: "/resident/leases", destination: "/resident/documents/lease", permanent: false },
-      { source: "/resident/leases/:path*", destination: "/resident/documents/lease", permanent: false },
-      { source: "/resident/lease", destination: "/resident/documents/lease", permanent: false },
-      { source: "/resident/lease/:path*", destination: "/resident/documents/lease", permanent: false },
+      // "lease" is a dedicated resident section (resident-sections.ts) rendered by
+      // ResidentLeasePanel — documents has no lease tab, so redirecting there 404s.
+      { source: "/resident/leases", destination: "/resident/lease", permanent: false },
+      { source: "/resident/leases/:path*", destination: "/resident/lease", permanent: false },
       { source: "/resident/announcements", destination: "/resident/dashboard", permanent: false },
       { source: "/resident/announcements/:path*", destination: "/resident/dashboard", permanent: false },
       { source: "/resident/settings", destination: "/resident/profile", permanent: false },
