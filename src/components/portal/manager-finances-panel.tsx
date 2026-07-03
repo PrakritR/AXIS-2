@@ -415,6 +415,10 @@ export function ManagerFinancesPanel({
   const loadTable = useCallback(async () => {
     if (!ready) return;
     if (isDemoModeActive()) {
+      // No authenticated reports API in the sandbox — build the same report
+      // shapes from the browser-local demo stores instead.
+      const { buildDemoFinanceReport } = await import("@/lib/demo/demo-finance-reports");
+      setReport(buildDemoFinanceReport(reportId, filters.propertyId || undefined));
       setLoading(false);
       return;
     }
@@ -455,6 +459,11 @@ export function ManagerFinancesPanel({
       showToast("Enter a valid amount.");
       return;
     }
+    if (isDemoModeActive()) {
+      showToast("Expenses are simulated in this demo.");
+      setExpenseModal(false);
+      return;
+    }
     const res = await fetch("/api/expenses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -479,6 +488,10 @@ export function ManagerFinancesPanel({
   }
 
   async function updateExpenseTaxStatus(expenseId: string, deductible: boolean) {
+    if (isDemoModeActive()) {
+      showToast("Tax status changes are simulated in this demo.");
+      return;
+    }
     const res = await fetch("/api/expenses", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

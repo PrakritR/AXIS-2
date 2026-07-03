@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalFilterRow,
@@ -54,6 +54,8 @@ import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import type { ReportResult } from "@/lib/reports/types";
+import { readChargesForResident } from "@/lib/household-charges";
+import { DEMO_RESIDENT_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
 
 function defaultReceiptRange() {
   const now = new Date();
@@ -193,6 +195,11 @@ function ApplicationDocumentsTable() {
   const email = session.email?.trim().toLowerCase() ?? "";
   const [tick, setTick] = useState(0);
   const [preview, setPreview] = useState<DemoApplicantRow | null>(null);
+  // Demo sandbox: the PDF route requires auth, so build the same PDF in the
+  // browser and feed it to the preview/download as a data URL.
+  const demoMode = isDemoModeActive();
+  const demoPdfCache = useRef(new Map<string, string>());
+  const [demoPdfSrc, setDemoPdfSrc] = useState<string | null>(null);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -206,6 +213,38 @@ function ApplicationDocumentsTable() {
     if (!email) return [];
     return readManagerApplicationRows().filter((row) => (row.email ?? "").trim().toLowerCase() === email);
   }, [email, tick]);
+
+  const buildDemoPdf = useCallback(async (row: DemoApplicantRow): Promise<string> => {
+    const cached = demoPdfCache.current.get(row.id);
+    if (cached) return cached;
+    const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
+    const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
+    const url = await buildDemoApplicationPdfDataUrl(row, getRoomChoiceLabel(roomChoice) || undefined);
+    demoPdfCache.current.set(row.id, url);
+    return url;
+  }, []);
+
+  const openPreview = useCallback(
+    (row: DemoApplicantRow) => {
+      setPreview(row);
+      if (demoMode) {
+        setDemoPdfSrc(demoPdfCache.current.get(row.id) ?? null);
+        void buildDemoPdf(row).then(setDemoPdfSrc);
+      }
+    },
+    [demoMode, buildDemoPdf],
+  );
+
+  const downloadRow = useCallback(
+    (row: DemoApplicantRow) => {
+      if (demoMode) {
+        void buildDemoPdf(row).then((url) => triggerDownload(url, `rental-application-${row.id}.pdf`));
+        return;
+      }
+      triggerDownload(applicationPdfHref(row));
+    },
+    [demoMode, buildDemoPdf],
+  );
 
   if (rows.length === 0) {
     return <PortalDataTableEmpty icon="application" message="No applications are linked to your account yet." />;
@@ -224,7 +263,7 @@ function ApplicationDocumentsTable() {
         }
       >
         {rows.map((row) => (
-          <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setPreview(row)}>
+          <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => openPreview(row)}>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
               <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">
                 Rental application — {row.id}
@@ -236,8 +275,8 @@ function ApplicationDocumentsTable() {
             </td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
               <RowActions
-                onView={() => setPreview(row)}
-                onDownload={() => triggerDownload(applicationPdfHref(row))}
+                onView={() => openPreview(row)}
+                onDownload={() => downloadRow(row)}
               />
             </td>
           </tr>
@@ -246,10 +285,10 @@ function ApplicationDocumentsTable() {
       <DocumentPreviewModal
         open={preview !== null}
         title={preview ? `Rental application — ${preview.id}` : "Rental application"}
-        src={preview ? applicationPdfHref(preview, { inline: true }) : null}
+        src={preview ? (demoMode ? demoPdfSrc : applicationPdfHref(preview, { inline: true })) : null}
         onClose={() => setPreview(null)}
         onDownload={() => {
-          if (preview) triggerDownload(applicationPdfHref(preview));
+          if (preview) downloadRow(preview);
         }}
       />
     </>
@@ -267,13 +306,35 @@ function receiptPdfHref(date: string, opts?: { inline?: boolean }): string {
 
 /** Documents › Rent receipts — one row per recorded payment, with inline receipt PDF preview. */
 function RentReceiptsTab() {
+  const session = usePortalSession();
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [generated, setGenerated] = useState(false);
   const [range, setRange] = useState(defaultReceiptRange);
   const [preview, setPreview] = useState<ReceiptRow | null>(null);
+  // Demo sandbox: no authenticated ledger API — derive receipt rows from the
+  // seeded local charges and build receipt PDFs in the browser.
+  const demoMode = isDemoModeActive();
+  const demoPdfCache = useRef(new Map<string, string>());
+  const [demoPdfSrc, setDemoPdfSrc] = useState<string | null>(null);
+  const sessionEmail = session.email?.trim().toLowerCase() ?? "";
+  const sessionUserId = session.userId ?? null;
 
   const loadReceipts = useCallback(async (from: string, to: string) => {
+    if (demoMode) {
+      const rows = readChargesForResident(sessionEmail, sessionUserId)
+        .filter((charge) => charge.status === "paid" && charge.paidAt)
+        .sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)))
+        .map((charge) => ({
+          date: String(charge.paidAt).slice(0, 10),
+          description: `${charge.title} — ${charge.propertyLabel}`,
+          payment: charge.amountLabel,
+        }));
+      setLedgerReport({ id: "resident-ledger", title: "Resident ledger", columns: [], rows });
+      setGenerated(true);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const params = new URLSearchParams({ from, to, backfill: "1" });
@@ -286,7 +347,7 @@ function RentReceiptsTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [demoMode, sessionEmail, sessionUserId]);
 
   useEffect(() => {
     const { from, to } = defaultReceiptRange();
@@ -306,6 +367,43 @@ function RentReceiptsTab() {
   }, [ledgerReport]);
 
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
+
+  const buildDemoReceipt = useCallback(async (row: ReceiptRow): Promise<string> => {
+    const key = `${row.date}:${row.amount}`;
+    const cached = demoPdfCache.current.get(key);
+    if (cached) return cached;
+    const { buildDemoReceiptPdfDataUrl } = await import("@/lib/demo/demo-document-files");
+    const url = await buildDemoReceiptPdfDataUrl({
+      residentName: DEMO_RESIDENT_NAME,
+      description: row.description,
+      amountLabel: row.amount,
+      dateLabel: row.date,
+    });
+    demoPdfCache.current.set(key, url);
+    return url;
+  }, []);
+
+  const openReceipt = useCallback(
+    (row: ReceiptRow) => {
+      setPreview(row);
+      if (demoMode) {
+        setDemoPdfSrc(demoPdfCache.current.get(`${row.date}:${row.amount}`) ?? null);
+        void buildDemoReceipt(row).then(setDemoPdfSrc);
+      }
+    },
+    [demoMode, buildDemoReceipt],
+  );
+
+  const downloadReceipt = useCallback(
+    (row: ReceiptRow) => {
+      if (demoMode) {
+        void buildDemoReceipt(row).then((url) => triggerDownload(url, `rent-receipt-${row.date}.pdf`));
+        return;
+      }
+      triggerDownload(receiptPdfHref(row.date));
+    },
+    [demoMode, buildDemoReceipt],
+  );
 
   return (
     <>
@@ -340,7 +438,7 @@ function RentReceiptsTab() {
               {loading ? "Loading…" : "Update"}
             </button>
           </div>
-          {generated && receipts.length > 0 ? (
+          {generated && receipts.length > 0 && !demoMode ? (
             <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} />
           ) : null}
         </div>
@@ -363,7 +461,7 @@ function RentReceiptsTab() {
               <tr
                 key={`${row.date}-${i}`}
                 className={PORTAL_TABLE_TR_EXPANDABLE}
-                onClick={() => setPreview(row)}
+                onClick={() => openReceipt(row)}
               >
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>
                   <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">
@@ -374,8 +472,8 @@ function RentReceiptsTab() {
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>
                   <RowActions
-                    onView={() => setPreview(row)}
-                    onDownload={() => triggerDownload(receiptPdfHref(row.date))}
+                    onView={() => openReceipt(row)}
+                    onDownload={() => downloadReceipt(row)}
                   />
                 </td>
               </tr>
@@ -386,10 +484,10 @@ function RentReceiptsTab() {
       <DocumentPreviewModal
         open={preview !== null}
         title={preview ? `Rent receipt — ${preview.date}` : "Rent receipt"}
-        src={preview ? receiptPdfHref(preview.date, { inline: true }) : null}
+        src={preview ? (demoMode ? demoPdfSrc : receiptPdfHref(preview.date, { inline: true })) : null}
         onClose={() => setPreview(null)}
         onDownload={() => {
-          if (preview) triggerDownload(receiptPdfHref(preview.date));
+          if (preview) downloadReceipt(preview);
         }}
       />
     </>

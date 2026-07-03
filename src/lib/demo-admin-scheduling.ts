@@ -602,6 +602,32 @@ export async function deletePlannedEventFromServer(id: string): Promise<boolean>
   return writeJsonToServer(PLANNED_KEY, readPlannedEvents());
 }
 
+/**
+ * Demo seed: load calendar data (confirmed events, pending tour requests, and
+ * per-storage-key availability slot sets) into the local store without the
+ * server mirror. Full overwrite per key, matching the other `seedDemo…` helpers.
+ */
+export function seedDemoScheduleData(input: {
+  plannedEvents?: PlannedEvent[];
+  partnerInquiries?: PartnerInquiry[];
+  availabilityByStorageKey?: Record<string, string[]>;
+}): void {
+  if (!isBrowser()) return;
+  if (input.plannedEvents) {
+    memoryStore.set(PLANNED_KEY, input.plannedEvents);
+    writeSessionJson(PLANNED_KEY, input.plannedEvents);
+  }
+  if (input.partnerInquiries) {
+    memoryStore.set(INQ_KEY, input.partnerInquiries);
+    writeSessionJson(INQ_KEY, input.partnerInquiries);
+  }
+  for (const [key, slots] of Object.entries(input.availabilityByStorageKey ?? {})) {
+    memoryStore.set(key, slots);
+    writeSessionJson(key, slots);
+  }
+  emitAdminUi();
+}
+
 export function pendingInquiryCount() {
   return readPartnerInquiries().filter((r) => {
     if (r.status !== "pending") return false;

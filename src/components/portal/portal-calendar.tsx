@@ -25,6 +25,7 @@ import {
 } from "@/lib/co-manager-calendar";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
@@ -130,6 +131,15 @@ export function PortalCalendar({
       name: property.label,
     }));
   }, [portal, userId, propertyTick]);
+
+  // In the /demo sandbox, pre-select the first property so the calendar opens
+  // populated (availability + tours) instead of on the "Select a house" blank.
+  useEffect(() => {
+    if (!isDemoModeActive() || portal !== "manager" || calendarPropertyId) return;
+    const first = managerProperties[0];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time demo default once seeded properties arrive
+    if (first) setCalendarPropertyId(first.id);
+  }, [portal, calendarPropertyId, managerProperties]);
 
   const activeCalendarPropertyId =
     calendarPropertyId && managerProperties.some((property) => property.id === calendarPropertyId) ? calendarPropertyId : "";

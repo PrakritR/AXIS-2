@@ -22,6 +22,11 @@ import { seedDemoManagerProperties } from "@/lib/demo-property-pipeline";
 import { seedDemoBugFeedback } from "@/lib/portal-bug-feedback";
 import { seedDemoAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import {
+  managerPropertyAvailabilityStorageKey,
+  seedDemoScheduleData,
+} from "@/lib/demo-admin-scheduling";
+import { seedDemoUploadedOwnLeases } from "@/lib/resident-lease-upload";
+import {
   DEMO_MANAGER_USER_ID,
   DEMO_RESIDENT_EMAIL,
   DEMO_RESIDENT_USER_ID,
@@ -37,6 +42,8 @@ import {
   demoProperties,
   demoPromotions,
   demoResidentInbox,
+  demoResidentUploads,
+  demoSchedule,
   demoServiceRequests,
   demoVendors,
   demoWorkOrders,
@@ -52,10 +59,10 @@ export function seedDemoPortalData(): void {
   seedDemoManagerProperties(DEMO_MANAGER_USER_ID, demoProperties());
 
   const applications = demoApplications();
-  // Seed under the manager scope (manager/admin view) and the resident scope (so
-  // the resident's own application is visible in the resident portal), then
-  // restore the manager scope as active for subsequent reads.
-  seedDemoManagerApplicationRows(applications, DEMO_MANAGER_USER_ID);
+  // Seed the shared scope (resident-side panels read the store unscoped, which
+  // hydrates from the `:shared` session key), the resident scope, and finally
+  // the manager scope so it stays active for subsequent manager reads.
+  seedDemoManagerApplicationRows(applications, "");
   seedDemoManagerApplicationRows(
     applications.filter((a) => a.email?.toLowerCase() === DEMO_RESIDENT_EMAIL),
     DEMO_RESIDENT_USER_ID,
@@ -65,7 +72,27 @@ export function seedDemoPortalData(): void {
   // Seed explicit charges only — no recurring rent profiles, which would
   // auto-generate back-dated monthly charges and inflate the overdue count.
   seedDemoHouseholdCharges(demoCharges());
+  // Same shared-then-manager dance as applications: `findLeaseForResidentEmail`
+  // (resident Lease tab / dashboard / documents) reads the unscoped store.
+  seedDemoLeasePipeline(demoLeases(), "");
   seedDemoLeasePipeline(demoLeases(), DEMO_MANAGER_USER_ID);
+
+  // Calendar: confirmed tours, pending tour requests, and weekday availability
+  // for every demo property.
+  const schedule = demoSchedule();
+  seedDemoScheduleData({
+    plannedEvents: schedule.plannedEvents,
+    partnerInquiries: schedule.partnerInquiries,
+    availabilityByStorageKey: Object.fromEntries(
+      Object.entries(schedule.availabilityByPropertyId).map(([propertyId, slots]) => [
+        managerPropertyAvailabilityStorageKey(DEMO_MANAGER_USER_ID, propertyId),
+        slots,
+      ]),
+    ),
+  });
+
+  // Resident Documents › Other: a viewable, downloadable sample document.
+  seedDemoUploadedOwnLeases(DEMO_RESIDENT_EMAIL, demoResidentUploads());
   seedDemoManagerWorkOrderRows(demoWorkOrders());
   seedDemoManagerVendorRows(demoVendors());
   seedDemoManagerPromotionRows(demoPromotions());
