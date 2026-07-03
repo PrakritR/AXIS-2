@@ -5,29 +5,52 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { buildFlyerHtml, type ManagerPromotionRow } from "@/lib/promotion-flyer";
 
+/** Save the promotion's standalone flyer document as an .html download. */
+export function downloadPromotionFlyer(promotion: ManagerPromotionRow) {
+  const html = buildFlyerHtml(promotion);
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const slug = (promotion.title || "flyer").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  a.href = url;
+  a.download = `${slug || "flyer"}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /**
- * Full-screen flyer preview. The flyer is rendered inside an isolated <iframe>
- * (its own <style>, unaffected by the app theme) so what the manager sees is
- * exactly what prints. Print / Save-as-PDF drives the iframe's own print dialog;
- * Download saves the standalone HTML document.
+ * Flyer preview. The flyer is rendered inside an isolated <iframe> (its own
+ * <style>, unaffected by the app theme) so what the manager sees is exactly
+ * what prints.
+ *
+ * Two modes:
+ * - `embedded` — inline panel (used in the expanded promotion table row); the
+ *   iframe scrolls internally when the flyer is taller than the panel.
+ * - default — full-screen modal with Print / Save-as-PDF (drives the iframe's
+ *   own print dialog) and Download (saves the standalone HTML document).
  */
 export function PromotionFlyerPreview({
   promotion,
   onClose,
+  embedded = false,
 }: {
   promotion: ManagerPromotionRow;
-  onClose: () => void;
+  onClose?: () => void;
+  embedded?: boolean;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const html = useMemo(() => buildFlyerHtml(promotion), [promotion]);
 
   useEffect(() => {
+    if (embedded || !onClose) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [embedded, onClose]);
 
   function handlePrint() {
     const win = iframeRef.current?.contentWindow;
@@ -36,17 +59,17 @@ export function PromotionFlyerPreview({
     win.print();
   }
 
-  function handleDownload() {
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const slug = (promotion.title || "flyer").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-    a.href = url;
-    a.download = `${slug || "flyer"}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  if (embedded) {
+    return (
+      <div className="h-[480px] w-full overflow-hidden rounded-xl border border-border bg-white shadow-sm sm:h-[620px]">
+        <iframe
+          ref={iframeRef}
+          title={`Flyer — ${promotion.title || promotion.propertyLabel || "promotion"}`}
+          srcDoc={html}
+          className="h-full w-full border-0"
+        />
+      </div>
+    );
   }
 
   if (typeof document === "undefined") return null;
@@ -70,7 +93,7 @@ export function PromotionFlyerPreview({
               type="button"
               variant="outline"
               className="h-9 text-xs"
-              onClick={handleDownload}
+              onClick={() => downloadPromotionFlyer(promotion)}
               data-attr="promotion-flyer-download"
             >
               Download

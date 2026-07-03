@@ -21,7 +21,7 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
-import { PromotionFlyerPreview } from "@/components/portal/promotion-flyer-preview";
+import { PromotionFlyerPreview, downloadPromotionFlyer } from "@/components/portal/promotion-flyer-preview";
 import {
   buildManagerPromotionPropertyOptions,
   type ManagerPromotionPropertyOption,
@@ -111,7 +111,7 @@ export function ManagerPromotion() {
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
   const [generating, setGenerating] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -143,15 +143,43 @@ export function ManagerPromotion() {
     return buildManagerPromotionPropertyOptions(userId);
   }, [userId, propertyTick]);
 
-  const previewPromotion = useMemo(
-    () => promotions.find((p) => p.id === previewId) ?? null,
-    [promotions, previewId],
-  );
-
   const openNew = useCallback(() => {
     setDraft(EMPTY_DRAFT);
+    setEditingId(null);
     setShowForm(true);
   }, []);
+
+  const closeForm = useCallback(() => {
+    setShowForm(false);
+    setEditingId(null);
+    setDraft(EMPTY_DRAFT);
+  }, []);
+
+  const openEdit = useCallback(
+    (row: ManagerPromotionRow) => {
+      setDraft({
+        propertyKey:
+          row.propertyId && listings.some((l) => l.id === row.propertyId)
+            ? row.propertyId
+            : CUSTOM_PROPERTY_KEY,
+        propertyLabel: row.propertyLabel,
+        title: row.title,
+        headline: row.inputs.headline,
+        sellingPoints: row.inputs.sellingPoints,
+        customDetails: row.inputs.customDetails,
+        price: row.inputs.price,
+        promo: row.inputs.promo,
+        cta: row.inputs.cta,
+        contact: row.inputs.contact,
+        theme: row.theme,
+        flyerSize: row.flyerSize,
+        tone: row.inputs.tone || PROMOTION_TONE_OPTIONS[0]!,
+      });
+      setEditingId(row.id);
+      setShowForm(true);
+    },
+    [listings],
+  );
 
   function onSelectProperty(key: string) {
     if (key === CUSTOM_PROPERTY_KEY) {
@@ -181,8 +209,13 @@ export function ManagerPromotion() {
       return;
     }
     const propertyId = draft.propertyKey === CUSTOM_PROPERTY_KEY ? null : draft.propertyKey;
+    const editing = editingId ? promotions.find((p) => p.id === editingId) ?? null : null;
     setGenerating(true);
-    track("promotion_generation_started", { theme: draft.theme, flyer_size: draft.flyerSize });
+    if (editing) {
+      track("promotion_regenerated", { theme: draft.theme });
+    } else {
+      track("promotion_generation_started", { theme: draft.theme, flyer_size: draft.flyerSize });
+    }
     try {
       const inputs = draftInputs(draft);
       const { copy, source } = await generateFlyerCopy(inputs, label, propertyId);
@@ -192,8 +225,8 @@ export function ManagerPromotion() {
       }
       const now = new Date().toISOString();
       upsertManagerPromotion({
-        id: makePromotionId(),
-        managerUserId: userId ?? null,
+        id: editing?.id ?? makePromotionId(),
+        managerUserId: editing?.managerUserId ?? userId ?? null,
         propertyId,
         propertyLabel: label,
         title,
@@ -202,14 +235,19 @@ export function ManagerPromotion() {
         status: "generated",
         inputs,
         copy,
-        createdAt: now,
+        createdAt: editing?.createdAt ?? now,
         updatedAt: now,
       });
-      setShowForm(false);
-      setDraft(EMPTY_DRAFT);
-      showToast(source === "ai" ? "Flyer generated." : "Flyer generated (offline copy).");
+      closeForm();
+      showToast(
+        editing
+          ? "Flyer updated."
+          : source === "ai"
+            ? "Flyer generated."
+            : "Flyer generated (offline copy).",
+      );
     } catch {
-      showToast("Could not generate the flyer. Try again.");
+      showToast(editing ? "Could not update the flyer. Try again." : "Could not generate the flyer. Try again.");
     } finally {
       setGenerating(false);
     }
@@ -235,7 +273,7 @@ export function ManagerPromotion() {
 
   function removePromotion(id: string) {
     if (!deleteManagerPromotionRow(id)) return;
-    if (previewId === id) setPreviewId(null);
+    if (editingId === id) closeForm();
     if (expandedId === id) setExpandedId(null);
     showToast("Promotion deleted.");
   }
@@ -251,26 +289,22 @@ export function ManagerPromotion() {
     >
       <Modal
         open={showForm}
-        title="New promotion"
-        onClose={() => {
-          setShowForm(false);
-          setDraft(EMPTY_DRAFT);
-        }}
+        title={editingId ? "Edit promotion" : "New promotion"}
+        onClose={closeForm}
         panelClassName="max-w-2xl"
       >
         <PromotionForm draft={draft} setDraft={setDraft} listings={listings} onSelectProperty={onSelectProperty} />
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" onClick={generate} disabled={generating} data-attr="promotion-generate">
-            {generating ? "Generating…" : "Generate flyer"}
+            {generating
+              ? editingId
+                ? "Updating…"
+                : "Generating…"
+              : editingId
+                ? "Update flyer"
+                : "Generate flyer"}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setShowForm(false);
-              setDraft(EMPTY_DRAFT);
-            }}
-          >
+          <Button type="button" variant="outline" onClick={closeForm}>
             Cancel
           </Button>
         </div>
@@ -329,15 +363,27 @@ export function ManagerPromotion() {
                                 </span>
                               ) : null}
                             </div>
+                            <div className="mt-4">
+                              <PromotionFlyerPreview promotion={row} embedded />
+                            </div>
                             <PortalTableDetailActions>
                               <Button
                                 type="button"
                                 variant="outline"
                                 className={PORTAL_DETAIL_BTN}
-                                onClick={() => setPreviewId(row.id)}
-                                data-attr="promotion-view"
+                                onClick={() => downloadPromotionFlyer(row)}
+                                data-attr="promotion-flyer-download"
                               >
-                                View flyer
+                                Download
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => openEdit(row)}
+                                data-attr="promotion-edit"
+                              >
+                                Edit
                               </Button>
                               <Button
                                 type="button"
@@ -370,10 +416,6 @@ export function ManagerPromotion() {
           </div>
         </div>
       )}
-
-      {previewPromotion ? (
-        <PromotionFlyerPreview promotion={previewPromotion} onClose={() => setPreviewId(null)} />
-      ) : null}
     </ManagerPortalPageShell>
   );
 }
