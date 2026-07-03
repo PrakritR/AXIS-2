@@ -238,7 +238,7 @@ function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: 
       {caps.map((cap) => (
         <div
           key={cap}
-          className="flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 p-2"
+          className="flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 p-2 [html[data-theme=dark]_&]:from-slate-700 [html[data-theme=dark]_&]:to-slate-800"
         >
           <p className="text-[11px] font-semibold text-foreground">{cap}</p>
         </div>

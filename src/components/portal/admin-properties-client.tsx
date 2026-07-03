@@ -345,8 +345,7 @@ function AdminPropertyInlineDetails({
       </div>
       <div
         data-listing-preview-scroll
-        data-surface="light"
-        className="portal-desktop-scroll-panel overscroll-contain rounded-2xl border border-border bg-[#f5f8fd]"
+        className="portal-desktop-scroll-panel overscroll-contain rounded-2xl border border-border bg-background"
       >
         <ListingDetailSections property={mock} rich={rich} previewModal />
       </div>

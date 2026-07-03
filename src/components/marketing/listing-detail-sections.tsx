@@ -45,7 +45,7 @@ function ListingHeroPhotoGrid({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm">
+      <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm [html[data-theme=dark]_&]:from-slate-800 [html[data-theme=dark]_&]:to-slate-900">
         {mainUrl ? (
           <Image src={mainUrl} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 100vw, 60vw" />
         ) : null}
@@ -58,7 +58,7 @@ function ListingHeroPhotoGrid({
             Gallery
           </div>
         )}
-        <div className="absolute bottom-3 right-3 max-w-[min(100%,14rem)] truncate rounded-full bg-card px-3 py-1.5 text-xs font-bold text-foreground shadow-md backdrop-blur-sm sm:bottom-4 sm:right-4 sm:max-w-none sm:px-4 sm:py-2 sm:text-sm">
+        <div className="listing-photo-chip absolute bottom-3 right-3 max-w-[min(100%,14rem)] truncate rounded-full bg-card px-3 py-1.5 text-xs font-bold text-foreground shadow-md backdrop-blur-sm sm:bottom-4 sm:right-4 sm:max-w-none sm:px-4 sm:py-2 sm:text-sm">
           {priceRangeLabel}
         </div>
         <div className="aspect-[4/3] w-full" />
@@ -67,7 +67,7 @@ function ListingHeroPhotoGrid({
             <button
               type="button"
               aria-label="Previous photo"
-              className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
+              className="listing-photo-chip absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
               onClick={() => go(-1)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -77,7 +77,7 @@ function ListingHeroPhotoGrid({
             <button
               type="button"
               aria-label="Next photo"
-              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
+              className="listing-photo-chip absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-md transition hover:bg-card"
               onClick={() => go(1)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>

@@ -114,11 +114,13 @@
   color: rgba(255, 255, 255, 0.78);
 }
 
-/* Embedded listing / marketing blocks inside dark portal shells.
+/* Always-light embeds (formal "paper" documents: rent receipts, reports).
    Rebinds the full light palette so bg-background/bg-card/border utilities
    (including opacity variants) resolve light even when the surrounding shell
    is dark ([data-theme="dark"] or [data-surface="admin"]). Utility-class
-   overrides live after the [data-theme] rebinds below so they always win. */
+   overrides live after the [data-theme] rebinds below so they always win.
+   The embedded public listing preview does NOT use this — it follows the
+   shell theme via [data-listing-preview-scroll] below. */
 [data-surface="light"] {
   color-scheme: light;
   --background: linear-gradient(180deg, #f7f9fd 0%, #dde5f2 100%);
@@ -316,10 +318,36 @@
   border-color: rgba(255, 255, 255, 0.18);
 }
 
+/* Chips/controls overlaid on listing hero photos. In dark theme their
+   bg-card resolves to translucent white (the unlayered .bg-card rebind above
+   beats layered utility variants), which is illegible over a photo — give
+   them a solid dark scrim instead. Must sit after the .bg-card rebind. */
+[data-theme="dark"] .listing-photo-chip {
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+}
+
+[data-theme="dark"] button.listing-photo-chip:hover {
+  background-color: rgba(0, 0, 0, 0.75);
+}
+
 [data-surface="admin"] {
   --background: #0a0e18;
   --background-solid: #0a0e18;
   --portal-surface-dark: #0a0e18;
+}
+
+/* Embedded public listing preview (admin/manager Properties, preview modal)
+   follows the shell theme: dark shell → dark listing, light shell → light.
+   Dark theme needs no rebinds — the preview inherits the shell's dark tokens.
+   Light theme needs the background vars rebound because [data-surface="admin"]
+   above forces --background dark even when data-theme is light, which would
+   turn the section tab strip's bg-background/90 (opacity variants read
+   --color-background) dark navy inside an otherwise-light preview. */
+html[data-theme="light"] [data-listing-preview-scroll] {
+  --background: linear-gradient(180deg, #f7f9fd 0%, #dde5f2 100%);
+  --background-solid: #f7f9fd;
+  --color-background: #f7f9fd;
 }
 
 /* [data-surface="light"] utility rebinds — the `html` prefix out-specifies the
