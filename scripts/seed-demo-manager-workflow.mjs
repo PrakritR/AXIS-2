@@ -78,7 +78,7 @@ const usd = (n) =>
 const centsOf = (dollars) => Math.round(Number(dollars) * 100);
 /** Stable UUID (v5-shaped) derived from a key string, so ledger/expense upserts are idempotent. */
 function detUuid(key) {
-  const h = crypto.createHash("sha1").update(`${PREFIX}:${key}`).digest("hex");
+  const h = crypto.createHash("sha256").update(`${PREFIX}:${key}`).digest("hex");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 

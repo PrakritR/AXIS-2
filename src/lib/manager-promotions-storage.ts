@@ -78,7 +78,7 @@ function deleteFromServer(id: string) {
 }
 
 export function makePromotionId(): string {
-  return `promo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return `promo-${crypto.randomUUID()}`;
 }
 
 export async function syncManagerPromotionsFromServer(opts?: { force?: boolean }): Promise<ManagerPromotionRow[]> {

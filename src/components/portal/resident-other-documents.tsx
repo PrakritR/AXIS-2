@@ -278,6 +278,23 @@ function uploadedMimeType(row: UploadedOwnLease): string {
   return /^data:([^;,]+)/.exec(row.dataUrl)?.[1] ?? "";
 }
 
+/**
+ * Decode a base64 data URL's payload to plain text, for safe (escaped) React
+ * rendering. Never returns markup — callers must render the result as text
+ * (e.g. inside a `<pre>`), never via innerHTML/srcDoc/iframe src.
+ */
+function decodeDataUrlText(dataUrl: string): string | null {
+  const match = /^data:[^;,]*;base64,([\s\S]*)$/.exec(dataUrl);
+  if (!match) return null;
+  try {
+    const binary = atob(match[1]);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
 /** Documents › Other documents — table of the resident's own uploads; clicking a row opens it inline below. */
 export function ResidentOtherDocumentsTable({
   uploads,
@@ -309,7 +326,12 @@ export function ResidentOtherDocumentsTable({
 
   const selectedMime = selected ? uploadedMimeType(selected) : "";
   const selectedIsImage = selectedMime.startsWith("image/");
-  const selectedIsFramable = selectedIsImage || selectedMime === "application/pdf" || selectedMime.startsWith("text/");
+  const selectedIsPdf = selectedMime === "application/pdf";
+  // Plain-text previews are rendered as escaped text (never framed as HTML) —
+  // an uploaded file's declared mime type is attacker-controlled, so a
+  // "text/html" upload must never reach an iframe `src`/`srcDoc`.
+  const selectedIsText = selectedMime.startsWith("text/");
+  const selectedText = selected && selectedIsText ? decodeDataUrlText(selected.dataUrl) : null;
 
   return (
     <>
@@ -342,7 +364,7 @@ export function ResidentOtherDocumentsTable({
       {selected ? (
         <DocumentInlineViewer
           title={selected.fileName}
-          src={selectedIsFramable && !selectedIsImage ? selected.dataUrl : null}
+          src={selectedIsPdf ? selected.dataUrl : null}
           onClose={() => setSelectedId(null)}
           onDownload={() => triggerDocumentDownload(selected.dataUrl, selected.fileName)}
           extraActions={
@@ -366,7 +388,11 @@ export function ResidentOtherDocumentsTable({
               alt={selected.fileName}
               className="max-h-[720px] w-full bg-white object-contain"
             />
-          ) : selectedIsFramable ? null : (
+          ) : selectedIsText ? (
+            <pre className="max-h-[720px] overflow-auto whitespace-pre-wrap break-words bg-white p-4 text-sm text-foreground">
+              {selectedText ?? "Preview isn't available for this file — use Download to open it."}
+            </pre>
+          ) : selectedIsPdf ? null : (
             <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-neutral-500">
               Preview isn&apos;t available for this file type — use Download to open it.
             </div>
