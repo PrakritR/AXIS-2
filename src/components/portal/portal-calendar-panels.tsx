@@ -17,12 +17,20 @@ import {
 } from "@/lib/tour-notifications";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
+  DEFAULT_EVENT_DURATION_MINUTES,
+  EVENT_DURATION_PRESET_MINUTES,
+  MAX_EVENT_DURATION_MINUTES,
+  MIN_EVENT_DURATION_MINUTES,
   SLOTS_PER_DAY,
+  SLOT_DURATION_MINUTES,
   acceptPartnerInquiryFromServer,
+  clampEventDurationMinutes,
   dateHasAvailability,
   dateSlotKey,
   deletePartnerInquiryFromServer,
   deletePlannedEventFromServer,
+  durationMinutesBetweenIso,
+  endIsoForDuration,
   formatRangeLabel,
   formatAvailabilitySlotLabel,
   getPartnerInquiryWindows,
@@ -152,6 +160,7 @@ type DemoMeeting = {
   dateStr: string;
   startSlot: number;
   span: number;
+  durationMinutes: number;
   title: string;
   color: string;
   statusLabel?: string;
@@ -243,8 +252,11 @@ export function PortalCalendarPanels({
   const [updateToHousesOpen, setUpdateToHousesOpen] = useState(false);
   const [selectedHouseIds, setSelectedHouseIds] = useState<Set<string>>(new Set());
   const [selectedBlock, setSelectedBlock] = useState<CalendarBlockSelection | null>(null);
+  const [durationChoice, setDurationChoice] = useState<number | "custom">(DEFAULT_EVENT_DURATION_MINUTES);
+  const [customDurationText, setCustomDurationText] = useState(String(DEFAULT_EVENT_DURATION_MINUTES));
   const [tourConfirmPreview, setTourConfirmPreview] = useState<{
     meeting: DemoMeeting;
+    endIso: string;
     subject: string;
     body: string;
   } | null>(null);
@@ -306,8 +318,7 @@ export function PortalCalendarPanels({
       })
       .map((event) => {
       const start = new Date(event.start);
-      const end = new Date(event.end);
-      const mins = Math.max(30, end.getTime() - start.getTime());
+      const durationMinutes = durationMinutesBetweenIso(event.start, event.end);
       const isPeerTour =
         event.kind === "tour" &&
         Boolean(scheduledTourFilter) &&
@@ -320,8 +331,9 @@ export function PortalCalendarPanels({
         startIso: event.start,
         endIso: event.end,
         dateStr: toLocalDateStr(start),
-        startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
-        span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
+        startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / SLOT_DURATION_MINUTES)),
+        span: Math.max(1, Math.ceil(durationMinutes / SLOT_DURATION_MINUTES)),
+        durationMinutes,
         title: event.title,
         color: isPeerTour ? MEETING_PEER_COLOR : MEETING_CONFIRMED_COLOR,
         statusLabel: isPeerTour ? "Co-manager tour" : "Confirmed",
@@ -353,7 +365,7 @@ export function PortalCalendarPanels({
           if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
             return null;
           }
-          const mins = Math.max(30, end.getTime() - start.getTime());
+          const durationMinutes = durationMinutesBetweenIso(window.start, window.end);
           return {
             id: `inquiry-${row.id}-${index}`,
             source: "inquiry",
@@ -361,8 +373,9 @@ export function PortalCalendarPanels({
             startIso: window.start,
             endIso: window.end,
             dateStr: toLocalDateStr(start),
-            startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / 30)),
-            span: Math.max(1, Math.round(mins / (30 * 60 * 1000))),
+            startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / SLOT_DURATION_MINUTES)),
+            span: Math.max(1, Math.ceil(durationMinutes / SLOT_DURATION_MINUTES)),
+            durationMinutes,
             title: row.kind === "tour" ? `Tour · ${row.name}` : `${row.name} request`,
             color: MEETING_PENDING_COLOR,
             statusLabel: row.kind === "tour" ? "Tour requested" : "Requested",
@@ -439,6 +452,9 @@ export function PortalCalendarPanels({
   const openSlotDetails = useCallback(
     (dateStr: string, slotIdx: number, _target: HTMLElement, meeting?: DemoMeeting) => {
       if (meeting) {
+        const minutes = clampEventDurationMinutes(meeting.durationMinutes);
+        setDurationChoice((EVENT_DURATION_PRESET_MINUTES as readonly number[]).includes(minutes) ? minutes : "custom");
+        setCustomDurationText(String(minutes));
         setSelectedBlock({ kind: "meeting", meeting });
         return;
       }
@@ -457,11 +473,19 @@ export function PortalCalendarPanels({
     setSelectedBlock(null);
   }, [activeSlots, selectedBlock, writeAvailability]);
 
+  const selectedDurationMinutes = useMemo(
+    () =>
+      durationChoice === "custom"
+        ? clampEventDurationMinutes(Number.parseInt(customDurationText, 10))
+        : durationChoice,
+    [customDurationText, durationChoice],
+  );
+
   const approveSelectedInquiry = useCallback(async () => {
     if (selectedBlock?.kind !== "meeting" || selectedBlock.meeting.source !== "inquiry") return;
     const result = await acceptPartnerInquiryFromServer(selectedBlock.meeting.sourceId, {
       start: selectedBlock.meeting.startIso,
-      end: selectedBlock.meeting.endIso,
+      end: endIsoForDuration(selectedBlock.meeting.startIso, selectedDurationMinutes),
     });
     if (!result.ok) {
       showToast(result.error ?? "Could not approve request.");
@@ -471,7 +495,7 @@ export function PortalCalendarPanels({
     setMeetingRefresh((n) => n + 1);
     reloadAvailability();
     showToast("Request approved.");
-  }, [reloadAvailability, selectedBlock, showToast]);
+  }, [reloadAvailability, selectedBlock, selectedDurationMinutes, showToast]);
 
   const openTourConfirmPreview = useCallback(() => {
     if (selectedBlock?.kind !== "meeting" || selectedBlock.meeting.source !== "inquiry") return;
@@ -481,6 +505,7 @@ export function PortalCalendarPanels({
       return;
     }
     const property = meeting.propertyId ? getPropertyById(meeting.propertyId) : undefined;
+    const endIso = endIsoForDuration(meeting.startIso, selectedDurationMinutes);
     const ctx = buildTourNotificationContext({
       origin: typeof window !== "undefined" ? window.location.origin : "",
       guestName: meeting.name || "Guest",
@@ -491,25 +516,26 @@ export function PortalCalendarPanels({
       propertyAddress: property?.address || null,
       roomLabel: meeting.roomLabel || null,
       tourStartIso: meeting.startIso,
-      tourEndIso: meeting.endIso,
+      tourEndIso: endIso,
       notes: meeting.notes || null,
       managerLabel: scheduleOwnerLabel || null,
     });
     setTourConfirmPreview({
       meeting,
+      endIso,
       subject: TOUR_CONFIRMED_TENANT_SUBJECT,
       body: buildTourConfirmedTenantBody(ctx),
     });
-  }, [scheduleOwnerLabel, selectedBlock, showToast]);
+  }, [scheduleOwnerLabel, selectedBlock, selectedDurationMinutes, showToast]);
 
   const confirmTourWithNotification = useCallback(async (skipMessage: boolean) => {
     if (!tourConfirmPreview || tourConfirmBusy) return;
-    const { meeting } = tourConfirmPreview;
+    const { meeting, endIso } = tourConfirmPreview;
     setTourConfirmBusy(true);
     try {
       const result = await acceptPartnerInquiryFromServer(meeting.sourceId, {
         start: meeting.startIso,
-        end: meeting.endIso,
+        end: endIso,
         notifyTenant: !skipMessage,
       });
       if (!result.ok) {
@@ -899,6 +925,68 @@ export function PortalCalendarPanels({
           {selectedBlock.meeting.isPeerTour ? (
             <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-muted">
               Hosted by {selectedBlock.meeting.hostLabel ?? "your co-manager"}. You can view this tour because you were also available when it was booked.
+            </div>
+          ) : null}
+
+          {selectedBlock.meeting.source === "inquiry" && !selectedBlock.meeting.isPeerTour ? (
+            <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Duration</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {EVENT_DURATION_PRESET_MINUTES.map((minutes) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    data-attr="event-duration-preset"
+                    onClick={() => {
+                      setDurationChoice(minutes);
+                      setCustomDurationText(String(minutes));
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      durationChoice === minutes
+                        ? "border-primary bg-primary/[0.12] text-primary"
+                        : "border-border bg-card text-muted hover:border-primary/30"
+                    }`}
+                  >
+                    {minutes} min
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  data-attr="event-duration-custom"
+                  onClick={() => setDurationChoice("custom")}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    durationChoice === "custom"
+                      ? "border-primary bg-primary/[0.12] text-primary"
+                      : "border-border bg-card text-muted hover:border-primary/30"
+                  }`}
+                >
+                  Custom
+                </button>
+                {durationChoice === "custom" ? (
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+                    <Input
+                      type="number"
+                      min={MIN_EVENT_DURATION_MINUTES}
+                      max={MAX_EVENT_DURATION_MINUTES}
+                      step={5}
+                      value={customDurationText}
+                      onChange={(e) => setCustomDurationText(e.target.value)}
+                      className="h-9 w-24 rounded-xl"
+                      aria-label="Custom duration in minutes"
+                    />
+                    min
+                  </label>
+                ) : null}
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                Will be scheduled for{" "}
+                <span className="font-semibold text-foreground">
+                  {formatRangeLabel(
+                    selectedBlock.meeting.startIso,
+                    endIsoForDuration(selectedBlock.meeting.startIso, selectedDurationMinutes),
+                  )}
+                </span>
+              </p>
             </div>
           ) : null}
 
@@ -1479,7 +1567,7 @@ export function PortalCalendarPanels({
                       <button
                         type="button"
                         className={`absolute inset-1 z-[1] rounded-xl border px-2 py-2 text-left text-xs font-semibold shadow-sm transition hover:brightness-95 ${meeting.color}`}
-                        style={{ height: `calc(${meeting.span} * 40px - 4px)` }}
+                        style={{ height: `calc(${meeting.durationMinutes / SLOT_DURATION_MINUTES} * 40px - 4px)` }}
                         onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
                       >
                         {meeting.statusLabel ? `${meeting.statusLabel}: ` : ""}
