@@ -138,7 +138,7 @@ function applicationPdfHref(row: DemoApplicantRow): string {
 }
 
 /** Trigger a browser download of the application PDF without opening a blank tab. */
-function downloadApplicationPdf(row: DemoApplicantRow): void {
+export function downloadApplicationPdf(row: DemoApplicantRow): void {
   const anchor = document.createElement("a");
   anchor.href = applicationPdfHref(row);
   anchor.rel = "noopener";

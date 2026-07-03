@@ -3,7 +3,7 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import Link from "next/link";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -23,13 +23,14 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
+  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
+  PortalTableDetailActions,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -42,6 +43,8 @@ import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
+  markHouseholdChargePaid,
+  markHouseholdChargePending,
   readChargesForManagerResident,
   recordApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
@@ -132,7 +135,7 @@ import {
 import { Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PillTabs } from "@/components/ui/tabs";
-import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
+import { ApplicationDocumentPreview, downloadApplicationPdf } from "@/components/portal/manager-applications";
 import {
   INBOX_TAB_DEFS,
   PortalInboxEmptyState,
@@ -154,6 +157,53 @@ import {
   type UnifiedItem,
 } from "@/components/portal/resident-services-panel";
 import { isHouseholdChargeOverdue } from "@/lib/household-charges";
+import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
+import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
+import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
+
+/**
+ * Expanded-resident section: collapsed to a one-line summary by default; clicking the
+ * header opens the full content (PDF preview, document, action buttons) inline.
+ */
+function ResidentDetailSection({
+  title,
+  summary,
+  expanded,
+  onToggle,
+  headerAction,
+  children,
+}: {
+  title: string;
+  summary: ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  /** Extra control (e.g. a button) rendered next to the toggle, outside the clickable header. */
+  headerAction?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-left"
+        >
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{title}</p>
+            <p className="mt-1 text-sm text-muted">{summary}</p>
+          </div>
+          <span className="shrink-0 rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground/80">
+            {expanded ? "Hide" : "View"}
+          </span>
+        </button>
+        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+      </div>
+      {expanded ? <div className="mt-4">{children}</div> : null}
+    </div>
+  );
+}
 
 type ActiveResident = {
   id: string;
@@ -260,8 +310,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [woEditDetails, setWoEditDetails] = useState("");
 
   // Inbox tab replica (Unopened / Opened / Sent / Trash — mirrors resident-inbox-panel.tsx)
-  const [inboxSubTab, setInboxSubTab] = useState<"unopened" | "opened" | "sent" | "trash">("unopened");
+  const [inboxSubTab, setInboxSubTab] = useState<"unopened" | "opened" | "schedule" | "sent" | "trash">("unopened");
   const [inboxExpandedId, setInboxExpandedId] = useState<string | null>(null);
+
+  // Expanded-resident detail: collapsed section summaries, opened one at a time on click
+  const [expandedResidentSection, setExpandedResidentSection] = useState<
+    "application" | "lease" | "payments" | "services" | "inbox" | null
+  >(null);
+  const [chargeExpandedId, setChargeExpandedId] = useState<string | null>(null);
+  const [addPaymentMethodOpen, setAddPaymentMethodOpen] = useState(false);
 
   // Add resident manually
   const [addResidentOpen, setAddResidentOpen] = useState(false);
@@ -598,6 +655,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       setSvcExpandedId(null);
       setInboxSubTab("unopened");
       setInboxExpandedId(null);
+      setExpandedResidentSection(null);
+      setChargeExpandedId(null);
     }
   }
 
@@ -758,14 +817,48 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     [residentWorkOrders, svcWorkOrderBucket],
   );
 
+  // Scheduled-message count for this resident's Inbox → Schedule tab (mirrors manager-inbox.tsx's scheduleCount).
+  const { messages: residentScheduledAutomationMessages } = useScheduledPaymentMessages({ includeHidden: false });
+  const [residentManualScheduledMessages, setResidentManualScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
+
+  useEffect(() => {
+    if (isDemoModeActive()) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch("/api/portal/scheduled-inbox-messages", { credentials: "include", cache: "no-store" });
+      if (!res.ok || cancelled) return;
+      const body = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
+      setResidentManualScheduledMessages(Array.isArray(body.messages) ? body.messages : []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const residentScheduleCount = useMemo(() => {
+    const targetEmail = selected?.email?.trim().toLowerCase();
+    if (!targetEmail) return 0;
+    const upcoming = (status: string, sendAt: string) =>
+      status === "scheduled" && isUpcomingScheduledInboxMessage(sendAt, status);
+    return (
+      residentManualScheduledMessages.filter(
+        (m) => upcoming(m.status, m.sendAt) && m.recipientEmail?.trim().toLowerCase() === targetEmail,
+      ).length +
+      residentScheduledAutomationMessages.filter(
+        (m) => upcoming(m.status, m.sendAt) && m.residentEmail?.trim().toLowerCase() === targetEmail,
+      ).length
+    );
+  }, [residentManualScheduledMessages, residentScheduledAutomationMessages, selected]);
+
   const residentInboxCounts = useMemo(
     () => ({
       unopened: residentInboxThreads.filter((t) => t.folder === "inbox" && t.unread).length,
       opened: residentInboxThreads.filter((t) => t.folder === "inbox" && !t.unread).length,
+      schedule: residentScheduleCount,
       sent: residentInboxThreads.filter((t) => t.folder === "sent").length,
       trash: residentInboxThreads.filter((t) => t.folder === "trash").length,
     }),
-    [residentInboxThreads],
+    [residentInboxThreads, residentScheduleCount],
   );
 
   const residentInboxRowsForTab = useMemo(
@@ -1505,24 +1598,48 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               </div>
                             </div>
 
-                            <div className="rounded-2xl border border-border bg-card p-4">
+                            <ResidentDetailSection
+                              title="Application"
+                              summary={
+                                selectedApplicationRow
+                                  ? `Application — Approved · ${selected.name}`
+                                  : "No application on file for this resident."
+                              }
+                              expanded={expandedResidentSection === "application"}
+                              onToggle={() =>
+                                setExpandedResidentSection((cur) => (cur === "application" ? null : "application"))
+                              }
+                            >
                               {selectedApplicationRow ? (
-                                <ApplicationDocumentPreview row={selectedApplicationRow} />
+                                <>
+                                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="rounded-full px-3 py-1 text-xs"
+                                      onClick={() => downloadApplicationPdf(selectedApplicationRow)}
+                                    >
+                                      Download PDF
+                                    </Button>
+                                  </div>
+                                  <ApplicationDocumentPreview row={selectedApplicationRow} />
+                                </>
                               ) : (
                                 <p className="text-sm text-muted">No application on file for this resident.</p>
                               )}
-                            </div>
+                            </ResidentDetailSection>
 
-                            <div className="rounded-2xl border border-border bg-card p-4">
+                            <ResidentDetailSection
+                              title="Lease"
+                              summary={
+                                residentLease
+                                  ? `${residentLease.status ?? residentLease.stageLabel} · ${residentLease.application?.leaseStart || "No move-in"}${residentLease.application?.leaseEnd ? ` to ${residentLease.application.leaseEnd}` : ""}`
+                                  : "No lease created yet for this resident."
+                              }
+                              expanded={expandedResidentSection === "lease"}
+                              onToggle={() => setExpandedResidentSection((cur) => (cur === "lease" ? null : "lease"))}
+                            >
                               <div className="flex flex-wrap items-center justify-start gap-3">
-                                <div>
-                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Lease</p>
-                                  <p className="mt-1 text-sm text-muted">
-                                    {residentLease
-                                      ? `${residentLease.status ?? residentLease.stageLabel} · ${residentLease.application?.leaseStart || "No move-in"}${residentLease.application?.leaseEnd ? ` to ${residentLease.application.leaseEnd}` : ""}`
-                                      : "No lease created yet for this resident."}
-                                  </p>
-                                </div>
                                 {residentLease ? (
                                   <div className="flex flex-wrap gap-2">
                                     {leaseAllowsManagerDocumentEdits(residentLease) ? (
@@ -1700,10 +1817,30 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               ) : (
                                 <p className="mt-3 text-sm text-muted">Approve the application and create or generate a lease here for this resident.</p>
                               )}
-                            </div>
+                            </ResidentDetailSection>
 
-                            <div className="rounded-2xl border border-border bg-card p-4">
-                              <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted">Payments</p>
+                            <ResidentDetailSection
+                              title="Payments"
+                              summary={
+                                residentCharges.length === 0
+                                  ? "No charges yet."
+                                  : `${chargeCounts.pending} unpaid · $${(pendingBalance / 100).toFixed(2)} due${overdueChargeCount > 0 ? ` · ${overdueChargeCount} overdue` : ""}`
+                              }
+                              expanded={expandedResidentSection === "payments"}
+                              onToggle={() =>
+                                setExpandedResidentSection((cur) => (cur === "payments" ? null : "payments"))
+                              }
+                              headerAction={
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+                                  onClick={() => setAddPaymentMethodOpen(true)}
+                                >
+                                  Add payment method
+                                </Button>
+                              }
+                            >
                               <div className="flex flex-wrap items-center gap-2">
                                 <ManagerPortalStatusPills
                                   tabs={[
@@ -1754,20 +1891,113 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         {visibleCharges.map((c) => {
                                           const overdue = c.status === "pending" && isHouseholdChargeOverdue(c);
                                           return (
-                                            <tr key={c.id} className={PORTAL_TABLE_TR}>
-                                              <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{c.title}</td>
-                                              <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{selected.propertyLabel || "—"}</td>
-                                              <td className={PORTAL_TABLE_TD}>{chargeDueLabel(c)}</td>
-                                              <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{c.amountLabel}</td>
-                                              <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground hidden sm:table-cell`}>
-                                                {c.balanceLabel}
-                                              </td>
-                                              <td className={PORTAL_TABLE_TD}>
-                                                <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
-                                                  {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
-                                                </Badge>
-                                              </td>
-                                            </tr>
+                                            <Fragment key={c.id}>
+                                              <tr
+                                                className={PORTAL_TABLE_TR_EXPANDABLE}
+                                                onClick={createPortalRowExpandClick(() =>
+                                                  setChargeExpandedId((cur) => (cur === c.id ? null : c.id)),
+                                                )}
+                                                aria-expanded={chargeExpandedId === c.id}
+                                              >
+                                                <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{c.title}</td>
+                                                <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{selected.propertyLabel || "—"}</td>
+                                                <td className={PORTAL_TABLE_TD}>{chargeDueLabel(c)}</td>
+                                                <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{c.amountLabel}</td>
+                                                <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground hidden sm:table-cell`}>
+                                                  {c.balanceLabel}
+                                                </td>
+                                                <td className={PORTAL_TABLE_TD}>
+                                                  <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
+                                                    {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
+                                                  </Badge>
+                                                </td>
+                                              </tr>
+                                              {chargeExpandedId === c.id ? (
+                                                <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                                                  <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                                                    <div className="space-y-1 text-sm text-muted">
+                                                      <p>
+                                                        Property: <span className="text-foreground">{selected.propertyLabel || "—"}</span>
+                                                      </p>
+                                                      <p>
+                                                        Due: <span className="text-foreground">{chargeDueLabel(c)}</span>
+                                                      </p>
+                                                      <p>
+                                                        Amount: <span className="tabular-nums text-foreground">{c.amountLabel}</span> · Balance:{" "}
+                                                        <span className="tabular-nums font-semibold text-foreground">{c.balanceLabel}</span>
+                                                      </p>
+                                                    </div>
+                                                    <PortalTableDetailActions>
+                                                      {c.status !== "paid" ? (
+                                                        <>
+                                                          <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            className={PORTAL_DETAIL_BTN_PRIMARY}
+                                                            onClick={() => {
+                                                              if (markHouseholdChargePaid(c.id, userId)) {
+                                                                showToast("Marked as paid.");
+                                                                setChargeExpandedId(null);
+                                                              } else {
+                                                                showToast("Could not update this charge.");
+                                                              }
+                                                            }}
+                                                          >
+                                                            Mark as paid
+                                                          </Button>
+                                                          <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            className={PORTAL_DETAIL_BTN}
+                                                            onClick={() => {
+                                                              if (markHouseholdChargePaid(c.id, userId)) {
+                                                                showToast("Recorded as paid with Zelle.");
+                                                                setChargeExpandedId(null);
+                                                              } else {
+                                                                showToast("Could not update this charge.");
+                                                              }
+                                                            }}
+                                                          >
+                                                            Paid with Zelle
+                                                          </Button>
+                                                          <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            className={PORTAL_DETAIL_BTN}
+                                                            onClick={() => {
+                                                              if (markHouseholdChargePaid(c.id, userId)) {
+                                                                showToast("Recorded as paid with Venmo.");
+                                                                setChargeExpandedId(null);
+                                                              } else {
+                                                                showToast("Could not update this charge.");
+                                                              }
+                                                            }}
+                                                          >
+                                                            Paid with Venmo
+                                                          </Button>
+                                                        </>
+                                                      ) : (
+                                                        <Button
+                                                          type="button"
+                                                          variant="outline"
+                                                          className={PORTAL_DETAIL_BTN}
+                                                          onClick={() => {
+                                                            if (markHouseholdChargePending(c.id, userId)) {
+                                                              showToast("Moved to unpaid.");
+                                                              setChargeExpandedId(null);
+                                                            } else {
+                                                              showToast("Could not update this charge.");
+                                                            }
+                                                          }}
+                                                        >
+                                                          Move to unpaid
+                                                        </Button>
+                                                      )}
+                                                    </PortalTableDetailActions>
+                                                  </td>
+                                                </tr>
+                                              ) : null}
+                                            </Fragment>
                                           );
                                         })}
                                       </tbody>
@@ -1775,10 +2005,20 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   </div>
                                 </div>
                               )}
-                            </div>
+                            </ResidentDetailSection>
 
-                            <div className="rounded-2xl border border-border bg-card p-4">
-                              <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted">Services</p>
+                            <ResidentDetailSection
+                              title="Services"
+                              summary={
+                                residentUnifiedServiceItems.length === 0
+                                  ? "No service requests or work orders yet."
+                                  : `${residentUnifiedServiceItems.length} request${residentUnifiedServiceItems.length === 1 ? "" : "s"} / work order${residentUnifiedServiceItems.length === 1 ? "" : "s"}`
+                              }
+                              expanded={expandedResidentSection === "services"}
+                              onToggle={() =>
+                                setExpandedResidentSection((cur) => (cur === "services" ? null : "services"))
+                              }
+                            >
                               <div className="mb-4">
                                 <PillTabs
                                   items={[
@@ -1960,31 +2200,41 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   )}
                                 </div>
                               )}
-                            </div>
+                            </ResidentDetailSection>
 
-                            <div className="rounded-2xl border border-border bg-card p-4">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Inbox</p>
+                            <ResidentDetailSection
+                              title="Inbox"
+                              summary={
+                                residentInboxCounts.unopened > 0
+                                  ? `${residentInboxCounts.unopened} unopened message${residentInboxCounts.unopened === 1 ? "" : "s"}`
+                                  : "No unopened messages."
+                              }
+                              expanded={expandedResidentSection === "inbox"}
+                              onToggle={() => setExpandedResidentSection((cur) => (cur === "inbox" ? null : "inbox"))}
+                              headerAction={
                                 <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={() => setMessageOpen(true)}>
                                   New message
                                 </Button>
-                              </div>
-                              <div className="mt-3 mb-3">
+                              }
+                            >
+                              <div className="mb-3">
                                 <ManagerPortalStatusPills
                                   activeTone="primary"
-                                  tabs={INBOX_TAB_DEFS.filter(({ id }) => id !== "schedule").map(({ id, label }) => ({
+                                  tabs={INBOX_TAB_DEFS.map(({ id, label }) => ({
                                     id,
                                     label,
                                     count: residentInboxCounts[id as keyof typeof residentInboxCounts],
                                   }))}
                                   activeId={inboxSubTab}
                                   onChange={(id) => {
-                                    setInboxSubTab(id as "unopened" | "opened" | "sent" | "trash");
+                                    setInboxSubTab(id as "unopened" | "opened" | "schedule" | "sent" | "trash");
                                     setInboxExpandedId(null);
                                   }}
                                 />
                               </div>
-                              {residentInboxTableRows.length === 0 ? (
+                              {inboxSubTab === "schedule" ? (
+                                <ManagerInboxSchedulePanel portalBase={portalBase} filterResidentEmail={selected.email} />
+                              ) : residentInboxTableRows.length === 0 ? (
                                 <PortalInboxEmptyState
                                   title={
                                     inboxSubTab === "trash"
@@ -2046,7 +2296,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   }}
                                 />
                               )}
-                            </div>
+                            </ResidentDetailSection>
                           </div>
     ) : null;
 
@@ -2208,6 +2458,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         </div>
       </>
       )}
+
+      <Modal open={addPaymentMethodOpen} title="Add payment method" onClose={() => setAddPaymentMethodOpen(false)}>
+        <div className="space-y-3 text-sm text-muted">
+          <p>
+            Axis doesn&apos;t store a saved payment method on file for residents yet — {selected?.name ?? "this resident"} chooses
+            how to pay (bank/ACH, card, or Link) each time they check out a charge.
+          </p>
+          <p>
+            To accept Zelle or Venmo for this property, add or update the contact info under that property&apos;s payment settings
+            in Properties.
+          </p>
+        </div>
+      </Modal>
 
       <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
         <div className="space-y-3">
