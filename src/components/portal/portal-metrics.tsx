@@ -290,19 +290,21 @@ export function PortalDashboardSectionHeader({
   title: string;
   href?: string;
   linkLabel?: string;
-  /** Stable notification indicator rendered next to the title (e.g. overdue count). */
+  /** Stable notification indicator rendered on the right, next to the section link (e.g. overdue count). */
   badge?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <h2 className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
-        {badge ?? null}
-      </div>
-      {href && linkLabel ? (
-        <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
-          {linkLabel}
-        </Link>
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="truncate text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
+      {badge || (href && linkLabel) ? (
+        <div className="flex shrink-0 items-center gap-2.5">
+          {badge ?? null}
+          {href && linkLabel ? (
+            <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
+              {linkLabel}
+            </Link>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

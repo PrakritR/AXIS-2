@@ -312,8 +312,8 @@ export function ResidentDashboard({
                   linkLabel="Payments →"
                   badge={
                     overdueChargeCount > 0 ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">
-                        <span aria-hidden className="size-1.5 rounded-full bg-rose-500" />
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
                         {overdueChargeCount} overdue
                       </span>
                     ) : null

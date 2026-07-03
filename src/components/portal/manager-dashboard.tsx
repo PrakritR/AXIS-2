@@ -34,6 +34,16 @@ import {
   applicationVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
 import {
+  MANAGER_WORK_ORDERS_EVENT,
+  readManagerWorkOrderRows,
+  syncManagerWorkOrdersFromServer,
+} from "@/lib/manager-work-orders-storage";
+import {
+  readServiceRequestsForManager,
+  SERVICE_REQUESTS_EVENT,
+  syncServiceRequestsFromServer,
+} from "@/lib/service-requests-storage";
+import {
   countUnopenedPersistedInbox,
   loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
@@ -77,6 +87,8 @@ export function ManagerDashboard() {
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
       syncHouseholdChargesFromServer(true),
       syncScheduleRecordsFromServer(),
+      syncManagerWorkOrdersFromServer(),
+      syncServiceRequestsFromServer(),
     ]).then(bump);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
@@ -84,6 +96,8 @@ export function ManagerDashboard() {
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, bump);
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
@@ -92,6 +106,8 @@ export function ManagerDashboard() {
       window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, bump);
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+      window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
   }, [userId, authReady]);
@@ -119,6 +135,31 @@ export function ManagerDashboard() {
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
+    const managerWorkOrders = readManagerWorkOrderRows().filter(
+      (w) => !w.managerUserId || w.managerUserId === userId,
+    );
+    const pendingServiceRequests = readServiceRequestsForManager(userId).filter(
+      (r) => r.status === "pending",
+    );
+    const activeWorkOrders = managerWorkOrders.filter((w) => w.bucket !== "completed");
+    const serviceItems = [
+      ...pendingServiceRequests.map((r) => ({
+        id: `sr-${r.id}`,
+        title: r.offerName || "Service request",
+        subtitle: [r.residentName || r.residentEmail, r.price].filter(Boolean).join(" · ") || "—",
+        status: "pending" as const,
+        sortKey: new Date(r.requestedAt).getTime() || 0,
+      })),
+      ...activeWorkOrders.map((w) => ({
+        id: `wo-${w.id}`,
+        title: w.title || "Work order",
+        subtitle: [w.propertyName, w.unit].filter(Boolean).join(" · ") || "—",
+        status: w.bucket,
+        sortKey: w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : 0,
+      })),
+    ].sort((a, b) => b.sortKey - a.sortKey);
+    const openServiceCount = pendingServiceRequests.length + managerWorkOrders.filter((w) => w.bucket === "open").length;
+
     const inboxCount = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
     const inboxThreads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
       .filter((t) => t.folder === "inbox" && t.unread)
@@ -164,6 +205,8 @@ export function ManagerDashboard() {
       pendingCharges,
       inbox: inboxCount,
       inboxThreads,
+      serviceItems,
+      openServiceCount,
       needsManagerSig,
       totalProperties,
       pendingProperties,
@@ -179,6 +222,8 @@ export function ManagerDashboard() {
     pendingLeaseRows,
     pendingCharges,
     inboxThreads,
+    serviceItems,
+    openServiceCount,
     totalProperties,
     pendingProperties,
     tours,
@@ -306,8 +351,8 @@ export function ManagerDashboard() {
               linkLabel="Payments →"
               badge={
                 overdueChargeCount > 0 ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">
-                    <span aria-hidden className="size-1.5 rounded-full bg-rose-500" />
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
                     {overdueChargeCount} overdue
                   </span>
                 ) : null
@@ -344,30 +389,69 @@ export function ManagerDashboard() {
           </div>
         </div>
 
-        {/* ── Inbox ── */}
-        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <PortalDashboardSectionHeader
-            title="Inbox"
-            href={`${BASE}/inbox/unopened`}
-            linkLabel="Inbox →"
-          />
-          <PortalDashboardPreviewList
-            items={inboxThreads}
-            href={`${BASE}/inbox/unopened`}
-            emptyMessage="No unread messages — inbox is clear."
-            keyForItem={(thread) => thread.id}
-            renderRow={(thread) => (
-              <PortalDashboardCompactRow
-                title={thread.from || "Unknown sender"}
-                subtitle={thread.subject || thread.preview || "—"}
-                badge={
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                    Unread
+        {/* ── Services & inbox ── */}
+        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
+              title="Services"
+              href={`${BASE}/services/requests`}
+              linkLabel="Services →"
+              badge={
+                openServiceCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
+                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                    {openServiceCount} open
                   </span>
-                }
-              />
-            )}
-          />
+                ) : null
+              }
+            />
+            <PortalDashboardPreviewList
+              items={serviceItems}
+              href={`${BASE}/services/requests`}
+              emptyMessage="No open service requests or work orders."
+              keyForItem={(item) => item.id}
+              renderRow={(item) => (
+                <PortalDashboardCompactRow
+                  title={item.title}
+                  subtitle={item.subtitle}
+                  badge={
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        item.status === "pending" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
+                      }`}
+                    >
+                      {item.status === "pending" ? "Pending" : item.status === "open" ? "Open" : "Scheduled"}
+                    </span>
+                  }
+                />
+              )}
+            />
+          </div>
+
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
+              title="Inbox"
+              href={`${BASE}/inbox/unopened`}
+              linkLabel="Inbox →"
+            />
+            <PortalDashboardPreviewList
+              items={inboxThreads}
+              href={`${BASE}/inbox/unopened`}
+              emptyMessage="No unread messages — inbox is clear."
+              keyForItem={(thread) => thread.id}
+              renderRow={(thread) => (
+                <PortalDashboardCompactRow
+                  title={thread.from || "Unknown sender"}
+                  subtitle={thread.subject || thread.preview || "—"}
+                  badge={
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+                      Unread
+                    </span>
+                  }
+                />
+              )}
+            />
+          </div>
         </div>
       </div>
     </ManagerPortalPageShell>
