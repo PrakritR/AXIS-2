@@ -21,4 +21,7 @@ export const E2E_ACCOUNTS = {
   },
 };
 
+// Must match the axis id seeded by tests/helpers/seed-test-db.mjs (same env var +
+// default there): it is both the application record id and the resident's
+// profiles.manager_id.
 export const E2E_RESIDENT_AXIS_ID = process.env.E2E_RESIDENT_AXIS_ID ?? "AXIS-TESTRSID";
