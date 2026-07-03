@@ -803,20 +803,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     });
   }, [selected, srTick]);
 
-  // Per-resident pending service request counts — for table row badges
-  const pendingServiceRequestCountByEmail = useMemo<Map<string, number>>(() => {
-    void srTick;
-    if (!userId) return new Map();
-    const map = new Map<string, number>();
-    for (const req of readServiceRequestsForManager(userId)) {
-      if (req.status === "pending") {
-        const email = req.residentEmail.trim().toLowerCase();
-        map.set(email, (map.get(email) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [userId, srTick]);
-
   const residentInboxThreads = useMemo<PersistedInboxThread[]>(() => {
     void inboxTick;
     if (!selected?.email) return [];
@@ -1681,14 +1667,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                       aria-expanded={selectedId === res.id}
                     >
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        <div className="flex items-center gap-2">
-                          <span>{res.name || "—"}</span>
-                          {(pendingServiceRequestCountByEmail.get(res.email.trim().toLowerCase()) ?? 0) > 0 ? (
-                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-amber-300/60">
-                              {pendingServiceRequestCountByEmail.get(res.email.trim().toLowerCase())} service{pendingServiceRequestCountByEmail.get(res.email.trim().toLowerCase()) === 1 ? "" : "s"} pending
-                            </span>
-                          ) : null}
-                        </div>
+                        {res.name || "—"}
                       </td>
                       <td className={PORTAL_TABLE_TD}>{res.email}</td>
                       <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
