@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { cache } from "react";
-import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
+import { userHoldsAdminRole } from "@/lib/auth/admin-role";
 import type { PreviewPortal } from "@/lib/auth/preview-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -19,17 +19,12 @@ export const getAdminPreviewFromCookies = cache(async (): Promise<{ targetUserId
   return { targetUserId: uid, portal };
 });
 
+/**
+ * Data-API admin gate. Any account holding the `admin` role qualifies (same
+ * rule as the /admin portal shell — see `hasAdminRole` in portal-access.ts);
+ * the primary-admin email stays admin as a fallback via `userHoldsAdminRole`.
+ */
 export const isAdminUser = cache(async (userId: string): Promise<boolean> => {
   const supabase = await createSupabaseServerClient();
-  const { data: profile } = await supabase.from("profiles").select("email, role").eq("id", userId).maybeSingle();
-  if (!isPrimaryAdminEmail(profile?.email)) return false;
-
-  const { data: pr, error: prErr } = await supabase
-    .from("profile_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (!prErr && pr) return true;
-  return profile?.role === "admin";
+  return userHoldsAdminRole(supabase, userId);
 });

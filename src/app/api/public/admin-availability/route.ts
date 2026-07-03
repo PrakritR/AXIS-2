@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { filterAdminUserIds } from "@/lib/auth/admin-role";
 import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -74,8 +75,13 @@ export async function GET() {
       ),
     ];
     const emailByAdminId = new Map<string, string>();
+    let adminRoleIds = new Set<string>();
     if (adminIds.length > 0) {
-      const { data: profiles } = await db.from("profiles").select("id, email").in("id", adminIds);
+      const [{ data: profiles }, roleIds] = await Promise.all([
+        db.from("profiles").select("id, email").in("id", adminIds),
+        filterAdminUserIds(db, adminIds),
+      ]);
+      adminRoleIds = roleIds;
       for (const profile of (profiles ?? []) as { id?: string | null; email?: string | null }[]) {
         if (profile.id && profile.email) emailByAdminId.set(profile.id, profile.email.trim().toLowerCase());
       }
@@ -135,8 +141,10 @@ export async function GET() {
       if (!adminUserId) continue;
       const storedLabel = typeof rowData.adminLabel === "string" ? rowData.adminLabel.trim().toLowerCase() : "";
       const profileEmail = emailByAdminId.get(adminUserId) ?? "";
-      if (storedLabel !== PRIMARY_ADMIN_EMAIL && profileEmail !== PRIMARY_ADMIN_EMAIL) continue;
-      const adminLabel = PRIMARY_ADMIN_EMAIL;
+      // Availability belongs to any admin-role account; legacy rows labeled with
+      // the primary email stay valid even if their profile row is missing.
+      if (!adminRoleIds.has(adminUserId) && storedLabel !== PRIMARY_ADMIN_EMAIL) continue;
+      const adminLabel = profileEmail || storedLabel || PRIMARY_ADMIN_EMAIL;
       const blocked = blockedByAdmin.get(adminUserId) ?? [];
 
       for (const slot of slots) {
