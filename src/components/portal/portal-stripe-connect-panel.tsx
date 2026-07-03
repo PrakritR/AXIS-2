@@ -212,7 +212,7 @@ export function PortalStripeConnectPanel({
           className={`flex min-h-9 shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 disabled:opacity-60 ${
             ready
               ? "border border-border bg-card/80 text-foreground shadow-[var(--shadow-sm)] hover:border-primary/30"
-              : "bg-[var(--btn-primary)] text-white hover:opacity-90"
+              : "btn-cobalt hover:opacity-90"
           }`}
           disabled={busy}
           onClick={() => void startConnect()}
