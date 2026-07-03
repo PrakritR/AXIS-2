@@ -8,6 +8,12 @@ import { categoryCodeForChargeKind } from "@/lib/reports/categories";
 import { dollarsToCents } from "@/lib/reports/money";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string | null | undefined): boolean {
+  return Boolean(value && UUID_RE.test(value));
+}
+
 function chargeAmountCents(charge: HouseholdCharge): number {
   const raw = charge.status === "paid" ? charge.amountLabel : charge.balanceLabel || charge.amountLabel;
   return dollarsToCents(parseMoneyAmount(raw));
@@ -27,6 +33,24 @@ function dueDateFromCharge(charge: HouseholdCharge): string | null {
   }
   if (charge.rentMonth?.trim()) return `${charge.rentMonth}-01`;
   return parseIsoDate(charge.createdAt);
+}
+
+/**
+ * The DB column `manager_user_id` is set by authenticated server routes and is
+ * the trustworthy owner of a charge record; `row_data.managerUserId` is
+ * client-synced and can carry stale or placeholder ids (e.g. "demo-manager" or
+ * a deleted user's uuid) that would break the uuid FK on ledger_entries.
+ * Attribute the charge to the column owner whenever it is a real uuid.
+ */
+function normalizeChargeOwner(
+  charge: HouseholdCharge | null,
+  columnManagerUserId: string | null | undefined,
+): HouseholdCharge | null {
+  if (!charge) return null;
+  if (isUuid(columnManagerUserId) && charge.managerUserId !== columnManagerUserId) {
+    return { ...charge, managerUserId: columnManagerUserId as string };
+  }
+  return charge;
 }
 
 function throwIfLedgerError(error: { message: string } | null): void {
@@ -89,13 +113,19 @@ type LedgerEntryRow = {
   updated_at: string;
 };
 
-/** Row for the `charge` ledger entry mirroring a household charge (null if non-positive). */
+/**
+ * Row for the `charge` ledger entry mirroring a household charge (null if
+ * non-positive). Demo/sample charges carry placeholder ids like
+ * "demo-manager" — those can't be written to the uuid columns and would fail
+ * the whole backfill, so they are skipped (manager) or nulled (resident).
+ */
 function buildChargeLedgerRow(charge: HouseholdCharge): LedgerEntryRow | null {
   const amountCents = chargeAmountCents(charge);
   if (amountCents <= 0) return null;
+  if (!isUuid(charge.managerUserId)) return null;
   return {
     manager_user_id: charge.managerUserId,
-    resident_user_id: charge.residentUserId,
+    resident_user_id: isUuid(charge.residentUserId) ? charge.residentUserId : null,
     resident_email: charge.residentEmail.trim().toLowerCase(),
     property_id: charge.propertyId,
     unit_label: charge.propertyLabel,
@@ -119,9 +149,10 @@ function buildPaymentLedgerRow(
 ): LedgerEntryRow | null {
   const amountCents = dollarsToCents(parseMoneyAmount(charge.amountLabel));
   if (amountCents <= 0) return null;
+  if (!isUuid(charge.managerUserId)) return null;
   return {
     manager_user_id: charge.managerUserId,
-    resident_user_id: charge.residentUserId,
+    resident_user_id: isUuid(charge.residentUserId) ? charge.residentUserId : null,
     resident_email: charge.residentEmail.trim().toLowerCase(),
     property_id: charge.propertyId,
     unit_label: charge.propertyLabel,
@@ -245,7 +276,7 @@ export async function backfillLedgerFromCharges(
 
   let query = db
     .from("portal_household_charge_records")
-    .select("row_data")
+    .select("manager_user_id, row_data")
     .order("updated_at", { ascending: false })
     .limit(2000);
 
@@ -257,7 +288,7 @@ export async function backfillLedgerFromCharges(
   if (error) throw new Error(error.message);
 
   const raw = (data ?? [])
-    .map((record) => record.row_data as HouseholdCharge | null)
+    .map((record) => normalizeChargeOwner(record.row_data as HouseholdCharge | null, record.manager_user_id))
     .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
   const synced = await syncDedupedCharges(db, raw);
   return { synced, removedDuplicates: 0 };
@@ -271,7 +302,7 @@ export async function backfillLedgerForResident(
   const email = residentEmail.trim().toLowerCase();
   const { data, error } = await db
     .from("portal_household_charge_records")
-    .select("row_data")
+    .select("manager_user_id, row_data")
     .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${email}`)
     .order("updated_at", { ascending: false })
     .limit(500);
@@ -279,7 +310,7 @@ export async function backfillLedgerForResident(
   if (error) throw new Error(error.message);
 
   const raw = (data ?? [])
-    .map((record) => record.row_data as HouseholdCharge | null)
+    .map((record) => normalizeChargeOwner(record.row_data as HouseholdCharge | null, record.manager_user_id))
     .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
   const managerIds = [...new Set(raw.map((charge) => charge.managerUserId).filter(Boolean))] as string[];
   for (const managerUserId of managerIds) {

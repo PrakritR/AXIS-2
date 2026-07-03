@@ -93,6 +93,8 @@ function TaxSummaryCards({ report }: { report: ReportResult | null }) {
   const cards = [
     { label: "Rent earned", value: String(report.meta.totalEarned ?? "—") },
     { label: "Repairs & expenses", value: String(report.meta.totalSpent ?? "—") },
+    { label: "Deductible expenses", value: String(report.meta.totalDeductibleExpenses ?? "—") },
+    { label: "Non-deductible expenses", value: String(report.meta.totalNonDeductibleExpenses ?? "—") },
     { label: "Days rented", value: String(report.meta.totalDaysRented ?? "—") },
     { label: "Net income", value: String(report.meta.netIncome ?? "—") },
   ];

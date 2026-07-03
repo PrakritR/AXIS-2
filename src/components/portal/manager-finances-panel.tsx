@@ -33,7 +33,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
-import { SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
+import { expenseTaxStatusLabel, isCategoryDeductible, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
 import {
   MANAGER_VENDORS_EVENT,
@@ -41,7 +41,7 @@ import {
   syncManagerVendorsFromServer,
 } from "@/lib/manager-vendors-storage";
 
-const HIDDEN_FINANCE_COLS = new Set(["scheduleERef", "id", "workOrderId"]);
+const HIDDEN_FINANCE_COLS = new Set(["scheduleERef", "id", "workOrderId", "taxDeductible"]);
 
 type RowFilterState = {
   resident: string;
@@ -132,11 +132,13 @@ function FinancesDataTable({
   sortKey,
   sortDir,
   onHeaderSort,
+  onTaxStatusChange,
 }: {
   report: ReportResult;
   sortKey: string;
   sortDir: "asc" | "desc";
   onHeaderSort: (key: string) => void;
+  onTaxStatusChange?: (expenseId: string, deductible: boolean) => void;
 }) {
   const visibleCols = useMemo(
     () => report.columns.filter((c) => !HIDDEN_FINANCE_COLS.has(c.key)),
@@ -184,7 +186,19 @@ function FinancesDataTable({
                       col.key === "amount" ? "font-medium text-foreground" : ""
                     } ${col.key === "property" || col.key === "resident" ? "font-medium text-foreground" : ""}`}
                   >
-                    {formatCellValue(col, row[col.key])}
+                    {col.key === "taxStatus" && onTaxStatusChange && row.id ? (
+                      <select
+                        className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+                        data-attr="expense-tax-status-inline"
+                        value={row.taxDeductible === false ? "non_deductible" : "deductible"}
+                        onChange={(e) => onTaxStatusChange(String(row.id), e.target.value === "deductible")}
+                      >
+                        <option value="deductible">Deductible</option>
+                        <option value="non_deductible">Non-deductible</option>
+                      </select>
+                    ) : (
+                      formatCellValue(col, row[col.key])
+                    )}
                   </td>
                 ))}
               </tr>
@@ -336,6 +350,9 @@ type ExpenseDraft = {
   memo: string;
   vendorId: string;
   propertyId: string;
+  taxDeductible: boolean;
+  // Once the manager touches the tax field, category changes stop re-suggesting it.
+  taxTouched: boolean;
 };
 
 const EXPENSE_CATEGORIES = SYSTEM_CHART_ACCOUNTS.filter((a) => a.accountType === "expense");
@@ -363,6 +380,8 @@ export function ManagerFinancesPanel({
     memo: "",
     vendorId: "",
     propertyId: "",
+    taxDeductible: isCategoryDeductible("maintenance"),
+    taxTouched: false,
   });
 
   const reportId = TAB_TO_REPORT[tabId] ?? "rent-receipts";
@@ -446,6 +465,7 @@ export function ManagerFinancesPanel({
         memo: expenseDraft.memo,
         vendorId: expenseDraft.vendorId || undefined,
         propertyId: expenseDraft.propertyId || filters.propertyId || undefined,
+        taxDeductible: expenseDraft.taxDeductible,
       }),
     });
     const data = await res.json();
@@ -455,6 +475,21 @@ export function ManagerFinancesPanel({
     }
     showToast("Expense saved.");
     setExpenseModal(false);
+    void loadTable();
+  }
+
+  async function updateExpenseTaxStatus(expenseId: string, deductible: boolean) {
+    const res = await fetch("/api/expenses", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: expenseId, taxDeductible: deductible }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error ?? "Failed to update tax status.");
+      return;
+    }
+    showToast(`Marked ${expenseTaxStatusLabel(deductible).toLowerCase()}.`);
     void loadTable();
   }
 
@@ -485,6 +520,8 @@ export function ManagerFinancesPanel({
       memo: "",
       vendorId: "",
       propertyId: filters.propertyId,
+      taxDeductible: isCategoryDeductible("maintenance"),
+      taxTouched: false,
     });
     setExpenseModal(true);
   }
@@ -558,6 +595,7 @@ export function ManagerFinancesPanel({
               sortKey={sortKey}
               sortDir={sortDir}
               onHeaderSort={onHeaderSort}
+              onTaxStatusChange={tabId === "expenses" ? (id, d) => void updateExpenseTaxStatus(id, d) : undefined}
             />
           )
         ) : (
@@ -587,13 +625,37 @@ export function ManagerFinancesPanel({
             <select
               className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
               value={expenseDraft.categoryCode}
-              onChange={(e) => setExpenseDraft({ ...expenseDraft, categoryCode: e.target.value })}
+              onChange={(e) =>
+                setExpenseDraft((d) => ({
+                  ...d,
+                  categoryCode: e.target.value,
+                  taxDeductible: d.taxTouched ? d.taxDeductible : isCategoryDeductible(e.target.value),
+                }))
+              }
             >
               {EXPENSE_CATEGORIES.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.name}
                 </option>
               ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+            Tax status (suggested from category)
+            <select
+              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+              data-attr="expense-tax-status-select"
+              value={expenseDraft.taxDeductible ? "deductible" : "non_deductible"}
+              onChange={(e) =>
+                setExpenseDraft((d) => ({
+                  ...d,
+                  taxDeductible: e.target.value === "deductible",
+                  taxTouched: true,
+                }))
+              }
+            >
+              <option value="deductible">Deductible</option>
+              <option value="non_deductible">Non-deductible</option>
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">

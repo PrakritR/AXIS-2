@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import type { RecurringRentProfile } from "@/lib/household-charges";
-import { chartAccountLabel, chartAccountScheduleE } from "@/lib/reports/categories";
+import {
+  chartAccountLabel,
+  chartAccountScheduleE,
+  expenseTaxStatusLabel,
+  resolveExpenseTaxDeductible,
+} from "@/lib/reports/categories";
 import { humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import { scopeLabel } from "@/lib/reports/formal-documents/spec";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
@@ -338,17 +343,22 @@ export async function queryExpenses(
 
   const { data } = await query;
   const filtered = (data ?? []).filter((expense) => expenseMatchesScope(expense, scope, filters, workOrdersById));
-  const rows = filtered.map((e) => ({
-    id: e.id,
-    date: e.expense_date,
-    category: chartAccountLabel(e.category_code),
-    scheduleERef: chartAccountScheduleE(e.category_code)?.ref ?? "Sch. E, Line 19",
-    amount: centsToUsd(Number(e.amount_cents)),
-    vendor: display.vendorLabel(e.vendor_id),
-    memo: e.memo ?? "",
-    property: display.propertyLabel(e.property_id),
-    workOrderId: e.source_work_order_id ?? "",
-  }));
+  const rows = filtered.map((e) => {
+    const taxDeductible = resolveExpenseTaxDeductible(e.category_code, e.tax_deductible);
+    return {
+      id: e.id,
+      date: e.expense_date,
+      category: chartAccountLabel(e.category_code),
+      scheduleERef: chartAccountScheduleE(e.category_code)?.ref ?? "Sch. E, Line 19",
+      taxStatus: expenseTaxStatusLabel(taxDeductible),
+      taxDeductible,
+      amount: centsToUsd(Number(e.amount_cents)),
+      vendor: display.vendorLabel(e.vendor_id),
+      memo: e.memo ?? "",
+      property: display.propertyLabel(e.property_id),
+      workOrderId: e.source_work_order_id ?? "",
+    };
+  });
 
   const totalCents = filtered.reduce((sum, e) => sum + Number(e.amount_cents), 0);
   const propertyLabel = propertyId ? display.propertyLabel(propertyId) : undefined;
@@ -361,13 +371,14 @@ export async function queryExpenses(
       { key: "date", label: "Date", format: "date" },
       { key: "category", label: "Category" },
       { key: "scheduleERef", label: "Sch. E Line" },
+      { key: "taxStatus", label: "Tax status" },
       { key: "amount", label: "Amount", align: "right", format: "money" },
       { key: "vendor", label: "Vendor" },
       { key: "memo", label: "Description" },
       { key: "property", label: "Property" },
     ],
     rows,
-    totals: { date: "Total expenses", category: "", scheduleERef: "", amount: centsToUsd(totalCents), vendor: "", memo: "", property: "" },
+    totals: { date: "Total expenses", category: "", scheduleERef: "", taxStatus: "", amount: centsToUsd(totalCents), vendor: "", memo: "", property: "" },
     meta: {
       from,
       to,
@@ -538,9 +549,11 @@ export async function queryTaxSummary(
   }
 
   const expenseByProperty = new Map<string, number>();
+  let deductibleCents = 0;
+  let nonDeductibleCents = 0;
   let expenseQuery = db
     .from("manager_expense_entries")
-    .select("property_id, amount_cents")
+    .select("property_id, amount_cents, category_code, tax_deductible")
     .eq("manager_user_id", managerUserId)
     .gte("expense_date", from)
     .lte("expense_date", to);
@@ -549,6 +562,11 @@ export async function queryTaxSummary(
   for (const row of expenseRows ?? []) {
     const key = labelForPropertyId(String(row.property_id ?? "Unassigned"));
     expenseByProperty.set(key, (expenseByProperty.get(key) ?? 0) + Number(row.amount_cents));
+    if (resolveExpenseTaxDeductible(row.category_code as string | null, row.tax_deductible as boolean | null)) {
+      deductibleCents += Number(row.amount_cents);
+    } else {
+      nonDeductibleCents += Number(row.amount_cents);
+    }
   }
 
   const daysByProperty = new Map<string, number>();
@@ -606,6 +624,8 @@ export async function queryTaxSummary(
       netIncome: centsToUsd(totalIncomeCents - totalExpenseCents),
       totalIncome: incomeStatement.meta?.totalIncome ?? centsToUsd(totalIncomeCents),
       totalExpense: incomeStatement.meta?.totalExpense ?? centsToUsd(totalExpenseCents),
+      totalDeductibleExpenses: centsToUsd(deductibleCents),
+      totalNonDeductibleExpenses: centsToUsd(nonDeductibleCents),
       expenseCount: expensesReport.rows.length,
     },
   };

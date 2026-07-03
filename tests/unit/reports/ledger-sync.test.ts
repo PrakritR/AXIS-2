@@ -84,7 +84,7 @@ describe("syncLedgerChargeEntry", () => {
     const db = { from } as unknown as Parameters<typeof syncLedgerChargeEntry>[0];
     const charge = {
       id: "charge-1",
-      managerUserId: "mgr-1",
+      managerUserId: "3b9c2c65-6f0f-4d3a-9a3e-0b7f6f8a1c2d",
       residentUserId: "res-1",
       residentEmail: "r@example.com",
       propertyId: "prop-1",
@@ -98,5 +98,29 @@ describe("syncLedgerChargeEntry", () => {
     } as HouseholdCharge;
 
     await expect(syncLedgerChargeEntry(db, charge)).rejects.toThrow("Ledger sync failed: insert denied");
+  });
+
+  it("skips demo/placeholder charges whose manager id is not a uuid", async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+
+    const db = { from } as unknown as Parameters<typeof syncLedgerChargeEntry>[0];
+    const charge = {
+      id: "demo-hc-1",
+      managerUserId: "demo-manager",
+      residentUserId: "demo-resident",
+      residentEmail: "demo@example.com",
+      propertyId: "prop-1",
+      propertyLabel: "Unit 1",
+      kind: "rent",
+      status: "open",
+      amountLabel: "$100.00",
+      balanceLabel: "$100.00",
+      title: "Rent",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    } as HouseholdCharge;
+
+    await expect(syncLedgerChargeEntry(db, charge)).resolves.toBeUndefined();
+    expect(insert).not.toHaveBeenCalled();
   });
 });

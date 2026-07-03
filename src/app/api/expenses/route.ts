@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
-import { chartAccountLabel, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
+import {
+  chartAccountLabel,
+  isCategoryDeductible,
+  resolveExpenseTaxDeductible,
+  SYSTEM_CHART_ACCOUNTS,
+} from "@/lib/reports/categories";
 
 export const runtime = "nodejs";
 
@@ -14,6 +20,7 @@ export async function GET() {
     const categories = SYSTEM_CHART_ACCOUNTS.filter((a) => a.accountType === "expense").map((a) => ({
       code: a.code,
       name: a.name,
+      deductible: isCategoryDeductible(a.code),
     }));
 
     const { data, error } = await auth.db
@@ -36,6 +43,7 @@ export async function GET() {
         expenseDate: e.expense_date,
         memo: e.memo,
         vendorId: e.vendor_id,
+        taxDeductible: resolveExpenseTaxDeductible(e.category_code, e.tax_deductible),
       })),
     });
   } catch (e) {
@@ -58,6 +66,7 @@ export async function POST(req: Request) {
       expenseDate?: string;
       memo?: string;
       vendorId?: string;
+      taxDeductible?: boolean;
     };
 
     const amountCents = Number(body.amountCents);
@@ -71,26 +80,73 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "categoryCode required." }, { status: 400 });
     }
 
+    const categoryCode = body.categoryCode.trim();
+    // Auto-suggest the tax classification from the category; an explicit value
+    // from the form is a manager override and wins.
+    const taxDeductible =
+      typeof body.taxDeductible === "boolean" ? body.taxDeductible : isCategoryDeductible(categoryCode);
+
     const now = new Date().toISOString();
     const { data, error } = await auth.db
       .from("manager_expense_entries")
       .insert({
         manager_user_id: auth.userId,
         property_id: body.propertyId?.trim() || null,
-        category_code: body.categoryCode.trim(),
+        category_code: categoryCode,
         amount_cents: amountCents,
         expense_date: body.expenseDate.trim(),
         memo: body.memo?.trim() || null,
         vendor_id: body.vendorId?.trim() || null,
+        tax_deductible: taxDeductible,
         updated_at: now,
       })
       .select("*")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    track("expense_created", auth.userId, {
+      category_code: categoryCode,
+      tax_deductible: taxDeductible,
+      tax_overridden: typeof body.taxDeductible === "boolean" && body.taxDeductible !== isCategoryDeductible(categoryCode),
+    });
     return NextResponse.json({ expense: data });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to create expense.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const auth = await getReportsAuthContext();
+    if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    const gate = await assertManagerFinancialsAccess(auth);
+    if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
+    const body = (await req.json()) as { id?: string; taxDeductible?: boolean };
+    const id = body.id?.trim();
+    if (!id) return NextResponse.json({ error: "id required." }, { status: 400 });
+    if (typeof body.taxDeductible !== "boolean") {
+      return NextResponse.json({ error: "taxDeductible must be a boolean." }, { status: 400 });
+    }
+
+    const { data, error } = await auth.db
+      .from("manager_expense_entries")
+      .update({ tax_deductible: body.taxDeductible, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("manager_user_id", auth.userId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "Expense not found." }, { status: 404 });
+    track("expense_tax_status_changed", auth.userId, {
+      category_code: String(data.category_code ?? ""),
+      tax_deductible: body.taxDeductible,
+    });
+    return NextResponse.json({ expense: data });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to update expense.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
