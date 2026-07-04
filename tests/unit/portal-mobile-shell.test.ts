@@ -55,11 +55,20 @@ describe("portal mobile shell conventions", () => {
     expect(GLOBALS_CSS).toContain("flex: 1 1 0;");
   });
 
-  it("sizes native bottom tab icons and assistant trigger consistently", () => {
+  it("sizes native bottom tab icons consistently", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll a svg");
     expect(GLOBALS_CSS).toContain("height: 1.4375rem");
-    expect(GLOBALS_CSS).toContain("html[data-native] .axis-assistant-nav-btn");
-    expect(GLOBALS_CSS).toMatch(/html\[data-native\] \.axis-assistant-nav-btn[\s\S]*height: 1\.375rem/);
+  });
+
+  it("floats the assistant FAB above the native bottom bar instead of a bar slot", () => {
+    const AXIS_ASSISTANT_SOURCE = readFileSync(
+      join(process.cwd(), "src/components/portal/axis-assistant.tsx"),
+      "utf8",
+    );
+    expect(AXIS_ASSISTANT_SOURCE).not.toContain("AxisAssistantNavButton");
+    expect(AXIS_ASSISTANT_SOURCE).toContain("[html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]");
+    expect(GLOBALS_CSS).not.toContain(".axis-assistant-nav-btn");
+    expect(GLOBALS_CSS).not.toContain(".portal-native-bottom-nav-assistant");
   });
 
   it("hides Next.js dev issue badge on native", () => {

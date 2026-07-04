@@ -84,7 +84,8 @@ describe("splitNativeBottomNavItems", () => {
         (section) => !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section),
       ),
     );
-    expect(overflow.map((item) => item.section)).toContain("profile");
+    expect(overflow.map((item) => item.section)).toContain("calendar");
+    expect(overflow.map((item) => item.section)).toContain("vendors");
     expect(primary.length + overflow.length).toBe(items.length);
   });
 

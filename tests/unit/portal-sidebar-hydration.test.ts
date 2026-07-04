@@ -28,4 +28,21 @@ describe("portal sidebar native hydration", () => {
     expect(PORTAL_NAV_CLIENT_SOURCE).toContain("preferFullNavigation");
     expect(PORTAL_NAV_CLIENT_SOURCE).toContain("isCrossPortalNavigation");
   });
+
+  it("the More sheet lists every section, not just overflow (e.g. Documents alongside Finances)", () => {
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("orderNativeBottomNavItems(navItems, definition.kind)");
+    expect(PORTAL_SIDEBAR_SOURCE).not.toContain("nativeBottomNavSplit.overflow].map");
+  });
+
+  it("no longer hosts the assistant as an inline bottom-bar slot", () => {
+    expect(PORTAL_SIDEBAR_SOURCE).not.toContain("AxisAssistantNavButton");
+    expect(PORTAL_SIDEBAR_SOURCE).not.toContain("useHasAxisAssistant");
+  });
+
+  it("pages between primary tabs on a native swipe gesture", () => {
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("resolveSwipePageDirection");
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("adjacentPrimarySection");
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("playSwipeExit");
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("playSwipeEnter");
+  });
 });

@@ -1528,11 +1528,6 @@ html[data-native] .axis-page-frame > footer {
   display: none;
 }
 
-/* Axis Assistant — native bottom-nav slot uses .axis-assistant-nav-btn; web FAB stays fixed via Tailwind. */
-.axis-assistant-nav-btn {
-  touch-action: manipulation;
-}
-
 .axis-assistant-backdrop {
   background: rgba(15, 23, 42, 0.22);
   backdrop-filter: blur(3px);
@@ -1663,33 +1658,6 @@ html[data-native] .portal-native-bottom-nav-scroll {
 html[data-native] .portal-native-bottom-nav-scroll > a {
   flex: 1 1 0;
   min-width: 0;
-}
-
-html[data-native] .portal-native-bottom-nav-assistant {
-  touch-action: manipulation;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.75rem;
-  min-width: 2.75rem;
-  max-width: 2.75rem;
-  padding-left: 0.25rem;
-  padding-right: 0.25rem;
-  box-sizing: border-box;
-}
-
-html[data-native] .axis-assistant-nav-btn {
-  height: 1.375rem;
-  width: 1.375rem;
-  min-height: 1.375rem;
-  min-width: 1.375rem;
-  flex-shrink: 0;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
-
-html[data-native] .axis-assistant-nav-btn svg {
-  height: 0.6875rem;
-  width: 0.6875rem;
 }
 
 html[data-native] .portal-native-bottom-nav-scroll a svg,

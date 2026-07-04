@@ -232,6 +232,24 @@ export function ManagerProperties() {
             to add more.
           </p>
         ) : null}
+        {/* Property is a bottom-nav main tab on mobile — Promotion and Co-manager
+            linking don't get their own tab there, so surface them here too. */}
+        <div className="mb-4 flex flex-wrap gap-2 lg:hidden">
+          <Link
+            href="/portal/promotion"
+            data-attr="manager-properties-promotion-link"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-accent/40 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-accent/70"
+          >
+            Promotion
+          </Link>
+          <Link
+            href="/portal/relationships"
+            data-attr="manager-properties-co-managers-link"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-accent/40 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-accent/70"
+          >
+            Co-managers
+          </Link>
+        </div>
         <ManagerHousePropertiesPanel
           showToast={showToast}
           activeStage={activeStage}

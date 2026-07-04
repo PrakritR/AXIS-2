@@ -72,14 +72,18 @@ export function orderNativeBottomNavItems<T extends { section: string }>(
 /**
  * Curated primary sets for the fixed native bottom bar — one screen's worth of
  * one-tap tabs per role. Everything else in the portal registry is still reachable
- * via the swipe-up "More" sheet. Keep in sync with `src/lib/platform/parity.ts`.
+ * via the swipe-up "More" sheet (which now lists every section, primary or not —
+ * see `moreSheetItems` in portal-sidebar.tsx) and/or nested inside the most
+ * relevant primary tab's own page (Promotion + Co-managers inside Properties;
+ * Feedback inside Profile/Settings — see portal-settings-extras.tsx and
+ * manager-properties.tsx). Keep in sync with `src/lib/platform/parity.ts`.
  */
 export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
+  "dashboard",
   "properties",
-  "calendar",
   "residents",
-  "vendors",
   "documents",
+  "profile",
 ] as const;
 
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = ["dashboard", "lease", "payments", "documents"] as const;
