@@ -214,7 +214,7 @@ export function ManagerPortalStatusPills({
 }) {
   const isPrimary = activeTone === "primary";
   return (
-    <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:rounded-full [&::-webkit-scrollbar]:hidden">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
       {tabs.map((tab) => {
         const active = activeId === tab.id;
         return (
@@ -452,7 +452,7 @@ export const PORTAL_HEADER_ACTION_BTN =
 export const PORTAL_PAGE_ACTIONS_DESKTOP = "hidden shrink-0 flex-wrap items-center justify-end gap-2 lg:flex";
 
 /** Mobile page actions — place inside {@link ManagerPortalFilterRow}. */
-export const PORTAL_FILTER_ACTIONS_MOBILE = "flex shrink-0 items-center gap-2 lg:hidden";
+export const PORTAL_FILTER_ACTIONS_MOBILE = "flex max-w-full flex-wrap items-center gap-2 lg:hidden";
 
 /** Shared sort dropdown shell for portal section toolbars. */
 export function PortalToolbarSortSelect<T extends string>({
@@ -490,9 +490,7 @@ export function PortalToolbarSortSelect<T extends string>({
 /** Standard filter row wrapper (status pills + optional sort). */
 export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-3 max-lg:overflow-x-auto max-lg:flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {children}
-    </div>
+    <div className="flex max-w-full flex-wrap items-center gap-3">{children}</div>
   );
 }
 

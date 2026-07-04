@@ -26,6 +26,7 @@ export function ReportFilterBar({
   runLabel = "Generate report",
   showRunButton = true,
   leading,
+  trailing,
 }: {
   showProperty?: boolean;
   showDateRange?: boolean;
@@ -40,6 +41,8 @@ export function ReportFilterBar({
   showRunButton?: boolean;
   /** Extra controls rendered at the start of the row (e.g. a document scope selector). */
   leading?: ReactNode;
+  /** Extra controls rendered at the end of the row, before the run button (e.g. row-level filters). */
+  trailing?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -110,13 +113,15 @@ export function ReportFilterBar({
         </label>
       ) : null}
 
-      <div className={PORTAL_TOOLBAR_GROUP}>
-        {showRunButton ? (
+      {trailing}
+
+      {showRunButton ? (
+        <div className={PORTAL_TOOLBAR_GROUP}>
           <Button variant="primary" onClick={onRun} disabled={loading}>
             {loading ? "Loading…" : runLabel}
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

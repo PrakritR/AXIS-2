@@ -15,9 +15,9 @@ describe("portal mobile shell conventions", () => {
     expect(PORTAL_METRICS_SOURCE).toContain("hideTitleOnNative = false");
   });
 
-  it("uses horizontal scroll for status pills on mobile", () => {
-    expect(PORTAL_METRICS_SOURCE).toContain("overflow-x-auto");
-    expect(PORTAL_METRICS_SOURCE).toContain("sm:flex-wrap");
+  it("wraps status pills on mobile instead of scrolling horizontally", () => {
+    expect(PORTAL_METRICS_SOURCE).toContain("inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl");
+    expect(PORTAL_METRICS_SOURCE).not.toContain("overflow-x-auto");
   });
 
   it("scopes nested scroll panels to desktop only", () => {

@@ -12,6 +12,7 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -451,79 +452,18 @@ export function ManagerWorkOrdersPanel({
     showToast(`Assigned ${vendor.name}.`);
   };
 
-  if (rows.length === 0) {
+  const renderRowDetail = (row: DemoManagerWorkOrderRow) => {
+    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+    const linkedCharge = chargeByWoId.get(row.id);
+    const visitAt = visitAtById[row.id] ?? "";
+    const assignedVendor =
+      !row.selfAssigned && row.vendorId
+        ? activeVendors.find((v) => v.id === row.vendorId) ?? null
+        : null;
+    const assignedVendorEmail = assignedVendor?.email?.trim() ?? "";
+
     return (
-      <PortalDataTableEmpty
-        icon="work-order"
-        message={allRows.length === 0 ? "No work orders yet." : "No work orders in this bucket yet."}
-      />
-    );
-  }
-
-  return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
-      <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="min-w-[640px] w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className={PORTAL_TABLE_HEAD_ROW}>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-              const linkedCharge = chargeByWoId.get(row.id);
-              const visitAt = visitAtById[row.id] ?? "";
-              const isExpanded = expandedId === row.id;
-              const assignedVendor =
-                !row.selfAssigned && row.vendorId
-                  ? activeVendors.find((v) => v.id === row.vendorId) ?? null
-                  : null;
-              const assignedVendorEmail = assignedVendor?.email?.trim() ?? "";
-
-              return (
-                <Fragment key={row.id}>
-                  <tr
-                    className={PORTAL_TABLE_TR_EXPANDABLE}
-                    onClick={createPortalRowExpandClick(() =>
-                      isExpanded ? setExpandedId(null) : openExpand(row),
-                    )}
-                    aria-expanded={isExpanded}
-                  >
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                      {row.title}
-                      <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <span className="text-foreground">{row.propertyName}</span>
-                      {row.unit ? <span className="text-muted"> · {row.unit}</span> : null}
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
-                        {row.priority}
-                      </span>
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <div className="flex flex-col gap-1">
-                        <span>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
-                        {linkedCharge?.status === "paid" ? (
-                          <span className="inline-flex w-fit rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                            Paid
-                          </span>
-                        ) : linkedCharge?.status === "pending" ? (
-                          <span className="inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                            Pending
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                  {isExpanded ? (
-                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+      <>
                         <p className="text-sm leading-relaxed text-muted">{row.description}</p>
                         <p className="mt-1.5 text-xs text-muted">
                           Resident preferred arrival:{" "}
@@ -704,14 +644,135 @@ export function ManagerWorkOrdersPanel({
                             Delete work order
                           </Button>
                         </PortalTableDetailActions>
+      </>
+    );
+  };
+
+  if (rows.length === 0) {
+    return (
+      <PortalDataTableEmpty
+        icon="work-order"
+        message={allRows.length === 0 ? "No work orders yet." : "No work orders in this bucket yet."}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <div className="space-y-2 lg:hidden">
+        {rows.map((row) => {
+          const linkedCharge = chargeByWoId.get(row.id);
+          const isExpanded = expandedId === row.id;
+          return (
+            <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
+              >
+                <p className="truncate font-semibold text-foreground">{row.title}</p>
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {[row.propertyName, row.unit].filter(Boolean).join(" · ")}
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
+                    {row.priority}
+                  </span>
+                  <span className="text-xs text-muted">{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
+                  {linkedCharge?.status === "paid" ? (
+                    <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                      Paid
+                    </span>
+                  ) : linkedCharge?.status === "pending" ? (
+                    <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                      Pending
+                    </span>
+                  ) : null}
+                </div>
+              </button>
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
+                >
+                  {isExpanded ? "Less" : "Details"}
+                </Button>
+              </div>
+              {isExpanded ? (
+                <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+          <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const linkedCharge = chargeByWoId.get(row.id);
+                const isExpanded = expandedId === row.id;
+
+                return (
+                  <Fragment key={row.id}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        isExpanded ? setExpandedId(null) : openExpand(row),
+                      )}
+                      aria-expanded={isExpanded}
+                    >
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                        {row.title}
+                        <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <span className="text-foreground">{row.propertyName}</span>
+                        {row.unit ? <span className="text-muted"> · {row.unit}</span> : null}
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
+                          {row.priority}
+                        </span>
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <div className="flex flex-col gap-1">
+                          <span>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
+                          {linkedCharge?.status === "paid" ? (
+                            <span className="inline-flex w-fit rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                              Paid
+                            </span>
+                          ) : linkedCharge?.status === "pending" ? (
+                            <span className="inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                              Pending
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
-                  ) : null}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                    {isExpanded ? (
+                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                          {renderRowDetail(row)}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <Modal open={Boolean(completeRow)} onClose={() => setCompleteRow(null)} title="Complete work order">

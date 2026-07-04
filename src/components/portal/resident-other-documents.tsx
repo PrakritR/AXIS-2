@@ -13,6 +13,7 @@ import {
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PortalDataTableEmpty,
+  PortalMobileSummaryCard,
 } from "@/components/portal/portal-data-table";
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
 import { safeFormatDateTime } from "@/lib/pacific-time";
@@ -354,7 +355,17 @@ export function ResidentOtherDocumentsTable({
 
   return (
     <>
-      <div className={PORTAL_DATA_TABLE_WRAP}>
+      <div className="space-y-2 lg:hidden">
+        {uploads.map((row) => (
+          <PortalMobileSummaryCard
+            key={row.id}
+            title={row.fileName}
+            subtitle={`${uploadedDocumentKind(row)} · added ${safeFormatDateTime(row.uploadedAt)}`}
+            onClick={() => setSelectedId(row.id)}
+          />
+        ))}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className="w-full min-w-[640px] border-collapse text-left text-sm">
             <thead>

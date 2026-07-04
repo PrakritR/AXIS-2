@@ -12,7 +12,6 @@ export function TabNav({
   items: TabItem[];
   activeId: string;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const linkRefs = useRef(new Map<string, HTMLAnchorElement>());
   const [pill, setPill] = useState({ left: 0, top: 0, w: 0, h: 0 });
@@ -48,28 +47,11 @@ export function TabNav({
     };
   }, [sync]);
 
-  useLayoutEffect(() => {
-    const el = linkRefs.current.get(activeId);
-    const scroller = scrollRef.current;
-    if (!el || !scroller) return;
-    const elLeft = el.offsetLeft;
-    const elRight = elLeft + el.offsetWidth;
-    const viewLeft = scroller.scrollLeft;
-    const viewRight = viewLeft + scroller.clientWidth;
-    if (elLeft < viewLeft || elRight > viewRight) {
-      el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-    }
-  }, [activeId, items]);
-
   return (
     <div
-      ref={scrollRef}
-      className="max-w-full overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      ref={wrapRef}
+      className="relative inline-flex max-w-full flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1"
     >
-      <div
-        ref={wrapRef}
-        className="relative inline-flex min-w-max flex-nowrap gap-1 rounded-full border border-border bg-accent/30 p-1"
-      >
       {pill.w > 0 ? (
         <span
           aria-hidden
@@ -95,7 +77,6 @@ export function TabNav({
           </Link>
         );
       })}
-    </div>
     </div>
   );
 }

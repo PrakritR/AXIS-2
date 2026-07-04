@@ -241,6 +241,7 @@ export function PortalCalendarPanels({
     storageKey ? new Set(readAvailabilityDateSetForStorageKey(storageKey)) : new Set(),
   );
   const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
+  const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [visibleStartSlot, setVisibleStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
   const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE);
   const [blockModalOpen, setBlockModalOpen] = useState(false);
@@ -1162,89 +1163,152 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
-            <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-              <div className={`grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
-                <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
-                {fullWeekDates.map((d) => {
-                  const ds = toLocalDateStr(d);
-                  const count = visibleSlotIndices.reduce((total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0), 0);
-                  return (
-                    <div key={ds} className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
-                      <p className="font-bold uppercase tracking-[0.12em]">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
-                      <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-                      <p className={`mt-0.5 text-[11px] font-medium ${CALENDAR_OPEN_COUNT}`}>{count} open</p>
-                    </div>
-                  );
-                })}
+          {(() => {
+            const renderSlotButton = (ds: string, slotIdx: number) => {
+              const key = dateSlotKey(ds, slotIdx);
+              const active = activeSlots.has(key);
+              const coManagerOverlay = coManagerOverlayBySlotKey.get(key);
+              const coManagerOpen = Boolean(coManagerOverlay && !active && !meetingBySlotKey.get(key));
+              const selected = isSlotInDragSelection(ds, slotIdx);
+              const meeting = meetingBySlotKey.get(key);
+              const isMeetingStart = meeting?.startSlot === slotIdx;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onMouseDown={() => {
+                    if (meeting || active || coManagerOpen) return;
+                    startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx);
+                  }}
+                  onMouseEnter={() => {
+                    if (meeting || active || coManagerOpen) return;
+                    extendDragSelection(ds, slotIdx);
+                  }}
+                  onMouseUp={() => {
+                    if (meeting || active || coManagerOpen) return;
+                    finishDragSelection();
+                  }}
+                  onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
+                  className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
+                    meeting
+                      ? `${meeting.color} ring-1 ring-inset`
+                      : selected
+                        ? "bg-primary/[0.14] text-primary ring-2 ring-inset ring-primary/35"
+                      : active
+                        ? CALENDAR_OPEN_SLOT
+                        : coManagerOpen
+                          ? CALENDAR_CO_MANAGER_SLOT
+                        : CALENDAR_EMPTY_SLOT
+                  }`}
+                  aria-label={`${meeting || active || coManagerOpen ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
+                >
+                  {meeting ? (
+                    isMeetingStart ? (
+                      <span className="block truncate">
+                        {meeting.statusLabel}: {meeting.title}
+                        {meeting.hostLabel ? ` · ${meeting.hostLabel}` : ""}
+                      </span>
+                    ) : (
+                      <span className="block truncate opacity-70">{meeting.statusLabel}</span>
+                    )
+                  ) : selected ? (
+                    "Selected"
+                  ) : active ? (
+                    "Open"
+                  ) : coManagerOpen ? (
+                    `${coManagerOverlay!.label}`
+                  ) : (
+                    "Add"
+                  )}
+                </button>
+              );
+            };
 
-                {visibleSlotIndices.map((slotIdx) => (
-                  <Fragment key={slotIdx}>
-                    <div className={`flex min-h-9 items-center bg-card px-2 ${CALENDAR_TIME_CELL}`}>{formatAvailabilitySlotLabel(slotIdx)}</div>
-                    {fullWeekDateStrs.map((ds) => {
-                      const key = dateSlotKey(ds, slotIdx);
-                      const active = activeSlots.has(key);
-                      const coManagerOverlay = coManagerOverlayBySlotKey.get(key);
-                      const coManagerOpen = Boolean(coManagerOverlay && !active && !meetingBySlotKey.get(key));
-                      const selected = isSlotInDragSelection(ds, slotIdx);
-                      const meeting = meetingBySlotKey.get(key);
-                      const isMeetingStart = meeting?.startSlot === slotIdx;
+            const mobileDs = fullWeekDateStrs[mobileDayIndex] ?? fullWeekDateStrs[0]!;
+            const mobileDate = fullWeekDates[mobileDayIndex] ?? fullWeekDates[0]!;
+
+            return (
+              <>
+                {/* Mobile: one day at a time — the 7-column grid never fits a phone width. */}
+                <div className="mt-4 lg:hidden">
+                  <div className="flex flex-wrap gap-1.5">
+                    {fullWeekDates.map((d, idx) => {
+                      const ds = toLocalDateStr(d);
+                      const count = visibleSlotIndices.reduce(
+                        (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
+                        0,
+                      );
+                      const isActive = idx === mobileDayIndex;
                       return (
                         <button
-                          key={key}
+                          key={ds}
                           type="button"
-                          onMouseDown={() => {
-                            if (meeting || active || coManagerOpen) return;
-                            startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx);
-                          }}
-                          onMouseEnter={() => {
-                            if (meeting || active || coManagerOpen) return;
-                            extendDragSelection(ds, slotIdx);
-                          }}
-                          onMouseUp={() => {
-                            if (meeting || active || coManagerOpen) return;
-                            finishDragSelection();
-                          }}
-                          onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
-                          className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
-                            meeting
-                              ? `${meeting.color} ring-1 ring-inset`
-                              : selected
-                                ? "bg-primary/[0.14] text-primary ring-2 ring-inset ring-primary/35"
-                              : active
-                                ? CALENDAR_OPEN_SLOT
-                                : coManagerOpen
-                                  ? CALENDAR_CO_MANAGER_SLOT
-                                : CALENDAR_EMPTY_SLOT
+                          onClick={() => setMobileDayIndex(idx)}
+                          className={`flex shrink-0 flex-col items-center rounded-xl px-3 py-1.5 text-center transition ${
+                            isActive ? "bg-primary text-primary-foreground" : "bg-accent/40 text-muted"
                           }`}
-                          aria-label={`${meeting || active || coManagerOpen ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
                         >
-                          {meeting ? (
-                            isMeetingStart ? (
-                              <span className="block truncate">
-                                {meeting.statusLabel}: {meeting.title}
-                                {meeting.hostLabel ? ` · ${meeting.hostLabel}` : ""}
-                              </span>
-                            ) : (
-                              <span className="block truncate opacity-70">{meeting.statusLabel}</span>
-                            )
-                          ) : selected ? (
-                            "Selected"
-                          ) : active ? (
-                            "Open"
-                          ) : coManagerOpen ? (
-                            `${coManagerOverlay!.label}`
-                          ) : (
-                            "Add"
-                          )}
+                          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">
+                            {d.toLocaleDateString(undefined, { weekday: "short" })}
+                          </span>
+                          <span className="text-sm font-semibold">{d.toLocaleDateString(undefined, { day: "numeric" })}</span>
+                          <span className="text-[9px] font-medium opacity-80">{count} open</span>
                         </button>
                       );
                     })}
-                  </Fragment>
-                ))}
-              </div>
-            </div>
-          </div>
+                  </div>
+                  <div className="mt-2 overflow-hidden rounded-2xl border border-border bg-card">
+                    <div className={`grid grid-cols-[64px_1fr] text-xs ${CALENDAR_GRID_GAP}`}>
+                      <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
+                      <div className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
+                        {mobileDate.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                      </div>
+                      {visibleSlotIndices.map((slotIdx) => (
+                        <Fragment key={slotIdx}>
+                          <div className={`flex min-h-9 items-center bg-card px-2 ${CALENDAR_TIME_CELL}`}>
+                            {formatAvailabilitySlotLabel(slotIdx)}
+                          </div>
+                          {renderSlotButton(mobileDs, slotIdx)}
+                        </Fragment>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop: full 7-day week grid. */}
+                <div className="mt-4 hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
+                  <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
+                    <div className={`grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
+                      <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
+                      {fullWeekDates.map((d) => {
+                        const ds = toLocalDateStr(d);
+                        const count = visibleSlotIndices.reduce(
+                          (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
+                          0,
+                        );
+                        return (
+                          <div key={ds} className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
+                            <p className="font-bold uppercase tracking-[0.12em]">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
+                            <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+                            <p className={`mt-0.5 text-[11px] font-medium ${CALENDAR_OPEN_COUNT}`}>{count} open</p>
+                          </div>
+                        );
+                      })}
+
+                      {visibleSlotIndices.map((slotIdx) => (
+                        <Fragment key={slotIdx}>
+                          <div className={`flex min-h-9 items-center bg-card px-2 ${CALENDAR_TIME_CELL}`}>
+                            {formatAvailabilitySlotLabel(slotIdx)}
+                          </div>
+                          {fullWeekDateStrs.map((ds) => renderSlotButton(ds, slotIdx))}
+                        </Fragment>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </Card>
 
         <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => { setBlockModalOpen(false); setDragSelection(null); }}>

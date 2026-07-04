@@ -23,8 +23,9 @@ describe("portal sidebar native hydration", () => {
     expect(PORTAL_SIDEBAR_SOURCE).not.toContain("!showNativeChrome ?");
   });
 
-  it("uses full navigation for native bottom tab taps", () => {
-    expect(PORTAL_SIDEBAR_SOURCE).toContain("preferFullNavigation: true");
+  it("only forces full navigation on native bottom tab taps that leave the portal", () => {
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("isCrossPortalNavigation(pathname, s.href)");
     expect(PORTAL_NAV_CLIENT_SOURCE).toContain("preferFullNavigation");
+    expect(PORTAL_NAV_CLIENT_SOURCE).toContain("isCrossPortalNavigation");
   });
 });

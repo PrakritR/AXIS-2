@@ -4,6 +4,8 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PortalDataTableEmpty,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
@@ -145,6 +147,44 @@ export function AdminBugFeedbackClient() {
     }
   };
 
+  const renderRowDetail = (row: PortalBugFeedbackRow) => (
+    <div className="space-y-4 text-sm text-muted">
+      <p className="whitespace-pre-wrap leading-relaxed text-foreground">{row.description}</p>
+      {row.stepsToReproduce ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Steps to reproduce</p>
+          <p className="mt-1 whitespace-pre-wrap">{row.stepsToReproduce}</p>
+        </div>
+      ) : null}
+      {row.attachmentUrls && row.attachmentUrls.length > 0 ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Attachments</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {row.attachmentUrls.slice(0, 4).map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="block overflow-hidden rounded-lg border border-border bg-card transition hover:opacity-90"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="Feedback attachment" className="h-24 w-24 object-cover" />
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <AdminRowEditor
+        row={row}
+        saving={savingId === row.id}
+        deleting={deletingId === row.id}
+        onSave={(status, notes) => void saveStatus(row, status, notes)}
+        onDelete={() => void handleDelete(row)}
+      />
+    </div>
+  );
+
   return (
     <ManagerPortalPageShell
       title="Feedback"
@@ -210,97 +250,102 @@ export function AdminBugFeedbackClient() {
           message={roleFilter === "managers" ? "No manager feedback yet." : "No resident feedback yet."}
         />
       ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRows.map((row) => {
-                  const open = expandedId === row.id;
-                  return (
-                    <Fragment key={row.id}>
-                      <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() =>
-                          setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                        )}
-                        aria-expanded={open}
+        <>
+          <div className="space-y-2 lg:hidden">
+            {visibleRows.map((row) => {
+              const open = expandedId === row.id;
+              return (
+                <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                  >
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted">
+                          From {row.reporterName || row.reporterEmail} · {formatWhen(row.createdAt)}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
                       >
-                        <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
-                          {formatWhen(row.createdAt)}
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <p className="font-medium text-foreground">{row.reporterName || row.reporterEmail}</p>
-                          <p className="text-xs text-muted">
-                            {roleGroupLabelForFeedback(row.reporterRole)} · {row.reporterEmail}
-                          </p>
-                        </td>
-                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
-                          >
-                            {row.status}
-                          </span>
-                        </td>
-                      </tr>
-                      {open ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                            <div className="space-y-4 text-sm text-muted">
-                              <p className="whitespace-pre-wrap leading-relaxed text-foreground">{row.description}</p>
-                              {row.stepsToReproduce ? (
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                                    Steps to reproduce
-                                  </p>
-                                  <p className="mt-1 whitespace-pre-wrap">{row.stepsToReproduce}</p>
-                                </div>
-                              ) : null}
-                              {row.attachmentUrls && row.attachmentUrls.length > 0 ? (
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Attachments</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {row.attachmentUrls.slice(0, 4).map((url) => (
-                                      <a
-                                        key={url}
-                                        href={url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="block overflow-hidden rounded-lg border border-border bg-card transition hover:opacity-90"
-                                      >
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img src={url} alt="Feedback attachment" className="h-24 w-24 object-cover" />
-                                      </a>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : null}
-                              <AdminRowEditor
-                                row={row}
-                                saving={savingId === row.id}
-                                deleting={deletingId === row.id}
-                                onSave={(status, notes) => void saveStatus(row, status, notes)}
-                                onDelete={() => void handleDelete(row)}
-                              />
-                            </div>
+                        {row.status}
+                      </span>
+                    </div>
+                  </button>
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                    >
+                      {open ? "Less" : "Details"}
+                    </Button>
+                  </div>
+                  {open ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => {
+                    const open = expandedId === row.id;
+                    return (
+                      <Fragment key={row.id}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                          )}
+                          aria-expanded={open}
+                        >
+                          <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
+                            {formatWhen(row.createdAt)}
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <p className="font-medium text-foreground">{row.reporterName || row.reporterEmail}</p>
+                            <p className="text-xs text-muted">
+                              {roleGroupLabelForFeedback(row.reporterRole)} · {row.reporterEmail}
+                            </p>
+                          </td>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
+                            >
+                              {row.status}
+                            </span>
                           </td>
                         </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {open ? (
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                              {renderRowDetail(row)}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </ManagerPortalPageShell>
   );

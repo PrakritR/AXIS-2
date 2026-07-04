@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  NATIVE_BOTTOM_NAV_ADMIN_PRIMARY,
   NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER,
+  NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
+  NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
   orderNativeBottomNavItems,
   pickNativeBottomNavItems,
   splitNativeBottomNavItems,
@@ -72,32 +75,39 @@ describe("orderNativeBottomNavItems", () => {
 });
 
 describe("splitNativeBottomNavItems", () => {
-  it("returns every section in the scrollable bar with no overflow bucket", () => {
+  it("curates the pro manager bar to the primary set and overflows the rest", () => {
     const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "pro");
-    expect(overflow).toEqual([]);
-    expect(primary.map((item) => item.section)).toEqual(orderNativeBottomNavItems(items, "pro").map((item) => item.section));
-    expect(primary.at(-1)?.section).toBe("profile");
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY]);
+    expect(overflow.map((item) => item.section)).toEqual(
+      sectionIds(proPortal.sections).filter(
+        (section) => !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section),
+      ),
+    );
+    expect(overflow.map((item) => item.section)).toContain("profile");
+    expect(primary.length + overflow.length).toBe(items.length);
   });
 
-  it("includes all resident limited sections in the scroll strip", () => {
+  it("curates the resident bar (limited) to the primary set and overflows the rest", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
-    expect(overflow).toEqual([]);
-    expect(new Set(primary.map((item) => item.section))).toEqual(new Set(items.map((item) => item.section)));
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
+    expect(primary.length + overflow.length).toBe(items.length);
   });
 
-  it("includes all resident approved sections in the scroll strip", () => {
+  it("curates the resident bar (approved) to the primary set and overflows the rest", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
-    expect(overflow).toEqual([]);
-    expect(primary.map((item) => item.section)).toContain("services");
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
+    expect(overflow.map((item) => item.section)).toContain("services");
+    expect(primary.length + overflow.length).toBe(items.length);
   });
 
-  it("includes every admin section in the scroll strip", () => {
+  it("curates the admin bar to the primary set and overflows the rest", () => {
     const items = adminPortal.sections.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "admin");
-    expect(overflow).toEqual([]);
-    expect(primary.at(-1)?.section).toBe("profile");
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_ADMIN_PRIMARY]);
+    expect(overflow.map((item) => item.section)).toContain("profile");
+    expect(primary.length + overflow.length).toBe(items.length);
   });
 });

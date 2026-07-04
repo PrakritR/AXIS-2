@@ -15,6 +15,8 @@ import {
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -129,7 +131,7 @@ function TierBadge({ tier }: { tier: string }) {
   );
 }
 
-function ManagerDetailRow({
+function ManagerDetailContent({
   row,
   onRefresh,
   showToast,
@@ -208,97 +210,111 @@ function ManagerDetailRow({
     }
   };
   return (
+    <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
+        <TierBadge tier={row.tier} />
+        <StatusPill active={row.active} />
+        {row.joinedAt ? (
+          <span className="text-xs text-muted">
+            Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</p>
+        <Select
+          className="h-9 min-h-0 w-auto min-w-[8.5rem] rounded-full px-3 py-1.5 text-sm"
+          value={plan}
+          onChange={(e) => setPlan(e.target.value as ManagerPlan)}
+          disabled={busy}
+        >
+          {MANAGER_PLAN_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
+          onClick={() => void toggle()}
+          disabled={busy}
+        >
+          {busy && !confirmDelete && !planDirty ? "Updating…" : row.active ? "Disable account" : "Enable account"}
+        </Button>
+        {confirmDelete ? (
+          <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 portal-banner-danger">
+            <span className="text-xs font-semibold text-rose-800">Delete manager and all properties?</span>
+            <button
+              type="button"
+              className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              onClick={() => void deleteAccount()}
+              disabled={busy}
+            >
+              {busy ? "Deleting…" : "Yes, delete"}
+            </button>
+            <button
+              type="button"
+              className="text-xs font-semibold text-muted hover:text-foreground"
+              onClick={() => setConfirmDelete(false)}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
+            onClick={() => setConfirmDelete(true)}
+            disabled={busy}
+          >
+            Delete account
+          </Button>
+        )}
+      </div>
+
+      <div className="ml-auto shrink-0">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 rounded-full px-4 text-xs"
+          onClick={() => void savePlan()}
+          disabled={busy || !planDirty}
+        >
+          {busy && planDirty ? "Saving…" : "Save plan"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ManagerDetailRow({
+  row,
+  onRefresh,
+  showToast,
+}: {
+  row: { kind: "manager" } & ManagerRow;
+  onRefresh: () => void;
+  showToast: (m: string) => void;
+}) {
+  return (
     <tr className={PORTAL_TABLE_DETAIL_ROW}>
       <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
-            <TierBadge tier={row.tier} />
-            <StatusPill active={row.active} />
-            {row.joinedAt ? (
-              <span className="text-xs text-muted">
-                Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</p>
-            <Select
-              className="h-9 min-h-0 w-auto min-w-[8.5rem] rounded-full px-3 py-1.5 text-sm"
-              value={plan}
-              onChange={(e) => setPlan(e.target.value as ManagerPlan)}
-              disabled={busy}
-            >
-              {MANAGER_PLAN_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
-              onClick={() => void toggle()}
-              disabled={busy}
-            >
-              {busy && !confirmDelete && !planDirty ? "Updating…" : row.active ? "Disable account" : "Enable account"}
-            </Button>
-            {confirmDelete ? (
-              <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 portal-banner-danger">
-                <span className="text-xs font-semibold text-rose-800">Delete manager and all properties?</span>
-                <button
-                  type="button"
-                  className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
-                  onClick={() => void deleteAccount()}
-                  disabled={busy}
-                >
-                  {busy ? "Deleting…" : "Yes, delete"}
-                </button>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-muted hover:text-foreground"
-                  onClick={() => setConfirmDelete(false)}
-                  disabled={busy}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
-                onClick={() => setConfirmDelete(true)}
-                disabled={busy}
-              >
-                Delete account
-              </Button>
-            )}
-          </div>
-
-          <div className="ml-auto shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 rounded-full px-4 text-xs"
-              onClick={() => void savePlan()}
-              disabled={busy || !planDirty}
-            >
-              {busy && planDirty ? "Saving…" : "Save plan"}
-            </Button>
-          </div>
-        </div>
+        <ManagerDetailContent row={row} onRefresh={onRefresh} showToast={showToast} />
       </td>
     </tr>
   );
 }
 
-function SimpleAccountDetailRow({
+function SimpleAccountDetailContent({
   row,
   apiPath,
   accountLabel,
@@ -356,66 +372,90 @@ function SimpleAccountDetailRow({
     }
   };
   return (
-    <tr className={PORTAL_TABLE_DETAIL_ROW}>
-      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-        <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
-            <StatusPill active={row.active} />
-            {row.joinedAt ? (
-              <span className="text-xs text-muted">
-                Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
-              </span>
-            ) : null}
-          </div>
+    <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Account</p>
+        <StatusPill active={row.active} />
+        {row.joinedAt ? (
+          <span className="text-xs text-muted">
+            Joined {formatPacificDate(row.joinedAt, { year: "numeric", month: "short", day: "numeric" })}
+          </span>
+        ) : null}
+      </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
+          onClick={() => void toggle()}
+          disabled={busy}
+        >
+          {busy && !confirmDelete ? "Updating…" : row.active ? "Disable account" : "Enable account"}
+        </Button>
+        {confirmDelete ? (
+          <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 portal-banner-danger">
+            <span className="text-xs font-semibold text-rose-800">
+              {apiPath === "/api/admin/residents"
+                ? "Delete resident, leases, and payments?"
+                : "Delete permanently?"}
+            </span>
+            <button
               type="button"
-              variant="outline"
-              className={`rounded-full ${row.active ? "border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]" : ""}`}
-              onClick={() => void toggle()}
+              className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              onClick={() => void deleteAccount()}
               disabled={busy}
             >
-              {busy && !confirmDelete ? "Updating…" : row.active ? "Disable account" : "Enable account"}
-            </Button>
-            {confirmDelete ? (
-              <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 portal-banner-danger">
-                <span className="text-xs font-semibold text-rose-800">
-                  {apiPath === "/api/admin/residents"
-                    ? "Delete resident, leases, and payments?"
-                    : "Delete permanently?"}
-                </span>
-                <button
-                  type="button"
-                  className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
-                  onClick={() => void deleteAccount()}
-                  disabled={busy}
-                >
-                  {busy ? "Deleting…" : "Yes, delete"}
-                </button>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-muted hover:text-foreground"
-                  onClick={() => setConfirmDelete(false)}
-                  disabled={busy}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
-                onClick={() => setConfirmDelete(true)}
-                disabled={busy}
-              >
-                Delete account
-              </Button>
-            )}
+              {busy ? "Deleting…" : "Yes, delete"}
+            </button>
+            <button
+              type="button"
+              className="text-xs font-semibold text-muted hover:text-foreground"
+              onClick={() => setConfirmDelete(false)}
+              disabled={busy}
+            >
+              Cancel
+            </button>
           </div>
-        </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
+            onClick={() => setConfirmDelete(true)}
+            disabled={busy}
+          >
+            Delete account
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SimpleAccountDetailRow({
+  row,
+  apiPath,
+  accountLabel,
+  onRefresh,
+  showToast,
+}: {
+  row: { kind: "resident" } & SimpleRow;
+  apiPath: "/api/admin/residents";
+  accountLabel: string;
+  onRefresh: () => void;
+  showToast: (m: string) => void;
+}) {
+  return (
+    <tr className={PORTAL_TABLE_DETAIL_ROW}>
+      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+        <SimpleAccountDetailContent
+          row={row}
+          apiPath={apiPath}
+          accountLabel={accountLabel}
+          onRefresh={onRefresh}
+          showToast={showToast}
+        />
       </td>
     </tr>
   );
@@ -434,6 +474,29 @@ function ExpandedRow({
     return <ManagerDetailRow row={row} onRefresh={onRefresh} showToast={showToast} />;
   }
   return <SimpleAccountDetailRow row={row} apiPath="/api/admin/residents" accountLabel="Resident" onRefresh={onRefresh} showToast={showToast} />;
+}
+
+function ExpandedContent({
+  row,
+  onRefresh,
+  showToast,
+}: {
+  row: UnifiedRow;
+  onRefresh: () => void;
+  showToast: (m: string) => void;
+}) {
+  if (row.kind === "manager") {
+    return <ManagerDetailContent row={row} onRefresh={onRefresh} showToast={showToast} />;
+  }
+  return (
+    <SimpleAccountDetailContent
+      row={row}
+      apiPath="/api/admin/residents"
+      accountLabel="Resident"
+      onRefresh={onRefresh}
+      showToast={showToast}
+    />
+  );
 }
 
 export function AdminAxisUsersClient() {
@@ -596,19 +659,23 @@ export function AdminAxisUsersClient() {
         </ManagerPortalFilterRow>
       }
     >
-      <div className={PORTAL_DATA_TABLE_WRAP}>
-        {loading ? (
+      {loading ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className="flex items-center justify-center py-16">
             <p className="text-sm text-muted">Loading…</p>
           </div>
-        ) : loadError ? (
+        </div>
+      ) : loadError ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className="px-5 py-10 text-center">
             <p className="text-sm font-medium text-rose-600">{loadError}</p>
             <button type="button" onClick={() => void load()} className="mt-3 text-xs font-semibold text-primary hover:underline">
               Try again
             </button>
           </div>
-        ) : visible.length === 0 ? (
+        </div>
+      ) : visible.length === 0 ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className="flex flex-col items-center justify-center bg-accent/30/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
               <UsersEmptyIcon className="h-[26px] w-[26px]" />
@@ -617,63 +684,120 @@ export function AdminAxisUsersClient() {
               {unified.length === 0 ? "No accounts yet" : "No accounts match these filters"}
             </p>
           </div>
-        ) : (
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[min(100%,48rem)] border-collapse text-left">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Account</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Plan</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((row) => {
-                  const rowKey = `${row.kind}-${row.id}`;
-                  const isOpen = expandedKey === rowKey;
-                  return (
-                    <Fragment key={rowKey}>
-                      <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() => setExpandedKey(isOpen ? null : rowKey))}
-                        aria-expanded={isOpen}
-                      >
-                        <td className={PORTAL_TABLE_TD}>
-                          <RolePill kind={row.kind} />
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <p className="font-semibold text-foreground">{row.fullName || row.email}</p>
-                          <p className="mt-0.5 text-sm text-muted">{row.email}</p>
-                          {row.managerId ? (
-                            <p className="mt-0.5 font-mono text-xs text-muted">{row.managerId}</p>
-                          ) : null}
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          {row.kind === "manager" ? <TierBadge tier={row.tier} /> : <span className="text-sm text-muted">—</span>}
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <StatusPill active={row.active} />
-                        </td>
-                      </tr>
-                      {isOpen ? (
-                        <ExpandedRow
-                          row={row}
-                          onRefresh={() => {
-                            setExpandedKey(null);
-                            void load();
-                          }}
-                          showToast={showToast}
-                        />
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2 lg:hidden">
+            {visible.map((row) => {
+              const rowKey = `${row.kind}-${row.id}`;
+              const isOpen = expandedKey === rowKey;
+              return (
+                <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setExpandedKey(isOpen ? null : rowKey)}
+                  >
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-foreground">{row.fullName || row.email}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted">
+                          {row.kind === "manager" ? "Management" : "Resident"}
+                          {row.kind === "manager" ? ` · ${row.tier}` : ""}
+                        </p>
+                        {row.managerId ? (
+                          <p className="mt-0.5 truncate font-mono text-[11px] text-muted/90">{row.managerId}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <StatusPill active={row.active} />
+                      </div>
+                    </div>
+                  </button>
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      onClick={() => setExpandedKey(isOpen ? null : rowKey)}
+                    >
+                      {isOpen ? "Less" : "Details"}
+                    </Button>
+                  </div>
+                  {isOpen ? (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <ExpandedContent
+                        row={row}
+                        onRefresh={() => {
+                          setExpandedKey(null);
+                          void load();
+                        }}
+                        showToast={showToast}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full min-w-[min(100%,48rem)] border-collapse text-left">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Account</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Plan</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((row) => {
+                    const rowKey = `${row.kind}-${row.id}`;
+                    const isOpen = expandedKey === rowKey;
+                    return (
+                      <Fragment key={rowKey}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() => setExpandedKey(isOpen ? null : rowKey))}
+                          aria-expanded={isOpen}
+                        >
+                          <td className={PORTAL_TABLE_TD}>
+                            <RolePill kind={row.kind} />
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <p className="font-semibold text-foreground">{row.fullName || row.email}</p>
+                            <p className="mt-0.5 text-sm text-muted">{row.email}</p>
+                            {row.managerId ? (
+                              <p className="mt-0.5 font-mono text-xs text-muted">{row.managerId}</p>
+                            ) : null}
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            {row.kind === "manager" ? <TierBadge tier={row.tier} /> : <span className="text-sm text-muted">—</span>}
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <StatusPill active={row.active} />
+                          </td>
+                        </tr>
+                        {isOpen ? (
+                          <ExpandedRow
+                            row={row}
+                            onRefresh={() => {
+                              setExpandedKey(null);
+                              void load();
+                            }}
+                            showToast={showToast}
+                          />
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </ManagerPortalPageShell>
   );
 }

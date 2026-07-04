@@ -24,6 +24,8 @@ import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell } from
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -315,8 +317,8 @@ export function AdminLeasesClient() {
         </ManagerPortalFilterRow>
       }
     >
-      <div className={PORTAL_DATA_TABLE_WRAP}>
-        {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className="flex flex-col items-center justify-center bg-accent/30/30 px-4 py-16 text-center sm:py-20">
             <AxisHeaderMarkTile>
               <DocIcon className="h-[26px] w-[26px]" />
@@ -325,59 +327,108 @@ export function AdminLeasesClient() {
               {adminReviewRows.length === 0 ? "No leases awaiting admin review." : "No leases match this property filter."}
             </p>
           </div>
-        ) : (
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Lease</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Rent</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const rentLabel = rentSummaryFromApplication(row.application);
-                  return (
-                  <Fragment key={row.id}>
-                    <tr
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() =>
-                        setExpandedLeaseId((cur) => (cur === row.id ? null : row.id)),
-                      )}
-                      aria-expanded={visibleExpandedLeaseId === row.id}
-                    >
-                      <td className={PORTAL_TABLE_TD}>
-                        <p className="font-semibold text-foreground">{row.unit || "—"}</p>
-                        <p className="mt-0.5 text-sm text-muted">{row.residentName || "—"}</p>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        <p className="font-semibold text-foreground">{rentLabel ?? "—"}</p>
-                        <p className="text-xs text-muted">From application / listing</p>
-                      </td>
-                      <td className={PORTAL_TABLE_TD}>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2 lg:hidden">
+            {rows.map((row) => {
+              const rentLabel = rentSummaryFromApplication(row.application);
+              const isExpanded = visibleExpandedLeaseId === row.id;
+              return (
+                <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setExpandedLeaseId((cur) => (cur === row.id ? null : row.id))}
+                  >
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-foreground">{row.unit || "—"}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted">{row.residentName || "—"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted/90">{rentLabel ?? "—"}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
                         <StatusPill bucket={bucketToPillIndex(row.bucket)} />
-                      </td>
-                    </tr>
-                    {visibleExpandedLeaseId === row.id ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                          <LeasePipelineAdminDetail
-                            row={row}
-                            onSaved={() => setTick((t) => t + 1)}
-                            showToast={showToast}
-                          />
+                      </div>
+                    </div>
+                  </button>
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      onClick={() => setExpandedLeaseId((cur) => (cur === row.id ? null : row.id))}
+                    >
+                      {isExpanded ? "Less" : "Details"}
+                    </Button>
+                  </div>
+                  {isExpanded ? (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <LeasePipelineAdminDetail
+                        row={row}
+                        onSaved={() => setTick((t) => t + 1)}
+                        showToast={showToast}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Lease</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Rent</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const rentLabel = rentSummaryFromApplication(row.application);
+                    return (
+                    <Fragment key={row.id}>
+                      <tr
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() =>
+                          setExpandedLeaseId((cur) => (cur === row.id ? null : row.id)),
+                        )}
+                        aria-expanded={visibleExpandedLeaseId === row.id}
+                      >
+                        <td className={PORTAL_TABLE_TD}>
+                          <p className="font-semibold text-foreground">{row.unit || "—"}</p>
+                          <p className="mt-0.5 text-sm text-muted">{row.residentName || "—"}</p>
+                        </td>
+                        <td className={PORTAL_TABLE_TD}>
+                          <p className="font-semibold text-foreground">{rentLabel ?? "—"}</p>
+                          <p className="text-xs text-muted">From application / listing</p>
+                        </td>
+                        <td className={PORTAL_TABLE_TD}>
+                          <StatusPill bucket={bucketToPillIndex(row.bucket)} />
                         </td>
                       </tr>
-                    ) : null}
-                  </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                      {visibleExpandedLeaseId === row.id ? (
+                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                          <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <LeasePipelineAdminDetail
+                              row={row}
+                              onSaved={() => setTick((t) => t + 1)}
+                              showToast={showToast}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </ManagerPortalPageShell>
   );
 }

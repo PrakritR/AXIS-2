@@ -11,6 +11,7 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_TD,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
   createPortalRowExpandClick,
@@ -337,6 +338,53 @@ export function ManagerPromotion() {
     showToast("Promotion deleted.");
   }
 
+  const renderRowDetail = (row: ManagerPromotionRow) => (
+    <>
+      <div>
+        <PromotionFlyerPreview promotion={row} embedded />
+      </div>
+      <PortalTableDetailActions>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => downloadPromotionFlyer(row)}
+          data-attr="promotion-flyer-download"
+        >
+          Download
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => openEdit(row)}
+          data-attr="promotion-edit"
+        >
+          Edit
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => regenerate(row)}
+          disabled={regeneratingId === row.id}
+          data-attr="promotion-regenerate"
+        >
+          {regeneratingId === row.id ? "Regenerating…" : "Regenerate"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => removePromotion(row.id)}
+          data-attr="promotion-delete"
+        >
+          Delete
+        </Button>
+      </PortalTableDetailActions>
+    </>
+  );
+
   return (
     <ManagerPortalPageShell
       title="Promotion"
@@ -372,88 +420,83 @@ export function ManagerPromotion() {
       {promotions.length === 0 ? (
         <PortalDataTableEmpty message="No promotions yet." icon="data" />
       ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[560px] border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={MANAGER_TABLE_TH}>Property / Listing</th>
-                  <th className={MANAGER_TABLE_TH}>Title / Headline</th>
-                  <th className={MANAGER_TABLE_TH}>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {promotions.map((row) => {
-                  const isOpen = expandedId === row.id;
-                  return (
-                    <Fragment key={row.id}>
-                      <tr
-                        className={`${PORTAL_TABLE_TR_EXPANDABLE} ${isOpen ? "bg-accent/30" : ""}`}
-                        onClick={createPortalRowExpandClick(() =>
-                          setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                        )}
-                        aria-expanded={isOpen}
-                        data-attr="promotion-row"
-                      >
-                        <td className={PORTAL_TABLE_TD}>{row.propertyLabel || "—"}</td>
-                        <td className={PORTAL_TABLE_TD}>{row.copy?.headline || row.title || "—"}</td>
-                        <td className={PORTAL_TABLE_TD}>{formatDate(row.createdAt)}</td>
-                      </tr>
-                      {isOpen ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                            <div>
-                              <PromotionFlyerPreview promotion={row} embedded />
-                            </div>
-                            <PortalTableDetailActions>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => downloadPromotionFlyer(row)}
-                                data-attr="promotion-flyer-download"
-                              >
-                                Download
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => openEdit(row)}
-                                data-attr="promotion-edit"
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => regenerate(row)}
-                                disabled={regeneratingId === row.id}
-                                data-attr="promotion-regenerate"
-                              >
-                                {regeneratingId === row.id ? "Regenerating…" : "Regenerate"}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => removePromotion(row.id)}
-                                data-attr="promotion-delete"
-                              >
-                                Delete
-                              </Button>
-                            </PortalTableDetailActions>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+        <>
+          <div className="space-y-2 lg:hidden">
+            {promotions.map((row) => {
+              const isOpen = expandedId === row.id;
+              return (
+                <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                    data-attr="promotion-row"
+                  >
+                    <p className="truncate font-semibold text-foreground">{row.propertyLabel || "—"}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {row.copy?.headline || row.title || "—"}
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] text-muted/90">
+                      Created {formatDate(row.createdAt)}
+                    </p>
+                  </button>
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                    >
+                      {isOpen ? "Less" : "Details"}
+                    </Button>
+                  </div>
+                  {isOpen ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
+                </div>
+              );
+            })}
           </div>
-        </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={MANAGER_TABLE_TH}>Property / Listing</th>
+                    <th className={MANAGER_TABLE_TH}>Title / Headline</th>
+                    <th className={MANAGER_TABLE_TH}>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {promotions.map((row) => {
+                    const isOpen = expandedId === row.id;
+                    return (
+                      <Fragment key={row.id}>
+                        <tr
+                          className={`${PORTAL_TABLE_TR_EXPANDABLE} ${isOpen ? "bg-accent/30" : ""}`}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                          )}
+                          aria-expanded={isOpen}
+                          data-attr="promotion-row"
+                        >
+                          <td className={PORTAL_TABLE_TD}>{row.propertyLabel || "—"}</td>
+                          <td className={PORTAL_TABLE_TD}>{row.copy?.headline || row.title || "—"}</td>
+                          <td className={PORTAL_TABLE_TD}>{formatDate(row.createdAt)}</td>
+                        </tr>
+                        {isOpen ? (
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                              {renderRowDetail(row)}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </ManagerPortalPageShell>
   );

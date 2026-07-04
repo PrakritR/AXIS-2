@@ -16,6 +16,7 @@ import {
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
@@ -345,73 +346,134 @@ export function ManagerDocumentsPanel({
             {report.rows.length === 0 ? (
               <PortalDataTableEmpty message="No 1099 candidates yet." icon="document" />
             ) : (
-              <div className={PORTAL_DATA_TABLE_WRAP}>
-                <div className={PORTAL_DATA_TABLE_SCROLL}>
-                  <table className="min-w-[640px] w-full border-collapse text-left text-sm">
-                    <thead>
-                      <tr className={PORTAL_TABLE_HEAD_ROW}>
-                        <th className={`${MANAGER_TABLE_TH} text-left`}>Vendor</th>
-                        <th className={`${MANAGER_TABLE_TH} text-left`}>Total paid</th>
-                        <th className={`${MANAGER_TABLE_TH} text-left`}>W-9 status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+              (() => {
+                const renderVendorDetail = (vendorId: string, vendorName: string) => (
+                  <>
+                    <PortalTableDetailActions>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={PORTAL_DETAIL_BTN_PRIMARY}
+                        onClick={() => {
+                          setTaxVendorId(vendorId);
+                          setTaxVendorName(vendorName);
+                        }}
+                      >
+                        Edit W-9
+                      </Button>
+                      <a
+                        href={`/api/reports/1099-nec/export?vendorId=${encodeURIComponent(vendorId)}&taxYear=${filters.taxYear}`}
+                        className={`inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium hover:bg-accent/40 ${PORTAL_DETAIL_BTN}`}
+                      >
+                        Download 1099
+                      </a>
+                    </PortalTableDetailActions>
+                    <p className="mt-3 text-xs text-muted">
+                      Tag expenses with a vendor to include them in 1099 totals. Complete your payer tax profile under
+                      Plan if PDF download is blocked.
+                    </p>
+                  </>
+                );
+
+                return (
+                  <>
+                    <div className="space-y-2 lg:hidden">
                       {report.rows.map((row) => {
                         const vendorId = String(row.vendorId ?? "");
+                        const vendorName = String(row.vendorName ?? "");
                         const w9Status = String(row.w9Status ?? "");
+                        const expanded = expanded1099Id === vendorId;
                         return (
-                          <Fragment key={vendorId}>
-                            <tr
-                              className={PORTAL_TABLE_TR_EXPANDABLE}
-                              onClick={createPortalRowExpandClick(() =>
-                                setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId)),
-                              )}
-                              aria-expanded={expanded1099Id === vendorId}
+                          <div key={vendorId} className={PORTAL_MOBILE_CARD_CLASS}>
+                            <button
+                              type="button"
+                              className="w-full text-left"
+                              onClick={() => setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId))}
                             >
-                              <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{String(row.vendorName)}</td>
-                              <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{String(row.totalPaid)}</td>
-                              <td className={PORTAL_TABLE_TD}>
-                                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${w9StatusTone(w9Status)}`}>
+                              <div className="flex items-start justify-between gap-2.5">
+                                <div className="min-w-0">
+                                  <p className="truncate font-semibold text-foreground">{vendorName}</p>
+                                  <p className="mt-0.5 truncate text-xs text-muted tabular-nums">
+                                    {String(row.totalPaid)}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${w9StatusTone(w9Status)}`}
+                                >
                                   {w9Status || "Unknown"}
                                 </span>
-                              </td>
-                            </tr>
-                            {expanded1099Id === vendorId ? (
-                              <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                                  <PortalTableDetailActions>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={PORTAL_DETAIL_BTN_PRIMARY}
-                                      onClick={() => {
-                                        setTaxVendorId(vendorId);
-                                        setTaxVendorName(String(row.vendorName ?? ""));
-                                      }}
-                                    >
-                                      Edit W-9
-                                    </Button>
-                                    <a
-                                      href={`/api/reports/1099-nec/export?vendorId=${encodeURIComponent(vendorId)}&taxYear=${filters.taxYear}`}
-                                      className={`inline-flex h-8 items-center rounded-lg border border-border px-3 text-xs font-medium hover:bg-accent/40 ${PORTAL_DETAIL_BTN}`}
-                                    >
-                                      Download 1099
-                                    </a>
-                                  </PortalTableDetailActions>
-                                  <p className="mt-3 text-xs text-muted">
-                                    Tag expenses with a vendor to include them in 1099 totals. Complete your payer tax
-                                    profile under Plan if PDF download is blocked.
-                                  </p>
-                                </td>
-                              </tr>
+                              </div>
+                            </button>
+                            <div className="mt-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={PORTAL_DETAIL_BTN}
+                                onClick={() => setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId))}
+                              >
+                                {expanded ? "Less" : "Details"}
+                              </Button>
+                            </div>
+                            {expanded ? (
+                              <div className="mt-3 border-t border-border pt-3">
+                                {renderVendorDetail(vendorId, vendorName)}
+                              </div>
                             ) : null}
-                          </Fragment>
+                          </div>
                         );
                       })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                    </div>
+                    <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+                      <div className={PORTAL_DATA_TABLE_SCROLL}>
+                        <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+                          <thead>
+                            <tr className={PORTAL_TABLE_HEAD_ROW}>
+                              <th className={`${MANAGER_TABLE_TH} text-left`}>Vendor</th>
+                              <th className={`${MANAGER_TABLE_TH} text-left`}>Total paid</th>
+                              <th className={`${MANAGER_TABLE_TH} text-left`}>W-9 status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {report.rows.map((row) => {
+                              const vendorId = String(row.vendorId ?? "");
+                              const vendorName = String(row.vendorName ?? "");
+                              const w9Status = String(row.w9Status ?? "");
+                              return (
+                                <Fragment key={vendorId}>
+                                  <tr
+                                    className={PORTAL_TABLE_TR_EXPANDABLE}
+                                    onClick={createPortalRowExpandClick(() =>
+                                      setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId)),
+                                    )}
+                                    aria-expanded={expanded1099Id === vendorId}
+                                  >
+                                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{vendorName}</td>
+                                    <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{String(row.totalPaid)}</td>
+                                    <td className={PORTAL_TABLE_TD}>
+                                      <span
+                                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${w9StatusTone(w9Status)}`}
+                                      >
+                                        {w9Status || "Unknown"}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                  {expanded1099Id === vendorId ? (
+                                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                                      <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                                        {renderVendorDetail(vendorId, vendorName)}
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                </Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()
             )}
           </div>
         ) : tabId === "occupancy" && generated && occupancyReport ? (

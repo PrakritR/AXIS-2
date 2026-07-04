@@ -14,9 +14,9 @@ import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import { shouldOpenNativeSectionsSheet } from "@/lib/native/open-portal-sections-sheet";
-import { orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import { splitNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
 import { observeNativeBottomNavInset } from "@/lib/native/sync-portal-bottom-nav-inset";
-import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
+import { isCrossPortalNavigation, portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
 import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { PORTAL_MOBILE_CHROME_CLASS, PORTAL_NATIVE_BOTTOM_NAV_CLASS } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
@@ -160,14 +160,17 @@ export function PortalSidebar({
     [showResidentTierLocks, showManagerTierLocks, subscriptionTier],
   );
 
-  const nativeBottomNavAllItems = useMemo(
-    () => (showNativeChrome ? orderNativeBottomNavItems(navItems, definition.kind) : []),
+  const nativeBottomNavSplit = useMemo(
+    () =>
+      showNativeChrome
+        ? splitNativeBottomNavItems(navItems, definition.kind)
+        : { primary: [], overflow: [] },
     [definition.kind, navItems, showNativeChrome],
   );
 
   const nativeBottomNavItems = useMemo(
-    () => nativeBottomNavAllItems.filter((item) => !isSectionLocked(item.section)),
-    [nativeBottomNavAllItems, isSectionLocked],
+    () => nativeBottomNavSplit.primary.filter((item) => !isSectionLocked(item.section)),
+    [nativeBottomNavSplit, isSectionLocked],
   );
   const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
   const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);
@@ -195,17 +198,18 @@ export function PortalSidebar({
     activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
   }, [activeSection, navItems, showNativeChrome]);
 
-  const moreSheetItems: PortalMoreNavItem[] = useMemo(
-    () =>
-      nativeBottomNavAllItems.map((item) => ({
-        section: item.section,
-        label: item.label,
-        href: item.href,
-        locked: isSectionLocked(item.section),
-        count: navCounts[item.section] ?? 0,
-      })),
-    [nativeBottomNavAllItems, navCounts, isSectionLocked],
-  );
+  // Locked primary-bar sections (e.g. free-tier gating) never render in the fixed
+  // bar — they fall through to the More sheet alongside everything in `overflow`.
+  const moreSheetItems: PortalMoreNavItem[] = useMemo(() => {
+    const lockedPrimary = nativeBottomNavSplit.primary.filter((item) => isSectionLocked(item.section));
+    return [...lockedPrimary, ...nativeBottomNavSplit.overflow].map((item) => ({
+      section: item.section,
+      label: item.label,
+      href: item.href,
+      locked: isSectionLocked(item.section),
+      count: navCounts[item.section] ?? 0,
+    }));
+  }, [nativeBottomNavSplit, navCounts, isSectionLocked]);
 
   const lockAriaLabel = (label: string, locked: boolean) =>
     locked
@@ -229,11 +233,9 @@ export function PortalSidebar({
           href={s.href}
           data-native-nav-section={s.section}
           prefetch={portalMobileLinkPrefetchEnabled()}
-          onClick={
-            showNativeChrome
-              ? portalNavClick(router, s.href, { preferFullNavigation: true })
-              : portalNavClick(router, s.href)
-          }
+          onClick={portalNavClick(router, s.href, {
+            preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
+          })}
           className={`flex w-[2.75rem] shrink-0 snap-center flex-col items-center justify-end px-1 pt-0 pb-0 transition sm:w-[2.85rem] ${
             active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
           }`}

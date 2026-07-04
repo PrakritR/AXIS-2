@@ -45,6 +45,7 @@ import {
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_DETAIL_BTN_PRIMARY,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -198,6 +199,87 @@ export function ManagerAllServicesPanel({
     [reqCounts],
   );
 
+  const renderRequestDetail = (req: ServiceRequest) => {
+    const needsReturn = hasDeposit(req.deposit);
+    return (
+      <div className="space-y-3">
+        {req.notes ? <p className="text-xs italic text-muted">&ldquo;{req.notes}&rdquo;</p> : null}
+
+        {(req.status === "approved" || req.status === "returned") ? (
+          <div className="rounded-xl bg-accent/40 p-3 ring-1 ring-border">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
+            <div className="space-y-2">
+              {req.price ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-foreground/80">Service fee · {req.price}</span>
+                  {req.servicePaid
+                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
+                    : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestServicePaid(req.id); setDataTick((t) => t + 1); showToast("Service charge marked paid."); }}>Mark paid</Button>
+                  }
+                </div>
+              ) : null}
+              {needsReturn ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-foreground/80">Deposit · {req.deposit}</span>
+                  {req.depositPaid
+                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
+                    : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestDepositPaid(req.id); setDataTick((t) => t + 1); showToast("Deposit marked refunded."); }}>Mark refunded</Button>
+                  }
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        <PortalTableDetailActions>
+          {req.status === "pending" ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN_PRIMARY}
+                onClick={() => {
+                  approveServiceRequest(req.id);
+                  setDataTick((t) => t + 1);
+                  setReqBucket("scheduled");
+                  showToast(`Approved "${req.offerName}".`);
+                }}
+              >
+                Approve
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => {
+                  denyServiceRequest(req.id);
+                  setDataTick((t) => t + 1);
+                  showToast("Request denied.");
+                }}
+              >
+                Deny
+              </Button>
+            </>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            onClick={() => {
+              if (!window.confirm("Delete this request? This cannot be undone.")) return;
+              deleteServiceRequest(req.id);
+              setDataTick((t) => t + 1);
+              setExpandedId(null);
+              showToast("Request deleted.");
+            }}
+          >
+            Delete request
+          </Button>
+        </PortalTableDetailActions>
+      </div>
+    );
+  };
+
   return (
     <ManagerPortalPageShell
       title="Services"
@@ -288,7 +370,49 @@ export function ManagerAllServicesPanel({
                 icon="service"
               />
             ) : (
-          <div className={PORTAL_DATA_TABLE_WRAP}>
+          <>
+          <div className="space-y-2 lg:hidden">
+            {bucketedRequests.map((req) => {
+              const id = `request-${req.id}`;
+              const isExpanded = expandedId === id;
+              const needsReturn = hasDeposit(req.deposit);
+              const propertyLabel =
+                req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
+                  ? propertyOptions.find((p) => p.id === req.propertyId)!.label
+                  : "—";
+              const summary =
+                [req.price, needsReturn ? `Deposit ${req.deposit}` : null].filter(Boolean).join(" · ") || "—";
+              return (
+                <div key={`req-mobile-${req.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setExpandedId(isExpanded ? null : id)}
+                  >
+                    <p className="truncate font-semibold text-foreground">{req.offerName}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {[req.residentName || req.residentEmail, propertyLabel].filter(Boolean).join(" · ")}
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] text-muted/90">{summary}</p>
+                  </button>
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      onClick={() => setExpandedId(isExpanded ? null : id)}
+                    >
+                      {isExpanded ? "Less" : "Details"}
+                    </Button>
+                  </div>
+                  {isExpanded ? (
+                    <div className="mt-3 border-t border-border pt-3">{renderRequestDetail(req)}</div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
               <table className="min-w-[920px] w-full border-collapse text-left text-sm">
                 <thead>
@@ -327,81 +451,7 @@ export function ManagerAllServicesPanel({
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
                         <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                          <div className="space-y-3">
-                            {req.notes ? <p className="text-xs italic text-muted">&ldquo;{req.notes}&rdquo;</p> : null}
-
-                        {(req.status === "approved" || req.status === "returned") ? (
-                          <div className="rounded-xl bg-accent/40 p-3 ring-1 ring-border">
-                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
-                            <div className="space-y-2">
-                              {req.price ? (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-foreground/80">Service fee · {req.price}</span>
-                                  {req.servicePaid
-                                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
-                                    : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestServicePaid(req.id); setDataTick((t) => t + 1); showToast("Service charge marked paid."); }}>Mark paid</Button>
-                                  }
-                                </div>
-                              ) : null}
-                              {needsReturn ? (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-foreground/80">Deposit · {req.deposit}</span>
-                                  {req.depositPaid
-                                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
-                                    : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestDepositPaid(req.id); setDataTick((t) => t + 1); showToast("Deposit marked refunded."); }}>Mark refunded</Button>
-                                  }
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <PortalTableDetailActions>
-                          {req.status === "pending" ? (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN_PRIMARY}
-                                onClick={() => {
-                                  approveServiceRequest(req.id);
-                                  setDataTick((t) => t + 1);
-                                  setReqBucket("scheduled");
-                                  showToast(`Approved "${req.offerName}".`);
-                                }}
-                              >
-                                Approve
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => {
-                                  denyServiceRequest(req.id);
-                                  setDataTick((t) => t + 1);
-                                  showToast("Request denied.");
-                                }}
-                              >
-                                Deny
-                              </Button>
-                            </>
-                          ) : null}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                            onClick={() => {
-                              if (!window.confirm("Delete this request? This cannot be undone.")) return;
-                              deleteServiceRequest(req.id);
-                              setDataTick((t) => t + 1);
-                              setExpandedId(null);
-                              showToast("Request deleted.");
-                            }}
-                          >
-                            Delete request
-                          </Button>
-                        </PortalTableDetailActions>
-                          </div>
+                          {renderRequestDetail(req)}
                         </td>
                       </tr>
                     ) : null}
@@ -412,6 +462,7 @@ export function ManagerAllServicesPanel({
               </table>
             </div>
           </div>
+          </>
             )}
           </>
         )}

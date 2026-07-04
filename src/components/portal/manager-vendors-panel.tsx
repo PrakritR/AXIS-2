@@ -19,6 +19,8 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
+  PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -169,6 +171,77 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     showToast("Vendor removed.");
   }
 
+  const renderVendorDetail = (row: ManagerVendorRow) => {
+    const editing = editingId === row.id;
+    const own = isOwnVendor(row);
+    const sharedByOther = !own;
+    return editing ? (
+      <>
+        <VendorForm draft={draft} setDraft={setDraft} />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" onClick={() => saveVendor(row.id)}>Save changes</Button>
+          <Button type="button" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+        </div>
+      </>
+    ) : (
+      <div className="space-y-3">
+        {sharedByOther ? (
+          <p className="text-sm text-muted">
+            Shared by another manager on Axis. You can view contact details but can&apos;t edit or remove this vendor.
+          </p>
+        ) : null}
+        {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          {row.phone ? (
+            <a href={`tel:${row.phone}`} className="text-sm font-medium text-primary hover:underline">
+              Call {row.phone}
+            </a>
+          ) : null}
+          {row.email ? (
+            <a href={`mailto:${row.email}`} className="text-sm font-medium text-primary hover:underline">
+              Email {row.email}
+            </a>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {own ? (
+            <>
+              <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
+                Edit
+              </Button>
+              <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
+                Remove
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  const renderVendorStatusBadges = (row: ManagerVendorRow) => (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span
+        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
+          row.active !== false
+            ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+            : "bg-accent/30 text-muted ring-border"
+        }`}
+      >
+        {row.active !== false ? "Active" : "Inactive"}
+      </span>
+      {!isOwnVendor(row) ? (
+        <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+          Shared
+        </span>
+      ) : row.sharedWithManagers ? (
+        <span className="inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
+          Shared with managers
+        </span>
+      ) : null}
+    </div>
+  );
+
   const body = (
     <>
       {showAdd ? (
@@ -187,7 +260,46 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
       {vendors.length === 0 ? (
         <PortalDataTableEmpty message="No vendors yet." icon="vendor" />
       ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
+        <>
+        <div className="space-y-2 lg:hidden">
+          {vendors.map((row) => {
+            const open = expandedId === row.id;
+            return (
+              <div key={`vendor-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => setExpandedId(open ? null : row.id)}
+                >
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{row.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">{row.trade || "—"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">
+                        {[row.phone, row.email].filter(Boolean).join(" · ") || "—"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end">{renderVendorStatusBadges(row)}</div>
+                  </div>
+                </button>
+                <div className="mt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={PORTAL_DETAIL_BTN}
+                    onClick={() => setExpandedId(open ? null : row.id)}
+                  >
+                    {open ? "Less" : "Details"}
+                  </Button>
+                </div>
+                {open ? (
+                  <div className="mt-3 border-t border-border pt-3">{renderVendorDetail(row)}</div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
             <table className="w-full min-w-[640px] border-collapse text-left text-sm">
               <thead>
@@ -202,9 +314,6 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
               <tbody>
                 {vendors.map((row) => {
                   const open = expandedId === row.id;
-                  const editing = editingId === row.id;
-                  const own = isOwnVendor(row);
-                  const sharedByOther = !own;
                   return (
                     <Fragment key={row.id}>
                       <tr
@@ -216,74 +325,12 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
                         <td className={PORTAL_TABLE_TD}>{row.trade || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
-                                row.active !== false
-                                  ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-                                  : "bg-accent/30 text-muted ring-border"
-                              }`}
-                            >
-                              {row.active !== false ? "Active" : "Inactive"}
-                            </span>
-                            {sharedByOther ? (
-                              <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                                Shared
-                              </span>
-                            ) : row.sharedWithManagers ? (
-                              <span className="inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
-                                Shared with managers
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
+                        <td className={PORTAL_TABLE_TD}>{renderVendorStatusBadges(row)}</td>
                       </tr>
                       {open ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
                           <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                            {editing ? (
-                              <>
-                                <VendorForm draft={draft} setDraft={setDraft} />
-                                <div className="mt-4 flex flex-wrap gap-2">
-                                  <Button type="button" onClick={() => saveVendor(row.id)}>Save changes</Button>
-                                  <Button type="button" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
-                                </div>
-                              </>
-                            ) : (
-                              <div className="space-y-3">
-                                {sharedByOther ? (
-                                  <p className="text-sm text-muted">
-                                    Shared by another manager on Axis. You can view contact details but can&apos;t edit or remove this vendor.
-                                  </p>
-                                ) : null}
-                                {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
-                                <div className="flex flex-wrap gap-2">
-                                  {row.phone ? (
-                                    <a href={`tel:${row.phone}`} className="text-sm font-medium text-primary hover:underline">
-                                      Call {row.phone}
-                                    </a>
-                                  ) : null}
-                                  {row.email ? (
-                                    <a href={`mailto:${row.email}`} className="text-sm font-medium text-primary hover:underline">
-                                      Email {row.email}
-                                    </a>
-                                  ) : null}
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {own ? (
-                                    <>
-                                      <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
-                                        Edit
-                                      </Button>
-                                      <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
-                                        Remove
-                                      </Button>
-                                    </>
-                                  ) : null}
-                                </div>
-                              </div>
-                            )}
+                            {renderVendorDetail(row)}
                           </td>
                         </tr>
                       ) : null}
@@ -294,6 +341,7 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
             </table>
           </div>
         </div>
+        </>
       )}
     </>
   );

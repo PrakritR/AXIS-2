@@ -16,6 +16,8 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  PORTAL_MOBILE_CARD_CLASS,
+  PORTAL_DETAIL_BTN,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -546,73 +548,121 @@ export function ManagerHousePropertiesPanel({
     return <p className="text-sm text-muted">Sign in to view and manage your properties.</p>;
   }
 
+  const renderRowDetail = (sourceBucket: AdminPropertyBucketIndex, row: AdminPropertyRow, rowKey: string) => (
+    <ManagerPropertyInlineDetails
+      key={rowKey}
+      bucket={sourceBucket}
+      row={row}
+      onUpdated={() => setTick((t) => t + 1)}
+      showToast={showToast}
+      managerUserId={managerUserId}
+      onSendToProspect={onSendToProspect}
+    />
+  );
+
   return (
     <>
       {rows.length === 0 ? (
         <PortalDataTableEmpty message={MANAGER_PROPERTY_EMPTY_COPY[activeStage]} icon="default" />
       ) : (
-        <div className={`${PORTAL_DATA_TABLE_WRAP}`}>
-          <div className="overflow-x-auto">
-            <table className="min-w-[640px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ sourceBucket, row }) => {
-                  const rowKey = row.adminRefId + (row.listingId ?? "");
-                  const expanded = expandedRowKey === rowKey;
+        <>
+          <div className="space-y-2 lg:hidden">
+            {rows.map(({ sourceBucket, row }) => {
+              const rowKey = row.adminRefId + (row.listingId ?? "");
+              const expanded = expandedRowKey === rowKey;
 
-                  return (
-                    <Fragment key={rowKey}>
-                      <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() =>
-                          setExpandedRowKey(expanded ? null : rowKey),
-                        )}
-                        aria-expanded={expanded}
-                      >
-                        <td className={PORTAL_TABLE_TD}>
-                          <p className="font-medium text-foreground">
-                            {row.buildingName}
-                          </p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                            {row.address}
-                            {row.zip ? `, ${row.zip}` : ""}
-                          </p>
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <p className="text-xs text-muted">
-                            <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
-                            ba · {row.neighborhood}
-                          </p>
-                          {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
-                        </td>
-                      </tr>
-                      {expanded ? (
-                        <tr key={`${rowKey}-details`} className="border-b border-border">
-                          <td colSpan={2} className="bg-accent/30/40 px-4 py-4">
-                            <ManagerPropertyInlineDetails
-                              key={rowKey}
-                              bucket={sourceBucket}
-                              row={row}
-                              onUpdated={() => setTick((t) => t + 1)}
-                              showToast={showToast}
-                              managerUserId={managerUserId}
-                              onSendToProspect={onSendToProspect}
-                            />
+              return (
+                <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                  >
+                    <p className="font-medium text-foreground">{row.buildingName}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                      {row.address}
+                      {row.zip ? `, ${row.zip}` : ""}
+                    </p>
+                    <p className="mt-1.5 text-xs text-muted">
+                      <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
+                      ba · {row.neighborhood}
+                    </p>
+                    {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
+                  </button>
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                    >
+                      {expanded ? "Less" : "Details"}
+                    </Button>
+                  </div>
+                  {expanded ? (
+                    <div className="mt-3 border-t border-border pt-3">
+                      {renderRowDetail(sourceBucket, row, rowKey)}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className="overflow-x-auto">
+              <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(({ sourceBucket, row }) => {
+                    const rowKey = row.adminRefId + (row.listingId ?? "");
+                    const expanded = expandedRowKey === rowKey;
+
+                    return (
+                      <Fragment key={rowKey}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedRowKey(expanded ? null : rowKey),
+                          )}
+                          aria-expanded={expanded}
+                        >
+                          <td className={PORTAL_TABLE_TD}>
+                            <p className="font-medium text-foreground">
+                              {row.buildingName}
+                            </p>
+                            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                              {row.address}
+                              {row.zip ? `, ${row.zip}` : ""}
+                            </p>
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <p className="text-xs text-muted">
+                              <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
+                              ba · {row.neighborhood}
+                            </p>
+                            {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
                           </td>
                         </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {expanded ? (
+                          <tr key={`${rowKey}-details`} className="border-b border-border">
+                            <td colSpan={2} className="bg-accent/30/40 px-4 py-4">
+                              {renderRowDetail(sourceBucket, row, rowKey)}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </>
   );

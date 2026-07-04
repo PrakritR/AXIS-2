@@ -11,6 +11,7 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -473,6 +474,260 @@ export function ManagerLeasesPipelinePanel({
     } else showToast(res.error ?? "Upload failed.");
   };
 
+  const renderLeaseRowDetail = (row: LeasePipelineRow) => (
+    <>
+      {row.managerSignature || row.residentSignature ? (
+        <div className="mt-2 grid gap-2 rounded-xl border px-3 py-2.5 text-xs portal-banner-success sm:grid-cols-2">
+          <div>
+            <span className="font-semibold">Manager signature</span>
+            {row.managerSignature ? (
+              <p>
+                <span
+                  className="text-sm text-foreground"
+                  style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
+                >
+                  {row.managerSignature.name}
+                </span>
+                <span className="ml-2 text-emerald-700">{formatPacificDateTime(row.managerSignature.signedAtIso)}</span>
+              </p>
+            ) : (
+              <p className="text-amber-700">Pending</p>
+            )}
+          </div>
+          <div>
+            <span className="font-semibold">Resident signature</span>
+            {row.residentSignature ? (
+              <p>
+                <span
+                  className="text-sm text-foreground"
+                  style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
+                >
+                  {row.residentSignature.name}
+                </span>
+                <span className="ml-2 text-emerald-700">{formatPacificDateTime(row.residentSignature.signedAtIso)}</span>
+              </p>
+            ) : (
+              <p className="text-amber-700">Pending</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <PortalTableDetailActions placement="top">
+        {row.status === "Admin Review" ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => onDownload(row)}
+            >
+              Download lease
+            </Button>
+            {leaseAllowsManagerDocumentEdits(row) ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => {
+                setPendingRowId(row.id);
+                uploadRef.current?.click();
+              }}
+              disabled={pendingRowId === row.id}
+            >
+              Upload corrected lease
+            </Button>
+            ) : null}
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onMoveToManagerReview(row)}>
+              Send back to manager
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => setReportIssueRow(row)}
+            >
+              Report issue
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+              onClick={() => onDeleteLease(row)}
+            >
+              Delete lease
+            </Button>
+          </>
+        ) : (
+          <>
+            {!hasLeaseDocument(row) && leaseAllowsManagerDocumentEdits(row) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                disabled={generatingRowId === row.id || !generationGate(row).ok}
+                title={generationGateTitle(row)}
+                onClick={() => runGenerateLease(row)}
+              >
+                {generatingRowId === row.id ? "Generating..." : "Generate lease"}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => onDownload(row)}
+            >
+              Download lease
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => setReportIssueRow(row)}
+            >
+              Report issue
+            </Button>
+            {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => setAmendLeaseRow(row)}
+              >
+                Renew or extend lease
+              </Button>
+            ) : null}
+            {!row.managerSignature && residentHasSignedLease(row) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => onManagerSign(row)}
+                disabled={!row.generatedHtml && !row.managerUploadedPdf?.dataUrl}
+              >
+                Sign as manager
+              </Button>
+            ) : null}
+            {leaseAllowsManagerDocumentEdits(row) ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => {
+                setPendingRowId(row.id);
+                uploadRef.current?.click();
+              }}
+              disabled={pendingRowId === row.id}
+            >
+              Upload replacement
+            </Button>
+            ) : null}
+
+            {row.status === "Manager Review" || row.status === "Draft" ? (
+              <>
+                {!residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
+                  <div className="flex flex-wrap items-start gap-2">
+                    <p className="max-w-xl text-xs leading-relaxed text-amber-800">
+                      This lease cannot be sent yet. The resident must first create their Axis resident account using their
+                      application ID and matching email.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
+                      disabled={emailBusyForRow === row.id}
+                      onClick={() => void sendAccountEmail(row)}
+                    >
+                      {emailBusyForRow === row.id ? "Sending…" : "Email account setup"}
+                    </Button>
+                  </div>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => openSendLeasePreview(row)}
+                  disabled={
+                    sendingToResidentRowId === row.id ||
+                    !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
+                    (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
+                  }
+                >
+                  {sendingToResidentRowId === row.id ? "Sending…" : "Send to resident"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => onRequestAdminEdits(row)}
+                >
+                  Send to admin
+                </Button>
+              </>
+            ) : null}
+            {row.status === "Manager Signature Pending" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => onManagerSign(row)}
+                disabled={!residentHasSignedLease(row) || (!getLeaseDocumentHtml(row) && !row.managerUploadedPdf?.dataUrl)}
+              >
+                Manager sign lease
+              </Button>
+            ) : null}
+            {row.status === "Resident Signature Pending" ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  disabled={reminderBusyForRow === row.id}
+                  onClick={() => openLeaseSigningReminderPreview(row)}
+                >
+                  {reminderBusyForRow === row.id ? "Sending…" : "Send signing reminder"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => onMoveToManagerReview(row)}
+                >
+                  Move to manager review
+                </Button>
+              </>
+            ) : null}
+            {row.status !== "Fully Signed" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+              onClick={() => onDeleteLease(row)}
+            >
+              Delete lease
+            </Button>
+            ) : null}
+          </>
+        )}
+      </PortalTableDetailActions>
+
+      {row.status === "Admin Review" ? (
+        <>
+          <LeaseDocumentPreview
+            row={row}
+            emptyHint="No lease document yet — upload a corrected lease."
+          />
+          <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted">
+            Admin review is paused for resident actions. Correct the single lease document here, then send it back to the manager.
+          </p>
+        </>
+      ) : (
+        <LeaseDocumentPreview row={row} />
+      )}
+    </>
+  );
+
   if (bucketRows.length === 0) {
     return (
       <PortalDataTableEmpty
@@ -483,7 +738,7 @@ export function ManagerLeasesPipelinePanel({
   }
 
   return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
+    <>
       {signingRow ? (
         <LeaseSigningModal
           row={signingRow}
@@ -564,291 +819,66 @@ export function ManagerLeasesPipelinePanel({
           if (id) void onPickUpload(id, e.target.files);
         }}
       />
-      <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-          <thead>
-            <tr className={PORTAL_TABLE_HEAD_ROW}>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Unit / home</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Stage</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bucketRows.map((row) => (
-              <Fragment key={row.id}>
-                {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
-                <tr
-                  className={PORTAL_TABLE_TR_EXPANDABLE}
-                  onClick={createPortalRowExpandClick(() =>
-                    setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                  )}
-                  aria-expanded={expandedId === row.id}
-                >
-                  <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.residentName}</td>
-                  <td className={PORTAL_TABLE_TD}>{row.unit}</td>
-                  <td className={PORTAL_TABLE_TD}>{row.status ?? row.stageLabel}</td>
-                  <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
-                </tr>
-                {expandedId === row.id ? (
-                  <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                      {row.managerSignature || row.residentSignature ? (
-                        <div className="mt-2 grid gap-2 rounded-xl border px-3 py-2.5 text-xs portal-banner-success sm:grid-cols-2">
-                          <div>
-                            <span className="font-semibold">Manager signature</span>
-                            {row.managerSignature ? (
-                              <p>
-                                <span
-                                  className="text-sm text-foreground"
-                                  style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
-                                >
-                                  {row.managerSignature.name}
-                                </span>
-                                <span className="ml-2 text-emerald-700">{formatPacificDateTime(row.managerSignature.signedAtIso)}</span>
-                              </p>
-                            ) : (
-                              <p className="text-amber-700">Pending</p>
-                            )}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Resident signature</span>
-                            {row.residentSignature ? (
-                              <p>
-                                <span
-                                  className="text-sm text-foreground"
-                                  style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
-                                >
-                                  {row.residentSignature.name}
-                                </span>
-                                <span className="ml-2 text-emerald-700">{formatPacificDateTime(row.residentSignature.signedAtIso)}</span>
-                              </p>
-                            ) : (
-                              <p className="text-amber-700">Pending</p>
-                            )}
-                          </div>
-                        </div>
-                      ) : null}
+      <div className="space-y-2 lg:hidden">
+        {bucketRows.map((row) => (
+          <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+            <button
+              type="button"
+              className="w-full text-left"
+              onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+            >
+              <p className="truncate font-semibold text-foreground">{row.residentName}</p>
+              <p className="mt-0.5 truncate text-xs text-muted">
+                {row.unit} · {row.status ?? row.stageLabel}
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-muted/90">Updated {row.updated}</p>
+            </button>
+            {expandedId === row.id ? (
+              <div className="mt-3 border-t border-border pt-3">{renderLeaseRowDetail(row)}</div>
+            ) : null}
+          </div>
+        ))}
+      </div>
 
-                      <PortalTableDetailActions placement="top">
-                        {row.status === "Admin Review" ? (
-                          <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => onDownload(row)}
-                            >
-                              Download lease
-                            </Button>
-                            {leaseAllowsManagerDocumentEdits(row) ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => {
-                                setPendingRowId(row.id);
-                                uploadRef.current?.click();
-                              }}
-                              disabled={pendingRowId === row.id}
-                            >
-                              Upload corrected lease
-                            </Button>
-                            ) : null}
-                            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onMoveToManagerReview(row)}>
-                              Send back to manager
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => setReportIssueRow(row)}
-                            >
-                              Report issue
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-                              onClick={() => onDeleteLease(row)}
-                            >
-                              Delete lease
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            {!hasLeaseDocument(row) && leaseAllowsManagerDocumentEdits(row) ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                disabled={generatingRowId === row.id || !generationGate(row).ok}
-                                title={generationGateTitle(row)}
-                                onClick={() => runGenerateLease(row)}
-                              >
-                                {generatingRowId === row.id ? "Generating..." : "Generate lease"}
-                              </Button>
-                            ) : null}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => onDownload(row)}
-                            >
-                              Download lease
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => setReportIssueRow(row)}
-                            >
-                              Report issue
-                            </Button>
-                            {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => setAmendLeaseRow(row)}
-                              >
-                                Renew or extend lease
-                              </Button>
-                            ) : null}
-                            {!row.managerSignature && residentHasSignedLease(row) ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => onManagerSign(row)}
-                                disabled={!row.generatedHtml && !row.managerUploadedPdf?.dataUrl}
-                              >
-                                Sign as manager
-                              </Button>
-                            ) : null}
-                            {leaseAllowsManagerDocumentEdits(row) ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={PORTAL_DETAIL_BTN}
-                              onClick={() => {
-                                setPendingRowId(row.id);
-                                uploadRef.current?.click();
-                              }}
-                              disabled={pendingRowId === row.id}
-                            >
-                              Upload replacement
-                            </Button>
-                            ) : null}
-
-                            {row.status === "Manager Review" || row.status === "Draft" ? (
-                              <>
-                                {!residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
-                                  <div className="flex flex-wrap items-start gap-2">
-                                    <p className="max-w-xl text-xs leading-relaxed text-amber-800">
-                                      This lease cannot be sent yet. The resident must first create their Axis resident account using their
-                                      application ID and matching email.
-                                    </p>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
-                                      disabled={emailBusyForRow === row.id}
-                                      onClick={() => void sendAccountEmail(row)}
-                                    >
-                                      {emailBusyForRow === row.id ? "Sending…" : "Email account setup"}
-                                    </Button>
-                                  </div>
-                                ) : null}
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={PORTAL_DETAIL_BTN}
-                                  onClick={() => openSendLeasePreview(row)}
-                                  disabled={
-                                    sendingToResidentRowId === row.id ||
-                                    !residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ||
-                                    (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl)
-                                  }
-                                >
-                                  {sendingToResidentRowId === row.id ? "Sending…" : "Send to resident"}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={PORTAL_DETAIL_BTN}
-                                  onClick={() => onRequestAdminEdits(row)}
-                                >
-                                  Send to admin
-                                </Button>
-                              </>
-                            ) : null}
-                            {row.status === "Manager Signature Pending" ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => onManagerSign(row)}
-                                disabled={!residentHasSignedLease(row) || (!getLeaseDocumentHtml(row) && !row.managerUploadedPdf?.dataUrl)}
-                              >
-                                Manager sign lease
-                              </Button>
-                            ) : null}
-                            {row.status === "Resident Signature Pending" ? (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={PORTAL_DETAIL_BTN}
-                                  disabled={reminderBusyForRow === row.id}
-                                  onClick={() => openLeaseSigningReminderPreview(row)}
-                                >
-                                  {reminderBusyForRow === row.id ? "Sending…" : "Send signing reminder"}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={PORTAL_DETAIL_BTN}
-                                  onClick={() => onMoveToManagerReview(row)}
-                                >
-                                  Move to manager review
-                                </Button>
-                              </>
-                            ) : null}
-                            {row.status !== "Fully Signed" ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-                              onClick={() => onDeleteLease(row)}
-                            >
-                              Delete lease
-                            </Button>
-                            ) : null}
-                          </>
-                        )}
-                      </PortalTableDetailActions>
-
-                      {row.status === "Admin Review" ? (
-                        <>
-                          <LeaseDocumentPreview
-                            row={row}
-                            emptyHint="No lease document yet — upload a corrected lease."
-                          />
-                          <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted">
-                            Admin review is paused for resident actions. Correct the single lease document here, then send it back to the manager.
-                          </p>
-                        </>
-                      ) : (
-                        <LeaseDocumentPreview row={row} />
-                      )}
-                    </td>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Unit / home</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Stage</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bucketRows.map((row) => (
+                <Fragment key={row.id}>
+                  {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
+                  <tr
+                    className={PORTAL_TABLE_TR_EXPANDABLE}
+                    onClick={createPortalRowExpandClick(() =>
+                      setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                    )}
+                    aria-expanded={expandedId === row.id}
+                  >
+                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.residentName}</td>
+                    <td className={PORTAL_TABLE_TD}>{row.unit}</td>
+                    <td className={PORTAL_TABLE_TD}>{row.status ?? row.stageLabel}</td>
+                    <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
                   </tr>
-                ) : null}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+                  {expandedId === row.id ? (
+                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                        {renderLeaseRowDetail(row)}
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {amendLeaseRow ? (
@@ -863,6 +893,6 @@ export function ManagerLeasesPipelinePanel({
           onSuccess={() => void handleAmendLeaseSuccess()}
         />
       ) : null}
-    </div>
+    </>
   );
 }

@@ -26,6 +26,7 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  PortalMobileSummaryCard,
   PortalTableDetailActions,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -1018,7 +1019,58 @@ export function ResidentServicesPanel({
           ) : filteredUnifiedItems.length === 0 ? (
             <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
           ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
+        <>
+        <div className="space-y-2 lg:hidden">
+          {filteredUnifiedItems.map((item) => {
+            const rowId = item.kind === "request" ? `request-${item.req.id}` : `work-order-${item.row.id}`;
+            const expanded = expandedId === rowId;
+            const title = item.kind === "request" ? item.req.offerName : item.row.title;
+            const typeLabel = item.kind === "request" ? "Request" : "Work order";
+            const chargesSummary =
+              item.kind === "request"
+                ? requestChargesSummary(item.req)
+                : item.row.cost && item.row.cost !== "—"
+                  ? item.row.cost
+                  : "—";
+            const returnBy =
+              item.kind === "request" && item.req.returnByDate ? formatDate(item.req.returnByDate) : null;
+            const badge =
+              item.kind === "request" ? (
+                <ServiceStatusBadge status={item.req.status} />
+              ) : (
+                <WorkOrderStatusBadge bucket={item.row.bucket} />
+              );
+            return (
+              <PortalMobileSummaryCard
+                key={rowId}
+                title={title}
+                subtitle={`${typeLabel} · ${chargesSummary}`}
+                meta={returnBy ? `Return by ${returnBy}` : undefined}
+                badge={badge}
+                expanded={expanded}
+                onClick={() => setExpandedId((c) => (c === rowId ? null : rowId))}
+              >
+                {expanded ? (
+                  item.kind === "request" ? (
+                    <ServiceRequestCard
+                      req={item.req}
+                      onReturnPhotoUploaded={reloadServiceRequests}
+                      onDelete={reloadServiceRequests}
+                      onEdit={() => openRequestEdit(item.req)}
+                    />
+                  ) : (
+                    <WorkOrderDetail
+                      row={item.row}
+                      onEdit={() => openWorkOrderEdit(item.row)}
+                      onCancel={() => cancelWorkOrder(item.row.id)}
+                    />
+                  )
+                ) : null}
+              </PortalMobileSummaryCard>
+            );
+          })}
+        </div>
+        <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
               <table className="min-w-[860px] w-full border-collapse text-left text-sm">
                 <thead>
@@ -1104,6 +1156,7 @@ export function ResidentServicesPanel({
               </table>
             </div>
         </div>
+        </>
           )}
         </div>
       ) : (
@@ -1125,7 +1178,31 @@ export function ResidentServicesPanel({
               }
             />
           ) : (
-            <div className={PORTAL_DATA_TABLE_WRAP}>
+            <>
+            <div className="space-y-2 lg:hidden">
+              {rows.map((row) => {
+                const expanded = expandedId === row.id;
+                return (
+                  <PortalMobileSummaryCard
+                    key={row.id}
+                    title={row.title}
+                    subtitle={row.id}
+                    badge={<WorkOrderStatusBadge bucket={row.bucket} />}
+                    expanded={expanded}
+                    onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
+                  >
+                    {expanded ? (
+                      <WorkOrderDetail
+                        row={row}
+                        onEdit={() => openWorkOrderEdit(row)}
+                        onCancel={() => cancelWorkOrder(row.id)}
+                      />
+                    ) : null}
+                  </PortalMobileSummaryCard>
+                );
+              })}
+            </div>
+            <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
                 <table className="min-w-[700px] w-full border-collapse text-left text-sm">
                   <thead>
@@ -1166,6 +1243,7 @@ export function ResidentServicesPanel({
                 </table>
               </div>
             </div>
+            </>
           )}
         </div>
       )}

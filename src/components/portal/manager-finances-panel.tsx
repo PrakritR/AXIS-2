@@ -23,6 +23,7 @@ import {
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
@@ -154,8 +155,60 @@ function FinancesDataTable({
     return <PortalDataTableEmpty message="No finance entries yet." icon="finance" />;
   }
 
+  const renderCellValue = (col: ReportColumn, row: ReportRow) =>
+    col.key === "taxStatus" && onTaxStatusChange && row.id ? (
+      <select
+        className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+        data-attr="expense-tax-status-inline"
+        value={row.taxDeductible === false ? "non_deductible" : "deductible"}
+        onChange={(e) => onTaxStatusChange(String(row.id), e.target.value === "deductible")}
+      >
+        <option value="deductible">Deductible</option>
+        <option value="non_deductible">Non-deductible</option>
+      </select>
+    ) : (
+      formatCellValue(col, row[col.key])
+    );
+
   return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
+    <>
+      <div className="space-y-2 lg:hidden">
+        {sortedRows.map((row, idx) => (
+          <div key={`${row.id ?? idx}-${idx}`} className={PORTAL_MOBILE_CARD_CLASS}>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              {visibleCols.map((col) => (
+                <div key={col.key} className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted/70">{col.label}</p>
+                  <div
+                    className={`truncate text-sm ${
+                      col.key === "amount" || col.key === "property" || col.key === "resident"
+                        ? "font-medium text-foreground"
+                        : "text-foreground/80"
+                    }`}
+                  >
+                    {renderCellValue(col, row)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {report.totals ? (
+          <div className={`${PORTAL_MOBILE_CARD_CLASS} bg-accent/10`}>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              {visibleCols.map((col) => (
+                <div key={col.key} className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted/70">{col.label}</p>
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {formatCellValue(col, report.totals![col.key])}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
         <table className="min-w-[720px] w-full border-collapse text-left text-sm">
           <thead>
@@ -186,19 +239,7 @@ function FinancesDataTable({
                       col.key === "amount" ? "font-medium text-foreground" : ""
                     } ${col.key === "property" || col.key === "resident" ? "font-medium text-foreground" : ""}`}
                   >
-                    {col.key === "taxStatus" && onTaxStatusChange && row.id ? (
-                      <select
-                        className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
-                        data-attr="expense-tax-status-inline"
-                        value={row.taxDeductible === false ? "non_deductible" : "deductible"}
-                        onChange={(e) => onTaxStatusChange(String(row.id), e.target.value === "deductible")}
-                      >
-                        <option value="deductible">Deductible</option>
-                        <option value="non_deductible">Non-deductible</option>
-                      </select>
-                    ) : (
-                      formatCellValue(col, row[col.key])
-                    )}
+                    {renderCellValue(col, row)}
                   </td>
                 ))}
               </tr>
@@ -217,7 +258,8 @@ function FinancesDataTable({
           ) : null}
         </table>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -240,79 +282,72 @@ function FinancesRowFilters({
 
   if (!report || rows.length === 0) return null;
 
-  return (
-    <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Filters</p>
-      <div className="flex flex-wrap items-end gap-3">
-        {tabId === "income" ? (
-          <>
-            <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-              Resident
-              <select
-                className={FILTER_SELECT_CLASS}
-                value={rowFilters.resident}
-                onChange={(e) => onChange({ resident: e.target.value })}
-              >
-                <option value="">All residents</option>
-                {residents.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-              Type
-              <select
-                className={FILTER_SELECT_CLASS}
-                value={rowFilters.type}
-                onChange={(e) => onChange({ type: e.target.value })}
-              >
-                <option value="">All types</option>
-                {types.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        ) : (
-          <>
-            <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-              Category
-              <select
-                className={FILTER_SELECT_CLASS}
-                value={rowFilters.category}
-                onChange={(e) => onChange({ category: e.target.value })}
-              >
-                <option value="">All categories</option>
-                {categories.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-              Vendor
-              <select
-                className={FILTER_SELECT_CLASS}
-                value={rowFilters.vendor}
-                onChange={(e) => onChange({ vendor: e.target.value })}
-              >
-                <option value="">All vendors</option>
-                {vendors.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
-      </div>
-    </div>
+  return tabId === "income" ? (
+    <>
+      <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
+        Resident
+        <select
+          className={FILTER_SELECT_CLASS}
+          value={rowFilters.resident}
+          onChange={(e) => onChange({ resident: e.target.value })}
+        >
+          <option value="">All residents</option>
+          {residents.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
+        Type
+        <select
+          className={FILTER_SELECT_CLASS}
+          value={rowFilters.type}
+          onChange={(e) => onChange({ type: e.target.value })}
+        >
+          <option value="">All types</option>
+          {types.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  ) : (
+    <>
+      <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
+        Category
+        <select
+          className={FILTER_SELECT_CLASS}
+          value={rowFilters.category}
+          onChange={(e) => onChange({ category: e.target.value })}
+        >
+          <option value="">All categories</option>
+          {categories.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
+        Vendor
+        <select
+          className={FILTER_SELECT_CLASS}
+          value={rowFilters.vendor}
+          onChange={(e) => onChange({ vendor: e.target.value })}
+        >
+          <option value="">All vendors</option>
+          {vendors.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
   );
 }
 
@@ -588,13 +623,14 @@ export function ManagerFinancesPanel({
           onRun={() => void loadTable()}
           loading={loading}
           showRunButton={false}
-        />
-
-        <FinancesRowFilters
-          tabId={tabId}
-          report={report}
-          rowFilters={rowFilters}
-          onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
+          trailing={
+            <FinancesRowFilters
+              tabId={tabId}
+              report={report}
+              rowFilters={rowFilters}
+              onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
+            />
+          }
         />
 
         {loading && !report ? (

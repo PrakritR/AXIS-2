@@ -15,7 +15,7 @@ export type ShellAction = {
 };
 
 const selectClass =
-  "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
+  "h-10 max-w-full min-w-0 truncate rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
 
 /** Property dropdown wrapped like admin filter chips (rounded shell). */
 export function PortalPropertyFilterPill({

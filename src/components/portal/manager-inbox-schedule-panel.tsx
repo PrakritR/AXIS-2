@@ -6,6 +6,7 @@ import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
@@ -198,9 +199,52 @@ export function ManagerInboxSchedulePanel({
       ) : rows.length === 0 ? (
         <PortalInboxEmptyState title="No scheduled messages in this window." />
       ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[1024px] text-sm">
+        <>
+          <div className="space-y-2 lg:hidden">
+            {rows.map((row) => {
+              const id = rowId(row);
+              const isManual = row.kind === "manual";
+              const recipientName = isManual ? row.message.recipientName : row.message.residentName;
+              const recipientEmail = isManual ? row.message.recipientEmail : row.message.residentEmail;
+              const topic = isManual ? "Inbox message" : row.message.chargeTitle;
+              const topicMeta = isManual ? null : row.message.propertyLabel;
+              const timing = isManual
+                ? "Scheduled send"
+                : inboxScheduleTypeLabel(row.message.kind, row.message.daysBeforeDue);
+              const subject = row.message.subject;
+              const body = row.message.body;
+              const status = row.message.status;
+              const sendAt = row.message.sendAt;
+
+              return (
+                <div key={id} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button type="button" className="w-full text-left" onClick={() => openRowEdit(row)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate font-semibold text-foreground">{subject}</p>
+                      <span className="shrink-0 rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
+                        {isManual ? "Manual" : "Automated"}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-xs text-muted">
+                      {recipientName} · {recipientEmail}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {[topic, topicMeta].filter(Boolean).join(" · ")}
+                      {!isManual && row.message.dueDateLabel ? ` · Due ${row.message.dueDateLabel}` : ""}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {formatSendDate(sendAt)} · {timing}
+                    </p>
+                    <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">{messagePreview(body)}</p>
+                    <p className={`mt-1.5 text-xs font-medium capitalize ${statusClass(status)}`}>{status}</p>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full min-w-[1024px] text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Send date</th>
@@ -267,7 +311,8 @@ export function ManagerInboxSchedulePanel({
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       <ScheduleInboxComposeModal

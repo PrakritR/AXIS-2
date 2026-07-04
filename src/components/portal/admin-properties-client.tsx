@@ -11,6 +11,8 @@ import { PropertyRequestEditForm } from "@/components/portal/property-request-ed
 import { getListingRichContent } from "@/data/listing-rich-content";
 import {
   PORTAL_DATA_TABLE_WRAP,
+  PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
@@ -404,81 +406,141 @@ export function AdminPropertiesClient() {
         />
       }
     >
-      <div className={PORTAL_DATA_TABLE_WRAP}>
-        {rows.length === 0 ? (
+      {rows.length === 0 ? (
+        <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className="flex flex-col items-center justify-center bg-accent/30/20 px-4 py-14 text-center sm:py-16">
             <AxisHeaderMarkTile>
               <HouseIcon className="h-[26px] w-[26px]" />
             </AxisHeaderMarkTile>
             <p className="mt-4 max-w-sm text-sm font-medium text-muted">{EMPTY_COPY[activeKpi]}</p>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[800px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const rowKey = row.adminRefId + (row.listingId ?? "");
-                  const expanded = expandedRowKey === rowKey;
-                  return (
-                    <Fragment key={rowKey}>
-                      <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() =>
-                          setExpandedRowKey(expanded ? null : rowKey),
-                        )}
-                        aria-expanded={expanded}
-                      >
-                        <td className={PORTAL_TABLE_TD}>
-                          <p className="font-medium text-foreground">
-                            {row.buildingName} · {row.unitLabel}
-                          </p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                            {row.address}
-                            {row.zip ? `, ${row.zip}` : ""}
-                          </p>
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <p className="text-xs text-muted">
-                            <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
-                            {row.neighborhood}
-                          </p>
-                          {String(row.tagline ?? "").trim() ? (
-                            <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p>
-                          ) : null}
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <StatusPill label={status.label} tone={status.tone} />
-                        </td>
-                      </tr>
-                      {expanded ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={3} className="bg-accent/30 px-4 py-4">
-                            <AdminPropertyInlineDetails
-                              key={rowKey}
-                              bucket={activeKpi}
-                              row={row}
-                              onUpdated={() => setTick((t) => t + 1)}
-                              onDismiss={() => setExpandedRowKey(null)}
-                              showToast={showToast}
-                            />
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2 lg:hidden">
+            {rows.map((row) => {
+              const rowKey = row.adminRefId + (row.listingId ?? "");
+              const expanded = expandedRowKey === rowKey;
+              return (
+                <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                  >
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-foreground">
+                          {row.buildingName} · {row.unitLabel}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-muted">
+                          <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
+                          {row.neighborhood}
+                        </p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted/90">
+                          {row.address}
+                          {row.zip ? `, ${row.zip}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <StatusPill label={status.label} tone={status.tone} />
+                      </div>
+                    </div>
+                  </button>
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                    >
+                      {expanded ? "Less" : "Details"}
+                    </Button>
+                  </div>
+                  {expanded ? (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <AdminPropertyInlineDetails
+                        key={rowKey}
+                        bucket={activeKpi}
+                        row={row}
+                        onUpdated={() => setTick((t) => t + 1)}
+                        onDismiss={() => setExpandedRowKey(null)}
+                        showToast={showToast}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className="overflow-x-auto">
+              <table className="min-w-[800px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const rowKey = row.adminRefId + (row.listingId ?? "");
+                    const expanded = expandedRowKey === rowKey;
+                    return (
+                      <Fragment key={rowKey}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedRowKey(expanded ? null : rowKey),
+                          )}
+                          aria-expanded={expanded}
+                        >
+                          <td className={PORTAL_TABLE_TD}>
+                            <p className="font-medium text-foreground">
+                              {row.buildingName} · {row.unitLabel}
+                            </p>
+                            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                              {row.address}
+                              {row.zip ? `, ${row.zip}` : ""}
+                            </p>
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <p className="text-xs text-muted">
+                              <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
+                              {row.neighborhood}
+                            </p>
+                            {String(row.tagline ?? "").trim() ? (
+                              <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p>
+                            ) : null}
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <StatusPill label={status.label} tone={status.tone} />
                           </td>
                         </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {expanded ? (
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={3} className="bg-accent/30 px-4 py-4">
+                              <AdminPropertyInlineDetails
+                                key={rowKey}
+                                bucket={activeKpi}
+                                row={row}
+                                onUpdated={() => setTick((t) => t + 1)}
+                                onDismiss={() => setExpandedRowKey(null)}
+                                showToast={showToast}
+                              />
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </ManagerPortalPageShell>
   );
 }

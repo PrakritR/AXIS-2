@@ -4,12 +4,12 @@ import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
-import { portalNavClick } from "@/lib/portal-nav-client";
+import { isCrossPortalNavigation, portalNavClick } from "@/lib/portal-nav-client";
 import { portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { groupNavItems } from "@/lib/portals/nav-groups";
 import type { PortalKind } from "@/lib/portal-types";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo } from "react";
 
 export type PortalMoreNavItem = {
@@ -58,6 +58,7 @@ function MoreNavRow({
   onNavigate: () => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const nativeChrome = useNativeChrome();
 
   return (
@@ -65,7 +66,9 @@ function MoreNavRow({
       href={item.href}
       prefetch={portalMobileLinkPrefetchEnabled()}
       onClick={(e) => {
-        portalNavClick(router, item.href, { preferFullNavigation: nativeChrome })(e);
+        portalNavClick(router, item.href, {
+          preferFullNavigation: nativeChrome && isCrossPortalNavigation(pathname, item.href),
+        })(e);
         onNavigate();
       }}
       className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${

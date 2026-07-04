@@ -18,6 +18,7 @@ import {
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PortalDataTableEmpty,
+  PortalMobileSummaryCard,
 } from "@/components/portal/portal-data-table";
 import {
   DocumentInlineViewer,
@@ -71,19 +72,34 @@ function defaultReceiptRange() {
   return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
 }
 
-/** Shared table shell so every Documents tab matches the Other documents layout. */
-function DocumentsTableShell({ head, children }: { head: ReactNode; children: ReactNode }) {
+/**
+ * Shared table shell so every Documents tab matches the Other documents layout.
+ * Renders a `space-y-2 lg:hidden` mobile card stack (via `mobile`) above the
+ * `lg:` desktop table so neither layout scrolls horizontally on small screens.
+ */
+function DocumentsTableShell({
+  head,
+  children,
+  mobile,
+}: {
+  head: ReactNode;
+  children: ReactNode;
+  mobile: ReactNode;
+}) {
   return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
-      <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-          <thead>
-            <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
-          </thead>
-          <tbody>{children}</tbody>
-        </table>
+    <>
+      <div className="space-y-2 lg:hidden">{mobile}</div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
+            </thead>
+            <tbody>{children}</tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -199,6 +215,15 @@ function ApplicationDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
           </>
         }
+        mobile={rows.map((row) => (
+          <PortalMobileSummaryCard
+            key={row.id}
+            title={`Rental application — ${row.id}`}
+            subtitle={applicationStatusLabel(row.bucket)}
+            meta={row.property || "—"}
+            onClick={() => setPreview(row)}
+          />
+        ))}
       >
         {rows.map((row) => (
           <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setPreview(row)}>
@@ -388,6 +413,15 @@ function RentReceiptsTab() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
               </>
             }
+            mobile={receipts.map((row, i) => (
+              <PortalMobileSummaryCard
+                key={`${row.date}-${i}`}
+                title={`Rent receipt — ${row.description}`}
+                subtitle={row.amount}
+                meta={row.date}
+                onClick={() => setPreview(row)}
+              />
+            ))}
           >
             {receipts.map((row, i) => (
               <tr
@@ -512,6 +546,14 @@ function SignedLeaseDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Date signed</th>
           </>
+        }
+        mobile={
+          <PortalMobileSummaryCard
+            title={leaseName}
+            subtitle="Fully signed"
+            meta={safeFormatDateTime(signedAt)}
+            onClick={() => setPreviewOpen(true)}
+          />
         }
       >
         <tr className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setPreviewOpen(true)}>

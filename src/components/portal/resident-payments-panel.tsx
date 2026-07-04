@@ -14,6 +14,7 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -438,6 +439,78 @@ export function ResidentPaymentsPanel() {
     );
   };
 
+  const renderRowDetail = (row: HouseholdCharge) => {
+    const achPayable = row.status === "pending" && canPayHouseholdChargeWithAxisAch(row);
+    return (
+      <>
+        <p className="mb-3 text-sm text-muted">
+          Due: <span className="font-semibold text-foreground">{chargeDueLabel(row)}</span>
+        </p>
+        {row.zelleContactSnapshot ? (
+          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
+            <p className="text-xs font-semibold">Pay with Zelle</p>
+            <p className="mt-1 text-sm leading-relaxed">
+              Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>. Include your name and unit in
+              the memo. Your manager marks this paid when they receive it.
+            </p>
+          </div>
+        ) : row.venmoContactSnapshot ? (
+          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
+            <p className="text-xs font-semibold">Pay with Venmo</p>
+            <p className="mt-1 text-sm leading-relaxed">
+              Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>. Include your name and unit in
+              the note. Your manager marks this paid when they receive it.
+            </p>
+          </div>
+        ) : null}
+        {achPayable ? (
+          <div className="mb-4">
+            {renderCheckoutBlock(
+              checkout && checkout.chargeIds.length > 1 && checkout.chargeIds.includes(row.id)
+                ? `Pay ${checkout.chargeIds.length} selected charges`
+                : `Pay online (${residentPaymentMethodLabel(checkout?.paymentMethod ?? paymentMethod)})`,
+            )}
+          </div>
+        ) : !row.zelleContactSnapshot && !row.venmoContactSnapshot ? (
+          <p className="mb-4 leading-relaxed">
+            All charges are updated by your manager when they receive payment via Zelle, Venmo, ACH, or cash.
+          </p>
+        ) : null}
+        {row.status === "paid" && row.paidAt ? (
+          <p className="mt-2 text-xs text-muted">Marked paid {safeFormatDateTime(row.paidAt)}</p>
+        ) : null}
+        {row.blocksLeaseUntilPaid && row.status === "pending" ? (
+          <p className="mt-3 text-sm text-amber-900">
+            Pay this before signing your lease.{" "}
+            <Link href="/resident/lease" className="font-semibold text-primary underline underline-offset-2">
+              Open lease tab
+            </Link>
+            .
+          </p>
+        ) : null}
+        <PortalTableDetailActions>
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            onClick={() => {
+              void navigator.clipboard?.writeText(row.balanceLabel);
+              showToast("Balance copied.");
+            }}
+          >
+            Copy balance
+          </Button>
+          <Link
+            href="/resident/lease"
+            className={`inline-flex items-center justify-center ${PORTAL_DETAIL_BTN}`}
+          >
+            Lease tab
+          </Link>
+        </PortalTableDetailActions>
+      </>
+    );
+  };
+
   return (
     <ManagerPortalPageShell
       title="Payments"
@@ -514,7 +587,63 @@ export function ResidentPaymentsPanel() {
               }
             />
           ) : (
-            <div className={PORTAL_DATA_TABLE_WRAP}>
+            <>
+            <div className="space-y-2 lg:hidden">
+              {rows.map((row) => {
+                const overdue = row.status === "pending" && isHouseholdChargeOverdue(row);
+                const achPayable = row.status === "pending" && canPayHouseholdChargeWithAxisAch(row);
+                const showSelectCol = tab === "pending" && unpaidAchCharges.length > 0;
+                const expanded = expandedId === row.id;
+                const toggleExpand = () =>
+                  setExpandedId((cur) => {
+                    const next = cur === row.id ? null : row.id;
+                    if (next !== cur && next) {
+                      setCheckout(null);
+                    }
+                    return next;
+                  });
+                return (
+                  <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+                    <div className="flex items-start gap-2.5">
+                      {showSelectCol && achPayable ? (
+                        <input
+                          type="checkbox"
+                          className="mt-1 size-4 shrink-0 rounded border-border"
+                          checked={selectedIds.has(row.id)}
+                          onChange={() => toggleSelected(row.id)}
+                          aria-label={`Select ${row.title}`}
+                        />
+                      ) : null}
+                      <button type="button" className="min-w-0 flex-1 text-left" onClick={toggleExpand}>
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
+                            <p className="mt-0.5 truncate text-xs text-muted">{row.propertyLabel}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-muted/90">
+                              Due {chargeDueLabel(row)} · {row.amountLabel}
+                            </p>
+                          </div>
+                          <Badge tone={row.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
+                            {row.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
+                          </Badge>
+                        </div>
+                      </button>
+                    </div>
+                    <div className="mt-2">
+                      <button type="button" className="text-[11px] font-semibold text-primary" onClick={toggleExpand}>
+                        {expanded ? "Less" : "Details"}
+                      </button>
+                    </div>
+                    {expanded ? (
+                      <div className="mt-2.5 border-t border-border pt-2.5 text-sm text-muted">
+                        {renderRowDetail(row)}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
                 <table className="sm:min-w-[720px] w-full border-collapse text-left text-sm">
                   <thead>
@@ -582,70 +711,7 @@ export function ResidentPaymentsPanel() {
                           {expandedId === row.id ? (
                             <tr className={PORTAL_TABLE_DETAIL_ROW}>
                               <td colSpan={detailColSpan} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
-                                <p className="mb-3 text-sm text-muted">
-                                  Due: <span className="font-semibold text-foreground">{chargeDueLabel(row)}</span>
-                                </p>
-                                {row.zelleContactSnapshot ? (
-                                  <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
-                                    <p className="text-xs font-semibold">Pay with Zelle</p>
-                                    <p className="mt-1 text-sm leading-relaxed">
-                                      Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>. Include your name and unit in
-                                      the memo. Your manager marks this paid when they receive it.
-                                    </p>
-                                  </div>
-                                ) : row.venmoContactSnapshot ? (
-                                  <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
-                                    <p className="text-xs font-semibold">Pay with Venmo</p>
-                                    <p className="mt-1 text-sm leading-relaxed">
-                                      Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>. Include your name and unit in
-                                      the note. Your manager marks this paid when they receive it.
-                                    </p>
-                                  </div>
-                                ) : null}
-                                {achPayable ? (
-                                  <div className="mb-4">
-                                    {renderCheckoutBlock(
-                                      checkout && checkout.chargeIds.length > 1 && checkout.chargeIds.includes(row.id)
-                                        ? `Pay ${checkout.chargeIds.length} selected charges`
-                                        : `Pay online (${residentPaymentMethodLabel(checkout?.paymentMethod ?? paymentMethod)})`,
-                                    )}
-                                  </div>
-                                ) : !row.zelleContactSnapshot && !row.venmoContactSnapshot ? (
-                                  <p className="mb-4 leading-relaxed">
-                                    All charges are updated by your manager when they receive payment via Zelle, Venmo, ACH, or cash.
-                                  </p>
-                                ) : null}
-                                {row.status === "paid" && row.paidAt ? (
-                                  <p className="mt-2 text-xs text-muted">Marked paid {safeFormatDateTime(row.paidAt)}</p>
-                                ) : null}
-                                {row.blocksLeaseUntilPaid && row.status === "pending" ? (
-                                  <p className="mt-3 text-sm text-amber-900">
-                                    Pay this before signing your lease.{" "}
-                                    <Link href="/resident/lease" className="font-semibold text-primary underline underline-offset-2">
-                                      Open lease tab
-                                    </Link>
-                                    .
-                                  </p>
-                                ) : null}
-                                <PortalTableDetailActions>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className={PORTAL_DETAIL_BTN}
-                                    onClick={() => {
-                                      void navigator.clipboard?.writeText(row.balanceLabel);
-                                      showToast("Balance copied.");
-                                    }}
-                                  >
-                                    Copy balance
-                                  </Button>
-                                  <Link
-                                    href="/resident/lease"
-                                    className={`inline-flex items-center justify-center ${PORTAL_DETAIL_BTN}`}
-                                  >
-                                    Lease tab
-                                  </Link>
-                                </PortalTableDetailActions>
+                                {renderRowDetail(row)}
                               </td>
                             </tr>
                           ) : null}
@@ -656,6 +722,7 @@ export function ResidentPaymentsPanel() {
                 </table>
               </div>
             </div>
+            </>
           )}
         </>
       )}
