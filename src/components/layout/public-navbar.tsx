@@ -61,15 +61,17 @@ export function PublicNavbar() {
   );
   const contactActive = useMemo(() => pathname === "/contact", [pathname]);
   const demoActive = useMemo(() => pathname === "/demo" || pathname.startsWith("/demo/"), [pathname]);
+  const vendorsActive = useMemo(() => pathname.startsWith("/vendors"), [pathname]);
 
   const menu: NavbarMenuItem[] = useMemo(
     () => [
       { title: "Partners", url: "/partner", active: partnerActive },
       { title: "Demo", url: "/demo", active: demoActive },
       { title: "Pricing", url: "/partner/pricing", active: pricingActive },
+      { title: "Vendors", url: "/vendors", active: vendorsActive, dataAttr: "nav-vendors" },
       { title: "Contact", url: "/contact", active: contactActive },
     ],
-    [demoActive, partnerActive, pricingActive, contactActive],
+    [demoActive, partnerActive, pricingActive, vendorsActive, contactActive],
   );
 
   if (hideOnNative) return null;
