@@ -27,6 +27,11 @@ import {
   type AddDocumentMode,
 } from "@/components/portal/resident-other-documents";
 import { buildApplicationHtml } from "@/lib/manager-application-html";
+import {
+  fetchCosignerSubmissionsForSignerAppId,
+  readCosignerSubmissionsForSignerAppId,
+  type CosignerSubmission,
+} from "@/lib/cosigner-submissions-storage";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -109,10 +114,28 @@ function ApplicationDocumentsTable() {
   const email = session.email?.trim().toLowerCase() ?? "";
   const [tick, setTick] = useState(0);
   const [preview, setPreview] = useState<DemoApplicantRow | null>(null);
+  const [previewCosignerSubmissions, setPreviewCosignerSubmissions] = useState<CosignerSubmission[]>([]);
   // Demo sandbox: the PDF route requires auth, so build the same PDF in the
   // browser and feed it to the download as a data URL.
   const demoMode = isDemoModeActive();
   const demoPdfCache = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset co-signer data when the previewed application changes
+    setPreviewCosignerSubmissions([]);
+    if (!preview || preview.application?.hasCosigner !== "yes") return;
+    if (demoMode) {
+      setPreviewCosignerSubmissions(readCosignerSubmissionsForSignerAppId(preview.id));
+      return;
+    }
+    let cancelled = false;
+    void fetchCosignerSubmissionsForSignerAppId(preview.id).then((rows) => {
+      if (!cancelled) setPreviewCosignerSubmissions(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [preview, demoMode]);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -131,7 +154,9 @@ function ApplicationDocumentsTable() {
     const cached = demoPdfCache.current.get(row.id);
     if (cached) return cached;
     const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-    const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined);
+    const cosignerSubmissions =
+      row.application?.hasCosigner === "yes" ? readCosignerSubmissionsForSignerAppId(row.id) : [];
+    const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
     demoPdfCache.current.set(row.id, url);
     return url;
   }, []);
@@ -150,8 +175,14 @@ function ApplicationDocumentsTable() {
   // Rendered-document HTML (same as the manager Applications preview) — the
   // application data is already client-side, so this works in demo mode too.
   const previewHtml = useMemo(
-    () => (preview ? buildApplicationHtml(preview, { roomLabel: applicationRoomLabel(preview) || undefined }) : null),
-    [preview],
+    () =>
+      preview
+        ? buildApplicationHtml(preview, {
+            roomLabel: applicationRoomLabel(preview) || undefined,
+            cosignerSubmissions: previewCosignerSubmissions,
+          })
+        : null,
+    [preview, previewCosignerSubmissions],
   );
 
   if (rows.length === 0) {

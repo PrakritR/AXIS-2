@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -25,12 +26,29 @@ export async function GET(req: Request) {
     if (!admin) {
       const { data: appRow } = await db
         .from("manager_application_records")
-        .select("manager_user_id")
+        .select("manager_user_id, resident_email, property_id, assigned_property_id")
         .eq("id", signerAppId)
         .maybeSingle();
-      if (!appRow || appRow.manager_user_id !== user.id) {
-        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      if (!appRow) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+
+      let allowed = appRow.manager_user_id === user.id;
+      if (!allowed) {
+        const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
+        const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+        const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+        if (role === "resident") {
+          const recordEmail = String(appRow.resident_email ?? "").trim().toLowerCase();
+          allowed = Boolean(email) && recordEmail === email;
+        } else {
+          const linked = await collectLinkedPropertyIdsForUser(db, user.id);
+          const propertyId = String(appRow.property_id ?? "").trim();
+          const assignedPropertyId = String(appRow.assigned_property_id ?? "").trim();
+          allowed = Boolean(
+            (propertyId && linked.has(propertyId)) || (assignedPropertyId && linked.has(assignedPropertyId)),
+          );
+        }
       }
+      if (!allowed) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
     const { data, error } = await db

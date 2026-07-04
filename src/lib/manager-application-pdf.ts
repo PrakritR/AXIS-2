@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import {
   displayableCustomFieldAnswers,
@@ -61,6 +62,25 @@ function maskSsn(ssn: string | null | undefined): string {
   const d = digitsOnly(clean(ssn));
   if (d.length !== 9) return "";
   return `•••-••-${d.slice(5)}`;
+}
+
+/** Co-signer SSNs are already masked at submission-storage time; re-mask defensively if a raw value ever reaches here. */
+function maskCosignerSsn(ssn: string | null | undefined): string {
+  const raw = clean(ssn);
+  if (!raw) return "";
+  if (raw.includes("*")) return raw;
+  return maskSsn(raw);
+}
+
+function cosignerBankruptcyLabel(value: string | undefined): string {
+  if (value === "never") return "Never filed";
+  if (value === "past_discharged") return "Past (discharged)";
+  if (value === "current") return "Current / active";
+  return "";
+}
+
+function cosignerCriminalLabel(value: string | undefined): string {
+  return yesNo(value);
 }
 
 function groupRoleLabel(role: RentalWizardFormState["groupRole"] | undefined): string {
@@ -159,6 +179,8 @@ export type ApplicationPdfOptions = {
   roomLabel?: string;
   /** ISO generation timestamp; defaults to now. */
   generatedAt?: string;
+  /** Co-signer application(s) submitted against this applicant's Axis ID, if any. */
+  cosignerSubmissions?: CosignerSubmission[];
 };
 
 export async function buildApplicationPdf(
@@ -397,11 +419,53 @@ export async function buildApplicationPdf(
   drawSection("Household", [
     { label: "Applying as a group", value: yesNo(app.applyingAsGroup) },
     { label: "Group role", value: groupRoleLabel(app.groupRole) },
-    { label: "Group size", value: clean(app.groupSize) },
+    { label: "Group size", value: app.groupRole === "joining" ? "" : clean(app.groupSize) },
+    { label: "Group ID", value: app.groupRole === "joining" ? clean(app.groupId) : "" },
     { label: "Has co-signer", value: yesNo(app.hasCosigner) },
     { label: "Occupants", value: clean(app.occupancyCount) },
     { label: "Pets", value: clean(app.pets) },
   ]);
+
+  // ---- Co-signer application(s) -------------------------------------------
+  const cosigners = options.cosignerSubmissions ?? [];
+  cosigners.forEach((sub, i) => {
+    const title = cosigners.length > 1 ? `Co-signer ${i + 1}` : "Co-signer";
+    const cosignerAddress = [
+      clean(sub.address),
+      [clean(sub.city), clean(sub.state)].filter(Boolean).join(", "),
+      clean(sub.zip),
+    ]
+      .filter(Boolean)
+      .join("  ");
+    drawSection(title, [
+      { label: "Legal name", value: clean(sub.fullName) },
+      { label: "Email", value: clean(sub.email) },
+      { label: "Phone", value: clean(sub.phone) },
+      { label: "Date of birth", value: clean(sub.dob) },
+      { label: "ID number", value: clean(sub.dlNumber) },
+      { label: "SSN", value: maskCosignerSsn(sub.ssn) },
+      { label: "Address", value: cosignerAddress },
+      { label: "Employment", value: sub.notEmployed ? "Not currently employed" : "" },
+      { label: "Employer", value: clean(sub.employerName) },
+      { label: "Employer address", value: clean(sub.employerAddress) },
+      { label: "Job title", value: clean(sub.jobTitle) },
+      { label: "Supervisor", value: clean(sub.supervisorName) },
+      { label: "Supervisor phone", value: clean(sub.supervisorPhone) },
+      { label: "Employment start", value: clean(sub.employmentStart) },
+      { label: "Monthly income", value: money(sub.monthlyIncome) },
+      { label: "Annual income", value: money(sub.annualIncome) },
+      { label: "Other income", value: clean(sub.otherIncome) },
+      { label: "Bankruptcy", value: cosignerBankruptcyLabel(sub.bankruptcy) },
+      { label: "Criminal history", value: cosignerCriminalLabel(sub.criminal) },
+      { label: "Credit/background consent", value: sub.consentCredit ? "Authorized" : "" },
+      { label: "Signature", value: clean(sub.signature) },
+      { label: "Date signed", value: clean(sub.dateSigned) },
+      {
+        label: "Submitted",
+        value: sub.submittedAt ? new Date(sub.submittedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" }) : "",
+      },
+    ]);
+  });
 
   // ---- Current residence --------------------------------------------------
   const currentAddress = [

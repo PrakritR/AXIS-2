@@ -53,6 +53,10 @@ import {
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
 import { buildApplicationHtml } from "@/lib/manager-application-html";
+import {
+  fetchCosignerSubmissionsForSignerAppId,
+  type CosignerSubmission,
+} from "@/lib/cosigner-submissions-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   recordApprovedApplicationCharges,
@@ -157,9 +161,23 @@ export function downloadApplicationPdf(row: DemoApplicantRow): void {
  * falls back to row-level fields.
  */
 export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
+  const [cosignerSubmissions, setCosignerSubmissions] = useState<CosignerSubmission[]>([]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset co-signer data when the row changes
+    setCosignerSubmissions([]);
+    if (row.application?.hasCosigner !== "yes") return;
+    let cancelled = false;
+    void fetchCosignerSubmissionsForSignerAppId(row.id).then((rows) => {
+      if (!cancelled) setCosignerSubmissions(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [row.id, row.application?.hasCosigner]);
+
   const documentHtml = useMemo(
-    () => buildApplicationHtml(row, { roomLabel: applicationRoomLabel(row) || undefined }),
-    [row],
+    () => buildApplicationHtml(row, { roomLabel: applicationRoomLabel(row) || undefined, cosignerSubmissions }),
+    [row, cosignerSubmissions],
   );
   return (
     <section>

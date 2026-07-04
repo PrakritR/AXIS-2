@@ -9,6 +9,7 @@
  */
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { buildApplicationPdf } from "@/lib/manager-application-pdf";
 
 function bytesToPdfDataUrl(bytes: Uint8Array): string {
@@ -24,8 +25,9 @@ function bytesToPdfDataUrl(bytes: Uint8Array): string {
 export async function buildDemoApplicationPdfDataUrl(
   row: DemoApplicantRow,
   roomLabel?: string,
+  cosignerSubmissions?: CosignerSubmission[],
 ): Promise<string> {
-  const bytes = await buildApplicationPdf(row, roomLabel ? { roomLabel } : {});
+  const bytes = await buildApplicationPdf(row, { roomLabel, cosignerSubmissions });
   return bytesToPdfDataUrl(bytes);
 }
 
