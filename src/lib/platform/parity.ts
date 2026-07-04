@@ -34,6 +34,10 @@ export const REGISTERED_PUSH_DEEP_LINKS = [
   "/resident/payments",
   "/resident/dashboard",
   "/resident/applications",
+  "/resident/inbox/unopened",
+  "/portal/inbox/unopened",
+  "/admin/inbox/unopened",
+  "/vendor/inbox/unopened",
 ] as const;
 
 export type PlatformSurface = "web" | "native-webview";

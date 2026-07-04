@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
+import { sendPushToUser } from "@/lib/push-notifications.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -30,6 +31,15 @@ function scopeForRole(role: string | null | undefined): string {
   if (normalized === "manager" || normalized === "pro" || normalized === "admin") return MANAGER_INBOX_SCOPE;
   if (normalized === "vendor") return VENDOR_INBOX_SCOPE;
   return RESIDENT_INBOX_SCOPE;
+}
+
+/** Deep-link a push notification tap into the recipient's own inbox. */
+function inboxDeepLinkForRole(role: string | null | undefined): string {
+  const normalized = String(role ?? "").trim().toLowerCase();
+  if (normalized === "manager" || normalized === "pro") return "/portal/inbox/unopened";
+  if (normalized === "admin") return "/admin/inbox/unopened";
+  if (normalized === "vendor") return "/vendor/inbox/unopened";
+  return "/resident/inbox/unopened";
 }
 
 type BroadcastRecipient = { email: string; userId: string | null; role: "resident" | "manager" };
@@ -297,6 +307,37 @@ export async function POST(req: Request) {
           },
           { onConflict: "id" },
         );
+      }
+
+      // Push notification, best-effort. Keep the payload generic (sender name
+      // only) since messages here can carry sensitive lease/payment details.
+      try {
+        const pushCandidates = recipients.filter((r) => r.email !== senderEmail);
+        const missingIdEmails = pushCandidates.filter((r) => !r.userId).map((r) => r.email);
+        const resolvedIds = new Map<string, string>();
+        if (missingIdEmails.length > 0) {
+          const { data: resolvedProfiles } = await db
+            .from("profiles")
+            .select("id, email")
+            .in("email", missingIdEmails);
+          for (const p of resolvedProfiles ?? []) {
+            const email = String(p.email ?? "").trim().toLowerCase();
+            if (email) resolvedIds.set(email, p.id as string);
+          }
+        }
+        await Promise.all(
+          pushCandidates.map((r) => {
+            const uid = r.userId ?? resolvedIds.get(r.email);
+            if (!uid) return Promise.resolve();
+            return sendPushToUser(uid, {
+              title: `New message from ${fromName}`,
+              body: "You have a new message in your Axis inbox.",
+              url: inboxDeepLinkForRole(r.role),
+            }).catch(() => {});
+          }),
+        );
+      } catch {
+        /* non-critical — no-ops when FCM is not configured */
       }
     }
 
