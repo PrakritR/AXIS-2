@@ -112,6 +112,7 @@ export function ManagerWorkOrdersPanel({
   });
   const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid[]>>({});
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
+  const [autoSchedulingId, setAutoSchedulingId] = useState<string | null>(null);
 
   useEffect(() => {
     void syncManagerVendorsFromServer();
@@ -232,6 +233,54 @@ export function ManagerWorkOrdersPanel({
     [activeVendors],
   );
 
+  /** Commit a resolved visit time (manual or auto-scheduled) — bucket/status transition,
+   * best-effort billing charge, and the vendor email + inbox notification, all shared so
+   * auto-schedule reuses exactly the same write + notify path as picking a time by hand. */
+  const commitScheduledVisit = useCallback(
+    async (row: DemoManagerWorkOrderRow, iso: string) => {
+      const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+      const costTrimmed = draft.cost.trim();
+      const amt = costTrimmed ? parseMoneyAmount(costTrimmed) : 0;
+      const residentEmail = (row.residentEmail ?? "").trim();
+
+      updateManagerWorkOrder(row.id, (r) => ({
+        ...r,
+        bucket: "scheduled",
+        status: "Scheduled",
+        scheduledAtIso: iso,
+        scheduled: formatScheduledLabel(iso),
+        ...(costTrimmed && Number.isFinite(amt) && amt >= 0 ? { cost: `$${amt.toFixed(2)}` } : {}),
+      }));
+
+      let created = null;
+      if (residentEmail.includes("@") && Number.isFinite(amt) && amt > 0) {
+        created = recordWorkOrderResidentCharge({
+          managerUserId: effectiveManagerId,
+          workOrderId: row.id,
+          propertyId: row.propertyId || row.assignedPropertyId,
+          propertyLabel: row.propertyName,
+          unit: row.unit,
+          workOrderTitle: row.title,
+          amountInput: draft.cost,
+          residentEmail,
+          residentName: row.residentName ?? "",
+          initialStatus: draft.paymentStatus,
+        });
+      }
+      if (created) setHcTick((n) => n + 1);
+      const vendorEmailed = await sendVendorVisitEmail(row, iso);
+      const billingPart = created
+        ? created.status === "paid"
+          ? " Payment recorded as paid."
+          : " Pending payment created."
+        : "";
+      showToast(`Work order scheduled.${billingPart}${vendorEmailed ? " Vendor emailed with the visit details." : ""}`);
+      setExpandedId(null);
+      onAfterSchedule?.();
+    },
+    [billDraftById, effectiveManagerId, onAfterSchedule, sendVendorVisitEmail, showToast],
+  );
+
   /** Schedule the visit (date required). Billing is optional — a charge is only created when a cost is set and a resident is linked. */
   const saveScheduleFromOpen = async (row: DemoManagerWorkOrderRow) => {
     const visitAt = visitAtById[row.id] ?? "";
@@ -240,45 +289,42 @@ export function ManagerWorkOrdersPanel({
       showToast("Choose a visit date and time to schedule.");
       return;
     }
-    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-    const costTrimmed = draft.cost.trim();
-    const amt = costTrimmed ? parseMoneyAmount(costTrimmed) : 0;
-    const residentEmail = (row.residentEmail ?? "").trim();
+    await commitScheduledVisit(row, iso);
+  };
 
-    updateManagerWorkOrder(row.id, (r) => ({
-      ...r,
-      bucket: "scheduled",
-      status: "Scheduled",
-      scheduledAtIso: iso,
-      scheduled: formatScheduledLabel(iso),
-      ...(costTrimmed && Number.isFinite(amt) && amt >= 0 ? { cost: `$${amt.toFixed(2)}` } : {}),
-    }));
-
-    let created = null;
-    if (residentEmail.includes("@") && Number.isFinite(amt) && amt > 0) {
-      created = recordWorkOrderResidentCharge({
-        managerUserId: effectiveManagerId,
-        workOrderId: row.id,
-        propertyId: row.propertyId || row.assignedPropertyId,
-        propertyLabel: row.propertyName,
-        unit: row.unit,
-        workOrderTitle: row.title,
-        amountInput: draft.cost,
-        residentEmail,
-        residentName: row.residentName ?? "",
-        initialStatus: draft.paymentStatus,
-      });
+  /** Resolve the assigned vendor's next open slot from their set availability (weekly
+   * windows minus blocked dates minus their other scheduled visits) and book it — same
+   * commit path as scheduling by hand, so the vendor gets the same email + inbox notice. */
+  const autoScheduleVisit = async (row: DemoManagerWorkOrderRow) => {
+    if (row.selfAssigned || !row.vendorId) {
+      showToast("Assign a vendor before auto-scheduling.");
+      return;
     }
-    if (created) setHcTick((n) => n + 1);
-    const vendorEmailed = await sendVendorVisitEmail(row, iso);
-    const billingPart = created
-      ? created.status === "paid"
-        ? " Payment recorded as paid."
-        : " Pending payment created."
-      : "";
-    showToast(`Work order scheduled.${billingPart}${vendorEmailed ? " Vendor emailed with the visit details." : ""}`);
-    setExpandedId(null);
-    onAfterSchedule?.();
+    setAutoSchedulingId(row.id);
+    try {
+      const res = await fetch("/api/portal-work-orders/auto-schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ workOrderId: row.id, vendorId: row.vendorId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not auto-schedule.");
+      if (!data.iso) {
+        showToast(
+          data.reason === "no_availability"
+            ? "This vendor hasn't set their availability yet."
+            : "No open slot found in the vendor's availability.",
+        );
+        return;
+      }
+      setVisitAtById((prev) => ({ ...prev, [row.id]: toDatetimeLocalValue(data.iso) }));
+      await commitScheduledVisit(row, data.iso);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not auto-schedule.");
+    } finally {
+      setAutoSchedulingId(null);
+    }
   };
 
   const rescheduleVisit = async (row: DemoManagerWorkOrderRow) => {
@@ -770,6 +816,18 @@ export function ManagerWorkOrdersPanel({
                           ) : row.bucket === "scheduled" ? (
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => void rescheduleVisit(row)}>
                               Save new time
+                            </Button>
+                          ) : null}
+                          {!row.selfAssigned && row.vendorId && row.bucket !== "completed" ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              data-attr="work-order-auto-schedule"
+                              className={PORTAL_DETAIL_BTN}
+                              disabled={autoSchedulingId === row.id}
+                              onClick={() => void autoScheduleVisit(row)}
+                            >
+                              {autoSchedulingId === row.id ? "Finding a slot…" : "Auto-schedule"}
                             </Button>
                           ) : null}
                           {!linkedCharge ? (
