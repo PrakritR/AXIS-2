@@ -2381,38 +2381,26 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       ) : (
       <>
       <div className="space-y-2 lg:hidden">
-        {filtered.map((res) => (
+        {filtered.map((res) => {
+          const housingLabel = [res.roomLabel, !propertyFilter ? res.propertyLabel : null].filter(Boolean).join(" · ");
+          return (
           <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
             <button
               type="button"
-              className="w-full text-left"
+              className="flex w-full items-baseline justify-between gap-2 text-left"
               onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
             >
-              <p className="truncate font-semibold text-foreground">{res.name || "—"}</p>
-              <p className="mt-0.5 truncate text-xs text-muted">
-                {[res.roomLabel, res.signedMonthlyRent ? `$${res.signedMonthlyRent.toFixed(2)}/mo` : null]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-              {!propertyFilter && res.propertyLabel ? (
-                <p className="mt-0.5 truncate text-[11px] text-muted/90">{res.propertyLabel}</p>
+              <p className="min-w-0 flex-1 truncate font-semibold text-foreground">{res.name || "—"}</p>
+              {housingLabel ? (
+                <p className="min-w-0 max-w-[55%] shrink-0 truncate text-right text-xs text-muted">{housingLabel}</p>
               ) : null}
             </button>
-            <div className="mt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_DETAIL_BTN}
-                onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
-              >
-                {selectedId === res.id ? "Less" : "Details"}
-              </Button>
-            </div>
             {selectedId === res.id && selected ? (
               <div className="mt-3 border-t border-border pt-3">{residentDetailPanel}</div>
             ) : null}
           </div>
-        ))}
+          );
+        })}
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
