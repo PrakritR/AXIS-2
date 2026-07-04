@@ -211,6 +211,10 @@ export type ManagerListingSubmissionV1 = {
   venmoPaymentsEnabled?: boolean;
   /** Venmo username, phone, or email (shown to applicants; manager marks payments paid manually). */
   venmoContact?: string;
+  /** When true, applicants/residents see a direct bank/ACH payment link using `achPaymentLink`. */
+  achPaymentLinkEnabled?: boolean;
+  /** External bank/ACH payment link (e.g. a bank bill-pay URL), shown to applicants/residents. */
+  achPaymentLink?: string;
   /**
    * When manual payment methods are enabled for the listing, applicants can still use the default “portal / online” path
    * for the application fee (manager marks received). Default true.
@@ -1241,6 +1245,8 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     zelleContact: "",
     venmoPaymentsEnabled: false,
     venmoContact: "",
+    achPaymentLinkEnabled: false,
+    achPaymentLink: "",
     applicationFeeStripeEnabled: true,
     applicationFeeZelleEnabled: false,
     applicationFeeVenmoEnabled: false,

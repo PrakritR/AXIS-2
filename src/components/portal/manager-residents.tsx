@@ -72,7 +72,9 @@ import {
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
+  updateExtraListingFromSubmissionOnServer,
 } from "@/lib/demo-property-pipeline";
+import { sanitizePaymentContactInput, sanitizePaymentLinkInput } from "@/lib/listing-form-inputs";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import {
   appendLeaseThreadMessage,
@@ -322,6 +324,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   >(null);
   const [chargeExpandedId, setChargeExpandedId] = useState<string | null>(null);
   const [addPaymentMethodOpen, setAddPaymentMethodOpen] = useState(false);
+  const [pmPropertyId, setPmPropertyId] = useState("");
+  const [pmZelleEnabled, setPmZelleEnabled] = useState(false);
+  const [pmZelleContact, setPmZelleContact] = useState("");
+  const [pmVenmoEnabled, setPmVenmoEnabled] = useState(false);
+  const [pmVenmoContact, setPmVenmoContact] = useState("");
+  const [pmAchLinkEnabled, setPmAchLinkEnabled] = useState(false);
+  const [pmAchLink, setPmAchLink] = useState("");
+  const [pmSaving, setPmSaving] = useState(false);
 
   // Add resident manually
   const [addResidentOpen, setAddResidentOpen] = useState(false);
@@ -1425,6 +1435,69 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     showToast("Resident updated.");
   }
 
+  function openPaymentMethodEditor() {
+    if (!selected) return;
+    const propId = selected.propertyId?.trim() || "";
+    setPmPropertyId(propId);
+    const listing = propId && userId ? readExtraListingsForUser(userId).find((p) => p.id === propId) : undefined;
+    const sub = listing?.listingSubmission ? normalizeManagerListingSubmissionV1(listing.listingSubmission) : null;
+    setPmZelleEnabled(Boolean(sub?.zellePaymentsEnabled));
+    setPmZelleContact(sub?.zelleContact ?? "");
+    setPmVenmoEnabled(Boolean(sub?.venmoPaymentsEnabled));
+    setPmVenmoContact(sub?.venmoContact ?? "");
+    setPmAchLinkEnabled(Boolean(sub?.achPaymentLinkEnabled));
+    setPmAchLink(sub?.achPaymentLink ?? "");
+    setAddPaymentMethodOpen(true);
+  }
+
+  async function savePaymentMethodSettings() {
+    if (!userId || !pmPropertyId) {
+      showToast("This resident isn't linked to a property yet.");
+      return;
+    }
+    const zelleContact = sanitizePaymentContactInput(pmZelleContact).trim();
+    const venmoContact = sanitizePaymentContactInput(pmVenmoContact).trim();
+    const achLink = sanitizePaymentLinkInput(pmAchLink).trim();
+    if (pmZelleEnabled && !zelleContact) {
+      showToast("Enter a Zelle phone or email, or turn Zelle off.");
+      return;
+    }
+    if (pmVenmoEnabled && !venmoContact) {
+      showToast("Enter a Venmo username, phone, or email, or turn Venmo off.");
+      return;
+    }
+    if (pmAchLinkEnabled && !achLink) {
+      showToast("Enter a bank/ACH payment link, or turn it off.");
+      return;
+    }
+    // Scoped to this manager's own properties only — readExtraListingsForUser(userId) can never
+    // resolve a listing owned by another manager, and the server re-checks ownership on write.
+    const listing = readExtraListingsForUser(userId).find((p) => p.id === pmPropertyId);
+    if (!listing?.listingSubmission) {
+      showToast("Could not find this property's payment settings.");
+      return;
+    }
+    setPmSaving(true);
+    const nextSubmission = {
+      ...normalizeManagerListingSubmissionV1(listing.listingSubmission),
+      zellePaymentsEnabled: pmZelleEnabled,
+      zelleContact,
+      venmoPaymentsEnabled: pmVenmoEnabled,
+      venmoContact,
+      achPaymentLinkEnabled: pmAchLinkEnabled,
+      achPaymentLink: achLink,
+    };
+    const ok = await updateExtraListingFromSubmissionOnServer(pmPropertyId, userId, nextSubmission);
+    setPmSaving(false);
+    if (!ok) {
+      showToast("Could not save payment methods. Try again.");
+      return;
+    }
+    setPropertyTick((n) => n + 1);
+    showToast("Payment methods saved.");
+    setAddPaymentMethodOpen(false);
+  }
+
   async function deleteSelectedResident() {
     if (!selected) return;
     const selectedResident = selected;
@@ -1838,7 +1911,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   type="button"
                                   variant="outline"
                                   className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                                  onClick={() => setAddPaymentMethodOpen(true)}
+                                  onClick={openPaymentMethodEditor}
+                                  data-attr="resident-payment-method-open"
                                 >
                                   Add payment method
                                 </Button>
@@ -2450,16 +2524,103 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       </>
       )}
 
-      <Modal open={addPaymentMethodOpen} title="Add payment method" onClose={() => setAddPaymentMethodOpen(false)}>
-        <div className="space-y-3 text-sm text-muted">
-          <p>
-            Axis doesn&apos;t store a saved payment method on file for residents yet — {selected?.name ?? "this resident"} chooses
-            how to pay (bank/ACH, card, or Link) each time they check out a charge.
+      <Modal open={addPaymentMethodOpen} title="Payment methods" onClose={() => setAddPaymentMethodOpen(false)}>
+        <div className="space-y-4 text-sm">
+          <p className="text-muted">
+            {selected?.name ?? "This resident"}{" "}
+            chooses how to pay (bank/ACH, card, or Link) each time they check out a charge. The methods below apply to{" "}
+            {selected?.propertyLabel?.trim() || "this resident's property"}{" "}
+            and are the same settings shown under that property&apos;s payment settings in Properties — editing here
+            updates them there too.
           </p>
-          <p>
-            To accept Zelle or Venmo for this property, add or update the contact info under that property&apos;s payment settings
-            in Properties.
-          </p>
+          {!pmPropertyId ? (
+            <p className="rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs text-muted">
+              This resident isn&apos;t linked to a property yet, so payment methods can&apos;t be edited here.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0 rounded border-border"
+                    checked={pmZelleEnabled}
+                    onChange={(e) => setPmZelleEnabled(e.target.checked)}
+                    data-attr="resident-payment-zelle-toggle"
+                  />
+                  <span className="text-sm font-medium text-foreground">Zelle</span>
+                </label>
+                {pmZelleEnabled ? (
+                  <Input
+                    value={pmZelleContact}
+                    onChange={(e) => setPmZelleContact(sanitizePaymentContactInput(e.target.value))}
+                    placeholder="+1 555 010 8899 or name@email.com"
+                    data-attr="resident-payment-zelle-contact-input"
+                  />
+                ) : null}
+              </div>
+              <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0 rounded border-border"
+                    checked={pmVenmoEnabled}
+                    onChange={(e) => setPmVenmoEnabled(e.target.checked)}
+                    data-attr="resident-payment-venmo-toggle"
+                  />
+                  <span className="text-sm font-medium text-foreground">Venmo</span>
+                </label>
+                {pmVenmoEnabled ? (
+                  <Input
+                    value={pmVenmoContact}
+                    onChange={(e) => setPmVenmoContact(sanitizePaymentContactInput(e.target.value))}
+                    placeholder="@username, +1 555 010 8899, or name@email.com"
+                    data-attr="resident-payment-venmo-contact-input"
+                  />
+                ) : null}
+              </div>
+              <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0 rounded border-border"
+                    checked={pmAchLinkEnabled}
+                    onChange={(e) => setPmAchLinkEnabled(e.target.checked)}
+                    data-attr="resident-payment-ach-link-toggle"
+                  />
+                  <span className="text-sm font-medium text-foreground">Bank / ACH payment link</span>
+                </label>
+                {pmAchLinkEnabled ? (
+                  <Input
+                    value={pmAchLink}
+                    onChange={(e) => setPmAchLink(sanitizePaymentLinkInput(e.target.value))}
+                    placeholder="https://your-bank.com/pay/..."
+                    data-attr="resident-payment-ach-link-input"
+                  />
+                ) : null}
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setAddPaymentMethodOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              onClick={savePaymentMethodSettings}
+              disabled={pmSaving || !pmPropertyId}
+              data-attr="resident-payment-method-save"
+            >
+              {pmSaving ? "Saving…" : "Save"}
+            </Button>
+          </div>
         </div>
       </Modal>
 

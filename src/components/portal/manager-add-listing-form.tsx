@@ -91,6 +91,7 @@ import {
   sanitizeMoneyInput,
   sanitizeNeighborhoodInput,
   sanitizePaymentContactInput,
+  sanitizePaymentLinkInput,
   sanitizePlaceNameInput,
   sanitizeStreetAddressInput,
   sanitizeZipInput,
@@ -2951,6 +2952,36 @@ export function ManagerAddListingForm({
                           placeholder="@username, +1 555 010 8899, or name@email.com"
                         />
                         <StepFieldError msg={stepFieldErrors.venmoContact} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="border-t border-border pt-3">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border"
+                        checked={Boolean(sub.achPaymentLinkEnabled)}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setSub((s) => ({ ...s, achPaymentLinkEnabled: on }));
+                        }}
+                        data-attr="listing-payment-ach-link-toggle"
+                      />
+                      <span className="text-sm font-medium text-foreground">Bank / ACH payment link</span>
+                    </label>
+                    {sub.achPaymentLinkEnabled ? (
+                      <div className="mt-2 pl-7" data-wizard-field="achPaymentLink">
+                        <FieldLabel required>Bank / ACH payment link</FieldLabel>
+                        <Input
+                          value={sub.achPaymentLink ?? ""}
+                          onChange={(e) => {
+                            clearListingFieldError("achPaymentLink");
+                            setSub((s) => ({ ...s, achPaymentLink: sanitizePaymentLinkInput(e.target.value) }));
+                          }}
+                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.achPaymentLink))}
+                          placeholder="https://your-bank.com/pay/..."
+                        />
+                        <StepFieldError msg={stepFieldErrors.achPaymentLink} />
                       </div>
                     ) : null}
                   </div>
