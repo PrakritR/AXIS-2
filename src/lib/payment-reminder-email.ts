@@ -26,7 +26,8 @@ export type ReminderTemplateParams = {
 };
 
 export function applyReminderTemplate(template: string, params: ReminderTemplateParams): string {
-  const propertyLine = params.propertyLabel.trim() ? `Property: ${params.propertyLabel.trim()}` : "";
+  const propertyLabel = (params.propertyLabel ?? "").trim();
+  const propertyLine = propertyLabel ? `Property: ${propertyLabel}` : "";
   const daysLabel =
     params.daysUntilDue === 0
       ? "today"

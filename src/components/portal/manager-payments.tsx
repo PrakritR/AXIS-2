@@ -58,8 +58,8 @@ function shouldExcludePaymentAccount(residentName: string, residentEmail?: strin
   return PAYMENT_ACCOUNT_EXCLUSIONS.some((token) => name.includes(token) || email.includes(token));
 }
 
-function normalizePropertyLabel(label: string): string {
-  const trimmed = label.trim();
+function normalizePropertyLabel(label: string | undefined): string {
+  const trimmed = (label ?? "").trim();
   if (!trimmed) return "";
   return trimmed
     .replace(/\s*·\s*[^·]*::[^·]*$/i, "")
