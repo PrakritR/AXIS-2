@@ -14,14 +14,17 @@
  * effects, and it can never leak into a real signed-in portal session.
  */
 
-export type DemoPortalRole = "manager" | "resident";
+export type DemoPortalRole = "manager" | "resident" | "vendor";
 
 export const DEMO_MANAGER_USER_ID = "demo-manager";
 export const DEMO_RESIDENT_USER_ID = "demo-resident";
+export const DEMO_VENDOR_USER_ID = "demo-vendor";
 export const DEMO_MANAGER_EMAIL = "alex.morgan@axis.local";
 export const DEMO_RESIDENT_EMAIL = "jordan.lee@axis.local";
+export const DEMO_VENDOR_EMAIL = "cascade.mechanical@axis.local";
 export const DEMO_MANAGER_NAME = "Alex Morgan";
 export const DEMO_RESIDENT_NAME = "Jordan Lee";
+export const DEMO_VENDOR_NAME = "Cascade Mechanical";
 
 export type DemoSessionSnapshot = { userId: string | null; email: string | null; ready: boolean };
 
@@ -64,6 +67,9 @@ export function subscribeDemoRole(listener: () => void): () => void {
 export function demoSessionForRole(r: DemoPortalRole): DemoSessionSnapshot {
   if (r === "resident") {
     return { userId: DEMO_RESIDENT_USER_ID, email: DEMO_RESIDENT_EMAIL, ready: true };
+  }
+  if (r === "vendor") {
+    return { userId: DEMO_VENDOR_USER_ID, email: DEMO_VENDOR_EMAIL, ready: true };
   }
   // The manager view uses the manager-scoped demo account so seeded manager
   // data (charges, applications, leases…) is visible.

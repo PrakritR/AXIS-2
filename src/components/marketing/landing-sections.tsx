@@ -78,7 +78,7 @@ export function LandingVendorCta() {
         <div className="text-center">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Built for maintenance vendors</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
-            Become an Axis vendor
+            Vendor
           </h2>
         </div>
       </RevealOnView>

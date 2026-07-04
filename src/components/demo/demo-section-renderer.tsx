@@ -8,7 +8,13 @@ import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { ResidentMoveInResolvedView } from "@/components/portal/resident-move-in-view";
 import { demoApplications, demoProperties } from "@/lib/demo/demo-data";
 import type { DemoPortalRole } from "@/lib/demo/demo-session";
-import { DEMO_MANAGER_USER_ID, DEMO_RESIDENT_EMAIL, DEMO_RESIDENT_NAME, DEMO_RESIDENT_USER_ID } from "@/lib/demo/demo-session";
+import {
+  DEMO_MANAGER_USER_ID,
+  DEMO_RESIDENT_EMAIL,
+  DEMO_RESIDENT_NAME,
+  DEMO_RESIDENT_USER_ID,
+  DEMO_VENDOR_NAME,
+} from "@/lib/demo/demo-session";
 import type { PortalSection } from "@/lib/portal-types";
 import { resolveResidentMoveInFromApplications } from "@/lib/resident-move-in-resolve";
 
@@ -41,6 +47,13 @@ const ResidentInboxPanel = dynamic(() => import("@/components/portal/resident-in
 const ResidentDocumentsPanel = dynamic(() => import("@/components/portal/resident-documents-panel").then((m) => m.ResidentDocumentsPanel), { ssr: false, loading });
 const ResidentProfilePanel = dynamic(() => import("@/components/portal/resident-profile-panel").then((m) => m.ResidentProfilePanel), { ssr: false, loading });
 
+// Vendor panels
+const VendorDashboard = dynamic(() => import("@/components/portal/vendor-dashboard").then((m) => m.VendorDashboard), { ssr: false, loading });
+const VendorWorkOrdersPanel = dynamic(() => import("@/components/portal/vendor-work-orders-panel").then((m) => m.VendorWorkOrdersPanel), { ssr: false, loading });
+const VendorCalendarPanel = dynamic(() => import("@/components/portal/vendor-calendar-panel").then((m) => m.VendorCalendarPanel), { ssr: false, loading });
+const VendorInboxPanel = dynamic(() => import("@/components/portal/vendor-inbox-panel").then((m) => m.VendorInboxPanel), { ssr: false, loading });
+const VendorProfilePanel = dynamic(() => import("@/components/portal/vendor-profile-panel").then((m) => m.VendorProfilePanel), { ssr: false, loading });
+
 function Placeholder({ title, message }: { title: string; message: string }) {
   return (
     <ManagerPortalPageShell title={title}>
@@ -62,7 +75,24 @@ export function DemoSectionRenderer({
 }): ReactNode {
   const firstTab = meta?.tabs[0]?.id;
   const tabId = tab ?? firstTab ?? "index";
-  const basePath = role === "resident" ? "/resident" : "/portal";
+  const basePath = role === "resident" ? "/resident" : role === "vendor" ? "/vendor" : "/portal";
+
+  if (role === "vendor") {
+    switch (section) {
+      case "dashboard":
+        return <VendorDashboard displayName={DEMO_VENDOR_NAME} />;
+      case "work-orders":
+        return <VendorWorkOrdersPanel />;
+      case "calendar":
+        return <VendorCalendarPanel />;
+      case "inbox":
+        return <VendorInboxPanel tabId={tabId} />;
+      case "profile":
+        return <VendorProfilePanel />;
+      default:
+        return <Placeholder title={meta?.label ?? "Section"} message="Nothing to show yet." />;
+    }
+  }
 
   if (role === "manager") {
     switch (section) {

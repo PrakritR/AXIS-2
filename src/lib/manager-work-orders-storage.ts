@@ -1,4 +1,4 @@
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { DEMO_VENDOR_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { removePendingWorkOrderChargesForWorkOrder } from "@/lib/household-charges";
 
@@ -113,6 +113,19 @@ export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = E
   });
   const extras = stored.filter((s) => s.id && !fallbackIds.has(s.id));
   return [...merged, ...extras];
+}
+
+/**
+ * Vendor-scoped read. The real `/vendor` route gets rows already scoped to the
+ * signed-in vendor by the server (`vendor_user_id`) before they ever reach this
+ * shared store, so this is a no-op outside the demo sandbox. The `/demo`
+ * sandbox has no per-role server scoping — every persona reads the same
+ * collapsed store — so filter by the demo vendor's name here instead.
+ */
+export function readVendorWorkOrderRows(): DemoManagerWorkOrderRow[] {
+  const rows = readManagerWorkOrderRows();
+  if (!isDemoModeActive()) return rows;
+  return rows.filter((r) => r.vendorName === DEMO_VENDOR_NAME);
 }
 
 export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void {

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { VendorTaxDraft } from "@/components/portal/vendor-tax-profile-modal";
 
 const EMPTY: VendorTaxDraft = {
@@ -25,10 +26,11 @@ const EMPTY: VendorTaxDraft = {
 export function VendorProfilePanel() {
   const { showToast } = useAppUi();
   const [draft, setDraft] = useState<VendorTaxDraft>(EMPTY);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !isDemoModeActive());
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (isDemoModeActive()) return;
     void fetch("/api/vendor/tax-profile", { credentials: "include" })
       .then((r) => r.json())
       .then((data: { profile?: Record<string, unknown> | null }) => {
@@ -54,6 +56,12 @@ export function VendorProfilePanel() {
   async function save() {
     setSaving(true);
     try {
+      if (isDemoModeActive()) {
+        // Nothing to persist server-side in the sandbox — just confirm the
+        // (ephemeral) local edit, same as the rest of the demo experience.
+        showToast("Tax profile saved.");
+        return;
+      }
       const res = await fetch("/api/vendor/tax-profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

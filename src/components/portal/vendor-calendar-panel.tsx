@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
-import { readManagerWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
+import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
 
 function propertyLabel(row: DemoManagerWorkOrderRow): string {
   const unit = row.unit?.trim();
@@ -21,10 +21,10 @@ function timeLabel(iso: string): string {
 
 /** Scheduled visits for the signed-in vendor, grouped by day. */
 export function VendorCalendarPanel() {
-  const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readManagerWorkOrderRows());
+  const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
 
   useEffect(() => {
-    const sync = () => setRows(readManagerWorkOrderRows());
+    const sync = () => setRows(readVendorWorkOrderRows());
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     void syncManagerWorkOrdersFromServer().then(() => sync());
     return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);

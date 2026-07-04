@@ -6,7 +6,8 @@ import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { WorkOrderStatusBadge } from "@/components/portal/resident-services-panel";
-import { readManagerWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
 
 function propertyLabel(row: DemoManagerWorkOrderRow): string {
   const unit = row.unit?.trim();
@@ -47,17 +48,18 @@ function ChecklistItem({
 
 /** Vendor Home — getting-started checklist plus an at-a-glance list of active/assigned work. */
 export function VendorDashboard({ displayName }: { displayName: string }) {
-  const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readManagerWorkOrderRows());
+  const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
   const [profileComplete, setProfileComplete] = useState(false);
 
   useEffect(() => {
-    const sync = () => setRows(readManagerWorkOrderRows());
+    const sync = () => setRows(readVendorWorkOrderRows());
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     void syncManagerWorkOrdersFromServer().then(() => sync());
     return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
   }, []);
 
   useEffect(() => {
+    if (isDemoModeActive()) return;
     void fetch("/api/vendor/tax-profile", { credentials: "include" })
       .then((r) => r.json())
       .then((data: { profile?: { w9_attestation?: boolean; legal_name?: string } | null }) => {

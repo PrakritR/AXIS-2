@@ -20,7 +20,7 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { WorkOrderStatusBadge } from "@/components/portal/resident-services-panel";
-import { readManagerWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
+import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
 import { parseMoneyAmount } from "@/lib/household-charges";
 import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -62,7 +62,7 @@ function defaultBidDraft(bid: WorkOrderBid | undefined): BidDraft {
  * cost/time bid once the manager has opened a work order for bids. */
 export function VendorWorkOrdersPanel() {
   const { showToast } = useAppUi();
-  const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readManagerWorkOrderRows());
+  const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
   const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, BidDraft>>({});
@@ -74,7 +74,7 @@ export function VendorWorkOrdersPanel() {
   }, []);
 
   useEffect(() => {
-    const sync = () => setRows(readManagerWorkOrderRows());
+    const sync = () => setRows(readVendorWorkOrderRows());
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     void syncManagerWorkOrdersFromServer().then(() => sync());
     void loadBids();

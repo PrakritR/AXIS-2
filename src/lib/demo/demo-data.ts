@@ -26,6 +26,7 @@ import {
   DEMO_RESIDENT_EMAIL,
   DEMO_RESIDENT_NAME,
   DEMO_RESIDENT_USER_ID,
+  DEMO_VENDOR_NAME,
 } from "@/lib/demo/demo-session";
 
 // --- date helpers (relative to "now" so the demo never goes stale) -----------
@@ -774,8 +775,19 @@ export function demoWorkOrders(): DemoManagerWorkOrderRow[] {
         residentName: "Omar Haddad",
         category: "hvac",
         scheduled: dateLabel(3),
-        scheduledAtIso: isoDaysFromNow(3),
-        vendorName: "Cascade Mechanical",
+        scheduledAtIso: isoAtTime(3, 10, 0),
+        vendorName: DEMO_VENDOR_NAME,
+      }),
+    // Second scheduled visit for the same vendor — gives the vendor persona's
+    // Work Orders + Calendar more than one entry to show.
+    mk("demo-wo-5", PROP.lakeview, "Furnace filter replacement", "Low", "Scheduled", "scheduled",
+      "Quarterly furnace filter swap ahead of the new resident's move-in.", {
+        residentName: "Grace Kim",
+        residentEmail: "grace.kim@example.com",
+        category: "hvac",
+        scheduled: dateLabel(6),
+        scheduledAtIso: isoAtTime(6, 13, 30),
+        vendorName: DEMO_VENDOR_NAME,
       }),
     mk("demo-wo-3", PROP.emerald, "Repaint living room", "Low", "Completed", "completed",
       "Turn-over repaint before renewal.", {
@@ -1083,6 +1095,33 @@ export function demoResidentInbox(): PersistedInboxThread[] {
       preview: "The leak under the sink is getting worse…",
       body: "Hi,\n\nThe leak under the kitchen sink is getting worse. Could someone take a look this week?\n\nThanks,\nJordan",
       time: dateLabel(-1),
+      unread: false,
+    },
+  ];
+}
+
+export function demoVendorInbox(): PersistedInboxThread[] {
+  return [
+    {
+      id: "demo-vi-1",
+      folder: "inbox",
+      from: DEMO_MANAGER_NAME,
+      email: DEMO_MANAGER_EMAIL,
+      subject: "Service visit scheduled — HVAC seasonal tune-up",
+      preview: `${PROP_LABEL[PROP.cascade]} · ${dateLabel(3)} at 10:00 AM…`,
+      body: `Hi ${DEMO_VENDOR_NAME},\n\nYou're scheduled for the annual HVAC tune-up at ${PROP_LABEL[PROP.cascade]} on ${dateLabel(3)} at 10:00 AM. Resident Omar Haddad will be expecting you.\n\nThanks,\nAlex`,
+      time: dateLabel(-1),
+      unread: true,
+    },
+    {
+      id: "demo-vi-2",
+      folder: "inbox",
+      from: DEMO_MANAGER_NAME,
+      email: DEMO_MANAGER_EMAIL,
+      subject: "Service visit scheduled — Furnace filter replacement",
+      preview: `${PROP_LABEL[PROP.lakeview]} · ${dateLabel(6)} at 1:30 PM…`,
+      body: `Hi ${DEMO_VENDOR_NAME},\n\nQuick one — please swap the furnace filter at ${PROP_LABEL[PROP.lakeview]} on ${dateLabel(6)} at 1:30 PM ahead of the new resident's move-in.\n\nThanks,\nAlex`,
+      time: dateLabel(-2),
       unread: false,
     },
   ];

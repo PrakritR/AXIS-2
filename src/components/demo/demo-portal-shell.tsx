@@ -9,6 +9,7 @@ import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { PortalContainerProvider } from "@/components/ui/portal-container-context";
 import { groupNavItems } from "@/lib/portals/nav-groups";
 import { proPortal } from "@/lib/portals/pro";
+import { vendorPortal } from "@/lib/portals/vendor";
 import { RESIDENT_APPROVED_PORTAL_SECTIONS, RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import type { PortalDefinition, PortalSection } from "@/lib/portal-types";
 import { closeAxisAssistant, sendAxisAssistantPrompt } from "@/lib/axis-assistant/open-store";
@@ -26,7 +27,7 @@ import { DemoShowcaseOverlay, type ShowcaseKind } from "@/components/demo/demo-s
 /** App routes a reused portal panel might try to navigate to. In the demo these
  * must never reach the real (auth-gated) router — either they map to an in-demo
  * section switch or they are swallowed so the visitor stays in the sandbox. */
-const DEMO_INTERCEPT_HREF = /^\/(portal|resident|admin|auth|rent)(\/|$)/;
+const DEMO_INTERCEPT_HREF = /^\/(portal|resident|vendor|admin|auth|rent)(\/|$)/;
 
 /** Parse an in-app portal href (`/resident/documents/receipts`) into the demo's
  * section + tab. Returns null for routes with no in-demo equivalent
@@ -36,7 +37,7 @@ function parseDemoTarget(href: string): { section: string; tab: string | null } 
   const parts = path.split("/").filter(Boolean);
   if (parts.length < 2) return null;
   const [prefix, section, tab] = parts;
-  if (prefix !== "portal" && prefix !== "resident") return null;
+  if (prefix !== "portal" && prefix !== "resident" && prefix !== "vendor") return null;
   return { section: section!, tab: tab ?? null };
 }
 
@@ -50,12 +51,14 @@ function definitionForRole(role: DemoPortalRole): PortalDefinition {
       sections: RESIDENT_APPROVED_PORTAL_SECTIONS,
     };
   }
+  if (role === "vendor") return vendorPortal;
   return proPortal;
 }
 
 const ROLES: { id: DemoPortalRole; label: string }[] = [
   { id: "resident", label: "Resident" },
   { id: "manager", label: "Manager" },
+  { id: "vendor", label: "Vendor" },
 ];
 
 /** Sections the auto-play tour steps through (sidebar order, minus Settings). */
@@ -355,7 +358,7 @@ export function DemoPortalShell() {
             <div className="flex h-12 items-center gap-2 border-b border-border px-3">
               <span className="text-sm font-semibold text-foreground">Axis</span>
               <span className="rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
-                {role === "resident" ? "Resident" : "Manager"}
+                {ROLES.find((r) => r.id === role)?.label ?? "Manager"}
               </span>
               <button
                 type="button"
