@@ -164,7 +164,7 @@ export type DemoManagerWorkOrderRow = {
   vendorAssignedAt?: string;
   /** Manager handles the work themselves — no vendor assigned, no vendor email sent. */
   selfAssigned?: boolean;
-  category?: "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
+  category?: "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general" | "appliance" | "access";
   vendorCostCents?: number;
   materialsCostCents?: number;
   materialsMemo?: string;

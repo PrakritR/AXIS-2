@@ -956,6 +956,8 @@ export function ManagerWorkOrdersPanel({
                 <option value="mold">Mold remediation</option>
                 <option value="electrical">Electrical</option>
                 <option value="hvac">HVAC</option>
+                <option value="appliance">Appliance</option>
+                <option value="access">Access / Locks</option>
                 <option value="general">General maintenance</option>
               </select>
             </label>

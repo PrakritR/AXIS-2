@@ -50,6 +50,7 @@ import type { ManagerListingServiceOption } from "@/lib/manager-listing-submissi
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { notifyManagerOfResidentSubmission } from "@/lib/resident-manager-notifications";
+import { workOrderCategoryForResidentLabel } from "@/lib/work-order-taxonomy";
 import {
   SERVICE_REQUESTS_EVENT,
   createServiceRequest,
@@ -790,6 +791,7 @@ export function ResidentServicesPanel({
       priority: mPriority,
       status: "Submitted",
       bucket: "open",
+      category: workOrderCategoryForResidentLabel(mCategory),
       description: `${mCategory}: Your request is logged. Maintenance will review and update this thread.`,
       scheduled: "—",
       cost: "—",
