@@ -20,6 +20,7 @@ export const IN_APP_PATH_PREFIXES = [
   "/rent/",
   "/partner/",
   "/billing/",
+  "/vendor/",
 ] as const;
 
 /** Exact paths (no trailing segment) that are also in-app. */

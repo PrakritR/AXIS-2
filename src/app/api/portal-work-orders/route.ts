@@ -41,6 +41,9 @@ export async function GET() {
 
     if (!admin && role === "resident") {
       query = query.eq("resident_email", email);
+    } else if (!admin && role === "vendor") {
+      // A vendor sees only work orders assigned to them, never another vendor's or landlord's.
+      query = query.eq("vendor_user_id", user.id);
     } else if (!admin) {
       // Managers see only their own work orders (plus legacy unassigned rows),
       // never other landlords'. This matches the manager panel's client filter.
@@ -77,9 +80,21 @@ function actorOwnsRecord(actor: Actor, rec: OwnerCols | null): boolean {
   return false;
 }
 
+/** Resolve a vendor directory row's linked auth user, so the record can be scoped
+ * for the vendor's own GET query and inbox notifications without a join at read time. */
+async function resolveVendorUserId(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  vendorId: string | null | undefined,
+): Promise<string | null> {
+  const id = vendorId?.trim();
+  if (!id) return null;
+  const { data } = await db.from("manager_vendor_records").select("vendor_user_id").eq("id", id).maybeSingle();
+  return (data?.vendor_user_id as string | null) ?? null;
+}
+
 /** Build the persisted record, binding scope columns to the authenticated caller
  * so a client cannot spoof ownership. */
-function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow) {
+function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow, vendorUserId: string | null) {
   const normalized = normalizeRow(row);
   const base = {
     id: normalized.id,
@@ -87,6 +102,7 @@ function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow) {
     resident_email: normalized.residentEmail?.trim().toLowerCase() || null,
     property_id: normalized.propertyId || null,
     assigned_property_id: normalized.assignedPropertyId || null,
+    vendor_user_id: normalized.selfAssigned ? null : vendorUserId,
     row_data: normalized,
     updated_at: new Date().toISOString(),
   };
@@ -113,6 +129,12 @@ export async function POST(req: Request) {
       admin,
       role: String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase(),
     };
+
+    // Vendors see their offered/assigned work through GET; the record itself is
+    // manager-authored (assignment, scheduling, billing), so vendor writes are rejected.
+    if (!admin && actor.role === "vendor") {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
 
     const body = (await req.json()) as {
       action?: "upsert" | "delete" | "replace";
@@ -147,7 +169,8 @@ export async function POST(req: Request) {
         if (!row?.id) continue;
         if (!(await ownsExisting(row.id))) continue;
         if (!(await residentMayTargetRowManager(row))) continue;
-        await db.from("portal_work_order_records").upsert(recordForActor(actor, row), { onConflict: "id" });
+        const vendorUserId = await resolveVendorUserId(db, row.vendorId);
+        await db.from("portal_work_order_records").upsert(recordForActor(actor, row, vendorUserId), { onConflict: "id" });
       }
       return NextResponse.json({ ok: true });
     }
@@ -176,9 +199,10 @@ export async function POST(req: Request) {
     if (!(await residentMayTargetRowManager(body.row))) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
+    const vendorUserId = await resolveVendorUserId(db, body.row.vendorId);
     const { error } = await db
       .from("portal_work_order_records")
-      .upsert(recordForActor(actor, body.row), { onConflict: "id" });
+      .upsert(recordForActor(actor, body.row, vendorUserId), { onConflict: "id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   } catch (e) {

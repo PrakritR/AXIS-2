@@ -44,6 +44,8 @@ function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: strin
       return { subtitle: "Resident", ariaLabel: "Axis Resident Portal home" };
     case "admin":
       return { subtitle: "Admin", ariaLabel: "Axis Admin Portal home" };
+    case "vendor":
+      return { subtitle: "Vendor", ariaLabel: "Axis Vendor Portal home" };
     default:
       return { subtitle: "Manager", ariaLabel: "Axis Manager Portal home" };
   }

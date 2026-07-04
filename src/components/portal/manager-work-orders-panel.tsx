@@ -204,6 +204,7 @@ export function ManagerWorkOrdersPanel({
           credentials: "include",
           body: JSON.stringify({
             workOrderId: row.id,
+            vendorId: vendor.id,
             vendorEmail,
             vendorName: vendor.name,
             workOrderTitle: row.title,

@@ -208,3 +208,76 @@ Local dev and the automated tests share one **dev/test** Supabase project;
 Never point a local `.env` at production. Schema parity between the two projects
 is maintained with the Supabase CLI (`npm run db:push`), not the SQL Editor. Full
 model and workflow: [`docs/database-environments.md`](docs/database-environments.md).
+
+# Vendor portal (Phase 1 foundation)
+
+A 4th portal role — `vendor` — sits alongside manager/resident/admin. Phase 1
+covers vendor login + portal shell + work-order visibility + notifications.
+Bidding/tours (Phase 2) and real Stripe payouts (Phase 3) are NOT built yet; the
+vendor Profile tab's "Payments" section is a placeholder.
+
+**Role plumbing.** `"vendor"` was added to `AuthRole`
+(`src/lib/auth/portal-roles.ts`) and `PortalKind` (`src/lib/portal-types.ts`) —
+two parallel enums, both needed. Every hardcoded role-literal guard across the
+auth flow (`portal-access.ts`, `set-active-portal`, `resolve-oauth-portal-access.ts`,
+`post-oauth-routing.ts`, `migrate-portal-user-id.ts`, `profile-role-row.ts`) was
+extended in lockstep — when adding a 5th role, grep for `"resident" ===` /
+`"manager" ===` literal chains rather than assuming one canonical `isAuthRole`.
+
+**Portal registry.** `src/lib/portals/vendor.ts` defines 5 sections: Home
+(`dashboard`), Work Orders, Calendar, Inbox, Profile. Routes live at
+`src/app/vendor/layout.tsx` + `src/app/vendor/[section]/[[...tab]]/page.tsx`,
+copied from the resident portal shell. Render handlers are in
+`render-portal-section.tsx` under `kind === "vendor"` blocks (after the resident
+blocks, before the generic tabbed-workspace fallback). Native bottom bar primary
+set (`NATIVE_BOTTOM_NAV_VENDOR_PRIMARY` in `src/lib/native/portal-bottom-nav.ts`)
+is Home/Work Orders/Calendar/Inbox — Profile lives in the swipe-up More sheet.
+
+**Invite → signup linking.** A manager's "Send invite" (Services → Vendors)
+writes a `vendor_invites` row (`manager_user_id`, `vendor_directory_id`,
+`vendor_email`, status) — the invitee has no account yet, so this can't use the
+`account_link_invites` Axis-ID-lookup shape; it's matched by lowercased email at
+signup instead, mirroring how `manager_application_records` links residents.
+`provision-vendor-account.ts` does the linking: on signup it looks up the
+pending invite by email, links (or creates) the `manager_vendor_records` row,
+sets its `vendor_user_id`, and marks the invite accepted. A vendor CAN also
+self-serve signup from the public marketing CTA with no invite at all — they
+just land with no linked manager until one exists.
+
+**Row-level isolation.** `manager_vendor_records`, `portal_work_order_records`,
+and `vendor_tax_profiles` all gained a `vendor_user_id` column (nullable,
+populated once the vendor signs up) plus a `..._vendor_read` RLS SELECT policy
+scoped to `vendor_user_id = auth.uid()` — defense in depth alongside the
+existing service-role API routes, matching the `auth.uid()` pattern on the
+financials tables. `/api/portal-work-orders` resolves `vendorId` (a
+`manager_vendor_records.id` string) → `vendor_user_id` via
+`resolveVendorUserId()` at write time so vendor GET requests can scope directly
+by `.eq("vendor_user_id", user.id)`; vendor writes to that route are rejected
+(vendor is read-only — the manager owns assignment/scheduling).
+
+**Notifications.** Work-order-offer notification (Axis inbox message + email)
+is NOT a separate new endpoint — it's wired into the EXISTING
+`/api/portal/send-vendor-visit-email` route, which the manager UI already calls
+whenever a visit is scheduled/rescheduled (`manager-work-orders-panel.tsx`).
+That route now also calls `deliverPortalInboxMessage()` with
+`toUserIds: [vendorUserId]` (resolved from the vendor's directory row) whenever
+the vendor has signed up; the email always sends via the vendor's stored email
+regardless of signup status. Phase 2 (tour → bid) should hook the same
+`deliverPortalInboxMessage` call rather than growing a second notification path.
+Inbox scoping added a 3rd scope constant (`axis_portal_inbox_vendor_v1`,
+mirrored across `portal-inbox-delivery.ts`, `portal-inbox-thread-scope.ts`, and
+the legacy duplicate in `send-inbox-message/route.ts` — yes, the scope-for-role
+logic is duplicated 3x pre-existing, not something introduced here). Manager →
+vendor and vendor → manager messaging permission checks were added to
+`src/lib/inbox-recipient-scope.ts` (`vendorEmailsForManagers`,
+`managerIdsOwningVendor` / `isVendorRole` branches) — without these the
+automatic notification would silently get filtered out by
+`filterRecipientsBySenderScope`.
+
+**Vendor self-service tax profile.** The manager-facing
+`/api/vendors/[id]/tax-profile` route requires manager auth
+(`assertManagerFinancialsAccess`) and can't be reused by the vendor directly.
+A separate `/api/vendor/tax-profile` route lets the signed-in vendor read/write
+their OWN `vendor_tax_profiles` row, resolving `(manager_user_id, vendor_id)`
+server-side from their own `manager_vendor_records.vendor_user_id` link — never
+trusting client input for those two key fields.

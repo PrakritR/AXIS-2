@@ -4,6 +4,7 @@ import { sendSms } from "@/lib/twilio";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
+export const VENDOR_INBOX_SCOPE = "axis_portal_inbox_vendor_v1";
 
 export type InboxDeliveryRecipient = {
   email: string;
@@ -15,6 +16,7 @@ export type InboxDeliveryRecipient = {
 function scopeForRole(role: string | null | undefined): string {
   const normalized = String(role ?? "").trim().toLowerCase();
   if (normalized === "manager" || normalized === "pro" || normalized === "admin") return MANAGER_INBOX_SCOPE;
+  if (normalized === "vendor") return VENDOR_INBOX_SCOPE;
   return RESIDENT_INBOX_SCOPE;
 }
 

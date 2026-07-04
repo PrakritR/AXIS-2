@@ -8,6 +8,13 @@ const OWNER_FEATURES = [
   "Rent collection",
 ] as const;
 
+const VENDOR_FEATURES = [
+  "See work orders offered to you, with the scheduled visit time",
+  "Track your jobs on a calendar built for your schedule",
+  "Message the property manager directly from your inbox",
+  "Keep your W-9/tax info on file for accurate 1099s",
+] as const;
+
 const HOW_STEPS = [
   {
     title: "Onboard your properties",
@@ -55,6 +62,49 @@ export function LandingAudienceBento() {
             </ul>
             <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors duration-200 group-hover:gap-2">
               Partner with Axis
+              <ArrowIcon />
+            </span>
+          </Link>
+        </div>
+      </RevealOnView>
+    </section>
+  );
+}
+
+export function LandingVendorCta() {
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-16 sm:px-5 sm:py-20">
+      <RevealOnView>
+        <div className="text-center">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Built for maintenance vendors</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
+            Become an Axis vendor
+          </h2>
+        </div>
+      </RevealOnView>
+
+      <RevealOnView delayMs={80}>
+        <div className="mx-auto mt-12 max-w-2xl">
+          <Link
+            href="/auth/vendor-register"
+            data-attr="become-a-vendor-cta"
+            className="glass-card group flex h-full cursor-pointer flex-col rounded-2xl p-7 transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-[var(--shadow-card-hover)]"
+          >
+            <h3 className="text-lg font-semibold text-foreground">Work orders from Axis property managers</h3>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              Get started in minutes: create your account (or accept an invite from a manager you already
+              work with), add your business & tax info, and start receiving offered work.
+            </p>
+            <ul className="mt-5 space-y-2">
+              {VENDOR_FEATURES.map((f) => (
+                <li key={f} className="flex items-center gap-2 text-sm text-foreground/80">
+                  <CheckIcon />
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors duration-200 group-hover:gap-2">
+              Sign up as a vendor
               <ArrowIcon />
             </span>
           </Link>

@@ -24,6 +24,11 @@ import { ResidentApplicationsPanel } from "@/components/portal/resident-applicat
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
+import { VendorDashboard } from "@/components/portal/vendor-dashboard";
+import { VendorWorkOrdersPanel } from "@/components/portal/vendor-work-orders-panel";
+import { VendorCalendarPanel } from "@/components/portal/vendor-calendar-panel";
+import { VendorInboxPanel } from "@/components/portal/vendor-inbox-panel";
+import { VendorProfilePanel } from "@/components/portal/vendor-profile-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
@@ -609,6 +614,37 @@ export async function renderPortalSection(
         return <ResidentServicesPanel tabId="work-orders" basePath={def.basePath} />;
       }
     }
+  }
+
+  if (kind === "vendor" && section === "dashboard") {
+    if (tabParts?.length) notFound();
+    const { profile } = await getEffectiveSessionForPortal("vendor");
+    return <VendorDashboard displayName={profile?.full_name?.trim() || "there"} />;
+  }
+
+  if (kind === "vendor" && section === "work-orders") {
+    if (tabParts?.length) notFound();
+    return <VendorWorkOrdersPanel />;
+  }
+
+  if (kind === "vendor" && section === "calendar") {
+    if (tabParts?.length) notFound();
+    return <VendorCalendarPanel />;
+  }
+
+  if (kind === "vendor" && section === "inbox") {
+    if (!meta.tabs.length) notFound();
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    }
+    const inboxTab = tabParts[0]!;
+    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+    return <VendorInboxPanel tabId={inboxTab} />;
+  }
+
+  if (kind === "vendor" && section === "profile") {
+    if (tabParts?.length) notFound();
+    return <VendorProfilePanel />;
   }
 
   if (!meta.tabs.length) {

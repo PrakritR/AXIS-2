@@ -17,6 +17,7 @@ const NATIVE_APP_ALLOWED_PREFIXES = [
   "/admin",
   "/pro",
   "/billing",
+  "/vendor",
 ] as const;
 
 /** Public pages reachable from inside the app (e.g. admin "Contact us" link). */

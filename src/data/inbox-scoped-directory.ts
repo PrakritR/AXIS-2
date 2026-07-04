@@ -26,10 +26,14 @@ export type InboxRecipientCategory = "admin" | "management" | "resident";
 
 /** Which address-book roles appear under Management / Resident for each portal. */
 export function rolesForRecipientCategory(
-  portal: "resident" | "manager",
+  portal: "resident" | "manager" | "vendor",
   category: InboxRecipientCategory,
 ): InboxContactRole[] {
   if (category === "admin") return [];
+  if (portal === "vendor") {
+    if (category === "management") return ["manager"];
+    return [];
+  }
   if (portal === "manager") {
     if (category === "management") return ["manager"];
     return ["resident"];
@@ -39,10 +43,10 @@ export function rolesForRecipientCategory(
 }
 
 export function categoryForContactRole(
-  portal: "resident" | "manager",
+  portal: "resident" | "manager" | "vendor",
   role: InboxContactRole,
 ): InboxRecipientCategory {
-  if (portal === "resident") {
+  if (portal === "resident" || portal === "vendor") {
     if (role === "resident") return "resident";
     return "management";
   }
@@ -50,7 +54,7 @@ export function categoryForContactRole(
   return "resident";
 }
 
-function contactsVisibleInPortal(portal: "resident" | "manager", list: InboxScopedContact[]) {
+function contactsVisibleInPortal(portal: "resident" | "manager" | "vendor", list: InboxScopedContact[]) {
   const roles = new Set<InboxContactRole>([
     ...rolesForRecipientCategory(portal, "management"),
     ...rolesForRecipientCategory(portal, "resident"),
@@ -59,7 +63,7 @@ function contactsVisibleInPortal(portal: "resident" | "manager", list: InboxScop
 }
 
 export function contactsForPortal(
-  portal: "resident" | "manager",
+  portal: "resident" | "manager" | "vendor",
   liveContacts: InboxScopedContact[] = [],
 ): InboxScopedContact[] {
   return contactsVisibleInPortal(portal, liveContacts);

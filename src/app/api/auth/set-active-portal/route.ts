@@ -7,7 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "admin";
+  return value === "resident" || value === "manager" || value === "admin" || value === "vendor";
 }
 
 export async function POST(req: Request) {

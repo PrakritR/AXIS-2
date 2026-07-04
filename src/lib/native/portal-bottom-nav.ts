@@ -46,6 +46,12 @@ export const NATIVE_BOTTOM_NAV_RESIDENT_ORDER = [
 ] as const;
 
 /**
+ * Vendor footer order — mirrors `vendorPortal.sections` (Settings/profile omitted; pinned last).
+ * Keep in sync with `src/lib/portals/vendor.ts`.
+ */
+export const NATIVE_BOTTOM_NAV_VENDOR_ORDER = ["dashboard", "work-orders", "calendar", "inbox"] as const;
+
+/**
  * Native bottom bar order — preserves portal registry order (web sidebar = native bar).
  * Settings is always appended last when present.
  */
@@ -79,6 +85,8 @@ export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = ["dashboard", "lease", "paymen
 
 export const NATIVE_BOTTOM_NAV_ADMIN_PRIMARY = ["dashboard", "properties", "axis-users", "events"] as const;
 
+export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["dashboard", "work-orders", "calendar", "inbox"] as const;
+
 function primaryOrderFor(kind?: PortalDefinition["kind"]): readonly string[] {
   switch (kind) {
     case "pro":
@@ -88,6 +96,8 @@ function primaryOrderFor(kind?: PortalDefinition["kind"]): readonly string[] {
       return NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY;
     case "admin":
       return NATIVE_BOTTOM_NAV_ADMIN_PRIMARY;
+    case "vendor":
+      return NATIVE_BOTTOM_NAV_VENDOR_PRIMARY;
     default:
       return [];
   }

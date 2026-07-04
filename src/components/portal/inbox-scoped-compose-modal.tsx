@@ -36,12 +36,13 @@ type Chip =
   | { key: string; kind: "broadcast"; category: InboxRecipientCategory }
   | { key: string; kind: "contact"; contact: InboxScopedContact };
 
-function categoryHint(portal: "resident" | "manager", category: InboxRecipientCategory): string {
+function categoryHint(portal: "resident" | "manager" | "vendor", category: InboxRecipientCategory): string {
   if (category === "admin") return "Messages to Axis operations.";
   if (portal === "manager") {
     if (category === "management") return "Property owners on your listings.";
     return "Tenants & approved residents.";
   }
+  if (portal === "vendor") return "Your property manager(s).";
   if (category === "management") return "Property managers and owners.";
   return "Household / co-tenants.";
 }
@@ -59,8 +60,9 @@ const CATEGORY_ORDER: InboxRecipientCategory[] = ["admin", "management", "reside
  * and their own managers — never other residents — so the Resident bucket is
  * hidden for them (the server enforces the same scope regardless).
  */
-function visibleCategoriesForPortal(portal: "resident" | "manager"): InboxRecipientCategory[] {
+function visibleCategoriesForPortal(portal: "resident" | "manager" | "vendor"): InboxRecipientCategory[] {
   if (portal === "resident") return ["admin", "management"];
+  if (portal === "vendor") return ["management"];
   return CATEGORY_ORDER;
 }
 
@@ -77,7 +79,7 @@ export function ScopedInboxComposeModal({
   open: boolean;
   onClose: () => void;
   onSend: (payload: ScopedInboxSendPayload) => void;
-  portal: "resident" | "manager";
+  portal: "resident" | "manager" | "vendor";
   title?: string;
   senderName?: string;
   senderEmail?: string;

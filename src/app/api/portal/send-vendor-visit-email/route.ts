@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { buildVendorVisitEmail } from "@/lib/vendor-visit-email";
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
 
     const db = createSupabaseServiceRoleClient();
     const admin = await isAdminUser(user.id);
-    const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const { data: profile } = await db.from("profiles").select("role, email, full_name").eq("id", user.id).maybeSingle();
     const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
     if (!admin && role !== "manager" && role !== "pro") {
       return NextResponse.json({ ok: false, error: "Forbidden." }, { status: 403 });
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
 
     const body = (await req.json().catch(() => ({}))) as {
       workOrderId?: string;
+      vendorId?: string;
       vendorEmail?: string;
       vendorName?: string;
       workOrderTitle?: string;
@@ -107,8 +109,36 @@ export async function POST(req: Request) {
       console.error("send-vendor-visit-email: audit log write failed", auditError);
     }
 
-    track("work_order_vendor_email_sent", user.id, { email_sent: emailSent });
-    return NextResponse.json({ ok: true, emailSent, skipped: skipExternalEmail });
+    // Also deliver an Axis inbox message once the vendor has signed up and linked
+    // their auth user — the email above reaches them regardless of signup status,
+    // but the inbox thread only makes sense once there's a vendor account to own it.
+    let inboxDelivered = false;
+    const vendorId = String(body.vendorId ?? "").trim();
+    if (vendorId) {
+      const { data: vendorRow } = await db
+        .from("manager_vendor_records")
+        .select("vendor_user_id")
+        .eq("id", vendorId)
+        .maybeSingle();
+      const vendorUserId = (vendorRow?.vendor_user_id as string | null) ?? null;
+      if (vendorUserId) {
+        const delivery = await deliverPortalInboxMessage(db, {
+          senderUserId: user.id,
+          senderEmail: (profile?.email ?? user.email ?? "").trim().toLowerCase(),
+          fromName: profile?.full_name?.trim() || "Axis Portal",
+          subject,
+          text: messageBody,
+          toUserIds: [vendorUserId],
+          deliverToPortalInbox: true,
+          deliverViaEmail: false,
+          deliverViaSms: false,
+        });
+        inboxDelivered = delivery.ok;
+      }
+    }
+
+    track("work_order_vendor_email_sent", user.id, { email_sent: emailSent, inbox_delivered: inboxDelivered });
+    return NextResponse.json({ ok: true, emailSent, inboxDelivered, skipped: skipExternalEmail });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });

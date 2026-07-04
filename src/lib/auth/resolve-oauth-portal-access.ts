@@ -23,7 +23,7 @@ import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "admin";
+  return value === "resident" || value === "manager" || value === "admin" || value === "vendor";
 }
 
 function isBypassOAuthGatePath(path: string): boolean {
@@ -97,7 +97,7 @@ export async function resolveOAuthPortalRedirect(
   }
 
   const soleRole = roles[0] ?? null;
-  if (soleRole === "resident" || soleRole === "admin") {
+  if (soleRole === "resident" || soleRole === "admin" || soleRole === "vendor") {
     return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
   if (soleRole === "manager") {

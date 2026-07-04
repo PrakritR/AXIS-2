@@ -4,6 +4,7 @@ import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useM
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
@@ -81,6 +82,7 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<VendorDraft>(EMPTY_DRAFT);
   const [showAdd, setShowAdd] = useState(false);
+  const [sendingInviteId, setSendingInviteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -160,6 +162,37 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     showToast(existingId ? "Vendor updated." : "Vendor added.");
   }
 
+  async function sendInvite(row: ManagerVendorRow) {
+    if (!row.email.trim()) {
+      showToast("Add an email for this vendor before sending an invite.");
+      return;
+    }
+    setSendingInviteId(row.id);
+    try {
+      const res = await fetch("/api/portal/send-vendor-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ vendorId: row.id, vendorName: row.name, vendorEmail: row.email }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
+      if (!res.ok || data.ok === false) {
+        if (data.mailtoHref) {
+          window.open(data.mailtoHref, "_blank");
+          showToast(data.error ?? "Email delivery isn't configured — opened your email client instead.");
+          return;
+        }
+        showToast(data.error ?? "Could not send invite.");
+        return;
+      }
+      showToast("Invite sent.");
+    } catch {
+      showToast("Could not send invite.");
+    } finally {
+      setSendingInviteId(null);
+    }
+  }
+
   function removeVendor(id: string) {
     const row = vendors.find((v) => v.id === id);
     if (row && !isOwnVendor(row)) {
@@ -209,6 +242,16 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
               <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
                 Edit
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 text-xs"
+                onClick={() => void sendInvite(row)}
+                disabled={sendingInviteId === row.id}
+                data-attr="vendor-send-invite"
+              >
+                {sendingInviteId === row.id ? "Sending…" : "Send invite"}
+              </Button>
               <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
                 Remove
               </Button>
@@ -244,18 +287,22 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
 
   const body = (
     <>
-      {showAdd ? (
-        <div className="mb-6 rounded-2xl border border-border bg-card p-5">
-          <p className="text-sm font-semibold text-foreground">New vendor</p>
-          <VendorForm draft={draft} setDraft={setDraft} />
-          <div className="mt-4 flex gap-2">
-            <Button type="button" onClick={() => saveVendor()}>Save vendor</Button>
-            <Button type="button" variant="outline" onClick={() => { setShowAdd(false); setDraft(EMPTY_DRAFT); }}>
-              Cancel
-            </Button>
-          </div>
+      <Modal
+        open={showAdd}
+        onClose={() => {
+          setShowAdd(false);
+          setDraft(EMPTY_DRAFT);
+        }}
+        title="New vendor"
+      >
+        <VendorForm draft={draft} setDraft={setDraft} />
+        <div className="mt-4 flex gap-2">
+          <Button type="button" onClick={() => saveVendor()}>Save vendor</Button>
+          <Button type="button" variant="outline" onClick={() => { setShowAdd(false); setDraft(EMPTY_DRAFT); }}>
+            Cancel
+          </Button>
         </div>
-      ) : null}
+      </Modal>
 
       {vendors.length === 0 ? (
         <PortalDataTableEmpty message="No vendors yet." icon="vendor" />

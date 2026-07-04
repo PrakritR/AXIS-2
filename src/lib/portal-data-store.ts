@@ -9,6 +9,7 @@ import {
 import {
   MANAGER_INBOX_STORAGE_KEY,
   RESIDENT_INBOX_STORAGE_KEY,
+  VENDOR_INBOX_STORAGE_KEY,
   syncPersistedInboxFromServer,
 } from "@/lib/portal-inbox-storage";
 import type { PortalKind } from "@/lib/portal-types";
@@ -26,6 +27,9 @@ let managerPrefetchPromise: Promise<void> | null = null;
 
 let residentPrefetchAt = 0;
 let residentPrefetchPromise: Promise<void> | null = null;
+
+let vendorPrefetchAt = 0;
+let vendorPrefetchPromise: Promise<void> | null = null;
 
 let accountLinksAt = 0;
 let accountLinksPromise: Promise<AccountLinksResponse> | null = null;
@@ -79,6 +83,16 @@ export function prefetchPortalData(kind: PortalKind, userId?: string | null): Pr
     residentPrefetchAt = now;
     residentPrefetchPromise = syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY).then(() => undefined);
     return residentPrefetchPromise;
+  }
+
+  if (kind === "vendor") {
+    const now = Date.now();
+    if (vendorPrefetchPromise && now - vendorPrefetchAt < PREFETCH_TTL_MS) {
+      return vendorPrefetchPromise;
+    }
+    vendorPrefetchAt = now;
+    vendorPrefetchPromise = syncPersistedInboxFromServer(VENDOR_INBOX_STORAGE_KEY).then(() => undefined);
+    return vendorPrefetchPromise;
   }
 
   return Promise.resolve();

@@ -18,6 +18,8 @@ import {
   RESIDENT_PORTAL_SMOKE_PATHS,
   RESIDENT_RENDERED_SECTION_IDS,
 } from "@/lib/portals/resident-sections";
+import { vendorPortal, VENDOR_PORTAL_SMOKE_PATHS } from "@/lib/portals/vendor";
+import { NATIVE_BOTTOM_NAV_VENDOR_PRIMARY } from "@/lib/native/portal-bottom-nav";
 
 const RENDER_PORTAL_SECTION_SOURCE = readFileSync(
   join(process.cwd(), "src/lib/render-portal-section.tsx"),
@@ -68,6 +70,30 @@ describe("platform parity (web + native WebView)", () => {
 
   it("smoke-test paths are valid in-app routes for web and native", () => {
     for (const { path } of RESIDENT_PORTAL_SMOKE_PATHS) {
+      expect(isInAppPath(path)).toBe(true);
+      expect(isNativeDeepLinkPath(path)).toBe(true);
+    }
+  });
+
+  it("documents that vendor portal UI is shared — no duplicate app routes", () => {
+    expect(IN_APP_PATH_PREFIXES).toContain("/vendor/");
+  });
+
+  it("every vendor portal section has a render handler", () => {
+    for (const { section } of vendorPortal.sections) {
+      expect(RENDER_PORTAL_SECTION_SOURCE).toContain(`section === "${section}"`);
+    }
+  });
+
+  it("vendor native bottom bar primary items are real vendor sections", () => {
+    const sectionIds = new Set(vendorPortal.sections.map((s) => s.section));
+    for (const section of NATIVE_BOTTOM_NAV_VENDOR_PRIMARY) {
+      expect(sectionIds.has(section)).toBe(true);
+    }
+  });
+
+  it("vendor smoke-test paths are valid in-app routes for web and native", () => {
+    for (const { path } of VENDOR_PORTAL_SMOKE_PATHS) {
       expect(isInAppPath(path)).toBe(true);
       expect(isNativeDeepLinkPath(path)).toBe(true);
     }
