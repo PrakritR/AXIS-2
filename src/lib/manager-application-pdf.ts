@@ -6,6 +6,7 @@ import {
   formatCustomFieldAnswerDisplay,
 } from "@/lib/rental-application/custom-fields";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
+import { digitsOnly } from "@/lib/rental-application/masks";
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -53,6 +54,36 @@ function statusLabel(row: DemoApplicantRow): string {
   if (row.bucket === "approved") return "Approved";
   if (row.bucket === "rejected") return "Rejected";
   return "Pending review";
+}
+
+/** Never render full digits — last 4 only, matching the review-screen SSN mask. */
+function maskSsn(ssn: string | null | undefined): string {
+  const d = digitsOnly(clean(ssn));
+  if (d.length !== 9) return "";
+  return `•••-••-${d.slice(5)}`;
+}
+
+function groupRoleLabel(role: RentalWizardFormState["groupRole"] | undefined): string {
+  if (role === "first") return "First applicant";
+  if (role === "joining") return "Joining group";
+  return "";
+}
+
+function feeChannelLabel(channel: RentalWizardFormState["applicationFeePayChannel"] | undefined): string {
+  switch (channel) {
+    case "ach":
+      return "ACH";
+    case "zelle":
+      return "Zelle";
+    case "venmo":
+      return "Venmo";
+    case "stripe":
+      return "Card (Stripe)";
+    case "other":
+      return "Other";
+    default:
+      return "";
+  }
 }
 
 /** Split text so it fits maxWidth at the given font size (word wrap, char-break as fallback). */
@@ -328,6 +359,7 @@ export async function buildApplicationPdf(
     { label: "Email", value: clean(app.email) || clean(row.email) },
     { label: "Phone", value: clean(app.phone) },
     { label: "Date of birth", value: clean(app.dateOfBirth) },
+    { label: "SSN", value: maskSsn(app.ssn) },
     { label: "Driver's license", value: clean(app.driversLicense) },
     { label: "Application status", value: statusLabel(row) },
     { label: "Stage", value: clean(row.stage) },
@@ -343,6 +375,8 @@ export async function buildApplicationPdf(
     { label: "Stay type / term", value: clean(app.leaseTerm) },
     { label: "Move-in date", value: formatLeaseDateLabel(app.leaseStart) || clean(app.leaseStart) },
     { label: "Lease end / move-out", value: formatLeaseDateLabel(app.leaseEnd) || clean(app.leaseEnd) },
+    { label: "Check-in time", value: app.rentalType === "short_term" ? clean(app.shortTermCheckInTime) : "" },
+    { label: "Check-out time", value: app.rentalType === "short_term" ? clean(app.shortTermCheckOutTime) : "" },
     {
       label: "Signed monthly rent",
       value:
@@ -362,6 +396,7 @@ export async function buildApplicationPdf(
   // ---- Occupancy / household ---------------------------------------------
   drawSection("Household", [
     { label: "Applying as a group", value: yesNo(app.applyingAsGroup) },
+    { label: "Group role", value: groupRoleLabel(app.groupRole) },
     { label: "Group size", value: clean(app.groupSize) },
     { label: "Has co-signer", value: yesNo(app.hasCosigner) },
     { label: "Occupants", value: clean(app.occupancyCount) },
@@ -456,6 +491,14 @@ export async function buildApplicationPdf(
     { label: "Credit/background consent", value: app.consentCredit ? "Authorized" : "" },
     { label: "Attestation of truth", value: app.consentTruth ? "Acknowledged" : "" },
     { label: "Application fee acknowledged", value: app.applicationFeeAcknowledged ? "Yes" : "" },
+    { label: "Application fee payment method", value: feeChannelLabel(app.applicationFeePayChannel) },
+    {
+      label: "Manual fee payment confirmed",
+      value:
+        app.applicationFeePayChannel === "zelle" || app.applicationFeePayChannel === "venmo"
+          ? yesNo(app.applicationFeeZelleSentConfirmed ? "yes" : "no")
+          : "",
+    },
     { label: "Digital signature", value: clean(app.digitalSignature) },
     { label: "Date signed", value: clean(app.dateSigned) },
   ]);

@@ -3,6 +3,7 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import Link from "next/link";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { ChevronDown } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -188,15 +189,17 @@ function ResidentDetailSection({
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
+          data-attr="resident-section-toggle"
           className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-left"
         >
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{title}</p>
             <p className="mt-1 text-sm text-muted">{summary}</p>
           </div>
-          <span className="shrink-0 rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground/80">
-            {expanded ? "Hide" : "View"}
-          </span>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-muted transition-transform ${expanded ? "rotate-180" : ""}`}
+            aria-hidden
+          />
         </button>
         {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </div>
