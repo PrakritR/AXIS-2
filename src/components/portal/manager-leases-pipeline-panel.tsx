@@ -593,11 +593,6 @@ export function ManagerLeasesPipelinePanel({
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
                     <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                      {row.notes?.trim() ? (
-                        <p className="text-sm leading-relaxed text-muted">{row.notes}</p>
-                      ) : null}
-                      <p className="mt-1.5 text-xs text-muted">Version v{row.versionNumber ?? row.pdfVersion}</p>
-                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted">{row.status ?? row.stageLabel}</p>
                       {row.managerSignature || row.residentSignature ? (
                         <div className="mt-2 grid gap-2 rounded-xl border px-3 py-2.5 text-xs portal-banner-success sm:grid-cols-2">
                           <div>

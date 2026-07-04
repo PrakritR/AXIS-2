@@ -394,9 +394,6 @@ export function ResidentLeasePanel() {
         {leaseVisibleToResident && pipelineRow && email ? (
           <Card className="glass-card border-border p-5">
             <p className="text-xs font-bold uppercase tracking-wide text-muted">Have a question or issue with this lease?</p>
-            <p className="mt-1.5 text-sm text-muted">
-              Send a message to your property manager. It&apos;s delivered to their Axis inbox and by email.
-            </p>
             <div className="mt-3">
               <Button type="button" variant="outline" className="rounded-full" onClick={() => setReportIssueOpen(true)}>
                 Report issue

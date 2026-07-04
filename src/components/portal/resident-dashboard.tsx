@@ -91,7 +91,6 @@ function StatusBadge({ label, tone }: { label: string; tone: string }) {
 export function ResidentDashboard({
   applicationApproved = false,
   initialApplicationId = null,
-  showTestAccessNote = false,
   displayName = "Resident",
   residentEmail = "",
   residentUserId = null,
@@ -99,7 +98,6 @@ export function ResidentDashboard({
 }: {
   applicationApproved?: boolean;
   initialApplicationId?: string | null;
-  showTestAccessNote?: boolean;
   displayName?: string;
   residentEmail?: string;
   residentUserId?: string | null;
@@ -256,34 +254,13 @@ export function ResidentDashboard({
   const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges, pendingTotal } = data;
 
   const welcomeTitle = `Welcome${displayName && displayName !== "Resident" ? `, ${displayName.split(" ")[0]}` : ""}`;
-  const propertySubtitle =
-    appProperty && appRoom ? `${appProperty} · ${appRoom}` : appProperty ?? undefined;
-
-  let statusTone = "portal-banner-pending";
-  let statusCopy = "Application submitted and pending manager review. Your portal will unlock after approval.";
-  if (showTestAccessNote) {
-    statusTone = "portal-banner-info";
-    statusCopy = "Test access active — resident portal is fully unlocked for this email.";
-  } else if (appStatus === "approved") {
-    statusTone = "portal-banner-success";
-    statusCopy = appProperty && appRoom
-      ? `Approved for ${appProperty} - ${appRoom}.`
-      : appProperty
-      ? `Approved for ${appProperty}.`
-      : "Approved and active.";
-  } else if (appStatus === "rejected") {
-    statusTone = "portal-banner-danger";
-    statusCopy = "Your most recent application is marked rejected. Contact your manager if you need help or want to reapply.";
-  }
 
   const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
-    <ManagerPortalPageShell title={welcomeTitle} subtitle={propertySubtitle} hideTitleOnNative>
+    <ManagerPortalPageShell title={welcomeTitle} hideTitleOnNative>
       <div className={PORTAL_DASHBOARD_STACK}>
-
-        <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>{statusCopy}</div>
 
         {appStatus === "approved" ? (
           <>
