@@ -173,6 +173,10 @@ export type DemoManagerWorkOrderRow = {
   expenseEntryIds?: string[];
   /** Logged by manager (not submitted by resident). */
   managerInitiated?: boolean;
+  /** Manager has invited the assigned vendor to submit a cost/time bid (see work_order_bids). */
+  biddingOpen?: boolean;
+  biddingOpenedAt?: string;
+  biddingResolvedAt?: string;
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];

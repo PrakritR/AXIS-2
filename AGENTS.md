@@ -281,3 +281,57 @@ A separate `/api/vendor/tax-profile` route lets the signed-in vendor read/write
 their OWN `vendor_tax_profiles` row, resolving `(manager_user_id, vendor_id)`
 server-side from their own `manager_vendor_records.vendor_user_id` link — never
 trusting client input for those two key fields.
+
+# Vendor portal (Phase 2: tour → bid pricing)
+
+Bidding lives in a new `work_order_bids` table
+(`supabase/migrations/20260704130000_work_order_bids.sql`), not in
+`portal_work_order_records.row_data` — the work order row only carries a
+lightweight `biddingOpen` / `biddingOpenedAt` / `biddingResolvedAt` flag
+(`DemoManagerWorkOrderRow` fields) plus the existing `vendorId` /
+`vendorName` / `cost` fields that already model final vendor assignment.
+
+**Single-vendor-at-a-time offer, not a multi-vendor auction.** The work
+order's existing `vendorId` (`manager_vendor_records.id`) / `vendor_user_id`
+column can only point at one vendor, and `/api/portal-work-orders` GET scopes
+a vendor's visibility to `vendor_user_id = auth.uid()` — so only the currently
+assigned vendor can see and bid on a given work order at a time. The
+`work_order_bids` table itself does **not** preclude multiple bids per work
+order (only `unique(work_order_id, vendor_user_id)`): a manager can reassign
+`vendorId` to a different vendor and click "Invite for bids" again, and each
+vendor's bid is tracked as its own row. The tradeoff: if a manager moves on to
+vendor B, vendor A loses read access to that work order (and its own status
+badge) even though their `work_order_bids` row still exists — acceptable for
+Phase 2 per spec, revisit if concurrent multi-vendor bidding becomes a
+requirement.
+
+**Flow.** Manager assigns a vendor (existing `assignVendor`), optionally
+schedules a tour visit (existing flow, unchanged), then clicks "Invite for
+bids" (`manager-work-orders-panel.tsx`) — this sets `biddingOpen: true` on the
+work order (mirrored to the server via the existing local-first
+`updateManagerWorkOrder` → `/api/portal-work-orders` "replace" sync, same as
+every other work-order field) and calls `/api/portal/send-vendor-visit-email`
+with `kind: "bid_offer"` to reuse the SAME vendor resolution + email (Resend)
++ `deliverPortalInboxMessage` + audit-log pipeline as the visit-scheduled
+email, just with different copy (`buildVendorBidOfferEmail` in
+`src/lib/vendor-visit-email.ts`) — no second notification path was built. The
+vendor submits/updates a cost + proposed-time + note bid via the new
+`/api/portal/work-order-bids` route (`vendor-work-orders-panel.tsx`), which
+verifies `portal_work_order_records.vendor_user_id === auth.uid()` AND
+`row_data.biddingOpen === true` before accepting a write — never trusting a
+client-supplied work order id to attach a bid to an unrelated manager's
+record. The manager reviews bids on the work-order detail and accepts one;
+the accept route (server-side, service-role) sets that bid `accepted`, every
+other `submitted` bid on the same work order `declined`, patches the work
+order's `row_data` directly (`vendorId`, `vendorName`, `cost`, `biddingOpen:
+false`) bypassing the client mirror (the manager's browser picks it up on its
+next `syncManagerWorkOrdersFromServer`), and notifies the winner (and,
+best-effort, each declined vendor) via `deliverPortalInboxMessage`.
+
+**RLS** (`work_order_bids_vendor_owner` / `work_order_bids_manager_read`)
+follows the `vendor_tax_profiles_owner` / `..._vendor_read` split from Phase
+1: vendor is `FOR ALL` owner of their own bid rows (`vendor_user_id =
+auth.uid()`), manager gets `FOR SELECT` only (`manager_user_id = auth.uid()`,
+denormalized onto the bid row at submit time so no join is needed) —
+defense-in-depth only, since real writes go through the service-role API
+exactly like every other portal table in this codebase.

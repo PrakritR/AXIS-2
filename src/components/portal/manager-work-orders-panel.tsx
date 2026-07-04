@@ -39,6 +39,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-documents/spec";
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
+import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -109,6 +110,8 @@ export function ManagerWorkOrdersPanel({
     materialsMemo: "",
     workDoneSummary: "",
   });
+  const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid[]>>({});
+  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
 
   useEffect(() => {
     void syncManagerVendorsFromServer();
@@ -130,6 +133,11 @@ export function ManagerWorkOrdersPanel({
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
   }, []);
 
+  const loadBids = useCallback(async (workOrderId: string) => {
+    const bids = await fetchWorkOrderBids(workOrderId);
+    setBidsByWorkOrderId((prev) => ({ ...prev, [workOrderId]: bids }));
+  }, []);
+
   const openExpand = useCallback(
     (row: DemoManagerWorkOrderRow) => {
       setExpandedId(row.id);
@@ -141,8 +149,9 @@ export function ManagerWorkOrdersPanel({
         ...prev,
         [row.id]: prev[row.id] ?? defaultBillDraft(row),
       }));
+      if (!row.selfAssigned && row.vendorId) void loadBids(row.id);
     },
-    [],
+    [loadBids],
   );
 
   const effectiveManagerId = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
@@ -453,6 +462,71 @@ export function ManagerWorkOrdersPanel({
     showToast(`Assigned ${vendor.name}.`);
   };
 
+  /** Invite the assigned vendor to submit a cost/time bid — reuses the same email + inbox
+   * notification path as the visit-scheduled email (send-vendor-visit-email), just with
+   * bid-offer copy instead of a scheduled-visit time. */
+  const offerForBids = async (row: DemoManagerWorkOrderRow) => {
+    if (row.selfAssigned || !row.vendorId) {
+      showToast("Assign a vendor before inviting them to bid.");
+      return;
+    }
+    const vendor = activeVendors.find((v) => v.id === row.vendorId);
+    const vendorEmail = vendor?.email?.trim() ?? "";
+    if (!vendor || !vendorEmail.includes("@")) {
+      showToast("That vendor doesn't have a valid email on file.");
+      return;
+    }
+    try {
+      await fetch("/api/portal/send-vendor-visit-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          kind: "bid_offer",
+          workOrderId: row.id,
+          vendorId: vendor.id,
+          vendorEmail,
+          vendorName: vendor.name,
+          workOrderTitle: row.title,
+          propertyLabel: row.propertyName,
+          unit: row.unit,
+          visitLabel: row.scheduled && row.scheduled !== "—" ? row.scheduled : "",
+          description: row.description,
+        }),
+      });
+    } catch {
+      /* best-effort notification; bidding still opens locally */
+    }
+    updateManagerWorkOrder(row.id, (r) => ({ ...r, biddingOpen: true, biddingOpenedAt: new Date().toISOString() }));
+    showToast(`${vendor.name} invited to bid.`);
+  };
+
+  const closeBidding = (row: DemoManagerWorkOrderRow) => {
+    updateManagerWorkOrder(row.id, (r) => ({ ...r, biddingOpen: false }));
+    showToast("Bidding closed.");
+  };
+
+  const acceptBidHandler = async (bid: WorkOrderBid) => {
+    setAcceptingBidId(bid.id);
+    try {
+      const res = await fetch("/api/portal/work-order-bids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "accept", bidId: bid.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not accept bid.");
+      await syncManagerWorkOrdersFromServer({ force: true });
+      await loadBids(bid.workOrderId);
+      showToast("Bid accepted — vendor assigned at the agreed cost.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not accept bid.");
+    } finally {
+      setAcceptingBidId(null);
+    }
+  };
+
   const renderRowDetail = (row: DemoManagerWorkOrderRow) => {
     const draft = billDraftById[row.id] ?? defaultBillDraft(row);
     const linkedCharge = chargeByWoId.get(row.id);
@@ -595,6 +669,93 @@ export function ManagerWorkOrdersPanel({
                             </a>
                           ) : null}
                         </div>
+
+                        {!row.selfAssigned && row.vendorId && row.bucket !== "completed" ? (
+                          <div className="mt-3 border-t border-border pt-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted">Bidding</p>
+                              {row.biddingOpen ? (
+                                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                                  Open for bids
+                                </span>
+                              ) : row.biddingResolvedAt ? (
+                                <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                                  Bid accepted
+                                </span>
+                              ) : null}
+                              {row.biddingOpen ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  data-attr="work-order-close-bidding"
+                                  className={PORTAL_DETAIL_BTN}
+                                  onClick={() => closeBidding(row)}
+                                >
+                                  Close bidding
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  data-attr="work-order-invite-bid"
+                                  className={PORTAL_DETAIL_BTN}
+                                  onClick={() => void offerForBids(row)}
+                                >
+                                  Invite for bids
+                                </Button>
+                              )}
+                            </div>
+                            {(bidsByWorkOrderId[row.id] ?? []).length > 0 ? (
+                              <div className="mt-2 space-y-1.5">
+                                {(bidsByWorkOrderId[row.id] ?? []).map((bid) => (
+                                  <div
+                                    key={bid.id}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs"
+                                  >
+                                    <div>
+                                      <span className="font-medium text-foreground">{bid.vendorName || "Vendor"}</span>{" "}
+                                      · ${(bid.amountCents / 100).toFixed(2)} ·{" "}
+                                      {new Date(bid.proposedTime).toLocaleString(undefined, {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "numeric",
+                                        minute: "2-digit",
+                                      })}
+                                      {bid.note ? <p className="mt-0.5 text-muted">{bid.note}</p> : null}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={
+                                          bid.status === "accepted"
+                                            ? "inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border"
+                                            : bid.status === "declined"
+                                              ? "inline-flex rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border"
+                                              : "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+                                        }
+                                      >
+                                        {bid.status}
+                                      </span>
+                                      {bid.status === "submitted" ? (
+                                        <Button
+                                          type="button"
+                                          variant="primary"
+                                          data-attr="work-order-accept-bid"
+                                          className="h-7 rounded-full px-3 text-xs"
+                                          disabled={acceptingBidId === bid.id}
+                                          onClick={() => void acceptBidHandler(bid)}
+                                        >
+                                          Accept
+                                        </Button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : row.biddingOpen ? (
+                              <p className="mt-2 text-xs text-muted">No bids yet.</p>
+                            ) : null}
+                          </div>
+                        ) : null}
 
                         <PortalTableDetailActions>
                           {row.bucket === "open" ? (
