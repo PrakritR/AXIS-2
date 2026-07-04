@@ -234,18 +234,24 @@ export function PortalSidebar({
           key={s.section}
           href={s.href}
           data-native-nav-section={s.section}
+          data-attr={`bottom-nav-${s.section}`}
           prefetch={portalMobileLinkPrefetchEnabled()}
           onClick={portalNavClick(router, s.href, {
             preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
           })}
-          className={`flex w-[2.75rem] shrink-0 snap-center flex-col items-center justify-end px-1 pt-0 pb-0 transition sm:w-[2.85rem] ${
-            active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
+          className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 py-2 transition ${
+            active ? "text-primary" : locked ? "text-muted/60" : "text-muted"
           }`}
           aria-label={lockAriaLabel(s.label, locked)}
+          aria-current={active ? "page" : undefined}
         >
           {showNavIcons ? (
             <span className={`relative shrink-0 ${locked ? "opacity-60" : "opacity-100"}`} aria-hidden>
-              <PortalNavIcon section={s.section} />
+              <PortalNavIcon
+                section={s.section}
+                className="h-[23px] w-[23px] shrink-0"
+                strokeWidth={active ? 2.35 : 1.75}
+              />
               {!locked && count > 0 ? (
                 <span className="absolute -top-1 -right-1.5">
                   <PortalNavCountBadge count={count} />
@@ -488,7 +494,7 @@ export function PortalSidebar({
             >
               <button
                 type="button"
-                className="portal-native-bottom-nav-pull flex w-full shrink-0 items-center justify-center border-0 bg-transparent px-3 pb-0.5 pt-1"
+                className="portal-native-bottom-nav-pull flex w-full shrink-0 items-center justify-center border-0 bg-transparent px-3 pb-0 pt-1"
                 aria-label="Show all sections"
                 onClick={() => setSectionsSheetOpen(true)}
                 onTouchStart={(e) => {
@@ -518,7 +524,7 @@ export function PortalSidebar({
               <div className="flex min-w-0 w-full items-stretch">
                 <div
                   ref={bottomNavScrollRef}
-                  className="portal-native-bottom-nav-scroll flex min-w-0 w-0 flex-1 flex-nowrap snap-x snap-mandatory gap-0 overflow-x-auto overscroll-x-contain px-1.5 pt-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  className="portal-native-bottom-nav-scroll flex min-w-0 w-0 flex-1 flex-nowrap items-stretch justify-evenly gap-0 px-1"
                   aria-label="Scroll portal sections"
                 >
                   {nativeBottomNavItems.map((s) => renderMobileNavLink(s, "bottom"))}

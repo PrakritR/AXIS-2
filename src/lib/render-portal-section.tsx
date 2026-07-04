@@ -419,6 +419,19 @@ export async function renderPortalSection(
       );
     }
 
+    // Vendors — promoted to its own primary nav entry; renders the same panel
+    // (and same tier gate) as the "vendors" tab under Services.
+    if (section === "vendors") {
+      if (tabParts?.length) notFound();
+      const ManagerAllServicesPanel = await loadManagerAllServicesPanel();
+      return subscriptionGated(
+        <ManagerAllServicesPanel tabId="vendors" basePath={def.basePath} />,
+        kind,
+        "vendors",
+        managerOwnerSubscriptionTier,
+      );
+    }
+
     if (section === "payments") {
       if (tabParts?.length === 1 && tabParts[0] === "payouts") {
         return subscriptionGated(

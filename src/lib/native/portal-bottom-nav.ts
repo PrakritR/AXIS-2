@@ -22,6 +22,7 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER = [
   "leases",
   "payments",
   "services",
+  "vendors",
   "inbox",
   "documents",
   "financials",
@@ -75,9 +76,9 @@ export function orderNativeBottomNavItems<T extends { section: string }>(
  */
 export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
   "properties",
-  "applications",
-  "residents",
   "calendar",
+  "residents",
+  "vendors",
   "documents",
 ] as const;
 

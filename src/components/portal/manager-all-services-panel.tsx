@@ -282,7 +282,7 @@ export function ManagerAllServicesPanel({
 
   return (
     <ManagerPortalPageShell
-      title="Services"
+      title={typeFilter === "vendors" ? "Vendors" : "Services"}
       titleAside={
         <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap items-center justify-end gap-2`}>
           {pendingCount > 0 && (

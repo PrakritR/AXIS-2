@@ -16,6 +16,7 @@ import {
   MessageSquare,
   ScrollText,
   Settings,
+  Truck,
   Users,
   Wrench,
   type LucideIcon,
@@ -36,6 +37,8 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   documents: Folder,
   financials: BarChart3,
   services: Wrench,
+  "work-orders": Wrench,
+  vendors: Truck,
   inbox: Inbox,
   "bugs-feedback": MessageSquare,
   profile: Settings,
@@ -46,9 +49,17 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   promotion: Megaphone,
 };
 
-export function PortalNavIcon({ section, className }: { section: string; className?: string }) {
+export function PortalNavIcon({
+  section,
+  className,
+  strokeWidth = 2,
+}: {
+  section: string;
+  className?: string;
+  strokeWidth?: number;
+}) {
   const Icon = SECTION_ICONS[section] ?? Circle;
-  return <Icon className={className ?? "h-[18px] w-[18px] shrink-0"} strokeWidth={2} aria-hidden />;
+  return <Icon className={className ?? "h-[18px] w-[18px] shrink-0"} strokeWidth={strokeWidth} aria-hidden />;
 }
 
 /** @deprecated Use PortalNavIcon */

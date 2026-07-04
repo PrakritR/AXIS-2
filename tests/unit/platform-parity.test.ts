@@ -19,7 +19,11 @@ import {
   RESIDENT_RENDERED_SECTION_IDS,
 } from "@/lib/portals/resident-sections";
 import { vendorPortal, VENDOR_PORTAL_SMOKE_PATHS } from "@/lib/portals/vendor";
-import { NATIVE_BOTTOM_NAV_VENDOR_PRIMARY } from "@/lib/native/portal-bottom-nav";
+import { proPortal, MANAGER_PORTAL_SMOKE_PATHS } from "@/lib/portals/pro";
+import {
+  NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
+  NATIVE_BOTTOM_NAV_VENDOR_PRIMARY,
+} from "@/lib/native/portal-bottom-nav";
 
 const RENDER_PORTAL_SECTION_SOURCE = readFileSync(
   join(process.cwd(), "src/lib/render-portal-section.tsx"),
@@ -94,6 +98,26 @@ describe("platform parity (web + native WebView)", () => {
 
   it("vendor smoke-test paths are valid in-app routes for web and native", () => {
     for (const { path } of VENDOR_PORTAL_SMOKE_PATHS) {
+      expect(isInAppPath(path)).toBe(true);
+      expect(isNativeDeepLinkPath(path)).toBe(true);
+    }
+  });
+
+  it("manager native bottom bar primary items are real pro portal sections", () => {
+    const sectionIds = new Set(proPortal.sections.map((s) => s.section));
+    for (const section of NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY) {
+      expect(sectionIds.has(section)).toBe(true);
+    }
+  });
+
+  it("every pro portal section has a render handler", () => {
+    for (const { section } of proPortal.sections) {
+      expect(RENDER_PORTAL_SECTION_SOURCE).toContain(`section === "${section}"`);
+    }
+  });
+
+  it("manager smoke-test paths are valid in-app routes for web and native", () => {
+    for (const { path } of MANAGER_PORTAL_SMOKE_PATHS) {
       expect(isInAppPath(path)).toBe(true);
       expect(isNativeDeepLinkPath(path)).toBe(true);
     }

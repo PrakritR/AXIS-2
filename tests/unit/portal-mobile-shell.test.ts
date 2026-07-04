@@ -44,14 +44,20 @@ describe("portal mobile shell conventions", () => {
 
   it("pins native bottom nav flush to screen bottom", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav");
-    expect(GLOBALS_CSS).toContain("align-items: flex-end");
     expect(GLOBALS_CSS).toContain("bottom: 0");
     expect(GLOBALS_CSS).toContain("padding-right: max(0.5rem, var(--native-safe-right))");
   });
 
+  it("evenly distributes Instagram-style bottom tabs instead of scrolling", () => {
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll");
+    expect(GLOBALS_CSS).toContain("justify-content: space-evenly");
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll > a");
+    expect(GLOBALS_CSS).toContain("flex: 1 1 0;");
+  });
+
   it("sizes native bottom tab icons and assistant trigger consistently", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll a svg");
-    expect(GLOBALS_CSS).toContain("height: 1.375rem");
+    expect(GLOBALS_CSS).toContain("height: 1.4375rem");
     expect(GLOBALS_CSS).toContain("html[data-native] .axis-assistant-nav-btn");
     expect(GLOBALS_CSS).toMatch(/html\[data-native\] \.axis-assistant-nav-btn[\s\S]*height: 1\.375rem/);
   });

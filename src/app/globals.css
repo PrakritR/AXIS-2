@@ -1633,6 +1633,7 @@ html[data-native] .portal-native-bottom-nav {
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
+  border-top: 1px solid var(--border);
   padding-top: 0;
   padding-bottom: max(4px, calc(var(--native-safe-bottom) * 0.45));
   padding-right: max(0.5rem, var(--native-safe-right));
@@ -1641,38 +1642,33 @@ html[data-native] .portal-native-bottom-nav {
 
 html[data-native] .portal-native-bottom-nav-pull-handle {
   display: block;
-  height: 0.25rem;
-  width: 2.25rem;
+  height: 0.1875rem;
+  width: 2rem;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
 }
 
+/* Instagram-style: evenly-spaced icon-only tabs, no horizontal scroll — every
+   curated primary set is small enough (4-5 items) to fit at once. */
 html[data-native] .portal-native-bottom-nav-scroll {
   display: flex;
   flex: 1 1 0;
   width: 0;
   min-width: 0;
   flex-wrap: nowrap;
-  align-items: flex-end;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  align-items: stretch;
+  justify-content: space-evenly;
 }
 
 html[data-native] .portal-native-bottom-nav-scroll > a {
-  flex: 0 0 auto;
-  scroll-snap-align: center;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 html[data-native] .portal-native-bottom-nav-assistant {
   touch-action: manipulation;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   width: 2.75rem;
   min-width: 2.75rem;
@@ -1698,12 +1694,8 @@ html[data-native] .axis-assistant-nav-btn svg {
 
 html[data-native] .portal-native-bottom-nav-scroll a svg,
 html[data-native] .portal-native-bottom-nav-scroll button svg {
-  height: 1.375rem;
-  width: 1.375rem;
-}
-
-html[data-native] .portal-native-bottom-nav-scroll::-webkit-scrollbar {
-  display: none;
+  height: 1.4375rem;
+  width: 1.4375rem;
 }
 
 html[data-native] .portal-shell,
