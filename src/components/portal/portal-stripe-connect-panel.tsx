@@ -262,14 +262,14 @@ export function PortalStripeConnectPanel({
 
   const body = (
     <div className={`space-y-3 text-sm text-muted ${variant === "embedded" ? "" : "max-w-2xl"}`}>
+      {status?.demo ? (
+        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
+          {status.message ?? "Add Stripe keys to enable bank linking."}
+        </p>
+      ) : null}
+
       {variant !== "embedded" ? (
         <>
-          {status?.demo ? (
-            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
-              {status.message ?? "Add Stripe keys to enable bank linking."}
-            </p>
-          ) : null}
-
           {stripeTestMode && !status?.demo ? (
             <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending [html[data-native]_&]:hidden">
               Stripe test mode is active — onboarding uses sandbox test banks (e.g. code <span className="font-mono">000000</span>).
@@ -283,11 +283,11 @@ export function PortalStripeConnectPanel({
               to your https production URL.
             </p>
           ) : null}
-
-          {blockingError ? (
-            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">{blockingError}</p>
-          ) : null}
         </>
+      ) : null}
+
+      {blockingError ? (
+        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">{blockingError}</p>
       ) : null}
 
       {!status?.demo ? (

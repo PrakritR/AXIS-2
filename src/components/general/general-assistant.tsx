@@ -64,12 +64,12 @@ function handleOpen() {
 /**
  * Site-wide general AI assistant. A larger FAB pinned bottom-right on
  * public / marketing pages (home, pricing, create-account, /demo). It is
- * intentionally NOT rendered inside the manager, admin, or resident portals —
- * those surfaces keep their own portal-scoped Axis Assistant, so only one AI
- * button ever shows there. Answers broad questions about Axis via the tool-free
- * `/api/agent/general-chat` endpoint.
+ * intentionally NOT rendered inside the manager, admin, resident, or vendor
+ * portals — those surfaces keep their own portal-scoped Axis Assistant, so
+ * only one AI button ever shows there. Answers broad questions about Axis via
+ * the tool-free `/api/agent/general-chat` endpoint.
  */
-const PORTAL_PATH_PREFIXES = ["/portal", "/admin", "/resident"];
+const PORTAL_PATH_PREFIXES = ["/portal", "/admin", "/resident", "/vendor"];
 
 export function GeneralAssistant() {
   const isClient = useIsClient();

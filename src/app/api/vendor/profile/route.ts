@@ -47,7 +47,7 @@ export async function GET() {
     if (!auth.ok) return auth.response;
 
     const own = await resolveOwnVendorRecord(auth.db, auth.userId);
-    return NextResponse.json({ profile: own?.row ?? null });
+    return NextResponse.json({ profile: own?.row ?? null, linked: own !== null });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load vendor profile.";
     return NextResponse.json({ error: message }, { status: 500 });

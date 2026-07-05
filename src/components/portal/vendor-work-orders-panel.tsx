@@ -30,8 +30,8 @@ import {
 import { WorkOrderStatusBadge } from "@/components/portal/resident-services-panel";
 import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
 import { parseMoneyAmount } from "@/lib/household-charges";
-import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
-import { fetchVendorPayouts, type VendorPayout } from "@/lib/vendor-payouts";
+import { fetchWorkOrderBidsResult, type WorkOrderBid } from "@/lib/work-order-bids";
+import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payouts";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 function propertyLabel(row: DemoManagerWorkOrderRow): string {
@@ -99,15 +99,21 @@ export function VendorWorkOrdersPanel() {
   const [consultationDraftById, setConsultationDraftById] = useState<Record<string, string>>({});
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const [tab, setTab] = useState<VendorWorkOrderTab>("to_bid");
+  const [bidsSyncFailed, setBidsSyncFailed] = useState(false);
+  const [payoutsSyncFailed, setPayoutsSyncFailed] = useState(false);
 
   const loadBids = useCallback(async () => {
-    const bids = await fetchWorkOrderBids();
-    setBidsByWorkOrderId(Object.fromEntries(bids.map((b) => [b.workOrderId, b])));
+    const result = await fetchWorkOrderBidsResult();
+    setBidsSyncFailed(!result.ok);
+    if (!result.ok) return;
+    setBidsByWorkOrderId(Object.fromEntries(result.bids.map((b) => [b.workOrderId, b])));
   }, []);
 
   const loadPayouts = useCallback(async () => {
-    const payouts = await fetchVendorPayouts();
-    setPayoutsByWorkOrderId(Object.fromEntries(payouts.map((p) => [p.workOrderId, p])));
+    const result = await fetchVendorPayoutsResult();
+    setPayoutsSyncFailed(!result.ok);
+    if (!result.ok) return;
+    setPayoutsByWorkOrderId(Object.fromEntries(result.payouts.map((p) => [p.workOrderId, p])));
   }, []);
 
   useEffect(() => {
@@ -116,7 +122,28 @@ export function VendorWorkOrdersPanel() {
     void syncManagerWorkOrdersFromServer().then(() => sync());
     void loadBids();
     void loadPayouts();
-    return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+
+    // Bidding state (open/accepted) and payout status can change server-side while this
+    // tab sits idle (manager accepts another bid, a payout posts) — refresh on a short
+    // poll and whenever the tab regains focus so they can't silently go stale.
+    const refreshAll = () => {
+      void syncManagerWorkOrdersFromServer({ force: true }).then(() => sync());
+      void loadBids();
+      void loadPayouts();
+    };
+    const id = window.setInterval(refreshAll, 60_000);
+    const onVisible = () => {
+      if (!document.hidden) refreshAll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", refreshAll);
+
+    return () => {
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", refreshAll);
+    };
   }, [loadBids, loadPayouts]);
 
   const sorted = useMemo(
@@ -268,7 +295,8 @@ export function VendorWorkOrdersPanel() {
           </p>
         ) : payout?.status === "failed" ? (
           <p className="mt-1 text-xs text-muted">
-            Paid by the manager, but the payout to your bank couldn&apos;t be sent — check your{" "}
+            Paid by the manager, but the payout to your bank couldn&apos;t be sent
+            {payout.failureReason ? `: ${payout.failureReason}` : ""} — check your{" "}
             <Link href="/vendor/profile" className="font-medium text-foreground underline underline-offset-2">
               Stripe payout setup
             </Link>
@@ -537,6 +565,11 @@ export function VendorWorkOrdersPanel() {
         ) : null
       }
     >
+      {bidsSyncFailed || payoutsSyncFailed ? (
+        <p className="mb-4 rounded-xl border px-4 py-3 text-sm portal-banner-danger" data-attr="vendor-wo-sync-error">
+          Couldn&apos;t refresh the latest bidding/payout status — this may be out of date. Retrying automatically.
+        </p>
+      ) : null}
       {visible.length === 0 ? (
         <PortalDataTableEmpty message={emptyMessage} icon="work-order" />
       ) : (

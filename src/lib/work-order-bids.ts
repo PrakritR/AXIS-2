@@ -21,13 +21,19 @@ export type WorkOrderBid = {
 };
 
 export async function fetchWorkOrderBids(workOrderId?: string): Promise<WorkOrderBid[]> {
+  const result = await fetchWorkOrderBidsResult(workOrderId);
+  return result.bids;
+}
+
+/** Like {@link fetchWorkOrderBids} but reports fetch failure instead of swallowing it to an empty list. */
+export async function fetchWorkOrderBidsResult(workOrderId?: string): Promise<{ ok: boolean; bids: WorkOrderBid[] }> {
   try {
     const query = workOrderId ? `?workOrderId=${encodeURIComponent(workOrderId)}` : "";
     const res = await fetch(`/api/portal/work-order-bids${query}`, { credentials: "include" });
-    if (!res.ok) return [];
+    if (!res.ok) return { ok: false, bids: [] };
     const data = (await res.json()) as { bids?: WorkOrderBid[] };
-    return Array.isArray(data.bids) ? data.bids : [];
+    return { ok: true, bids: Array.isArray(data.bids) ? data.bids : [] };
   } catch {
-    return [];
+    return { ok: false, bids: [] };
   }
 }

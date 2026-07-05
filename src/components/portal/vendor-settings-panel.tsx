@@ -12,17 +12,29 @@ import { isoDateOnly } from "@/lib/demo/demo-data";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
 import type { VendorTaxDraft } from "@/components/portal/vendor-tax-profile-modal";
 import {
+  DEMO_VENDOR_AVAILABILITY_RULES,
   WEEKDAY_DISPLAY_ORDER,
   WEEKDAY_LABELS,
   deleteVendorAvailabilityRule,
   fetchVendorAvailability,
   formatMinuteOfDayLabel,
+  minuteOfDayToTimeInputValue,
   saveVendorBlockRule,
   saveVendorDateRule,
   saveVendorWeeklyRule,
   timeInputValueToMinuteOfDay,
   type VendorAvailabilityRule,
 } from "@/lib/vendor-availability";
+
+/** Tap target for the small chip/row "remove" glyphs — keeps the glyph small while meeting the 44px minimum. */
+const AVAILABILITY_REMOVE_BTN =
+  "inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-muted hover:text-danger disabled:opacity-50";
+/** Text affordance to edit a rule in place instead of delete + re-add. */
+const AVAILABILITY_EDIT_BTN = "font-medium text-foreground underline-offset-2 hover:underline";
+
+function minuteRangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
 
 type VendorProfileDraft = {
   name: string;
@@ -95,16 +107,6 @@ function todayDateInputValue(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const DEMO_VENDOR_AVAILABILITY_RULES: VendorAvailabilityRule[] = [
-  { id: "demo-avail-mon", kind: "weekly", weekday: 1, startMinute: 8 * 60, endMinute: 17 * 60 },
-  { id: "demo-avail-tue", kind: "weekly", weekday: 2, startMinute: 8 * 60, endMinute: 17 * 60 },
-  { id: "demo-avail-wed", kind: "weekly", weekday: 3, startMinute: 8 * 60, endMinute: 17 * 60 },
-  { id: "demo-avail-thu", kind: "weekly", weekday: 4, startMinute: 8 * 60, endMinute: 17 * 60 },
-  { id: "demo-avail-fri", kind: "weekly", weekday: 5, startMinute: 8 * 60, endMinute: 15 * 60 },
-  { id: "demo-avail-block-1", kind: "block", specificDate: isoDateOnly(9), startMinute: 0, endMinute: 1440, note: "Company holiday" },
-  { id: "demo-avail-open-1", kind: "open", specificDate: isoDateOnly(6), startMinute: 10 * 60, endMinute: 14 * 60, note: "Saturday availability" },
-];
-
 let demoAvailabilityRuleCounter = 0;
 
 /** Weekly recurring hours + one-off blocked dates, editable inline. */
@@ -115,10 +117,13 @@ function VendorAvailabilityEditor() {
   const [loaded, setLoaded] = useState(demo);
   const [weeklyFormOpen, setWeeklyFormOpen] = useState(false);
   const [weeklyDraft, setWeeklyDraft] = useState({ weekday: 1, start: "09:00", end: "17:00" });
+  const [weeklyEditingId, setWeeklyEditingId] = useState<string | null>(null);
   const [openFormOpen, setOpenFormOpen] = useState(false);
   const [openDraft, setOpenDraft] = useState({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
+  const [openEditingId, setOpenEditingId] = useState<string | null>(null);
   const [blockFormOpen, setBlockFormOpen] = useState(false);
   const [blockDraft, setBlockDraft] = useState({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
+  const [blockEditingId, setBlockEditingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -161,6 +166,21 @@ function VendorAvailabilityEditor() {
     [rules],
   );
 
+  const resetWeeklyForm = () => {
+    setWeeklyEditingId(null);
+    setWeeklyDraft({ weekday: 1, start: "09:00", end: "17:00" });
+  };
+
+  const startEditWeekly = (rule: Extract<VendorAvailabilityRule, { kind: "weekly" }>) => {
+    setWeeklyDraft({
+      weekday: rule.weekday,
+      start: minuteOfDayToTimeInputValue(rule.startMinute),
+      end: minuteOfDayToTimeInputValue(rule.endMinute),
+    });
+    setWeeklyEditingId(rule.id);
+    setWeeklyFormOpen(true);
+  };
+
   const addWeeklyWindow = async () => {
     const start = timeInputValueToMinuteOfDay(weeklyDraft.start);
     const end = timeInputValueToMinuteOfDay(weeklyDraft.end);
@@ -168,26 +188,64 @@ function VendorAvailabilityEditor() {
       showToast("Choose a valid start and end time.");
       return;
     }
+    const overlaps = rules.some(
+      (r) =>
+        r.kind === "weekly" &&
+        r.weekday === weeklyDraft.weekday &&
+        r.id !== weeklyEditingId &&
+        minuteRangesOverlap(start, end, r.startMinute, r.endMinute),
+    );
+    if (overlaps) {
+      showToast("That overlaps with an existing window on this day.");
+      return;
+    }
+    const editingId = weeklyEditingId;
     if (demo) {
-      demoAvailabilityRuleCounter += 1;
-      setRules((cur) => [
-        ...cur,
-        { id: `demo-avail-new-${demoAvailabilityRuleCounter}`, kind: "weekly", weekday: weeklyDraft.weekday, startMinute: start, endMinute: end },
-      ]);
+      if (editingId) {
+        setRules((cur) =>
+          cur.map((r) => (r.id === editingId ? { ...r, weekday: weeklyDraft.weekday, startMinute: start, endMinute: end } : r)),
+        );
+      } else {
+        demoAvailabilityRuleCounter += 1;
+        setRules((cur) => [
+          ...cur,
+          { id: `demo-avail-new-${demoAvailabilityRuleCounter}`, kind: "weekly", weekday: weeklyDraft.weekday, startMinute: start, endMinute: end },
+        ]);
+      }
       setWeeklyFormOpen(false);
-      showToast("Weekly window added.");
+      resetWeeklyForm();
+      showToast(editingId ? "Weekly window updated." : "Weekly window added.");
       return;
     }
     setSaving(true);
-    const result = await saveVendorWeeklyRule({ weekday: weeklyDraft.weekday, startMinute: start, endMinute: end });
+    const result = await saveVendorWeeklyRule({ id: editingId ?? undefined, weekday: weeklyDraft.weekday, startMinute: start, endMinute: end });
     setSaving(false);
     if (!result.ok) {
       showToast(result.error ?? "Could not save that window.");
       return;
     }
     setWeeklyFormOpen(false);
-    showToast("Weekly window added.");
+    resetWeeklyForm();
+    showToast(editingId ? "Weekly window updated." : "Weekly window added.");
     await reload();
+  };
+
+  const resetBlockForm = () => {
+    setBlockEditingId(null);
+    setBlockDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
+  };
+
+  const startEditBlock = (rule: Extract<VendorAvailabilityRule, { kind: "block" }>) => {
+    const allDay = rule.startMinute === 0 && rule.endMinute === 1440;
+    setBlockDraft({
+      date: rule.specificDate,
+      allDay,
+      start: allDay ? "09:00" : minuteOfDayToTimeInputValue(rule.startMinute),
+      end: allDay ? "17:00" : minuteOfDayToTimeInputValue(rule.endMinute),
+      note: rule.note ?? "",
+    });
+    setBlockEditingId(rule.id);
+    setBlockFormOpen(true);
   };
 
   const addBlock = async () => {
@@ -207,26 +265,51 @@ function VendorAvailabilityEditor() {
       startMinute = start;
       endMinute = end;
     }
+    const rangeStart = startMinute ?? 0;
+    const rangeEnd = endMinute ?? 1440;
+    const overlaps = rules.some(
+      (r) =>
+        r.kind === "block" &&
+        r.specificDate === blockDraft.date &&
+        r.id !== blockEditingId &&
+        minuteRangesOverlap(rangeStart, rangeEnd, r.startMinute, r.endMinute),
+    );
+    if (overlaps) {
+      showToast("That overlaps with an existing blocked window on this date.");
+      return;
+    }
+    const editingId = blockEditingId;
     if (demo) {
-      demoAvailabilityRuleCounter += 1;
-      setRules((cur) => [
-        ...cur,
-        {
-          id: `demo-avail-new-${demoAvailabilityRuleCounter}`,
-          kind: "block",
-          specificDate: blockDraft.date,
-          startMinute: startMinute ?? 0,
-          endMinute: endMinute ?? 1440,
-          note: blockDraft.note || null,
-        },
-      ]);
+      if (editingId) {
+        setRules((cur) =>
+          cur.map((r) =>
+            r.id === editingId
+              ? { ...r, specificDate: blockDraft.date, startMinute: rangeStart, endMinute: rangeEnd, note: blockDraft.note || null }
+              : r,
+          ),
+        );
+      } else {
+        demoAvailabilityRuleCounter += 1;
+        setRules((cur) => [
+          ...cur,
+          {
+            id: `demo-avail-new-${demoAvailabilityRuleCounter}`,
+            kind: "block",
+            specificDate: blockDraft.date,
+            startMinute: rangeStart,
+            endMinute: rangeEnd,
+            note: blockDraft.note || null,
+          },
+        ]);
+      }
       setBlockFormOpen(false);
-      setBlockDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
-      showToast("Date blocked.");
+      resetBlockForm();
+      showToast(editingId ? "Blocked date updated." : "Date blocked.");
       return;
     }
     setSaving(true);
     const result = await saveVendorBlockRule({
+      id: editingId ?? undefined,
       specificDate: blockDraft.date,
       startMinute,
       endMinute,
@@ -238,9 +321,27 @@ function VendorAvailabilityEditor() {
       return;
     }
     setBlockFormOpen(false);
-    setBlockDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
-    showToast("Date blocked.");
+    resetBlockForm();
+    showToast(editingId ? "Blocked date updated." : "Date blocked.");
     await reload();
+  };
+
+  const resetOpenForm = () => {
+    setOpenEditingId(null);
+    setOpenDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
+  };
+
+  const startEditOpen = (rule: Extract<VendorAvailabilityRule, { kind: "open" }>) => {
+    const allDay = rule.startMinute === 0 && rule.endMinute === 1440;
+    setOpenDraft({
+      date: rule.specificDate,
+      allDay,
+      start: allDay ? "09:00" : minuteOfDayToTimeInputValue(rule.startMinute),
+      end: allDay ? "17:00" : minuteOfDayToTimeInputValue(rule.endMinute),
+      note: rule.note ?? "",
+    });
+    setOpenEditingId(rule.id);
+    setOpenFormOpen(true);
   };
 
   const addOpenDate = async () => {
@@ -260,26 +361,51 @@ function VendorAvailabilityEditor() {
       startMinute = start;
       endMinute = end;
     }
+    const rangeStart = startMinute ?? 0;
+    const rangeEnd = endMinute ?? 1440;
+    const overlaps = rules.some(
+      (r) =>
+        r.kind === "open" &&
+        r.specificDate === openDraft.date &&
+        r.id !== openEditingId &&
+        minuteRangesOverlap(rangeStart, rangeEnd, r.startMinute, r.endMinute),
+    );
+    if (overlaps) {
+      showToast("That overlaps with an existing open window on this date.");
+      return;
+    }
+    const editingId = openEditingId;
     if (demo) {
-      demoAvailabilityRuleCounter += 1;
-      setRules((cur) => [
-        ...cur,
-        {
-          id: `demo-avail-new-${demoAvailabilityRuleCounter}`,
-          kind: "open",
-          specificDate: openDraft.date,
-          startMinute: startMinute ?? 0,
-          endMinute: endMinute ?? 1440,
-          note: openDraft.note || null,
-        },
-      ]);
+      if (editingId) {
+        setRules((cur) =>
+          cur.map((r) =>
+            r.id === editingId
+              ? { ...r, specificDate: openDraft.date, startMinute: rangeStart, endMinute: rangeEnd, note: openDraft.note || null }
+              : r,
+          ),
+        );
+      } else {
+        demoAvailabilityRuleCounter += 1;
+        setRules((cur) => [
+          ...cur,
+          {
+            id: `demo-avail-new-${demoAvailabilityRuleCounter}`,
+            kind: "open",
+            specificDate: openDraft.date,
+            startMinute: rangeStart,
+            endMinute: rangeEnd,
+            note: openDraft.note || null,
+          },
+        ]);
+      }
       setOpenFormOpen(false);
-      setOpenDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
-      showToast("Date opened.");
+      resetOpenForm();
+      showToast(editingId ? "Open date updated." : "Date opened.");
       return;
     }
     setSaving(true);
     const result = await saveVendorDateRule({
+      id: editingId ?? undefined,
       specificDate: openDraft.date,
       startMinute,
       endMinute,
@@ -291,12 +417,15 @@ function VendorAvailabilityEditor() {
       return;
     }
     setOpenFormOpen(false);
-    setOpenDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
-    showToast("Date opened.");
+    resetOpenForm();
+    showToast(editingId ? "Open date updated." : "Date opened.");
     await reload();
   };
 
   const removeRule = async (id: string) => {
+    if (weeklyEditingId === id) { setWeeklyFormOpen(false); resetWeeklyForm(); }
+    if (openEditingId === id) { setOpenFormOpen(false); resetOpenForm(); }
+    if (blockEditingId === id) { setBlockFormOpen(false); resetBlockForm(); }
     if (demo) {
       setRules((cur) => cur.filter((r) => r.id !== id));
       return;
@@ -321,7 +450,15 @@ function VendorAvailabilityEditor() {
             variant="outline"
             data-attr="vendor-availability-add-weekly"
             className="h-8 rounded-full px-3 text-xs"
-            onClick={() => setWeeklyFormOpen((v) => !v)}
+            onClick={() => {
+              if (weeklyFormOpen) {
+                setWeeklyFormOpen(false);
+                resetWeeklyForm();
+              } else {
+                resetWeeklyForm();
+                setWeeklyFormOpen(true);
+              }
+            }}
           >
             {weeklyFormOpen ? "Cancel" : "+ Add window"}
           </Button>
@@ -369,7 +506,7 @@ function VendorAvailabilityEditor() {
               disabled={saving}
               onClick={() => void addWeeklyWindow()}
             >
-              Save
+              {weeklyEditingId ? "Save changes" : "Save"}
             </Button>
           </div>
         ) : null}
@@ -389,12 +526,19 @@ function VendorAvailabilityEditor() {
                         key={w.id}
                         className="inline-flex items-center gap-1.5 rounded-full bg-accent/30 px-3 py-1 text-xs font-medium text-foreground ring-1 ring-border"
                       >
-                        {formatMinuteOfDayLabel(w.startMinute)}–{formatMinuteOfDayLabel(w.endMinute)}
+                        <button
+                          type="button"
+                          data-attr="vendor-availability-edit-weekly"
+                          className={AVAILABILITY_EDIT_BTN}
+                          onClick={() => startEditWeekly(w)}
+                        >
+                          {formatMinuteOfDayLabel(w.startMinute)}–{formatMinuteOfDayLabel(w.endMinute)}
+                        </button>
                         <button
                           type="button"
                           data-attr="vendor-availability-remove-weekly"
                           aria-label={`Remove ${WEEKDAY_LABELS[wd]} ${formatMinuteOfDayLabel(w.startMinute)}–${formatMinuteOfDayLabel(w.endMinute)}`}
-                          className="text-muted hover:text-danger"
+                          className={AVAILABILITY_REMOVE_BTN}
                           disabled={busyId === w.id}
                           onClick={() => void removeRule(w.id)}
                         >
@@ -421,7 +565,15 @@ function VendorAvailabilityEditor() {
             variant="outline"
             data-attr="vendor-availability-add-open-date"
             className="h-8 rounded-full px-3 text-xs"
-            onClick={() => setOpenFormOpen((v) => !v)}
+            onClick={() => {
+              if (openFormOpen) {
+                setOpenFormOpen(false);
+                resetOpenForm();
+              } else {
+                resetOpenForm();
+                setOpenFormOpen(true);
+              }
+            }}
           >
             {openFormOpen ? "Cancel" : "+ Open a date"}
           </Button>
@@ -487,7 +639,7 @@ function VendorAvailabilityEditor() {
               disabled={saving}
               onClick={() => void addOpenDate()}
             >
-              Save
+              {openEditingId ? "Save changes" : "Save"}
             </Button>
           </div>
         ) : null}
@@ -501,7 +653,12 @@ function VendorAvailabilityEditor() {
                 key={o.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs"
               >
-                <span>
+                <button
+                  type="button"
+                  data-attr="vendor-availability-edit-open-date"
+                  className={`text-left ${AVAILABILITY_EDIT_BTN}`}
+                  onClick={() => startEditOpen(o)}
+                >
                   <span className="font-medium text-foreground">
                     {new Date(`${o.specificDate}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                   </span>{" "}
@@ -510,12 +667,12 @@ function VendorAvailabilityEditor() {
                     ? "All day"
                     : `${formatMinuteOfDayLabel(o.startMinute)}–${formatMinuteOfDayLabel(o.endMinute)}`}
                   {o.note ? <span className="text-muted"> · {o.note}</span> : null}
-                </span>
+                </button>
                 <button
                   type="button"
                   data-attr="vendor-availability-remove-open-date"
                   aria-label={`Remove open date ${o.specificDate}`}
-                  className="text-muted hover:text-danger"
+                  className={AVAILABILITY_REMOVE_BTN}
                   disabled={busyId === o.id}
                   onClick={() => void removeRule(o.id)}
                 >
@@ -535,7 +692,15 @@ function VendorAvailabilityEditor() {
             variant="outline"
             data-attr="vendor-availability-add-block"
             className="h-8 rounded-full px-3 text-xs"
-            onClick={() => setBlockFormOpen((v) => !v)}
+            onClick={() => {
+              if (blockFormOpen) {
+                setBlockFormOpen(false);
+                resetBlockForm();
+              } else {
+                resetBlockForm();
+                setBlockFormOpen(true);
+              }
+            }}
           >
             {blockFormOpen ? "Cancel" : "+ Block a date"}
           </Button>
@@ -601,7 +766,7 @@ function VendorAvailabilityEditor() {
               disabled={saving}
               onClick={() => void addBlock()}
             >
-              Save
+              {blockEditingId ? "Save changes" : "Save"}
             </Button>
           </div>
         ) : null}
@@ -615,7 +780,12 @@ function VendorAvailabilityEditor() {
                 key={b.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs"
               >
-                <span>
+                <button
+                  type="button"
+                  data-attr="vendor-availability-edit-block"
+                  className={`text-left ${AVAILABILITY_EDIT_BTN}`}
+                  onClick={() => startEditBlock(b)}
+                >
                   <span className="font-medium text-foreground">
                     {new Date(`${b.specificDate}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                   </span>{" "}
@@ -624,12 +794,12 @@ function VendorAvailabilityEditor() {
                     ? "All day"
                     : `${formatMinuteOfDayLabel(b.startMinute)}–${formatMinuteOfDayLabel(b.endMinute)}`}
                   {b.note ? <span className="text-muted"> · {b.note}</span> : null}
-                </span>
+                </button>
                 <button
                   type="button"
                   data-attr="vendor-availability-remove-block"
                   aria-label={`Remove blocked date ${b.specificDate}`}
-                  className="text-muted hover:text-danger"
+                  className={AVAILABILITY_REMOVE_BTN}
                   disabled={busyId === b.id}
                   onClick={() => void removeRule(b.id)}
                 >
@@ -659,12 +829,14 @@ export function VendorSettingsPanel() {
   const [taxDraft, setTaxDraft] = useState<VendorTaxDraft>(() => (demo ? DEMO_VENDOR_TAX : EMPTY_TAX));
   const [taxLoading, setTaxLoading] = useState(() => !demo);
   const [taxSaving, setTaxSaving] = useState(false);
+  const [unlinked, setUnlinked] = useState(false);
 
   useEffect(() => {
     if (demo) return;
     void fetch("/api/vendor/profile", { credentials: "include" })
       .then((r) => r.json())
-      .then((data: { profile?: VendorProfileApiRow | null }) => {
+      .then((data: { profile?: VendorProfileApiRow | null; linked?: boolean }) => {
+        setUnlinked(data.linked === false);
         const p = data.profile;
         if (!p) return;
         setProfileDraft({
@@ -804,6 +976,12 @@ export function VendorSettingsPanel() {
   return (
     <ManagerPortalPageShell title="Settings">
       <div className="space-y-6">
+        {unlinked ? (
+          <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending" data-attr="vendor-settings-unlinked-banner">
+            Waiting on a property manager to connect with you — you&apos;ll be able to save your profile once linked.
+          </p>
+        ) : null}
+
         <section className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-sm)]">
           <p className="text-sm font-semibold text-foreground">Business profile</p>
           <p className="mt-1 text-xs text-muted">Shown to the manager(s) you work with.</p>
@@ -869,7 +1047,7 @@ export function VendorSettingsPanel() {
             <Button
               variant="primary"
               onClick={() => void saveProfile()}
-              disabled={profileSaving || profileLoading}
+              disabled={profileSaving || profileLoading || unlinked}
               data-attr="vendor-settings-profile-save"
             >
               {profileSaving ? "Saving…" : "Save"}
@@ -910,7 +1088,7 @@ export function VendorSettingsPanel() {
             <Button
               variant="primary"
               onClick={() => void saveCapabilities()}
-              disabled={capabilitiesSaving || profileLoading}
+              disabled={capabilitiesSaving || profileLoading || unlinked}
               data-attr="vendor-settings-capabilities-save"
             >
               {capabilitiesSaving ? "Saving…" : "Save capabilities"}
@@ -1010,7 +1188,7 @@ export function VendorSettingsPanel() {
             <Button
               variant="primary"
               onClick={() => void saveTax()}
-              disabled={taxSaving || taxLoading}
+              disabled={taxSaving || taxLoading || unlinked}
               data-attr="vendor-tax-profile-save"
             >
               {taxSaving ? "Saving…" : "Save"}
