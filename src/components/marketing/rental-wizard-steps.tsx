@@ -405,7 +405,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         {form.hasCosigner === "yes" ? (
           <div className="rounded-2xl border border-border bg-accent/30 p-5 text-sm leading-relaxed text-foreground">
             After you pay the listing&apos;s application fee on the last step, you&apos;ll receive an{" "}
-            <strong className="text-foreground">Axis ID</strong> to share with your co-signer so they can link their information to yours.
+            <strong className="text-foreground">application ID</strong> to share with your co-signer so they can link their information to yours.
           </div>
         ) : null}
       </div>

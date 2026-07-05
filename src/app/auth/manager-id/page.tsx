@@ -121,9 +121,9 @@ function ManagerIdContent() {
         ) : null}
       </div>
 
-      {/* Axis ID display */}
+      {/* Account ID display */}
       <div className="mt-7 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted">Your Axis ID</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted">Your account ID</p>
         <div className="mt-2 flex items-center justify-between gap-3">
           <p className="font-mono text-2xl font-bold tracking-wide text-foreground">{preview.managerId}</p>
           <button
@@ -140,7 +140,7 @@ function ManagerIdContent() {
       {/* Steps */}
       <div className="mt-7 space-y-3 rounded-2xl border border-border bg-accent/30 p-4">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted/70 mb-4">Account setup steps</p>
-        <Step n={1} label="Reserve your Axis ID" done />
+        <Step n={1} label="Reserve your account ID" done />
         <Step n={2} label="Set a password to activate your portal" />
         <Step n={3} label="Sign in to Axis" />
       </div>

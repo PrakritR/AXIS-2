@@ -27,7 +27,7 @@ export async function completeResidentSignupFromOAuth(
   const normalAxisId = axisId.trim();
 
   if (!normalEmail || !normalAxisId) {
-    return { ok: false, status: 400, error: "Email and Axis ID are required." };
+    return { ok: false, status: 400, error: "Email and application ID are required." };
   }
 
   const { data: applicationRows, error: applicationError } = await supabase

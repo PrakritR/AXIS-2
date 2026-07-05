@@ -269,12 +269,12 @@ export default function CreateAccountClient() {
           password,
         });
         if (signInError || !signInData?.user) {
-          showToast(`Account ready. Axis ID ${body.managerId ?? effectiveCheckoutPreview.managerId}. Sign in with your email.`);
+          showToast(`Account ready. Account ID ${body.managerId ?? effectiveCheckoutPreview.managerId}. Sign in with your email.`);
           router.push("/auth/sign-in");
           return;
         }
         posthog.identify(signInData.user.id);
-        showToast(`Account ready. Axis ID ${body.managerId ?? effectiveCheckoutPreview.managerId}.`);
+        showToast(`Account ready. Account ID ${body.managerId ?? effectiveCheckoutPreview.managerId}.`);
         window.location.replace("/portal/dashboard");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Sign up failed";
@@ -421,12 +421,12 @@ export default function CreateAccountClient() {
           <>
             {isAxisIntentSignup ? (
               <>
-                Your <span className="font-semibold text-foreground">Axis ID</span> is reserved for this signup—use it
+                Your <span className="font-semibold text-foreground">account ID</span> is reserved for this signup—use it
                 when you need support. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             ) : (
               <>
-                Payment confirmed. Your <span className="font-semibold text-foreground">Axis ID</span> is tied to this
+                Payment confirmed. Your <span className="font-semibold text-foreground">account ID</span> is tied to this
                 checkout. Set a password below to finish {managerSignupFinishPhrase(effectiveCheckoutPreview?.tier)}.
               </>
             )}
@@ -434,7 +434,7 @@ export default function CreateAccountClient() {
         ) : role === "resident" ? (
           <>
             Use the same email address from your rental application. Axis links your account to that application
-            automatically—no Axis ID needed. After signup, your resident portal stays limited until an Axis manager
+            automatically—no extra steps needed. After signup, your resident portal stays limited until an Axis manager
             marks your application fee paid and approves your application.
           </>
         ) : (
@@ -485,7 +485,7 @@ export default function CreateAccountClient() {
             </div>
             <div>
               <label className={FIELD_LABEL_CLASS} htmlFor="manager-id">
-                Axis ID
+                Account ID
               </label>
               <Input
                 id="manager-id"

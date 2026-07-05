@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (!appRow) {
-      return NextResponse.json({ error: "Application ID not found. Check the Axis ID from the primary applicant." }, { status: 404 });
+      return NextResponse.json({ error: "Application ID not found. Check the application ID from the primary applicant." }, { status: 404 });
     }
 
     const submission: CosignerSubmission = {
