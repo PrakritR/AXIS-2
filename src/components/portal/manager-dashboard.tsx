@@ -255,7 +255,7 @@ export function ManagerDashboard() {
         </div>
 
         {/* ── Calendar & applications ── */}
-        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
 
           {/* Pending tours */}
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
@@ -312,7 +312,7 @@ export function ManagerDashboard() {
         </div>
 
         {/* ── Leases & payments ── */}
-        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader
               title="Leases pending signature"
@@ -390,7 +390,7 @@ export function ManagerDashboard() {
         </div>
 
         {/* ── Services & inbox ── */}
-        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader
               title="Services"
