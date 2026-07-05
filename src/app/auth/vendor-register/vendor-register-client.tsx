@@ -3,10 +3,12 @@
 import posthog from "posthog-js";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { AuthCard } from "@/components/auth/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { HideOnNative } from "@/components/native/hide-on-native";
 import { FIELD_LABEL_CLASS } from "@/lib/ui-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -231,6 +233,18 @@ export default function VendorRegisterClient() {
             {busy ? "Creating account…" : "Create vendor account"}
           </Button>
         </div>
+
+        <HideOnNative>
+          <p className="mt-5 text-center text-[12px] text-muted">
+            <Link
+              className="font-semibold text-muted transition hover:text-foreground"
+              href="/"
+              data-attr="auth-back-to-home"
+            >
+              ← Back to home
+            </Link>
+          </p>
+        </HideOnNative>
       </AuthCard>
     </main>
   );
