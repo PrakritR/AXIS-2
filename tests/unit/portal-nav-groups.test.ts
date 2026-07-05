@@ -12,8 +12,10 @@ import {
 } from "@/lib/portals/resident-sections";
 
 const CASES = [
-  { kind: "pro" as const, sections: proPortal.sections.map((s) => s.section) },
-  { kind: "admin" as const, sections: adminPortal.sections.map((s) => s.section) },
+  // pro/manager surfaces Settings (profile) at the bottom of the sidebar, in
+  // parity with the native bottom bar — see NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY.
+  { kind: "pro" as const, sections: proPortal.sections.map((s) => s.section), sidebarShowsProfile: true },
+  { kind: "admin" as const, sections: adminPortal.sections.map((s) => s.section), sidebarShowsProfile: false },
   {
     kind: "resident" as const,
     sections: [
@@ -22,16 +24,19 @@ const CASES = [
         ...RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => s.section),
       ]),
     ],
+    sidebarShowsProfile: false,
   },
 ];
 
 describe("portal nav groups cover the registry exactly", () => {
-  for (const { kind, sections } of CASES) {
+  for (const { kind, sections, sidebarShowsProfile } of CASES) {
     const groups = PORTAL_NAV_GROUPS[kind];
     const grouped = groups.flatMap((g) => g.sections);
 
     it(`${kind}: every registry section (except excluded) maps to exactly one group`, () => {
-      const expected = sections.filter((s) => !SIDEBAR_EXCLUDED_SECTIONS.has(s)).sort();
+      const expected = sections
+        .filter((s) => (s === "profile" ? sidebarShowsProfile : !SIDEBAR_EXCLUDED_SECTIONS.has(s)))
+        .sort();
       expect([...grouped].sort()).toEqual(expected);
     });
 
@@ -44,8 +49,13 @@ describe("portal nav groups cover the registry exactly", () => {
       for (const id of grouped) expect(known.has(id)).toBe(true);
     });
 
-    it(`${kind}: profile is excluded from the sidebar`, () => {
-      expect(grouped).not.toContain("profile");
+    it(`${kind}: profile ${sidebarShowsProfile ? "surfaces at the bottom of" : "is excluded from"} the sidebar`, () => {
+      if (sidebarShowsProfile) {
+        expect(grouped).toContain("profile");
+        expect(grouped.at(-1)).toBe("profile");
+      } else {
+        expect(grouped).not.toContain("profile");
+      }
     });
   }
 });
@@ -59,8 +69,8 @@ describe("groupNavItems", () => {
 
     expect(result[0]).toEqual({ id: "home", label: null, items: [{ section: "dashboard" }] });
     const financials = result.find((g) => g.id === "financials");
-    expect(financials?.items.map((i) => i.section)).toEqual(["payments", "financials", "documents"]);
-    // profile is never rendered even if present in input
+    expect(financials?.items.map((i) => i.section)).toEqual(["documents", "financials", "payments"]);
+    // profile was filtered out of `items` above (pro's sidebar otherwise surfaces it)
     expect(result.flatMap((g) => g.items).map((i) => i.section)).not.toContain("profile");
   });
 

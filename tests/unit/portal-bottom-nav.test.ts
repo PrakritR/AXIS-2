@@ -111,4 +111,19 @@ describe("splitNativeBottomNavItems", () => {
     expect(overflow.map((item) => item.section)).toContain("profile");
     expect(primary.length + overflow.length).toBe(items.length);
   });
+
+  it("fails closed (not open) for an unrecognized kind — nothing goes on the fixed bar", () => {
+    const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
+    // @ts-expect-error deliberately probing an unknown/future role
+    const { primary, overflow } = splitNativeBottomNavItems(items, "future-role");
+    expect(primary).toEqual([]);
+    expect(overflow.length).toBe(items.length);
+  });
+
+  it("fails closed for a missing kind too", () => {
+    const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
+    const { primary, overflow } = splitNativeBottomNavItems(items, undefined);
+    expect(primary).toEqual([]);
+    expect(overflow.length).toBe(items.length);
+  });
 });

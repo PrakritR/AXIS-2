@@ -1644,11 +1644,15 @@ html[data-native] .portal-native-bottom-nav-pull-handle {
 }
 
 /* Instagram-style: evenly-spaced icon-only tabs, no horizontal scroll — every
-   curated primary set is small enough (4-5 items) to fit at once. */
+   curated primary set is small enough (4-5 items) to fit at once.
+   `.portal-native-bottom-nav`'s flex-direction is `column`, so `flex: 1 1 0`
+   here sizes this row's HEIGHT (main axis) — it must NOT also carry `width: 0`
+   (that's a cross-axis override that collapsed the whole icon row to ~0px
+   wide, rendering an icon-less empty bar). Width comes from the parent's
+   `align-items: stretch` instead. */
 html[data-native] .portal-native-bottom-nav-scroll {
   display: flex;
   flex: 1 1 0;
-  width: 0;
   min-width: 0;
   flex-wrap: nowrap;
   align-items: stretch;

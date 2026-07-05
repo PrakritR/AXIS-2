@@ -15,14 +15,18 @@ export type NavGroupConfig = { id: string; label: string | null; sections: strin
 /** Sections never rendered in the desktop sidebar (surfaced in the account menu instead). */
 export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile"]);
 
+// Order mirrors the native bottom bar (Dashboard, Properties, Residents, Documents,
+// Finances, ..., Settings) — see NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY in
+// portal-bottom-nav.ts. Documents and Finances stay separate sidebar items on
+// desktop; only the mobile bar combines them into one "Files" tab.
 const PRO_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "properties", label: "Properties", sections: ["properties", "applications", "residents", "leases"] },
-  { id: "financials", label: "Financials", sections: ["payments", "financials", "documents"] },
+  { id: "properties", label: "Properties", sections: ["properties", "residents", "applications", "leases"] },
+  { id: "financials", label: "Financials", sections: ["documents", "financials", "payments"] },
   { id: "operations", label: "Operations", sections: ["calendar", "services", "vendors", "inbox"] },
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
-  { id: "account", label: null, sections: ["bugs-feedback"] },
+  { id: "account", label: null, sections: ["bugs-feedback", "profile"] },
 ];
 
 const ADMIN_GROUPS: NavGroupConfig[] = [

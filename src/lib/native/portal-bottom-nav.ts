@@ -118,7 +118,9 @@ export function splitNativeBottomNavItems<T extends { section: string }>(
 ): { primary: T[]; overflow: T[] } {
   const ordered = orderNativeBottomNavItems(items, kind);
   const primaryOrder = primaryOrderFor(kind);
-  if (primaryOrder.length === 0) return { primary: ordered, overflow: [] };
+  // Fail closed: an unrecognized role with no curated primary set must not dump
+  // every section onto the fixed bar — everything goes to the More sheet instead.
+  if (primaryOrder.length === 0) return { primary: [], overflow: ordered };
 
   const bySection = new Map(ordered.map((item) => [item.section, item]));
   const primary = primaryOrder

@@ -305,6 +305,15 @@ export function PortalSidebar({
         : `${label} — locked on Pro or Business`
       : label;
 
+  // Manager/pro only: the native bottom bar's Documents tab is the combined
+  // "Files" tab (Documents + Finances, switch at the top of the Documents
+  // page) — desktop and the More sheet still say "Documents" since those keep
+  // Documents/Finances as separate items.
+  const bottomBarLabel = (s: (typeof navItems)[number]) =>
+    (definition.kind === "pro" || definition.kind === "manager") && s.section === "documents"
+      ? "Files"
+      : s.label;
+
   const renderMobileNavLink = (
     s: (typeof navItems)[number],
     variant: "top" | "bottom",
@@ -325,13 +334,18 @@ export function PortalSidebar({
             preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
           })}
           className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 py-2 transition ${
-            active ? "text-primary" : locked ? "text-muted/60" : "text-muted"
+            active ? "text-primary" : "text-foreground"
           }`}
-          aria-label={lockAriaLabel(s.label, locked)}
+          aria-label={lockAriaLabel(bottomBarLabel(s), locked)}
           aria-current={active ? "page" : undefined}
         >
           {showNavIcons ? (
-            <span className={`relative shrink-0 ${locked ? "opacity-60" : "opacity-100"}`} aria-hidden>
+            <span
+              className={`relative shrink-0 transition-opacity duration-200 ${
+                active ? "opacity-100" : locked ? "opacity-45" : "opacity-60"
+              }`}
+              aria-hidden
+            >
               <PortalNavIcon
                 section={s.section}
                 className="h-[23px] w-[23px] shrink-0"
