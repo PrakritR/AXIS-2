@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { TabNav } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
-  ManagerDocumentsFinancesSwitch,
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
@@ -285,7 +284,6 @@ export function ManagerDocumentsPanel({
       title="Documents"
       titleAside={
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <ManagerDocumentsFinancesSwitch active="documents" basePath={basePath} />
           {hasExportActions ? (
             <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div>
           ) : null}

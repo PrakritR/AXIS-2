@@ -464,38 +464,6 @@ export const PORTAL_PAGE_ACTIONS_DESKTOP = "hidden shrink-0 flex-wrap items-cent
 /** Mobile page actions — place inside {@link ManagerPortalFilterRow}. */
 export const PORTAL_FILTER_ACTIONS_MOBILE = "flex max-w-full flex-wrap items-center gap-2 lg:hidden";
 
-/** Documents ⇄ Finances quick-switch pill — the two manager reporting/financial
- * views link to each other so the manager never has to open the More sheet to
- * flip between them. */
-export function ManagerDocumentsFinancesSwitch({
-  active,
-  basePath = "/portal",
-}: {
-  active: "documents" | "finances";
-  basePath?: string;
-}) {
-  const items = [
-    { id: "documents" as const, label: "Documents", href: `${basePath}/documents/income-documents` },
-    { id: "finances" as const, label: "Finances", href: `${basePath}/financials/income` },
-  ];
-  return (
-    <div className={PORTAL_TOOLBAR_GROUP} role="tablist" aria-label="Documents or Finances">
-      {items.map((item) => (
-        <Link
-          key={item.id}
-          href={item.href}
-          role="tab"
-          aria-selected={active === item.id}
-          data-attr={`switch-to-${item.id}`}
-          className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${active === item.id ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
-        >
-          {item.label}
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 /** Shared sort dropdown shell for portal section toolbars. */
 export function PortalToolbarSortSelect<T extends string>({
   label,

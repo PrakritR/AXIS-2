@@ -7,7 +7,6 @@ import { Modal } from "@/components/ui/modal";
 import { TabNav } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
-  ManagerDocumentsFinancesSwitch,
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
@@ -595,7 +594,6 @@ export function ManagerFinancesPanel({
       title="Finances"
       titleAside={
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <ManagerDocumentsFinancesSwitch active="finances" basePath={basePath} />
           {hasHeaderActions ? (
             <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{headerActions}</div>
           ) : null}
