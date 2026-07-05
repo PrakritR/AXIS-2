@@ -1,7 +1,6 @@
 "use client";
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { track } from "@/lib/analytics/track-client";
 import Link from "next/link";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { ChevronDown } from "lucide-react";
@@ -57,7 +56,6 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
   upsertApplicationRowToServer,
-  upsertApplicationRowToServerAwait,
   writeManagerApplicationRows,
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
@@ -65,9 +63,7 @@ import {
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
-import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { transitionApplicationBucket } from "@/lib/application-review";
 import {
   buildMockPropertyFromDraft,
   PROPERTY_PIPELINE_EVENT,
@@ -76,7 +72,8 @@ import {
   syncPropertyPipelineFromServer,
   updateExtraListingFromSubmissionOnServer,
 } from "@/lib/demo-property-pipeline";
-import { sanitizePaymentContactInput, sanitizePaymentLinkInput } from "@/lib/listing-form-inputs";
+import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
+import { AXIS_ACH_FEE_PERCENT } from "@/lib/payment-policy";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import {
   appendLeaseThreadMessage,
@@ -132,6 +129,7 @@ import {
   deleteInboxThreadIds,
   type PersistedInboxThread,
 } from "@/lib/portal-inbox-storage";
+import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
 import {
   RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildResidentWelcomeEmailBody,
@@ -149,7 +147,7 @@ import {
 } from "@/components/portal/portal-inbox-ui";
 import {
   REQUEST_STATUS_TABS,
-  STATUS_TABS,
+  WORK_ORDER_FILTER_TABS,
   ServiceRequestCard,
   ServiceStatusBadge,
   WorkOrderDetail,
@@ -157,11 +155,13 @@ import {
   formatDate as serviceRequestDateLabel,
   pillLabelWithCount,
   requestChargesSummary,
-  unifiedItemStatusBucket,
+  serviceRequestStatusBucket,
+  workOrderFilterBucket,
   type RequestStatusBucket,
-  type UnifiedItem,
+  type WorkOrderFilterBucket,
 } from "@/components/portal/resident-services-panel";
 import { isHouseholdChargeOverdue } from "@/lib/household-charges";
+import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
@@ -240,17 +240,7 @@ function shortDateLabel(iso: string): string {
 }
 
 function isPreviousResidentRow(row: DemoApplicantRow): boolean {
-  // Pending/denied applications added from this tab haven't moved in (or out) yet — they
-  // belong in Current, not Previous, regardless of isCurrentResidentApplicationRow's
-  // approved-only assumption.
-  if (row.bucket !== "approved") return false;
   return !isCurrentResidentApplicationRow(row);
-}
-
-function applicationStatusLabel(bucket: DemoApplicantRow["bucket"]): string {
-  if (bucket === "approved") return "Approved";
-  if (bucket === "rejected") return "Denied";
-  return "Pending review";
 }
 
 const AR_LEASE_TERM_CUSTOM = "__custom__";
@@ -291,6 +281,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageSubject, setMessageSubject] = useState("");
   const [messageBody, setMessageBody] = useState("");
+  const [messageScheduleLater, setMessageScheduleLater] = useState(false);
+  const [messageSendAt, setMessageSendAt] = useState("");
+  const [messageBusy, setMessageBusy] = useState(false);
   const [leaseReminderBusy, setLeaseReminderBusy] = useState(false);
   const [leaseReminderPreview, setLeaseReminderPreview] = useState<{
     res: ActiveResident;
@@ -315,7 +308,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   // Services tab replica (Requests / Work orders — mirrors resident-services-panel.tsx)
   const [svcSubTab, setSvcSubTab] = useState<"requests" | "work-orders">("requests");
   const [svcRequestsFilter, setSvcRequestsFilter] = useState<RequestStatusBucket>("pending");
-  const [svcWorkOrderBucket, setSvcWorkOrderBucket] = useState<ResidentWorkBucket>("open");
+  const [svcWorkOrderFilter, setSvcWorkOrderFilter] = useState<WorkOrderFilterBucket>("pending");
   const [svcExpandedId, setSvcExpandedId] = useState<string | null>(null);
   const [editingServiceRequest, setEditingServiceRequest] = useState<ServiceRequest | null>(null);
   const [srEditNotes, setSrEditNotes] = useState("");
@@ -336,18 +329,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   >(null);
   const [chargeExpandedId, setChargeExpandedId] = useState<string | null>(null);
   const [addPaymentMethodOpen, setAddPaymentMethodOpen] = useState(false);
+  const [addResidentPaymentOpen, setAddResidentPaymentOpen] = useState(false);
   const [pmPropertyId, setPmPropertyId] = useState("");
   const [pmZelleEnabled, setPmZelleEnabled] = useState(false);
   const [pmZelleContact, setPmZelleContact] = useState("");
   const [pmVenmoEnabled, setPmVenmoEnabled] = useState(false);
   const [pmVenmoContact, setPmVenmoContact] = useState("");
-  const [pmAchLinkEnabled, setPmAchLinkEnabled] = useState(false);
-  const [pmAchLink, setPmAchLink] = useState("");
+  const [pmAxisPaymentsEnabled, setPmAxisPaymentsEnabled] = useState(true);
+  const [pmConnectReady, setPmConnectReady] = useState<boolean | null>(null);
   const [pmSaving, setPmSaving] = useState(false);
 
   // Add resident manually
   const [addResidentOpen, setAddResidentOpen] = useState(false);
-  const [addResidentSaving, setAddResidentSaving] = useState(false);
   const [arName, setArName] = useState("");
   const [arEmail, setArEmail] = useState("");
   const [arPropertyId, setArPropertyId] = useState("");
@@ -548,14 +541,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
     return readManagerApplicationRows()
-      .filter(
-        (row) =>
-          // Approved residents, plus applications created via this tab's Add flow while
-          // they're still awaiting (or denied) manager review — public applicant submissions
-          // stay exclusively in the Applications tab until a manager places/approves them.
-          (row.bucket === "approved" || (row.manuallyAdded && (row.bucket === "pending" || row.bucket === "rejected"))) &&
-          applicationVisibleToPortalUser(row, userId),
-      )
+      .filter((row) => row.bucket === "approved" && applicationVisibleToPortalUser(row, userId))
       .map((row) => {
         const propId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
         const prop = propId ? getPropertyById(propId) : null;
@@ -684,7 +670,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       setChargeTab("pending");
       setSvcSubTab("requests");
       setSvcRequestsFilter("pending");
-      setSvcWorkOrderBucket("open");
+      setSvcWorkOrderFilter("pending");
       setSvcExpandedId(null);
       setInboxSubTab("unopened");
       setInboxExpandedId(null);
@@ -793,14 +779,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     [residentCharges, chargeTab],
   );
 
-  const pendingBalance = useMemo(
-    () =>
-      residentCharges
-        .filter((c) => c.status === "pending")
-        .reduce((sum, c) => sum + centsFromLabel(c.balanceLabel), 0),
-    [residentCharges],
-  );
-
   const overdueChargeCount = useMemo(
     () => residentCharges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c)).length,
     [residentCharges],
@@ -812,76 +790,26 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     return readManagerApplicationRows().find((row) => row.id === selected.id) ?? null;
   }, [selected, hcTick]);
 
-  const [applicationActionBusyId, setApplicationActionBusyId] = useState<string | null>(null);
-
-  async function approveSelectedApplication() {
-    if (!selectedApplicationRow) return;
-    const row = selectedApplicationRow;
-    setApplicationActionBusyId(row.id);
-    const result = await transitionApplicationBucket(row.id, "approved", { userId: userId ?? null });
-    setApplicationActionBusyId(null);
-    if (!result) {
-      showToast("Could not approve application.");
-      return;
-    }
-    setHcTick((n) => n + 1);
-    showToast(
-      result.welcomeSent
-        ? "Application approved. A welcome email with portal setup was sent to the resident."
-        : "Application approved.",
-    );
-  }
-
-  async function denySelectedApplication() {
-    if (!selectedApplicationRow) return;
-    const row = selectedApplicationRow;
-    setApplicationActionBusyId(row.id);
-    const result = await transitionApplicationBucket(row.id, "rejected", { userId: userId ?? null });
-    setApplicationActionBusyId(null);
-    if (!result) {
-      showToast("Could not deny application.");
-      return;
-    }
-    setHcTick((n) => n + 1);
-    showToast("Application denied.");
-  }
-
-  const residentUnifiedServiceItems = useMemo<UnifiedItem[]>(() => {
-    const items: UnifiedItem[] = [];
-    for (const req of residentServiceRequests) {
-      const t = new Date(req.requestedAt).getTime();
-      items.push({ kind: "request", req, sortKey: Number.isFinite(t) ? t : 0 });
-    }
-    for (const row of residentWorkOrders) {
-      const fromId = Number(row.id.replace(/^\D*/, ""));
-      const fromSchedule = row.scheduledAtIso ? new Date(row.scheduledAtIso).getTime() : 0;
-      const t = Number.isFinite(fromId) && fromId > 0 ? fromId : fromSchedule;
-      items.push({ kind: "work-order", row, sortKey: Number.isFinite(t) ? t : 0 });
-    }
-    items.sort((a, b) => b.sortKey - a.sortKey);
-    return items;
-  }, [residentServiceRequests, residentWorkOrders]);
-
   const residentServiceRequestsCounts = useMemo(() => {
-    const c: Record<RequestStatusBucket, number> = { pending: 0, approved: 0, completed: 0 };
-    for (const item of residentUnifiedServiceItems) c[unifiedItemStatusBucket(item)] += 1;
+    const c: Record<RequestStatusBucket, number> = { pending: 0, completed: 0 };
+    for (const req of residentServiceRequests) c[serviceRequestStatusBucket(req)] += 1;
     return c;
-  }, [residentUnifiedServiceItems]);
+  }, [residentServiceRequests]);
 
-  const residentFilteredUnifiedServiceItems = useMemo(
-    () => residentUnifiedServiceItems.filter((item) => unifiedItemStatusBucket(item) === svcRequestsFilter),
-    [residentUnifiedServiceItems, svcRequestsFilter],
+  const residentFilteredServiceRequests = useMemo(
+    () => residentServiceRequests.filter((req) => serviceRequestStatusBucket(req) === svcRequestsFilter),
+    [residentServiceRequests, svcRequestsFilter],
   );
 
-  const residentWorkOrderBucketCounts = useMemo(() => {
-    const c: Record<ResidentWorkBucket, number> = { open: 0, scheduled: 0, completed: 0 };
-    for (const row of residentWorkOrders) c[row.bucket] += 1;
+  const residentWorkOrderFilterCounts = useMemo(() => {
+    const c: Record<WorkOrderFilterBucket, number> = { pending: 0, scheduled: 0, completed: 0 };
+    for (const row of residentWorkOrders) c[workOrderFilterBucket(row)] += 1;
     return c;
   }, [residentWorkOrders]);
 
   const residentWorkOrdersInBucket = useMemo(
-    () => residentWorkOrders.filter((row) => row.bucket === svcWorkOrderBucket),
-    [residentWorkOrders, svcWorkOrderBucket],
+    () => residentWorkOrders.filter((row) => workOrderFilterBucket(row) === svcWorkOrderFilter),
+    [residentWorkOrders, svcWorkOrderFilter],
   );
 
   // Scheduled-message count for this resident's Inbox → Schedule tab (mirrors manager-inbox.tsx's scheduleCount).
@@ -961,31 +889,89 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
 
   async function sendResidentMessage() {
-    if (!selected) return;
+    if (!selected || messageBusy) return;
     const subject = messageSubject.trim();
     const body = messageBody.trim();
     if (!subject || !body) {
       showToast("Add a subject and message.");
       return;
     }
-    setMessageSubject("");
-    setMessageBody("");
-    setMessageOpen(false);
-    const result = await deliverPortalInboxMessage({
-      fromName: managerEmail ?? "Property Manager",
-      toEmails: [selected.email],
-      subject,
-      text: body,
-    });
-    if (!result.ok) {
-      showToast(result.error ?? "Message could not be sent.");
+
+    if (messageScheduleLater) {
+      const sendAt = new Date(messageSendAt);
+      if (Number.isNaN(sendAt.getTime())) {
+        showToast("Choose a valid send date and time.");
+        return;
+      }
+      if (sendAt.getTime() < Date.now() - 60_000) {
+        showToast("Send time must be in the future.");
+        return;
+      }
+      setMessageBusy(true);
+      try {
+        const res = await fetch("/api/portal/scheduled-inbox-messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            subject,
+            body,
+            sendAt: sendAt.toISOString(),
+            deliverViaEmail: true,
+            recipientEmail: selected.email.trim().toLowerCase(),
+            recipientName: selected.name.trim(),
+          }),
+        });
+        if (!res.ok) {
+          const payload = (await res.json()) as { error?: string };
+          showToast(payload.error ?? "Could not schedule message.");
+          return;
+        }
+        setMessageSubject("");
+        setMessageBody("");
+        setMessageScheduleLater(false);
+        setMessageOpen(false);
+        showToast("Message scheduled.");
+      } finally {
+        setMessageBusy(false);
+      }
       return;
     }
-    invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
-    const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
-    persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
-    setInboxTick((n) => n + 1);
-    showToast(result.skipped ? "Message sent to inbox (demo email skipped)." : "Message sent via inbox and email.");
+
+    setMessageBusy(true);
+    setMessageSubject("");
+    setMessageBody("");
+    setMessageScheduleLater(false);
+    setMessageOpen(false);
+    try {
+      const result = await deliverPortalInboxMessage({
+        fromName: managerEmail ?? "Property Manager",
+        toEmails: [selected.email],
+        subject,
+        text: body,
+      });
+      if (!result.ok) {
+        showToast(result.error ?? "Message could not be sent.");
+        return;
+      }
+      invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+      const fresh = await syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true });
+      persistInbox(MANAGER_INBOX_STORAGE_KEY, fresh as PersistedInboxThread[]);
+      setInboxTick((n) => n + 1);
+      showToast(result.skipped ? "Message sent to inbox (demo email skipped)." : "Message sent via inbox and email.");
+    } finally {
+      setMessageBusy(false);
+    }
+  }
+
+  function openResidentMessageModal() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setMessageSendAt(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    setMessageScheduleLater(false);
+    setMessageOpen(true);
   }
 
   function openServiceRequestEdit(req: ServiceRequest) {
@@ -1315,73 +1301,52 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
-  /**
-   * Submits the same application record a resident would fill out (RentalWizardFormState),
-   * completed here by the manager on the prospective resident's behalf. This creates a
-   * pending application — visible in both this tab and the Applications tab's Pending
-   * bucket — rather than an already-active resident; the manager approves it from the
-   * Application section below once it's ready.
-   */
-  async function submitResidentApplication() {
+  function saveManualResident() {
     if (!arName.trim()) { showToast("Enter the resident's name."); return; }
     if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
-    if (addResidentSaving) return;
-    setAddResidentSaving(true);
+    const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
+    const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
+    const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
+    const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
     const axisId = `AXIS-${Date.now().toString(36).toUpperCase().slice(-8)}`;
     const propLabel = arPropertyId
       ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
       : "—";
-    const roomChoice = arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined;
-    const rentTrim = arRent.trim();
+    const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
     const nextRow: DemoApplicantRow = {
       id: axisId,
       name: arName.trim(),
       email: arEmail.trim(),
       property: propLabel,
-      propertyId: arPropertyId || undefined,
-      stage: "Submitted",
-      bucket: "pending",
-      detail: `Submitted ${new Date().toLocaleString()}`,
+      stage: "Active",
+      bucket: "approved",
+      detail: "",
       assignedPropertyId: arPropertyId || undefined,
-      assignedRoomChoice: roomChoice,
-      signedMonthlyRent: rentTrim ? Number(rentTrim.replace(/[^\d.]/g, "")) : undefined,
+      assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
+      signedMonthlyRent: rent ?? undefined,
       managerUserId: userId ?? undefined,
       manuallyAdded: true,
-      application: {
-        ...createInitialRentalWizardState(),
-        fullLegalName: arName.trim(),
-        email: arEmail.trim(),
-        propertyId: arPropertyId,
-        roomChoice1: roomChoice ?? "",
-        leaseTerm: arLeaseTerm,
-        leaseStart: arMoveInDate,
-        leaseEnd: arMoveOutDate,
-        managerRentOverride: arRent.trim(),
-        managerUtilitiesOverride: arUtilities.trim(),
-        managerSecurityDepositOverride: arSecurityDeposit.trim(),
-        managerMoveInFeeOverride: arMoveInFee.trim(),
+      manualResidentDetails: {
+        moveInDate: arMoveInDate || undefined,
+        moveOutDate: arMoveOutDate || undefined,
+        monthlyUtilities: utilities ?? undefined,
+        moveInFee: moveInFee ?? undefined,
+        securityDeposit: secDeposit ?? undefined,
+        roomNumber: selectedRoomLabel || undefined,
+        leaseTerm: arLeaseTerm || undefined,
+        notes: arNotes.trim() || undefined,
       },
-      manualResidentDetails: arNotes.trim() ? { notes: arNotes.trim() } : undefined,
     };
     appendManagerApplicationRow(nextRow);
-    const sync = await upsertApplicationRowToServerAwait(nextRow);
-    setAddResidentSaving(false);
-    if (!sync.ok) {
-      showToast(sync.error ?? "Could not submit the application. Try again.");
-      return;
-    }
-    track("rental_application_submitted", {
-      axis_id: axisId,
-      property_id: arPropertyId || undefined,
-      synced_to_server: true,
-      source: "manager_added",
-    });
+    recordApprovedApplicationCharges(nextRow, userId ?? null);
+    void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
+    setChargeTab("pending");
     setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
     setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
     setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
     setAddResidentOpen(false);
     setHcTick((n) => n + 1);
-    showToast(`Application submitted — Axis ID: ${axisId}. Approve it below to activate this resident.`);
+    showToast(`Resident added — Axis ID: ${axisId}`);
   }
 
   function openEditResidentModal() {
@@ -1520,9 +1485,23 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setPmZelleContact(sub?.zelleContact ?? "");
     setPmVenmoEnabled(Boolean(sub?.venmoPaymentsEnabled));
     setPmVenmoContact(sub?.venmoContact ?? "");
-    setPmAchLinkEnabled(Boolean(sub?.achPaymentLinkEnabled));
-    setPmAchLink(sub?.achPaymentLink ?? "");
+    setPmAxisPaymentsEnabled(sub?.axisPaymentsEnabled !== false);
+    setPmConnectReady(null);
     setAddPaymentMethodOpen(true);
+    if (isDemoModeActive()) {
+      setPmConnectReady(true);
+      return;
+    }
+    void fetch("/api/stripe/connect/status", { credentials: "include", cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) {
+          setPmConnectReady(false);
+          return;
+        }
+        const body = (await res.json()) as { paymentReady?: boolean; payoutsEnabled?: boolean; transfersEnabled?: boolean };
+        setPmConnectReady(Boolean(body.paymentReady ?? (body.payoutsEnabled && body.transfersEnabled)));
+      })
+      .catch(() => setPmConnectReady(false));
   }
 
   async function savePaymentMethodSettings() {
@@ -1532,17 +1511,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
     const zelleContact = sanitizePaymentContactInput(pmZelleContact).trim();
     const venmoContact = sanitizePaymentContactInput(pmVenmoContact).trim();
-    const achLink = sanitizePaymentLinkInput(pmAchLink).trim();
     if (pmZelleEnabled && !zelleContact) {
       showToast("Enter a Zelle phone or email, or turn Zelle off.");
       return;
     }
     if (pmVenmoEnabled && !venmoContact) {
       showToast("Enter a Venmo username, phone, or email, or turn Venmo off.");
-      return;
-    }
-    if (pmAchLinkEnabled && !achLink) {
-      showToast("Enter a bank/ACH payment link, or turn it off.");
       return;
     }
     // Scoped to this manager's own properties only — readExtraListingsForUser(userId) can never
@@ -1559,8 +1533,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       zelleContact,
       venmoPaymentsEnabled: pmVenmoEnabled,
       venmoContact,
-      achPaymentLinkEnabled: pmAchLinkEnabled,
-      achPaymentLink: achLink,
+      axisPaymentsEnabled: pmAxisPaymentsEnabled,
+      applicationFeeStripeEnabled: pmAxisPaymentsEnabled ? true : undefined,
     };
     const ok = await updateExtraListingFromSubmissionOnServer(pmPropertyId, userId, nextSubmission);
     setPmSaving(false);
@@ -1629,6 +1603,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
 
     deleteServiceRequestsForResident(selectedResident.email);
+    clearUploadedOwnLease(selectedResident.email);
 
     const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
     const deletedThreads = allInbox.filter((thread) => thread.email.trim().toLowerCase() === residentEmail);
@@ -1753,7 +1728,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               title="Application"
                               summary={
                                 selectedApplicationRow
-                                  ? `Application — ${applicationStatusLabel(selectedApplicationRow.bucket)} · ${selected.name}`
+                                  ? `Application — Approved · ${selected.name}`
                                   : "No application on file for this resident."
                               }
                               expanded={expandedResidentSection === "application"}
@@ -1764,34 +1739,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               {selectedApplicationRow ? (
                                 <>
                                   <div className="mb-4 flex flex-wrap items-center gap-2">
-                                    {selectedApplicationRow.bucket === "pending" ? (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN_PRIMARY}
-                                          disabled={applicationActionBusyId === selectedApplicationRow.id}
-                                          data-attr="resident-application-approve"
-                                          onClick={() => void approveSelectedApplication()}
-                                        >
-                                          {applicationActionBusyId === selectedApplicationRow.id ? "Approving…" : "Approve"}
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          disabled={applicationActionBusyId === selectedApplicationRow.id}
-                                          data-attr="resident-application-deny"
-                                          onClick={() => void denySelectedApplication()}
-                                        >
-                                          Deny
-                                        </Button>
-                                      </>
-                                    ) : (
-                                      <Badge tone={selectedApplicationRow.bucket === "approved" ? "approved" : "overdue"}>
-                                        {applicationStatusLabel(selectedApplicationRow.bucket)}
-                                      </Badge>
-                                    )}
                                     <Button
                                       type="button"
                                       variant="outline"
@@ -2000,22 +1947,33 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               summary={
                                 residentCharges.length === 0
                                   ? "No charges yet."
-                                  : `${chargeCounts.pending} unpaid · $${(pendingBalance / 100).toFixed(2)} due${overdueChargeCount > 0 ? ` · ${overdueChargeCount} overdue` : ""}`
+                                  : `${chargeCounts.pending} unpaid${overdueChargeCount > 0 ? ` · ${overdueChargeCount} overdue` : ""}`
                               }
                               expanded={expandedResidentSection === "payments"}
                               onToggle={() =>
                                 setExpandedResidentSection((cur) => (cur === "payments" ? null : "payments"))
                               }
                               headerAction={
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                                  onClick={openPaymentMethodEditor}
-                                  data-attr="resident-payment-method-open"
-                                >
-                                  Add payment method
-                                </Button>
+                                <div className="flex shrink-0 flex-col items-stretch gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className={PORTAL_HEADER_ACTION_BTN}
+                                    onClick={openPaymentMethodEditor}
+                                    data-attr="resident-payment-method-open"
+                                  >
+                                    Add payment method
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="primary"
+                                    className={PORTAL_HEADER_ACTION_BTN}
+                                    onClick={() => setAddResidentPaymentOpen(true)}
+                                    data-attr="resident-add-payment"
+                                  >
+                                    Add
+                                  </Button>
+                                </div>
                               }
                             >
                               <div className="flex flex-wrap items-center gap-2">
@@ -2027,9 +1985,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   activeId={chargeTab}
                                   onChange={(id) => setChargeTab(id as "pending" | "paid")}
                                 />
-                                <div className="inline-flex shrink-0 items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted">
-                                  Unpaid: <span className="ms-1 tabular-nums text-foreground">${(pendingBalance / 100).toFixed(2)}</span>
-                                </div>
                                 {overdueChargeCount > 0 ? (
                                   <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
                                     <span aria-hidden className="size-1.5 rounded-full bg-current" />
@@ -2053,7 +2008,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               ) : (
                                 <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
                                   <div className={PORTAL_DATA_TABLE_SCROLL}>
-                                    <table className="sm:min-w-[640px] w-full border-collapse text-left text-sm">
+                                    <table className="w-full table-fixed border-collapse text-left text-sm">
                                       <thead>
                                         <tr className={PORTAL_TABLE_HEAD_ROW}>
                                           <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
@@ -2122,36 +2077,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                           >
                                                             Mark as paid
                                                           </Button>
-                                                          <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            className={PORTAL_DETAIL_BTN}
-                                                            onClick={() => {
-                                                              if (markHouseholdChargePaid(c.id, userId)) {
-                                                                showToast("Recorded as paid with Zelle.");
-                                                                setChargeExpandedId(null);
-                                                              } else {
-                                                                showToast("Could not update this charge.");
-                                                              }
-                                                            }}
-                                                          >
-                                                            Paid with Zelle
-                                                          </Button>
-                                                          <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            className={PORTAL_DETAIL_BTN}
-                                                            onClick={() => {
-                                                              if (markHouseholdChargePaid(c.id, userId)) {
-                                                                showToast("Recorded as paid with Venmo.");
-                                                                setChargeExpandedId(null);
-                                                              } else {
-                                                                showToast("Could not update this charge.");
-                                                              }
-                                                            }}
-                                                          >
-                                                            Paid with Venmo
-                                                          </Button>
                                                         </>
                                                       ) : (
                                                         <Button
@@ -2187,9 +2112,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             <ResidentDetailSection
                               title="Services"
                               summary={
-                                residentUnifiedServiceItems.length === 0
+                                residentServiceRequests.length + residentWorkOrders.length === 0
                                   ? "No service requests or work orders yet."
-                                  : `${residentUnifiedServiceItems.length} request${residentUnifiedServiceItems.length === 1 ? "" : "s"} / work order${residentUnifiedServiceItems.length === 1 ? "" : "s"}`
+                                  : `${residentServiceRequests.length} request${residentServiceRequests.length === 1 ? "" : "s"} · ${residentWorkOrders.length} work order${residentWorkOrders.length === 1 ? "" : "s"}`
                               }
                               expanded={expandedResidentSection === "services"}
                               onToggle={() =>
@@ -2222,62 +2147,25 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       onChange={(id) => setSvcRequestsFilter(id as RequestStatusBucket)}
                                     />
                                   </div>
-                                  {residentUnifiedServiceItems.length === 0 ? (
-                                    <PortalDataTableEmpty message="No service requests or work orders yet." icon="service" />
-                                  ) : residentFilteredUnifiedServiceItems.length === 0 ? (
+                                  {residentServiceRequests.length === 0 ? (
+                                    <PortalDataTableEmpty message="No service requests yet." icon="service" />
+                                  ) : residentFilteredServiceRequests.length === 0 ? (
                                     <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
                                   ) : (
                                     <div className={PORTAL_DATA_TABLE_WRAP}>
-                                      <div className={PORTAL_DATA_TABLE_SCROLL}>
-                                        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+                                        <table className="w-full border-collapse text-left text-sm">
                                           <thead>
                                             <tr className={PORTAL_TABLE_HEAD_ROW}>
-                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
+                                              <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>Type</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Item</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Charges</th>
-                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Return by</th>
+                                              <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>Charges</th>
+                                              <th className={`${MANAGER_TABLE_TH} hidden text-left md:table-cell`}>Return by</th>
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {residentFilteredUnifiedServiceItems.map((item) => {
-                                              if (item.kind === "request") {
-                                                const req = item.req;
-                                                const rowId = `request-${req.id}`;
-                                                return (
-                                                  <Fragment key={rowId}>
-                                                    <tr
-                                                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                                                      onClick={createPortalRowExpandClick(() =>
-                                                        setSvcExpandedId((c) => (c === rowId ? null : rowId)),
-                                                      )}
-                                                      aria-expanded={svcExpandedId === rowId}
-                                                    >
-                                                      <td className={`${PORTAL_TABLE_TD} text-muted`}>Request</td>
-                                                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
-                                                      <td className={PORTAL_TABLE_TD}>
-                                                        <ServiceStatusBadge status={req.status} />
-                                                      </td>
-                                                      <td className={PORTAL_TABLE_TD}>{requestChargesSummary(req)}</td>
-                                                      <td className={PORTAL_TABLE_TD}>{req.returnByDate ? serviceRequestDateLabel(req.returnByDate) : "—"}</td>
-                                                    </tr>
-                                                    {svcExpandedId === rowId ? (
-                                                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                                                          <ServiceRequestCard
-                                                            req={req}
-                                                            onReturnPhotoUploaded={() => setSrTick((n) => n + 1)}
-                                                            onDelete={() => deleteResidentServiceRequest(req.id)}
-                                                            onEdit={() => openServiceRequestEdit(req)}
-                                                          />
-                                                        </td>
-                                                      </tr>
-                                                    ) : null}
-                                                  </Fragment>
-                                                );
-                                              }
-                                              const row = item.row;
-                                              const rowId = `work-order-${row.id}`;
+                                            {residentFilteredServiceRequests.map((req) => {
+                                              const rowId = `request-${req.id}`;
                                               return (
                                                 <Fragment key={rowId}>
                                                   <tr
@@ -2287,21 +2175,25 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                     )}
                                                     aria-expanded={svcExpandedId === rowId}
                                                   >
-                                                    <td className={`${PORTAL_TABLE_TD} text-muted`}>Work order</td>
-                                                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                                                    <td className={PORTAL_TABLE_TD}>
-                                                      <WorkOrderStatusBadge bucket={row.bucket} />
+                                                    <td className={`${PORTAL_TABLE_TD} hidden text-muted sm:table-cell`}>Request</td>
+                                                    <td className={`${PORTAL_TABLE_TD} min-w-0 font-medium text-foreground`}>
+                                                      <span className="block text-xs text-muted sm:hidden">Request</span>
+                                                      <span className="break-words">{req.offerName}</span>
                                                     </td>
-                                                    <td className={PORTAL_TABLE_TD}>{row.cost && row.cost !== "—" ? row.cost : "—"}</td>
-                                                    <td className={PORTAL_TABLE_TD}>—</td>
+                                                    <td className={PORTAL_TABLE_TD}>
+                                                      <ServiceStatusBadge status={req.status} />
+                                                    </td>
+                                                    <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{requestChargesSummary(req)}</td>
+                                                    <td className={`${PORTAL_TABLE_TD} hidden md:table-cell`}>{req.returnByDate ? serviceRequestDateLabel(req.returnByDate) : "—"}</td>
                                                   </tr>
                                                   {svcExpandedId === rowId ? (
                                                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                      <td colSpan={5} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
-                                                        <WorkOrderDetail
-                                                          row={row}
-                                                          onEdit={() => openWorkOrderRowEdit(row)}
-                                                          onCancel={() => cancelResidentWorkOrder(row.id)}
+                                                      <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                                                        <ServiceRequestCard
+                                                          req={req}
+                                                          onReturnPhotoUploaded={() => setSrTick((n) => n + 1)}
+                                                          onDelete={() => deleteResidentServiceRequest(req.id)}
+                                                          onEdit={() => openServiceRequestEdit(req)}
                                                         />
                                                       </td>
                                                     </tr>
@@ -2311,20 +2203,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             })}
                                           </tbody>
                                         </table>
-                                      </div>
                                     </div>
                                   )}
                                 </div>
                               ) : (
                                 <div>
-                                  <div className="mb-3">
+                                  <div className="mb-3 w-fit max-w-full">
                                     <PillTabs
-                                      items={STATUS_TABS.map(({ id, label }) => ({
+                                      items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
                                         id,
-                                        label: pillLabelWithCount(label, residentWorkOrderBucketCounts[id]),
+                                        label: pillLabelWithCount(label, residentWorkOrderFilterCounts[id]),
                                       }))}
-                                      activeId={svcWorkOrderBucket}
-                                      onChange={(id) => setSvcWorkOrderBucket(id as ResidentWorkBucket)}
+                                      activeId={svcWorkOrderFilter}
+                                      onChange={(id) => setSvcWorkOrderFilter(id as WorkOrderFilterBucket)}
                                     />
                                   </div>
                                   {residentWorkOrdersInBucket.length === 0 ? (
@@ -2334,11 +2225,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     />
                                   ) : (
                                     <div className={PORTAL_DATA_TABLE_WRAP}>
-                                      <div className={PORTAL_DATA_TABLE_SCROLL}>
-                                        <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                                        <table className="w-full border-collapse text-left text-sm">
                                           <thead>
                                             <tr className={PORTAL_TABLE_HEAD_ROW}>
-                                              <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
+                                              <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>ID</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                                             </tr>
@@ -2353,8 +2243,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                   )}
                                                   aria-expanded={svcExpandedId === row.id}
                                                 >
-                                                  <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-muted`}>{row.id}</td>
-                                                  <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                                                  <td className={`${PORTAL_TABLE_TD} hidden font-mono text-xs text-muted sm:table-cell`}>{row.id}</td>
+                                                  <td className={`${PORTAL_TABLE_TD} min-w-0 font-medium text-foreground`}>
+                                                    <span className="block font-mono text-[10px] text-muted sm:hidden">{row.id}</span>
+                                                    <span className="break-words">{row.title}</span>
+                                                  </td>
                                                   <td className={PORTAL_TABLE_TD}>{row.status}</td>
                                                 </tr>
                                                 {svcExpandedId === row.id ? (
@@ -2372,7 +2265,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             ))}
                                           </tbody>
                                         </table>
-                                      </div>
                                     </div>
                                   )}
                                 </div>
@@ -2389,7 +2281,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               expanded={expandedResidentSection === "inbox"}
                               onToggle={() => setExpandedResidentSection((cur) => (cur === "inbox" ? null : "inbox"))}
                               headerAction={
-                                <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={() => setMessageOpen(true)}>
+                                <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={openResidentMessageModal}>
                                   New message
                                 </Button>
                               }
@@ -2502,17 +2394,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       ) : null}
       <ManagerPortalPageShell
         title="Residents"
-        titleAsideInline
         titleAside={
-          <Button
-            type="button"
-            variant="primary"
-            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => setAddResidentOpen(true)}
-            data-attr="residents-add-open"
-          >
-            <span className="sm:hidden">+ Add</span>
-            <span className="hidden sm:inline">+ Add resident</span>
+          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
+            + Add
           </Button>
         }
         filterRow={
@@ -2574,7 +2458,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="min-w-[680px] w-full border-collapse text-left text-sm">
+            <table className="w-full table-fixed border-collapse text-left text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
@@ -2619,6 +2503,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         </div>
       </>
       )}
+
+      <ManagerAddPaymentModal
+        open={addResidentPaymentOpen}
+        onClose={() => setAddResidentPaymentOpen(false)}
+        managerUserId={userId ?? null}
+        initialApplicationId={selected?.id}
+        initialPropertyId={selected?.propertyId}
+        onSubmitted={() => {
+          setAddResidentPaymentOpen(false);
+          setHcTick((n) => n + 1);
+        }}
+      />
 
       <Modal open={addPaymentMethodOpen} title="Payment methods" onClose={() => setAddPaymentMethodOpen(false)}>
         <div className="space-y-4 text-sm">
@@ -2676,23 +2572,32 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 ) : null}
               </div>
               <div className="space-y-2 rounded-xl border border-border bg-card p-4">
-                <label className="flex cursor-pointer items-center gap-3">
+                <label className="flex cursor-pointer items-start gap-3">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 shrink-0 rounded border-border"
-                    checked={pmAchLinkEnabled}
-                    onChange={(e) => setPmAchLinkEnabled(e.target.checked)}
-                    data-attr="resident-payment-ach-link-toggle"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+                    checked={pmAxisPaymentsEnabled}
+                    onChange={(e) => setPmAxisPaymentsEnabled(e.target.checked)}
+                    data-attr="resident-payment-axis-ach-toggle"
                   />
-                  <span className="text-sm font-medium text-foreground">Bank / ACH payment link</span>
+                  <span className="text-sm font-medium text-foreground">
+                    Bank (ACH) with Stripe — {AXIS_ACH_FEE_PERCENT}% processing fee
+                  </span>
                 </label>
-                {pmAchLinkEnabled ? (
-                  <Input
-                    value={pmAchLink}
-                    onChange={(e) => setPmAchLink(sanitizePaymentLinkInput(e.target.value))}
-                    placeholder="https://your-bank.com/pay/..."
-                    data-attr="resident-payment-ach-link-input"
-                  />
+                {pmAxisPaymentsEnabled ? (
+                  <p className="text-xs leading-relaxed text-muted">
+                    Residents pay through Stripe Checkout with bank (ACH), card, or Link. Funds transfer to your
+                    connected payout account after checkout.
+                    {pmConnectReady === false ? (
+                      <>
+                        {" "}
+                        <Link href={`${portalBase}/payments/payouts`} className="font-medium text-primary underline">
+                          Complete payout setup
+                        </Link>{" "}
+                        before residents can pay by bank.
+                      </>
+                    ) : null}
+                  </p>
                 ) : null}
               </div>
             </div>
@@ -2722,11 +2627,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
         <div className="space-y-3">
-          <p className="text-xs text-muted">
-            Fills out the standard rental application on this resident&apos;s behalf and submits it for review — the
-            same application used everywhere else in Axis. It appears here (and in Applications) as pending; approve
-            it below once you&apos;re ready to activate them as a resident.
-          </p>
+          <p className="text-xs text-muted">Creates an active resident record with an Axis ID. No application or lease is generated.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Full name *</span>
@@ -2841,16 +2742,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           </div>
           <div className="flex justify-start gap-2 pt-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)}>Cancel</Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={addResidentSaving}
-              data-attr="residents-submit-application"
-              onClick={() => void submitResidentApplication()}
-            >
-              {addResidentSaving ? "Submitting…" : "Submit application"}
-            </Button>
+            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident}>Add resident</Button>
           </div>
         </div>
       </Modal>
@@ -3057,7 +2949,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         }}
       />
 
-      <Modal open={messageOpen} title="Message resident" onClose={() => setMessageOpen(false)}>
+      <Modal
+        open={messageOpen}
+        title="Message resident"
+        onClose={() => {
+          if (messageBusy) return;
+          setMessageOpen(false);
+        }}
+      >
         <div className="space-y-3">
           <p className="text-sm text-muted">
             Sending to <span className="font-semibold text-foreground">{selected?.email || "resident"}</span>.
@@ -3075,12 +2974,32 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               placeholder="Write your message..."
             />
           </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border accent-primary"
+              checked={messageScheduleLater}
+              onChange={(e) => setMessageScheduleLater(e.target.checked)}
+            />
+            <span className="font-medium text-foreground">Schedule for later</span>
+          </label>
+          {messageScheduleLater ? (
+            <label className="block text-sm">
+              <span className="font-medium text-muted">Send date & time</span>
+              <Input
+                type="datetime-local"
+                className="mt-1.5"
+                value={messageSendAt}
+                onChange={(e) => setMessageSendAt(e.target.value)}
+              />
+            </label>
+          ) : null}
           <div className="flex justify-start gap-2 pt-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setMessageOpen(false)}>
+            <Button type="button" variant="outline" className="rounded-full" disabled={messageBusy} onClick={() => setMessageOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={sendResidentMessage}>
-              Send
+            <Button type="button" variant="primary" className="rounded-full" disabled={messageBusy} onClick={() => void sendResidentMessage()}>
+              {messageBusy ? "Saving…" : messageScheduleLater ? "Schedule message" : "Send"}
             </Button>
           </div>
         </div>

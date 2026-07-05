@@ -11,6 +11,7 @@ import {
   formatCompactChargeLine,
 } from "@/components/portal/portal-metrics";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   chargeDueLabel,
@@ -37,6 +38,11 @@ import {
   readManagerWorkOrderRows,
   syncManagerWorkOrdersFromServer,
 } from "@/lib/manager-work-orders-storage";
+import {
+  readServiceRequestsForResident,
+  SERVICE_REQUESTS_EVENT,
+  syncServiceRequestsFromServer,
+} from "@/lib/service-requests-storage";
 import {
   countUnopenedPersistedInbox,
   loadPersistedInbox,
@@ -99,6 +105,7 @@ export function ResidentDashboard({
   managerSubscriptionTier?: "free" | "paid" | null;
 }) {
   void managerSubscriptionTier;
+  const { isNative } = useIsNativeApp();
   const initialEmail = residentEmail.trim().toLowerCase();
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
   const email = session.email?.trim().toLowerCase() || initialEmail;
@@ -123,11 +130,13 @@ export function ResidentDashboard({
       syncManagerApplicationsFromServer({ force: true }),
       syncLeasePipelineFromServer(),
       syncManagerWorkOrdersFromServer(),
+      syncServiceRequestsFromServer({ force: true }),
       syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY),
       syncHouseholdChargesFromServer(false, { skipReconcile: true }),
     ]).then(bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, bump);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, bump);
     window.addEventListener("storage", bump);
     const onInbox = (e: Event) => {
@@ -138,6 +147,7 @@ export function ResidentDashboard({
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+      window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
       window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, bump);
       window.removeEventListener("storage", bump);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInbox as EventListener);
@@ -204,9 +214,8 @@ export function ResidentDashboard({
       return {
         leaseRow: null,
         lease: leaseBadge(null, appStatus === "approved"),
-        openWO: 0,
-        scheduledWO: 0,
-        completedWO: 0,
+        pendingRequests: 0,
+        pendingWorkOrders: 0,
         inbox: 0,
         inboxThreads: [] as ReturnType<typeof loadPersistedInbox>,
         pendingCharges: [] as ReturnType<typeof readChargesForResident>,
@@ -217,11 +226,16 @@ export function ResidentDashboard({
     const lease = leaseBadge(leaseRow, appStatus === "approved");
 
     const workOrders = email
-      ? readManagerWorkOrderRows().filter((r) => r.residentEmail?.trim().toLowerCase() === email)
+      ? readManagerWorkOrderRows().filter(
+          (r) =>
+            r.residentEmail?.trim().toLowerCase() === email &&
+            (r as { requestType?: string }).requestType !== "service",
+        )
       : [];
-    const openWO = workOrders.filter((r) => r.bucket === "open").length;
-    const scheduledWO = workOrders.filter((r) => r.bucket === "scheduled").length;
-    const completedWO = workOrders.filter((r) => r.bucket === "completed").length;
+    const pendingWorkOrders = workOrders.filter((r) => r.bucket === "open").length;
+
+    const serviceRequests = email ? readServiceRequestsForResident(email) : [];
+    const pendingRequests = serviceRequests.filter((r) => r.status === "pending").length;
 
     const inboxThreads = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK)
       .filter((t) => t.folder === "inbox" && t.unread)
@@ -237,20 +251,20 @@ export function ResidentDashboard({
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         return 0;
       });
-    return { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges };
+    return { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges };
   }, [tick, email, appStatus, residentUserId, clientReady]);
 
-  const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges } = data;
+  const { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges } = data;
 
   const welcomeTitle = `Welcome${displayName && displayName !== "Resident" ? `, ${displayName.split(" ")[0]}` : ""}`;
+  const pageTitle = isNative ? "Dashboard" : welcomeTitle;
 
   const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
-    <ManagerPortalPageShell title={welcomeTitle} hideTitleOnNative>
+    <ManagerPortalPageShell title={pageTitle} hideTitleOnNative>
       <div className={PORTAL_DASHBOARD_STACK}>
-
         {appStatus === "approved" ? (
           <>
             <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
@@ -325,7 +339,6 @@ export function ResidentDashboard({
                       <li className="rounded-xl bg-accent/30 px-3 py-2.5">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Property</p>
                         <p className="mt-0.5 break-words text-sm font-semibold text-foreground">{appProperty}</p>
-                        {appId ? <p className="mt-0.5 break-all text-xs font-mono text-muted">{appId}</p> : null}
                       </li>
                     ) : null}
                     {appRoom ? (
@@ -349,32 +362,34 @@ export function ResidentDashboard({
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Services"
-                  href={canUseFullPortal ? `${BASE}/services/work-orders` : `${BASE}/services`}
+                  href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
                   linkLabel="Services →"
                 />
                 {canUseFullPortal ? (
-                  openWO + scheduledWO + completedWO === 0 ? (
-                    <p className="mt-4 text-sm text-muted">No active maintenance requests.</p>
+                  pendingRequests + pendingWorkOrders === 0 ? (
+                    <p className="mt-4 text-sm text-muted">No pending service requests or work orders.</p>
                   ) : (
                     <ul className="mt-3 space-y-2">
-                      {openWO > 0 ? (
-                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                          <span className="text-sm text-muted">Open</span>
-                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">{openWO}</span>
-                        </li>
-                      ) : null}
-                      {scheduledWO > 0 ? (
-                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                          <span className="text-sm text-muted">Scheduled</span>
-                          <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">{scheduledWO}</span>
-                        </li>
-                      ) : null}
-                      {completedWO > 0 ? (
-                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                          <span className="text-sm text-muted">Completed</span>
-                          <span className="text-sm font-semibold text-muted">{completedWO}</span>
-                        </li>
-                      ) : null}
+                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                        <span className="text-sm text-muted">Requests</span>
+                        {pendingRequests > 0 ? (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            {pendingRequests}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted">0</span>
+                        )}
+                      </li>
+                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                        <span className="text-sm text-muted">Work orders</span>
+                        {pendingWorkOrders > 0 ? (
+                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
+                            {pendingWorkOrders}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted">0</span>
+                        )}
+                      </li>
                     </ul>
                   )
                 ) : (

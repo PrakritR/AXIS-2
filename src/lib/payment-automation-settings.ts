@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PaymentReminderKind = "pre_due" | "same_day" | "overdue_daily" | "late_fee" | "set_date";
+export type PaymentReminderKind = "pre_due" | "same_day" | "post_due" | "overdue_daily" | "late_fee" | "set_date";
 
 export type ScheduleVisibilityMode = "all" | "days_before_send";
 
@@ -11,6 +11,8 @@ export type ReminderTemplate = {
 
 export type ManagerAutomationSettings = {
   preDueReminderDays: number[];
+  /** One-time reminders after the due date (e.g. [1] = one day after due). */
+  postDueReminderDays: number[];
   /** One-off reminders sent on specific calendar dates (ISO YYYY-MM-DD), for every eligible charge. */
   setDateReminders: string[];
   scheduleVisibilityMode: ScheduleVisibilityMode;
@@ -27,17 +29,19 @@ export type ManagerAutomationSettings = {
   };
 };
 
-export const DEFAULT_PRE_DUE_REMINDER_DAYS = [7, 3, 1] as const;
+export const DEFAULT_PRE_DUE_REMINDER_DAYS = [3, 2, 1] as const;
+export const DEFAULT_POST_DUE_REMINDER_DAYS = [1] as const;
 
 export const PAYMENT_AUTOMATION_SETTINGS_EVENT = "axis:payment-automation-settings";
 
 export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   preDueReminderDays: [...DEFAULT_PRE_DUE_REMINDER_DAYS],
+  postDueReminderDays: [...DEFAULT_POST_DUE_REMINDER_DAYS],
   setDateReminders: [],
   scheduleVisibilityMode: "days_before_send",
-  scheduleVisibilityDays: 2,
-  overdueDailyEnabled: true,
-  overdueDailyStartDays: 1,
+  scheduleVisibilityDays: 3,
+  overdueDailyEnabled: false,
+  overdueDailyStartDays: 2,
   lateFeeNoticeEnabled: true,
   lateFeeNoticeDaysAfterDue: 5,
   sameDayReminderEnabled: true,
@@ -100,6 +104,30 @@ export type ScheduledMessageOverride = {
   customDaysBeforeDue?: number;
 };
 
+function normalizePostDueDays(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [...DEFAULT_POST_DUE_REMINDER_DAYS];
+  const nums = raw
+    .map((v) => Math.round(Number(v)))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 30);
+  const unique = [...new Set(nums)].sort((a, b) => a - b);
+  return unique.length ? unique : [...DEFAULT_POST_DUE_REMINDER_DAYS];
+}
+
+/** Human-readable summary of the automated reminder cadence. */
+export function formatStandardReminderSchedule(settings: Pick<
+  ManagerAutomationSettings,
+  "preDueReminderDays" | "sameDayReminderEnabled" | "postDueReminderDays" | "overdueDailyEnabled"
+>): string {
+  const parts: string[] = [];
+  const pre = [...settings.preDueReminderDays].sort((a, b) => b - a);
+  if (pre.length) parts.push(`${pre.join(", ")} days before`);
+  if (settings.sameDayReminderEnabled) parts.push("due date");
+  const post = [...settings.postDueReminderDays].sort((a, b) => a - b);
+  if (post.length) parts.push(`${post.join(", ")} day(s) after`);
+  if (settings.overdueDailyEnabled) parts.push("daily when overdue");
+  return parts.length ? parts.join(" · ") : "Off";
+}
+
 function normalizePreDueDays(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [...DEFAULT_PRE_DUE_REMINDER_DAYS];
   const nums = raw
@@ -160,6 +188,7 @@ export function normalizeManagerAutomationSettings(raw: unknown): ManagerAutomat
 
   return {
     preDueReminderDays: normalizePreDueDays(row.preDueReminderDays),
+    postDueReminderDays: normalizePostDueDays(row.postDueReminderDays),
     setDateReminders: normalizeSetDateReminders(row.setDateReminders),
     scheduleVisibilityMode: visibilityMode,
     scheduleVisibilityDays: visibilityDays,
@@ -306,6 +335,10 @@ export function paymentReminderDedupId(input: {
   }
   if (input.kind === "same_day") {
     return `payment_reminder_same_day_${input.chargeId}`;
+  }
+  if (input.kind === "post_due") {
+    const days = input.daysBeforeDue ?? 1;
+    return `payment_reminder_post_${days}d_${input.chargeId}`;
   }
   if (input.kind === "late_fee") {
     return `late_fee_notice_${input.chargeId}`;

@@ -66,26 +66,26 @@ export function ReportFilterBar({
       ) : null}
 
       {showDateRange ? (
-        <>
-          <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
+        <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:flex sm:w-auto">
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted">
             From
             <Input
               type="date"
-              className="h-10 w-[10.5rem]"
+              className="h-10 w-full min-w-0 sm:w-[10.5rem]"
               value={filters.from}
               onChange={(e) => onChange({ from: e.target.value })}
             />
           </label>
-          <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted">
             To
             <Input
               type="date"
-              className="h-10 w-[10.5rem]"
+              className="h-10 w-full min-w-0 sm:w-[10.5rem]"
               value={filters.to}
               onChange={(e) => onChange({ to: e.target.value })}
             />
           </label>
-        </>
+        </div>
       ) : null}
 
       {showDaysAhead ? (

@@ -44,7 +44,9 @@ export async function POST(req: Request) {
     }
     const existingRow = (existing.row_data ?? {}) as DemoManagerWorkOrderRow;
 
-    const expenseEntryIds = await createExpensesFromWorkOrder(auth.db, auth.userId, {
+    const ownerManagerUserId = String(existing.manager_user_id ?? auth.userId);
+
+    const expenseEntryIds = await createExpensesFromWorkOrder(auth.db, ownerManagerUserId, {
       workOrderId: workOrder.id,
       category: body.category,
       vendorCostCents: body.vendorCostCents,
@@ -74,7 +76,7 @@ export async function POST(req: Request) {
     const { error } = await auth.db.from("portal_work_order_records").upsert(
       {
         id: workOrder.id,
-        manager_user_id: auth.userId,
+        manager_user_id: ownerManagerUserId,
         property_id: workOrder.propertyId ?? null,
         resident_email: workOrder.residentEmail ?? null,
         row_data: paid,
@@ -90,7 +92,7 @@ export async function POST(req: Request) {
       // so a forged body.vendorCostCents can't inflate a payout beyond the agreed bid.
       await payoutVendorForWorkOrder(auth.db, {
         workOrderId: workOrder.id,
-        managerUserId: auth.userId,
+        managerUserId: ownerManagerUserId,
         vendorUserId: existing.vendor_user_id,
         amountCents: body.vendorCostCents ?? 0,
       }).catch(() => undefined);

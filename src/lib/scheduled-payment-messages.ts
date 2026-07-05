@@ -90,6 +90,10 @@ function typeLabel(kind: PaymentReminderKind, daysBeforeDue: number | null): str
     return d === 1 ? "1 day before due" : `${d} days before due`;
   }
   if (kind === "same_day") return "Due day";
+  if (kind === "post_due") {
+    const d = daysBeforeDue ?? 1;
+    return d === 1 ? "1 day after due" : `${d} days after due`;
+  }
   if (kind === "overdue_daily") return "Overdue daily";
   if (kind === "set_date") {
     const formatted = formatSetDateIso(setDateReminderIsoFromKey(daysBeforeDue));
@@ -104,6 +108,10 @@ export function scheduledReminderShortLabel(kind: PaymentReminderKind, daysBefor
     return d === 1 ? "1 day before" : `${d} days before`;
   }
   if (kind === "same_day") return "Due date";
+  if (kind === "post_due") {
+    const d = daysBeforeDue ?? 1;
+    return d === 1 ? "1 day after" : `${d} days after`;
+  }
   if (kind === "overdue_daily") return "Follow-up";
   if (kind === "set_date") return "Set date";
   return "Notice";
@@ -116,6 +124,10 @@ export function inboxScheduleTypeLabel(kind: PaymentReminderKind, daysBeforeDue:
     return d === 1 ? "1 day before send" : `${d} days before send`;
   }
   if (kind === "same_day") return "Send on due date";
+  if (kind === "post_due") {
+    const d = daysBeforeDue ?? 1;
+    return d === 1 ? "1 day after due" : `${d} days after due`;
+  }
   if (kind === "overdue_daily") return "Daily follow-up";
   if (kind === "set_date") return "On set date";
   return "Notice";
@@ -306,6 +318,45 @@ export function projectScheduledPaymentMessages(input: {
           typeLabel: typeLabel("same_day", null),
         });
       }
+    }
+
+    for (const daysAfterDue of settings.postDueReminderDays) {
+      if (daysAfterDue <= 0) continue;
+      const sendAt = addDays(dueStart, daysAfterDue);
+      const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
+      if (!input.includeHidden && !isVisible(settings, sendAt, visibleFrom, now)) continue;
+      if (!input.includeHidden && sendAt.getTime() < startOfLocalDay(now).getTime()) continue;
+
+      const override = resolveOverride(overrides, input.managerUserId, charge.id, "post_due", daysAfterDue);
+      const cancelled = override?.cancelled === true;
+      const sent = isSent(sentIds, "post_due", charge.id, daysAfterDue, todayKey);
+      const content = buildReminderContent({
+        kind: "post_due",
+        daysBeforeDue: daysAfterDue,
+        settings,
+        override,
+        params: { ...baseParams, daysUntilDue: -daysAfterDue },
+      });
+      rows.push({
+        id: scheduledMessageListId({ chargeId: charge.id, kind: "post_due", daysBeforeDue: daysAfterDue, sendAt }),
+        chargeId: charge.id,
+        kind: "post_due",
+        daysBeforeDue: daysAfterDue,
+        sendAt: sendAt.toISOString(),
+        visibleFrom: visibleFrom.toISOString(),
+        dueDate: dueStart.toISOString(),
+        dueDateLabel,
+        residentName: charge.residentName || "Resident",
+        residentEmail: charge.residentEmail.trim().toLowerCase(),
+        chargeTitle: charge.title,
+        propertyLabel: charge.propertyLabel,
+        balanceDue: charge.balanceLabel,
+        subject: content.subject,
+        body: content.body,
+        status: sent ? "sent" : cancelled ? "cancelled" : "scheduled",
+        managerUserId: input.managerUserId,
+        typeLabel: typeLabel("post_due", daysAfterDue),
+      });
     }
 
     if (daysUntilDue < 0 && settings.overdueDailyEnabled) {

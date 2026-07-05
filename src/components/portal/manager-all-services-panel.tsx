@@ -6,7 +6,6 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   ManagerPortalStatusPills,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_PAGE_ACTIONS_DESKTOP,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
@@ -27,6 +26,7 @@ import {
   denyServiceRequest,
   markServiceRequestServicePaid,
   markServiceRequestDepositPaid,
+  updateServiceRequest,
   SERVICE_REQUESTS_EVENT,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
@@ -39,6 +39,7 @@ import {
 } from "@/components/portal/manager-vendors-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { TabNav } from "@/components/ui/tabs";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -58,13 +59,21 @@ import {
 
 type FilterType = "requests" | "work-orders" | "vendors";
 
-/** Requests get the same Pending / Scheduled / Completed buckets as work orders. */
-type RequestBucket = "pending" | "scheduled" | "completed";
+/** Service requests: pending → approved (no scheduling step). Denied/returned are completed. */
+type RequestBucket = "pending" | "approved" | "completed";
 
 function requestBucket(status: ServiceRequest["status"]): RequestBucket {
   if (status === "pending") return "pending";
-  if (status === "approved") return "scheduled";
+  if (status === "approved") return "approved";
   return "completed"; // denied or returned — closed either way
+}
+
+function requestPricingSummary(req: ServiceRequest): string {
+  const parts: string[] = [];
+  if (req.price?.trim()) parts.push(req.price.trim());
+  else if (req.priceLimit?.trim()) parts.push(`Limit ${req.priceLimit.trim()}`);
+  if (hasDeposit(req.deposit)) parts.push(`Deposit ${req.deposit}`);
+  return parts.join(" · ") || "—";
 }
 
 function hasDeposit(dep: string) {
@@ -86,6 +95,8 @@ export function ManagerAllServicesPanel({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [reqBucket, setReqBucket] = useState<RequestBucket>("pending");
+  const [reqEditPrice, setReqEditPrice] = useState("");
+  const [reqEditDeposit, setReqEditDeposit] = useState("");
   const [addRequestOpen, setAddRequestOpen] = useState(false);
   const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
   const typeFilter: FilterType = tabId;
@@ -181,55 +192,114 @@ export function ManagerAllServicesPanel({
     () =>
       (["open", "scheduled", "completed"] as const).map((id) => ({
         id,
-        label: id === "open" ? "Open" : id === "scheduled" ? "Scheduled" : "Completed",
+        label: id === "open" ? "Pending" : id === "scheduled" ? "Scheduled" : "Completed",
         count: woCounts[id],
       })),
     [woCounts],
   );
   const reqCounts = useMemo(() => {
-    const c: Record<RequestBucket, number> = { pending: 0, scheduled: 0, completed: 0 };
+    const c: Record<RequestBucket, number> = { pending: 0, approved: 0, completed: 0 };
     for (const r of filteredRequests) c[requestBucket(r.status)] += 1;
     return c;
   }, [filteredRequests]);
   const reqTabs = useMemo(
     () =>
-      (["pending", "scheduled", "completed"] as const).map((id) => ({
+      (["pending", "approved", "completed"] as const).map((id) => ({
         id,
-        label: id === "pending" ? "Pending" : id === "scheduled" ? "Scheduled" : "Completed",
+        label: id === "pending" ? "Pending" : id === "approved" ? "Approved" : "Completed",
         count: reqCounts[id],
       })),
     [reqCounts],
   );
 
+  useEffect(() => {
+    if (!expandedId?.startsWith("request-")) {
+      setReqEditPrice("");
+      setReqEditDeposit("");
+      return;
+    }
+    const reqId = expandedId.slice("request-".length);
+    const req = filteredRequests.find((r) => r.id === reqId);
+    if (!req) return;
+    setReqEditPrice(req.price ?? "");
+    setReqEditDeposit(req.deposit ?? "");
+  }, [expandedId, filteredRequests]);
+
   const renderRequestDetail = (req: ServiceRequest) => {
     const needsReturn = hasDeposit(req.deposit);
+    const description = req.offerDescription?.trim() ?? "";
+    const showDescription =
+      description.length > 0 && description !== "Add-on service booked through the resident portal.";
     return (
       <div className="space-y-3">
+        {showDescription ? (
+          <p className="text-xs text-muted">{description}</p>
+        ) : null}
+        {req.priceLimit?.trim() && !req.price?.trim() ? (
+          <p className="text-xs text-muted">
+            Resident price limit: <span className="font-semibold text-foreground">{req.priceLimit.trim()}</span>
+          </p>
+        ) : null}
         {req.notes ? <p className="text-xs italic text-muted">&ldquo;{req.notes}&rdquo;</p> : null}
 
+        {req.status === "pending" ? (
+          <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-2">
+            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+              Service fee
+              <Input
+                value={reqEditPrice}
+                onChange={(e) => setReqEditPrice(e.target.value)}
+                placeholder={req.priceLimit?.trim() ? `Up to ${req.priceLimit.trim()}` : "$0"}
+                className="h-8 w-28 rounded-md text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+              Deposit (optional)
+              <Input
+                value={reqEditDeposit}
+                onChange={(e) => setReqEditDeposit(e.target.value)}
+                placeholder="$0"
+                className="h-8 w-28 rounded-md text-sm"
+              />
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              className={`${PORTAL_DETAIL_BTN} mb-0.5`}
+              onClick={() => {
+                updateServiceRequest(req.id, {
+                  price: reqEditPrice.trim(),
+                  deposit: reqEditDeposit.trim(),
+                });
+                setDataTick((t) => t + 1);
+                showToast("Pricing saved.");
+              }}
+            >
+              Save pricing
+            </Button>
+          </div>
+        ) : null}
+
         {(req.status === "approved" || req.status === "returned") ? (
-          <div className="rounded-xl bg-accent/40 p-3 ring-1 ring-border">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
-            <div className="space-y-2">
-              {req.price ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-foreground/80">Service fee · {req.price}</span>
-                  {req.servicePaid
-                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
-                    : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestServicePaid(req.id); setDataTick((t) => t + 1); showToast("Service charge marked paid."); }}>Mark paid</Button>
-                  }
-                </div>
-              ) : null}
-              {needsReturn ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-foreground/80">Deposit · {req.deposit}</span>
-                  {req.depositPaid
-                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
-                    : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestDepositPaid(req.id); setDataTick((t) => t + 1); showToast("Deposit marked refunded."); }}>Mark refunded</Button>
-                  }
-                </div>
-              ) : null}
-            </div>
+          <div className="mt-4 space-y-2">
+            {req.price ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-foreground/80">Service fee · {req.price}</span>
+                {req.servicePaid
+                  ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
+                  : <Button type="button" className="h-7 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestServicePaid(req.id); setDataTick((t) => t + 1); showToast("Service charge marked paid."); }}>Mark paid</Button>
+                }
+              </div>
+            ) : null}
+            {needsReturn ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-foreground/80">Deposit · {req.deposit}</span>
+                {req.depositPaid
+                  ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
+                  : <Button type="button" className="h-7 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestDepositPaid(req.id); setDataTick((t) => t + 1); showToast("Deposit marked refunded."); }}>Mark refunded</Button>
+                }
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -241,9 +311,20 @@ export function ManagerAllServicesPanel({
                 variant="outline"
                 className={PORTAL_DETAIL_BTN_PRIMARY}
                 onClick={() => {
+                  const price = (reqEditPrice.trim() || req.price?.trim()) ?? "";
+                  if (!price) {
+                    showToast("Set a service fee before approving.");
+                    return;
+                  }
+                  if (price !== req.price?.trim() || reqEditDeposit.trim() !== (req.deposit ?? "")) {
+                    updateServiceRequest(req.id, {
+                      price,
+                      deposit: reqEditDeposit.trim(),
+                    });
+                  }
                   approveServiceRequest(req.id);
                   setDataTick((t) => t + 1);
-                  setReqBucket("scheduled");
+                  setReqBucket("approved");
                   showToast(`Approved "${req.offerName}".`);
                 }}
               >
@@ -286,22 +367,19 @@ export function ManagerAllServicesPanel({
     <ManagerPortalPageShell
       title={typeFilter === "vendors" ? "Vendors" : "Services"}
       titleAside={
-        <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap items-center justify-end gap-2`}>
-          {pendingCount > 0 && (
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-300/60">
-              {pendingCount} awaiting approval
-            </span>
-          )}
-          {openCount > 0 && (
-            <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 ring-1 ring-sky-300/60">
-              {openCount} open work orders
-            </span>
-          )}
-          <PortalPropertyFilterPill
-            propertyOptions={filterPropertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
+        <>
+          <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap items-center justify-end gap-2`}>
+            {pendingCount > 0 && (
+              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-300/60">
+                {pendingCount} awaiting approval
+              </span>
+            )}
+            {openCount > 0 && (
+              <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 ring-1 ring-sky-300/60">
+                {openCount} pending work orders
+              </span>
+            )}
+          </div>
           {typeFilter === "vendors" ? (
             <Button
               type="button"
@@ -323,7 +401,7 @@ export function ManagerAllServicesPanel({
               Add request
             </Button>
           ) : null}
-        </div>
+        </>
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -335,31 +413,11 @@ export function ManagerAllServicesPanel({
               { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors`, dataAttr: "manager-services-tab-vendors" },
             ]}
           />
-          {typeFilter === "vendors" ? (
-            <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
-              <Button
-                type="button"
-                variant="primary"
-                className={PORTAL_HEADER_ACTION_BTN}
-                onClick={() => vendorsPanelRef.current?.openAdd()}
-              >
-                Add vendor
-              </Button>
-            </div>
-          ) : null}
-          {typeFilter === "requests" ? (
-            <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
-              <Button
-                type="button"
-                variant="primary"
-                className={PORTAL_HEADER_ACTION_BTN}
-                data-attr="manager-service-request-add-mobile"
-                onClick={() => setAddRequestOpen(true)}
-              >
-                Add request
-              </Button>
-            </div>
-          ) : null}
+          <PortalPropertyFilterPill
+            propertyOptions={filterPropertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
         </ManagerPortalFilterRow>
       }
     >
@@ -401,13 +459,11 @@ export function ManagerAllServicesPanel({
             {bucketedRequests.map((req) => {
               const id = `request-${req.id}`;
               const isExpanded = expandedId === id;
-              const needsReturn = hasDeposit(req.deposit);
               const propertyLabel =
                 req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
                   ? propertyOptions.find((p) => p.id === req.propertyId)!.label
                   : "—";
-              const summary =
-                [req.price, needsReturn ? `Deposit ${req.deposit}` : null].filter(Boolean).join(" · ") || "—";
+              const summary = requestPricingSummary(req);
               return (
                 <div key={`req-mobile-${req.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
@@ -430,7 +486,7 @@ export function ManagerAllServicesPanel({
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="min-w-[920px] w-full border-collapse text-left text-sm">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
@@ -444,7 +500,6 @@ export function ManagerAllServicesPanel({
             {bucketedRequests.map((req) => {
               const id = `request-${req.id}`;
               const isExpanded = expandedId === id;
-              const needsReturn = hasDeposit(req.deposit);
               return (
                   <Fragment key={`req-${req.id}`}>
                     <tr
@@ -460,9 +515,7 @@ export function ManagerAllServicesPanel({
                           ? propertyOptions.find((p) => p.id === req.propertyId)!.label
                           : "—"}
                       </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        {[req.price, needsReturn ? `Deposit ${req.deposit}` : null].filter(Boolean).join(" · ") || "—"}
-                      </td>
+                      <td className={PORTAL_TABLE_TD}>{requestPricingSummary(req)}</td>
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>

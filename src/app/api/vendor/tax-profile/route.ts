@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { encryptTin, tinLast4 } from "@/lib/reports/tin-crypto";
+import { resolveOwnVendorRecord } from "@/lib/vendor-own-record";
 
 export const runtime = "nodejs";
 
@@ -10,13 +11,9 @@ async function resolveOwnVendorRow(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
   userId: string,
 ): Promise<{ managerUserId: string; vendorId: string } | null> {
-  const { data } = await db
-    .from("manager_vendor_records")
-    .select("id, manager_user_id")
-    .eq("vendor_user_id", userId)
-    .maybeSingle();
-  if (!data) return null;
-  return { managerUserId: data.manager_user_id as string, vendorId: data.id as string };
+  const own = await resolveOwnVendorRecord(db, userId);
+  if (!own) return null;
+  return { managerUserId: own.managerUserId, vendorId: own.id };
 }
 
 export async function GET() {
@@ -34,7 +31,7 @@ export async function GET() {
     }
 
     const own = await resolveOwnVendorRow(db, user.id);
-    if (!own) return NextResponse.json({ profile: null });
+    if (!own) return NextResponse.json({ profile: null, linked: false });
 
     const { data, error } = await db
       .from("vendor_tax_profiles")
@@ -46,7 +43,7 @@ export async function GET() {
       .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ profile: data ?? null });
+    return NextResponse.json({ profile: data ?? null, linked: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load tax profile.";
     return NextResponse.json({ error: message }, { status: 500 });

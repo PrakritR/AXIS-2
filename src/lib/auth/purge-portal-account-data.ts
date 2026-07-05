@@ -39,16 +39,23 @@ export async function purgeResidentPortalData(
       db.from("portal_recurring_rent_profile_records").delete().eq("resident_email", email),
       db.from("portal_lease_pipeline_records").delete().eq("resident_email", email),
       db.from("portal_work_order_records").delete().eq("resident_email", email),
+      db.from("portal_service_request_records").delete().eq("resident_email", email),
       db.from("portal_inbox_thread_records").delete().eq("participant_email", email).neq("scope", ADMIN_INBOX_SCOPE),
       db.from("portal_outbound_mail_records").delete().eq("recipient_email", email),
       db.from("portal_resident_lease_upload_records").delete().eq("resident_email", email),
       db.from("manager_application_records").delete().eq("resident_email", email),
       db.from("portal_bug_feedback_records").delete().eq("reporter_email", email),
+      db.from("ledger_entries").delete().eq("resident_email", email),
       db.from("portal_household_charge_records").delete().filter("row_data->>residentEmail", "eq", email),
       db.from("portal_recurring_rent_profile_records").delete().filter("row_data->>residentEmail", "eq", email),
       db.from("portal_lease_pipeline_records").delete().filter("row_data->>residentEmail", "eq", email),
       db.from("portal_work_order_records").delete().filter("row_data->>residentEmail", "eq", email),
+      db.from("portal_service_request_records").delete().filter("row_data->>residentEmail", "eq", email),
       db.from("portal_resident_lease_upload_records").delete().filter("row_data->>residentEmail", "eq", email),
+      db.from("portal_inbox_thread_records").delete().filter("row_data->>email", "eq", email),
+      db.from("portal_inbox_thread_records").delete().filter("row_data->>fromEmail", "eq", email),
+      db.from("portal_scheduled_inbox_message_records").delete().filter("row_data->>recipientEmail", "eq", email),
+      db.from("portal_scheduled_inbox_message_records").delete().filter("row_data->>senderEmail", "eq", email),
     );
   }
 
@@ -59,6 +66,10 @@ export async function purgeResidentPortalData(
       db.from("portal_lease_pipeline_records").delete().eq("resident_user_id", userId),
       db.from("portal_resident_lease_upload_records").delete().eq("resident_user_id", userId),
       db.from("portal_bug_feedback_records").delete().eq("reporter_user_id", userId),
+      db.from("ledger_entries").delete().eq("resident_user_id", userId),
+      db.from("portal_inbox_thread_records").delete().eq("owner_user_id", userId).neq("scope", ADMIN_INBOX_SCOPE),
+      db.from("portal_scheduled_inbox_message_records").delete().filter("row_data->>senderUserId", "eq", userId),
+      db.from("portal_scheduled_inbox_message_records").delete().filter("row_data->>recipientUserId", "eq", userId),
     );
   }
 
@@ -67,6 +78,8 @@ export async function purgeResidentPortalData(
       db.from("manager_application_records").delete().eq("id", applicationId),
       db.from("portal_household_charge_records").delete().filter("row_data->>applicationId", "eq", applicationId),
       db.from("portal_lease_pipeline_records").delete().filter("row_data->>axisId", "eq", applicationId),
+      db.from("cosigner_submission_records").delete().eq("signer_app_id", applicationId),
+      db.from("screening_orders").delete().eq("application_id", applicationId),
     );
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { portalDashboardMobileHeaderLabel, resolvePortalMobileBackTarget } from "@/lib/portal-mobile-back";
 import type { PortalDefinition } from "@/lib/portal-types";
+import { vendorPortal } from "@/lib/portals/vendor";
 
 const residentPortal: PortalDefinition = {
   kind: "resident",
@@ -60,5 +61,9 @@ describe("portalDashboardMobileHeaderLabel", () => {
 
   it("returns null outside the portal's basePath", () => {
     expect(portalDashboardMobileHeaderLabel("/manager/dashboard", residentPortal)).toBeNull();
+  });
+
+  it("returns Dashboard for vendor portal dashboard route", () => {
+    expect(portalDashboardMobileHeaderLabel("/vendor/dashboard", vendorPortal)).toBe("Dashboard");
   });
 });

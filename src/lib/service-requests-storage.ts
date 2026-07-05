@@ -18,6 +18,12 @@ let serviceRequestsSyncPromise: Promise<ServiceRequest[]> | null = null;
 
 export type ServiceRequestStatus = "pending" | "approved" | "denied" | "returned";
 
+export const CUSTOM_SERVICE_REQUEST_OFFER_ID = "custom";
+
+export function isCustomServiceRequest(req: Pick<ServiceRequest, "offerId">): boolean {
+  return req.offerId === CUSTOM_SERVICE_REQUEST_OFFER_ID;
+}
+
 export type ServiceRequest = {
   id: string;
   // Offer snapshot at time of request
@@ -25,6 +31,8 @@ export type ServiceRequest = {
   offerName: string;
   offerDescription: string;
   price: string;
+  /** Resident's max budget on custom requests — manager sets `price` before approval. */
+  priceLimit?: string;
   deposit: string;
   // Participants
   residentEmail: string;

@@ -173,8 +173,14 @@ async function registerSelfServe(
   // fragment. `/auth/confirm` exchanges the hash via `verifyOtp`, which works either way.
   const confirmLink = `${origin}/auth/confirm?token_hash=${encodeURIComponent(linkData.properties.hashed_token)}&type=signup`;
   const apiKey = process.env.RESEND_API_KEY?.trim();
+  const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
   if (!apiKey) {
-    // Dev/no-Resend fallback: surface the link instead of silently confirming the email.
+    if (isProduction) {
+      return NextResponse.json(
+        { error: "Email delivery is not configured. Contact support to confirm your account." },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({
       ok: true,
       confirmed: false,
@@ -194,8 +200,12 @@ async function registerSelfServe(
     });
     if (!res.ok) {
       const payload = (await res.json().catch(() => ({}))) as { message?: string };
-      // The account was already created — surface the link instead of a dead-end "check
-      // your email" screen with no way to actually confirm.
+      if (isProduction) {
+        return NextResponse.json(
+          { error: payload.message ?? "Could not send the confirmation email. Try again or contact support." },
+          { status: 502 },
+        );
+      }
       return NextResponse.json({
         ok: true,
         confirmed: false,
@@ -205,6 +215,9 @@ async function registerSelfServe(
       });
     }
   } catch {
+    if (isProduction) {
+      return NextResponse.json({ error: "Could not send the confirmation email." }, { status: 502 });
+    }
     return NextResponse.json({
       ok: true,
       confirmed: false,

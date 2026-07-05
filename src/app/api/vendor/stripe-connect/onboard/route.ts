@@ -39,8 +39,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const refreshUrl = `${origin}/vendor/profile?connect=refresh`;
-    const returnUrl = `${origin}/vendor/profile?connect=done`;
+    const refreshUrl = `${origin}/vendor/payments?connect=refresh`;
+    const returnUrl = `${origin}/vendor/payments?connect=done`;
 
     try {
       const stripe = getStripe();

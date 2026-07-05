@@ -49,7 +49,14 @@ export const NATIVE_BOTTOM_NAV_RESIDENT_ORDER = [
  * Vendor footer order — mirrors `vendorPortal.sections` (Settings/profile omitted; pinned last).
  * Keep in sync with `src/lib/portals/vendor.ts`.
  */
-export const NATIVE_BOTTOM_NAV_VENDOR_ORDER = ["dashboard", "work-orders", "calendar", "inbox"] as const;
+export const NATIVE_BOTTOM_NAV_VENDOR_ORDER = [
+  "dashboard",
+  "work-orders",
+  "calendar",
+  "inbox",
+  "payments",
+  "documents",
+] as const;
 
 /**
  * Native bottom bar order — preserves portal registry order (web sidebar = native bar).
@@ -95,7 +102,7 @@ export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
 
 export const NATIVE_BOTTOM_NAV_ADMIN_PRIMARY = ["dashboard", "properties", "axis-users", "events"] as const;
 
-export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["work-orders", "calendar", "inbox"] as const;
+export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["work-orders", "calendar", "inbox", "payments"] as const;
 
 /**
  * Every role gets the fixed native bottom bar — Dashboard and Settings are
@@ -110,11 +117,11 @@ export function nativeBottomBarEnabledForKind(_kind?: PortalDefinition["kind"]):
  * Whether the fixed bar also gets a trailing "More" tab that opens the full
  * section sheet. Kinds whose curated primary set — plus the shared back
  * arrow (Dashboard) and profile menu (Settings) — already reaches every
- * section don't need one. Vendor's 5 sections are fully covered by 3 primary
- * tabs + back + profile, so it's the one role that skips it.
+ * section don't need one. Vendor now has 7 sections — Documents is reachable via
+ * the More sheet alongside the 4 primary tabs + back + profile.
  */
 export function nativeBottomNavShowMoreTab(kind?: PortalDefinition["kind"]): boolean {
-  return kind === "pro" || kind === "manager" || kind === "resident";
+  return kind === "pro" || kind === "manager" || kind === "resident" || kind === "vendor";
 }
 
 function primaryOrderFor(kind?: PortalDefinition["kind"]): readonly string[] {

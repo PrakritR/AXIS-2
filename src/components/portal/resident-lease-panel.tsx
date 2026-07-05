@@ -8,7 +8,7 @@ import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseReportIssueModal } from "@/components/portal/lease-report-issue-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import {
@@ -325,38 +325,40 @@ export function ResidentLeasePanel() {
       <ManagerPortalPageShell
         title="Lease"
         titleAside={
-          <div className="flex w-full max-w-full flex-wrap items-center justify-end gap-2 [html[data-native]_&]:flex-col [html[data-native]_&]:items-stretch">
+          <div className="flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-2">
+            {leaseFullyExecuted ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+                onClick={() => setShowMoveOutModal(true)}
+              >
+                Renew
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 rounded-full [html[data-native]_&]:w-full"
-              onClick={() => setShowMoveOutModal(true)}
-            >
-              Renew or extend lease
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 rounded-full [html[data-native]_&]:w-full"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
               onClick={onDownloadLeasePackage}
             >
-              Download PDF
+              Download
             </Button>
             {showSigningWorkflowActions && !residentAlreadySigned ? (
               <>
                 <Button
                   type="button"
                   variant="outline"
-                  className="shrink-0 rounded-full [html[data-native]_&]:w-full"
+                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
                   onClick={() => uploadRef.current?.click()}
                   disabled={uploadingPdf}
                 >
-                  {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
+                  {uploadingPdf ? "Uploading..." : "Upload"}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  className="shrink-0 rounded-full [html[data-native]_&]:w-full"
+                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
                   onClick={onSendToManager}
                 >
                   Send to manager
@@ -364,7 +366,7 @@ export function ResidentLeasePanel() {
                 <Button
                   type="button"
                   variant="primary"
-                  className="shrink-0 rounded-full [html[data-native]_&]:w-full"
+                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
                   onClick={() => onSignLease()}
                 >
                   Sign lease

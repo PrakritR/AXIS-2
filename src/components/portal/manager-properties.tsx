@@ -16,9 +16,7 @@ import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -173,27 +171,29 @@ export function ManagerProperties() {
     setShareListingOpen(true);
   };
 
+  const propertiesHeaderActions = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        disabled={shareableProperties.length === 0}
+        title={shareableProperties.length === 0 ? "No listed properties to share yet" : undefined}
+        onClick={() => openShareListing()}
+      >
+        Send
+      </Button>
+      <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={tryOpenAdd}>
+        Create
+      </Button>
+    </>
+  );
+
   return (
     <>
       <ManagerPortalPageShell
         title="Properties"
-        titleAside={
-          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
-            <Button
-              type="button"
-              variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              disabled={shareableProperties.length === 0}
-              title={shareableProperties.length === 0 ? "No listed properties to share yet" : undefined}
-              onClick={() => openShareListing()}
-            >
-              Send to prospect
-            </Button>
-            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={tryOpenAdd}>
-              + Create listing
-            </Button>
-          </div>
-        }
+        titleAside={propertiesHeaderActions}
         filterRow={
           <ManagerPortalFilterRow>
             <ManagerPortalStatusPills
@@ -205,21 +205,6 @@ export function ManagerProperties() {
               activeId={activeStage}
               onChange={(id) => setActiveStage(id as ManagerStageKey)}
             />
-            <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_HEADER_ACTION_BTN}
-                disabled={shareableProperties.length === 0}
-                title={shareableProperties.length === 0 ? "No listed properties to share yet" : undefined}
-                onClick={() => openShareListing()}
-              >
-                Send to prospect
-              </Button>
-              <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={tryOpenAdd}>
-                + Create listing
-              </Button>
-            </div>
           </ManagerPortalFilterRow>
         }
       >
@@ -232,24 +217,6 @@ export function ManagerProperties() {
             to add more.
           </p>
         ) : null}
-        {/* Property is a bottom-nav main tab on mobile — Promotion and Co-manager
-            linking don't get their own tab there, so surface them here too. */}
-        <div className="mb-4 flex flex-wrap gap-2 lg:hidden">
-          <Link
-            href="/portal/promotion"
-            data-attr="manager-properties-promotion-link"
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-accent/40 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-accent/70"
-          >
-            Promotion
-          </Link>
-          <Link
-            href="/portal/relationships"
-            data-attr="manager-properties-co-managers-link"
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-accent/40 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-accent/70"
-          >
-            Co-managers
-          </Link>
-        </div>
         <ManagerHousePropertiesPanel
           showToast={showToast}
           activeStage={activeStage}

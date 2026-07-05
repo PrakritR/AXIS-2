@@ -222,27 +222,21 @@ export function ShareLeadLinkModal({
                 </div>
               ) : null}
 
-              {kind === "listing" && listingSummary ? (
+              {kind === "listing" ? (
                 <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Listing preview</p>
-                  <ul className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
-                    {listingSummary.detailLines.map((line) => (
-                      <li key={line} className="list-disc ms-4 leading-relaxed">
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-                  {linkUrl ? (
-                    <div className="mt-3">
-                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public listing link</p>
-                      <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                        {linkUrl}
-                      </div>
-                      <Button type="button" variant="outline" className="mt-2 rounded-full" onClick={() => void handleCopy()}>
-                        Copy listing link
-                      </Button>
-                    </div>
-                  ) : null}
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public listing link</p>
+                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
+                    {linkUrl || "Select a property to generate a link."}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-2 rounded-full"
+                    disabled={!linkUrl}
+                    onClick={() => void handleCopy()}
+                  >
+                    Copy listing link
+                  </Button>
                 </div>
               ) : null}
 

@@ -8,7 +8,6 @@ import {
   PortalDashboardCompactRow,
   PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
-  PortalDashboardTile,
   PORTAL_DASHBOARD_SECTION_CARD,
   PORTAL_DASHBOARD_STACK,
 } from "@/components/portal/portal-metrics";
@@ -75,7 +74,7 @@ function ChecklistItem({
   );
 }
 
-/** Vendor Home — mirrors the manager Dashboard format: KPI tiles + a 2-column section grid. */
+/** Vendor Home — section previews and getting-started checklist. */
 export function VendorDashboard({ displayName }: { displayName: string }) {
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
@@ -132,8 +131,6 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       .filter((r) => r.scheduledAtIso && r.bucket !== "completed")
       .sort((a, b) => (a.scheduledAtIso ?? "").localeCompare(b.scheduledAtIso ?? ""));
 
-    const unscheduledCount = activeRows.filter((r) => !r.scheduledAtIso).length;
-
     const quotesPending = rows
       .filter((r) => r.biddingOpen && !r.biddingResolvedAt)
       .sort((a, b) => (b.biddingOpenedAt ?? "").localeCompare(a.biddingOpenedAt ?? ""));
@@ -142,40 +139,14 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       .filter((t) => t.folder === "inbox" && t.unread)
       .slice(0, 5);
 
-    return { activeRows, upcomingVisits, unscheduledCount, quotesPending, inboxThreads };
+    return { activeRows, upcomingVisits, quotesPending, inboxThreads };
   }, [tick]);
 
-  const { activeRows, upcomingVisits, unscheduledCount, quotesPending, inboxThreads } = data;
+  const { activeRows, upcomingVisits, quotesPending, inboxThreads } = data;
 
   return (
     <ManagerPortalPageShell title="Dashboard" subtitle={`Welcome, ${displayName}`} hideTitleOnNative>
       <div className={PORTAL_DASHBOARD_STACK}>
-
-        {/* ── KPI tiles ── */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <PortalDashboardTile
-            label="Active work orders"
-            value={activeRows.length}
-            sub={unscheduledCount > 0 ? `${unscheduledCount} awaiting scheduling` : undefined}
-            href={`${BASE}/work-orders`}
-            dataAttr="vendor-dashboard-active-work-orders-tile"
-          />
-          <PortalDashboardTile
-            label="Upcoming visits"
-            value={upcomingVisits.length}
-            sub={upcomingVisits.length > 0 ? fmt(upcomingVisits[0].scheduledAtIso ?? "") : "No visits scheduled"}
-            href={`${BASE}/calendar`}
-            dataAttr="vendor-dashboard-upcoming-visits-tile"
-          />
-          <PortalDashboardTile
-            label="Quotes pending"
-            value={quotesPending.length}
-            sub={quotesPending.length > 0 ? "Awaiting your response" : undefined}
-            href={`${BASE}/work-orders`}
-            urgent={quotesPending.length > 0}
-            dataAttr="vendor-dashboard-quotes-pending-tile"
-          />
-        </div>
 
         {/* ── Visits & work orders ── */}
         <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
@@ -272,16 +243,16 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
             <div className="mt-3 space-y-2">
               <ChecklistItem
                 done={profileComplete}
-                title="Complete your profile"
-                description="Add your business & W-9 tax info so managers can pay you correctly."
-                href="/vendor/profile"
+                title="Complete tax info"
+                description="Add your W-9 details under Payments so managers can pay you correctly."
+                href="/vendor/payments"
                 dataAttr="vendor-dashboard-checklist-profile"
               />
               <ChecklistItem
                 done={paymentsConnected}
                 title="Connect payments"
                 description="Link your Stripe account to get paid directly for completed work orders."
-                href="/vendor/profile"
+                href="/vendor/payments"
                 dataAttr="vendor-dashboard-checklist-payments"
               />
               <ChecklistItem

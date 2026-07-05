@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Input, Select } from "@/components/ui/input";
@@ -142,11 +142,15 @@ export function ManagerAddPaymentModal({
   onClose,
   onSubmitted,
   managerUserId,
+  initialApplicationId,
+  initialPropertyId,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmitted: () => void;
   managerUserId: string | null;
+  initialApplicationId?: string;
+  initialPropertyId?: string;
 }) {
   const { showToast } = useAppUi();
   const [applicationTick, setApplicationTick] = useState(0);
@@ -199,6 +203,19 @@ export function ManagerAddPaymentModal({
     () => residentOptions.find((row) => row.applicationId === residentApplicationId) ?? null,
     [residentApplicationId, residentOptions],
   );
+
+  useEffect(() => {
+    if (!open || (!initialApplicationId && !initialPropertyId)) return;
+    const resident = initialApplicationId
+      ? residentOptions.find((row) => row.applicationId === initialApplicationId)
+      : null;
+    if (resident) {
+      setPropertyId(resident.propertyId);
+      setResidentApplicationId(resident.applicationId);
+      return;
+    }
+    if (initialPropertyId) setPropertyId(initialPropertyId);
+  }, [open, initialApplicationId, initialPropertyId, residentOptions]);
 
   const onPresetChange = (next: ManagerPaymentPresetId) => {
     setPreset(next);
@@ -327,6 +344,7 @@ export function ManagerAddPaymentModal({
     });
 
   const noProperties = propertyOptions.length === 0;
+  const compactField = "min-h-9 rounded-xl px-3 py-1.5 text-sm";
 
   return (
     <>
@@ -334,12 +352,13 @@ export function ManagerAddPaymentModal({
         open={open && noticePreview === null}
         title="Add payment"
         onClose={handleClose}
-        panelClassName="modal-panel relative z-[71] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border p-4 shadow-2xl sm:my-4 sm:p-6"
+        dense
+        panelClassName="max-w-xl p-3 sm:p-4"
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-            <span className="font-medium text-muted">Payment type</span>
-            <Select value={preset} onChange={(e) => onPresetChange(e.target.value as ManagerPaymentPresetId)}>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="flex flex-col gap-0.5 sm:col-span-2">
+            <span className={MODAL_FIELD_LABEL_CLASS}>Payment type</span>
+            <Select value={preset} className={compactField} onChange={(e) => onPresetChange(e.target.value as ManagerPaymentPresetId)}>
               {MANAGER_PAYMENT_PRESETS.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}
@@ -347,9 +366,10 @@ export function ManagerAddPaymentModal({
               ))}
             </Select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Property</span>
+          <label className="flex flex-col gap-0.5">
+            <span className={MODAL_FIELD_LABEL_CLASS}>Property</span>
             <Select
+              className={compactField}
               value={propertyId}
               onChange={(e) => {
                 setPropertyId(e.target.value);
@@ -365,9 +385,10 @@ export function ManagerAddPaymentModal({
               ))}
             </Select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Resident</span>
+          <label className="flex flex-col gap-0.5">
+            <span className={MODAL_FIELD_LABEL_CLASS}>Resident</span>
             <Select
+              className={compactField}
               value={residentApplicationId}
               onChange={(e) => setResidentApplicationId(e.target.value)}
               disabled={!propertyId || residentsForProperty.length === 0}
@@ -386,13 +407,20 @@ export function ManagerAddPaymentModal({
               ))}
             </Select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Charge title</span>
-            <Input value={chargeTitle} onChange={(e) => setChargeTitle(e.target.value)} placeholder="April rent" autoComplete="off" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Amount (USD)</span>
+          <label className="flex flex-col gap-0.5">
+            <span className={MODAL_FIELD_LABEL_CLASS}>Charge title</span>
             <Input
+              className={compactField}
+              value={chargeTitle}
+              onChange={(e) => setChargeTitle(e.target.value)}
+              placeholder="April rent"
+              autoComplete="off"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className={MODAL_FIELD_LABEL_CLASS}>Amount (USD)</span>
+            <Input
+              className={compactField}
               type="number"
               inputMode="decimal"
               min={0.01}
@@ -402,23 +430,29 @@ export function ManagerAddPaymentModal({
               placeholder="1850"
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Due date</span>
-            <Input type="date" value={dueIso} onChange={(e) => setDueIso(e.target.value)} />
+          <label className="flex flex-col gap-0.5">
+            <span className={MODAL_FIELD_LABEL_CLASS}>Due date</span>
+            <Input className={compactField} type="date" value={dueIso} onChange={(e) => setDueIso(e.target.value)} />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-muted">Status</span>
-            <Select value={bucket} onChange={(e) => setBucket(e.target.value as ManagerPaymentBucket)}>
+          <label className="flex flex-col gap-0.5">
+            <span className={MODAL_FIELD_LABEL_CLASS}>Status</span>
+            <Select className={compactField} value={bucket} onChange={(e) => setBucket(e.target.value as ManagerPaymentBucket)}>
               <option value="pending">Pending</option>
               <option value="overdue">Overdue</option>
               <option value="paid">Paid</option>
             </Select>
           </label>
-          <div className="mt-2 flex justify-start gap-2 sm:col-span-2">
-            <Button type="button" variant="outline" className="rounded-full" onClick={handleClose}>
+          <div className="flex justify-start gap-2 pt-1 sm:col-span-2">
+            <Button type="button" variant="outline" className="h-9 rounded-full px-4 text-sm" onClick={handleClose}>
               Cancel
             </Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={reviewPayment} disabled={!propertyId}>
+            <Button
+              type="button"
+              variant="primary"
+              className="h-9 rounded-full px-4 text-sm"
+              onClick={reviewPayment}
+              disabled={!propertyId}
+            >
               Review & add payment
             </Button>
           </div>
@@ -437,7 +471,7 @@ export function ManagerAddPaymentModal({
         confirmBusy={noticeBusy}
         confirmBusyLabel="Adding…"
         cancelLabel="Back"
-        panelClassName="modal-panel relative z-[72] mx-auto my-2 w-full max-w-3xl overflow-hidden rounded-3xl border border-border p-4 shadow-2xl sm:my-4 sm:p-6"
+        panelClassName="max-w-xl p-3 sm:p-4"
         onConfirm={(skipMessage) => void confirmPayment(skipMessage)}
       />
     </>

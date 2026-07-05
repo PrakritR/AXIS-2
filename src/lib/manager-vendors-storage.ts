@@ -1,4 +1,6 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import type { VendorDocumentRecord } from "@/lib/vendor-documents";
+
 export type ManagerVendorRow = {
   id: string;
   managerUserId: string | null;
@@ -18,6 +20,8 @@ export type ManagerVendorRow = {
   insurancePolicyNumber?: string;
   /** ISO date (yyyy-mm-dd) the vendor's insurance coverage expires. */
   insuranceExpiresAt?: string;
+  /** Uploaded compliance files (insurance cert, W-9 PDF, license). */
+  vendorDocuments?: VendorDocumentRecord[];
   createdAt?: string;
   updatedAt?: string;
 };

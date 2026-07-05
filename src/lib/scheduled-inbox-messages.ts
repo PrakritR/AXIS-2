@@ -22,6 +22,11 @@ export type ScheduledInboxMessageRecord = {
   broadcastCategories?: ("management" | "resident")[];
   deliverViaEmail: boolean;
   deliverViaSms: boolean;
+  /** When a resident schedules a message to their manager. */
+  senderPortal?: "resident" | "manager";
+  senderUserId?: string | null;
+  senderName?: string;
+  senderEmail?: string;
   createdAt: string;
   sentAt?: string | null;
   cancelledAt?: string | null;
@@ -51,6 +56,10 @@ function rowFromDb(row: {
       : undefined,
     deliverViaEmail: data.deliverViaEmail !== false,
     deliverViaSms: data.deliverViaSms === true,
+    senderPortal: data.senderPortal === "resident" ? "resident" : data.senderPortal === "manager" ? "manager" : undefined,
+    senderUserId: typeof data.senderUserId === "string" ? data.senderUserId : null,
+    senderName: typeof data.senderName === "string" ? data.senderName : undefined,
+    senderEmail: typeof data.senderEmail === "string" ? data.senderEmail : undefined,
     createdAt: row.created_at,
     sentAt: typeof data.sentAt === "string" ? data.sentAt : null,
     cancelledAt: typeof data.cancelledAt === "string" ? data.cancelledAt : null,
@@ -71,6 +80,23 @@ export async function loadScheduledInboxMessagesForManager(
     .eq("manager_user_id", managerUserId)
     .order("send_at", { ascending: true })
     .limit(500);
+  if (error) throw error;
+  return (data ?? []).map((row) =>
+    rowFromDb(row as { id: string; manager_user_id: string; send_at: string; status: string; row_data: unknown; created_at: string }),
+  );
+}
+
+export async function loadScheduledInboxMessagesForResident(
+  db: SupabaseClient,
+  senderUserId: string,
+): Promise<ScheduledInboxMessageRecord[]> {
+  const { data, error } = await db
+    .from("portal_scheduled_inbox_message_records")
+    .select("id, manager_user_id, send_at, status, row_data, created_at")
+    .eq("row_data->>senderPortal", "resident")
+    .eq("row_data->>senderUserId", senderUserId)
+    .order("send_at", { ascending: true })
+    .limit(200);
   if (error) throw error;
   return (data ?? []).map((row) =>
     rowFromDb(row as { id: string; manager_user_id: string; send_at: string; status: string; row_data: unknown; created_at: string }),
@@ -108,6 +134,10 @@ export async function createScheduledInboxMessage(
     broadcastCategories: input.broadcastCategories ?? [],
     deliverViaEmail: input.deliverViaEmail,
     deliverViaSms: input.deliverViaSms,
+    ...(input.senderPortal ? { senderPortal: input.senderPortal } : {}),
+    ...(input.senderUserId ? { senderUserId: input.senderUserId } : {}),
+    ...(input.senderName ? { senderName: input.senderName } : {}),
+    ...(input.senderEmail ? { senderEmail: input.senderEmail } : {}),
   };
   const { error } = await db.from("portal_scheduled_inbox_message_records").insert({
     id: input.id,
@@ -165,6 +195,41 @@ export async function updateScheduledInboxMessage(
     })
     .eq("id", id)
     .eq("manager_user_id", managerUserId);
+  if (error) throw error;
+}
+
+/** Resident may cancel (or uncancel) their own scheduled outbound messages only. */
+export async function updateScheduledInboxMessageForResident(
+  db: SupabaseClient,
+  senderUserId: string,
+  id: string,
+  patch: { status?: ScheduledInboxMessageStatus; cancelledAt?: string | null },
+): Promise<void> {
+  const { data: existing } = await db
+    .from("portal_scheduled_inbox_message_records")
+    .select("row_data, status")
+    .eq("id", id)
+    .eq("row_data->>senderPortal", "resident")
+    .eq("row_data->>senderUserId", senderUserId)
+    .maybeSingle();
+  if (!existing) throw new Error("Scheduled message not found.");
+
+  const prev = (existing.row_data ?? {}) as Record<string, unknown>;
+  const nextData = {
+    ...prev,
+    ...(patch.cancelledAt !== undefined ? { cancelledAt: patch.cancelledAt } : {}),
+  };
+
+  const { error } = await db
+    .from("portal_scheduled_inbox_message_records")
+    .update({
+      ...(patch.status != null ? { status: patch.status } : {}),
+      row_data: nextData,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("row_data->>senderPortal", "resident")
+    .eq("row_data->>senderUserId", senderUserId);
   if (error) throw error;
 }
 

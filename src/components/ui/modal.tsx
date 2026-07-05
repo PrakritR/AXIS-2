@@ -19,6 +19,7 @@ export function Modal({
   children,
   panelClassName,
   stackClassName,
+  dense = false,
 }: {
   open: boolean;
   title: string;
@@ -28,6 +29,8 @@ export function Modal({
   panelClassName?: string;
   /** Override z-index stacking for nested modals (e.g. inside listing form overlay). */
   stackClassName?: string;
+  /** Tighter header/body spacing for compact forms. */
+  dense?: boolean;
 }) {
   const isClient = useIsClient();
   const portalContainer = usePortalContainer();
@@ -51,26 +54,47 @@ export function Modal({
   if (!open || !isClient) return null;
 
   return createPortal(
-    <div className={stackClassName ?? "fixed inset-0 z-[70] overflow-y-auto"}>
+    <div className={stackClassName ?? "fixed inset-0 z-[70] overflow-y-auto overscroll-contain"}>
       <button
         type="button"
         aria-label="Close"
         className="modal-overlay fixed inset-0"
         onClick={onClose}
       />
-      <div className="relative z-[71] flex min-h-screen items-center justify-center px-2 py-4 sm:px-4 sm:py-6">
-        <div ref={panelRef} className={cn(MODAL_PANEL_CLASS, panelClassName)} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-border pb-4">
-            <h3 id="modal-title" className="min-w-0 text-lg font-semibold text-foreground">{title}</h3>
+      <div className="relative z-[71] flex min-h-[100dvh] justify-center px-2 py-4 sm:px-4 sm:py-8">
+        <div
+          ref={panelRef}
+          className={cn(MODAL_PANEL_CLASS, "my-auto", panelClassName)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+        >
+          <div
+            className={cn(
+              "flex shrink-0 items-start justify-between border-b border-border",
+              dense ? "gap-2 pb-2" : "gap-4 pb-4",
+            )}
+          >
+            <h3
+              id="modal-title"
+              className={cn("min-w-0 font-semibold text-foreground", dense ? "text-base" : "text-lg")}
+            >
+              {title}
+            </h3>
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded-full border border-border bg-card px-3 py-1 text-sm font-semibold text-muted hover:bg-foreground/5"
+              className={cn(
+                "shrink-0 rounded-full border border-border bg-card font-semibold text-muted hover:bg-foreground/5",
+                dense ? "px-2.5 py-0.5 text-xs" : "px-3 py-1 text-sm",
+              )}
             >
               Close
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto pt-4">{children}</div>
+          <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", dense ? "pt-2" : "pt-4")}>
+            {children}
+          </div>
         </div>
       </div>
     </div>,

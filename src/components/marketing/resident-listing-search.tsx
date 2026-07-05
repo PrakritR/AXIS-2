@@ -6,7 +6,10 @@ import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
 import { usePublicListings } from "@/hooks/use-public-listings";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
+import { parseUSZip } from "@/lib/listings-search";
 import { track } from "@/lib/analytics/track-client";
+
+const ZIP_RADIUS_MILES = 50;
 
 const BUDGET_MIN = 500;
 const BUDGET_MAX = 6500;
@@ -43,7 +46,7 @@ type ChatAppliedFilters = {
   maxBudget?: number;
   bedroom?: string;
   bathroom?: string;
-  petFriendly?: boolean;
+  zip?: string;
   neighborhood?: string;
 };
 
@@ -54,39 +57,31 @@ export function ResidentListingSearch() {
   const [budget, setBudget] = useState(BUDGET_MAX);
   const [bathroom, setBathroom] = useState("any");
   const [bedroom, setBedroom] = useState("any");
-  const [petFriendly, setPetFriendly] = useState(false);
-  const [neighborhood, setNeighborhood] = useState("any");
-
-  const neighborhoodOptions = useMemo(
-    () => [...new Set(listings.map((p) => p.neighborhood).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [listings],
-  );
+  const [zipCode, setZipCode] = useState("");
 
   const budgetActive = budget < BUDGET_MAX;
   const budgetLabel = budgetActive ? `$${budget.toLocaleString()}` : "Any";
+  const zipActive = parseUSZip(zipCode) !== null;
   const hasActiveFilter =
     moveIn.trim().length > 0 ||
     budgetActive ||
     bathroom !== "any" ||
     bedroom !== "any" ||
-    petFriendly ||
-    neighborhood !== "any";
+    zipActive;
   const pct = ((clampBudget(budget) - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const results = useMemo(() => {
     if (!hasActiveFilter) return [];
     return filterRoomListings(listings, {
-      zipRaw: "",
-      radiusMiles: 50,
+      zipRaw: zipCode,
+      radiusMiles: ZIP_RADIUS_MILES,
       maxBudgetNum: budgetActive ? budget : null,
       bathroom,
       bedroom,
-      petFriendly,
-      neighborhood,
       moveIn,
       moveOut,
     });
-  }, [listings, hasActiveFilter, budgetActive, budget, bathroom, bedroom, petFriendly, neighborhood, moveIn, moveOut]);
+  }, [listings, hasActiveFilter, budgetActive, budget, bathroom, bedroom, zipCode, moveIn, moveOut]);
 
   function applyChatFilters(applied: ChatAppliedFilters) {
     // Replace the full filter set rather than merging: the search results the chat
@@ -98,21 +93,24 @@ export function ResidentListingSearch() {
     setBudget(typeof applied.maxBudget === "number" ? clampBudget(applied.maxBudget) : BUDGET_MAX);
     setBedroom(applied.bedroom ?? "any");
     setBathroom(applied.bathroom ?? "any");
-    setPetFriendly(applied.petFriendly === true);
-    setNeighborhood(applied.neighborhood ?? "any");
+    setZipCode(applied.zip ?? "");
   }
 
   return (
     <div className="hero-search-panel relative mx-auto w-full max-w-[1060px] overflow-hidden rounded-[1.35rem] px-4 py-6 sm:rounded-[1.75rem] sm:px-8 sm:py-8">
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="grid grid-cols-2 gap-3">
+      <ResidentHousingChat onApplyFilters={applyChatFilters} />
+
+      <div className="my-6 h-px w-full bg-border" />
+
+      <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="col-span-full grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:col-span-1">
           <FieldBlock label="Move-in date">
             <input
               type="date"
               value={moveIn}
               onChange={(e) => setMoveIn(e.target.value)}
               data-attr="resident-search-move-in"
-              className={inputCls}
+              className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
             />
           </FieldBlock>
 
@@ -122,12 +120,12 @@ export function ResidentListingSearch() {
               value={moveOut}
               onChange={(e) => setMoveOut(e.target.value)}
               data-attr="resident-search-move-out"
-              className={inputCls}
+              className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
             />
           </FieldBlock>
         </div>
 
-        <div>
+        <div className="col-span-full min-w-0 lg:col-span-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Max budget / mo</span>
             <span className={`text-[13px] font-semibold ${budgetActive ? "text-primary" : "text-muted/60"}`}>
@@ -186,35 +184,18 @@ export function ResidentListingSearch() {
           </select>
         </FieldBlock>
 
-        <FieldBlock label="Neighborhood">
-          <select
-            value={neighborhood}
-            onChange={(e) => setNeighborhood(e.target.value)}
-            aria-label="Neighborhood"
-            data-attr="resident-search-neighborhood"
+        <FieldBlock label="Zip code">
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="postal-code"
+            value={zipCode}
+            onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
+            aria-label="Zip code"
+            placeholder="98101"
+            data-attr="resident-search-zip"
             className={inputCls}
-          >
-            <option value="any">Any area</option>
-            {neighborhoodOptions.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </FieldBlock>
-
-        <FieldBlock label="Pet policy">
-          <label className={`${inputCls} flex cursor-pointer items-center justify-between gap-2`}>
-            <span>Pet friendly only</span>
-            <input
-              type="checkbox"
-              checked={petFriendly}
-              onChange={(e) => setPetFriendly(e.target.checked)}
-              aria-label="Pet friendly only"
-              data-attr="resident-search-pet-friendly"
-              className="h-4 w-4 shrink-0 accent-primary"
-            />
-          </label>
+          />
         </FieldBlock>
       </div>
 
@@ -266,21 +247,14 @@ export function ResidentListingSearch() {
         </div>
       )}
 
-      <div className="mt-6 border-t border-border pt-6">
-        <ResidentHousingChat onApplyFilters={applyChatFilters} />
-      </div>
     </div>
   );
 }
 
 function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div className="mb-2 flex items-baseline gap-1.5">
-        <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-          {label}
-        </span>
-      </div>
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</span>
       {children}
     </div>
   );
@@ -333,8 +307,8 @@ function ResidentHousingChat({ onApplyFilters }: { onApplyFilters: (filters: Cha
       setStatus("idle");
       setSummary(
         body.matchCount === 0
-          ? "No listings match that yet — filters above were still updated."
-          : `Found ${body.matchCount} matching listing${body.matchCount === 1 ? "" : "s"} — filters applied above.`,
+          ? "No listings match that yet — filters below were still updated."
+          : `Found ${body.matchCount} matching listing${body.matchCount === 1 ? "" : "s"} — filters applied below.`,
       );
     } catch {
       setStatus("error");
@@ -346,7 +320,7 @@ function ResidentHousingChat({ onApplyFilters }: { onApplyFilters: (filters: Cha
     <div>
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Ask Axis</p>
       <p className="mt-1 text-sm text-muted">
-        Describe what you need — e.g. &ldquo;2 bed pet-friendly under $2000 in Ballard, moving in August&rdquo;
+        Describe what you need — e.g. &ldquo;2 bed under $2000 in Ballard, moving in August&rdquo;
       </p>
       <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2 sm:flex-row">
         <input

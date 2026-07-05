@@ -12,9 +12,7 @@ import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -69,6 +67,7 @@ import {
   deleteManagerWorkOrdersForResident,
 } from "@/lib/manager-work-orders-storage";
 import { deleteServiceRequestsForResident } from "@/lib/service-requests-storage";
+import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
 import { loadPersistedInbox, MANAGER_INBOX_STORAGE_KEY, persistInbox } from "@/lib/portal-inbox-storage";
 import {
   RESIDENT_WELCOME_EMAIL_SUBJECT,
@@ -317,27 +316,42 @@ export function ManagerApplications() {
     showToast(msg);
   };
 
+  const purgeResidentLocalData = (residentEmail: string, applicationId: string) => {
+    const email = residentEmail.trim().toLowerCase();
+    if (!email) return;
+
+    removeResidentHouseholdPaymentData(residentEmail);
+    removeAllApplicationCharges(applicationId, userId ?? null);
+    deleteLeasePipelineRowsForResident(residentEmail, applicationId, userId);
+    deleteManagerWorkOrdersForResident(residentEmail);
+    deleteServiceRequestsForResident(residentEmail);
+    clearUploadedOwnLease(residentEmail);
+
+    const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+    const deletedThreads = allInbox.filter((thread) => thread.email.trim().toLowerCase() === email);
+    persistInbox(
+      MANAGER_INBOX_STORAGE_KEY,
+      allInbox.filter((thread) => thread.email.trim().toLowerCase() !== email),
+    );
+    for (const thread of deletedThreads) {
+      void fetch("/api/portal-inbox-threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "delete", id: thread.id }),
+      }).catch(() => undefined);
+    }
+  };
+
   const deleteApplication = async (id: string) => {
     const row = rows.find((candidate) => candidate.id === id);
     const email = row?.email?.trim().toLowerCase();
 
-    // Optimistic removal — update the UI immediately before any network calls.
     setRows((prev) => prev.filter((r) => r.id !== id));
     setExpandedId(null);
 
-    const result = await deleteManagerApplicationFromServer(id);
-    if (!result.ok) {
-      // Roll back on failure.
-      setRows(await syncManagerApplicationsFromServer({ managerUserId: userId }));
-      showToast(result.error ?? "Could not delete application.");
-      return;
-    }
-
-    await syncHouseholdChargesFromServer();
-    removeAllApplicationCharges(id, userId ?? null);
-
-    let removedResidentAccess = true;
-    if (email) {
+    let serverError: string | null = null;
+    if (email || id) {
       try {
         const res = await fetch("/api/portal/delete-resident-access", {
           method: "POST",
@@ -345,39 +359,39 @@ export function ManagerApplications() {
           credentials: "include",
           body: JSON.stringify({ email, purgeData: true, applicationId: id }),
         });
-        if (!res.ok) removedResidentAccess = false;
-      } catch {
-        removedResidentAccess = false;
-      }
-      if (removedResidentAccess) {
-        removeResidentHouseholdPaymentData(email);
-        deleteLeasePipelineRowsForResident(email, id, userId);
-        deleteManagerWorkOrdersForResident(email);
-        deleteServiceRequestsForResident(email);
-        const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
-        const deletedThreads = allInbox.filter((thread) => thread.email.trim().toLowerCase() === email);
-        persistInbox(
-          MANAGER_INBOX_STORAGE_KEY,
-          allInbox.filter((thread) => thread.email.trim().toLowerCase() !== email),
-        );
-        for (const thread of deletedThreads) {
-          void fetch("/api/portal-inbox-threads", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ action: "delete", id: thread.id }),
-          }).catch(() => undefined);
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        if (!res.ok) {
+          serverError = body?.error ?? "Could not delete application and resident data.";
         }
+      } catch {
+        serverError = "Could not delete application and resident data.";
       }
+    } else {
+      const result = await deleteManagerApplicationFromServer(id);
+      if (!result.ok) serverError = result.error ?? "Could not delete application.";
     }
 
-    void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
+    if (serverError) {
+      setRows(await syncManagerApplicationsFromServer({ managerUserId: userId }));
+      showToast(serverError);
+      return;
+    }
+
+    if (email) {
+      purgeResidentLocalData(email, id);
+    } else {
+      removeAllApplicationCharges(id, userId ?? null);
+    }
+
+    await Promise.all([
+      syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
+      syncHouseholdChargesFromServer(),
+    ]);
+
     showToast(
-      email && !removedResidentAccess
-        ? "Application deleted, but resident access could not be removed."
-        : email
-          ? "Application and resident access deleted."
-          : "Application deleted.",
+      email
+        ? "Application deleted. Resident account, payments, documents, inbox, and services were removed."
+        : "Application deleted.",
     );
   };
 
@@ -441,15 +455,8 @@ export function ManagerApplications() {
     <ManagerPortalPageShell
       title="Applications"
       titleAside={
-        <>
-          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(id) => setPropertyFilter(id)}
-            />
-            <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
-          </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
           <Button
             type="button"
             variant="outline"
@@ -458,22 +465,23 @@ export function ManagerApplications() {
             disabled={shareableProperties.length === 0}
             title={shareableProperties.length === 0 ? "List a property as active before inviting prospects" : undefined}
           >
-            Invite to apply
+            Invite
           </Button>
-        </>
+        </div>
       }
       filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
+        <>
+          <ManagerPortalFilterRow>
+            <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+          </ManagerPortalFilterRow>
+          <div className="mt-2.5 w-full min-w-0 [&>div]:w-full [&_select]:w-full [html[data-native]_&]:mt-2">
             <PortalPropertyFilterPill
               propertyOptions={propertyOptions}
               propertyValue={propertyFilter}
               onPropertyChange={(id) => setPropertyFilter(id)}
             />
-            <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
           </div>
-        </ManagerPortalFilterRow>
+        </>
       }
     >
       <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
@@ -517,33 +525,6 @@ export function ManagerApplications() {
                 </p>
                 {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
               </button>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                {row.bucket === "pending" ? (
-                  <>
-                    <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
-                      Approve
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_DETAIL_BTN}
-                      data-attr="open-run-screening"
-                      onClick={() => setCheckrScreeningRowId(row.id)}
-                    >
-                      Run screening
-                    </Button>
-                  </>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  data-attr="application-pdf-download"
-                  onClick={() => downloadApplicationPdf(row)}
-                >
-                  PDF
-                </Button>
-              </div>
               {expanded ? (
                 <div className="mt-3 border-t border-border pt-3">{renderApplicationDetail(row)}</div>
               ) : null}
@@ -553,7 +534,7 @@ export function ManagerApplications() {
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>

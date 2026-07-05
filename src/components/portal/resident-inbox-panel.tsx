@@ -12,7 +12,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { demoResidentInboxThreads } from "@/data/demo-portal";
-import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
+import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   appendPersistedInboxThread,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -77,6 +77,7 @@ function countThreads(threads: InboxThread[]) {
 
 export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
+  const session = usePortalSession();
   const navigate = usePortalNavigate();
   const [local, setLocal] = useState<InboxThread[]>(
     () => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[],
@@ -139,9 +140,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const counts = useMemo(() => countThreads(local), [local]);
 
-  // Residents have no scheduled-messages feature (that's manager-only), and the
-  // resident inbox route rejects the "schedule" tab with a 404. Drop that pill so
-  // residents can't navigate to a route that doesn't exist for them.
+  // Residents schedule via compose modal; the inbox route has no schedule tab.
   const tabs = useMemo(
     () =>
       INBOX_TAB_DEFS.filter(({ id }) => id !== "schedule").map(({ id, label }) => ({
@@ -308,27 +307,51 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      if (p.includesAxisAdmin) {
-        appendPortalMessageToAdminInbox({
-          role: "resident",
-          name: p.senderName,
-          email: p.senderEmail,
-          topic: p.subject.trim(),
-          body: p.body.trim(),
-        });
-      }
       setComposeOpen(false);
+      const senderName = p.senderName.trim() || "Resident";
+      const senderEmail = session.email?.trim().toLowerCase() || p.senderEmail;
 
       void (async () => {
         try {
+          if (p.scheduleLater && p.sendAt) {
+            const recipientEmail = p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean)[0];
+            if (!recipientEmail) {
+              showToast("Choose your property manager.");
+              return;
+            }
+            const contact = eligibleContacts.find((c) => c.email.trim().toLowerCase() === recipientEmail);
+            const res = await fetch("/api/portal/scheduled-inbox-messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                subject: p.subject.trim(),
+                body: p.body.trim(),
+                sendAt: p.sendAt,
+                recipientEmail,
+                recipientName: contact?.name?.trim() || recipientEmail,
+                deliverViaEmail: p.deliverViaEmail !== false,
+                deliverViaSms: p.deliverViaSms,
+                senderPortal: "resident",
+              }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+            if (!res.ok || !data.ok) {
+              showToast(data.error ?? "Could not schedule message.");
+              return;
+            }
+            showToast("Message scheduled.");
+            return;
+          }
+
           if (p.includesDirectoryRecipients) {
             const res = await fetch("/api/portal/send-inbox-message", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
               body: JSON.stringify({
-                fromName: p.senderName,
-                fromEmail: p.senderEmail,
+                fromName: senderName,
+                fromEmail: senderEmail,
                 toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
                 toBroadcast: p.broadcastCategories,
                 subject: p.subject.trim(),
@@ -347,18 +370,14 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           invalidatePersistedInboxCache(RESIDENT_INBOX_STORAGE_KEY);
           const rows = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
           setLocal(rows as InboxThread[]);
-          showToast(
-            p.includesAxisAdmin && !p.includesDirectoryRecipients
-              ? "Message sent to Axis admin."
-              : "Message sent via inbox and email.",
-          );
+          showToast("Message sent via inbox and email.");
           navigate("/resident/inbox/sent");
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [navigate, showToast],
+    [eligibleContacts, navigate, session.email, showToast],
   );
 
   const handleReply = useCallback(
@@ -504,7 +523,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         onSend={handleComposeSend}
         portal="resident"
         senderName="Resident"
-        senderEmail="resident@example.com"
+        senderEmail={session.email?.trim().toLowerCase() || "resident@example.com"}
         liveContacts={eligibleContacts}
       />
 

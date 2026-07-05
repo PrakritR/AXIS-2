@@ -12,7 +12,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { portalDashboardMobileHeaderLabel, resolvePortalMobileBackTarget } from "@/lib/portal-mobile-back";
+import {
+  portalDashboardMobileHeaderLabel,
+  resolvePortalMobileBackTarget,
+} from "@/lib/portal-mobile-back";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function ChevronLeftIcon() {
@@ -57,35 +60,35 @@ export function PortalMobileNavBar({
   const router = useRouter();
   const back = useMemo(() => resolvePortalMobileBackTarget(pathname, definition), [pathname, definition]);
   const dashboardLabel = useMemo(
-    () => (back ? null : portalDashboardMobileHeaderLabel(pathname, definition)),
-    [back, pathname, definition],
+    () => portalDashboardMobileHeaderLabel(pathname, definition),
+    [pathname, definition],
   );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
 
   return (
-    <div className="mb-3 flex items-center gap-2 lg:hidden">
+    <div className="portal-mobile-nav-bar mb-3 flex w-full items-center justify-between gap-2 lg:hidden [html[data-native]_&]:mb-0">
       {back ? (
         <button
           type="button"
           data-attr="portal-mobile-back"
           onClick={() => router.push(back.href)}
-          className="-ml-2 inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15"
+          className="-ml-2 inline-flex min-h-11 max-w-[calc(100%-3rem)] items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15 [html[data-native]_&]:min-h-9 [html[data-native]_&]:py-1"
         >
           <ChevronLeftIcon />
           <span className="truncate">{back.label}</span>
         </button>
       ) : dashboardLabel ? (
-        <span className="-ml-2 inline-flex min-h-11 min-w-0 items-center truncate px-2 py-2 text-sm font-semibold text-foreground">
+        <h1 className="min-w-0 truncate px-2 text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
           {dashboardLabel}
-        </span>
+        </h1>
       ) : null}
 
-      <div className="ml-auto">
+      <div className="shrink-0">
         <DropdownMenu>
           <DropdownMenuTrigger
             data-attr="portal-mobile-profile-menu"
             aria-label="Account menu"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--cobalt-deep,#16233f)] text-[12px] font-bold text-white outline-none transition focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--cobalt-deep,#16233f)] text-[12px] font-bold text-white outline-none transition focus-visible:ring-2 focus-visible:ring-primary/40 [html[data-native]_&]:h-9 [html[data-native]_&]:w-9"
           >
             {initials(name, email)}
           </DropdownMenuTrigger>

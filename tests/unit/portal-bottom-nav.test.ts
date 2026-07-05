@@ -147,21 +147,21 @@ describe("nativeBottomBarEnabledForKind", () => {
 });
 
 describe("nativeBottomNavShowMoreTab", () => {
-  it("shows the More tab for pro/manager and resident, whose primary sets don't cover every section", () => {
+  it("shows the More tab for pro/manager, resident, and vendor when primary sets don't cover every section", () => {
     expect(nativeBottomNavShowMoreTab("pro")).toBe(true);
     expect(nativeBottomNavShowMoreTab("manager")).toBe(true);
     expect(nativeBottomNavShowMoreTab("resident")).toBe(true);
+    expect(nativeBottomNavShowMoreTab("vendor")).toBe(true);
   });
 
-  it("skips the More tab for vendor and admin", () => {
-    expect(nativeBottomNavShowMoreTab("vendor")).toBe(false);
+  it("skips the More tab for admin", () => {
     expect(nativeBottomNavShowMoreTab("admin")).toBe(false);
     expect(nativeBottomNavShowMoreTab(undefined)).toBe(false);
   });
 
-  it("vendor's 3 primary tabs plus back arrow (dashboard) and profile menu (settings) cover all 5 vendor sections", () => {
+  it("vendor primary tabs plus back arrow (dashboard) and profile menu (settings) cover 6 of 7 vendor sections", () => {
     const coveredByBackAndProfile = new Set(["dashboard", "profile"]);
     const coveredSections = new Set([...NATIVE_BOTTOM_NAV_VENDOR_PRIMARY, ...coveredByBackAndProfile]);
-    expect(coveredSections.size).toBe(5);
+    expect(coveredSections.size).toBe(6);
   });
 });

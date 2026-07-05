@@ -53,8 +53,17 @@ function priorityClass(p: string) {
 
 type BillDraft = { cost: string; paymentStatus: "pending" | "paid" };
 
+function isSetWorkOrderCost(cost: string | undefined): boolean {
+  const trimmed = cost?.trim() ?? "";
+  return trimmed !== "" && trimmed !== "—";
+}
+
+function displayWorkOrderCost(cost: string | undefined): string {
+  return isSetWorkOrderCost(cost) ? (cost ?? "") : "—";
+}
+
 function defaultBillDraft(row: DemoManagerWorkOrderRow): BillDraft {
-  const cost = row.cost !== "—" && row.cost.trim() ? row.cost : "";
+  const cost = isSetWorkOrderCost(row.cost) ? (row.cost ?? "") : "";
   return { cost, paymentStatus: "pending" };
 }
 
@@ -191,7 +200,7 @@ export function ManagerWorkOrdersPanel({
       if (row.bucket !== "scheduled") continue;
       if (findWorkOrderCharge(row.id)) continue;
       const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-      const amountInput = draft.cost.trim() ? draft.cost : row.cost;
+      const amountInput = draft.cost.trim() ? draft.cost : isSetWorkOrderCost(row.cost) ? (row.cost ?? "") : "";
       const amt = parseMoneyAmount(amountInput);
       const email = (row.residentEmail ?? "").trim().toLowerCase();
       if (amt <= 0 || !email.includes("@")) continue;
@@ -473,7 +482,7 @@ export function ManagerWorkOrdersPanel({
       const draft = { ...(billDraftById[row.id] ?? defaultBillDraft(row)), ...overrides };
       const trimmed = draft.cost.trim();
       if (!trimmed) {
-        if (row.cost !== "—") updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
+        if (isSetWorkOrderCost(row.cost)) updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
         return;
       }
       const amt = parseMoneyAmount(trimmed);
@@ -819,11 +828,11 @@ export function ManagerWorkOrdersPanel({
                         </div>
 
                         {row.bucket === "open" && !row.selfAssigned && !row.vendorId ? (
-                          <div className="mt-3 border-t border-border pt-3">
+                          <div className="mt-3 space-y-2">
                             <p className="text-xs font-medium uppercase tracking-wide text-muted">
                               {suggestions.length > 0 ? "Suggested vendors" : "Pick vendors manually"}
                             </p>
-                            <p className="mt-1 text-xs text-muted">
+                            <p className="text-xs text-muted">
                               {suggestions.length > 0
                                 ? "Review and confirm who to send this to for a consultation/quote. Nothing sends until you confirm."
                                 : candidates.length > 0
@@ -832,16 +841,14 @@ export function ManagerWorkOrdersPanel({
                             </p>
                             {candidates.length > 0 ? (
                               <>
-                                <div className="mt-2 space-y-1.5">
+                                <div className="space-y-1">
                                   {candidates.map((c) => {
                                     const alreadyOffered = offeredVendorIdSet.has(c.vendorId);
                                     const checked = selectedVendorIds.includes(c.vendorId);
                                     return (
                                       <label
                                         key={c.vendorId}
-                                        className={`flex items-start gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs ${
-                                          alreadyOffered ? "opacity-60" : "cursor-pointer"
-                                        }`}
+                                        className={`flex items-start gap-2 py-1 text-xs ${alreadyOffered ? "opacity-60" : "cursor-pointer"}`}
                                       >
                                         <input
                                           type="checkbox"
@@ -862,7 +869,7 @@ export function ManagerWorkOrdersPanel({
                                     );
                                   })}
                                 </div>
-                                <div className="mt-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <Button
                                     type="button"
                                     variant="primary"
@@ -876,6 +883,14 @@ export function ManagerWorkOrdersPanel({
                                       : selectedVendorIds.length > 1
                                         ? `Send to ${selectedVendorIds.length} vendors`
                                         : "Send to vendor"}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="primary"
+                                    className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                                    onClick={() => void saveScheduleFromOpen(row)}
+                                  >
+                                    Schedule visit
                                   </Button>
                                 </div>
                               </>
@@ -1006,14 +1021,26 @@ export function ManagerWorkOrdersPanel({
 
                         <PortalTableDetailActions>
                           {row.bucket === "open" ? (
-                            <Button
-                              type="button"
-                              variant="primary"
-                              className={`${PORTAL_DETAIL_BTN} rounded-full`}
-                              onClick={() => void saveScheduleFromOpen(row)}
-                            >
-                              Schedule visit
-                            </Button>
+                            <>
+                              {!row.selfAssigned && !row.vendorId && candidates.length > 0 ? null : (
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                                  onClick={() => void saveScheduleFromOpen(row)}
+                                >
+                                  Schedule visit
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+                                onClick={() => onDeleteWorkOrder(row)}
+                              >
+                                Delete
+                              </Button>
+                            </>
                           ) : row.bucket === "scheduled" ? (
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => void rescheduleVisit(row)}>
                               Save new time
@@ -1047,14 +1074,16 @@ export function ManagerWorkOrdersPanel({
                               Mark complete
                             </Button>
                           ) : null}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-                            onClick={() => onDeleteWorkOrder(row)}
-                          >
-                            Delete work order
-                          </Button>
+                          {row.bucket !== "open" ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+                              onClick={() => onDeleteWorkOrder(row)}
+                            >
+                              Delete
+                            </Button>
+                          ) : null}
                         </PortalTableDetailActions>
       </>
     );
@@ -1090,7 +1119,7 @@ export function ManagerWorkOrdersPanel({
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
                     {row.priority}
                   </span>
-                  <span className="text-xs text-muted">{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
+                  <span className="text-xs text-muted">{displayWorkOrderCost(row.cost)}</span>
                   {linkedCharge?.status === "paid" ? (
                     <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
                       Paid
@@ -1111,7 +1140,7 @@ export function ManagerWorkOrdersPanel({
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
@@ -1149,7 +1178,7 @@ export function ManagerWorkOrdersPanel({
                       </td>
                       <td className={PORTAL_TABLE_TD}>
                         <div className="flex flex-col gap-1">
-                          <span>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
+                          <span>{displayWorkOrderCost(row.cost)}</span>
                           {linkedCharge?.status === "paid" ? (
                             <span className="inline-flex w-fit rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
                               Paid

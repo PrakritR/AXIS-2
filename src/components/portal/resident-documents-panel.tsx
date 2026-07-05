@@ -91,7 +91,7 @@ function DocumentsTableShell({
       <div className="space-y-2 lg:hidden">{mobile}</div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
             </thead>
@@ -218,19 +218,23 @@ function ApplicationDocumentsTable() {
         mobile={rows.map((row) => (
           <PortalMobileSummaryCard
             key={row.id}
-            title={`Rental application — ${row.id}`}
+            title="Rental application"
             subtitle={applicationStatusLabel(row.bucket)}
             meta={row.property || "—"}
-            onClick={() => setPreview(row)}
+            expanded={preview?.id === row.id}
+            onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
           />
         ))}
       >
         {rows.map((row) => (
-          <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setPreview(row)}>
+          <tr
+            key={row.id}
+            className={PORTAL_TABLE_TR_EXPANDABLE}
+            aria-expanded={preview?.id === row.id}
+            onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
+          >
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">
-                Rental application — {row.id}
-              </p>
+              <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">Rental application</p>
             </td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>{applicationStatusLabel(row.bucket)}</td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
@@ -241,9 +245,8 @@ function ApplicationDocumentsTable() {
       </DocumentsTableShell>
       {preview ? (
         <DocumentInlineViewer
-          title={`Rental application — ${preview.id}`}
+          title={`Rental application ${preview.id}`}
           srcDoc={previewHtml}
-          onClose={() => setPreview(null)}
           onDownload={() => downloadRow(preview)}
         />
       ) : null}
@@ -304,9 +307,8 @@ function RentReceiptsTab() {
   }, [demoMode, sessionEmail, sessionUserId]);
 
   useEffect(() => {
-    const { from, to } = defaultReceiptRange();
-    queueMicrotask(() => void loadReceipts(from, to));
-  }, [loadReceipts]);
+    void loadReceipts(range.from, range.to);
+  }, [range.from, range.to, loadReceipts]);
 
   const receipts = useMemo<ReceiptRow[]>(() => {
     if (!ledgerReport) return [];
@@ -386,15 +388,6 @@ function RentReceiptsTab() {
                 onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
               />
             </label>
-            <button
-              type="button"
-              className="mt-5 h-10 rounded-full border border-border bg-foreground px-4 text-xs font-medium text-background hover:opacity-90"
-              data-attr="resident-receipts-update-range"
-              onClick={() => void loadReceipts(range.from, range.to)}
-              disabled={loading}
-            >
-              {loading ? "Loading…" : "Update"}
-            </button>
           </div>
           {generated && receipts.length > 0 && !demoMode ? (
             <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} />
@@ -413,38 +406,45 @@ function RentReceiptsTab() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
               </>
             }
-            mobile={receipts.map((row, i) => (
-              <PortalMobileSummaryCard
-                key={`${row.date}-${i}`}
-                title={`Rent receipt — ${row.description}`}
-                subtitle={row.amount}
-                meta={row.date}
-                onClick={() => setPreview(row)}
-              />
-            ))}
+            mobile={receipts.map((row, i) => {
+              const key = `${row.date}-${i}`;
+              const isOpen = preview?.date === row.date && preview?.amount === row.amount && preview?.description === row.description;
+              return (
+                <PortalMobileSummaryCard
+                  key={key}
+                  title="Rent receipt"
+                  subtitle={row.amount}
+                  meta={row.date}
+                  expanded={isOpen}
+                  onClick={() => setPreview((cur) => (isOpen ? null : row))}
+                />
+              );
+            })}
           >
-            {receipts.map((row, i) => (
+            {receipts.map((row, i) => {
+              const key = `${row.date}-${i}`;
+              const isOpen = preview?.date === row.date && preview?.amount === row.amount && preview?.description === row.description;
+              return (
               <tr
-                key={`${row.date}-${i}`}
+                key={key}
                 className={PORTAL_TABLE_TR_EXPANDABLE}
-                onClick={() => setPreview(row)}
+                aria-expanded={isOpen}
+                onClick={() => setPreview((cur) => (isOpen ? null : row))}
               >
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">
-                    Rent receipt — {row.description}
-                  </p>
+                  <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">Rent receipt</p>
                 </td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
               </tr>
-            ))}
+              );
+            })}
           </DocumentsTableShell>
         )}
         {preview ? (
           <DocumentInlineViewer
-            title={`Rent receipt — ${preview.date}`}
+            title={`Rent receipt ${preview.date}`}
             srcDoc={previewHtml}
-            onClose={() => setPreview(null)}
             onDownload={() => downloadReceipt(preview)}
           />
         ) : null}
@@ -552,11 +552,16 @@ function SignedLeaseDocumentsTable() {
             title={leaseName}
             subtitle="Fully signed"
             meta={safeFormatDateTime(signedAt)}
-            onClick={() => setPreviewOpen(true)}
+            expanded={previewOpen}
+            onClick={() => setPreviewOpen((open) => !open)}
           />
         }
       >
-        <tr className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setPreviewOpen(true)}>
+        <tr
+          className={PORTAL_TABLE_TR_EXPANDABLE}
+          aria-expanded={previewOpen}
+          onClick={() => setPreviewOpen((open) => !open)}
+        >
           <td className={`${PORTAL_TABLE_TD} align-middle`}>
             <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">{leaseName}</p>
           </td>
@@ -569,10 +574,8 @@ function SignedLeaseDocumentsTable() {
           title={leaseName}
           src={pdfSrc}
           srcDoc={leaseHtml}
-          onClose={() => setPreviewOpen(false)}
           onDownload={onDownload}
           downloadLabel="Download PDF"
-          downloadPosition="bottom"
           downloadAttr="resident-documents-lease-download-pdf"
         />
       ) : null}

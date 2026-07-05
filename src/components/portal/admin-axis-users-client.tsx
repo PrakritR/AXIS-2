@@ -742,7 +742,7 @@ export function AdminAxisUsersClient() {
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full min-w-[min(100%,48rem)] border-collapse text-left">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>

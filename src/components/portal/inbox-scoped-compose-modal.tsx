@@ -30,6 +30,8 @@ export type ScopedInboxSendPayload = {
   broadcastCategories: ("management" | "resident")[];
   deliverViaEmail: boolean;
   deliverViaSms: boolean;
+  scheduleLater?: boolean;
+  sendAt?: string;
 };
 
 type Chip =
@@ -56,14 +58,21 @@ function allLabelForCategory(category: InboxRecipientCategory): string {
 const CATEGORY_ORDER: InboxRecipientCategory[] = ["admin", "management", "resident"];
 
 /**
- * Categories the sender may actually reach. Residents can only message Axis admin
- * and their own managers — never other residents — so the Resident bucket is
- * hidden for them (the server enforces the same scope regardless).
+ * Categories the sender may actually reach. Residents message their manager(s)
+ * only — no admin broadcast and no other residents.
  */
 function visibleCategoriesForPortal(portal: "resident" | "manager" | "vendor"): InboxRecipientCategory[] {
-  if (portal === "resident") return ["admin", "management"];
+  if (portal === "resident") return ["management"];
   if (portal === "vendor") return ["management"];
   return CATEGORY_ORDER;
+}
+
+function defaultScheduleSendAt(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function ScopedInboxComposeModal({
@@ -95,6 +104,9 @@ export function ScopedInboxComposeModal({
   const [body, setBody] = useState("");
   const [deliverViaEmail, setDeliverViaEmail] = useState(true);
   const [deliverViaSms, setDeliverViaSms] = useState(false);
+  const [scheduleLater, setScheduleLater] = useState(false);
+  const [sendAt, setSendAt] = useState(defaultScheduleSendAt);
+  const managerOnlyCompose = portal === "resident";
 
   useEffect(() => {
     if (!open) return;
@@ -105,8 +117,18 @@ export function ScopedInboxComposeModal({
       setBody("");
       setDeliverViaEmail(true);
       setDeliverViaSms(false);
+      setScheduleLater(false);
+      setSendAt(defaultScheduleSendAt());
     });
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !managerOnlyCompose) return;
+    const managers = contacts.filter((c) => categoryForContactRole(portal, c.role) === "management");
+    if (managers.length === 1) {
+      queueMicrotask(() => setContactIds(new Set([managers[0]!.id])));
+    }
+  }, [open, managerOnlyCompose, contacts, portal]);
 
   const contactsByCategory = useMemo(() => {
     const map: Record<InboxRecipientCategory, InboxScopedContact[]> = {
@@ -204,8 +226,19 @@ export function ScopedInboxComposeModal({
       return;
     }
     if (chips.length === 0) {
-      showToast("Add at least one recipient in To.");
+      showToast(managerOnlyCompose ? "Choose your property manager." : "Add at least one recipient in To.");
       return;
+    }
+    if (scheduleLater) {
+      const when = new Date(sendAt);
+      if (Number.isNaN(when.getTime())) {
+        showToast("Choose a valid send date and time.");
+        return;
+      }
+      if (when.getTime() < Date.now() - 60_000) {
+        showToast("Send time must be in the future.");
+        return;
+      }
     }
 
     const seen = new Set<string>();
@@ -269,12 +302,15 @@ export function ScopedInboxComposeModal({
       broadcastCategories,
       deliverViaEmail,
       deliverViaSms,
+      scheduleLater,
+      sendAt: scheduleLater ? new Date(sendAt).toISOString() : undefined,
     });
   };
 
   return (
     <Modal open={open} title={title} onClose={onClose}>
       <div className="space-y-4">
+        {!managerOnlyCompose ? (
         <div>
           <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted" htmlFor="scoped-compose-to-chips">
             Send to
@@ -310,9 +346,38 @@ export function ScopedInboxComposeModal({
           </div>
           <p className="mt-1.5 text-[11px] text-muted">Click a chip to remove it. You can mix groups and individuals like email.</p>
         </div>
+        ) : null}
 
         <div className="space-y-3">
-          {visibleCategories.map((category) => {
+          {managerOnlyCompose ? (
+            <div className="rounded-2xl border border-border bg-accent/30/40 px-4 py-3">
+              <p className="text-sm font-semibold text-foreground">Property manager</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted">Messages go to your assigned manager only.</p>
+              {contactsByCategory.management.length > 0 ? (
+                <ul className="mt-3 space-y-2">
+                  {contactsByCategory.management.map((c) => (
+                    <li key={c.id}>
+                      <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-card px-3 py-2.5 ring-1 ring-border hover:bg-accent/30">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+                          checked={contactIds.has(c.id)}
+                          onChange={() => toggleContact(c)}
+                        />
+                        <span>
+                          <span className="text-sm font-medium text-foreground">{c.name}</span>
+                          <span className="mt-0.5 block text-xs text-muted">{c.email}</span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-muted">No manager contact available yet.</p>
+              )}
+            </div>
+          ) : (
+          visibleCategories.map((category) => {
             const titleCase =
               category === "admin" ? "Admin" : category === "management" ? "Management" : "Resident";
             const subtitle = categoryHint(portal, category);
@@ -379,7 +444,8 @@ export function ScopedInboxComposeModal({
                 </div>
               </details>
             );
-          })}
+          })
+          )}
         </div>
 
         <div>
@@ -429,12 +495,37 @@ export function ScopedInboxComposeModal({
           )}
         </div>
 
+        {managerOnlyCompose ? (
+          <>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border accent-primary"
+                checked={scheduleLater}
+                onChange={(e) => setScheduleLater(e.target.checked)}
+              />
+              <span className="font-medium text-foreground">Schedule for later</span>
+            </label>
+            {scheduleLater ? (
+              <label className="block text-sm">
+                <span className="font-medium text-muted">Send date &amp; time</span>
+                <Input
+                  type="datetime-local"
+                  className="mt-1.5"
+                  value={sendAt}
+                  onChange={(e) => setSendAt(e.target.value)}
+                />
+              </label>
+            ) : null}
+          </>
+        ) : null}
+
         <div className="flex flex-wrap justify-start gap-2 pt-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Cancel
           </Button>
           <Button type="button" variant="primary" className="rounded-full" onClick={submit}>
-            Send
+            {scheduleLater ? "Schedule message" : "Send"}
           </Button>
         </div>
       </div>

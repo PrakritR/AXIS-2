@@ -61,7 +61,7 @@ export function buildReminderContent(input: {
 }): { subject: string; body: string } {
   const settings = input.settings ?? DEFAULT_MANAGER_AUTOMATION_SETTINGS;
   const template =
-    input.kind === "overdue_daily"
+    input.kind === "overdue_daily" || input.kind === "post_due"
       ? settings.templates.overdue
       : input.kind === "late_fee"
         ? settings.templates.lateFee

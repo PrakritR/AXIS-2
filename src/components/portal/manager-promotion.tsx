@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -56,7 +57,7 @@ import {
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 
-type PromotionDraft = {
+export type PromotionDraft = {
   propertyKey: string;
   propertyLabel: string;
   address: string;
@@ -76,9 +77,9 @@ type PromotionDraft = {
   images: string[];
 };
 
-const CUSTOM_PROPERTY_KEY = "__custom__";
+export const CUSTOM_PROPERTY_KEY = "__custom__";
 
-const EMPTY_DRAFT: PromotionDraft = {
+export const EMPTY_DRAFT: PromotionDraft = {
   propertyKey: CUSTOM_PROPERTY_KEY,
   propertyLabel: "",
   address: "",
@@ -97,7 +98,7 @@ const EMPTY_DRAFT: PromotionDraft = {
   images: [],
 };
 
-function draftInputs(draft: PromotionDraft): PromotionInputs {
+export function draftInputs(draft: PromotionDraft): PromotionInputs {
   return {
     headline: draft.headline.trim(),
     sellingPoints: draft.sellingPoints.trim(),
@@ -158,9 +159,50 @@ function formatDate(iso: string): string {
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+export function draftWithPropertyKey(
+  base: PromotionDraft,
+  key: string,
+  listings: ManagerPromotionPropertyOption[],
+): PromotionDraft {
+  if (key === CUSTOM_PROPERTY_KEY) return { ...base, propertyKey: key };
+  const listing = listings.find((l) => l.id === key)?.property;
+  const submission = listing?.listingSubmission;
+  const amenityLines = submission?.amenitiesText
+    ? submission.amenitiesText
+        .split(/\r?\n|,/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const autoImages = sanitizeFlyerImages(submission?.housePhotoDataUrls ?? []);
+  return {
+    ...base,
+    propertyKey: key,
+    propertyLabel: listing ? `${listing.title} — ${listing.neighborhood || listing.address}` : base.propertyLabel,
+    address: base.address.trim() || listing?.address || base.address,
+    price: base.price.trim() ? base.price : (listing?.rentLabel ?? base.price),
+    sellingPoints:
+      base.sellingPoints.trim() || !listing
+        ? base.sellingPoints
+        : [
+            `${listing.beds} bed · ${listing.baths} bath`,
+            listing.petFriendly ? "Pet friendly" : "",
+            listing.tagline,
+            ...amenityLines,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+    customDetails: base.customDetails.trim() || submission?.houseOverview?.trim() || base.customDetails,
+    images: base.images.length ? base.images : autoImages.length ? autoImages : base.images,
+  };
+}
+
 export function ManagerPromotion() {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const handledFlyerDeepLink = useRef(false);
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [showForm, setShowForm] = useState(false);
@@ -205,6 +247,35 @@ export function ManagerPromotion() {
     setShowForm(true);
   }, []);
 
+  const openNewWithProperty = useCallback(
+    (propertyId?: string) => {
+      setEditingId(null);
+      if (propertyId && listings.some((l) => l.id === propertyId)) {
+        setDraft(draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings));
+      } else {
+        setDraft(EMPTY_DRAFT);
+      }
+      setShowForm(true);
+    },
+    [listings],
+  );
+
+  useEffect(() => {
+    if (handledFlyerDeepLink.current || searchParams.get("new") !== "1") return;
+    if (!authReady) return;
+    const propertyId = searchParams.get("propertyId")?.trim() || "";
+    if (propertyId && listings.length === 0 && userId) return;
+
+    handledFlyerDeepLink.current = true;
+    openNewWithProperty(propertyId || undefined);
+
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("new");
+    next.delete("propertyId");
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [authReady, listings, userId, searchParams, pathname, router, openNewWithProperty]);
+
   const closeForm = useCallback(() => {
     setShowForm(false);
     setEditingId(null);
@@ -241,44 +312,7 @@ export function ManagerPromotion() {
   );
 
   function onSelectProperty(key: string) {
-    if (key === CUSTOM_PROPERTY_KEY) {
-      setDraft((d) => ({ ...d, propertyKey: key }));
-      return;
-    }
-    const listing = listings.find((l) => l.id === key)?.property;
-    const submission = listing?.listingSubmission;
-    // Real amenities from the listing wizard, folded in alongside beds/baths so
-    // the flyer's feature card reflects actual property facts, not placeholders.
-    const amenityLines = submission?.amenitiesText
-      ? submission.amenitiesText
-          .split(/\r?\n|,/)
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [];
-    // Auto-fill flyer photos from the property's own listing photos when the
-    // manager hasn't already uploaded/chosen any — grounded in the real
-    // listing, not a blank slate the manager has to re-upload into.
-    const autoImages = sanitizeFlyerImages(submission?.housePhotoDataUrls ?? []);
-    setDraft((d) => ({
-      ...d,
-      propertyKey: key,
-      propertyLabel: listing ? `${listing.title} — ${listing.neighborhood || listing.address}` : d.propertyLabel,
-      address: d.address.trim() || listing?.address || d.address,
-      price: d.price.trim() ? d.price : listing?.rentLabel ?? d.price,
-      sellingPoints:
-        d.sellingPoints.trim() || !listing
-          ? d.sellingPoints
-          : [
-              `${listing.beds} bed · ${listing.baths} bath`,
-              listing.petFriendly ? "Pet friendly" : "",
-              listing.tagline,
-              ...amenityLines,
-            ]
-              .filter(Boolean)
-              .join("\n"),
-      customDetails: d.customDetails.trim() || submission?.houseOverview?.trim() || d.customDetails,
-      images: d.images.length ? d.images : autoImages.length ? autoImages : d.images,
-    }));
+    setDraft((d) => draftWithPropertyKey(d, key, listings));
   }
 
   async function generate() {
@@ -474,7 +508,7 @@ export function ManagerPromotion() {
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={MANAGER_TABLE_TH}>Property / Listing</th>
@@ -613,16 +647,18 @@ function TemplateThumb({ id }: { id: PromotionTemplate }) {
   );
 }
 
-function PromotionForm({
+export function PromotionForm({
   draft,
   setDraft,
   listings,
   onSelectProperty,
+  hidePropertyPicker = false,
 }: {
   draft: PromotionDraft;
   setDraft: React.Dispatch<React.SetStateAction<PromotionDraft>>;
   listings: ManagerPromotionPropertyOption[];
   onSelectProperty: (key: string) => void;
+  hidePropertyPicker?: boolean;
 }) {
   const { showToast } = useAppUi();
   const [readingPhotos, setReadingPhotos] = useState(false);
@@ -655,17 +691,19 @@ function PromotionForm({
 
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      <div>
-        <label className="text-xs font-semibold text-muted">Property / listing</label>
-        <Select className="mt-1" value={draft.propertyKey} onChange={(e) => onSelectProperty(e.target.value)}>
-          <option value={CUSTOM_PROPERTY_KEY}>Custom (type below)</option>
-          {listings.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.label}
-            </option>
-          ))}
-        </Select>
-      </div>
+      {hidePropertyPicker ? null : (
+        <div>
+          <label className="text-xs font-semibold text-muted">Property / listing</label>
+          <Select className="mt-1" value={draft.propertyKey} onChange={(e) => onSelectProperty(e.target.value)}>
+            <option value={CUSTOM_PROPERTY_KEY}>Custom (type below)</option>
+            {listings.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
       <div>
         <label className="text-xs font-semibold text-muted">Property label (shown on flyer)</label>
         <Input
@@ -684,7 +722,7 @@ function PromotionForm({
           placeholder="1420 Broadway, Seattle, WA 98122"
         />
       </div>
-      {isCustom ? (
+      {isCustom && !hidePropertyPicker ? (
         <div className="sm:col-span-2">
           <label className="text-xs font-semibold text-muted">Custom property details</label>
           <Textarea

@@ -8,6 +8,7 @@ import {
   PortalInboxEmptyState,
 } from "@/components/portal/portal-inbox-ui";
 import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -490,8 +491,8 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           <PortalInboxEmptyState title={emptyCopy} />
         ) : (
           <div className={PORTAL_INBOX_TABLE_WRAP}>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>{fromOrToHeader}</th>

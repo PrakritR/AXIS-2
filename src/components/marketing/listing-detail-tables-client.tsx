@@ -724,22 +724,16 @@ function FloorPlanSummaryBar({ floor }: { floor: ListingFloorCard }) {
   );
 }
 
-const FLOOR_PLAN_SUMMARY_STICKY_TOP =
-  "var(--listing-sticky-stack, calc(env(safe-area-inset-top, 0px) + 3.5rem))";
-
 export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: ListingFloorCard; listingPropertyId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm md:p-5">
-        <div
-          className="sticky z-30 border-b border-border bg-card/95 px-4 py-3 backdrop-blur-md md:static md:border-b md:bg-card md:px-0 md:py-0 md:pb-3 md:backdrop-blur-none [html[data-theme=dark]_&]:bg-card/90"
-          style={{ top: FLOOR_PLAN_SUMMARY_STICKY_TOP }}
-        >
+      <div className="rounded-2xl border border-border bg-card shadow-sm md:p-5">
+        <div className="border-b border-border bg-card px-4 py-3 md:px-0 md:pb-3">
           <FloorPlanSummaryBar floor={floor} />
         </div>
-        <div className="px-4 pt-3 md:mt-4 md:overflow-x-auto md:px-0 sm:pt-4">
+        <div className="relative isolate px-4 pb-4 pt-3 md:mt-4 md:overflow-x-auto md:px-0 sm:pt-4">
           <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
         </div>
       </div>
@@ -751,16 +745,18 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
 function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpen: (r: ListingRoomRow) => void }) {
   return (
     <>
-      <div className="space-y-2.5 md:hidden">
+      <div className="space-y-3 md:hidden">
         {rooms.map((r) => (
-          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
-            <p className="text-sm font-semibold text-foreground">{r.name}</p>
-            <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div key={r.id} className="flex flex-col gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:gap-2.5 sm:p-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{r.name}</p>
+              <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
               <AvailabilityPill text={r.availability} variant="room" />
             </div>
-            <DetailsButton className="mt-2.5 w-full" onClick={() => onOpen(r)} />
+            <DetailsButton className="w-full" onClick={() => onOpen(r)} />
           </div>
         ))}
       </div>

@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { formatPacificDate } from "@/lib/pacific-time";
+import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
@@ -48,7 +48,6 @@ import {
   type CoManagerAvailabilityOverlay,
   type ScheduledTourFilter,
 } from "@/lib/co-manager-calendar";
-import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
 
 type CalendarMode = "day" | "week" | "month";
 type RecurrenceCadence = "once" | "weekly" | "biweekly" | "monthly";
@@ -63,6 +62,7 @@ const SLOT_ROW_START = 0;
 const SLOT_ROW_END = SLOTS_PER_DAY - 1;
 const DEFAULT_VISIBLE_START_SLOT = 16;
 const DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE = 40;
+const COMPACT_BLOCK_DAYS = 5;
 const WEEKDAY_OPTIONS = [
   { value: 0, label: "Mon" },
   { value: 1, label: "Tue" },
@@ -134,6 +134,18 @@ function formatWeekRangeMonSun(monday: Date): string {
   return `${formatPacificDate(monday, opts)}–${formatPacificDate(sunday, { ...opts, year: "numeric" })}`;
 }
 
+function formatBlockRange(start: Date, dayCount: number): string {
+  const end = addDays(start, dayCount - 1);
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  return `${formatPacificDate(start, opts)}–${formatPacificDate(end, { ...opts, year: "numeric" })}`;
+}
+
+function startOfLocalDay(d: Date): Date {
+  const copy = new Date(d);
+  copy.setHours(12, 0, 0, 0);
+  return copy;
+}
+
 function isInMonthPickRange(ds: string, pick: { start: string | null; end: string | null }): boolean {
   if (!pick.start) return false;
   if (!pick.end) return ds === pick.start;
@@ -189,7 +201,7 @@ function formatSlotEndLabel(slotIndexExclusive: number): string {
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
   const d = new Date(2000, 0, 1, h24, m);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return formatPacificDateTime(d).replace(/^\w{3} \d{1,2}, /, "");
 }
 
 function localIsoForSlot(dateStr: string, slotIndex: number): string {
@@ -311,18 +323,17 @@ export function PortalCalendarPanels({
     };
   }, [storageKey]);
 
-  const isSmallViewport = useIsSmallPortalViewport();
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
   const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
-  // Mobile shows a 5-day rolling window starting at the anchor date (not
-  // Monday-aligned) so the day-picker never has to wrap to a second row;
-  // desktop keeps the full Mon-Sun week untouched.
-  const mobileWindowDates = useMemo(
-    () => (isSmallViewport ? [0, 1, 2, 3, 4].map((i) => addDays(anchorDate, i)) : fullWeekDates),
-    [isSmallViewport, anchorDate, fullWeekDates],
+  const compactBlockStart = useMemo(() => startOfLocalDay(anchorDate), [anchorDate]);
+  const compactBlockDates = useMemo(
+    () => [0, 1, 2, 3, 4].map((i) => addDays(compactBlockStart, i)),
+    [compactBlockStart],
   );
-  const mobileWindowDateStrs = useMemo(() => mobileWindowDates.map(toLocalDateStr), [mobileWindowDates]);
+  const compactBlockDateStrs = useMemo(() => compactBlockDates.map(toLocalDateStr), [compactBlockDates]);
+  const activeBlockDates = compactAvailability ? compactBlockDates : fullWeekDates;
+  const activeBlockDateStrs = compactAvailability ? compactBlockDateStrs : fullWeekDateStrs;
 
   const meetings = useMemo<DemoMeeting[]>(() => {
     void calendarRefreshSignal;
@@ -608,13 +619,13 @@ export function PortalCalendarPanels({
 
   const weekSlotCount = useMemo(() => {
     let n = 0;
-    for (const ds of fullWeekDateStrs) {
+    for (const ds of activeBlockDateStrs) {
       for (const slot of slotRowIndices) {
         if (activeSlots.has(dateSlotKey(ds, slot))) n += 1;
       }
     }
     return n;
-  }, [activeSlots, fullWeekDateStrs]);
+  }, [activeBlockDateStrs, activeSlots]);
 
   const meetingBySlotKey = useMemo(() => {
     const map = new Map<string, DemoMeeting>();
@@ -658,7 +669,7 @@ export function PortalCalendarPanels({
     (isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting");
 
   const timeWindowControl = (
-    <div className="flex flex-nowrap items-center gap-1.5 sm:gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Show</p>
       <select
         className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
@@ -712,27 +723,28 @@ export function PortalCalendarPanels({
     setMonthPick({ start: null, end: null });
   }, [today]);
 
-  const shiftAvailabilityWeek = useCallback(
-    (dir: -1 | 1) => {
-      setAnchorDate((d) => addDays(d, dir * (isSmallViewport ? 5 : 7)));
-    },
-    [isSmallViewport],
-  );
+  const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
+    const shiftDays = compactAvailability ? COMPACT_BLOCK_DAYS : 7;
+    setAnchorDate((d) => addDays(d, dir * shiftDays));
+    if (compactAvailability) setMobileDayIndex(0);
+  }, [compactAvailability]);
 
   const copyPreviousWeek = useCallback(() => {
-    const previousWeekDates = fullWeekDates.map((date) => addDays(date, -7));
+    const currentDates = activeBlockDates;
+    const shiftDays = compactAvailability ? COMPACT_BLOCK_DAYS : 7;
+    const previousBlockDates = currentDates.map((date) => addDays(date, -shiftDays));
     const next = new Set(activeSlots);
 
-    for (const targetDate of fullWeekDates) {
+    for (const targetDate of currentDates) {
       const targetDateStr = toLocalDateStr(targetDate);
       for (const slot of slotRowIndices) {
         next.delete(dateSlotKey(targetDateStr, slot));
       }
     }
 
-    previousWeekDates.forEach((sourceDate, idx) => {
+    previousBlockDates.forEach((sourceDate, idx) => {
       const sourceDateStr = toLocalDateStr(sourceDate);
-      const targetDateStr = toLocalDateStr(fullWeekDates[idx]!);
+      const targetDateStr = toLocalDateStr(currentDates[idx]!);
       for (const slot of slotRowIndices) {
         if (activeSlots.has(dateSlotKey(sourceDateStr, slot))) {
           next.add(dateSlotKey(targetDateStr, slot));
@@ -741,7 +753,7 @@ export function PortalCalendarPanels({
     });
 
     writeAvailability(next);
-  }, [activeSlots, fullWeekDates, writeAvailability]);
+  }, [activeBlockDates, activeSlots, compactAvailability, writeAvailability]);
 
   const toggleBlockWeekday = useCallback((weekday: number) => {
     setBlockWeekdays((current) =>
@@ -840,13 +852,13 @@ export function PortalCalendarPanels({
 
   const clearCurrentWeek = useCallback(() => {
     const next = new Set(activeSlots);
-    for (const ds of fullWeekDateStrs) {
+    for (const ds of activeBlockDateStrs) {
       for (const slot of slotRowIndices) {
         next.delete(dateSlotKey(ds, slot));
       }
     }
     writeAvailability(next);
-  }, [activeSlots, fullWeekDateStrs, writeAvailability]);
+  }, [activeBlockDateStrs, activeSlots, writeAvailability]);
 
   const blockSummary = useMemo(() => {
     const days = blockWeekdays.length > 0 ? weekdayLabelList(blockWeekdays) : "No days selected";
@@ -1108,39 +1120,30 @@ export function PortalCalendarPanels({
       <>
         <Card className="p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex w-full min-w-0 flex-nowrap items-center gap-2 sm:w-auto sm:flex-1">
-              <Button type="button" variant="outline" className="h-9 w-9 shrink-0 rounded-full px-0" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous days">
                 ←
               </Button>
-              <div className="min-w-0 flex-1 rounded-2xl border border-border bg-accent/30 px-3 py-2 [html[data-theme=dark]_&]:portal-calendar-week-banner">
-                <p className="truncate text-[13px] font-semibold text-foreground sm:text-sm">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted sm:text-[11px] sm:tracking-[0.14em]">{availabilityHeading}</span>
-                  <span className="mx-1 font-normal text-muted">·</span>
-                  {formatWeekRangeMonSun(weekMonday)}
-                  {tourScopeLabel ? (
-                    <>
-                      <span className="mx-1 font-normal text-muted">·</span>
-                      <span className="font-medium text-primary">{tourScopeLabel}</span>
-                    </>
-                  ) : null}
-                </p>
+              <div className="min-w-0 flex-1 rounded-xl border border-border bg-accent/30 px-2.5 py-1.5 [html[data-theme=dark]_&]:portal-calendar-week-banner">
+                <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{availabilityHeading}</p>
+                <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
+                {tourScopeLabel ? <p className="truncate text-[10px] font-medium text-primary sm:text-xs">{tourScopeLabel}</p> : null}
               </div>
-              <Button type="button" variant="outline" className="h-9 w-9 shrink-0 rounded-full px-0" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
+              <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next days">
                 →
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {saveStatus === "saving" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
-              {saveStatus === "saved" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
-              {saveStatus === "error" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {saveStatus === "saving" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
+              {saveStatus === "saved" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
+              {saveStatus === "error" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
               {!readOnly ? (
-                <div className={`px-4 py-2 text-sm font-semibold ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open this week</div>
+                <div className={`px-2.5 py-1 text-xs font-semibold sm:text-sm ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open</div>
               ) : null}
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {timeWindowControl}
             {!readOnly ? (
               <>
                 <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
@@ -1213,7 +1216,7 @@ export function PortalCalendarPanels({
                   type="button"
                   onMouseDown={() => {
                     if (readOnly || meeting || active || coManagerOpen) return;
-                    startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx);
+                    startDragSelection(ds, activeBlockDateStrs.indexOf(ds), slotIdx);
                   }}
                   onMouseEnter={() => {
                     if (readOnly || meeting || active || coManagerOpen) return;
@@ -1259,19 +1262,15 @@ export function PortalCalendarPanels({
               );
             };
 
-            // Clamp against the mobile window length (5) in case the index was set while
-            // viewing the desktop 7-day week (e.g. viewport resized after selecting day 6).
-            const clampedMobileDayIndex = Math.min(mobileDayIndex, mobileWindowDates.length - 1);
-            const mobileDs = mobileWindowDateStrs[clampedMobileDayIndex] ?? mobileWindowDateStrs[0]!;
-            const mobileDate = mobileWindowDates[clampedMobileDayIndex] ?? mobileWindowDates[0]!;
+            const mobileDs = activeBlockDateStrs[mobileDayIndex] ?? activeBlockDateStrs[0]!;
+            const mobileDate = activeBlockDates[mobileDayIndex] ?? activeBlockDates[0]!;
 
             return (
               <>
-                {/* Mobile: one day at a time, 5-day rolling window in the picker — a 7-column
-                    row never fits a phone width and a 7-pill picker wraps to two rows. */}
+                {/* Mobile: one day at a time — the multi-column grid never fits a phone width. */}
                 <div className="mt-4 lg:hidden">
-                  <div className="flex flex-nowrap gap-1.5">
-                    {mobileWindowDates.map((d, idx) => {
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeBlockDates.map((d, idx) => {
                       const ds = toLocalDateStr(d);
                       const count = readOnly
                         ? meetings.filter((meeting) => meeting.dateStr === ds).length
@@ -1279,13 +1278,13 @@ export function PortalCalendarPanels({
                             (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
                             0,
                           );
-                      const isActive = idx === clampedMobileDayIndex;
+                      const isActive = idx === mobileDayIndex;
                       return (
                         <button
                           key={ds}
                           type="button"
                           onClick={() => setMobileDayIndex(idx)}
-                          className={`flex min-w-0 flex-1 basis-0 flex-col items-center rounded-xl px-1.5 py-1.5 text-center transition ${
+                          className={`flex shrink-0 flex-col items-center rounded-xl px-3 py-1.5 text-center transition ${
                             isActive ? "bg-primary text-primary-foreground" : "bg-accent/40 text-muted"
                           }`}
                         >
@@ -1316,12 +1315,12 @@ export function PortalCalendarPanels({
                   </div>
                 </div>
 
-                {/* Desktop: full 7-day week grid. */}
+                {/* Desktop: 5-day block grid. */}
                 <div className="mt-4 hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
                   <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-                    <div className={`grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
+                    <div className={`grid min-w-[680px] grid-cols-[76px_repeat(5,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
                       <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
-                      {fullWeekDates.map((d) => {
+                      {activeBlockDates.map((d) => {
                         const ds = toLocalDateStr(d);
                         const count = readOnly
                           ? meetings.filter((meeting) => meeting.dateStr === ds).length
@@ -1343,7 +1342,7 @@ export function PortalCalendarPanels({
                           <div className={`flex min-h-9 items-center bg-card px-2 ${CALENDAR_TIME_CELL}`}>
                             {formatAvailabilitySlotLabel(slotIdx)}
                           </div>
-                          {fullWeekDateStrs.map((ds) => renderSlotButton(ds, slotIdx))}
+                          {activeBlockDateStrs.map((ds) => renderSlotButton(ds, slotIdx))}
                         </Fragment>
                       ))}
                     </div>
@@ -1512,7 +1511,7 @@ export function PortalCalendarPanels({
                   className="rounded-full"
                   disabled={selectedHouseIds.size === 0}
                   onClick={() => {
-                    onCopyWeekToHouses([...selectedHouseIds], fullWeekDateStrs);
+                    onCopyWeekToHouses([...selectedHouseIds], activeBlockDateStrs);
                     setUpdateToHousesOpen(false);
                   }}
                 >

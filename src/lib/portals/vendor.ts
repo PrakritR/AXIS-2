@@ -7,7 +7,7 @@ export const vendorPortal: PortalDefinition = {
   title: "Axis",
   accent: "blue",
   sections: [
-    { section: "dashboard", label: "Home", tabs: [] },
+    { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "work-orders", label: "Services", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
     {
@@ -20,15 +20,19 @@ export const vendorPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    { section: "payments", label: "Payments", tabs: [] },
+    { section: "documents", label: "Documents", tabs: [] },
     { section: "profile", label: "Settings", tabs: [] },
   ],
 };
 
 /** Default smoke-test paths for web + native WebView (vendor portal). */
 export const VENDOR_PORTAL_SMOKE_PATHS = [
-  { label: "Home", path: "/vendor/dashboard" },
+  { label: "Dashboard", path: "/vendor/dashboard" },
   { label: "Services", path: "/vendor/work-orders" },
   { label: "Calendar", path: "/vendor/calendar" },
   { label: "Inbox", path: "/vendor/inbox/unopened" },
+  { label: "Payments", path: "/vendor/payments" },
+  { label: "Documents", path: "/vendor/documents" },
   { label: "Settings", path: "/vendor/profile" },
 ] as const;

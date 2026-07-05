@@ -129,7 +129,7 @@ export function PillTabs({
   return (
     <div
       ref={wrapRef}
-      className="relative flex flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1"
+      className="relative inline-flex w-fit max-w-full flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1"
     >
       {pill.w > 0 ? (
         <span
@@ -149,7 +149,7 @@ export function PillTabs({
               else btnRefs.current.delete(t.id);
             }}
             onClick={() => onChange(t.id)}
-            className={`relative z-10 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
+            className={`relative z-10 shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
               active ? "text-foreground" : "text-muted hover:text-foreground"
             }`}
           >

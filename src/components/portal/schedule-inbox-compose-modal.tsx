@@ -45,7 +45,7 @@ async function postScheduledMessage(payload: Record<string, unknown>): Promise<v
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ senderPortal: "manager", ...payload }),
   });
   if (!res.ok) {
     const data = (await res.json()) as { error?: string };

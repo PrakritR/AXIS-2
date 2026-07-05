@@ -70,7 +70,11 @@ export function PortalNotificationPreviewModal({
         </div>
         <div>
           <p className={MODAL_FIELD_LABEL_CLASS}>Message</p>
-          <pre className={`${MODAL_INSET_BOX_PRE_CLASS} mt-1 ${skipMessage ? "opacity-50" : ""}`}>{body}</pre>
+          <pre
+            className={`${MODAL_INSET_BOX_PRE_CLASS} mt-1 max-h-[min(40dvh,16rem)] overflow-y-auto overscroll-contain ${skipMessage ? "opacity-50" : ""}`}
+          >
+            {body}
+          </pre>
         </div>
         <label className="flex items-start gap-2 text-sm">
           <input
@@ -85,7 +89,7 @@ export function PortalNotificationPreviewModal({
         {skipMessage ? (
           <p className="text-xs text-muted">The action will complete without sending this message.</p>
         ) : null}
-        <div className="flex justify-start gap-2 pt-2">
+        <div className="sticky bottom-0 z-10 -mx-1 flex justify-start gap-2 border-t border-border bg-[inherit] px-1 pt-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             {cancelLabel}
           </Button>

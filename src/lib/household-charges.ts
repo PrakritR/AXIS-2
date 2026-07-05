@@ -78,6 +78,10 @@ export type HouseholdCharge = {
   zelleContactSnapshot?: string;
   /** Snapshot of Venmo contact from listing when charge was created */
   venmoContactSnapshot?: string;
+  /** Resident-reported manual payment channel (Zelle/Venmo); charge stays pending until manager marks paid. */
+  manualPaymentChannel?: "zelle" | "venmo";
+  /** ISO timestamp when the resident confirmed they sent a manual payment. */
+  manualPaymentReportedAt?: string;
   /** Snapshot of whether Axis ACH was enabled on the listing when the charge was created or synced. */
   axisPaymentsEnabledSnapshot?: boolean;
   /** Payment methods the property currently accepts, refreshed from the listing on each server sync. */
@@ -1702,6 +1706,39 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
     if (ok) emit();
   });
   return true;
+}
+
+/** Resident confirms they sent Zelle/Venmo for pending charges; charge stays pending until manager marks paid. */
+export async function reportResidentManualPayment(
+  chargeIds: string[],
+  channel: "zelle" | "venmo",
+): Promise<{ ok: true; charges: HouseholdCharge[] } | { ok: false; error: string }> {
+  if (!isBrowser() || isDemoModeActive()) {
+    return { ok: false, error: "Manual payment reporting is unavailable in demo mode." };
+  }
+  const ids = [...new Set(chargeIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return { ok: false, error: "No charges selected." };
+
+  const res = await fetch("/api/portal/resident-report-manual-payment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ chargeIds: ids, channel }),
+  });
+  const payload = (await res.json().catch(() => ({}))) as { charges?: HouseholdCharge[]; error?: string };
+  if (!res.ok) {
+    return { ok: false, error: typeof payload.error === "string" ? payload.error : "Could not report payment." };
+  }
+
+  const updates = Array.isArray(payload.charges) ? payload.charges : [];
+  if (updates.length > 0 && isBrowser()) {
+    hydrateHouseholdStateFromSession();
+    const byId = new Map(updates.map((c) => [c.id, c]));
+    const next = readAll().map((c) => byId.get(c.id) ?? c);
+    writeAll(next);
+    emit();
+  }
+  return { ok: true, charges: updates };
 }
 
 /**

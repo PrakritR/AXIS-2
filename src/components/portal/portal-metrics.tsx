@@ -206,15 +206,24 @@ export function ManagerPortalStatusPills({
   onChange,
   /** `primary` = blue active pill (inbox-style); default = white active chip (leases/applications). */
   activeTone = "default",
+  /** Single-row horizontal scroll with tighter chips (long lease labels on mobile). */
+  compact = false,
 }: {
   tabs: { id: string; label: string; count: number; alert?: boolean; dataAttr?: string }[];
   activeId: string;
   onChange: (id: string) => void;
   activeTone?: "default" | "primary";
+  compact?: boolean;
 }) {
   const isPrimary = activeTone === "primary";
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full">
+    <div
+      className={
+        compact
+          ? "flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto rounded-full border border-border bg-accent/30 p-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          : "inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full"
+      }
+    >
       {tabs.map((tab) => {
         const active = activeId === tab.id;
         return (
@@ -223,7 +232,9 @@ export function ManagerPortalStatusPills({
             type="button"
             data-attr={tab.dataAttr}
             onClick={() => onChange(tab.id)}
-            className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+            className={`flex shrink-0 items-center rounded-full font-semibold transition-all duration-150 ${
+              compact ? "min-h-8 gap-1 px-2.5 py-1 text-xs" : "min-h-9 gap-1.5 px-4 py-1.5 text-sm"
+            } ${
               active
                 ? isPrimary
                   ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
@@ -406,7 +417,6 @@ export function ManagerPortalPageShell({
   title,
   subtitle,
   titleAside,
-  titleAsideInline = false,
   filterRow,
   children,
   hideTitleOnNative = false,
@@ -414,8 +424,6 @@ export function ManagerPortalPageShell({
   title: string;
   subtitle?: string;
   titleAside?: ReactNode;
-  /** Keep titleAside on the same row as the title at every width instead of wrapping to its own row below. */
-  titleAsideInline?: boolean;
   filterRow?: ReactNode;
   children: ReactNode;
   /** Visually hide the page title in the native app (bottom nav shows the section). */
@@ -423,13 +431,7 @@ export function ManagerPortalPageShell({
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
-      <div
-        className={
-          titleAsideInline
-            ? "flex items-center justify-between gap-x-3 gap-y-2"
-            : "flex flex-wrap items-center justify-between gap-x-3 gap-y-2"
-        }
-      >
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0 shrink-0">
           <h1
             className={`text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem] [html[data-native]_&]:text-[1.2rem] ${
@@ -445,21 +447,19 @@ export function ManagerPortalPageShell({
           ) : null}
         </div>
         {titleAside ? (
-          <div
-            className={
-              titleAsideInline
-                ? "flex shrink-0 items-center justify-end gap-2"
-                : "flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto"
-            }
-          >
-            {titleAside}
-          </div>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">{titleAside}</div>
         ) : null}
       </div>
-      <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5">
-        {filterRow ?? null}
-      </div>
-      <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5">{children}</div>
+      {filterRow ? (
+        <>
+          <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5">
+            {filterRow}
+          </div>
+          <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5">{children}</div>
+        </>
+      ) : (
+        <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-0">{children}</div>
+      )}
     </div>
   );
 }

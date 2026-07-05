@@ -46,29 +46,25 @@ export function DocumentInlineViewer({
   title,
   src,
   srcDoc,
-  onClose,
   onDownload,
   extraActions,
   children,
   downloadLabel = "Download",
-  downloadPosition = "top",
   downloadAttr = "resident-document-download",
 }: {
+  /** Used for iframe/img accessibility only — not shown in the UI. */
   title: string;
   /** Same-origin PDF URL (or data URL) rendered via iframe src. */
   src?: string | null;
   /** Clean document HTML rendered via iframe srcDoc. */
   srcDoc?: string | null;
-  onClose: () => void;
   onDownload: () => void;
-  /** Optional extra buttons rendered before Close/Download (e.g. Remove). */
+  /** Optional extra actions after Download (e.g. Remove). */
   extraActions?: ReactNode;
   /** Custom frame content (e.g. an image) used instead of the iframe. */
   children?: ReactNode;
   /** Label for the download action; defaults to "Download". */
   downloadLabel?: string;
-  /** Where the download action renders — alongside Close (default), or in its own bar below the document. */
-  downloadPosition?: "top" | "bottom";
   /** data-attr override for the download button. */
   downloadAttr?: string;
 }) {
@@ -79,23 +75,13 @@ export function DocumentInlineViewer({
 
   return (
     <section ref={sectionRef} className="mt-6">
-      <div className="flex flex-wrap items-center justify-start gap-3">
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground" title={title}>
-          {title}
-        </p>
-        <div className="flex items-center gap-2">
-          {extraActions}
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-            Close
-          </Button>
-          {downloadPosition === "top" ? (
-            <Button type="button" className="rounded-full" data-attr={downloadAttr} onClick={onDownload}>
-              {downloadLabel}
-            </Button>
-          ) : null}
-        </div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Button type="button" className="rounded-full" data-attr={downloadAttr} onClick={onDownload}>
+          {downloadLabel}
+        </Button>
+        {extraActions}
       </div>
-      <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
         {children ? (
           children
         ) : src ? (
@@ -114,13 +100,6 @@ export function DocumentInlineViewer({
           </div>
         )}
       </div>
-      {downloadPosition === "bottom" ? (
-        <div className="mt-4 flex justify-start">
-          <Button type="button" className="rounded-full" data-attr={downloadAttr} onClick={onDownload}>
-            {downloadLabel}
-          </Button>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -348,6 +327,8 @@ export function ResidentOtherDocumentsTable({
     [uploads, selectedId],
   );
 
+  const toggleRow = (id: string) => setSelectedId((cur) => (cur === id ? null : id));
+
   if (loading) {
     return (
       <div className={PORTAL_DATA_TABLE_WRAP}>
@@ -376,13 +357,14 @@ export function ResidentOtherDocumentsTable({
             key={row.id}
             title={row.fileName}
             subtitle={`${uploadedDocumentKind(row)} · added ${safeFormatDateTime(row.uploadedAt)}`}
-            onClick={() => setSelectedId(row.id)}
+            expanded={selectedId === row.id}
+            onClick={() => toggleRow(row.id)}
           />
         ))}
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
@@ -392,7 +374,12 @@ export function ResidentOtherDocumentsTable({
             </thead>
             <tbody>
               {uploads.map((row) => (
-                <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setSelectedId(row.id)}>
+                <tr
+                  key={row.id}
+                  className={PORTAL_TABLE_TR_EXPANDABLE}
+                  aria-expanded={selectedId === row.id}
+                  onClick={() => toggleRow(row.id)}
+                >
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>
                     <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground" title={row.fileName}>
                       {row.fileName}
@@ -410,14 +397,14 @@ export function ResidentOtherDocumentsTable({
         <DocumentInlineViewer
           title={selected.fileName}
           src={selectedIsPdf ? selected.dataUrl : null}
-          onClose={() => setSelectedId(null)}
           onDownload={() => triggerDocumentDownload(selected.dataUrl, selected.fileName)}
           extraActions={
             <Button
               type="button"
               variant="outline"
               className="rounded-full text-danger"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setSelectedId(null);
                 onRemove(selected.id);
               }}

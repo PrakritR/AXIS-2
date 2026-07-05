@@ -686,7 +686,7 @@ html {
 }
 
 /* Keep viewport-based modal sizing bounded to the frame, not the browser. */
-.demo-portal-frame .min-h-screen {
+.demo-portal-frame .min-h-\[100dvh\] {
   min-height: 100%;
 }
 
@@ -904,6 +904,19 @@ html {
 .hero-search-panel input[type="date"],
 .hero-search-panel select {
   color-scheme: light;
+}
+
+.hero-search-panel input[type="date"].hero-search-date-input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.hero-search-panel input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
 }
 
 [data-theme="dark"] .hero-search-panel input[type="date"],
@@ -1191,9 +1204,8 @@ html:has([data-auth-layout]) body {
   min-height: 0;
   width: 100%;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   justify-content: flex-start;
-  align-content: flex-start;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior-y: contain;
@@ -1206,10 +1218,9 @@ html:has([data-auth-layout]) body {
 .auth-layout-panel {
   width: 100%;
   max-width: 460px;
-  margin-inline: auto;
-  margin-block: 0;
+  margin: auto;
   flex: 0 0 auto;
-  align-self: stretch;
+  align-self: center;
 }
 
 @media (min-width: 640px) {
@@ -1236,12 +1247,11 @@ html[data-auth-welcome] .auth-layout {
 }
 
 html[data-auth-welcome] .auth-layout-main {
-  justify-content: flex-start;
-  align-content: flex-start;
+  align-items: center;
 }
 
 html[data-auth-welcome] .auth-layout-panel {
-  margin-block: 0;
+  margin: auto;
 }
 
 html[data-auth-welcome] .auth-native-email-sign-in {
@@ -1278,6 +1288,7 @@ html[data-native] .auth-card-shell > div:first-child {
 }
 
 html[data-native] .auth-layout-main {
+  align-items: center;
   justify-content: flex-start;
   padding-top: max(0.375rem, var(--native-safe-top));
   padding-bottom: max(0.75rem, var(--native-safe-bottom));
@@ -1287,7 +1298,8 @@ html[data-native] .auth-layout-main {
 }
 
 html[data-native] .auth-layout-panel {
-  margin-block: 0;
+  margin: auto;
+  align-self: center;
   max-width: 100%;
 }
 
@@ -1358,24 +1370,12 @@ html[data-native] .native-auth-role-toggle {
   width: 100%;
 }
 
-.auth-layout-main:has(.native-auth-hub) {
-  justify-content: flex-start;
-  align-content: flex-start;
-  padding-top: max(0.375rem, env(safe-area-inset-top, 0px));
-}
-
-.auth-layout-panel:has(.native-auth-hub) {
-  margin-block: 0;
-  align-self: stretch;
-  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
-}
-
 .auth-layout:has(.native-auth-hub) {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
 html[data-native] .auth-layout-main:has(.native-auth-hub) {
-  justify-content: flex-start;
+  align-items: center;
   padding-top: 0.375rem;
   padding-bottom: max(1rem, var(--native-safe-bottom));
   scroll-padding-top: 0.375rem;
@@ -1383,6 +1383,8 @@ html[data-native] .auth-layout-main:has(.native-auth-hub) {
 }
 
 html[data-native] .auth-layout-panel:has(.native-auth-hub) {
+  margin: auto;
+  align-self: center;
   padding-bottom: max(1.25rem, var(--native-safe-bottom));
 }
 
@@ -1395,10 +1397,15 @@ html[data-native] .auth-plan-picker-wide .auth-plan-tier-card {
 }
 
 html[data-native] .auth-layout-main:has(.auth-plan-picker-wide) {
-  justify-content: flex-start;
+  align-items: center;
   padding-top: max(0.25rem, var(--native-safe-top));
   padding-bottom: max(0.75rem, var(--native-safe-bottom));
   scroll-padding-top: max(0.25rem, var(--native-safe-top));
+}
+
+html[data-native] .auth-layout-panel:has(.auth-plan-picker-wide) {
+  margin: auto;
+  align-self: center;
 }
 
 html[data-native] .auth-plan-picker .auth-plan-tier-row {
@@ -1688,12 +1695,34 @@ html[data-native] .portal-main-inner {
 }
 
 html[data-native] #portal-main-content {
-  padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem));
+  padding-top: max(0.25rem, var(--native-safe-top));
   padding-bottom: var(--portal-native-bottom-nav-inset);
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
-  scroll-padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem));
+  scroll-padding-top: max(0.25rem, var(--native-safe-top));
   scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+}
+
+/* Resident/manager/vendor: back + profile sit in the status-bar band beside the notch. */
+html[data-native] #portal-main-content:has(.portal-mobile-nav-bar) {
+  padding-top: 0;
+}
+
+html[data-native] .portal-mobile-nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  box-sizing: border-box;
+  min-height: calc(var(--native-safe-top) + 1.5rem);
+  padding-top: 0;
+  padding-left: max(0.75rem, var(--native-safe-left));
+  padding-right: max(0.75rem, var(--native-safe-right));
+  padding-bottom: 0.125rem;
+  margin-bottom: 0.5rem;
+  align-items: flex-end;
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 /* Mobile web (<1024px, matches the shared `lg:hidden`/`max-lg:` breakpoint):
@@ -1800,12 +1829,13 @@ html[data-native] #axis-public-navbar {
   }
 
   .auth-layout-main {
-    justify-content: flex-start;
+    align-items: center;
     padding-top: max(1rem, env(safe-area-inset-top, 0px));
   }
 
   .auth-layout-panel {
-    margin-block: 0;
+    margin: auto;
+    align-self: center;
   }
 
   .auth-role-stack .auth-choice-hint {

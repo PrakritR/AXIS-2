@@ -7,6 +7,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
@@ -310,8 +311,8 @@ export function PortalInboxMessageTable({
 
   const desktopTable = (
     <div className={PORTAL_INBOX_TABLE_WRAP}>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <div className={PORTAL_DATA_TABLE_SCROLL}>
+        <table className="w-full table-fixed border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               <th className={`${MANAGER_TABLE_TH} text-left`}>{primaryPartyHeader}</th>

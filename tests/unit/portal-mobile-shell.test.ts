@@ -15,9 +15,14 @@ describe("portal mobile shell conventions", () => {
     expect(PORTAL_METRICS_SOURCE).toContain("hideTitleOnNative = false");
   });
 
-  it("wraps status pills on mobile instead of scrolling horizontally", () => {
+  it("wraps status pills on mobile instead of scrolling horizontally by default", () => {
     expect(PORTAL_METRICS_SOURCE).toContain("inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl");
-    expect(PORTAL_METRICS_SOURCE).not.toContain("overflow-x-auto");
+    expect(PORTAL_METRICS_SOURCE).toContain('compact = false');
+  });
+
+  it("allows horizontal scroll only for compact status pill strips", () => {
+    expect(PORTAL_METRICS_SOURCE).toContain("flex-nowrap");
+    expect(PORTAL_METRICS_SOURCE).toContain("overflow-x-auto");
   });
 
   it("scopes nested scroll panels to desktop only", () => {
@@ -38,8 +43,11 @@ describe("portal mobile shell conventions", () => {
 
   it("uses native safe-area top padding on portal main content", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] #portal-main-content");
-    expect(GLOBALS_CSS).toContain("padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem))");
-    expect(GLOBALS_CSS).toContain("scroll-padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem))");
+    expect(GLOBALS_CSS).toContain("padding-top: max(0.25rem, var(--native-safe-top))");
+    expect(GLOBALS_CSS).toContain("scroll-padding-top: max(0.25rem, var(--native-safe-top))");
+    expect(GLOBALS_CSS).toContain("html[data-native] #portal-main-content:has(.portal-mobile-nav-bar)");
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-mobile-nav-bar");
+    expect(GLOBALS_CSS).toContain("min-height: calc(var(--native-safe-top) + 1.5rem)");
   });
 
   it("pins native bottom nav flush to screen bottom", () => {

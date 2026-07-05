@@ -1,5 +1,6 @@
 import type { HouseholdCharge } from "@/lib/household-charges";
 import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment-eligibility";
+import { isPayableHouseholdCharge } from "@/lib/platform/resident-payments";
 
 export function chargeBalanceCents(label: string): number {
   const n = Number(label.replace(/[^\d.]/g, ""));
@@ -8,6 +9,10 @@ export function chargeBalanceCents(label: string): number {
 
 export function unpaidAchChargesForResident(charges: HouseholdCharge[]): HouseholdCharge[] {
   return charges.filter((c) => c.status === "pending" && canPayHouseholdChargeWithAxisAch(c));
+}
+
+export function unpaidPayableChargesForResident(charges: HouseholdCharge[]): HouseholdCharge[] {
+  return charges.filter((c) => isPayableHouseholdCharge(c));
 }
 
 export function pendingChargesTotalCents(charges: HouseholdCharge[]): number {
@@ -27,6 +32,10 @@ export function selectAllUnpaidAchChargeIds(charges: HouseholdCharge[]): Set<str
   return new Set(unpaidAchChargesForResident(charges).map((c) => c.id));
 }
 
+export function selectAllUnpaidPayableChargeIds(charges: HouseholdCharge[]): Set<string> {
+  return new Set(unpaidPayableChargesForResident(charges).map((c) => c.id));
+}
+
 export function encodeSelectedChargeIds(ids: Iterable<string>): string {
   return [...ids].join(",");
 }
@@ -36,7 +45,7 @@ export function parseSelectedChargeIds(
   allowedCharges: HouseholdCharge[],
 ): Set<string> {
   if (!raw?.trim()) return new Set();
-  const allowed = new Set(unpaidAchChargesForResident(allowedCharges).map((c) => c.id));
+  const allowed = new Set(unpaidPayableChargesForResident(allowedCharges).map((c) => c.id));
   const ids = raw
     .split(",")
     .map((id) => id.trim())

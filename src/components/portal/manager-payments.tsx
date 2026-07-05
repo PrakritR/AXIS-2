@@ -8,7 +8,6 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
@@ -25,7 +24,6 @@ import {
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
-import { ManagerPaymentMethodsModal } from "@/components/portal/manager-payment-methods-modal";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
@@ -72,7 +70,6 @@ export function ManagerPayments() {
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
-  const [paymentMethodsOpen, setPaymentMethodsOpen] = useState(false);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [applicationTick, setApplicationTick] = useState(0);
@@ -291,10 +288,11 @@ export function ManagerPayments() {
   }, [mergedRows, bucket, propertyFilter, activeResidentFilter]);
 
   const filterRow = (
-    <ManagerPortalFilterRow>
-      <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
-      <PortalStripeConnectPanel basePath="/portal" variant="inline" />
-      <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
+    <>
+      <ManagerPortalFilterRow>
+        <ManagerPortalStatusPills compact tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
+      </ManagerPortalFilterRow>
+      <div className="mt-2.5 flex flex-col gap-2 lg:hidden [html[data-native]_&]:mt-2">
         <PortalPropertyFilterPill
           propertyOptions={propertyOptions}
           propertyValue={propertyFilter}
@@ -307,20 +305,8 @@ export function ManagerPayments() {
           residentValue={activeResidentFilter}
           onResidentChange={setResidentFilter}
         />
-        <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setReminderSettingsOpen(true)}>
-          Reminders
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className={PORTAL_HEADER_ACTION_BTN}
-          onClick={() => setPaymentMethodsOpen(true)}
-          data-attr="manager-open-payment-methods"
-        >
-          Payment methods
-        </Button>
       </div>
-    </ManagerPortalFilterRow>
+    </>
   );
 
   return (
@@ -341,22 +327,23 @@ export function ManagerPayments() {
               residentValue={activeResidentFilter}
               onResidentChange={setResidentFilter}
             />
-            <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setReminderSettingsOpen(true)}>
-              Auto reminders
-            </Button>
+          </div>
+          <div className="flex min-w-0 flex-col items-stretch gap-2">
+            <div className="flex items-center justify-end gap-2">
+              <PortalStripeConnectPanel basePath="/portal" variant="header" />
+              <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setAddOpen(true)}>
+                Add
+              </Button>
+            </div>
             <Button
               type="button"
               variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => setPaymentMethodsOpen(true)}
-              data-attr="manager-open-payment-methods-desktop"
+              className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => setReminderSettingsOpen(true)}
             >
-              Payment methods
+              Reminders
             </Button>
           </div>
-          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
-            Add payment
-          </Button>
         </>
       }
       filterRow={filterRow}
@@ -369,11 +356,6 @@ export function ManagerPayments() {
         onOpenReminderSettings={() => setReminderSettingsOpen(true)}
         onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
-      />
-      <ManagerPaymentMethodsModal
-        open={paymentMethodsOpen}
-        onClose={() => setPaymentMethodsOpen(false)}
-        managerUserId={userId ?? null}
       />
       <ReminderSettingsModal
         open={reminderSettingsOpen}

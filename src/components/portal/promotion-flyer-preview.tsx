@@ -61,13 +61,13 @@ export function PromotionFlyerPreview({
 
   if (embedded) {
     return (
-      <div className="h-[480px] w-full overflow-hidden rounded-xl border border-border bg-white shadow-sm sm:h-[620px]">
+      <div className="h-[480px] min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-xl border border-border bg-white shadow-sm sm:h-[620px]">
         <iframe
           ref={iframeRef}
           title={`Flyer — ${promotion.title || promotion.propertyLabel || "promotion"}`}
           srcDoc={html}
           sandbox="allow-same-origin"
-          className="h-full w-full border-0"
+          className="block h-full min-h-full w-full min-w-0 border-0"
         />
       </div>
     );

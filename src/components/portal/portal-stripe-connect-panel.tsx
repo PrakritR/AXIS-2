@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { openAppUrl, shouldUseInAppConnectFlow } from "@/lib/native/open-url";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -50,7 +50,7 @@ export function PortalStripeConnectPanel({
   dataAttrPrefix = "stripe-connect",
 }: {
   basePath: string;
-  variant?: "page" | "embedded" | "inline";
+  variant?: "page" | "embedded" | "inline" | "header";
   /** Base path for the status/onboard API pair — defaults to the manager Connect routes. */
   apiBase?: string;
   /** Path the client cleans `?connect=` params off of after returning from Stripe. Defaults to `${basePath}/payments`. */
@@ -206,6 +206,33 @@ export function PortalStripeConnectPanel({
 
   const blockingError = actionError ?? status?.stripeError ?? null;
 
+  if (variant === "header") {
+    if (status?.demo) return null;
+
+    if (!statusLoaded) {
+      return (
+        <div
+          className={`${PORTAL_HEADER_ACTION_BTN} h-9 w-[5.5rem] shrink-0 animate-pulse rounded-full bg-accent/30`}
+          aria-hidden
+        />
+      );
+    }
+
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        disabled={busy}
+        onClick={() => void startConnect()}
+        data-attr={`${dataAttrPrefix}-link`}
+        title={blockingError ?? (ready ? "Update linked bank account" : "Link bank account for payouts")}
+      >
+        {busy ? "Opening…" : "Link bank"}
+      </Button>
+    );
+  }
+
   if (variant === "inline") {
     if (status?.demo) return null;
 
@@ -221,9 +248,9 @@ export function PortalStripeConnectPanel({
     const statusLabel = ready ? "Bank linked" : status?.connected ? "Finish bank setup" : "Bank not linked";
 
     return (
-      <div className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
+      <div className="flex h-9 w-full min-w-0 max-w-full items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:w-auto sm:rounded-full">
         <span
-          className={`flex min-h-9 min-w-[7.5rem] shrink-0 items-center truncate rounded-full px-4 py-1.5 text-sm font-semibold ${
+          className={`flex min-h-9 min-w-0 flex-1 items-center truncate rounded-full px-4 py-1.5 text-sm font-semibold sm:min-w-[7.5rem] sm:flex-none ${
             ready
               ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
               : blockingError

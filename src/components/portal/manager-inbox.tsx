@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
@@ -418,7 +418,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
     <ManagerPortalPageShell
       title="Inbox"
       titleAside={
-        <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+        <>
           {tabId === "trash" ? (
             <Button
               type="button"
@@ -430,9 +430,9 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             </Button>
           ) : null}
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
-            New message
+            New
           </Button>
-        </div>
+        </>
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -441,21 +441,6 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             activeId={tabId}
             onChange={(id) => navigate(`${portalBase}/inbox/${id}`)}
           />
-          <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
-            {tabId === "trash" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={PORTAL_HEADER_ACTION_BTN}
-                onClick={deleteAllTrash}
-              >
-                Empty trash
-              </Button>
-            ) : null}
-            <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setComposeOpen(true)}>
-              New
-            </Button>
-          </div>
         </ManagerPortalFilterRow>
       }
     >

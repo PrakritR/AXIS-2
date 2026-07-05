@@ -11,6 +11,11 @@ function asProperty(value: unknown, id: string): MockProperty | null {
   return { ...property, id: property.id?.trim() || id };
 }
 
+function applicationBucket(rowData: unknown): string {
+  if (!rowData || typeof rowData !== "object" || Array.isArray(rowData)) return "";
+  return String((rowData as { bucket?: string }).bucket ?? "").toLowerCase();
+}
+
 /**
  * Resident-scoped property lookup, regardless of publish status — unlike the
  * public catalog/lead routes (live-only), a resident must see their own
@@ -33,14 +38,15 @@ export async function GET() {
 
     const { data: appRows, error: appError } = await db
       .from("manager_application_records")
-      .select("property_id, assigned_property_id")
+      .select("property_id, assigned_property_id, row_data, updated_at")
       .eq("resident_email", email)
       .order("updated_at", { ascending: false })
-      .limit(1);
+      .limit(50);
     if (appError) return NextResponse.json({ error: appError.message }, { status: 500 });
 
-    const appRow = appRows?.[0];
-    const propertyId = appRow?.assigned_property_id?.trim() || appRow?.property_id?.trim() || "";
+    const approvedRow =
+      (appRows ?? []).find((row) => applicationBucket(row.row_data) === "approved") ?? appRows?.[0];
+    const propertyId = approvedRow?.assigned_property_id?.trim() || approvedRow?.property_id?.trim() || "";
     if (!propertyId) return NextResponse.json({ error: "No property linked to this resident." }, { status: 404 });
 
     const { data: propRecord, error: propError } = await db

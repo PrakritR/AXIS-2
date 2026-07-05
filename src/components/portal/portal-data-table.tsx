@@ -7,7 +7,10 @@ import { portalListPreviewLimit, sliceForPortalPreview } from "@/lib/portal-mobi
 export const PORTAL_DATA_TABLE_WRAP =
   "relative z-0 max-w-full overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-sm)]";
 
-export const PORTAL_DATA_TABLE_SCROLL = "relative z-0 max-w-full overflow-x-auto";
+export const PORTAL_DATA_TABLE_SCROLL = "relative z-0 min-w-0 max-w-full overflow-hidden";
+
+/** Fluid portal table — fits the card width without horizontal scrolling. */
+export const PORTAL_DATA_TABLE = "w-full table-fixed border-collapse text-left text-sm";
 
 /** Table header row (use under `<thead>`). */
 export const PORTAL_TABLE_HEAD_ROW = "border-b border-border bg-accent/30";
@@ -39,8 +42,8 @@ export function createPortalRowExpandClick(
 /** Expanded detail row (full-width cell below the summary row). */
 export const PORTAL_TABLE_DETAIL_ROW = "border-b border-border/80 bg-accent/25 last:border-0";
 
-/** Data cell padding — room for name / property lines to breathe. */
-export const PORTAL_TABLE_TD = "px-4 py-4 align-middle text-sm text-foreground/80 sm:px-5 sm:py-[1.125rem]";
+/** Data cell padding — wraps long values inside {@link PORTAL_DATA_TABLE} instead of scrolling. */
+export const PORTAL_TABLE_TD = "max-w-0 break-words px-4 py-4 align-middle text-sm text-foreground/80 sm:px-5 sm:py-[1.125rem]";
 
 /** Compact card shell for mobile portal lists (pair with {@link PortalResponsiveDataView}). */
 export const PORTAL_MOBILE_CARD_CLASS =

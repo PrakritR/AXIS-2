@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
   getPartnerInquiryWindows,
   readPartnerInquiries,
@@ -44,7 +43,6 @@ import {
   syncServiceRequestsFromServer,
 } from "@/lib/service-requests-storage";
 import {
-  countUnopenedPersistedInbox,
   loadPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -55,7 +53,6 @@ import {
   PortalDashboardCompactRow,
   PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
-  PortalDashboardTile,
   PORTAL_DASHBOARD_SECTION_CARD,
   PORTAL_DASHBOARD_STACK,
   formatCompactChargeLine,
@@ -118,13 +115,11 @@ export function ManagerDashboard() {
 
     const allApps = readManagerApplicationRows().filter((a) => applicationVisibleToPortalUser(a, userId));
     const pendingApps = allApps.filter((a) => a.bucket === "pending");
-    const activeResidents = allApps.filter((a) => a.bucket === "approved");
 
     const leases = readLeasePipeline(userId);
     const pendingLeaseRows = leases
       .filter((l) => l.status === "Manager Signature Pending" || l.status === "Resident Signature Pending")
       .sort((a, b) => new Date(b.updatedAtIso).getTime() - new Date(a.updatedAtIso).getTime());
-    const needsManagerSig = pendingLeaseRows.filter((l) => l.status === "Manager Signature Pending").length;
 
     const charges = readChargesForManager(userId);
     const pendingCharges = charges
@@ -141,7 +136,7 @@ export function ManagerDashboard() {
     const pendingServiceRequests = readServiceRequestsForManager(userId).filter(
       (r) => r.status === "pending",
     );
-    const activeWorkOrders = managerWorkOrders.filter((w) => w.bucket !== "completed");
+    const pendingWorkOrders = managerWorkOrders.filter((w) => w.bucket === "open");
     const serviceItems = [
       ...pendingServiceRequests.map((r) => ({
         id: `sr-${r.id}`,
@@ -150,25 +145,19 @@ export function ManagerDashboard() {
         status: "pending" as const,
         sortKey: new Date(r.requestedAt).getTime() || 0,
       })),
-      ...activeWorkOrders.map((w) => ({
+      ...pendingWorkOrders.map((w) => ({
         id: `wo-${w.id}`,
         title: w.title || "Work order",
         subtitle: [w.propertyName, w.unit].filter(Boolean).join(" · ") || "—",
-        status: w.bucket,
+        status: "pending" as const,
         sortKey: w.scheduledAtIso ? new Date(w.scheduledAtIso).getTime() : 0,
       })),
     ].sort((a, b) => b.sortKey - a.sortKey);
-    const openServiceCount = pendingServiceRequests.length + managerWorkOrders.filter((w) => w.bucket === "open").length;
+    const pendingServiceCount = pendingServiceRequests.length + pendingWorkOrders.length;
 
-    const inboxCount = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
     const inboxThreads = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, [])
       .filter((t) => t.folder === "inbox" && t.unread)
       .slice(0, 5);
-
-    const [p0, , p2] = adminKpiCounts(userId);
-    const pendingProperties = p0;
-    const publishedProperties = p2;
-    const totalProperties = publishedProperties + pendingProperties;
 
     const cutoff = nowMs - 30 * 60 * 1000;
     const tours = [
@@ -200,16 +189,11 @@ export function ManagerDashboard() {
 
     return {
       pendingApps,
-      activeResidents,
       pendingLeaseRows,
       pendingCharges,
-      inbox: inboxCount,
       inboxThreads,
       serviceItems,
-      openServiceCount,
-      needsManagerSig,
-      totalProperties,
-      pendingProperties,
+      pendingServiceCount,
       tours,
     };
   }, [tick, userId, nowMs]);
@@ -218,14 +202,11 @@ export function ManagerDashboard() {
 
   const {
     pendingApps,
-    activeResidents,
     pendingLeaseRows,
     pendingCharges,
     inboxThreads,
     serviceItems,
-    openServiceCount,
-    totalProperties,
-    pendingProperties,
+    pendingServiceCount,
     tours,
   } = data;
 
@@ -235,24 +216,6 @@ export function ManagerDashboard() {
   return (
     <ManagerPortalPageShell title="Dashboard" hideTitleOnNative>
       <div className={PORTAL_DASHBOARD_STACK}>
-
-        {/* ── KPI tiles ── */}
-        <div className="grid grid-cols-2 gap-3">
-          <PortalDashboardTile
-            label="Properties"
-            value={totalProperties}
-            sub={pendingProperties > 0 ? `${pendingProperties} pending approval` : undefined}
-            href={`${BASE}/properties`}
-            urgent={pendingProperties > 0}
-          />
-          <PortalDashboardTile
-            label="Active residents"
-            value={activeResidents.length}
-            sub={pendingApps.length > 0 ? `${pendingApps.length} pending review` : undefined}
-            href={`${BASE}/residents`}
-            urgent={pendingApps.length > 0}
-          />
-        </div>
 
         {/* ── Calendar & applications ── */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
@@ -397,10 +360,10 @@ export function ManagerDashboard() {
               href={`${BASE}/services/requests`}
               linkLabel="Services →"
               badge={
-                openServiceCount > 0 ? (
+                pendingServiceCount > 0 ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
                     <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {openServiceCount} open
+                    {pendingServiceCount} pending
                   </span>
                 ) : null
               }
@@ -408,19 +371,15 @@ export function ManagerDashboard() {
             <PortalDashboardPreviewList
               items={serviceItems}
               href={`${BASE}/services/requests`}
-              emptyMessage="No open service requests or work orders."
+              emptyMessage="No pending service requests or work orders."
               keyForItem={(item) => item.id}
               renderRow={(item) => (
                 <PortalDashboardCompactRow
                   title={item.title}
                   subtitle={item.subtitle}
                   badge={
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        item.status === "pending" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
-                      }`}
-                    >
-                      {item.status === "pending" ? "Pending" : item.status === "open" ? "Open" : "Scheduled"}
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                      Pending
                     </span>
                   }
                 />

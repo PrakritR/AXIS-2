@@ -201,7 +201,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null);
   const [addPropertySelect, setAddPropertySelect] = useState<Record<string, string>>({});
-  const [coManagerBucket, setCoManagerBucket] = useState<"all" | "active" | "pending">("all");
+  const [coManagerBucket, setCoManagerBucket] = useState<"active" | "pending">("active");
   const [linkedPropertiesPopup, setLinkedPropertiesPopup] = useState<{
     label: string;
     propertyIds: string[];
@@ -321,13 +321,12 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const coManagerBucketCounts = useMemo(() => {
     const active = useRemote ? activeRemote.length : localRows.length;
     const pending = useRemote ? incomingPending.length + outgoingPending.length : 0;
-    return { all: active + pending, active, pending };
+    return { active, pending };
   }, [useRemote, activeRemote, localRows, incomingPending, outgoingPending]);
 
   const coManagerBucketTabs = useMemo(
     () =>
       [
-        { id: "all" as const, label: "All", count: coManagerBucketCounts.all, dataAttr: "co-manager-filter-all" },
         { id: "active" as const, label: "Active", count: coManagerBucketCounts.active, dataAttr: "co-manager-filter-active" },
         { id: "pending" as const, label: "Pending", count: coManagerBucketCounts.pending, dataAttr: "co-manager-filter-pending" },
       ] as const,
@@ -1320,7 +1319,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             </div>
             <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
-                <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <table className="w-full table-fixed border-collapse text-left text-sm">
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Manager</th>

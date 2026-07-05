@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import {
   updateExtraListingFromSubmission,
@@ -61,9 +62,23 @@ function typeLabel(type: ManagerCustomApplicationFieldType): string {
   return CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.find((o) => o.id === type)?.label ?? type;
 }
 
+function persistSubmission(
+  saveTarget: NonNullable<QuestionsSaveTarget>,
+  managerUserId: string,
+  next: ManagerListingSubmissionV1,
+): boolean {
+  if (saveTarget.mode === "pending") {
+    return updatePendingManagerProperty(saveTarget.saveId, next, managerUserId);
+  }
+  if (saveTarget.mode === "listing") {
+    return updateExtraListingFromSubmission(saveTarget.saveId, managerUserId, next);
+  }
+  return updateRequestChangeProperty(saveTarget.saveId, managerUserId, next);
+}
+
 /**
- * Per-property "Application questions" editor — the questions applicants answer in
- * the rental application (Additional details step). Stored on the listing submission
+ * Per-property application editor — custom questions applicants answer in the
+ * rental application (Additional details step). Stored on the listing submission
  * (`customApplicationFields`) so they persist with the property record.
  */
 export function ManagerPropertyApplicationQuestionsPanel({
@@ -79,17 +94,24 @@ export function ManagerPropertyApplicationQuestionsPanel({
   onUpdated: () => void;
   showToast: (m: string) => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [rows, setRows] = useState<DraftQuestionRow[]>([]);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
 
   const fields = normalizeCustomApplicationFields(sub.customApplicationFields);
   if (!saveTarget || !managerUserId) return null;
 
-  const startEdit = () => {
+  const hasCustomConfig = fields.length > 0 || sub.applicationConfigMode === "custom";
+
+  const openModal = () => {
     setRows(draftRowsFromFields(fields));
     setRowErrors({});
-    setEditing(true);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setRowErrors({});
   };
 
   const patchRow = (id: string, patch: Partial<DraftQuestionRow>) => {
@@ -155,67 +177,101 @@ export function ManagerPropertyApplicationQuestionsPanel({
     const next: ManagerListingSubmissionV1 = {
       ...sub,
       customApplicationFields: nextFields,
-      // Saving questions here means the manager wants them asked — leave "standard" only when clearing all questions.
-      applicationConfigMode: nextFields.length > 0 ? "custom" : sub.applicationConfigMode,
+      applicationConfigMode: nextFields.length > 0 ? "custom" : "standard",
     };
-    let ok = false;
-    if (saveTarget.mode === "pending") {
-      ok = updatePendingManagerProperty(saveTarget.saveId, next, managerUserId);
-    } else if (saveTarget.mode === "listing") {
-      ok = updateExtraListingFromSubmission(saveTarget.saveId, managerUserId, next);
-    } else {
-      ok = updateRequestChangeProperty(saveTarget.saveId, managerUserId, next);
-    }
-    if (!ok) {
+    if (!persistSubmission(saveTarget, managerUserId, next)) {
       showToast("Could not save application questions.");
       return;
     }
-    showToast("Application questions saved.");
-    setEditing(false);
+    showToast("Application saved.");
+    closeModal();
+    onUpdated();
+  };
+
+  const removeCustomConfig = () => {
+    if (
+      !window.confirm("Remove custom application questions and reset to the default application?")
+    ) {
+      return;
+    }
+    const next: ManagerListingSubmissionV1 = {
+      ...sub,
+      customApplicationFields: [],
+      applicationConfigMode: "standard",
+    };
+    if (!persistSubmission(saveTarget, managerUserId, next)) {
+      showToast("Could not reset application.");
+      return;
+    }
+    showToast("Application reset to default.");
     onUpdated();
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-foreground">Application questions</p>
-          <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Applicants</span>
+    <>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">Application</p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {hasCustomConfig ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 rounded-full px-3 text-xs border-rose-200 text-rose-800 portal-danger-outline"
+                data-attr="application-questions-remove"
+                onClick={removeCustomConfig}
+              >
+                Remove
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              data-attr="application-questions-add"
+              onClick={openModal}
+            >
+              Add
+            </Button>
+          </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 rounded-full px-3 text-xs"
-          data-attr="application-questions-edit"
-          onClick={() => (editing ? setEditing(false) : startEdit())}
-        >
-          {editing ? "Cancel" : "Edit"}
-        </Button>
+
+        {fields.length > 0 ? (
+          <div>
+            {fields.map((field, idx) => (
+              <div key={field.id} className="flex gap-4 border-t border-border px-4 py-3 first:border-t-0">
+                <p className="w-6 shrink-0 pt-0.5 text-xs font-semibold text-muted">{idx + 1}.</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">{field.label}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {typeLabel(field.type)}
+                    {field.required ? " · Required" : " · Optional"}
+                    {field.type === "select" && field.options.length > 0 ? ` · ${field.options.join(" / ")}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      {editing ? (
-        <div className="space-y-4 px-4 py-4">
-          <p className="text-xs leading-relaxed text-muted">
-            Applicants answer these on the “Additional details” step of the rental application. Answers appear in the
-            application review and PDF.
-          </p>
-          {rows.length === 0 ? (
-            <p className="text-sm text-muted">No questions yet — add your first one below.</p>
-          ) : null}
+      <Modal open={modalOpen} title="Application" onClose={closeModal} panelClassName="max-w-2xl">
+        <div className="space-y-4">
           {rows.map((row, idx) => (
             <div
               key={row.id}
               className={`space-y-3 rounded-xl border p-3 ${rowErrors[row.id] ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
             >
-              <div className="flex items-center justify-start gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Question {idx + 1}</p>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-7 rounded-full px-2 text-xs"
+                    className="h-7 rounded-full px-2.5 text-xs"
                     disabled={idx === 0}
                     title="Move up"
+                    aria-label="Move question up"
                     onClick={() => moveRow(row.id, -1)}
                   >
                     ↑
@@ -223,9 +279,10 @@ export function ManagerPropertyApplicationQuestionsPanel({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-7 rounded-full px-2 text-xs"
+                    className="h-7 rounded-full px-2.5 text-xs"
                     disabled={idx === rows.length - 1}
                     title="Move down"
+                    aria-label="Move question down"
                     onClick={() => moveRow(row.id, 1)}
                   >
                     ↓
@@ -233,7 +290,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-7 rounded-full px-2 text-xs border-rose-200 text-rose-800 portal-danger-outline"
+                    className="h-7 shrink-0 rounded-full px-2.5 text-xs border-rose-200 text-rose-800 portal-danger-outline"
                     title="Remove question"
                     onClick={() => removeRow(row.id)}
                   >
@@ -293,40 +350,23 @@ export function ManagerPropertyApplicationQuestionsPanel({
             <Button type="button" variant="outline" className="rounded-full" onClick={addRow}>
               + Add question
             </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              data-attr="application-questions-save"
-              onClick={save}
-            >
-              Save questions
-            </Button>
           </div>
         </div>
-      ) : (
-        <div>
-          {fields.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-muted">
-              No custom questions yet — click Edit to ask applicants your own questions during the rental application.
-            </p>
-          ) : (
-            fields.map((field, idx) => (
-              <div key={field.id} className="flex gap-4 border-t border-border px-4 py-3 first:border-t-0">
-                <p className="w-6 shrink-0 pt-0.5 text-xs font-semibold text-muted">{idx + 1}.</p>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">{field.label}</p>
-                  <p className="mt-0.5 text-xs text-muted">
-                    {typeLabel(field.type)}
-                    {field.required ? " · Required" : " · Optional"}
-                    {field.type === "select" && field.options.length > 0 ? ` · ${field.options.join(" / ")}` : ""}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            className="rounded-full"
+            data-attr="application-questions-save"
+            onClick={save}
+          >
+            Save
+          </Button>
+          <Button type="button" variant="outline" className="rounded-full" onClick={closeModal}>
+            Cancel
+          </Button>
         </div>
-      )}
-    </div>
+      </Modal>
+    </>
   );
 }

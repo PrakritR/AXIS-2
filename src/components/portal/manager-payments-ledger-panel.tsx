@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE,
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
@@ -24,7 +26,6 @@ import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markMana
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
-import { ChargeRemindersModal, addChargeSetDateReminder, patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 
@@ -59,7 +60,6 @@ export function ManagerPaymentsLedgerPanel({
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [reminderPreview, setReminderPreview] = useState<{ row: DemoManagerPaymentLedgerRow; subject: string; body: string } | null>(null);
-  const [chargeRemindersRow, setChargeRemindersRow] = useState<DemoManagerPaymentLedgerRow | null>(null);
 
   const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
     const email = row.residentEmail?.trim();
@@ -196,12 +196,6 @@ export function ManagerPaymentsLedgerPanel({
           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => recordPaid(row, "Marked as paid.")}>
             Mark as paid
           </Button>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Zelle.")}>
-            Paid with Zelle
-          </Button>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Venmo.")}>
-            Paid with Venmo
-          </Button>
         </>
       ) : null}
       <Button
@@ -214,7 +208,7 @@ export function ManagerPaymentsLedgerPanel({
         {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
       </Button>
       {row.householdChargeId ? (
-        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
+        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onOpenReminderSettings?.()}>
           Auto reminders
         </Button>
       ) : null}
@@ -347,8 +341,8 @@ export function ManagerPaymentsLedgerPanel({
       })}
     </div>
     <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-      <div className="relative z-0 max-w-full overflow-x-auto">
-        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+      <div className={PORTAL_DATA_TABLE_SCROLL}>
+        <table className={PORTAL_DATA_TABLE}>
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
@@ -411,43 +405,6 @@ export function ManagerPaymentsLedgerPanel({
         </table>
       </div>
     </div>
-    {chargeRemindersRow?.householdChargeId ? (
-      <ChargeRemindersModal
-        open
-        onClose={() => setChargeRemindersRow(null)}
-        residentName={chargeRemindersRow.residentName}
-        chargeTitle={chargeRemindersRow.chargeTitle}
-        dueDate={chargeRemindersRow.dueDate}
-        messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersRow.householdChargeId)}
-        onMessageSaved={() => onScheduleChanged?.()}
-        onToggleCancel={async (msg, cancelled) => {
-          try {
-            await patchScheduledMessage(msg.id, { cancelled });
-            showToast(cancelled ? "Reminder skipped." : "Reminder restored.");
-            onScheduleChanged?.();
-          } catch (e) {
-            showToast(e instanceof Error ? e.message : "Could not update reminder.");
-          }
-        }}
-        onAddSetDate={async (iso) => {
-          try {
-            await addChargeSetDateReminder(chargeRemindersRow.householdChargeId!, iso);
-            showToast("Reminder scheduled.");
-            onScheduleChanged?.();
-          } catch (e) {
-            showToast(e instanceof Error ? e.message : "Could not add reminder.");
-          }
-        }}
-        onOpenSettings={
-          onOpenReminderSettings
-            ? () => {
-                setChargeRemindersRow(null);
-                onOpenReminderSettings();
-              }
-            : undefined
-        }
-      />
-    ) : null}
     </>
   );
 }

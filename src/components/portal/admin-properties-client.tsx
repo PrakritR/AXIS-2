@@ -10,6 +10,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_ROW,
@@ -465,8 +466,8 @@ export function AdminPropertiesClient() {
             })}
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-            <div className="overflow-x-auto">
-              <table className="min-w-[800px] w-full border-collapse text-left text-sm">
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>

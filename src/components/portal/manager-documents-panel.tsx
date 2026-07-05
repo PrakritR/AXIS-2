@@ -415,7 +415,7 @@ export function ManagerDocumentsPanel({
                     </div>
                     <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
                       <div className={PORTAL_DATA_TABLE_SCROLL}>
-                        <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+                        <table className="w-full table-fixed border-collapse text-left text-sm">
                           <thead>
                             <tr className={PORTAL_TABLE_HEAD_ROW}>
                               <th className={`${MANAGER_TABLE_TH} text-left`}>Vendor</th>

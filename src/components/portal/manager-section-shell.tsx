@@ -5,7 +5,7 @@ import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PORTAL_TOOLBAR_GROUP, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
+import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
 
 export type ShellAction = {
   label: string;
@@ -15,7 +15,7 @@ export type ShellAction = {
 };
 
 const selectClass =
-  "h-10 max-w-full min-w-0 truncate rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
+  "h-10 w-full min-w-0 truncate rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring sm:w-auto sm:max-w-full";
 
 /** Property dropdown wrapped like admin filter chips (rounded shell). */
 export function PortalPropertyFilterPill({
@@ -53,7 +53,7 @@ export function PortalPropertyFilterPill({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!mounted || (!hasPropertyPick && !hasResidentPick && !hasApplicationPick)) return null;
   return (
-    <div className={`${PORTAL_TOOLBAR_GROUP} min-w-0 max-w-full flex-wrap`}>
+    <div className="w-full min-w-0 max-w-full rounded-2xl border border-border bg-accent/30 p-1.5 sm:w-auto sm:rounded-full sm:p-1">
       <PortalPropertyFilter
         applications={applications}
         residents={residents}
@@ -102,7 +102,7 @@ export function PortalPropertyFilter({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       {hasPropertyPick ? (
         <select
           className={selectClass}

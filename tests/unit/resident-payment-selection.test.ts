@@ -7,6 +7,8 @@ import {
   pendingChargesTotalCents,
   residentPaymentsHrefWithSelection,
   selectAllUnpaidAchChargeIds,
+  unpaidPayableChargesForResident,
+  selectAllUnpaidPayableChargeIds,
   toggleChargeSelection,
   unpaidAchChargesForResident,
 } from "@/lib/resident-payment-selection";
@@ -38,6 +40,15 @@ describe("resident payment selection", () => {
     expect(unpaidAchChargesForResident(charges).map((c) => c.id)).toEqual(["a"]);
   });
 
+  it("includes zelle/venmo charges in payable selection", () => {
+    const charges = [
+      mkCharge("a"),
+      { ...mkCharge("b"), axisPaymentsEnabledSnapshot: false, zelleContactSnapshot: "z@x.com" },
+    ];
+    expect(unpaidPayableChargesForResident(charges).map((c) => c.id)).toEqual(["a", "b"]);
+    expect(selectAllUnpaidPayableChargeIds(charges)).toEqual(new Set(["a", "b"]));
+  });
+
   it("toggles and selects all unpaid ACH charges", () => {
     const charges = [mkCharge("a"), mkCharge("b")];
     expect(toggleChargeSelection(new Set(), "a")).toEqual(new Set(["a"]));
@@ -45,9 +56,14 @@ describe("resident payment selection", () => {
     expect(selectAllUnpaidAchChargeIds(charges)).toEqual(new Set(["a", "b"]));
   });
 
-  it("parses selected ids against allowed unpaid ACH charges", () => {
-    const charges = [mkCharge("a"), mkCharge("b"), mkCharge("c", "paid")];
+  it("parses selected ids against allowed unpaid payable charges", () => {
+    const charges = [
+      mkCharge("a"),
+      { ...mkCharge("b"), axisPaymentsEnabledSnapshot: false, venmoContactSnapshot: "@mgr" },
+      mkCharge("c", "paid"),
+    ];
     expect(parseSelectedChargeIds("a,c,bogus", charges)).toEqual(new Set(["a"]));
+    expect(parseSelectedChargeIds("b,a", charges)).toEqual(new Set(["b", "a"]));
     expect(encodeSelectedChargeIds(["b", "a"])).toBe("b,a");
   });
 

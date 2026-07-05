@@ -2,27 +2,11 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
+import { resolveOwnVendorRecord } from "@/lib/vendor-own-record";
 
 export const runtime = "nodejs";
 
 /** Resolves the signed-in vendor's own directory row — never trusts client input for the id/manager link. */
-async function resolveOwnVendorRecord(
-  db: ReturnType<typeof createSupabaseServiceRoleClient>,
-  userId: string,
-): Promise<{ id: string; managerUserId: string; row: ManagerVendorRow } | null> {
-  const { data } = await db
-    .from("manager_vendor_records")
-    .select("id, manager_user_id, row_data")
-    .eq("vendor_user_id", userId)
-    .maybeSingle();
-  if (!data) return null;
-  return {
-    id: data.id as string,
-    managerUserId: data.manager_user_id as string,
-    row: data.row_data as ManagerVendorRow,
-  };
-}
-
 async function requireVendor(): Promise<
   | { ok: true; userId: string; db: ReturnType<typeof createSupabaseServiceRoleClient> }
   | { ok: false; response: NextResponse }

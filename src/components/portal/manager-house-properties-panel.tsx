@@ -10,8 +10,10 @@ import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-f
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
 import { ManagerPropertyServiceOptionsPanel } from "@/components/portal/manager-property-service-options-panel";
+import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
@@ -436,7 +438,7 @@ function ManagerPropertyInlineDetails({
       {mock && rich ? (
         <div
           data-listing-preview-scroll
-          className="portal-desktop-scroll-panel overscroll-contain rounded-2xl border border-border bg-background"
+          className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-background"
         >
           <ListingDetailSections property={mock} rich={rich} previewModal />
         </div>
@@ -466,6 +468,10 @@ function ManagerPropertyInlineDetails({
         onUpdated={onUpdated}
         showToast={showToast}
       />
+
+      {bucket === 2 && listingId ? (
+        <ManagerPropertyPromotionPanel listingId={listingId} showToast={showToast} onUpdated={onUpdated} />
+      ) : null}
 
       <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">{footer}</div>
 
@@ -611,8 +617,8 @@ export function ManagerHousePropertiesPanel({
             })}
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-            <div className="overflow-x-auto">
-              <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>

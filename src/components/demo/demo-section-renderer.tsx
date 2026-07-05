@@ -55,6 +55,8 @@ const VendorDashboard = dynamic(() => import("@/components/portal/vendor-dashboa
 const VendorWorkOrdersPanel = dynamic(() => import("@/components/portal/vendor-work-orders-panel").then((m) => m.VendorWorkOrdersPanel), { ssr: false, loading });
 const VendorCalendarPanel = dynamic(() => import("@/components/portal/vendor-calendar-panel").then((m) => m.VendorCalendarPanel), { ssr: false, loading });
 const VendorInboxPanel = dynamic(() => import("@/components/portal/vendor-inbox-panel").then((m) => m.VendorInboxPanel), { ssr: false, loading });
+const VendorPaymentsPanel = dynamic(() => import("@/components/portal/vendor-payments-panel").then((m) => m.VendorPaymentsPanel), { ssr: false, loading });
+const VendorDocumentsPanel = dynamic(() => import("@/components/portal/vendor-documents-panel").then((m) => m.VendorDocumentsPanel), { ssr: false, loading });
 const VendorSettingsPanel = dynamic(() => import("@/components/portal/vendor-settings-panel").then((m) => m.VendorSettingsPanel), { ssr: false, loading });
 
 function Placeholder({ title, message }: { title: string; message: string }) {
@@ -90,6 +92,10 @@ export function DemoSectionRenderer({
         return <VendorCalendarPanel />;
       case "inbox":
         return <VendorInboxPanel tabId={tabId} />;
+      case "payments":
+        return <VendorPaymentsPanel />;
+      case "documents":
+        return <VendorDocumentsPanel />;
       case "profile":
         return <VendorSettingsPanel />;
       default:

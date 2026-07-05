@@ -6,6 +6,8 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
+  PORTAL_FILTER_ACTIONS_MOBILE,
+  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
@@ -150,15 +152,29 @@ export function ManagerLeases() {
     <ManagerPortalPageShell
       title="Leases"
       titleAside={
-        <PortalPropertyFilterPill
-          propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={setPropertyFilter}
-        />
+        <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
+        </div>
       }
       filterRow={
         <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills tabs={tabs} activeId={tab} onChange={(id) => setTab(id as ManagerLeaseTab)} />
+          <ManagerPortalStatusPills
+            compact
+            tabs={tabs}
+            activeId={tab}
+            onChange={(id) => setTab(id as ManagerLeaseTab)}
+          />
+          <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} min-w-0`}>
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
+          </div>
         </ManagerPortalFilterRow>
       }
     >
