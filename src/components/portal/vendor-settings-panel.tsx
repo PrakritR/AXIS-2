@@ -18,6 +18,7 @@ import {
   fetchVendorAvailability,
   formatMinuteOfDayLabel,
   saveVendorBlockRule,
+  saveVendorDateRule,
   saveVendorWeeklyRule,
   timeInputValueToMinuteOfDay,
   type VendorAvailabilityRule,
@@ -101,6 +102,7 @@ const DEMO_VENDOR_AVAILABILITY_RULES: VendorAvailabilityRule[] = [
   { id: "demo-avail-thu", kind: "weekly", weekday: 4, startMinute: 8 * 60, endMinute: 17 * 60 },
   { id: "demo-avail-fri", kind: "weekly", weekday: 5, startMinute: 8 * 60, endMinute: 15 * 60 },
   { id: "demo-avail-block-1", kind: "block", specificDate: isoDateOnly(9), startMinute: 0, endMinute: 1440, note: "Company holiday" },
+  { id: "demo-avail-open-1", kind: "open", specificDate: isoDateOnly(6), startMinute: 10 * 60, endMinute: 14 * 60, note: "Saturday availability" },
 ];
 
 let demoAvailabilityRuleCounter = 0;
@@ -113,6 +115,8 @@ function VendorAvailabilityEditor() {
   const [loaded, setLoaded] = useState(demo);
   const [weeklyFormOpen, setWeeklyFormOpen] = useState(false);
   const [weeklyDraft, setWeeklyDraft] = useState({ weekday: 1, start: "09:00", end: "17:00" });
+  const [openFormOpen, setOpenFormOpen] = useState(false);
+  const [openDraft, setOpenDraft] = useState({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
   const [blockFormOpen, setBlockFormOpen] = useState(false);
   const [blockDraft, setBlockDraft] = useState({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -145,6 +149,14 @@ function VendorAvailabilityEditor() {
     () =>
       rules
         .filter((r): r is Extract<VendorAvailabilityRule, { kind: "block" }> => r.kind === "block")
+        .sort((a, b) => a.specificDate.localeCompare(b.specificDate)),
+    [rules],
+  );
+
+  const opens = useMemo(
+    () =>
+      rules
+        .filter((r): r is Extract<VendorAvailabilityRule, { kind: "open" }> => r.kind === "open")
         .sort((a, b) => a.specificDate.localeCompare(b.specificDate)),
     [rules],
   );
@@ -228,6 +240,59 @@ function VendorAvailabilityEditor() {
     setBlockFormOpen(false);
     setBlockDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
     showToast("Date blocked.");
+    await reload();
+  };
+
+  const addOpenDate = async () => {
+    if (!openDraft.date) {
+      showToast("Choose a date to open.");
+      return;
+    }
+    let startMinute: number | undefined;
+    let endMinute: number | undefined;
+    if (!openDraft.allDay) {
+      const start = timeInputValueToMinuteOfDay(openDraft.start);
+      const end = timeInputValueToMinuteOfDay(openDraft.end);
+      if (start === null || end === null || start >= end) {
+        showToast("Choose a valid start and end time, or mark it all day.");
+        return;
+      }
+      startMinute = start;
+      endMinute = end;
+    }
+    if (demo) {
+      demoAvailabilityRuleCounter += 1;
+      setRules((cur) => [
+        ...cur,
+        {
+          id: `demo-avail-new-${demoAvailabilityRuleCounter}`,
+          kind: "open",
+          specificDate: openDraft.date,
+          startMinute: startMinute ?? 0,
+          endMinute: endMinute ?? 1440,
+          note: openDraft.note || null,
+        },
+      ]);
+      setOpenFormOpen(false);
+      setOpenDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
+      showToast("Date opened.");
+      return;
+    }
+    setSaving(true);
+    const result = await saveVendorDateRule({
+      specificDate: openDraft.date,
+      startMinute,
+      endMinute,
+      note: openDraft.note,
+    });
+    setSaving(false);
+    if (!result.ok) {
+      showToast(result.error ?? "Could not open that date.");
+      return;
+    }
+    setOpenFormOpen(false);
+    setOpenDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
+    showToast("Date opened.");
     await reload();
   };
 
@@ -342,6 +407,123 @@ function VendorAvailabilityEditor() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-sm)]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Open specific dates</p>
+            <p className="text-xs text-muted">Open a one-off date for visits, even outside your weekly hours.</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            data-attr="vendor-availability-add-open-date"
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={() => setOpenFormOpen((v) => !v)}
+          >
+            {openFormOpen ? "Cancel" : "+ Open a date"}
+          </Button>
+        </div>
+
+        {openFormOpen ? (
+          <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2 rounded-xl border border-border bg-accent/20 p-3">
+            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+              Date
+              <Input
+                type="date"
+                value={openDraft.date}
+                onChange={(e) => setOpenDraft((d) => ({ ...d, date: e.target.value }))}
+                className="h-9 w-[160px] rounded-md text-sm"
+              />
+            </label>
+            <label className="flex items-center gap-2 pb-1.5 text-xs font-medium text-muted">
+              <input
+                type="checkbox"
+                checked={openDraft.allDay}
+                onChange={(e) => setOpenDraft((d) => ({ ...d, allDay: e.target.checked }))}
+                className="h-4 w-4 rounded border-border"
+              />
+              All day
+            </label>
+            {!openDraft.allDay ? (
+              <>
+                <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                  Start
+                  <Input
+                    type="time"
+                    value={openDraft.start}
+                    onChange={(e) => setOpenDraft((d) => ({ ...d, start: e.target.value }))}
+                    className="h-9 w-[120px] rounded-md text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                  End
+                  <Input
+                    type="time"
+                    value={openDraft.end}
+                    onChange={(e) => setOpenDraft((d) => ({ ...d, end: e.target.value }))}
+                    className="h-9 w-[120px] rounded-md text-sm"
+                  />
+                </label>
+              </>
+            ) : null}
+            <label className="flex flex-1 min-w-[140px] flex-col gap-1 text-[11px] font-medium text-muted">
+              Note (optional)
+              <Input
+                type="text"
+                placeholder="e.g. Saturday availability"
+                value={openDraft.note}
+                onChange={(e) => setOpenDraft((d) => ({ ...d, note: e.target.value }))}
+                className="h-9 rounded-md text-sm"
+              />
+            </label>
+            <Button
+              type="button"
+              variant="primary"
+              data-attr="vendor-availability-save-open-date"
+              className="h-9 rounded-full px-4 text-sm"
+              disabled={saving}
+              onClick={() => void addOpenDate()}
+            >
+              Save
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="mt-3 space-y-1.5">
+          {opens.length === 0 ? (
+            <p className="text-xs text-muted">No specific dates opened.</p>
+          ) : (
+            opens.map((o) => (
+              <div
+                key={o.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs"
+              >
+                <span>
+                  <span className="font-medium text-foreground">
+                    {new Date(`${o.specificDate}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>{" "}
+                  ·{" "}
+                  {o.startMinute === 0 && o.endMinute === 1440
+                    ? "All day"
+                    : `${formatMinuteOfDayLabel(o.startMinute)}–${formatMinuteOfDayLabel(o.endMinute)}`}
+                  {o.note ? <span className="text-muted"> · {o.note}</span> : null}
+                </span>
+                <button
+                  type="button"
+                  data-attr="vendor-availability-remove-open-date"
+                  aria-label={`Remove open date ${o.specificDate}`}
+                  className="text-muted hover:text-danger"
+                  disabled={busyId === o.id}
+                  onClick={() => void removeRule(o.id)}
+                >
+                  ✕
+                </button>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

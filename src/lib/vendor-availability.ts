@@ -9,7 +9,8 @@
 
 export type VendorAvailabilityRule =
   | { id: string; kind: "weekly"; weekday: number; startMinute: number; endMinute: number; note?: string | null }
-  | { id: string; kind: "block"; specificDate: string; startMinute: number; endMinute: number; note?: string | null };
+  | { id: string; kind: "block"; specificDate: string; startMinute: number; endMinute: number; note?: string | null }
+  | { id: string; kind: "open"; specificDate: string; startMinute: number; endMinute: number; note?: string | null };
 
 export const DEFAULT_VISIT_DURATION_MINUTES = 60;
 export const SLOT_STEP_MINUTES = 30;
@@ -117,15 +118,20 @@ export function resolveNextAvailableSlot(options: {
 
   const weeklyByWeekday = new Map<number, Array<{ start: number; end: number }>>();
   const blocksByDate = new Map<string, Array<{ start: number; end: number }>>();
+  const opensByDate = new Map<string, Array<{ start: number; end: number }>>();
   for (const rule of rules) {
     if (rule.kind === "weekly") {
       const list = weeklyByWeekday.get(rule.weekday) ?? [];
       list.push({ start: rule.startMinute, end: rule.endMinute });
       weeklyByWeekday.set(rule.weekday, list);
-    } else {
+    } else if (rule.kind === "block") {
       const list = blocksByDate.get(rule.specificDate) ?? [];
       list.push({ start: rule.startMinute, end: rule.endMinute });
       blocksByDate.set(rule.specificDate, list);
+    } else {
+      const list = opensByDate.get(rule.specificDate) ?? [];
+      list.push({ start: rule.startMinute, end: rule.endMinute });
+      opensByDate.set(rule.specificDate, list);
     }
   }
 
@@ -154,8 +160,8 @@ export function resolveNextAvailableSlot(options: {
     const weekday = candidate.getUTCDay();
     const key = dateKey(y, m, d);
 
-    const windows = weeklyByWeekday.get(weekday);
-    if (!windows || windows.length === 0) continue;
+    const windows = [...(weeklyByWeekday.get(weekday) ?? []), ...(opensByDate.get(key) ?? [])];
+    if (windows.length === 0) continue;
 
     const exclusions = [...(blocksByDate.get(key) ?? []), ...(busyByDate.get(key) ?? [])].sort((a, b) => a.start - b.start);
     const dayFloor = dayOffset === 0 ? fromMinuteFloor : 0;
@@ -206,6 +212,10 @@ export function saveVendorWeeklyRule(input: { id?: string; weekday: number; star
 
 export function saveVendorBlockRule(input: { id?: string; specificDate: string; startMinute?: number; endMinute?: number; note?: string }) {
   return postAvailability({ action: "upsert-block", ...input });
+}
+
+export function saveVendorDateRule(input: { id?: string; specificDate: string; startMinute?: number; endMinute?: number; note?: string }) {
+  return postAvailability({ action: "upsert-open", ...input });
 }
 
 export function deleteVendorAvailabilityRule(id: string) {

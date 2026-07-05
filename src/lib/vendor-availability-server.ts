@@ -3,7 +3,7 @@ import { DEFAULT_VISIT_DURATION_MINUTES, resolveNextAvailableSlot, type VendorAv
 
 type RuleRecord = {
   id: string;
-  kind: "weekly" | "block";
+  kind: "weekly" | "block" | "open";
   weekday: number | null;
   specific_date: string | null;
   start_minute: number;
@@ -14,7 +14,7 @@ function toRule(rule: RuleRecord): VendorAvailabilityRule {
   if (rule.kind === "weekly") {
     return { id: rule.id, kind: "weekly", weekday: rule.weekday as number, startMinute: rule.start_minute, endMinute: rule.end_minute };
   }
-  return { id: rule.id, kind: "block", specificDate: rule.specific_date as string, startMinute: rule.start_minute, endMinute: rule.end_minute };
+  return { id: rule.id, kind: rule.kind, specificDate: rule.specific_date as string, startMinute: rule.start_minute, endMinute: rule.end_minute };
 }
 
 export type VendorBusyWindow = { startIso: string; endIso: string };
@@ -35,7 +35,7 @@ export async function resolveVendorNextAvailableSlot(
     .select("id, kind, weekday, specific_date, start_minute, end_minute")
     .eq("vendor_user_id", vendorUserId);
   const rules = (ruleRows ?? []).map((r) => toRule(r as RuleRecord));
-  if (rules.filter((r) => r.kind === "weekly").length === 0) {
+  if (rules.filter((r) => r.kind === "weekly" || r.kind === "open").length === 0) {
     return { iso: null, reason: "no_availability" };
   }
 

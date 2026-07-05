@@ -10,7 +10,7 @@ type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
 type RuleRecord = {
   id: string;
   vendor_user_id: string;
-  kind: "weekly" | "block";
+  kind: "weekly" | "block" | "open";
   weekday: number | null;
   specific_date: string | null;
   start_minute: number;
@@ -22,7 +22,7 @@ function toJson(rule: RuleRecord): VendorAvailabilityRule {
   if (rule.kind === "weekly") {
     return { id: rule.id, kind: "weekly", weekday: rule.weekday as number, startMinute: rule.start_minute, endMinute: rule.end_minute, note: rule.note };
   }
-  return { id: rule.id, kind: "block", specificDate: rule.specific_date as string, startMinute: rule.start_minute, endMinute: rule.end_minute, note: rule.note };
+  return { id: rule.id, kind: rule.kind, specificDate: rule.specific_date as string, startMinute: rule.start_minute, endMinute: rule.end_minute, note: rule.note };
 }
 
 async function sessionActor(db: Db) {
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
     if (actor.role !== "vendor") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as {
-      action?: "upsert-weekly" | "upsert-block" | "delete";
+      action?: "upsert-weekly" | "upsert-block" | "upsert-open" | "delete";
       id?: string;
       weekday?: number;
       specificDate?: string;
@@ -159,6 +159,35 @@ export async function POST(req: Request) {
       const row = {
         vendor_user_id: actor.userId,
         kind: "block" as const,
+        weekday: null,
+        specific_date: specificDate,
+        start_minute: range.start,
+        end_minute: range.end,
+        note: body.note?.trim().slice(0, 500) || null,
+        updated_at: now,
+      };
+      const query = body.id
+        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", actor.userId)
+        : db.from("vendor_availability_rules").insert(row);
+      const { data, error } = await query
+        .select("id, vendor_user_id, kind, weekday, specific_date, start_minute, end_minute, note")
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ ok: true, rule: toJson(data as RuleRecord) });
+    }
+
+    if (body.action === "upsert-open") {
+      const specificDate = String(body.specificDate ?? "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(specificDate)) {
+        return NextResponse.json({ error: "Choose a valid date to open." }, { status: 400 });
+      }
+      const range = validMinuteRange(body.startMinute ?? 0, body.endMinute ?? 1440);
+      if (!range) return NextResponse.json({ error: "Choose a valid time window." }, { status: 400 });
+
+      const now = new Date().toISOString();
+      const row = {
+        vendor_user_id: actor.userId,
+        kind: "open" as const,
         weekday: null,
         specific_date: specificDate,
         start_minute: range.start,
