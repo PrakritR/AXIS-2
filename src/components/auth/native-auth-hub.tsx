@@ -18,9 +18,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
-import { ResidentApplyPropertyPicker } from "@/components/auth/resident-apply-property-picker";
 import { parseManagerApplicationLink } from "@/lib/auth/parse-resident-link";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { isNativeOAuthInProgress } from "@/lib/native/open-url";
@@ -145,7 +143,6 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [applicationLink, setApplicationLink] = useState("");
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
@@ -269,10 +266,6 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
   };
 
   const startResidentApplication = () => {
-    if (selectedPropertyId) {
-      router.push(buildRentalApplyHref({ propertyId: selectedPropertyId }));
-      return;
-    }
     const parsed = parseManagerApplicationLink(applicationLink);
     if (parsed.kind === "invalid") {
       showToast(parsed.reason);
@@ -281,7 +274,7 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
     router.push(parsed.href);
   };
 
-  const canStartResidentApplication = Boolean(selectedPropertyId || applicationLink.trim());
+  const canStartResidentApplication = Boolean(applicationLink.trim());
 
   if (checkingSession) {
     return (
@@ -357,24 +350,12 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
                     className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                     placeholder="https://…/rent/apply?…"
                     value={applicationLink}
-                    onChange={(e) => {
-                      setApplicationLink(e.target.value);
-                      if (e.target.value.trim()) setSelectedPropertyId(null);
-                    }}
+                    onChange={(e) => setApplicationLink(e.target.value)}
                     autoComplete="off"
                     inputMode="url"
-                    disabled={locked || Boolean(selectedPropertyId)}
+                    disabled={locked}
                   />
                 </AuthFieldBlock>
-                <AuthDivider label="or select a house" />
-                <ResidentApplyPropertyPicker
-                  value={selectedPropertyId}
-                  onChange={(id) => {
-                    setSelectedPropertyId(id);
-                    if (id) setApplicationLink("");
-                  }}
-                  disabled={locked}
-                />
                 <Button
                   type="button"
                   className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
@@ -383,14 +364,17 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
                 >
                   Start an application
                 </Button>
-                <p className="text-center text-[12px] text-muted">
-                  <Link
-                    className="font-semibold text-primary hover:opacity-90"
-                    href="/rent/browse?from=auth"
-                  >
-                    Browse all properties
-                  </Link>
-                </p>
+                <AuthDivider label="or" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  data-attr="auth-hub-resident-browse"
+                  className="w-full rounded-full py-2.5 text-[15px] font-semibold"
+                  disabled={locked}
+                  onClick={() => router.push("/rent/browse?from=auth")}
+                >
+                  Browse properties
+                </Button>
               </>
             ) : role === "vendor" ? (
               <>

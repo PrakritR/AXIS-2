@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
+import { ManagerPricingPreview } from "@/components/marketing/manager-pricing-preview";
 import { RevealOnView } from "@/components/motion/reveal-on-view";
 
 const STATS = [
@@ -32,6 +33,8 @@ export default function PartnerLandingPage() {
           </div>
         </div>
       </section>
+
+      <ManagerPricingPreview />
 
       {/* ── What we handle ── */}
       <section className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pb-20 sm:pt-10">
