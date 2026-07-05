@@ -94,7 +94,7 @@ const CALENDAR_INACTIVE_SLOT =
   "border-border bg-accent/30 text-muted hover:border-primary/20 hover:bg-primary/[0.06] [html[data-theme=dark]_&]:portal-calendar-inactive-slot";
 const CALENDAR_CO_MANAGER_SLOT =
   "border-violet-300 bg-violet-100 text-violet-950 ring-1 ring-inset ring-violet-300/80 [html[data-theme=dark]_&]:border-violet-400/40 [html[data-theme=dark]_&]:bg-violet-500/15 [html[data-theme=dark]_&]:text-violet-100";
-const MEETING_CONFIRMED_COLOR =
+export const MEETING_CONFIRMED_COLOR =
   "border-sky-300 bg-sky-100 text-sky-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
 const MEETING_PEER_COLOR =
   "border-indigo-300 bg-indigo-100 text-indigo-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
@@ -151,9 +151,9 @@ function formatNavTitle(anchor: Date, mode: CalendarMode): string {
   return formatPacificDate(anchor, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
 }
 
-type DemoMeeting = {
+export type DemoMeeting = {
   id: string;
-  source: "planned" | "inquiry";
+  source: "planned" | "inquiry" | "external";
   sourceId: string;
   startIso: string;
   endIso: string;
@@ -218,6 +218,9 @@ export function PortalCalendarPanels({
   coManagerAvailabilityOverlays,
   scheduleOwnerLabel,
   availabilityHeading = "Availability",
+  externalMeetings,
+  readOnly = false,
+  eventSummaryLabel,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -232,6 +235,13 @@ export function PortalCalendarPanels({
   coManagerAvailabilityOverlays?: CoManagerAvailabilityOverlay[];
   scheduleOwnerLabel?: string | null;
   availabilityHeading?: string;
+  /** Pre-built calendar events from a caller-owned data source (e.g. vendor visits) merged
+   * alongside the planned-events/partner-inquiries meetings this component reads itself. */
+  externalMeetings?: DemoMeeting[];
+  /** Hides availability-editing affordances (create/copy/clear block, slot painting) so this
+   * component can display a schedule for a caller that manages availability elsewhere. */
+  readOnly?: boolean;
+  eventSummaryLabel?: "meeting" | "tour" | "visit";
 }) {
   const { showToast } = useAppUi();
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
@@ -393,8 +403,8 @@ export function PortalCalendarPanels({
       )
       .filter(Boolean) as DemoMeeting[];
 
-    return [...planned, ...pending];
-  }, [storageKey, calendarRefreshSignal, meetingRefresh, scheduledTourFilter]);
+    return [...planned, ...pending, ...(externalMeetings ?? [])];
+  }, [storageKey, calendarRefreshSignal, meetingRefresh, scheduledTourFilter, externalMeetings]);
 
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
@@ -623,7 +633,7 @@ export function PortalCalendarPanels({
       .filter((item) => Number.isFinite(item.startMs) && item.startMs >= now)
       .sort((a, b) => a.startMs - b.startMs);
     const pending = sorted.filter((item) => item.meeting.source === "inquiry").length;
-    const confirmed = sorted.filter((item) => item.meeting.source === "planned").length;
+    const confirmed = sorted.filter((item) => item.meeting.source === "planned" || item.meeting.source === "external").length;
     return {
       total: sorted.length,
       pending,
@@ -634,7 +644,8 @@ export function PortalCalendarPanels({
 
   const isPropertyTourCalendar = Boolean(scheduledTourFilter?.viewerUserId);
   const eventSummaryKind =
-    isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting";
+    eventSummaryLabel ??
+    (isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting");
 
   const timeWindowControl = (
     <div className="flex flex-wrap items-center gap-2">
@@ -995,7 +1006,7 @@ export function PortalCalendarPanels({
             <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
-            {!selectedBlock.meeting.isPeerTour ? (
+            {!selectedBlock.meeting.isPeerTour && selectedBlock.meeting.source !== "external" ? (
               <>
             <Button
               type="button"
@@ -1071,7 +1082,7 @@ export function PortalCalendarPanels({
     />
   );
 
-  if (!storageKey) {
+  if (!storageKey && !readOnly) {
     return (
       <Card className="p-5">
         <p className="text-sm font-medium text-foreground">{unavailableMessage}</p>
@@ -1101,7 +1112,9 @@ export function PortalCalendarPanels({
               {saveStatus === "saving" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
               {saveStatus === "saved" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
               {saveStatus === "error" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
-              <div className={`px-4 py-2 text-sm font-semibold ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open this week</div>
+              {!readOnly ? (
+                <div className={`px-4 py-2 text-sm font-semibold ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open this week</div>
+              ) : null}
             </div>
           </div>
 
@@ -1110,15 +1123,19 @@ export function PortalCalendarPanels({
             <Button type="button" variant="outline" className="rounded-full" onClick={jumpToToday}>
               Today
             </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
-              Copy previous week
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
-              Create block
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
-              Clear week
-            </Button>
+            {!readOnly ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
+                  Copy previous week
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
+                  Create block
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
+                  Clear week
+                </Button>
+              </>
+            ) : null}
             {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
               <Button
                 type="button"
@@ -1177,15 +1194,15 @@ export function PortalCalendarPanels({
                   key={key}
                   type="button"
                   onMouseDown={() => {
-                    if (meeting || active || coManagerOpen) return;
+                    if (readOnly || meeting || active || coManagerOpen) return;
                     startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx);
                   }}
                   onMouseEnter={() => {
-                    if (meeting || active || coManagerOpen) return;
+                    if (readOnly || meeting || active || coManagerOpen) return;
                     extendDragSelection(ds, slotIdx);
                   }}
                   onMouseUp={() => {
-                    if (meeting || active || coManagerOpen) return;
+                    if (readOnly || meeting || active || coManagerOpen) return;
                     finishDragSelection();
                   }}
                   onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
@@ -1218,7 +1235,7 @@ export function PortalCalendarPanels({
                   ) : coManagerOpen ? (
                     `${coManagerOverlay!.label}`
                   ) : (
-                    "Add"
+                    readOnly ? "" : "Add"
                   )}
                 </button>
               );
@@ -1234,10 +1251,12 @@ export function PortalCalendarPanels({
                   <div className="flex flex-wrap gap-1.5">
                     {fullWeekDates.map((d, idx) => {
                       const ds = toLocalDateStr(d);
-                      const count = visibleSlotIndices.reduce(
-                        (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
-                        0,
-                      );
+                      const count = readOnly
+                        ? meetings.filter((meeting) => meeting.dateStr === ds).length
+                        : visibleSlotIndices.reduce(
+                            (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
+                            0,
+                          );
                       const isActive = idx === mobileDayIndex;
                       return (
                         <button
@@ -1252,7 +1271,7 @@ export function PortalCalendarPanels({
                             {d.toLocaleDateString(undefined, { weekday: "short" })}
                           </span>
                           <span className="text-sm font-semibold">{d.toLocaleDateString(undefined, { day: "numeric" })}</span>
-                          <span className="text-[9px] font-medium opacity-80">{count} open</span>
+                          <span className="text-[9px] font-medium opacity-80">{readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}</span>
                         </button>
                       );
                     })}
@@ -1282,15 +1301,17 @@ export function PortalCalendarPanels({
                       <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
                       {fullWeekDates.map((d) => {
                         const ds = toLocalDateStr(d);
-                        const count = visibleSlotIndices.reduce(
-                          (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
-                          0,
-                        );
+                        const count = readOnly
+                          ? meetings.filter((meeting) => meeting.dateStr === ds).length
+                          : visibleSlotIndices.reduce(
+                              (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
+                              0,
+                            );
                         return (
                           <div key={ds} className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
                             <p className="font-bold uppercase tracking-[0.12em]">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
                             <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-                            <p className={`mt-0.5 text-[11px] font-medium ${CALENDAR_OPEN_COUNT}`}>{count} open</p>
+                            <p className={`mt-0.5 text-[11px] font-medium ${CALENDAR_OPEN_COUNT}`}>{readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}</p>
                           </div>
                         );
                       })}

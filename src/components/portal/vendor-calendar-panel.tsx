@@ -5,9 +5,10 @@ import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
+import { PortalCalendarPanels, MEETING_CONFIRMED_COLOR, type DemoMeeting } from "@/components/portal/portal-calendar-panels";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
+import { SLOT_DURATION_MINUTES, toLocalDateStr } from "@/lib/demo-admin-scheduling";
 import {
   WEEKDAY_DISPLAY_ORDER,
   WEEKDAY_LABELS,
@@ -25,12 +26,31 @@ function propertyLabel(row: DemoManagerWorkOrderRow): string {
   return unit && unit !== "—" ? `${row.propertyName} · ${unit}` : row.propertyName;
 }
 
-function dayKey(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-}
+/** Work orders don't carry an explicit visit duration — assume an hour on-site. */
+const VENDOR_VISIT_DEFAULT_DURATION_MINUTES = 60;
 
-function timeLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+function vendorMeetingFromRow(row: DemoManagerWorkOrderRow): DemoMeeting | null {
+  if (!row.scheduledAtIso) return null;
+  const start = new Date(row.scheduledAtIso);
+  if (Number.isNaN(start.getTime())) return null;
+  const end = new Date(start.getTime() + VENDOR_VISIT_DEFAULT_DURATION_MINUTES * 60_000);
+  return {
+    id: `vendor-visit-${row.id}`,
+    source: "external",
+    sourceId: row.id,
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+    dateStr: toLocalDateStr(start),
+    startSlot: Math.max(0, Math.floor((start.getHours() * 60 + start.getMinutes()) / SLOT_DURATION_MINUTES)),
+    span: Math.max(1, Math.ceil(VENDOR_VISIT_DEFAULT_DURATION_MINUTES / SLOT_DURATION_MINUTES)),
+    durationMinutes: VENDOR_VISIT_DEFAULT_DURATION_MINUTES,
+    title: row.title,
+    color: MEETING_CONFIRMED_COLOR,
+    statusLabel: "Scheduled",
+    propertyTitle: propertyLabel(row),
+    propertyId: row.propertyId,
+    notes: row.description || undefined,
+  };
 }
 
 function todayDateInputValue(): string {
@@ -373,59 +393,28 @@ export function VendorCalendarPanel() {
     return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
   }, []);
 
-  const groups = useMemo(() => {
-    const upcoming = rows
-      .filter((r) => r.scheduledAtIso && r.bucket !== "completed")
-      .sort((a, b) => (a.scheduledAtIso ?? "").localeCompare(b.scheduledAtIso ?? ""));
-    const byDay = new Map<string, DemoManagerWorkOrderRow[]>();
-    for (const row of upcoming) {
-      const key = dayKey(row.scheduledAtIso!);
-      const list = byDay.get(key) ?? [];
-      list.push(row);
-      byDay.set(key, list);
-    }
-    return [...byDay.entries()];
-  }, [rows]);
+  const vendorMeetings = useMemo<DemoMeeting[]>(
+    () =>
+      rows
+        .filter((r) => r.scheduledAtIso && r.bucket !== "completed")
+        .map(vendorMeetingFromRow)
+        .filter((meeting): meeting is DemoMeeting => meeting !== null),
+    [rows],
+  );
 
   return (
     <ManagerPortalPageShell title="Calendar">
       <div className="space-y-6">
         <VendorAvailabilityEditor />
-
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Scheduled visits</p>
-          <div className="mt-2">
-            {groups.length === 0 ? (
-              <PortalDataTableEmpty message="No scheduled visits yet." icon="work-order" />
-            ) : (
-              <div className="space-y-6">
-                {groups.map(([day, items]) => (
-                  <div key={day}>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">{day}</p>
-                    <div className="mt-2 space-y-2">
-                      {items.map((row) => (
-                        <div
-                          key={row.id}
-                          className="rounded-2xl border border-border bg-card px-4 py-3.5 shadow-[var(--shadow-sm)]"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="font-medium text-foreground">{row.title}</p>
-                              <p className="mt-0.5 text-sm text-muted">{propertyLabel(row)}</p>
-                            </div>
-                            <span className="shrink-0 text-sm font-semibold text-foreground">
-                              {timeLabel(row.scheduledAtIso!)}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <PortalCalendarPanels
+          storageKey={null}
+          readOnly
+          compactAvailability
+          defaultViewMode="week"
+          availabilityHeading="Your schedule"
+          eventSummaryLabel="visit"
+          externalMeetings={vendorMeetings}
+        />
       </div>
     </ManagerPortalPageShell>
   );
