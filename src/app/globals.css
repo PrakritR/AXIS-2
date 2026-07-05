@@ -1114,6 +1114,15 @@ html {
   }
 }
 
+/* Mobile-web default for the bottom-nav inset (same var native uses below), so
+   `#portal-main-content` padding / the assistant FAB clear the fixed bottom bar
+   on a phone-width browser too, before JS measures the real bar height via
+   observeNativeBottomNavInset. `html[data-native]`'s own declaration below has
+   higher specificity and wins in the native app, so this only ever governs web. */
+:root {
+  --portal-native-bottom-nav-inset: max(2.75rem, calc(env(safe-area-inset-bottom, 0px) + 2rem));
+}
+
 /* Capacitor native shell — safe areas for notch / home indicator (see NativeBridge data-native). */
 html[data-native] {
   --native-safe-top: env(safe-area-inset-top, 0px);
@@ -1685,6 +1694,66 @@ html[data-native] #portal-main-content {
   -webkit-overflow-scrolling: touch;
   scroll-padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem));
   scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+}
+
+/* Mobile web (<1024px, matches the shared `lg:hidden`/`max-lg:` breakpoint):
+   mirrors the native bottom-nav rules above so a phone-width browser gets the
+   same fixed bar, retired top strip, and content clearance as the native app.
+   Uses `env()` safe-area fallbacks directly instead of the native-only
+   `--native-safe-*` vars (those are undefined outside `html[data-native]`).
+   `html[data-native]` selectors above have higher specificity and still win
+   when both native and small-viewport match, so native behavior is unchanged. */
+@media (max-width: 1023px) {
+  .portal-mobile-chrome {
+    display: none !important;
+  }
+
+  .portal-native-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    border-top: 1px solid var(--border);
+    padding-top: 0;
+    padding-bottom: max(4px, calc(env(safe-area-inset-bottom, 0px) * 0.45));
+    padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+  }
+
+  .portal-native-bottom-nav-pull-handle {
+    display: block;
+    height: 0.1875rem;
+    width: 2rem;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--muted) 45%, transparent);
+  }
+
+  /* Same load-bearing height-distribution rule as the native block above —
+     do not add `width: 0` here (see comment there). */
+  .portal-native-bottom-nav-scroll {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    justify-content: space-evenly;
+  }
+
+  #portal-main-content {
+    padding-bottom: var(--portal-native-bottom-nav-inset);
+    scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+  }
+
+  .axis-assistant-panel {
+    bottom: calc(var(--portal-native-bottom-nav-inset) + 0.75rem);
+  }
 }
 
 /* Nested scroll panels: desktop only — mobile uses #portal-main-content scroll. */

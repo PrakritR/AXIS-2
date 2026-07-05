@@ -60,3 +60,21 @@ export function useNativeChrome(): boolean {
   const { isNative } = useIsNativeApp();
   return isNative === true;
 }
+
+/** Matches the portal shell's `lg:hidden` breakpoint (1024px) so JS gating tracks the same cutoff as the CSS. */
+const SMALL_PORTAL_VIEWPORT_QUERY = "(max-width: 1023px)";
+
+/** True after mount when the viewport is narrower than the portal `lg` breakpoint — false during SSR to avoid hydration mismatches. */
+export function useIsSmallPortalViewport(): boolean {
+  const [isSmall, setIsSmall] = useState(false);
+
+  useEffect(() => {
+    const mql = window.matchMedia(SMALL_PORTAL_VIEWPORT_QUERY);
+    const sync = () => setIsSmall(mql.matches);
+    sync();
+    mql.addEventListener("change", sync);
+    return () => mql.removeEventListener("change", sync);
+  }, []);
+
+  return isSmall;
+}

@@ -9,7 +9,7 @@ import {
   type PortalMoreNavItem,
 } from "@/components/portal/portal-native-more-sheet";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
-import { useNativeChrome } from "@/hooks/use-is-native-app";
+import { useIsSmallPortalViewport, useNativeChrome } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
@@ -112,6 +112,11 @@ export function PortalSidebar({
   const router = useRouter();
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
+  const isSmallViewport = useIsSmallPortalViewport();
+  // Native app OR a phone-width browser — same bottom-nav chrome in both; only
+  // the desktop (`lg:`) sidebar differs. Cross-portal full-navigation stays
+  // native-only below (a WebView-specific routing quirk, not a viewport one).
+  const showMobileNav = showNativeChrome || isSmallViewport;
   const navigate = usePortalNavigate();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
@@ -180,17 +185,17 @@ export function PortalSidebar({
 
   const nativeBottomNavSplit = useMemo(
     () =>
-      showNativeChrome && nativeBottomBarEnabledForKind(definition.kind)
+      showMobileNav && nativeBottomBarEnabledForKind(definition.kind)
         ? splitNativeBottomNavItems(navItems, definition.kind)
         : { primary: [], overflow: [] },
-    [definition.kind, navItems, showNativeChrome],
+    [definition.kind, navItems, showMobileNav],
   );
 
   const nativeBottomNavItems = useMemo(
     () => nativeBottomNavSplit.primary.filter((item) => !isSectionLocked(item.section)),
     [nativeBottomNavSplit, isSectionLocked],
   );
-  const showMoreTab = showNativeChrome && nativeBottomNavShowMoreTab(definition.kind);
+  const showMoreTab = showMobileNav && nativeBottomNavShowMoreTab(definition.kind);
   const moreTabActive = !nativeBottomNavItems.some((item) => item.section === activeSection);
   const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
   const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);
@@ -214,14 +219,14 @@ export function PortalSidebar({
   }, [activeSection]);
 
   useEffect(() => {
-    return observeNativeBottomNavInset(bottomNavEl, showNativeChrome);
-  }, [bottomNavEl, showNativeChrome]);
+    return observeNativeBottomNavInset(bottomNavEl, showMobileNav);
+  }, [bottomNavEl, showMobileNav]);
 
   // Apple-style paged swipe between the fixed bar's main tabs — a horizontal
   // touch gesture on the page content pages to the adjacent primary tab, kept in
   // sync with the bar since navigation drives `activeSection` the same as a tap.
   useEffect(() => {
-    if (!showNativeChrome) return;
+    if (!showMobileNav) return;
     const contentEl = document.getElementById(PORTAL_MAIN_CONTENT_ID);
     if (!contentEl) return;
 
@@ -262,7 +267,7 @@ export function PortalSidebar({
       contentEl.removeEventListener("touchend", onTouchEnd);
       resetSwipeTransform(contentEl);
     };
-  }, [showNativeChrome, navigate]);
+  }, [showMobileNav, navigate]);
 
   // Once the swiped-to tab's content has actually mounted (pathname settled),
   // play the entrance half of the slide from the opposite edge.
@@ -276,12 +281,12 @@ export function PortalSidebar({
   }, [pathname]);
 
   useEffect(() => {
-    if (!showNativeChrome) return;
+    if (!showMobileNav) return;
     const strip = bottomNavScrollRef.current;
     if (!strip) return;
     const activeEl = strip.querySelector<HTMLElement>(`[data-native-nav-section="${activeSection}"]`);
     activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [activeSection, nativeBottomNavItems, showNativeChrome]);
+  }, [activeSection, nativeBottomNavItems, showMobileNav]);
 
   useEffect(() => {
     if (showNativeChrome) return;
@@ -590,7 +595,7 @@ export function PortalSidebar({
         showNavIcons={showNavIcons}
       />
 
-      {showNativeChrome && nativeBottomNavItems.length > 0 && isClient
+      {showMobileNav && nativeBottomNavItems.length > 0 && isClient
         ? createPortal(
             <nav
               ref={setBottomNavEl}
