@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect } from "react";
 import { DemoPortalShell } from "@/components/demo/demo-portal-shell";
 import { seedDemoPortalData } from "@/lib/demo/demo-seed";
 
 export function DemoPortalExperience() {
-  // Seed the demo stores during the first client render, before the portal
-  // panels mount and read them. Idempotent + a no-op on the server / off /demo.
-  useState(() => {
+  // Seed during layout effect so it always runs on the client after hydration.
+  // A useState initializer alone can run on the server (no-op) and skip re-run on hydrate.
+  useLayoutEffect(() => {
     seedDemoPortalData();
-    return true;
-  });
+  }, []);
 
   return (
     <>

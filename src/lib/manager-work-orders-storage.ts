@@ -1,4 +1,5 @@
 import { DEMO_VENDOR_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
+import { demoWorkOrders } from "@/lib/demo/demo-data";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { removePendingWorkOrderChargesForWorkOrder } from "@/lib/household-charges";
 
@@ -104,7 +105,10 @@ export async function syncManagerWorkOrdersFromServer(opts?: { force?: boolean }
 export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = EMPTY_FALLBACK): DemoManagerWorkOrderRow[] {
   hydrateWorkOrdersFromSession();
   const stored = memoryRows;
-  if (stored.length === 0) return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+  if (stored.length === 0) {
+    if (isDemoModeActive()) return demoWorkOrders();
+    return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+  }
   const byId = new Map(stored.map((r) => [r.id, r]));
   const fallbackIds = new Set(fallback.map((f) => f.id));
   const merged = fallback.map((seed) => {
@@ -125,7 +129,9 @@ export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = E
 export function readVendorWorkOrderRows(): DemoManagerWorkOrderRow[] {
   const rows = readManagerWorkOrderRows();
   if (!isDemoModeActive()) return rows;
-  return rows.filter((r) => r.vendorName === DEMO_VENDOR_NAME);
+  const scoped = rows.filter((r) => r.vendorName === DEMO_VENDOR_NAME);
+  if (scoped.length > 0) return scoped;
+  return demoWorkOrders().filter((r) => r.vendorName === DEMO_VENDOR_NAME);
 }
 
 export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void {

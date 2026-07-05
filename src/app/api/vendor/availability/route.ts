@@ -134,7 +134,7 @@ export async function POST(req: Request) {
         specific_date: null,
         start_minute: range.start,
         end_minute: range.end,
-        note: null,
+        note: body.note?.trim().slice(0, 500) || null,
         updated_at: now,
       };
       const query = body.id

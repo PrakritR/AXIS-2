@@ -50,6 +50,7 @@ import {
 } from "@/lib/portal-inbox-storage";
 import {
   ManagerPortalPageShell,
+  portalDashboardWelcomeSubtitle,
   PortalDashboardCompactRow,
   PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
@@ -68,7 +69,7 @@ function fmt(iso: string) {
   return formatPacificDateTime(d);
 }
 
-export function ManagerDashboard() {
+export function ManagerDashboard({ displayName = "there" }: { displayName?: string }) {
   const { userId, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
@@ -214,7 +215,11 @@ export function ManagerDashboard() {
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
-    <ManagerPortalPageShell title="Dashboard" hideTitleOnNative>
+    <ManagerPortalPageShell
+      title="Dashboard"
+      subtitle={portalDashboardWelcomeSubtitle(displayName)}
+      hideTitleOnNative
+    >
       <div className={PORTAL_DASHBOARD_STACK}>
 
         {/* ── Calendar & applications ── */}

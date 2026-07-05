@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { readInboxMessages } from "@/lib/demo-admin-partner-inbox";
-import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
   readPartnerInquiries,
@@ -12,7 +11,6 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { LEASE_PIPELINE_EVENT, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import {
   applicationVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
@@ -36,10 +34,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
 
   useEffect(() => {
     if (kind === "admin") {
-      void Promise.allSettled([
-        syncScheduleRecordsFromServer(),
-        syncLeasePipelineFromServer(null),
-      ]).then(() => bump());
+      void syncScheduleRecordsFromServer().then(() => bump());
     } else if (kind === "manager" || kind === "pro") {
       void prefetchPortalData(kind, userId ?? undefined)
         .then(() => bump())
@@ -51,13 +46,11 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
     }
 
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
-    window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
-      window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, bump);
       window.removeEventListener("storage", bump);
@@ -72,13 +65,11 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
 
     if (kind === "admin") {
       const [pendingProps] = adminKpiCounts();
-      const [, adminBucket] = adminLeaseKpiCounts();
       const inboxUnread = readInboxMessages().filter((m) => m.folder === "inbox" && !m.read).length;
       const pendingMeetings = readPartnerInquiries().filter((r) => r.status === "pending" && r.kind !== "tour").length;
       const pendingTours = readPartnerInquiries().filter((r) => r.kind === "tour" && r.status === "pending").length;
       return {
         properties: pendingProps,
-        leases: adminBucket,
         events: pendingMeetings + pendingTours,
         inbox: inboxUnread,
       };

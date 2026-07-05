@@ -25,9 +25,7 @@ import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
-import { LeaseEditRequestModal, LEASE_EDIT_REQUEST_TEMPLATE_INTRO } from "@/components/portal/lease-edit-request-modal";
 import { LeaseReportIssueModal } from "@/components/portal/lease-report-issue-modal";
-import { PRIMARY_AXIS_ADMIN_EMAIL, PRIMARY_AXIS_ADMIN_LABEL } from "@/data/inbox-scoped-directory";
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
@@ -40,7 +38,6 @@ import {
   managerUploadLeasePdf,
   printLeaseAsPdf,
   sendLeaseBackToManager,
-  sendLeaseToAdminReview,
   sendLeaseToResident,
   hasBothLeaseSignatures,
   leaseRowMatchesManagerTab,
@@ -66,8 +63,6 @@ export function ManagerLeasesPipelinePanel({
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editRequestRow, setEditRequestRow] = useState<LeasePipelineRow | null>(null);
-  const [editRequestBusy, setEditRequestBusy] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
   const [generatingRowId, setGeneratingRowId] = useState<string | null>(null);
@@ -355,73 +350,6 @@ export function ManagerLeasesPipelinePanel({
     } else showToast("Could not delete lease.");
   };
 
-  const onRequestAdminEdits = (row: LeasePipelineRow) => {
-    setEditRequestRow(row);
-  };
-
-  function leaseEditRequestSubject(row: LeasePipelineRow): string {
-    const unit = row.unit.trim() || "unit";
-    return `Lease edits requested — ${row.residentName || "Resident"} (${unit})`;
-  }
-
-  function leaseEditRequestBody(row: LeasePipelineRow, note: string): string {
-    const unit = row.unit.trim() || "the unit";
-    const details = note.trim() || "(No additional details provided.)";
-    const lines = [
-      LEASE_EDIT_REQUEST_TEMPLATE_INTRO,
-      "",
-      `Lease: ${row.residentName || "Resident"} — ${unit}`,
-      "",
-      "Issue described by the property manager:",
-      details,
-      "",
-      "Property Manager",
-    ];
-    return lines.join("\n");
-  }
-
-  const onSubmitEditRequest = async (note: string) => {
-    const row = editRequestRow;
-    if (!row || editRequestBusy) return;
-    setEditRequestBusy(true);
-    try {
-      const subject = leaseEditRequestSubject(row);
-      const body = leaseEditRequestBody(row, note);
-
-      const result = sendLeaseToAdminReview(row.id, managerUserId);
-      if (!result.ok) {
-        showToast(result.error);
-        return;
-      }
-      appendLeaseThreadMessage(row.id, "manager", body, managerUserId);
-
-      // Notify admin via BOTH the Axis portal inbox and a Resend email, only
-      // after the state transition above succeeded. The shared helper posts
-      // to /api/portal/send-inbox-message with deliverToPortalInbox +
-      // deliverViaEmail, matching the other send-* routes.
-      const delivery = await deliverPortalInboxMessage({
-        fromName: "Property Manager",
-        toEmails: [PRIMARY_AXIS_ADMIN_EMAIL],
-        subject,
-        text: body,
-      });
-
-      if (delivery.ok) {
-        showToast(
-          delivery.skipped
-            ? "Sent to Admin Review — admin inbox updated."
-            : "Sent to Admin Review — admin notified by inbox and email.",
-        );
-      } else {
-        showToast(`Sent to Admin Review, but admin notification failed: ${delivery.error ?? "unknown error"}`);
-      }
-      setEditRequestRow(null);
-      setExpandedId(null);
-    } finally {
-      setEditRequestBusy(false);
-    }
-  };
-
   const onMoveToManagerReview = (row: LeasePipelineRow) => {
     const result = sendLeaseBackToManager(row.id, managerUserId);
     if (!result.ok) {
@@ -514,52 +442,6 @@ export function ManagerLeasesPipelinePanel({
       ) : null}
 
       <PortalTableDetailActions placement="top">
-        {row.status === "Admin Review" ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              onClick={() => onDownload(row)}
-            >
-              Download lease
-            </Button>
-            {leaseAllowsManagerDocumentEdits(row) ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              onClick={() => {
-                setPendingRowId(row.id);
-                uploadRef.current?.click();
-              }}
-              disabled={pendingRowId === row.id}
-            >
-              Upload corrected lease
-            </Button>
-            ) : null}
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onMoveToManagerReview(row)}>
-              Send back to manager
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              onClick={() => setReportIssueRow(row)}
-            >
-              Report issue
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-              onClick={() => onDeleteLease(row)}
-            >
-              Delete lease
-            </Button>
-          </>
-        ) : (
-          <>
             {!hasLeaseDocument(row) && leaseAllowsManagerDocumentEdits(row) ? (
               <Button
                 type="button"
@@ -656,14 +538,6 @@ export function ManagerLeasesPipelinePanel({
                 >
                   {sendingToResidentRowId === row.id ? "Sending…" : "Send to resident"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  onClick={() => onRequestAdminEdits(row)}
-                >
-                  Send to admin
-                </Button>
               </>
             ) : null}
             {row.status === "Manager Signature Pending" ? (
@@ -708,23 +582,9 @@ export function ManagerLeasesPipelinePanel({
               Delete lease
             </Button>
             ) : null}
-          </>
-        )}
       </PortalTableDetailActions>
 
-      {row.status === "Admin Review" ? (
-        <>
-          <LeaseDocumentPreview
-            row={row}
-            emptyHint="No lease document yet — upload a corrected lease."
-          />
-          <p className="mt-3 max-w-xl text-xs leading-relaxed text-muted">
-            Admin review is paused for resident actions. Correct the single lease document here, then send it back to the manager.
-          </p>
-        </>
-      ) : (
-        <LeaseDocumentPreview row={row} />
-      )}
+      <LeaseDocumentPreview row={row} />
     </>
   );
 
@@ -749,18 +609,6 @@ export function ManagerLeasesPipelinePanel({
           onClose={() => setSigningRow(null)}
         />
       ) : null}
-      <LeaseEditRequestModal
-        open={editRequestRow !== null}
-        residentName={editRequestRow?.residentName ?? ""}
-        unit={editRequestRow?.unit ?? ""}
-        recipientLabel={`${PRIMARY_AXIS_ADMIN_LABEL} (${PRIMARY_AXIS_ADMIN_EMAIL})`}
-        busy={editRequestBusy}
-        onClose={() => {
-          if (editRequestBusy) return;
-          setEditRequestRow(null);
-        }}
-        onSubmit={onSubmitEditRequest}
-      />
       <LeaseReportIssueModal
         open={reportIssueRow !== null}
         recipientLabel={reportIssueRow ? `${reportIssueRow.residentName || "the resident"}` : ""}

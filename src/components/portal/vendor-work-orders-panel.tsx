@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { Button } from "@/components/ui/button";
@@ -29,9 +29,11 @@ import {
 } from "@/components/portal/portal-data-table";
 import { WorkOrderStatusBadge } from "@/components/portal/resident-services-panel";
 import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { parseMoneyAmount } from "@/lib/household-charges";
 import { fetchWorkOrderBidsResult, type WorkOrderBid } from "@/lib/work-order-bids";
 import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payouts";
+import { upsertWorkOrderBid, WORK_ORDER_BIDS_EVENT } from "@/lib/work-order-bids-storage";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 function propertyLabel(row: DemoManagerWorkOrderRow): string {
@@ -86,6 +88,7 @@ function vendorWorkOrderTab(row: DemoManagerWorkOrderRow): VendorWorkOrderTab {
  * cost/time bid once the manager has opened a work order for bids. */
 export function VendorWorkOrdersPanel() {
   const { showToast } = useAppUi();
+  const demo = isDemoModeActive();
   const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
   const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid>>({});
   const [payoutsByWorkOrderId, setPayoutsByWorkOrderId] = useState<Record<string, VendorPayout>>({});
@@ -118,7 +121,9 @@ export function VendorWorkOrdersPanel() {
 
   useEffect(() => {
     const sync = () => setRows(readVendorWorkOrderRows());
+    const onBidsChanged = () => void loadBids();
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+    window.addEventListener(WORK_ORDER_BIDS_EVENT, onBidsChanged);
     void syncManagerWorkOrdersFromServer().then(() => sync());
     void loadBids();
     void loadPayouts();
@@ -140,6 +145,7 @@ export function VendorWorkOrdersPanel() {
 
     return () => {
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
+      window.removeEventListener(WORK_ORDER_BIDS_EVENT, onBidsChanged);
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", refreshAll);
@@ -165,6 +171,15 @@ export function VendorWorkOrdersPanel() {
     ],
     [tabCounts],
   );
+
+  const tabPickRef = useRef(false);
+  useEffect(() => {
+    if (tabPickRef.current || sorted.length === 0) return;
+    const order: VendorWorkOrderTab[] = ["to_bid", "scheduled", "completed"];
+    const first = order.find((id) => tabCounts[id] > 0);
+    if (first) setTab(first);
+    tabPickRef.current = true;
+  }, [sorted.length, tabCounts]);
 
   const visible = useMemo(() => sorted.filter((row) => vendorWorkOrderTab(row) === tab), [sorted, tab]);
 
@@ -193,6 +208,21 @@ export function VendorWorkOrdersPanel() {
     }
     setSubmittingId(row.id);
     try {
+      if (demo) {
+        upsertWorkOrderBid({
+          workOrderId: row.id,
+          vendorDirectoryId: row.vendorId ?? "demo-vendor-1",
+          quoteMode: modeById[row.id] ?? "upfront",
+          amountCents,
+          materialsCents,
+          proposedTime: proposedTimeIso,
+          note: draft.note.trim() || null,
+          status: "submitted",
+        });
+        await loadBids();
+        showToast("Price submitted.");
+        return;
+      }
       const res = await fetch("/api/portal/work-order-bids", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,6 +258,33 @@ export function VendorWorkOrdersPanel() {
     }
     setSchedulingId(row.id);
     try {
+      if (demo) {
+        let visitAt = consultationVisitAt;
+        if (mode === "auto") {
+          const d = new Date();
+          d.setDate(d.getDate() + 2);
+          d.setHours(10, 0, 0, 0);
+          visitAt = d.toISOString();
+        }
+        if (!visitAt) {
+          showToast("Choose a date and time for the consultation.");
+          return;
+        }
+        upsertWorkOrderBid({
+          workOrderId: row.id,
+          vendorDirectoryId: row.vendorId ?? "demo-vendor-1",
+          quoteMode: "after_consultation",
+          consultationVisitAt: visitAt,
+          amountCents: null,
+          materialsCents: 0,
+          proposedTime: null,
+          note: null,
+          status: "submitted",
+        });
+        await loadBids();
+        showToast(`Consultation scheduled for ${formatVisitLabel(visitAt)}.`);
+        return;
+      }
       const res = await fetch("/api/portal/work-order-bids", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

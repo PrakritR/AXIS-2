@@ -106,7 +106,7 @@ export function DemoSectionRenderer({
   if (role === "manager") {
     switch (section) {
       case "dashboard":
-        return <ManagerDashboard />;
+        return <ManagerDashboard displayName={DEMO_MANAGER_NAME} />;
       case "properties":
         return <ManagerProperties />;
       case "calendar":

@@ -61,10 +61,10 @@ export function Modal({
         className="modal-overlay fixed inset-0"
         onClick={onClose}
       />
-      <div className="relative z-[71] flex min-h-[100dvh] justify-center px-2 py-4 sm:px-4 sm:py-8">
+      <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-8">
         <div
           ref={panelRef}
-          className={cn(MODAL_PANEL_CLASS, "my-auto", panelClassName)}
+          className={cn(MODAL_PANEL_CLASS, "min-h-0", panelClassName)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"

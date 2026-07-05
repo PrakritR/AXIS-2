@@ -209,7 +209,6 @@ function workflowStatusForRow(
   const managerSigned = Boolean(input.managerSignature?.name && input.managerSignature?.signedAtIso);
   if (input.voidedAt) return "Voided";
   if (managerSigned && residentSigned) return "Fully Signed";
-  if (input.bucket === "admin") return "Admin Review";
   if (input.bucket === "resident") return "Resident Signature Pending";
   if (input.bucket === "signed") return "Manager Signature Pending";
   return input.generatedHtml || input.managerUploadedPdf ? "Manager Review" : "Draft";
@@ -222,7 +221,7 @@ function currentActorForStatus(status: LeaseWorkflowStatus): LeasePipelineRow["c
     case "Manager Signature Pending":
       return "manager";
     case "Admin Review":
-      return "admin";
+      return "manager";
     case "Resident Signature Pending":
       return "resident";
     case "Fully Signed":
@@ -265,7 +264,8 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
   const residentSignature = normalizeLeaseSignature(r.residentSignature, "resident") ?? legacyResidentSignature;
   const managerSignature = normalizeLeaseSignature(r.managerSignature, "manager");
   let bucket: ManagerLeaseBucket =
-    b === "manager" || b === "admin" || b === "resident" || b === "signed" ? b : "manager";
+    b === "manager" || b === "resident" || b === "signed" ? b : "manager";
+  if (typeof b === "string" && b === "admin") bucket = "manager";
   const residentSigned = Boolean(residentSignature?.name && residentSignature.signedAtIso);
   if (residentSigned && !managerSignature && bucket === "resident") bucket = "signed";
   const status = workflowStatusForRow({
@@ -398,8 +398,6 @@ function stageLabelForBucket(b: ManagerLeaseBucket): string {
   switch (b) {
     case "manager":
       return "Manager review";
-    case "admin":
-      return "Admin review";
     case "resident":
       return "Resident Signature Pending";
     case "signed":
@@ -418,7 +416,6 @@ export function leaseRowMatchesManagerTab(row: LeasePipelineRow, tab: ManagerLea
 export function countManagerLeaseTabs(rows: LeasePipelineRow[]): Record<ManagerLeaseTab, number> {
   return {
     manager: rows.filter((r) => r.bucket === "manager").length,
-    admin: rows.filter((r) => r.bucket === "admin").length,
     resident: rows.filter((r) => r.bucket === "resident").length,
     signed: rows.filter((r) => r.bucket === "signed" && r.status !== "Fully Signed").length,
     completed: rows.filter((r) => r.status === "Fully Signed").length,
@@ -767,11 +764,10 @@ export function syncLeasePipelineFromApplications(managerUserId?: string | null)
   return next;
 }
 
-export function leasePipelineBucketCounts(): [number, number, number, number] {
+export function leasePipelineBucketCounts(): [number, number, number] {
   const rows = readLeasePipeline();
   return [
     rows.filter((r) => r.bucket === "manager").length,
-    rows.filter((r) => r.bucket === "admin").length,
     rows.filter((r) => r.bucket === "resident").length,
     rows.filter((r) => r.bucket === "signed").length,
   ];
@@ -830,7 +826,7 @@ function residentLeasePriority(row: LeasePipelineRow): number {
     case "Manager Review":
       return 2;
     case "Admin Review":
-      return 1;
+      return 2;
     default:
       return 0;
   }
@@ -1548,32 +1544,6 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
     return { ok: false, error: "Lease could not be saved to the server. Check your connection and try again." };
   }
   raw[idx] = updated;
-  write(raw, managerUserId);
-  return { ok: true };
-}
-
-export function sendLeaseToAdminReview(rowId: string, managerUserId?: string | null): LeasePipelineActionResult {
-  const rows = readLeasePipeline(managerUserId);
-  const idx = rows.findIndex((r) => r.id === rowId);
-  if (idx === -1) return { ok: false, error: "Lease not found." };
-  const row = rows[idx]!;
-  if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
-  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
-    return { ok: false, error: "This lease can no longer be sent for admin review." };
-  }
-  const iso = new Date().toISOString();
-  const raw = [...materializeLeasePipeline(managerUserId)];
-  const rawIdx = findRawLeaseRowIndex(rowId, managerUserId);
-  if (rawIdx === -1) return { ok: false, error: "Lease record could not be saved locally." };
-  raw[rawIdx] = normalizeLeasePipelineRow({
-    ...row,
-    bucket: "admin",
-    status: "Admin Review",
-    currentActorRole: "admin",
-    adminReviewRequestedAt: iso,
-    updatedAtIso: iso,
-    updated: formatUpdatedLabel(iso),
-  });
   write(raw, managerUserId);
   return { ok: true };
 }

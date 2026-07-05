@@ -20,6 +20,7 @@ import {
   saveVendorDateRule,
   saveVendorWeeklyRule,
   timeInputValueToMinuteOfDay,
+  isFlexibleWeeklyRule,
   type VendorAvailabilityRule,
 } from "@/lib/vendor-availability";
 
@@ -67,8 +68,16 @@ function todayDateInputValue(): string {
 
 let demoAvailabilityRuleCounter = 0;
 
+export const VENDOR_AVAILABILITY_CHANGED_EVENT = "axis:vendor-availability-changed";
+
+function notifyAvailabilityChanged(rules?: VendorAvailabilityRule[]) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(VENDOR_AVAILABILITY_CHANGED_EVENT, { detail: { rules } }));
+  }
+}
+
 /** Weekly recurring hours + one-off blocked dates, editable inline. */
-function VendorAvailabilityEditor() {
+export function VendorAvailabilityEditor() {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
   const [rules, setRules] = useState<VendorAvailabilityRule[]>(() => (demo ? DEMO_VENDOR_AVAILABILITY_RULES : []));
@@ -90,6 +99,7 @@ function VendorAvailabilityEditor() {
     const next = await fetchVendorAvailability();
     setRules(next);
     setLoaded(true);
+    notifyAvailabilityChanged();
   };
 
   useEffect(() => {
@@ -159,17 +169,20 @@ function VendorAvailabilityEditor() {
     }
     const editingId = weeklyEditingId;
     if (demo) {
-      if (editingId) {
-        setRules((cur) =>
-          cur.map((r) => (r.id === editingId ? { ...r, weekday: weeklyDraft.weekday, startMinute: start, endMinute: end } : r)),
-        );
-      } else {
-        demoAvailabilityRuleCounter += 1;
-        setRules((cur) => [
-          ...cur,
-          { id: `demo-avail-new-${demoAvailabilityRuleCounter}`, kind: "weekly", weekday: weeklyDraft.weekday, startMinute: start, endMinute: end },
-        ]);
-      }
+      const next = editingId
+        ? rules.map((r) => (r.id === editingId ? { ...r, weekday: weeklyDraft.weekday, startMinute: start, endMinute: end } : r))
+        : [
+            ...rules,
+            {
+              id: `demo-avail-new-${++demoAvailabilityRuleCounter}`,
+              kind: "weekly" as const,
+              weekday: weeklyDraft.weekday,
+              startMinute: start,
+              endMinute: end,
+            },
+          ];
+      setRules(next);
+      notifyAvailabilityChanged(next);
       setWeeklyFormOpen(false);
       resetWeeklyForm();
       showToast(editingId ? "Weekly window updated." : "Weekly window added.");
@@ -385,7 +398,9 @@ function VendorAvailabilityEditor() {
     if (openEditingId === id) { setOpenFormOpen(false); resetOpenForm(); }
     if (blockEditingId === id) { setBlockFormOpen(false); resetBlockForm(); }
     if (demo) {
-      setRules((cur) => cur.filter((r) => r.id !== id));
+      const next = rules.filter((r) => r.id !== id);
+      setRules(next);
+      notifyAvailabilityChanged(next);
       return;
     }
     setBusyId(id);
@@ -395,6 +410,49 @@ function VendorAvailabilityEditor() {
       showToast(ok.error ?? "Could not remove that.");
       return;
     }
+    await reload();
+  };
+
+  const flexibleRuleForDay = (weekday: number) =>
+    rules.find((r) => r.kind === "weekly" && r.weekday === weekday && isFlexibleWeeklyRule(r));
+
+  const toggleFlexibleDay = async (weekday: number) => {
+    const existing = flexibleRuleForDay(weekday);
+    if (existing) {
+      await removeRule(existing.id);
+      showToast("Flexible schedule removed.");
+      return;
+    }
+    if (demo) {
+      const next = [
+        ...rules.filter((r) => !(r.kind === "weekly" && r.weekday === weekday && isFlexibleWeeklyRule(r))),
+        {
+          id: `demo-avail-flex-${++demoAvailabilityRuleCounter}`,
+          kind: "weekly" as const,
+          weekday,
+          startMinute: 0,
+          endMinute: 1440,
+          note: "Flexible",
+        },
+      ];
+      setRules(next);
+      notifyAvailabilityChanged(next);
+      showToast("Marked flexible — managers can schedule any time this day.");
+      return;
+    }
+    setSaving(true);
+    const result = await saveVendorWeeklyRule({
+      weekday,
+      startMinute: 0,
+      endMinute: 1440,
+      note: "Flexible",
+    });
+    setSaving(false);
+    if (!result.ok) {
+      showToast(result.error ?? "Could not save flexible schedule.");
+      return;
+    }
+    showToast("Marked flexible — managers can schedule any time this day.");
     await reload();
   };
 
@@ -471,11 +529,27 @@ function VendorAvailabilityEditor() {
 
         <div className="mt-3 space-y-2">
           {WEEKDAY_DISPLAY_ORDER.map((wd) => {
-            const windows = weeklyByDay.get(wd) ?? [];
+            const windows = (weeklyByDay.get(wd) ?? []).filter((w) => !isFlexibleWeeklyRule(w));
+            const flexible = flexibleRuleForDay(wd);
             return (
               <div key={wd} className="flex flex-wrap items-center gap-2">
                 <span className="w-9 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted">{WEEKDAY_LABELS[wd]}</span>
-                {windows.length === 0 ? (
+                <button
+                  type="button"
+                  data-attr={`vendor-availability-flexible-${WEEKDAY_LABELS[wd].toLowerCase()}`}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
+                    flexible
+                      ? "bg-primary/10 text-primary ring-primary/30"
+                      : "bg-accent/30 text-muted ring-border hover:text-foreground"
+                  }`}
+                  disabled={saving || busyId !== null}
+                  onClick={() => void toggleFlexibleDay(wd)}
+                >
+                  Flexible
+                </button>
+                {flexible ? (
+                  <span className="text-xs font-medium text-primary">Any time</span>
+                ) : windows.length === 0 ? (
                   <span className="text-xs text-muted">Unavailable</span>
                 ) : (
                   windows.map((w) =>
@@ -958,12 +1032,6 @@ export function VendorSettingsPanel() {
               {capabilitiesSaving ? "Saving…" : "Save capabilities"}
             </Button>
           </div>
-        </section>
-
-        <section className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">Availability</p>
-          <p className="mb-3 text-xs text-muted">Set your weekly hours and block off dates you&apos;re unavailable for visits.</p>
-          <VendorAvailabilityEditor />
         </section>
 
         <PortalBugFeedbackPanel reporterRole="vendor" embedded />

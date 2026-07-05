@@ -12,11 +12,10 @@ import {
 } from "@/lib/portals/resident-sections";
 
 const CASES = [
-  // pro/manager and resident pin Settings (profile) alone at the bottom of the
+  // pro/manager, resident, and admin pin Settings (profile) alone at the bottom of the
   // sidebar; Feedback (bugs-feedback) is no longer a standalone sidebar entry
-  // for either — it's reachable from inside the Settings page instead (see
-  // PortalBugFeedbackPanel's `embedded` mode). Admin is untouched: it still
-  // shows Feedback as its own sidebar item and doesn't surface Settings there.
+  // for any portal — it's reachable from inside the Settings page instead (see
+  // PortalBugFeedbackPanel / AdminBugFeedbackClient `embedded` mode).
   {
     kind: "pro" as const,
     sections: proPortal.sections.map((s) => s.section),
@@ -26,8 +25,8 @@ const CASES = [
   {
     kind: "admin" as const,
     sections: adminPortal.sections.map((s) => s.section),
-    sidebarShowsProfile: false,
-    sidebarShowsFeedback: true,
+    sidebarShowsProfile: true,
+    sidebarShowsFeedback: false,
   },
   {
     kind: "resident" as const,

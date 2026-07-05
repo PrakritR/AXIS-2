@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
-import { PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
+import { DEMO_PORTAL_SCROLL_ID, PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
 
 describe("lockPortalScroll", () => {
   let main: HTMLElement;
@@ -43,5 +43,26 @@ describe("lockPortalScroll", () => {
 
     unlockB();
     expect(document.body.style.overflow).toBe("");
+  });
+
+  it("locks demo frame scroll without locking body on /demo", () => {
+    const demoScroll = document.createElement("div");
+    demoScroll.id = DEMO_PORTAL_SCROLL_ID;
+    demoScroll.style.overflow = "";
+    demoScroll.scrollTop = 64;
+    document.body.appendChild(demoScroll);
+
+    const originalPath = window.location.pathname;
+    window.history.pushState({}, "", "/demo");
+
+    const unlock = lockPortalScroll();
+    expect(document.body.style.overflow).toBe("");
+    expect(demoScroll.style.overflow).toBe("hidden");
+
+    unlock();
+    expect(demoScroll.style.overflow).toBe("");
+    expect(demoScroll.scrollTop).toBe(64);
+
+    window.history.pushState({}, "", originalPath || "/");
   });
 });

@@ -4,22 +4,28 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import {
+  PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
+  PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import {
+  MANAGER_TABLE_TH,
+  ManagerPortalFilterRow,
+  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+} from "@/components/portal/portal-metrics";
 import {
   PROPERTY_PIPELINE_EVENT,
   approvePendingManagerProperty,
@@ -49,13 +55,13 @@ import {
   type AdminPropertyRow,
 } from "@/lib/demo-admin-property-inventory";
 
-const KPI_LABELS = [
-  "Pending review",
-  "Request change",
-  "Listed",
-  "Unlisted",
-  "Rejected",
-] as const;
+/** Admin property tabs — pending review (bucket 0) is handled outside this queue. */
+const KPI_TABS: { bucket: AdminPropertyBucketIndex; label: string }[] = [
+  { bucket: 1, label: "Request change" },
+  { bucket: 2, label: "Listed" },
+  { bucket: 3, label: "Unlisted" },
+  { bucket: 4, label: "Rejected" },
+];
 
 const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
   0: "No properties awaiting review.",
@@ -82,31 +88,6 @@ function HouseIcon({ className }: { className?: string }) {
       <path d="M10 20v-6h4v6" />
     </svg>
   );
-}
-
-function StatusPill({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "confirmed" | "pending" | "neutral" | "overdue";
-}) {
-  return <Badge tone={tone}>{label}</Badge>;
-}
-
-function rowStatus(bucket: AdminPropertyBucketIndex): { label: string; tone: "confirmed" | "pending" | "neutral" | "overdue" } {
-  switch (bucket) {
-    case 0:
-      return { label: "Pending review", tone: "pending" };
-    case 1:
-      return { label: "Approved · edits requested", tone: "pending" };
-    case 2:
-      return { label: "Listed", tone: "confirmed" };
-    case 3:
-      return { label: "Unlisted", tone: "neutral" };
-    default:
-      return { label: "Rejected", tone: "overdue" };
-  }
 }
 
 function AdminPropertyInlineDetails({
@@ -359,7 +340,7 @@ function AdminPropertyInlineDetails({
 
 export function AdminPropertiesClient() {
   const { showToast } = useAppUi();
-  const [activeKpi, setActiveKpi] = useState<AdminPropertyBucketIndex>(0);
+  const [activeKpi, setActiveKpi] = useState<AdminPropertyBucketIndex>(2);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
 
@@ -387,10 +368,8 @@ export function AdminPropertiesClient() {
     void tick;
     return readAdminPropertyRows(activeKpi);
   }, [tick, activeKpi]);
-  const status = rowStatus(activeKpi);
-
   const kpiTabs = useMemo(
-    () => KPI_LABELS.map((label, i) => ({ id: String(i), label, count: kpiValues[i] })),
+    () => KPI_TABS.map(({ bucket, label }) => ({ id: String(bucket), label, count: kpiValues[bucket] })),
     [kpiValues],
   );
 
@@ -398,14 +377,18 @@ export function AdminPropertiesClient() {
     <ManagerPortalPageShell
       title="Properties"
       filterRow={
-        <ManagerPortalStatusPills
-          tabs={kpiTabs}
-          activeId={String(activeKpi)}
-          onChange={(id) => {
-            setActiveKpi(Number(id) as AdminPropertyBucketIndex);
-            setExpandedRowKey(null);
-          }}
-        />
+        <ManagerPortalFilterRow>
+          <div className="min-w-0 max-w-full">
+            <ManagerPortalStatusPills
+              tabs={kpiTabs}
+              activeId={String(activeKpi)}
+              onChange={(id) => {
+                setActiveKpi(Number(id) as AdminPropertyBucketIndex);
+                setExpandedRowKey(null);
+              }}
+            />
+          </div>
+        </ManagerPortalFilterRow>
       }
     >
       {rows.length === 0 ? (
@@ -430,23 +413,18 @@ export function AdminPropertiesClient() {
                     className="w-full text-left"
                     onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
                   >
-                    <div className="flex items-start justify-between gap-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold text-foreground">
-                          {row.buildingName} · {row.unitLabel}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs text-muted">
-                          <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths} ba ·{" "}
-                          {row.neighborhood}
-                        </p>
-                        <p className="mt-0.5 truncate text-[11px] text-muted/90">
-                          {row.address}
-                          {row.zip ? `, ${row.zip}` : ""}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <StatusPill label={status.label} tone={status.tone} />
-                      </div>
+                    <div className="min-w-0">
+                      <p className="break-words font-semibold text-foreground">
+                        {row.buildingName} · {row.unitLabel}
+                      </p>
+                      <p className="mt-0.5 break-words text-xs text-muted">
+                        <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths} ba ·{" "}
+                        {row.neighborhood}
+                      </p>
+                      <p className="mt-0.5 break-words text-[11px] text-muted/90">
+                        {row.address}
+                        {row.zip ? `, ${row.zip}` : ""}
+                      </p>
                     </div>
                   </button>
                   {expanded ? (
@@ -467,12 +445,11 @@ export function AdminPropertiesClient() {
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                    <th className={`${MANAGER_TABLE_TH} w-[45%] text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -489,27 +466,24 @@ export function AdminPropertiesClient() {
                           aria-expanded={expanded}
                         >
                           <td className={PORTAL_TABLE_TD}>
-                            <p className="font-medium text-foreground">
+                            <p className="break-words font-medium text-foreground">
                               {row.buildingName} · {row.unitLabel}
                             </p>
-                            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                            <p className="mt-0.5 break-words text-xs leading-relaxed text-muted">
                               {row.address}
                               {row.zip ? `, ${row.zip}` : ""}
                             </p>
                           </td>
                           <td className={PORTAL_TABLE_TD}>
-                            <p className="text-xs text-muted">
+                            <p className="break-words text-xs text-muted">
                               <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths} ba ·{" "}
                               {row.neighborhood}
                             </p>
                           </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <StatusPill label={status.label} tone={status.tone} />
-                          </td>
                         </tr>
                         {expanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className="bg-accent/30 px-4 py-4">
+                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
                               <AdminPropertyInlineDetails
                                 key={rowKey}
                                 bucket={activeKpi}

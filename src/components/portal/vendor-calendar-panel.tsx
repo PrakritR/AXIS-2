@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalCalendarPanels, MEETING_CONFIRMED_COLOR, type DemoMeeting } from "@/components/portal/portal-calendar-panels";
+import { VENDOR_AVAILABILITY_CHANGED_EVENT, VendorAvailabilityEditor } from "@/components/portal/vendor-settings-panel";
 import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
 import { dateSlotKey, SLOT_DURATION_MINUTES, toLocalDateStr } from "@/lib/demo-admin-scheduling";
 import { DEMO_VENDOR_AVAILABILITY_RULES, fetchVendorAvailability, type VendorAvailabilityRule } from "@/lib/vendor-availability";
@@ -91,13 +92,22 @@ function vendorAvailabilitySlotKeys(rules: VendorAvailabilityRule[]): Set<string
   return keys;
 }
 
-/** Scheduled visits + the vendor's own weekly/open/blocked availability (edited in Settings). */
+/** Scheduled visits + vendor availability editing (same flow as manager calendar). */
 export function VendorCalendarPanel() {
   const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
   const demo = isDemoModeActive();
   const [availabilityRules, setAvailabilityRules] = useState<VendorAvailabilityRule[]>(() =>
     demo ? DEMO_VENDOR_AVAILABILITY_RULES : [],
   );
+  const [availabilityTick, setAvailabilityTick] = useState(0);
+
+  const reloadAvailability = useCallback(async () => {
+    if (demo) {
+      setAvailabilityTick((n) => n + 1);
+      return;
+    }
+    setAvailabilityRules(await fetchVendorAvailability());
+  }, [demo]);
 
   useEffect(() => {
     const sync = () => setRows(readVendorWorkOrderRows());
@@ -107,9 +117,18 @@ export function VendorCalendarPanel() {
   }, []);
 
   useEffect(() => {
-    if (demo) return;
-    void fetchVendorAvailability().then(setAvailabilityRules);
-  }, [demo]);
+    void reloadAvailability();
+  }, [reloadAvailability, availabilityTick]);
+
+  useEffect(() => {
+    const bump = (event: Event) => {
+      const detail = (event as CustomEvent<{ rules?: VendorAvailabilityRule[] }>).detail;
+      if (detail?.rules) setAvailabilityRules(detail.rules);
+      setAvailabilityTick((n) => n + 1);
+    };
+    window.addEventListener(VENDOR_AVAILABILITY_CHANGED_EVENT, bump);
+    return () => window.removeEventListener(VENDOR_AVAILABILITY_CHANGED_EVENT, bump);
+  }, []);
 
   const vendorMeetings = useMemo<DemoMeeting[]>(
     () =>
@@ -121,19 +140,26 @@ export function VendorCalendarPanel() {
   );
 
   const availabilityOverlays = useMemo<CoManagerAvailabilityOverlay[]>(() => {
+    void availabilityTick;
     const slots = vendorAvailabilitySlotKeys(availabilityRules);
     return slots.size > 0 ? [{ userId: "self", label: "Available", slots }] : [];
-  }, [availabilityRules]);
+  }, [availabilityRules, availabilityTick]);
 
   return (
     <ManagerPortalPageShell title="Calendar">
       <div className="space-y-6">
+        <div>
+          <p className="mb-3 text-sm text-muted">
+            Set weekly hours, mark days as flexible, and block dates you&apos;re unavailable — managers schedule work order visits into your open slots.
+          </p>
+          <VendorAvailabilityEditor />
+        </div>
         <PortalCalendarPanels
           storageKey={null}
           readOnly
           compactAvailability
           defaultViewMode="week"
-          availabilityHeading="Your schedule"
+          availabilityHeading="Availability"
           eventSummaryLabel="visit"
           externalMeetings={vendorMeetings}
           coManagerAvailabilityOverlays={availabilityOverlays}

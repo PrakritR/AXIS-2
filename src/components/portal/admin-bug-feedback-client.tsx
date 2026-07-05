@@ -65,7 +65,7 @@ function feedbackStatusClass(status: BugFeedbackStatus) {
   }
 }
 
-export function AdminBugFeedbackClient() {
+export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolean }) {
   const { showToast } = useAppUi();
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("managers");
@@ -185,20 +185,19 @@ export function AdminBugFeedbackClient() {
     </div>
   );
 
-  return (
-    <ManagerPortalPageShell
-      title="Feedback"
-      filterRow={
-        <ManagerPortalStatusPills
-          tabs={roleTabs}
-          activeId={roleFilter}
-          onChange={(id) => {
-            setRoleFilter(id as RoleFilter);
-            setExpandedId(null);
-          }}
-        />
-      }
-    >
+  const filterRow = (
+    <ManagerPortalStatusPills
+      tabs={roleTabs}
+      activeId={roleFilter}
+      onChange={(id) => {
+        setRoleFilter(id as RoleFilter);
+        setExpandedId(null);
+      }}
+    />
+  );
+
+  const content = (
+    <>
       {schemaMissing ? (
         <div className="mb-5 rounded-2xl border px-4 py-3 text-sm portal-banner-pending">
           <p className="font-semibold">Feedback storage is not set up in Supabase yet.</p>
@@ -347,6 +346,22 @@ export function AdminBugFeedbackClient() {
           </div>
         </>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-sm)] sm:p-6">
+        <p className="text-sm font-semibold text-foreground">Feedback</p>
+        {filterRow}
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <ManagerPortalPageShell title="Feedback" filterRow={filterRow}>
+      {content}
     </ManagerPortalPageShell>
   );
 }

@@ -159,6 +159,9 @@ export function seedDemoManagerProperties(userId: string, extras: MockProperty[]
   const map = readExtrasMap();
   map[userId] = extras;
   writeExtrasMap(map);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+  }
 }
 
 function mirrorPropertyRecord(input: {

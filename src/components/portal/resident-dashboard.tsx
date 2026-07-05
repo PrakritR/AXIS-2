@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ManagerPortalPageShell,
+  portalDashboardWelcomeSubtitle,
   PortalDashboardCompactRow,
   PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
@@ -11,7 +12,6 @@ import {
   formatCompactChargeLine,
 } from "@/components/portal/portal-metrics";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
-import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   chargeDueLabel,
@@ -105,7 +105,6 @@ export function ResidentDashboard({
   managerSubscriptionTier?: "free" | "paid" | null;
 }) {
   void managerSubscriptionTier;
-  const { isNative } = useIsNativeApp();
   const initialEmail = residentEmail.trim().toLowerCase();
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
   const email = session.email?.trim().toLowerCase() || initialEmail;
@@ -256,14 +255,18 @@ export function ResidentDashboard({
 
   const { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges } = data;
 
-  const welcomeTitle = `Welcome${displayName && displayName !== "Resident" ? `, ${displayName.split(" ")[0]}` : ""}`;
-  const pageTitle = isNative ? "Dashboard" : welcomeTitle;
+  const welcomeName =
+    displayName && displayName !== "Resident" ? displayName.split(/\s+/)[0] : null;
 
   const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
-    <ManagerPortalPageShell title={pageTitle} hideTitleOnNative>
+    <ManagerPortalPageShell
+      title="Dashboard"
+      subtitle={portalDashboardWelcomeSubtitle(welcomeName)}
+      hideTitleOnNative
+    >
       <div className={PORTAL_DASHBOARD_STACK}>
         {appStatus === "approved" ? (
           <>

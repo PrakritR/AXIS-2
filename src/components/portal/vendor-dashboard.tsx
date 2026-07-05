@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import {
   ManagerPortalPageShell,
+  portalDashboardWelcomeSubtitle,
   PortalDashboardCompactRow,
   PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
@@ -134,7 +135,11 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
   const { activeRows, upcomingVisits, quotesPending, inboxThreads } = data;
 
   return (
-    <ManagerPortalPageShell title="Dashboard" subtitle={`Welcome, ${displayName}`} hideTitleOnNative>
+    <ManagerPortalPageShell
+      title="Dashboard"
+      subtitle={portalDashboardWelcomeSubtitle(displayName)}
+      hideTitleOnNative
+    >
       <div className={PORTAL_DASHBOARD_STACK}>
 
         {/* ── Visits & work orders ── */}

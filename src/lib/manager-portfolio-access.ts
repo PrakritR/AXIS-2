@@ -4,12 +4,14 @@
 
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { MockProperty } from "@/data/types";
+import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
   PROPERTY_PIPELINE_EVENT,
   readAllExtraListings,
   readAllPendingManagerProperties,
   readExtraListingsForUser,
   readPendingManagerPropertiesForUser,
+  readScopedExtraListings,
   syncPropertyPipelineFromServer,
   buildMockPropertyFromDraft,
 } from "@/lib/demo-property-pipeline";
@@ -107,19 +109,20 @@ export function safePropertyOptionLabel(candidates: Array<string | null | undefi
 
 /** Labels for Applications / Payments property dropdowns. */
 export function buildManagerPropertyFilterOptions(userId: string | null): ManagerPropertyFilterOption[] {
-  if (!userId) return [];
+  const scopeUserId = resolveManagerScopeUserId(userId);
+  if (!scopeUserId) return [];
   const labelById = new Map<string, string>();
 
-  for (const p of readExtraListingsForUser(userId)) {
+  for (const p of readScopedExtraListings(scopeUserId)) {
     labelById.set(p.id, safePropertyOptionLabel([p.title, p.buildingName, p.address], p.id));
   }
-  for (const r of readPendingManagerPropertiesForUser(userId)) {
+  for (const r of readPendingManagerPropertiesForUser(scopeUserId)) {
     const joined = [r.buildingName, r.address].filter(Boolean).join(" · ");
     labelById.set(r.id, safePropertyOptionLabel([joined, r.buildingName, r.address], r.id));
   }
 
   const allExtras = readAllExtraListings();
-  for (const rel of readProRelationships(userId)) {
+  for (const rel of readProRelationships(scopeUserId)) {
     for (const pid of rel.assignedPropertyIds) {
       if (!pid.trim() || labelById.has(pid)) continue;
       const found = allExtras.find((x) => x.id === pid);
@@ -128,7 +131,7 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
   }
 
   for (const row of readManagerApplicationRows()) {
-    if (!applicationVisibleToPortalUser(row, userId)) continue;
+    if (!applicationVisibleToPortalUser(row, scopeUserId)) continue;
     const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim();
     if (pid && !labelById.has(pid)) {
       labelById.set(pid, safePropertyOptionLabel([row.property], pid));

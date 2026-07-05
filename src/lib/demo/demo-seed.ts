@@ -14,6 +14,8 @@ import { seedDemoHouseholdCharges } from "@/lib/household-charges";
 import { seedDemoManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { seedDemoLeasePipeline } from "@/lib/lease-pipeline-storage";
 import { seedDemoManagerWorkOrderRows } from "@/lib/manager-work-orders-storage";
+import { seedDemoWorkOrderBids } from "@/lib/work-order-bids-storage";
+import { seedDemoVendorPayouts } from "@/lib/vendor-payouts-storage";
 import { seedDemoManagerVendorRows } from "@/lib/manager-vendors-storage";
 import { seedDemoManagerPromotionRows } from "@/lib/manager-promotions-storage";
 import { seedDemoServiceRequests } from "@/lib/service-requests-storage";
@@ -46,6 +48,8 @@ import {
   demoServiceRequests,
   demoVendorInbox,
   demoVendors,
+  demoVendorPayouts,
+  demoWorkOrderBids,
   demoWorkOrders,
 } from "@/lib/demo/demo-data";
 
@@ -90,6 +94,8 @@ export function seedDemoPortalData(): void {
   // Resident Documents › Other: a viewable, downloadable sample document.
   seedDemoUploadedOwnLeases(DEMO_RESIDENT_EMAIL, demoResidentUploads());
   seedDemoManagerWorkOrderRows(demoWorkOrders());
+  seedDemoWorkOrderBids(demoWorkOrderBids());
+  seedDemoVendorPayouts(demoVendorPayouts());
   seedDemoManagerVendorRows(demoVendors());
   seedDemoManagerPromotionRows(demoPromotions());
   seedDemoServiceRequests(demoServiceRequests());

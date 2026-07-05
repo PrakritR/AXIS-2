@@ -163,6 +163,8 @@ export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
       } catch {
         /* ignore */
       }
+      await supabase.auth.refreshSession().catch(() => undefined);
+      await supabase.auth.getSession();
       didRedirect = true;
       window.location.replace(continueHref(nextPath));
     } catch (e) {

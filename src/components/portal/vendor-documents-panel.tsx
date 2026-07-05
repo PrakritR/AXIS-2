@@ -1,305 +1,280 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { TabNav } from "@/components/ui/tabs";
-import {
-  ManagerPortalFilterRow,
-  ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
-} from "@/components/portal/portal-metrics";
-import { ReportFilterBar, type ReportFilterState } from "@/components/portal/reports/report-filter-bar";
-import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
-import { ReportTable } from "@/components/portal/reports/report-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import {
-  MANAGER_WORK_ORDERS_EVENT,
-  readVendorWorkOrderRows,
-  syncManagerWorkOrdersFromServer,
-} from "@/lib/manager-work-orders-storage";
 import { safeFormatDateTime } from "@/lib/pacific-time";
-import type { ReportResult } from "@/lib/reports/types";
+import {
+  VENDOR_DOCUMENT_HINTS,
+  VENDOR_DOCUMENT_LABELS,
+  VENDOR_DOCUMENT_SECTIONS,
+  type VendorDocumentKind,
+  type VendorDocumentRecord,
+} from "@/lib/vendor-documents";
 
-const INCOME_DOCUMENT_TAB = { id: "income-documents", label: "Income documents" } as const;
+const DEMO_VENDOR_DOCUMENTS: VendorDocumentRecord[] = [
+  {
+    kind: "w9",
+    fileName: "cascade-mechanical-w9.pdf",
+    url: "/api/vendor/documents/file?kind=w9",
+    uploadedAt: new Date(Date.now() - 120 * 86_400_000).toISOString(),
+  },
+  {
+    kind: "insurance",
+    fileName: "general-liability-certificate.pdf",
+    url: "/api/vendor/documents/file?kind=insurance",
+    uploadedAt: new Date(Date.now() - 45 * 86_400_000).toISOString(),
+  },
+  {
+    kind: "license",
+    fileName: "wa-contractor-license.pdf",
+    url: "/api/vendor/documents/file?kind=license",
+    uploadedAt: new Date(Date.now() - 200 * 86_400_000).toISOString(),
+  },
+];
 
-type VendorDocumentScope = "portfolio" | "property";
-
-type VendorDocumentScopeState = {
-  scope: VendorDocumentScope;
-  propertyName: string;
+type DocumentsPayload = {
+  linked?: boolean;
+  documents?: VendorDocumentRecord[];
 };
 
-function defaultFilters(): ReportFilterState {
-  const now = new Date();
-  const yearStart = new Date(now.getFullYear(), 0, 1);
-  return {
-    propertyId: "",
-    from: yearStart.toISOString().slice(0, 10),
-    to: now.toISOString().slice(0, 10),
-    daysAhead: "90",
-    taxYear: String(now.getFullYear() - 1),
-  };
-}
-
-function defaultScopeFilters(): VendorDocumentScopeState {
-  return { scope: "portfolio", propertyName: "" };
-}
-
-function propertyLabel(row: DemoManagerWorkOrderRow): string {
-  const unit = row.unit?.trim();
-  return unit && unit !== "—" ? `${row.propertyName} · ${unit}` : row.propertyName;
-}
-
-function workOrderAmountCents(row: DemoManagerWorkOrderRow): number {
-  const labor = row.vendorCostCents ?? 0;
-  const materials = row.materialsCostCents ?? 0;
-  if (labor + materials > 0) return labor + materials;
-  const parsed = parseFloat((row.cost ?? "").replace(/[^\d.]/g, ""));
-  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0;
-}
-
-function formatMoney(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function inDateRange(iso: string | undefined, from: string, to: string): boolean {
-  if (!iso) return false;
-  const day = iso.slice(0, 10);
-  return day >= from && day <= to;
-}
-
-function buildVendorIncomeReport(
-  rows: DemoManagerWorkOrderRow[],
-  filters: ReportFilterState,
-  scopeFilters: VendorDocumentScopeState,
-): ReportResult {
-  const paidRows = rows.filter((row) => {
-    if (row.automationStatus !== "paid") return false;
-    const paidDay = row.paidAt ?? row.completedAt;
-    if (!inDateRange(paidDay, filters.from, filters.to)) return false;
-    if (scopeFilters.scope === "property" && scopeFilters.propertyName) {
-      return row.propertyName === scopeFilters.propertyName;
-    }
-    return true;
-  });
-
-  let totalCents = 0;
-  const reportRows = paidRows.map((row) => {
-    const labor = row.vendorCostCents ?? 0;
-    const materials = row.materialsCostCents ?? 0;
-    const total = workOrderAmountCents(row);
-    totalCents += total;
-    return {
-      date: safeFormatDateTime(row.paidAt ?? row.completedAt ?? ""),
-      property: propertyLabel(row),
-      workOrder: row.title,
-      labor: labor > 0 ? formatMoney(labor) : "—",
-      materials: materials > 0 ? formatMoney(materials) : "—",
-      total: total > 0 ? formatMoney(total) : row.cost || "—",
-    };
-  });
-
-  return {
-    id: "vendor-income-documents",
-    title: "Income documents",
-    columns: [
-      { key: "date", label: "Date", format: "date" },
-      { key: "property", label: "Property" },
-      { key: "workOrder", label: "Work order" },
-      { key: "labor", label: "Labor", align: "right", format: "money" },
-      { key: "materials", label: "Materials", align: "right", format: "money" },
-      { key: "total", label: "Total", align: "right", format: "money" },
-    ],
-    rows: reportRows,
-    totals: reportRows.length
-      ? {
-          date: "",
-          property: "",
-          workOrder: "Total",
-          labor: "",
-          materials: "",
-          total: formatMoney(totalCents),
-        }
-      : undefined,
-  };
-}
-
-function VendorDocumentScopeBar({
-  filters,
-  onChange,
-  propertyOptions,
-}: {
-  filters: VendorDocumentScopeState;
-  onChange: (next: Partial<VendorDocumentScopeState>) => void;
-  propertyOptions: { id: string; label: string }[];
-}) {
-  return (
-    <>
-      <label className="flex min-w-[9rem] flex-col gap-1.5 text-xs font-medium text-muted">
-        Scope
-        <select
-          className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
-          value={filters.scope}
-          onChange={(e) =>
-            onChange({
-              scope: e.target.value as VendorDocumentScope,
-              propertyName: "",
-            })
-          }
-        >
-          <option value="portfolio">All properties</option>
-          <option value="property">Per property</option>
-        </select>
-      </label>
-      {filters.scope === "property" ? (
-        <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-          Property
-          <select
-            className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
-            value={filters.propertyName}
-            onChange={(e) => onChange({ propertyName: e.target.value })}
-          >
-            <option value="">Select property</option>
-            {propertyOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-    </>
-  );
-}
-
-/** Vendor Documents — income from approved work orders (manager Documents layout, income tab only). */
+/** Vendor Documents — compliance PDFs (W-9, insurance, licenses, tax forms). */
 export function VendorDocumentsPanel() {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
+  const fileRefs = useRef<Partial<Record<VendorDocumentKind, HTMLInputElement | null>>>({});
 
-  const [filters, setFilters] = useState(defaultFilters);
-  const [scopeFilters, setScopeFilters] = useState(defaultScopeFilters);
-  const [report, setReport] = useState<ReportResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [generated, setGenerated] = useState(false);
-  const [tick, setTick] = useState(0);
+  const [documents, setDocuments] = useState<VendorDocumentRecord[]>(() => (demo ? DEMO_VENDOR_DOCUMENTS : []));
+  const [loading, setLoading] = useState(!demo);
+  const [uploadingKind, setUploadingKind] = useState<VendorDocumentKind | null>(null);
+  const [previewKind, setPreviewKind] = useState<VendorDocumentKind | null>(null);
   const [unlinked, setUnlinked] = useState(false);
 
-  useEffect(() => {
-    const bump = () => setTick((n) => n + 1);
-    void syncManagerWorkOrdersFromServer().then(bump);
-    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
-    return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
-  }, []);
-
-  useEffect(() => {
-    if (demo) return;
-    void fetch("/api/vendor/profile", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data: { linked?: boolean }) => setUnlinked(data.linked === false))
-      .catch(() => undefined);
-  }, [demo]);
-
-  const propertyOptions = useMemo(() => {
-    void tick;
-    const seen = new Map<string, string>();
-    for (const row of readVendorWorkOrderRows()) {
-      const name = row.propertyName?.trim();
-      if (!name || seen.has(name)) continue;
-      seen.set(name, name);
+  const loadDocuments = useCallback(async () => {
+    if (demo) {
+      setDocuments(DEMO_VENDOR_DOCUMENTS);
+      setLoading(false);
+      return;
     }
-    return [...seen.entries()]
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [tick]);
-
-  const runReport = useCallback(async () => {
     setLoading(true);
     try {
-      void tick;
-      const rows = readVendorWorkOrderRows();
-      const next = buildVendorIncomeReport(rows, filters, scopeFilters);
-      setReport(next);
-      setGenerated(true);
+      const res = await fetch("/api/vendor/documents", { credentials: "include" });
+      const data = (await res.json()) as DocumentsPayload & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load documents.");
+      setUnlinked(data.linked === false);
+      setDocuments(data.documents ?? []);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to load income documents.");
-      setReport(null);
-      setGenerated(false);
+      showToast(e instanceof Error ? e.message : "Failed to load documents.");
+      setDocuments([]);
     } finally {
       setLoading(false);
     }
-  }, [filters, scopeFilters, showToast, tick]);
+  }, [demo, showToast]);
 
   useEffect(() => {
-    if (!isDemoModeActive()) return;
-    queueMicrotask(() => void runReport());
-  }, [runReport]);
+    void loadDocuments();
+  }, [loadDocuments]);
 
-  const documentTabItems = useMemo(
-    () => [{ ...INCOME_DOCUMENT_TAB, href: "/vendor/documents" }],
-    [],
-  );
+  const documentsByKind = useMemo(() => {
+    const map = new Map<VendorDocumentKind, VendorDocumentRecord>();
+    for (const doc of documents) map.set(doc.kind, doc);
+    return map;
+  }, [documents]);
+
+  const previewDoc = previewKind ? documentsByKind.get(previewKind) : undefined;
+
+  const uploadFile = async (kind: VendorDocumentKind, file: File) => {
+    if (demo) {
+      setDocuments((cur) => {
+        const next = cur.filter((d) => d.kind !== kind);
+        next.push({
+          kind,
+          fileName: file.name,
+          url: `/api/vendor/documents/file?kind=${encodeURIComponent(kind)}`,
+          uploadedAt: new Date().toISOString(),
+        });
+        return next;
+      });
+      showToast(`${VENDOR_DOCUMENT_LABELS[kind]} saved (demo).`);
+      return;
+    }
+    setUploadingKind(kind);
+    try {
+      const body = new FormData();
+      body.set("kind", kind);
+      body.set("file", file);
+      const res = await fetch("/api/vendor/documents/upload", { method: "POST", credentials: "include", body });
+      const data = (await res.json()) as { documents?: VendorDocumentRecord[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Upload failed.");
+      setDocuments(data.documents ?? []);
+      showToast(`${VENDOR_DOCUMENT_LABELS[kind]} uploaded.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setUploadingKind(null);
+    }
+  };
+
+  const removeDocument = async (kind: VendorDocumentKind) => {
+    if (demo) {
+      setDocuments((cur) => cur.filter((d) => d.kind !== kind));
+      if (previewKind === kind) setPreviewKind(null);
+      showToast("Document removed (demo).");
+      return;
+    }
+    try {
+      const res = await fetch("/api/vendor/documents", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ removeKind: kind }),
+      });
+      const data = (await res.json()) as { documents?: VendorDocumentRecord[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Could not remove document.");
+      setDocuments(data.documents ?? []);
+      if (previewKind === kind) setPreviewKind(null);
+      showToast("Document removed.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not remove document.");
+    }
+  };
 
   return (
-    <ManagerPortalPageShell
-      title="Documents"
-      titleAside={
-        <Button
-          type="button"
-          variant="primary"
-          className={PORTAL_HEADER_ACTION_BTN}
-          onClick={() => void runReport()}
-          disabled={loading}
-          data-attr="vendor-documents-generate-report"
+    <ManagerPortalPageShell title="Documents">
+      {unlinked ? (
+        <p
+          className="mb-4 rounded-xl border px-4 py-3 text-sm portal-banner-pending"
+          data-attr="vendor-documents-unlinked-banner"
         >
-          {loading ? "Generating…" : "Generate report"}
-        </Button>
-      }
-      filterRow={
-        <ManagerPortalFilterRow>
-          <TabNav activeId={INCOME_DOCUMENT_TAB.id} items={documentTabItems} />
-        </ManagerPortalFilterRow>
-      }
-    >
-      <div className="space-y-4">
-        {unlinked ? (
-          <p
-            className="rounded-xl border px-4 py-3 text-sm portal-banner-pending"
-            data-attr="vendor-documents-unlinked-banner"
-          >
-            Waiting on a property manager to connect with you — income documents will appear once you&apos;re linked.
-          </p>
-        ) : null}
+          Waiting on a property manager to connect with you — upload documents here so managers can review your compliance files.
+        </p>
+      ) : null}
 
-        <ReportFilterBar
-          showProperty={false}
-          showDateRange
-          showDaysAhead={false}
-          showTaxYear={false}
-          showRunButton={false}
-          filters={filters}
-          onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
-          onRun={() => void runReport()}
-          loading={loading}
-          leading={
-            <VendorDocumentScopeBar
-              filters={scopeFilters}
-              onChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
-              propertyOptions={propertyOptions}
-            />
-          }
-        />
+      {loading ? (
+        <p className="text-sm text-muted">Loading documents…</p>
+      ) : (
+        <div className="space-y-6">
+          {VENDOR_DOCUMENT_SECTIONS.map((section) => (
+            <section key={section.id} className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-sm)] sm:p-5">
+              <div className="mb-4">
+                <h2 className="text-sm font-semibold text-foreground">{section.label}</h2>
+                {section.description ? <p className="mt-1 text-xs text-muted">{section.description}</p> : null}
+              </div>
+              <ul className="space-y-3">
+                {section.kinds.map((kind) => {
+                  const doc = documentsByKind.get(kind);
+                  const busy = uploadingKind === kind;
+                  return (
+                    <li
+                      key={kind}
+                      className="flex flex-col gap-3 rounded-xl border border-border bg-accent/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground">{VENDOR_DOCUMENT_LABELS[kind]}</p>
+                        <p className="mt-0.5 text-xs text-muted">{VENDOR_DOCUMENT_HINTS[kind]}</p>
+                        {doc ? (
+                          <p className="mt-1 truncate text-xs text-muted">
+                            {doc.fileName} · uploaded {safeFormatDateTime(doc.uploadedAt)}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs font-medium text-muted">No file on file</p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {doc ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-full"
+                              data-attr={`vendor-documents-view-${kind}`}
+                              onClick={() => setPreviewKind((cur) => (cur === kind ? null : kind))}
+                            >
+                              {previewKind === kind ? "Hide" : "View"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-full"
+                              data-attr={`vendor-documents-download-${kind}`}
+                              onClick={() => {
+                                if (demo) {
+                                  showToast("Download is available after you sign in to a live vendor account.");
+                                  return;
+                                }
+                                triggerDocumentDownload(doc.url, doc.fileName);
+                              }}
+                            >
+                              Download
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-full text-danger"
+                              data-attr={`vendor-documents-remove-${kind}`}
+                              onClick={() => void removeDocument(kind)}
+                            >
+                              Remove
+                            </Button>
+                          </>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="primary"
+                          className="rounded-full"
+                          disabled={busy}
+                          data-attr={`vendor-documents-upload-${kind}`}
+                          onClick={() => fileRefs.current[kind]?.click()}
+                        >
+                          {busy ? "Uploading…" : doc ? "Replace" : "Upload PDF"}
+                        </Button>
+                        <input
+                          ref={(el) => {
+                            fileRefs.current[kind] = el;
+                          }}
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) void uploadFile(kind, file);
+                          }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
 
-        {loading ? (
-          <ReportGeneratePrompt loading loadingTitle="Generating documents…" />
-        ) : !generated ? (
-          <ReportGeneratePrompt title="No income documents yet." />
-        ) : (
-          <ReportTable report={report} loading={loading} generated={generated} />
-        )}
-      </div>
+      {previewDoc && previewKind ? (
+        <DocumentInlineViewer
+          title={VENDOR_DOCUMENT_LABELS[previewKind]}
+          src={demo ? null : previewDoc.url}
+          onDownload={() => {
+            if (demo) {
+              showToast("PDF preview is available on a live vendor account.");
+              return;
+            }
+            triggerDocumentDownload(previewDoc.url, previewDoc.fileName);
+          }}
+          downloadLabel="Download PDF"
+          downloadAttr={`vendor-documents-inline-download-${previewKind}`}
+        >
+          {demo ? (
+            <div className="flex h-64 items-center justify-center px-4 text-center text-sm text-muted">
+              Sample PDFs are listed above in the demo — sign in to a live vendor account to upload and preview real files.
+            </div>
+          ) : null}
+        </DocumentInlineViewer>
+      ) : null}
     </ManagerPortalPageShell>
   );
 }

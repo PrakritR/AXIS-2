@@ -715,7 +715,7 @@ function buildLeaseRow(a) {
     return row; // Manager Review
   }
   if (stage === "admin") {
-    return { ...row, bucket: "admin", status: "Admin Review", stageLabel: "Admin Review", currentActorRole: "admin", adminReviewRequestedAt: sentIso };
+    return row;
   }
   if (stage === "resident_sign") {
     return { ...row, bucket: "resident", status: "Resident Signature Pending", stageLabel: "Resident Signature Pending", currentActorRole: "resident", sentToResidentAt: sentIso };

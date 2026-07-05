@@ -1,6 +1,9 @@
 /** Target for skip-to-content links in authenticated portal layouts. */
 export const PORTAL_MAIN_CONTENT_ID = "portal-main-content";
 
+/** Scrollable main column inside the public `/demo` portal frame. */
+export const DEMO_PORTAL_SCROLL_ID = "demo-portal-scroll";
+
 /** Root shell for authenticated portals — uses dynamic viewport height in the native app. */
 export const PORTAL_SHELL_ROOT_CLASS =
   "portal-shell flex h-screen max-h-screen max-w-full flex-col overflow-hidden bg-background [html[data-native]_&]:h-[100dvh] [html[data-native]_&]:max-h-[100dvh] [html[data-native]_&]:max-w-[100vw] [html[data-native]_&]:overflow-x-clip";

@@ -8,12 +8,10 @@ import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
 import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
 import { AdminAxisUsersClient } from "@/components/portal/admin-axis-users-client";
-import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
 import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
 import { AdminEventsClient } from "@/components/portal/admin-events-client";
 import { AdminProfileSection } from "@/components/portal/admin-profile-section";
 import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
-import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
@@ -51,6 +49,7 @@ import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { managerSectionAllowedForTier, residentSectionAllowedForManagerTier } from "@/lib/manager-access";
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
 import { loadResidentPortalAccessState, loadResidentLeaseSignedStatus, residentHasFullPortalAccess } from "@/lib/resident-portal-access";
@@ -293,7 +292,9 @@ export async function renderPortalSection(
 
   if (kind === "admin" && section === "dashboard") {
     if (tabParts?.length) notFound();
-    return <AdminDashboard />;
+    const { profile } = await getServerSessionProfile();
+    const displayName = profile?.full_name?.trim() || profile?.email?.split("@")[0] || "there";
+    return <AdminDashboard displayName={displayName} />;
   }
 
   if (kind === "admin" && section === "create-manager") {
@@ -317,8 +318,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "admin" && section === "leases") {
-    if (tabParts?.length) notFound();
-    return <AdminLeasesClient />;
+    redirect(`${def.basePath}/dashboard`);
   }
 
   if (kind === "admin" && section === "profile") {
@@ -339,10 +339,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "admin" && section === "bugs-feedback") {
-    if (tabParts?.length) {
-      redirect(`${def.basePath}/${section}`);
-    }
-    return <AdminBugFeedbackClient />;
+    redirect(`${def.basePath}/profile`);
   }
 
   if (kind === "admin" && section === "events") {
@@ -469,7 +466,14 @@ export async function renderPortalSection(
     if (tabParts?.length) notFound();
 
     if (section === "dashboard") {
-      return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
+      const { profile } = await getEffectiveSessionForPortal("manager");
+      const displayName = profile?.full_name?.trim() || profile?.email?.split("@")[0] || "there";
+      return subscriptionGated(
+        <ManagerDashboard displayName={displayName} />,
+        kind,
+        "dashboard",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (section === "properties") {
       const ManagerProperties = await loadManagerProperties();

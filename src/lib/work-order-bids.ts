@@ -27,6 +27,13 @@ export async function fetchWorkOrderBids(workOrderId?: string): Promise<WorkOrde
 
 /** Like {@link fetchWorkOrderBids} but reports fetch failure instead of swallowing it to an empty list. */
 export async function fetchWorkOrderBidsResult(workOrderId?: string): Promise<{ ok: boolean; bids: WorkOrderBid[] }> {
+  if (typeof window !== "undefined") {
+    const { isDemoModeActive } = await import("@/lib/demo/demo-session");
+    if (isDemoModeActive()) {
+      const { readWorkOrderBids } = await import("@/lib/work-order-bids-storage");
+      return { ok: true, bids: readWorkOrderBids(workOrderId) };
+    }
+  }
   try {
     const query = workOrderId ? `?workOrderId=${encodeURIComponent(workOrderId)}` : "";
     const res = await fetch(`/api/portal/work-order-bids${query}`, { credentials: "include" });

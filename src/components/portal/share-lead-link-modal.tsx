@@ -254,23 +254,23 @@ export function ShareLeadLinkModal({
               ) : null}
 
               {kind !== "listing" ? (
-              <div>
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Link preview</p>
-                <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                  {linkUrl || "Select a property to generate a link."}
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Link preview</p>
+                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
+                    {linkUrl || "Select a property to generate a link."}
+                  </div>
+                  <Button type="button" variant="outline" className="mt-2 rounded-full" disabled={!linkUrl} onClick={() => void handleCopy()}>
+                    Copy link
+                  </Button>
                 </div>
-                <Button type="button" variant="outline" className="mt-2 rounded-full" disabled={!linkUrl} onClick={() => void handleCopy()}>
-                  Copy link
-                </Button>
-              </div>
               ) : null}
 
               <div className="border-t border-border pt-4">
                 <p className="text-sm font-semibold text-foreground">Send to prospect</p>
                 {kind !== "listing" ? (
-                <p className="mt-1 text-xs text-muted">
-                  Email an invite with the link above. You can add an optional note.
-                </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Email an invite with the link above. You can add an optional note.
+                  </p>
                 ) : null}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
@@ -310,14 +310,15 @@ export function ShareLeadLinkModal({
                     placeholder="Add context for the prospect…"
                   />
                 </div>
-                <div className="mt-4 flex justify-start gap-2">
-                  <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-                    Close
-                  </Button>
-                  <Button type="button" variant="primary" className="rounded-full" disabled={!propertyId} onClick={openSendPreview}>
-                    Preview & send
-                  </Button>
-                </div>
+              </div>
+
+              <div className="sticky bottom-0 z-10 -mx-5 flex justify-start gap-2 border-t border-border bg-inherit px-5 py-4 sm:-mx-6 sm:px-6">
+                <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+                  Close
+                </Button>
+                <Button type="button" variant="primary" className="rounded-full" disabled={!propertyId} onClick={openSendPreview}>
+                  Preview & send
+                </Button>
               </div>
             </>
           )}

@@ -26,7 +26,6 @@ import { getPropertyById } from "@/lib/rental-application/data";
 
 const LEASE_LABELS: { id: ManagerLeaseTab; label: string }[] = [
   { id: "manager", label: "Manager review" },
-  { id: "admin", label: "Admin review" },
   { id: "resident", label: "Resident signature pending" },
   { id: "signed", label: "Manager signature pending" },
   { id: "completed", label: "Signed" },

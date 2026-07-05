@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { deletePortalAccountCompletely } from "@/lib/auth/delete-portal-account";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isPortalSandboxEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -41,7 +42,9 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const residents = (data ?? []).map((p) => ({
+    const residents = (data ?? [])
+      .filter((p) => !isPortalSandboxEmail(p.email))
+      .map((p) => ({
       id: p.id,
       email: p.email ?? "",
       fullName: p.full_name ?? "",

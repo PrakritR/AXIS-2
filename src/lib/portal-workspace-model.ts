@@ -139,7 +139,6 @@ function actionsFor(portal: PortalKind, section: string): WorkspaceAction[] {
     if (section === "properties") return [];
     if (
       section === "axis-users" ||
-      section === "leases" ||
       section === "events" ||
       section === "applications" ||
       section === "payments" ||
@@ -512,7 +511,6 @@ export function buildPortalWorkspaceModel(
       subtitle: "",
       kpis: [
         { label: "Manager review", value: demoKpis.leases.managerReview, hint: "" },
-        { label: "Admin review", value: demoKpis.leases.adminReview, hint: "" },
         { label: "With resident", value: demoKpis.leases.withResident, hint: "" },
         { label: "Signed", value: demoKpis.leases.signed, hint: "" },
       ],
@@ -566,30 +564,6 @@ export function buildPortalWorkspaceModel(
         { key: "since", label: "Since" },
       ],
       rows: demoManagerSubscriberRows as unknown as Record<string, string>[],
-    };
-  }
-
-  if (portal === "admin" && section === "leases") {
-    return {
-      eyebrow,
-      title: "Leases",
-      subtitle: "",
-      kpis: [
-        { label: "Manager review", value: demoKpis.leases.managerReview, hint: "" },
-        { label: "Admin review", value: demoKpis.leases.adminReview, hint: "" },
-        { label: "With resident", value: demoKpis.leases.withResident, hint: "" },
-        { label: "Signed", value: demoKpis.leases.signed, hint: "" },
-      ],
-      showToolbar: false,
-      showQuickLinks: false,
-      actions: actionsFor(portal, section),
-      columns: [
-        { key: "resident", label: "Resident" },
-        { key: "unit", label: "Unit / home" },
-        { key: "stage", label: "Stage" },
-        { key: "updated", label: "Updated" },
-      ],
-      rows: demoLeasePipelineRows as unknown as Record<string, string>[],
     };
   }
 

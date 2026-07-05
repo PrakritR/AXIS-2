@@ -1,4 +1,5 @@
 import { AxisAssistant } from "@/components/portal/axis-assistant";
+import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
@@ -38,6 +39,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             />
             <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
               <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
+                <PortalMobileNavBar
+                  definition={adminPortal}
+                  name={profile?.full_name ?? null}
+                  email={profile?.email ?? null}
+                />
                 {children}
               </div>
             </main>

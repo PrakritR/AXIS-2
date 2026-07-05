@@ -16,6 +16,13 @@ export async function fetchVendorPayouts(): Promise<VendorPayout[]> {
 
 /** Like {@link fetchVendorPayouts} but reports fetch failure instead of swallowing it to an empty list. */
 export async function fetchVendorPayoutsResult(): Promise<{ ok: boolean; payouts: VendorPayout[] }> {
+  if (typeof window !== "undefined") {
+    const { isDemoModeActive } = await import("@/lib/demo/demo-session");
+    if (isDemoModeActive()) {
+      const { readVendorPayouts } = await import("@/lib/vendor-payouts-storage");
+      return { ok: true, payouts: readVendorPayouts() };
+    }
+  }
   try {
     const res = await fetch("/api/vendor/payouts", { credentials: "include" });
     if (!res.ok) return { ok: false, payouts: [] };

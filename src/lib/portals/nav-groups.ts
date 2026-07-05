@@ -10,11 +10,11 @@ import type { PortalKind } from "@/lib/portal-types";
  * `profile` (Settings) is the sole member of the trailing "account" group for
  * manager/pro and resident, so `PortalSidebar`'s `mt-auto` on the first
  * trailing group pins it alone to the sidebar's bottom corner. Feedback
- * (`bugs-feedback`) is left out of the manager/pro and resident configs on
- * purpose — it's reachable from inside the Settings page instead (see
- * `PortalBugFeedbackPanel`'s `embedded` mode), not as its own sidebar entry.
- * The route/section itself is untouched so it stays reachable directly. Admin
- * is out of scope for that change and keeps Feedback as its own sidebar item.
+ * (`bugs-feedback`) is left out of every portal's sidebar config on purpose —
+ * it's reachable from inside the Settings page instead (see
+ * `PortalBugFeedbackPanel` / `AdminBugFeedbackClient` `embedded` mode), not as
+ * its own sidebar entry. The route/section itself is untouched so old links can
+ * redirect to Settings.
  */
 export type NavGroupConfig = { id: string; label: string | null; sections: string[] };
 
@@ -22,14 +22,12 @@ export type NavGroupConfig = { id: string; label: string | null; sections: strin
 export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile", "bugs-feedback"]);
 
 /**
- * Feedback is embedded inside the Settings page (see `PortalBugFeedbackPanel`'s
- * `embedded` mode) for pro/manager and resident, matching the desktop sidebar
+ * Feedback is embedded inside the Settings page, matching the desktop sidebar
  * exclusion above — so it shouldn't appear as a separate destination in the
- * mobile top nav strip or the native "More" sheet either. Admin keeps Feedback
- * as a first-class destination everywhere (it's excluded from this check).
+ * mobile top nav strip or the native "More" sheet either.
  */
-export function isHiddenFromMobileNav(kind: PortalKind, section: string): boolean {
-  return section === "bugs-feedback" && kind !== "admin";
+export function isHiddenFromMobileNav(_kind: PortalKind, section: string): boolean {
+  return section === "bugs-feedback";
 }
 
 const PRO_GROUPS: NavGroupConfig[] = [
@@ -45,10 +43,10 @@ const PRO_GROUPS: NavGroupConfig[] = [
 
 const ADMIN_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "portfolio", label: "Portfolio", sections: ["properties", "leases"] },
+  { id: "portfolio", label: "Portfolio", sections: ["properties"] },
   { id: "people", label: "People", sections: ["axis-users"] },
   { id: "operations", label: "Operations", sections: ["events", "inbox"] },
-  { id: "account", label: null, sections: ["bugs-feedback"] },
+  { id: "account", label: null, sections: ["profile"] },
 ];
 
 const RESIDENT_GROUPS: NavGroupConfig[] = [

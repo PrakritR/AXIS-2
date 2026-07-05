@@ -12,6 +12,12 @@ export const PORTAL_DASHBOARD_TILE_LINK =
 export const PORTAL_SECTION_SURFACE =
   "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6 [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3.5";
 
+/** Subtitle under the Dashboard heading — shared across all portal dashboards. */
+export function portalDashboardWelcomeSubtitle(displayName?: string | null): string {
+  const trimmed = displayName?.trim();
+  return trimmed ? `Welcome, ${trimmed}` : "Welcome";
+}
+
 /** Calendar week grid outer frame (matches manager calendar chrome). */
 export const PORTAL_CALENDAR_FRAME =
   "overflow-hidden rounded-2xl border border-border bg-accent/40 [html[data-theme=dark]_&]:portal-calendar-grid";

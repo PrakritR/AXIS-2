@@ -32,7 +32,7 @@ import {
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payouts";
 
-type VendorPaymentBucket = "pending" | "overdue" | "paid";
+type VendorPaymentBucket = "pending" | "paid";
 
 type VendorPaymentLedgerRow = {
   id: string;
@@ -48,11 +48,8 @@ type VendorPaymentLedgerRow = {
 
 const PAY_LABELS: { id: VendorPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
-  { id: "overdue", label: "Overdue" },
   { id: "paid", label: "Paid" },
 ];
-
-const OVERDUE_AFTER_DAYS = 14;
 
 function propertyLabel(row: DemoManagerWorkOrderRow): string {
   const unit = row.unit?.trim();
@@ -71,20 +68,9 @@ function workOrderAmountCents(row: DemoManagerWorkOrderRow): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0;
 }
 
-function daysSince(iso: string | undefined): number | null {
-  if (!iso) return null;
-  const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return null;
-  return Math.floor(ms / 86_400_000);
-}
-
 function vendorPaymentBucket(row: DemoManagerWorkOrderRow): VendorPaymentBucket | null {
   if (row.automationStatus === "paid") return "paid";
   if (row.bucket !== "completed" && row.automationStatus !== "vendor_marked_done") return null;
-
-  const anchor = row.vendorMarkedDoneAt ?? row.completedAt;
-  const elapsed = daysSince(anchor);
-  if (elapsed !== null && elapsed >= OVERDUE_AFTER_DAYS) return "overdue";
   return "pending";
 }
 
@@ -120,8 +106,6 @@ function toLedgerRow(row: DemoManagerWorkOrderRow, payout: VendorPayout | undefi
   let statusLabel = "Awaiting payment";
   if (bucket === "paid") {
     statusLabel = payoutLabel ?? "Paid";
-  } else if (bucket === "overdue") {
-    statusLabel = "Overdue";
   } else if (row.automationStatus === "vendor_marked_done") {
     statusLabel = "Awaiting approval";
   }
@@ -157,11 +141,10 @@ export function VendorPaymentsPanel() {
   const [unlinked, setUnlinked] = useState(false);
 
   const loadPayouts = useCallback(async () => {
-    if (demo) return;
     const result = await fetchVendorPayoutsResult();
     if (!result.ok) return;
     setPayoutsByWorkOrderId(Object.fromEntries(result.payouts.map((p) => [p.workOrderId, p])));
-  }, [demo]);
+  }, []);
 
   useEffect(() => {
     const bump = () => setTick((n) => n + 1);
@@ -197,7 +180,7 @@ export function VendorPaymentsPanel() {
   }, [tick, payoutsByWorkOrderId]);
 
   const counts = useMemo(() => {
-    const c: Record<VendorPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
+    const c: Record<VendorPaymentBucket, number> = { pending: 0, paid: 0 };
     for (const row of ledgerRows) c[row.bucket] += 1;
     return c;
   }, [ledgerRows]);
@@ -208,7 +191,6 @@ export function VendorPaymentsPanel() {
         id,
         label,
         count: counts[id],
-        alert: id === "overdue" && counts.overdue > 0,
       })),
     [counts],
   );

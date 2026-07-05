@@ -686,7 +686,7 @@ html {
 }
 
 /* Keep viewport-based modal sizing bounded to the frame, not the browser. */
-.demo-portal-frame .min-h-\[100dvh\] {
+.demo-portal-frame .min-h-full {
   min-height: 100%;
 }
 

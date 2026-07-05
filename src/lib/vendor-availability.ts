@@ -219,8 +219,18 @@ async function postAvailability(body: Record<string, unknown>): Promise<{ ok: bo
   }
 }
 
-export function saveVendorWeeklyRule(input: { id?: string; weekday: number; startMinute: number; endMinute: number }) {
+export function saveVendorWeeklyRule(input: {
+  id?: string;
+  weekday: number;
+  startMinute: number;
+  endMinute: number;
+  note?: string;
+}) {
   return postAvailability({ action: "upsert-weekly", ...input });
+}
+
+export function isFlexibleWeeklyRule(rule: VendorAvailabilityRule): boolean {
+  return rule.kind === "weekly" && (rule.note?.trim().toLowerCase() ?? "") === "flexible";
 }
 
 export function saveVendorBlockRule(input: { id?: string; specificDate: string; startMinute?: number; endMinute?: number; note?: string }) {

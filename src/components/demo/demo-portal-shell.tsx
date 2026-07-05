@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
@@ -20,6 +20,8 @@ import {
   subscribeDemoRole,
   type DemoPortalRole,
 } from "@/lib/demo/demo-session";
+import { DEMO_PORTAL_SCROLL_ID } from "@/lib/portal-layout-classes";
+import { seedDemoPortalData } from "@/lib/demo/demo-seed";
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
 import { DemoFrameAssistant } from "@/components/demo/demo-frame-assistant";
 import { DemoShowcaseOverlay, type ShowcaseKind } from "@/components/demo/demo-showcase-overlay";
@@ -124,6 +126,10 @@ function RestartIcon() {
 }
 
 export function DemoPortalShell() {
+  useLayoutEffect(() => {
+    seedDemoPortalData();
+  }, []);
+
   const role = useSyncExternalStore(subscribeDemoRole, getDemoRole, () => "manager" as const);
   const def = useMemo(() => definitionForRole(role), [role]);
   // Same nav count badges as the real portal sidebar, fed by the seeded stores.
@@ -132,8 +138,8 @@ export function DemoPortalShell() {
     () => groupNavItems(def.kind, def.sections.map((s) => ({ section: s.section, meta: s }))),
     [def],
   );
-  // Match the real portal sidebar: the trailing unlabeled group (Feedback) is
-  // pushed to the bottom, separate from the Team group above it.
+  // Match the real portal sidebar: the trailing unlabeled group (Settings) is
+  // pushed to the bottom, separate from the groups above it.
   const firstTrailingGroupIdx = useMemo(
     () => navGroups.findIndex((g) => g.id === "account" || g.id === "more"),
     [navGroups],
@@ -332,7 +338,7 @@ export function DemoPortalShell() {
       <div
         ref={setFrameEl}
         onClickCapture={onFrameClickCapture}
-        className="demo-portal-frame relative flex min-h-[70vh] overflow-hidden rounded-2xl border border-border bg-background shadow-[var(--shadow-lg,0_20px_60px_-30px_rgba(15,23,42,0.5))]"
+        className="demo-portal-frame relative flex h-[min(85dvh,920px)] min-h-[70vh] overflow-hidden rounded-2xl border border-border bg-background shadow-[var(--shadow-lg,0_20px_60px_-30px_rgba(15,23,42,0.5))]"
       >
         {/* Sidebar */}
         <aside
@@ -456,7 +462,11 @@ export function DemoPortalShell() {
         </div>
 
         {/* Content */}
-        <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto px-3 pb-8 pt-14 sm:px-5 md:pt-5">
+        <div
+          id={DEMO_PORTAL_SCROLL_ID}
+          ref={scrollRef}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-8 pt-14 sm:px-5 md:pt-5"
+        >
           {/* No generic sub-tab strip here: every multi-tab panel renders its own
               tab row (TabNav / status pills) in its page-shell header, and those
               tab clicks are intercepted (onFrameClickCapture / DEMO_NAVIGATE_EVENT)

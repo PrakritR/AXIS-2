@@ -102,99 +102,103 @@ export function ResidentListingSearch() {
 
       <div className="my-6 h-px w-full bg-border" />
 
-      <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,1fr)]">
-        <FieldBlock label="Move-in date">
-          <input
-            type="date"
-            value={moveIn}
-            onChange={(e) => setMoveIn(e.target.value)}
-            data-attr="resident-search-move-in"
-            className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
-          />
-        </FieldBlock>
-
-        <FieldBlock label="Move-out date">
-          <input
-            type="date"
-            value={moveOut}
-            onChange={(e) => setMoveOut(e.target.value)}
-            data-attr="resident-search-move-out"
-            className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
-          />
-        </FieldBlock>
-
-        <div className="col-span-2 min-w-0 lg:col-span-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Max budget / mo</span>
-            <span className={`text-[13px] font-semibold ${budgetActive ? "text-primary" : "text-muted/60"}`}>
-              {budgetLabel}
-            </span>
-          </div>
-          <div className="budget-slider-wrap mt-4 px-0.5" style={{ "--budget-pct": `${pct}%` } as CSSProperties}>
+      <div className="space-y-5">
+        <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2.2fr)]">
+          <FieldBlock label="Move-in date">
             <input
-              type="range"
-              min={BUDGET_MIN}
-              max={BUDGET_MAX}
-              step={BUDGET_STEP}
-              value={budget}
-              onChange={(e) => setBudget(Number(e.target.value))}
-              aria-label="Maximum budget per month"
-              data-attr="resident-search-budget"
-              className="budget-slider relative z-10 h-7 w-full cursor-pointer appearance-none bg-transparent"
+              type="date"
+              value={moveIn}
+              onChange={(e) => setMoveIn(e.target.value)}
+              data-attr="resident-search-move-in"
+              className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
             />
-            <div className="mt-1 flex justify-between gap-1 text-[11px] font-medium text-muted/50">
-              {BUDGET_MARKERS.map((m) => (
-                <span key={m}>{m === BUDGET_MAX ? "Any" : `$${m.toLocaleString()}`}</span>
-              ))}
+          </FieldBlock>
+
+          <FieldBlock label="Move-out date">
+            <input
+              type="date"
+              value={moveOut}
+              onChange={(e) => setMoveOut(e.target.value)}
+              data-attr="resident-search-move-out"
+              className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
+            />
+          </FieldBlock>
+
+          <div className="col-span-2 min-w-0 lg:col-span-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Max budget / mo</span>
+              <span className={`text-[13px] font-semibold ${budgetActive ? "text-primary" : "text-muted/60"}`}>
+                {budgetLabel}
+              </span>
+            </div>
+            <div className="budget-slider-wrap mt-4 px-0.5" style={{ "--budget-pct": `${pct}%` } as CSSProperties}>
+              <input
+                type="range"
+                min={BUDGET_MIN}
+                max={BUDGET_MAX}
+                step={BUDGET_STEP}
+                value={budget}
+                onChange={(e) => setBudget(Number(e.target.value))}
+                aria-label="Maximum budget per month"
+                data-attr="resident-search-budget"
+                className="budget-slider relative z-10 h-7 w-full cursor-pointer appearance-none bg-transparent"
+              />
+              <div className="mt-1 flex justify-between gap-1 text-[11px] font-medium text-muted/50">
+                {BUDGET_MARKERS.map((m) => (
+                  <span key={m}>{m === BUDGET_MAX ? "Any" : `$${m.toLocaleString()}`}</span>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        <FieldBlock label="Bedrooms" className="col-span-2 lg:col-span-1">
-          <select
-            value={bedroom}
-            onChange={(e) => setBedroom(e.target.value)}
-            aria-label="Bedrooms"
-            data-attr="resident-search-bedrooms"
-            className={inputCls}
-          >
-            {BEDROOM_OPTIONS.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </FieldBlock>
+        <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-3">
+          <FieldBlock label="Bedrooms">
+            <select
+              value={bedroom}
+              onChange={(e) => setBedroom(e.target.value)}
+              aria-label="Bedrooms"
+              data-attr="resident-search-bedrooms"
+              className={inputCls}
+            >
+              {BEDROOM_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </FieldBlock>
 
-        <FieldBlock label="Bathroom type">
-          <select
-            value={bathroom}
-            onChange={(e) => setBathroom(e.target.value)}
-            aria-label="Bathroom type"
-            data-attr="resident-search-bathroom"
-            className={inputCls}
-          >
-            {BATHROOM_OPTIONS.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </FieldBlock>
+          <FieldBlock label="Bathroom type">
+            <select
+              value={bathroom}
+              onChange={(e) => setBathroom(e.target.value)}
+              aria-label="Bathroom type"
+              data-attr="resident-search-bathroom"
+              className={inputCls}
+            >
+              {BATHROOM_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </FieldBlock>
 
-        <FieldBlock label="Zip code">
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="postal-code"
-            value={zipCode}
-            onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-            aria-label="Zip code"
-            placeholder="98101"
-            data-attr="resident-search-zip"
-            className={inputCls}
-          />
-        </FieldBlock>
+          <FieldBlock label="Zip code" className="col-span-2 lg:col-span-1">
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              value={zipCode}
+              onChange={(e) => setZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
+              aria-label="Zip code"
+              placeholder="98101"
+              data-attr="resident-search-zip"
+              className={inputCls}
+            />
+          </FieldBlock>
+        </div>
       </div>
 
       <div className="my-6 h-px w-full bg-border" />

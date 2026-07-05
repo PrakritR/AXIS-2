@@ -987,7 +987,7 @@ try {
     { axisId: "AXIS-TESTLIAMFO", first: "Liam", last: "Foster", propId: "mgr-test-fir", roomId: "room-1", bucket: "approved", leaseStage: "signed", income: 98000 },
     { axisId: "AXIS-TESTISABEN", first: "Isabella", last: "Nguyen", propId: "mgr-test-cedar", roomId: "room-1", bucket: "approved", leaseStage: "manager", income: 120000 },
     { axisId: "AXIS-TESTMASONC", first: "Mason", last: "Clark", propId: "mgr-test-cedar", roomId: "room-1", bucket: "pending", income: 88000, screen: "consider" },
-    { axisId: "AXIS-TESTAVAROS", first: "Ava", last: "Rossi", propId: "mgr-test-spruce", roomId: "room-1", bucket: "approved", leaseStage: "admin", income: 82000 },
+    { axisId: "AXIS-TESTAVAROS", first: "Ava", last: "Rossi", propId: "mgr-test-spruce", roomId: "room-1", bucket: "approved", leaseStage: "manager", income: 82000 },
   ].map((p, i) => {
     const prop = propById.get(p.propId);
     const roomDef = prop.rooms.find((r) => r.id === p.roomId);
@@ -1248,7 +1248,7 @@ try {
     };
     if (p.leaseStage === "manager") return row;
     if (p.leaseStage === "admin") {
-      return { ...row, bucket: "admin", status: "Admin Review", stageLabel: "Admin Review", currentActorRole: "admin", adminReviewRequestedAt: sentIso };
+      return row;
     }
     if (p.leaseStage === "resident_sign") {
       return { ...row, bucket: "resident", status: "Resident Signature Pending", stageLabel: "Resident Signature Pending", currentActorRole: "resident", sentToResidentAt: sentIso };

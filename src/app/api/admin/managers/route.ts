@@ -5,6 +5,7 @@ import { deletePortalAccountCompletely } from "@/lib/auth/delete-portal-account"
 import { normalizeManagerSkuTier, pickBestManagerPurchaseRow } from "@/lib/manager-access";
 import { setManagerPurchaseTier } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isPortalSandboxEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -86,32 +87,34 @@ export async function GET() {
       purchasesByProfileId.set(profile.id, [...merged.values()]);
     }
 
-    const managers = (data ?? []).map((profile) => {
-      const rows = purchasesByProfileId.get(profile.id) ?? [];
-      const purchase = pickBestManagerPurchaseRow(
-        rows.map((r) => ({
-          id: String(r.id),
-          tier: r.tier,
-          billing: r.billing,
-          paid_at: r.paid_at,
-          user_id: r.user_id,
-          stripe_customer_id: r.stripe_customer_id,
-          stripe_subscription_id: r.stripe_subscription_id,
-          stripe_checkout_session_id: r.stripe_checkout_session_id ?? null,
-        })),
-        profile.id,
-      );
-      return {
-        id: profile.id,
-        email: profile.email ?? "",
-        fullName: profile.full_name ?? "",
-        managerId: profile.manager_id ?? "",
-        tier: purchase?.tier ?? "free",
-        billing: purchase?.billing ?? "free",
-        active: profile.application_approved !== false,
-        joinedAt: profile.created_at ?? purchase?.paid_at ?? null,
-      };
-    });
+    const managers = (data ?? [])
+      .filter((profile) => !isPortalSandboxEmail(profile.email))
+      .map((profile) => {
+        const rows = purchasesByProfileId.get(profile.id) ?? [];
+        const purchase = pickBestManagerPurchaseRow(
+          rows.map((r) => ({
+            id: String(r.id),
+            tier: r.tier,
+            billing: r.billing,
+            paid_at: r.paid_at,
+            user_id: r.user_id,
+            stripe_customer_id: r.stripe_customer_id,
+            stripe_subscription_id: r.stripe_subscription_id,
+            stripe_checkout_session_id: r.stripe_checkout_session_id ?? null,
+          })),
+          profile.id,
+        );
+        return {
+          id: profile.id,
+          email: profile.email ?? "",
+          fullName: profile.full_name ?? "",
+          managerId: profile.manager_id ?? "",
+          tier: purchase?.tier ?? "free",
+          billing: purchase?.billing ?? "free",
+          active: profile.application_approved !== false,
+          joinedAt: profile.created_at ?? purchase?.paid_at ?? null,
+        };
+      });
 
     return NextResponse.json({ managers });
   } catch (e) {

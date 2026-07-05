@@ -1,20 +1,24 @@
-import { PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { DEMO_PORTAL_SCROLL_ID, PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
 
 type ScrollLockSnapshot = {
   bodyOverflow: string;
-  mainOverflow: string;
-  mainScrollTop: number;
+  scrollEl: HTMLElement | null;
+  scrollOverflow: string;
+  scrollTop: number;
+  lockBody: boolean;
 };
 
 let lockCount = 0;
 let snapshot: ScrollLockSnapshot | null = null;
 
-function getPortalMain(): HTMLElement | null {
+function getScrollLockElement(): HTMLElement | null {
   if (typeof document === "undefined") return null;
-  return document.getElementById(PORTAL_MAIN_CONTENT_ID);
+  const id = isDemoModeActive() ? DEMO_PORTAL_SCROLL_ID : PORTAL_MAIN_CONTENT_ID;
+  return document.getElementById(id);
 }
 
-/** Locks portal page scroll (main column on native; body fallback on marketing pages). */
+/** Locks portal page scroll (main column on native; demo frame scroll on `/demo`). */
 export function lockPortalScroll(): () => void {
   if (typeof document === "undefined") return () => undefined;
 
@@ -29,16 +33,21 @@ export function lockPortalScroll(): () => void {
     };
   }
 
-  const main = getPortalMain();
+  const scrollEl = getScrollLockElement();
+  const lockBody = !isDemoModeActive();
   snapshot = {
     bodyOverflow: document.body.style.overflow,
-    mainOverflow: main?.style.overflow ?? "",
-    mainScrollTop: main?.scrollTop ?? 0,
+    scrollEl,
+    scrollOverflow: scrollEl?.style.overflow ?? "",
+    scrollTop: scrollEl?.scrollTop ?? 0,
+    lockBody,
   };
 
-  document.body.style.overflow = "hidden";
-  if (main) {
-    main.style.overflow = "hidden";
+  if (lockBody) {
+    document.body.style.overflow = "hidden";
+  }
+  if (scrollEl) {
+    scrollEl.style.overflow = "hidden";
   }
 
   return () => {
@@ -51,10 +60,11 @@ export function lockPortalScroll(): () => void {
 }
 
 function restorePortalScroll(prev: ScrollLockSnapshot) {
-  document.body.style.overflow = prev.bodyOverflow;
-  const main = getPortalMain();
-  if (main) {
-    main.style.overflow = prev.mainOverflow;
-    main.scrollTop = prev.mainScrollTop;
+  if (prev.lockBody) {
+    document.body.style.overflow = prev.bodyOverflow;
+  }
+  if (prev.scrollEl) {
+    prev.scrollEl.style.overflow = prev.scrollOverflow;
+    prev.scrollEl.scrollTop = prev.scrollTop;
   }
 }
