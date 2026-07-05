@@ -462,21 +462,23 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     <ManagerPortalPageShell
       title="Inbox"
       titleAside={
-        <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+        <>
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
-            New message
+            New
           </Button>
           {tabId === "trash" && counts.trash > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} text-[var(--status-overdue-fg)]`}
-              onClick={emptyTrash}
-            >
-              Empty trash
-            </Button>
+            <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+              <Button
+                type="button"
+                variant="outline"
+                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} text-[var(--status-overdue-fg)]`}
+                onClick={emptyTrash}
+              >
+                Empty trash
+              </Button>
+            </div>
           ) : null}
-        </div>
+        </>
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -486,16 +488,13 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
             activeId={tabId}
             onChange={(id) => navigate(`/resident/inbox/${id}`)}
           />
-          <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
-            <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setComposeOpen(true)}>
-              New
-            </Button>
-            {tabId === "trash" && counts.trash > 0 ? (
+          {tabId === "trash" && counts.trash > 0 ? (
+            <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
               <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={emptyTrash}>
                 Empty
               </Button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </ManagerPortalFilterRow>
       }
     >
