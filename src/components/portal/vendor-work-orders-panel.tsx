@@ -4,7 +4,13 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalPageShell,
+  MANAGER_TABLE_TH,
+  PORTAL_TOOLBAR_GROUP,
+  PORTAL_TOOLBAR_PILL_BUTTON,
+  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
+} from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
@@ -48,14 +54,19 @@ function fromDatetimeLocalValue(s: string): string | null {
   return d.toISOString();
 }
 
-type BidDraft = { amount: string; proposedTime: string; note: string };
+type BidDraft = { amount: string; materials: string; proposedTime: string; note: string };
 
 function defaultBidDraft(bid: WorkOrderBid | undefined): BidDraft {
   return {
-    amount: bid ? (bid.amountCents / 100).toFixed(2) : "",
-    proposedTime: bid ? toDatetimeLocalValue(bid.proposedTime) : "",
+    amount: bid?.amountCents ? (bid.amountCents / 100).toFixed(2) : "",
+    materials: bid?.materialsCents ? (bid.materialsCents / 100).toFixed(2) : "",
+    proposedTime: bid?.proposedTime ? toDatetimeLocalValue(bid.proposedTime) : "",
     note: bid?.note ?? "",
   };
+}
+
+function formatVisitLabel(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 /** Work orders offered/assigned to the signed-in vendor. Read-only except for submitting a
@@ -69,6 +80,10 @@ export function VendorWorkOrdersPanel() {
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [doneNoteById, setDoneNoteById] = useState<Record<string, string>>({});
   const [markingDoneId, setMarkingDoneId] = useState<string | null>(null);
+  /** Chosen before a bid row exists — once scheduled/submitted, the row's own quoteMode wins. */
+  const [modeById, setModeById] = useState<Record<string, "upfront" | "after_consultation">>({});
+  const [consultationDraftById, setConsultationDraftById] = useState<Record<string, string>>({});
+  const [schedulingId, setSchedulingId] = useState<string | null>(null);
 
   const loadBids = useCallback(async () => {
     const bids = await fetchWorkOrderBids();
@@ -97,9 +112,14 @@ export function VendorWorkOrdersPanel() {
   const submitBid = async (row: DemoManagerWorkOrderRow) => {
     const draft = draftById[row.id] ?? defaultBidDraft(undefined);
     const amountCents = Math.round(parseMoneyAmount(draft.amount) * 100);
+    const materialsCents = draft.materials.trim() ? Math.round(parseMoneyAmount(draft.materials) * 100) : 0;
     const proposedTimeIso = fromDatetimeLocalValue(draft.proposedTime);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      showToast("Enter a valid bid amount.");
+      showToast("Enter a valid labor cost.");
+      return;
+    }
+    if (!Number.isFinite(materialsCents) || materialsCents < 0) {
+      showToast("Enter a valid equipment/materials cost.");
       return;
     }
     if (!proposedTimeIso) {
@@ -116,6 +136,7 @@ export function VendorWorkOrdersPanel() {
           action: "submit",
           workOrderId: row.id,
           amountCents,
+          materialsCents,
           proposedTime: proposedTimeIso,
           note: draft.note,
         }),
@@ -123,11 +144,44 @@ export function VendorWorkOrdersPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not submit bid.");
       await loadBids();
-      showToast("Bid submitted.");
+      showToast("Price submitted.");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not submit bid.");
     } finally {
       setSubmittingId(null);
+    }
+  };
+
+  const scheduleConsultation = async (row: DemoManagerWorkOrderRow, mode: "auto" | "manual") => {
+    let consultationVisitAt: string | null = null;
+    if (mode === "manual") {
+      consultationVisitAt = fromDatetimeLocalValue(consultationDraftById[row.id] ?? "");
+      if (!consultationVisitAt) {
+        showToast("Choose a date and time for the consultation.");
+        return;
+      }
+    }
+    setSchedulingId(row.id);
+    try {
+      const res = await fetch("/api/portal/work-order-bids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "schedule_consultation",
+          workOrderId: row.id,
+          mode,
+          ...(consultationVisitAt ? { consultationVisitAt } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not schedule consultation.");
+      await loadBids();
+      showToast(`Consultation scheduled for ${formatVisitLabel(data.consultationVisitAt)}.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not schedule consultation.");
+    } finally {
+      setSchedulingId(null);
     }
   };
 
@@ -156,6 +210,12 @@ export function VendorWorkOrdersPanel() {
     const draft = draftById[row.id] ?? defaultBidDraft(bid);
     const canEditBid = row.biddingOpen && (!bid || bid.status === "submitted");
     const canMarkDone = row.bucket === "scheduled" && !row.automationStatus;
+    const mode = bid?.quoteMode ?? modeById[row.id] ?? "upfront";
+    const consultationScheduled = Boolean(bid?.consultationVisitAt);
+    const pricingPending = Boolean(bid) && bid?.quoteMode === "after_consultation" && bid?.amountCents == null;
+    const showModeToggle = canEditBid && !bid;
+    const showScheduleConsultation = canEditBid && !bid && mode === "after_consultation";
+    const showPricingFields = canEditBid && (mode === "upfront" || consultationScheduled);
 
     return (
       <>
@@ -173,32 +233,105 @@ export function VendorWorkOrdersPanel() {
 
         {row.biddingOpen || bid ? (
           <div className="mt-4 border-t border-border pt-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted">Bid</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">Quote</p>
+              {bid ? (
+                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                  {bid.quoteMode === "after_consultation" ? "After consultation" : "Upfront"}
+                </span>
+              ) : null}
+            </div>
+
             {bid && !canEditBid ? (
               <p className="mt-1.5 text-xs text-muted">
-                Your bid:{" "}
-                <span className="font-medium text-foreground">${(bid.amountCents / 100).toFixed(2)}</span> ·{" "}
-                {new Date(bid.proposedTime).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}{" "}
-                ·{" "}
-                <span
-                  className={
-                    bid.status === "accepted"
-                      ? "font-semibold text-foreground"
-                      : "font-semibold text-muted"
-                  }
-                >
+                Your quote:{" "}
+                <span className="font-medium text-foreground">
+                  ${(((bid.amountCents ?? 0) + bid.materialsCents) / 100).toFixed(2)}
+                </span>{" "}
+                <span className="text-muted">
+                  (labor ${((bid.amountCents ?? 0) / 100).toFixed(2)} + materials ${(bid.materialsCents / 100).toFixed(2)})
+                </span>{" "}
+                · {bid.proposedTime ? formatVisitLabel(bid.proposedTime) : "—"} ·{" "}
+                <span className={bid.status === "accepted" ? "font-semibold text-foreground" : "font-semibold text-muted"}>
                   {bid.status}
                 </span>
               </p>
-            ) : canEditBid ? (
+            ) : null}
+
+            {showModeToggle ? (
+              <div className={`${PORTAL_TOOLBAR_GROUP} mt-2`} role="tablist" aria-label="Pricing mode">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "upfront"}
+                  data-attr="vendor-quote-mode-upfront"
+                  className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${mode === "upfront" ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
+                  onClick={() => setModeById((prev) => ({ ...prev, [row.id]: "upfront" }))}
+                >
+                  Quote now
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "after_consultation"}
+                  data-attr="vendor-quote-mode-consultation"
+                  className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${mode === "after_consultation" ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
+                  onClick={() => setModeById((prev) => ({ ...prev, [row.id]: "after_consultation" }))}
+                >
+                  Consult first
+                </button>
+              </div>
+            ) : null}
+
+            {showScheduleConsultation ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-muted">Schedule a consultation visit, then come back to price the job.</p>
+                <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    data-attr="vendor-auto-schedule-consultation"
+                    className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                    disabled={schedulingId === row.id}
+                    onClick={() => void scheduleConsultation(row, "auto")}
+                  >
+                    {schedulingId === row.id ? "Finding a slot…" : "Auto-schedule from my availability"}
+                  </Button>
+                  <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                    Or pick a time
+                    <Input
+                      type="datetime-local"
+                      value={consultationDraftById[row.id] ?? ""}
+                      onChange={(e) => setConsultationDraftById((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                      className="h-8 rounded-md text-sm"
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    data-attr="vendor-manual-schedule-consultation"
+                    className={PORTAL_DETAIL_BTN}
+                    disabled={schedulingId === row.id}
+                    onClick={() => void scheduleConsultation(row, "manual")}
+                  >
+                    Schedule
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {bid?.quoteMode === "after_consultation" && consultationScheduled ? (
+              <p className="mt-2 text-xs text-muted">
+                Consultation scheduled for{" "}
+                <span className="font-medium text-foreground">{formatVisitLabel(bid.consultationVisitAt as string)}</span>
+                {pricingPending ? " — pricing pending." : "."}
+              </p>
+            ) : null}
+
+            {showPricingFields ? (
               <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
                 <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
-                  Your cost
+                  Labor cost
                   <Input
                     type="text"
                     inputMode="decimal"
@@ -206,6 +339,22 @@ export function VendorWorkOrdersPanel() {
                     value={draft.amount}
                     onChange={(e) =>
                       setDraftById((prev) => ({ ...prev, [row.id]: { ...(prev[row.id] ?? defaultBidDraft(bid)), amount: e.target.value } }))
+                    }
+                    className="h-8 w-24 rounded-md text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                  Equipment / materials
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="$0"
+                    value={draft.materials}
+                    onChange={(e) =>
+                      setDraftById((prev) => ({
+                        ...prev,
+                        [row.id]: { ...(prev[row.id] ?? defaultBidDraft(bid)), materials: e.target.value },
+                      }))
                     }
                     className="h-8 w-24 rounded-md text-sm"
                   />
@@ -241,7 +390,7 @@ export function VendorWorkOrdersPanel() {
           </div>
         ) : null}
 
-        {canEditBid ? (
+        {showPricingFields ? (
           <PortalTableDetailActions>
             <Button
               type="button"
@@ -251,7 +400,7 @@ export function VendorWorkOrdersPanel() {
               disabled={submittingId === row.id}
               onClick={() => void submitBid(row)}
             >
-              {bid ? "Update bid" : "Submit bid"}
+              {pricingPending ? "Submit price" : bid ? "Update bid" : "Submit bid"}
             </Button>
           </PortalTableDetailActions>
         ) : null}
@@ -305,7 +454,11 @@ export function VendorWorkOrdersPanel() {
                       <WorkOrderStatusBadge bucket={row.bucket} />
                       {row.biddingOpen ? (
                         <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                          {bid ? "Bid submitted" : "Open for bids"}
+                          {bid && bid.amountCents == null
+                            ? "Pricing pending"
+                            : bid
+                              ? "Bid submitted"
+                              : "Open for bids"}
                         </span>
                       ) : null}
                       {row.automationStatus === "vendor_marked_done" ? (
@@ -375,7 +528,7 @@ export function VendorWorkOrdersPanel() {
                           <td className={PORTAL_TABLE_TD}>
                             {row.biddingOpen ? (
                               <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                                {bid ? "Submitted" : "Open"}
+                                {bid && bid.amountCents == null ? "Pricing pending" : bid ? "Submitted" : "Open"}
                               </span>
                             ) : bid?.status === "accepted" ? (
                               <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">

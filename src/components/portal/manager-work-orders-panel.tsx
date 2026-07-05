@@ -940,20 +940,47 @@ export function ManagerWorkOrdersPanel({
                             ) : null}
                             {(bidsByWorkOrderId[row.id] ?? []).length > 0 ? (
                               <div className="mt-2 space-y-1.5">
-                                {(bidsByWorkOrderId[row.id] ?? []).map((bid) => (
+                                {(bidsByWorkOrderId[row.id] ?? []).map((bid) => {
+                                  const pricingPending = bid.amountCents == null;
+                                  const totalCents = (bid.amountCents ?? 0) + bid.materialsCents;
+                                  return (
                                   <div
                                     key={bid.id}
                                     className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs"
                                   >
                                     <div>
                                       <span className="font-medium text-foreground">{bid.vendorName || "Vendor"}</span>{" "}
-                                      · ${(bid.amountCents / 100).toFixed(2)} ·{" "}
-                                      {new Date(bid.proposedTime).toLocaleString(undefined, {
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "numeric",
-                                        minute: "2-digit",
-                                      })}
+                                      <span className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                                        {bid.quoteMode === "after_consultation" ? "After consultation" : "Upfront"}
+                                      </span>
+                                      {pricingPending ? (
+                                        <span className="ml-1 text-muted">
+                                          · Consultation{" "}
+                                          {bid.consultationVisitAt
+                                            ? `scheduled for ${new Date(bid.consultationVisitAt).toLocaleString(undefined, {
+                                                month: "short",
+                                                day: "numeric",
+                                                hour: "numeric",
+                                                minute: "2-digit",
+                                              })}`
+                                            : "pending"}{" "}
+                                          — pricing pending
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted">
+                                          {" "}
+                                          · ${(totalCents / 100).toFixed(2)} (labor ${((bid.amountCents ?? 0) / 100).toFixed(2)} + materials $
+                                          {(bid.materialsCents / 100).toFixed(2)}) ·{" "}
+                                          {bid.proposedTime
+                                            ? new Date(bid.proposedTime).toLocaleString(undefined, {
+                                                month: "short",
+                                                day: "numeric",
+                                                hour: "numeric",
+                                                minute: "2-digit",
+                                              })
+                                            : "—"}
+                                        </span>
+                                      )}
                                       {bid.note ? <p className="mt-0.5 text-muted">{bid.note}</p> : null}
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -968,7 +995,7 @@ export function ManagerWorkOrdersPanel({
                                       >
                                         {bid.status}
                                       </span>
-                                      {bid.status === "submitted" ? (
+                                      {bid.status === "submitted" && !pricingPending ? (
                                         <Button
                                           type="button"
                                           variant="primary"
@@ -982,7 +1009,8 @@ export function ManagerWorkOrdersPanel({
                                       ) : null}
                                     </div>
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             ) : row.biddingOpen ? (
                               <p className="mt-2 text-xs text-muted">No bids yet.</p>

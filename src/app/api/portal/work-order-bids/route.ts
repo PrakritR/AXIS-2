@@ -4,6 +4,7 @@ import { isAdminUser } from "@/lib/auth/admin-preview";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { resolveVendorNextAvailableSlot } from "@/lib/vendor-availability-server";
 import { buildVendorBidAcceptedEmail, buildVendorBidDeclinedEmail } from "@/lib/vendor-visit-email";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 
@@ -11,14 +12,24 @@ export const runtime = "nodejs";
 
 type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
 
+/** Placeholder duration used only to keep a scheduled consultation from double-booking
+ * against other pending consultations — the real job visit is scheduled separately once
+ * priced (see scheduledAtIso on the work order). */
+const CONSULTATION_VISIT_DURATION_MINUTES = 30;
+
+type QuoteMode = "upfront" | "after_consultation";
+
 type BidRecord = {
   id: string;
   work_order_id: string;
   vendor_user_id: string;
   vendor_directory_id: string | null;
   manager_user_id: string;
-  amount_cents: number;
-  proposed_time: string;
+  quote_mode: QuoteMode;
+  consultation_visit_at: string | null;
+  amount_cents: number | null;
+  materials_cents: number;
+  proposed_time: string | null;
   note: string | null;
   status: "submitted" | "accepted" | "declined";
   created_at: string;
@@ -32,8 +43,11 @@ type BidJson = {
   vendorDirectoryId: string | null;
   vendorName?: string;
   vendorEmail?: string;
-  amountCents: number;
-  proposedTime: string;
+  quoteMode: QuoteMode;
+  consultationVisitAt: string | null;
+  amountCents: number | null;
+  materialsCents: number;
+  proposedTime: string | null;
   note: string | null;
   status: "submitted" | "accepted" | "declined";
   createdAt: string;
@@ -79,7 +93,10 @@ function toJson(bid: BidRecord, vendors: Map<string, { name: string; email: stri
     vendorDirectoryId: bid.vendor_directory_id,
     vendorName: vendor?.name,
     vendorEmail: vendor?.email,
+    quoteMode: bid.quote_mode,
+    consultationVisitAt: bid.consultation_visit_at,
     amountCents: bid.amount_cents,
+    materialsCents: bid.materials_cents,
     proposedTime: bid.proposed_time,
     note: bid.note,
     status: bid.status,
@@ -117,37 +134,24 @@ export async function GET(req: Request) {
   }
 }
 
-async function submitBid(
+type WorkOrderAccess = { managerUserId: string; rowData: DemoManagerWorkOrderRow };
+
+/** A vendor may act on a work order if they're the currently assigned vendor, or if the
+ * manager sent them a consultation/quote offer for it (several vendors can be offered the
+ * same not-yet-assigned work order at once — see work_order_vendor_offers) — and only
+ * while bidding is open. Shared by submitBid and scheduleConsultation. */
+async function resolveVendorWorkOrderAccess(
   db: Db,
   actor: NonNullable<Awaited<ReturnType<typeof sessionActor>>>,
-  body: { workOrderId?: string; amountCents?: number; proposedTime?: string; note?: string },
-) {
-  if (actor.role !== "vendor") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-
-  const workOrderId = String(body.workOrderId ?? "").trim();
-  const amountCents = Math.round(Number(body.amountCents));
-  const proposedTime = String(body.proposedTime ?? "").trim();
-  const note = String(body.note ?? "").trim().slice(0, 2000);
-
-  if (!workOrderId) return NextResponse.json({ error: "Work order id required." }, { status: 400 });
-  if (!Number.isFinite(amountCents) || amountCents <= 0) {
-    return NextResponse.json({ error: "Enter a valid bid amount." }, { status: 400 });
-  }
-  const proposedDate = new Date(proposedTime);
-  if (Number.isNaN(proposedDate.getTime())) {
-    return NextResponse.json({ error: "Enter a valid proposed date/time." }, { status: 400 });
-  }
-
+  workOrderId: string,
+): Promise<{ ok: true; access: WorkOrderAccess } | { ok: false; response: NextResponse }> {
   const { data: workOrder } = await db
     .from("portal_work_order_records")
     .select("manager_user_id, vendor_user_id, row_data")
     .eq("id", workOrderId)
     .maybeSingle();
-  if (!workOrder) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  if (!workOrder) return { ok: false, response: NextResponse.json({ error: "Forbidden." }, { status: 403 }) };
 
-  // A vendor may bid if they're the currently assigned vendor, or if the manager sent
-  // them a consultation/quote offer for this work order (several vendors can be offered
-  // the same not-yet-assigned work order at once — see work_order_vendor_offers).
   const isAssignedVendor = workOrder.vendor_user_id === actor.userId;
   let isOfferedVendor = false;
   if (!isAssignedVendor) {
@@ -161,16 +165,46 @@ async function submitBid(
     isOfferedVendor = Boolean(offer);
   }
   if (!isAssignedVendor && !isOfferedVendor) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    return { ok: false, response: NextResponse.json({ error: "Forbidden." }, { status: 403 }) };
   }
   const rowData = (workOrder.row_data ?? {}) as DemoManagerWorkOrderRow;
   if (!rowData.biddingOpen) {
-    return NextResponse.json({ error: "Bidding is not open for this work order." }, { status: 400 });
+    return { ok: false, response: NextResponse.json({ error: "Bidding is not open for this work order." }, { status: 400 }) };
   }
+  return { ok: true, access: { managerUserId: workOrder.manager_user_id as string, rowData } };
+}
+
+async function submitBid(
+  db: Db,
+  actor: NonNullable<Awaited<ReturnType<typeof sessionActor>>>,
+  body: { workOrderId?: string; amountCents?: number; materialsCents?: number; proposedTime?: string; note?: string },
+) {
+  if (actor.role !== "vendor") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+
+  const workOrderId = String(body.workOrderId ?? "").trim();
+  const amountCents = Math.round(Number(body.amountCents));
+  const materialsCents = body.materialsCents === undefined ? 0 : Math.round(Number(body.materialsCents));
+  const proposedTime = String(body.proposedTime ?? "").trim();
+  const note = String(body.note ?? "").trim().slice(0, 2000);
+
+  if (!workOrderId) return NextResponse.json({ error: "Work order id required." }, { status: 400 });
+  if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    return NextResponse.json({ error: "Enter a valid labor cost." }, { status: 400 });
+  }
+  if (!Number.isFinite(materialsCents) || materialsCents < 0) {
+    return NextResponse.json({ error: "Enter a valid equipment/materials cost." }, { status: 400 });
+  }
+  const proposedDate = new Date(proposedTime);
+  if (Number.isNaN(proposedDate.getTime())) {
+    return NextResponse.json({ error: "Enter a valid proposed date/time." }, { status: 400 });
+  }
+
+  const access = await resolveVendorWorkOrderAccess(db, actor, workOrderId);
+  if (!access.ok) return access.response;
 
   const { data: existing } = await db
     .from("work_order_bids")
-    .select("id, status")
+    .select("id, status, quote_mode, consultation_visit_at")
     .eq("work_order_id", workOrderId)
     .eq("vendor_user_id", actor.userId)
     .maybeSingle();
@@ -182,15 +216,18 @@ async function submitBid(
     .from("manager_vendor_records")
     .select("id")
     .eq("vendor_user_id", actor.userId)
-    .eq("manager_user_id", workOrder.manager_user_id)
+    .eq("manager_user_id", access.access.managerUserId)
     .maybeSingle();
 
   const record = {
     work_order_id: workOrderId,
     vendor_user_id: actor.userId,
     vendor_directory_id: (vendorDirectoryRow?.id as string | undefined) ?? null,
-    manager_user_id: workOrder.manager_user_id,
+    manager_user_id: access.access.managerUserId,
+    quote_mode: (existing?.quote_mode as QuoteMode | undefined) ?? "upfront",
+    consultation_visit_at: existing?.consultation_visit_at ?? null,
     amount_cents: amountCents,
+    materials_cents: materialsCents,
     proposed_time: proposedDate.toISOString(),
     note: note || null,
     status: "submitted" as const,
@@ -204,6 +241,106 @@ async function submitBid(
 
   track("work_order_bid_submitted", actor.userId, { work_order_id: workOrderId });
   return NextResponse.json({ ok: true });
+}
+
+/** Vendor's first step of the "quote after consultation" mode: book (or manually set) a
+ * consultation visit and save a pricing-pending placeholder bid row. The vendor prices the
+ * job afterward via submitBid, which preserves quote_mode/consultation_visit_at. */
+async function scheduleConsultation(
+  db: Db,
+  actor: NonNullable<Awaited<ReturnType<typeof sessionActor>>>,
+  body: { workOrderId?: string; mode?: "auto" | "manual"; consultationVisitAt?: string; note?: string },
+) {
+  if (actor.role !== "vendor") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+
+  const workOrderId = String(body.workOrderId ?? "").trim();
+  if (!workOrderId) return NextResponse.json({ error: "Work order id required." }, { status: 400 });
+
+  const access = await resolveVendorWorkOrderAccess(db, actor, workOrderId);
+  if (!access.ok) return access.response;
+
+  const { data: existing } = await db
+    .from("work_order_bids")
+    .select("id, status, amount_cents, materials_cents, proposed_time, note")
+    .eq("work_order_id", workOrderId)
+    .eq("vendor_user_id", actor.userId)
+    .maybeSingle();
+  if (existing && existing.status !== "submitted") {
+    return NextResponse.json({ error: "This bid has already been resolved." }, { status: 403 });
+  }
+
+  let consultationVisitAt: string;
+  if (body.mode === "manual") {
+    const parsed = new Date(String(body.consultationVisitAt ?? ""));
+    if (Number.isNaN(parsed.getTime())) {
+      return NextResponse.json({ error: "Enter a valid consultation date/time." }, { status: 400 });
+    }
+    consultationVisitAt = parsed.toISOString();
+  } else {
+    const { data: otherConsultations } = await db
+      .from("work_order_bids")
+      .select("consultation_visit_at")
+      .eq("vendor_user_id", actor.userId)
+      .eq("status", "submitted")
+      .not("consultation_visit_at", "is", null)
+      .neq("work_order_id", workOrderId);
+    const extraBusy = (otherConsultations ?? [])
+      .map((r) => r.consultation_visit_at as string | null)
+      .filter((iso): iso is string => Boolean(iso))
+      .map((iso) => ({
+        startIso: iso,
+        endIso: new Date(new Date(iso).getTime() + CONSULTATION_VISIT_DURATION_MINUTES * 60_000).toISOString(),
+      }));
+    const { iso, reason } = await resolveVendorNextAvailableSlot(db, actor.userId, {
+      durationMinutes: CONSULTATION_VISIT_DURATION_MINUTES,
+      extraBusy,
+      excludeWorkOrderId: workOrderId,
+    });
+    if (!iso) {
+      return NextResponse.json(
+        {
+          error:
+            reason === "no_availability"
+              ? "Set your availability first, then try again."
+              : "No open slot found in your availability.",
+        },
+        { status: 400 },
+      );
+    }
+    consultationVisitAt = iso;
+  }
+
+  const note = String(body.note ?? existing?.note ?? "").trim().slice(0, 2000);
+
+  const { data: vendorDirectoryRow } = await db
+    .from("manager_vendor_records")
+    .select("id")
+    .eq("vendor_user_id", actor.userId)
+    .eq("manager_user_id", access.access.managerUserId)
+    .maybeSingle();
+
+  const record = {
+    work_order_id: workOrderId,
+    vendor_user_id: actor.userId,
+    vendor_directory_id: (vendorDirectoryRow?.id as string | undefined) ?? null,
+    manager_user_id: access.access.managerUserId,
+    quote_mode: "after_consultation" as const,
+    consultation_visit_at: consultationVisitAt,
+    amount_cents: existing?.amount_cents ?? null,
+    materials_cents: existing?.materials_cents ?? 0,
+    proposed_time: existing?.proposed_time ?? null,
+    note: note || null,
+    status: "submitted" as const,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await db
+    .from("work_order_bids")
+    .upsert(existing ? { id: existing.id, ...record } : record, { onConflict: "work_order_id,vendor_user_id" });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  track("work_order_consultation_scheduled", actor.userId, { work_order_id: workOrderId });
+  return NextResponse.json({ ok: true, consultationVisitAt });
 }
 
 async function acceptBid(
@@ -225,6 +362,12 @@ async function acceptBid(
   }
   if (record.status !== "submitted") {
     return NextResponse.json({ error: "This bid has already been resolved." }, { status: 400 });
+  }
+  if (record.amount_cents == null) {
+    return NextResponse.json(
+      { error: "This vendor hasn't priced the job yet — it's still pending their consultation." },
+      { status: 400 },
+    );
   }
 
   const now = new Date().toISOString();
@@ -268,13 +411,16 @@ async function acceptBid(
 
   if (workOrder) {
     const rowData = (workOrder.row_data ?? {}) as DemoManagerWorkOrderRow;
+    const totalCents = record.amount_cents + record.materials_cents;
     const nextRowData: DemoManagerWorkOrderRow = {
       ...rowData,
       vendorId: record.vendor_directory_id ?? undefined,
       vendorName: winningVendor?.name || rowData.vendorName,
       vendorAssignedAt: now,
       selfAssigned: false,
-      cost: `$${(record.amount_cents / 100).toFixed(2)}`,
+      cost: `$${(totalCents / 100).toFixed(2)}`,
+      vendorCostCents: record.amount_cents,
+      materialsCostCents: record.materials_cents,
       biddingOpen: false,
       biddingResolvedAt: now,
     };
@@ -341,16 +487,20 @@ export async function POST(req: Request) {
     if (!actor) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
     const body = (await req.json().catch(() => ({}))) as {
-      action?: "submit" | "accept";
+      action?: "submit" | "accept" | "schedule_consultation";
       workOrderId?: string;
       amountCents?: number;
+      materialsCents?: number;
       proposedTime?: string;
       note?: string;
       bidId?: string;
+      mode?: "auto" | "manual";
+      consultationVisitAt?: string;
     };
 
     if (body.action === "accept") return acceptBid(db, actor, body);
     if (body.action === "submit") return submitBid(db, actor, body);
+    if (body.action === "schedule_consultation") return scheduleConsultation(db, actor, body);
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save bid.";

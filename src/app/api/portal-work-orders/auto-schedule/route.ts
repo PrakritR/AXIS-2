@@ -2,28 +2,12 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { DEFAULT_VISIT_DURATION_MINUTES, resolveNextAvailableSlot, type VendorAvailabilityRule } from "@/lib/vendor-availability";
-import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { DEFAULT_VISIT_DURATION_MINUTES } from "@/lib/vendor-availability";
+import { resolveVendorNextAvailableSlot } from "@/lib/vendor-availability-server";
 
 export const runtime = "nodejs";
 
 type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
-
-type RuleRecord = {
-  id: string;
-  kind: "weekly" | "block";
-  weekday: number | null;
-  specific_date: string | null;
-  start_minute: number;
-  end_minute: number;
-};
-
-function toRule(rule: RuleRecord): VendorAvailabilityRule {
-  if (rule.kind === "weekly") {
-    return { id: rule.id, kind: "weekly", weekday: rule.weekday as number, startMinute: rule.start_minute, endMinute: rule.end_minute };
-  }
-  return { id: rule.id, kind: "block", specificDate: rule.specific_date as string, startMinute: rule.start_minute, endMinute: rule.end_minute };
-}
 
 /** Manager -> the vendor_user_id of a directory row they own, or null if unresolvable/unlinked. */
 async function resolveManagerOwnedVendorUserId(db: Db, managerUserId: string, vendorDirectoryId: string): Promise<string | null> {
@@ -77,34 +61,11 @@ export async function POST(req: Request) {
         ? Math.round(Number(body.durationMinutes))
         : DEFAULT_VISIT_DURATION_MINUTES;
 
-    const { data: ruleRows, error: ruleError } = await db
-      .from("vendor_availability_rules")
-      .select("id, kind, weekday, specific_date, start_minute, end_minute")
-      .eq("vendor_user_id", vendorUserId);
-    if (ruleError) return NextResponse.json({ error: ruleError.message }, { status: 500 });
-
-    const rules = (ruleRows ?? []).map((r) => toRule(r as RuleRecord));
-    if (rules.filter((r) => r.kind === "weekly").length === 0) {
-      return NextResponse.json({ iso: null, reason: "no_availability" });
-    }
-
-    const { data: busyRows, error: busyError } = await db
-      .from("portal_work_order_records")
-      .select("id, row_data")
-      .eq("vendor_user_id", vendorUserId)
-      .neq("id", workOrderId);
-    if (busyError) return NextResponse.json({ error: busyError.message }, { status: 500 });
-
-    const busy = (busyRows ?? [])
-      .map((r) => r.row_data as DemoManagerWorkOrderRow)
-      .filter((r) => r?.scheduledAtIso && r.bucket !== "completed")
-      .map((r) => {
-        const start = new Date(r.scheduledAtIso as string);
-        return { startIso: start.toISOString(), endIso: new Date(start.getTime() + durationMinutes * 60_000).toISOString() };
-      });
-
-    const iso = resolveNextAvailableSlot({ rules, busy, durationMinutes, from: new Date() });
-    if (!iso) return NextResponse.json({ iso: null, reason: "no_open_slot" });
+    const { iso, reason } = await resolveVendorNextAvailableSlot(db, vendorUserId, {
+      durationMinutes,
+      excludeWorkOrderId: workOrderId,
+    });
+    if (!iso) return NextResponse.json({ iso: null, reason });
     return NextResponse.json({ iso });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to auto-schedule.";
