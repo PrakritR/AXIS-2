@@ -16,6 +16,7 @@ import {
   isManagerOnboardingComplete,
   managerNeedsPricingSelection,
 } from "@/lib/auth/manager-onboarding";
+import { normalizePortalRoles } from "@/lib/auth/portal-access";
 import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
@@ -87,8 +88,11 @@ export async function resolveOAuthPortalRedirect(
     return finish(MANAGER_PRICING_ENTRY_PATH);
   }
 
-  const { data: roleRows } = await supabase.from("profile_roles").select("role").eq("user_id", user.id);
-  const roles = [...new Set((roleRows ?? []).map((row) => row.role).filter((role): role is AuthRole => isAuthRole(role)))];
+  const [{ data: roleRows }, { data: profile }] = await Promise.all([
+    supabase.from("profile_roles").select("role").eq("user_id", user.id),
+    supabase.from("profiles").select("role, manager_id, full_name, application_approved").eq("id", user.id).maybeSingle(),
+  ]);
+  const roles = normalizePortalRoles(roleRows, profile?.role);
 
   // Multi-role users (e.g. admin+manager) always pick their portal explicitly — the chooser
   // must never be skipped by a single-role branch below.
@@ -105,20 +109,6 @@ export async function resolveOAuthPortalRedirect(
       return finish(MANAGER_PRICING_ENTRY_PATH);
     }
     return finish(managerPortalDestination(safeIntended));
-  }
-
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role === "manager" && (await managerNeedsPricingSelection(supabase, user.id, email))) {
-    return finish(MANAGER_PRICING_ENTRY_PATH);
-  }
-  if (profile?.role === "manager") {
-    return finish(managerPortalDestination(safeIntended));
-  }
-  if (profile?.role === "resident") {
-    return finish(resolvePostOAuthPathFromRoles(["resident"], safeIntended));
-  }
-  if (profile?.role && isAuthRole(profile.role)) {
-    return finish(resolvePostOAuthPathFromRoles([profile.role], safeIntended));
   }
 
   if (isPrimaryAdminEmail(email)) {

@@ -102,30 +102,28 @@ export function ResidentListingSearch() {
 
       <div className="my-6 h-px w-full bg-border" />
 
-      <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="col-span-full grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:col-span-1">
-          <FieldBlock label="Move-in date">
-            <input
-              type="date"
-              value={moveIn}
-              onChange={(e) => setMoveIn(e.target.value)}
-              data-attr="resident-search-move-in"
-              className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
-            />
-          </FieldBlock>
+      <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2.2fr)_minmax(0,1fr)]">
+        <FieldBlock label="Move-in date">
+          <input
+            type="date"
+            value={moveIn}
+            onChange={(e) => setMoveIn(e.target.value)}
+            data-attr="resident-search-move-in"
+            className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
+          />
+        </FieldBlock>
 
-          <FieldBlock label="Move-out date">
-            <input
-              type="date"
-              value={moveOut}
-              onChange={(e) => setMoveOut(e.target.value)}
-              data-attr="resident-search-move-out"
-              className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
-            />
-          </FieldBlock>
-        </div>
+        <FieldBlock label="Move-out date">
+          <input
+            type="date"
+            value={moveOut}
+            onChange={(e) => setMoveOut(e.target.value)}
+            data-attr="resident-search-move-out"
+            className={`${inputCls} hero-search-date-input min-w-0 max-w-full`}
+          />
+        </FieldBlock>
 
-        <div className="col-span-full min-w-0 lg:col-span-1">
+        <div className="col-span-2 min-w-0 lg:col-span-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Max budget / mo</span>
             <span className={`text-[13px] font-semibold ${budgetActive ? "text-primary" : "text-muted/60"}`}>
@@ -152,7 +150,7 @@ export function ResidentListingSearch() {
           </div>
         </div>
 
-        <FieldBlock label="Bedrooms">
+        <FieldBlock label="Bedrooms" className="col-span-2 lg:col-span-1">
           <select
             value={bedroom}
             onChange={(e) => setBedroom(e.target.value)}
@@ -251,9 +249,9 @@ export function ResidentListingSearch() {
   );
 }
 
-function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldBlock({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div className={`flex min-w-0 flex-col gap-2${className ? ` ${className}` : ""}`}>
       <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</span>
       {children}
     </div>

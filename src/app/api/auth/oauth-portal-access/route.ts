@@ -27,7 +27,11 @@ export async function GET(req: NextRequest) {
     const service = createSupabaseServiceRoleClient();
     // Password sign-in reaches this resolver without an OAuth callback, so keep
     // email/password and OAuth portal rows merged before choosing a destination.
-    await reconcileAuthAccountsByEmail(service, user);
+    try {
+      await reconcileAuthAccountsByEmail(service, user);
+    } catch (reconcileError) {
+      console.error("[oauth-portal-access] reconcileAuthAccountsByEmail failed:", reconcileError);
+    }
     const redirectTo = normalizePostAuthPath(
       await resolveOAuthPortalRedirect(service, user, intendedPath, {
         intent: readOAuthIntentFromRequest(req),
