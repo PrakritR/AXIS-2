@@ -39,6 +39,7 @@ function normalizeInputs(raw: Record<string, unknown>): PromotionInputs {
     cta: clean(raw.cta),
     contact: clean(raw.contact),
     tone: clean(raw.tone),
+    address: clean(raw.address),
     customDetails: clean(raw.customDetails),
   };
 }
@@ -58,6 +59,7 @@ function buildUserPrompt(inputs: PromotionInputs, propertyLabel: string): string
   const points = parseSellingPoints(inputs.sellingPoints);
   return [
     `Property / listing: ${propertyLabel || "(unspecified)"}`,
+    `Address: ${inputs.address || "(none)"}`,
     `Manager's headline idea: ${inputs.headline || "(none)"}`,
     `Key selling points / amenities: ${points.length ? points.join("; ") : "(none)"}`,
     `Price: ${inputs.price || "(none)"}`,

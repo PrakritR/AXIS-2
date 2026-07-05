@@ -847,6 +847,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Book a tour today",
         contact: "leasing@axis.com · (206) 555-0142",
         tone: "Warm & welcoming",
+        address: "12 Pike St, Seattle, WA",
         customDetails: "",
       },
       copy: {
@@ -878,6 +879,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Schedule a viewing",
         contact: "leasing@axis.com",
         tone: "Modern & upscale",
+        address: "88 Bell St, Seattle, WA",
         customDetails: "",
       },
       copy: {
@@ -909,6 +911,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Apply online",
         contact: "leasing@axis.com",
         tone: "Calm & professional",
+        address: "455 Boren Ave, Seattle, WA",
         customDetails: "",
       },
       copy: null,
@@ -933,6 +936,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Apply today",
         contact: "leasing@axis.com",
         tone: "Clean & minimal",
+        address: "210 Fairview Ave N, Seattle, WA",
         customDetails: "",
       },
       copy: {

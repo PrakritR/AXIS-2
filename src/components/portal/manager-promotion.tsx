@@ -35,6 +35,7 @@ import {
   PROMOTION_THEME_OPTIONS,
   PROMOTION_TONE_OPTIONS,
   PROMOTION_SIZE_OPTIONS,
+  sanitizeFlyerImages,
   type FlyerSize,
   type ManagerPromotionRow,
   type PromotionInputs,
@@ -58,6 +59,7 @@ import {
 type PromotionDraft = {
   propertyKey: string;
   propertyLabel: string;
+  address: string;
   title: string;
   headline: string;
   sellingPoints: string;
@@ -79,6 +81,7 @@ const CUSTOM_PROPERTY_KEY = "__custom__";
 const EMPTY_DRAFT: PromotionDraft = {
   propertyKey: CUSTOM_PROPERTY_KEY,
   propertyLabel: "",
+  address: "",
   title: "",
   headline: "",
   sellingPoints: "",
@@ -103,6 +106,7 @@ function draftInputs(draft: PromotionDraft): PromotionInputs {
     cta: draft.cta.trim(),
     contact: draft.contact.trim(),
     tone: draft.tone.trim(),
+    address: draft.address.trim(),
     customDetails: draft.customDetails.trim(),
     images: draft.images.slice(0, FLYER_IMAGE_LIMIT),
   };
@@ -215,6 +219,7 @@ export function ManagerPromotion() {
             ? row.propertyId
             : CUSTOM_PROPERTY_KEY,
         propertyLabel: row.propertyLabel,
+        address: row.inputs.address ?? "",
         title: row.title,
         headline: row.inputs.headline,
         sellingPoints: row.inputs.sellingPoints,
@@ -241,17 +246,38 @@ export function ManagerPromotion() {
       return;
     }
     const listing = listings.find((l) => l.id === key)?.property;
+    const submission = listing?.listingSubmission;
+    // Real amenities from the listing wizard, folded in alongside beds/baths so
+    // the flyer's feature card reflects actual property facts, not placeholders.
+    const amenityLines = submission?.amenitiesText
+      ? submission.amenitiesText
+          .split(/\r?\n|,/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    // Auto-fill flyer photos from the property's own listing photos when the
+    // manager hasn't already uploaded/chosen any — grounded in the real
+    // listing, not a blank slate the manager has to re-upload into.
+    const autoImages = sanitizeFlyerImages(submission?.housePhotoDataUrls ?? []);
     setDraft((d) => ({
       ...d,
       propertyKey: key,
       propertyLabel: listing ? `${listing.title} — ${listing.neighborhood || listing.address}` : d.propertyLabel,
+      address: d.address.trim() || listing?.address || d.address,
       price: d.price.trim() ? d.price : listing?.rentLabel ?? d.price,
       sellingPoints:
         d.sellingPoints.trim() || !listing
           ? d.sellingPoints
-          : [`${listing.beds} bed · ${listing.baths} bath`, listing.petFriendly ? "Pet friendly" : "", listing.tagline]
+          : [
+              `${listing.beds} bed · ${listing.baths} bath`,
+              listing.petFriendly ? "Pet friendly" : "",
+              listing.tagline,
+              ...amenityLines,
+            ]
               .filter(Boolean)
               .join("\n"),
+      customDetails: d.customDetails.trim() || submission?.houseOverview?.trim() || d.customDetails,
+      images: d.images.length ? d.images : autoImages.length ? autoImages : d.images,
     }));
   }
 
@@ -511,6 +537,34 @@ function TemplateThumb({ id }: { id: PromotionTemplate }) {
   const bar = "rounded-[2px] bg-foreground/60";
   const line = "rounded-[2px] bg-foreground/25";
   const frame = "flex h-16 w-full flex-col gap-1 rounded-md border border-border bg-card p-1.5";
+  const circle = "rounded-full bg-primary/50";
+  if (id === "showcase") {
+    return (
+      <div className={`${frame} flex-row items-start justify-between`} aria-hidden="true">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className={`${line} h-1 w-1/2`} />
+          <div className={`${bar} h-1.5 w-full`} />
+          <div className={`${line} h-1 w-2/3`} />
+        </div>
+        <div className={`${circle} h-8 w-8 shrink-0`} />
+      </div>
+    );
+  }
+  if (id === "listing_sheet") {
+    return (
+      <div className={frame} aria-hidden="true">
+        <div className={`${bar} mx-auto h-1.5 w-2/3`} />
+        <div className="flex flex-1 gap-1">
+          <div className={`${photo} h-full w-3/5`} />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className={`${line} h-1.5 w-full`} />
+            <div className={`${line} h-1 w-full`} />
+            <div className={`${line} h-1 w-2/3`} />
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (id === "photo_hero") {
     return (
       <div className={frame} aria-hidden="true">
@@ -628,6 +682,15 @@ function PromotionForm({
           value={draft.propertyLabel}
           onChange={(e) => setDraft((d) => ({ ...d, propertyLabel: e.target.value }))}
           placeholder="The Pioneer — Pioneer Square"
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label className="text-xs font-semibold text-muted">Address (shown on flyer)</label>
+        <Input
+          className="mt-1"
+          value={draft.address}
+          onChange={(e) => setDraft((d) => ({ ...d, address: e.target.value }))}
+          placeholder="1420 Broadway, Seattle, WA 98122"
         />
       </div>
       {isCustom ? (
