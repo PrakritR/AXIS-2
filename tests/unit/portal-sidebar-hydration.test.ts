@@ -45,4 +45,5 @@ describe("portal sidebar native hydration", () => {
     expect(PORTAL_SIDEBAR_SOURCE).toContain("playSwipeExit");
     expect(PORTAL_SIDEBAR_SOURCE).toContain("playSwipeEnter");
   });
+
 });

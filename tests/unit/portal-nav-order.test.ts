@@ -58,7 +58,7 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
 describe("pro portal nav grouping (free → resident block → paid workspace → account → settings)", () => {
   const sections = sectionIds(proPortal.sections);
   const residentBlock = ["residents", "leases", "payments"];
-  const paidBlock = ["services", "inbox", "documents", "financials", "relationships", "promotion"];
+  const paidBlock = ["documents", "inbox", "services", "financials", "relationships", "promotion"];
 
   it("places residents and leases before payments", () => {
     expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("leases"));
@@ -66,7 +66,7 @@ describe("pro portal nav grouping (free → resident block → paid workspace �
   });
 
   it("groups resident block contiguously after applications", () => {
-    expectContiguousBlock(sections, residentBlock, "applications", "services");
+    expectContiguousBlock(sections, residentBlock, "applications", "documents");
   });
 
   it("groups paid sections contiguously between payments and feedback", () => {
