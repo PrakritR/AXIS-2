@@ -91,6 +91,16 @@ export const NATIVE_BOTTOM_NAV_ADMIN_PRIMARY = ["dashboard", "properties", "axis
 
 export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["dashboard", "work-orders", "calendar", "inbox"] as const;
 
+/**
+ * Resident: the Dashboard is the hub and every section drills back to it
+ * (PortalMobileBackBar/ResidentMobileNavBar) instead of switching via a fixed
+ * tab bar — Settings and Sign out live in the top-right profile menu there
+ * instead. Every other role keeps its fixed native bottom bar.
+ */
+export function nativeBottomBarEnabledForKind(kind?: PortalDefinition["kind"]): boolean {
+  return kind !== "resident";
+}
+
 function primaryOrderFor(kind?: PortalDefinition["kind"]): readonly string[] {
   switch (kind) {
     case "pro":

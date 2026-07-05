@@ -5,6 +5,7 @@ import {
   NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
   NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
+  nativeBottomBarEnabledForKind,
   orderNativeBottomNavItems,
   pickNativeBottomNavItems,
   splitNativeBottomNavItems,
@@ -125,5 +126,19 @@ describe("splitNativeBottomNavItems", () => {
     const { primary, overflow } = splitNativeBottomNavItems(items, undefined);
     expect(primary).toEqual([]);
     expect(overflow.length).toBe(items.length);
+  });
+});
+
+describe("nativeBottomBarEnabledForKind", () => {
+  it("is disabled only for resident — Dashboard is the hub, no fixed tab bar", () => {
+    expect(nativeBottomBarEnabledForKind("resident")).toBe(false);
+  });
+
+  it("stays enabled for every other role", () => {
+    expect(nativeBottomBarEnabledForKind("pro")).toBe(true);
+    expect(nativeBottomBarEnabledForKind("manager")).toBe(true);
+    expect(nativeBottomBarEnabledForKind("admin")).toBe(true);
+    expect(nativeBottomBarEnabledForKind("vendor")).toBe(true);
+    expect(nativeBottomBarEnabledForKind(undefined)).toBe(true);
   });
 });

@@ -13,7 +13,11 @@ import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import { shouldOpenNativeSectionsSheet } from "@/lib/native/open-portal-sections-sheet";
-import { splitNativeBottomNavItems, orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import {
+  nativeBottomBarEnabledForKind,
+  orderNativeBottomNavItems,
+  splitNativeBottomNavItems,
+} from "@/lib/native/portal-bottom-nav";
 import { adjacentPrimarySection, resolveSwipePageDirection } from "@/lib/native/portal-swipe-page";
 import { playSwipeEnter, playSwipeExit, resetSwipeTransform } from "@/lib/native/portal-swipe-page-transition";
 import { observeNativeBottomNavInset } from "@/lib/native/sync-portal-bottom-nav-inset";
@@ -31,7 +35,7 @@ import {
 } from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import { SIDEBAR_COLLAPSED_COOKIE } from "@/lib/portal-sidebar-cookie";
-import { groupNavItems } from "@/lib/portals/nav-groups";
+import { groupNavItems, isHiddenFromMobileNav } from "@/lib/portals/nav-groups";
 import type { PortalDefinition, PortalKind } from "@/lib/portal-types";
 import { cn } from "@/lib/utils";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
@@ -174,7 +178,7 @@ export function PortalSidebar({
 
   const nativeBottomNavSplit = useMemo(
     () =>
-      showNativeChrome
+      showNativeChrome && nativeBottomBarEnabledForKind(definition.kind)
         ? splitNativeBottomNavItems(navItems, definition.kind)
         : { primary: [], overflow: [] },
     [definition.kind, navItems, showNativeChrome],
@@ -289,14 +293,21 @@ export function PortalSidebar({
   // find anything, alongside their one-tap bar shortcut.
   const moreSheetItems: PortalMoreNavItem[] = useMemo(() => {
     const ordered = orderNativeBottomNavItems(navItems, definition.kind);
-    return ordered.map((item) => ({
-      section: item.section,
-      label: item.label,
-      href: item.href,
-      locked: isSectionLocked(item.section),
-      count: navCounts[item.section] ?? 0,
-    }));
+    return ordered
+      .filter((item) => !isHiddenFromMobileNav(definition.kind, item.section))
+      .map((item) => ({
+        section: item.section,
+        label: item.label,
+        href: item.href,
+        locked: isSectionLocked(item.section),
+        count: navCounts[item.section] ?? 0,
+      }));
   }, [navItems, definition.kind, navCounts, isSectionLocked]);
+
+  const mobileTopStripItems = useMemo(
+    () => navItems.filter((s) => !isHiddenFromMobileNav(definition.kind, s.section)),
+    [navItems, definition.kind],
+  );
 
   const lockAriaLabel = (label: string, locked: boolean) =>
     locked
@@ -569,7 +580,7 @@ export function PortalSidebar({
               className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               aria-label="Portal sections"
             >
-              {navItems.map((s) => renderMobileNavLink(s, "top"))}
+              {mobileTopStripItems.map((s) => renderMobileNavLink(s, "top"))}
             </nav>
           </div>
         </div>

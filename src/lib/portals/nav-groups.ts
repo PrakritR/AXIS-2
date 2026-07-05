@@ -21,6 +21,17 @@ export type NavGroupConfig = { id: string; label: string | null; sections: strin
 /** Sections never rendered in the desktop sidebar (surfaced in the account menu or inside Settings instead). */
 export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile", "bugs-feedback"]);
 
+/**
+ * Feedback is embedded inside the Settings page (see `PortalBugFeedbackPanel`'s
+ * `embedded` mode) for pro/manager and resident, matching the desktop sidebar
+ * exclusion above — so it shouldn't appear as a separate destination in the
+ * mobile top nav strip or the native "More" sheet either. Admin keeps Feedback
+ * as a first-class destination everywhere (it's excluded from this check).
+ */
+export function isHiddenFromMobileNav(kind: PortalKind, section: string): boolean {
+  return section === "bugs-feedback" && kind !== "admin";
+}
+
 // Order mirrors the native bottom bar (Dashboard, Properties, Residents, Documents,
 // Finances, ..., Settings) — see NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY in
 // portal-bottom-nav.ts. Documents and Finances stay separate sidebar items on
