@@ -9,6 +9,7 @@ import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
+import { ManagerPropertyServiceOptionsPanel } from "@/components/portal/manager-property-service-options-panel";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_WRAP,
@@ -447,6 +448,14 @@ function ManagerPropertyInlineDetails({
       />
 
       <ManagerPropertyApplicationQuestionsPanel
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+      />
+
+      <ManagerPropertyServiceOptionsPanel
         sub={managerSubmission}
         saveTarget={houseSaveTarget}
         managerUserId={managerUserId}

@@ -32,6 +32,7 @@ import {
 } from "@/lib/service-requests-storage";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
+import { ManagerCreateServiceRequestModal } from "@/components/portal/manager-create-service-request-modal";
 import {
   ManagerVendorsPanel,
   type ManagerVendorsPanelHandle,
@@ -85,6 +86,7 @@ export function ManagerAllServicesPanel({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [reqBucket, setReqBucket] = useState<RequestBucket>("pending");
+  const [addRequestOpen, setAddRequestOpen] = useState(false);
   const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
   const typeFilter: FilterType = tabId;
 
@@ -310,6 +312,17 @@ export function ManagerAllServicesPanel({
               Add vendor
             </Button>
           ) : null}
+          {typeFilter === "requests" ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              data-attr="manager-service-request-add"
+              onClick={() => setAddRequestOpen(true)}
+            >
+              Add request
+            </Button>
+          ) : null}
         </div>
       }
       filterRow={
@@ -331,6 +344,19 @@ export function ManagerAllServicesPanel({
                 onClick={() => vendorsPanelRef.current?.openAdd()}
               >
                 Add vendor
+              </Button>
+            </div>
+          ) : null}
+          {typeFilter === "requests" ? (
+            <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
+              <Button
+                type="button"
+                variant="primary"
+                className={PORTAL_HEADER_ACTION_BTN}
+                data-attr="manager-service-request-add-mobile"
+                onClick={() => setAddRequestOpen(true)}
+              >
+                Add request
               </Button>
             </div>
           ) : null}
@@ -467,6 +493,17 @@ export function ManagerAllServicesPanel({
           </>
         )}
       </div>
+
+      <ManagerCreateServiceRequestModal
+        open={addRequestOpen}
+        onClose={() => setAddRequestOpen(false)}
+        managerUserId={userId}
+        defaultPropertyId={propertyFilter || undefined}
+        onSubmitted={() => {
+          setDataTick((t) => t + 1);
+          setReqBucket("pending");
+        }}
+      />
     </ManagerPortalPageShell>
   );
 }
