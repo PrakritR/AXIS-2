@@ -338,37 +338,39 @@ export function ResidentLeasePanel() {
               </Button>
             </>
           ) : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0 rounded-full"
-                onClick={() => setShowMoveOutModal(true)}
-              >
-                Renew or extend lease
-              </Button>
-              <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
-                Download PDF
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0 rounded-full"
-                onClick={() => uploadRef.current?.click()}
-                disabled={uploadingPdf}
-              >
-                {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
-              </Button>
-              <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
-                Send to manager
-              </Button>
-              <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => onSignLease()}>
-                Sign lease
-              </Button>
-            </>
+            <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => onSignLease()}>
+              Sign lease
+            </Button>
           )
         }
       >
+        {!pipelineRow?.residentSignature ? (
+          <div className="mb-6 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              onClick={() => setShowMoveOutModal(true)}
+            >
+              Renew or extend lease
+            </Button>
+            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
+              Download PDF
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              onClick={() => uploadRef.current?.click()}
+              disabled={uploadingPdf}
+            >
+              {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
+            </Button>
+            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
+              Send to manager
+            </Button>
+          </div>
+        ) : null}
         {leaseVisibleToResident && pipelineRow ? (
           <div className="mb-6">
             <LeaseDocumentPreview
