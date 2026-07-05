@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
+import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
@@ -239,6 +240,7 @@ export function PortalProfileClient({
           </Card>
           <NotificationsToggle />
           <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
+          <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
           <PortalSettingsExtras currentKind={portalKind} />
         </div>
       </ManagerPortalPageShell>

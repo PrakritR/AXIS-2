@@ -28,16 +28,6 @@ export function PortalSettingsExtras({ currentKind }: { currentKind: PortalKind 
         </Link>
       ) : null}
 
-      {currentKind === "pro" || currentKind === "manager" ? (
-        <Link
-          href="/portal/bugs-feedback"
-          data-attr="portal-profile-feedback-link"
-          className="block w-full rounded-full border border-border px-4 py-3 text-center text-sm font-semibold text-foreground transition hover:bg-accent/70"
-        >
-          Feedback & bugs
-        </Link>
-      ) : null}
-
       <PortalSignOutButton className="w-full rounded-full border border-border px-4 py-3 text-center text-sm font-semibold text-foreground transition hover:bg-accent/70 disabled:opacity-60" />
     </div>
   );

@@ -12,10 +12,23 @@ import {
 } from "@/lib/portals/resident-sections";
 
 const CASES = [
-  // pro/manager surfaces Settings (profile) at the bottom of the sidebar, in
-  // parity with the native bottom bar — see NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY.
-  { kind: "pro" as const, sections: proPortal.sections.map((s) => s.section), sidebarShowsProfile: true },
-  { kind: "admin" as const, sections: adminPortal.sections.map((s) => s.section), sidebarShowsProfile: false },
+  // pro/manager and resident pin Settings (profile) alone at the bottom of the
+  // sidebar; Feedback (bugs-feedback) is no longer a standalone sidebar entry
+  // for either — it's reachable from inside the Settings page instead (see
+  // PortalBugFeedbackPanel's `embedded` mode). Admin is untouched: it still
+  // shows Feedback as its own sidebar item and doesn't surface Settings there.
+  {
+    kind: "pro" as const,
+    sections: proPortal.sections.map((s) => s.section),
+    sidebarShowsProfile: true,
+    sidebarShowsFeedback: false,
+  },
+  {
+    kind: "admin" as const,
+    sections: adminPortal.sections.map((s) => s.section),
+    sidebarShowsProfile: false,
+    sidebarShowsFeedback: true,
+  },
   {
     kind: "resident" as const,
     sections: [
@@ -24,18 +37,23 @@ const CASES = [
         ...RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => s.section),
       ]),
     ],
-    sidebarShowsProfile: false,
+    sidebarShowsProfile: true,
+    sidebarShowsFeedback: false,
   },
 ];
 
 describe("portal nav groups cover the registry exactly", () => {
-  for (const { kind, sections, sidebarShowsProfile } of CASES) {
+  for (const { kind, sections, sidebarShowsProfile, sidebarShowsFeedback } of CASES) {
     const groups = PORTAL_NAV_GROUPS[kind];
     const grouped = groups.flatMap((g) => g.sections);
 
     it(`${kind}: every registry section (except excluded) maps to exactly one group`, () => {
       const expected = sections
-        .filter((s) => (s === "profile" ? sidebarShowsProfile : !SIDEBAR_EXCLUDED_SECTIONS.has(s)))
+        .filter((s) => {
+          if (s === "profile") return sidebarShowsProfile;
+          if (s === "bugs-feedback") return sidebarShowsFeedback;
+          return !SIDEBAR_EXCLUDED_SECTIONS.has(s);
+        })
         .sort();
       expect([...grouped].sort()).toEqual(expected);
     });
@@ -55,6 +73,14 @@ describe("portal nav groups cover the registry exactly", () => {
         expect(grouped.at(-1)).toBe("profile");
       } else {
         expect(grouped).not.toContain("profile");
+      }
+    });
+
+    it(`${kind}: bugs-feedback ${sidebarShowsFeedback ? "surfaces in" : "is excluded from"} the sidebar`, () => {
+      if (sidebarShowsFeedback) {
+        expect(grouped).toContain("bugs-feedback");
+      } else {
+        expect(grouped).not.toContain("bugs-feedback");
       }
     });
   }

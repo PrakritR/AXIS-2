@@ -6,14 +6,20 @@ import type { PortalKind } from "@/lib/portal-types";
  * platform-parity tests are untouched; this only decides how the desktop sidebar
  * buckets sections under headings.
  *
- * `label: null` renders the items with no heading (Home row, trailing Feedback).
- * `profile` is intentionally absent everywhere — it lives in the top-right
- * account menu, not the sidebar.
+ * `label: null` renders the items with no heading (Home row, trailing Settings).
+ * `profile` (Settings) is the sole member of the trailing "account" group for
+ * manager/pro and resident, so `PortalSidebar`'s `mt-auto` on the first
+ * trailing group pins it alone to the sidebar's bottom corner. Feedback
+ * (`bugs-feedback`) is left out of the manager/pro and resident configs on
+ * purpose — it's reachable from inside the Settings page instead (see
+ * `PortalBugFeedbackPanel`'s `embedded` mode), not as its own sidebar entry.
+ * The route/section itself is untouched so it stays reachable directly. Admin
+ * is out of scope for that change and keeps Feedback as its own sidebar item.
  */
 export type NavGroupConfig = { id: string; label: string | null; sections: string[] };
 
-/** Sections never rendered in the desktop sidebar (surfaced in the account menu instead). */
-export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile"]);
+/** Sections never rendered in the desktop sidebar (surfaced in the account menu or inside Settings instead). */
+export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile", "bugs-feedback"]);
 
 // Order mirrors the native bottom bar (Dashboard, Properties, Residents, Documents,
 // Finances, ..., Settings) — see NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY in
@@ -26,7 +32,7 @@ const PRO_GROUPS: NavGroupConfig[] = [
   { id: "operations", label: "Operations", sections: ["calendar", "services", "vendors", "inbox"] },
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
-  { id: "account", label: null, sections: ["bugs-feedback", "profile"] },
+  { id: "account", label: null, sections: ["profile"] },
 ];
 
 const ADMIN_GROUPS: NavGroupConfig[] = [
@@ -42,7 +48,7 @@ const RESIDENT_GROUPS: NavGroupConfig[] = [
   { id: "living", label: "Living", sections: ["lease", "move-in", "services"] },
   { id: "financials", label: "Financials", sections: ["payments", "documents"] },
   { id: "operations", label: "Operations", sections: ["inbox"] },
-  { id: "account", label: null, sections: ["bugs-feedback"] },
+  { id: "account", label: null, sections: ["profile"] },
 ];
 
 const VENDOR_GROUPS: NavGroupConfig[] = [

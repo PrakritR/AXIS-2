@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
+import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import {
   normalizeApplicationAxisId,
   readManagerApplicationRows,
@@ -198,6 +199,8 @@ export function ResidentProfilePanel() {
         <NotificationsToggle />
 
         <PortalChangePasswordPanel accountEmail={email} />
+
+        <PortalBugFeedbackPanel reporterRole="resident" embedded />
 
         <PortalSettingsExtras currentKind="resident" />
       </div>

@@ -59,8 +59,11 @@ function feedbackStatusClass(status: BugFeedbackStatus) {
 
 export function PortalBugFeedbackPanel({
   reporterRole,
+  embedded = false,
 }: {
   reporterRole: BugFeedbackReporterRole;
+  /** Render as a plain card section (used inside the Settings page) instead of a full page shell. */
+  embedded?: boolean;
 }) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
@@ -140,106 +143,118 @@ export function PortalBugFeedbackPanel({
     </>
   );
 
+  const body =
+    myRows.length === 0 ? (
+      <PortalDataTableEmpty message="No feedback yet." icon="feedback" />
+    ) : (
+      <>
+        <div className="space-y-2 lg:hidden">
+          {myRows.map((row) => {
+            const open = expandedId === row.id;
+            return (
+              <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                >
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">Submitted {formatWhen(row.createdAt)}</p>
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
+                    >
+                      {row.status}
+                    </span>
+                  </div>
+                </button>
+                <div className="mt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={PORTAL_DETAIL_BTN}
+                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                  >
+                    {open ? "Less" : "Details"}
+                  </Button>
+                </div>
+                {open ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
+              </div>
+            );
+          })}
+        </div>
+        <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+          <div className={PORTAL_DATA_TABLE_SCROLL}>
+            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+              <thead>
+                <tr className={PORTAL_TABLE_HEAD_ROW}>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Submitted</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myRows.map((row) => {
+                  const open = expandedId === row.id;
+                  return (
+                    <Fragment key={row.id}>
+                      <tr
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() =>
+                          setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                        )}
+                        aria-expanded={open}
+                      >
+                        <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
+                          {formatWhen(row.createdAt)}
+                        </td>
+                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                        <td className={PORTAL_TABLE_TD}>
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                      {open ? (
+                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                          <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                            {renderRowDetail(row)}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    );
+
+  const addFeedbackButton = (
+    <PortalSectionPrimaryButton onClick={() => setSubmitOpen(true)}>Add feedback</PortalSectionPrimaryButton>
+  );
+
   return (
     <>
-      <ManagerPortalPageShell
-        title="Feedback"
-        titleAside={
-          <PortalSectionPrimaryButton onClick={() => setSubmitOpen(true)}>Add feedback</PortalSectionPrimaryButton>
-        }
-      >
-        {myRows.length === 0 ? (
-          <PortalDataTableEmpty message="No feedback yet." icon="feedback" />
-        ) : (
-          <>
-            <div className="space-y-2 lg:hidden">
-              {myRows.map((row) => {
-                const open = expandedId === row.id;
-                return (
-                  <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-                    <button
-                      type="button"
-                      className="w-full text-left"
-                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                    >
-                      <div className="flex items-start justify-between gap-2.5">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
-                          <p className="mt-0.5 truncate text-xs text-muted">Submitted {formatWhen(row.createdAt)}</p>
-                        </div>
-                        <span
-                          className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
-                        >
-                          {row.status}
-                        </span>
-                      </div>
-                    </button>
-                    <div className="mt-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={PORTAL_DETAIL_BTN}
-                        onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                      >
-                        {open ? "Less" : "Details"}
-                      </Button>
-                    </div>
-                    {open ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
-                  </div>
-                );
-              })}
-            </div>
-            <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-              <div className={PORTAL_DATA_TABLE_SCROLL}>
-                <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-                  <thead>
-                    <tr className={PORTAL_TABLE_HEAD_ROW}>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Submitted</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {myRows.map((row) => {
-                      const open = expandedId === row.id;
-                      return (
-                        <Fragment key={row.id}>
-                          <tr
-                            className={PORTAL_TABLE_TR_EXPANDABLE}
-                            onClick={createPortalRowExpandClick(() =>
-                              setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                            )}
-                            aria-expanded={open}
-                          >
-                            <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
-                              {formatWhen(row.createdAt)}
-                            </td>
-                            <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                            <td className={PORTAL_TABLE_TD}>
-                              <span
-                                className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
-                              >
-                                {row.status}
-                              </span>
-                            </td>
-                          </tr>
-                          {open ? (
-                            <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                              <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                                {renderRowDetail(row)}
-                              </td>
-                            </tr>
-                          ) : null}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        )}
-      </ManagerPortalPageShell>
+      {embedded ? (
+        <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-sm)] sm:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm font-semibold text-foreground">Feedback</p>
+            {addFeedbackButton}
+          </div>
+          {body}
+        </div>
+      ) : (
+        <ManagerPortalPageShell title="Feedback" titleAside={addFeedbackButton}>
+          {body}
+        </ManagerPortalPageShell>
+      )}
 
       <PortalFeedbackSubmitModal
         open={submitOpen}
