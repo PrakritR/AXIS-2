@@ -30,8 +30,8 @@ export async function payoutVendorForWorkOrder(
   const accountId = (vendorProfile as { stripe_connect_account_id?: string | null } | null)
     ?.stripe_connect_account_id?.trim();
 
-  const insertPayout = (row: { status: "paid" | "failed"; stripeTransferId?: string; failureReason?: string }) =>
-    db.from("vendor_payouts").insert({
+  const insertPayout = async (row: { status: "paid" | "failed"; stripeTransferId?: string; failureReason?: string }) => {
+    const { error } = await db.from("vendor_payouts").insert({
       manager_user_id: opts.managerUserId,
       vendor_user_id: opts.vendorUserId,
       work_order_id: opts.workOrderId,
@@ -40,6 +40,11 @@ export async function payoutVendorForWorkOrder(
       status: row.status,
       failure_reason: row.failureReason ?? null,
     });
+    // Concurrent approve-pay calls can both pass the pre-check; the unique index
+    // on work_order_id is the backstop — treat a duplicate as already handled.
+    if (error?.code === "23505") return { duplicate: true as const };
+    return { duplicate: false as const };
+  };
 
   if (!accountId) {
     await insertPayout({ status: "failed", failureReason: "Vendor has not connected a Stripe payout account yet." });
@@ -57,13 +62,17 @@ export async function payoutVendorForWorkOrder(
       return;
     }
 
-    const transfer = await stripe.transfers.create({
-      amount: opts.amountCents,
-      currency: "usd",
-      destination: accountId,
-      metadata: { work_order_id: opts.workOrderId, manager_user_id: opts.managerUserId },
-    });
-    await insertPayout({ status: "paid", stripeTransferId: transfer.id });
+    const transfer = await stripe.transfers.create(
+      {
+        amount: opts.amountCents,
+        currency: "usd",
+        destination: accountId,
+        metadata: { work_order_id: opts.workOrderId, manager_user_id: opts.managerUserId },
+      },
+      { idempotencyKey: `vendor_payout_${opts.workOrderId}` },
+    );
+    const result = await insertPayout({ status: "paid", stripeTransferId: transfer.id });
+    if (result.duplicate) return;
   } catch (e) {
     const message = e instanceof Error ? e.message : "Stripe transfer failed.";
     await insertPayout({ status: "failed", failureReason: message });

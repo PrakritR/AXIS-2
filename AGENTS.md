@@ -213,8 +213,7 @@ model and workflow: [`docs/database-environments.md`](docs/database-environments
 
 A 4th portal role — `vendor` — sits alongside manager/resident/admin. Phase 1
 covers vendor login + portal shell + work-order visibility + notifications.
-Bidding/tours (Phase 2) and real Stripe payouts (Phase 3) are NOT built yet; the
-vendor Profile tab's "Payments" section is a placeholder.
+Phase 2 (bidding) and Phase 3 (Stripe Connect payouts) are documented below.
 
 **Role plumbing.** `"vendor"` was added to `AuthRole`
 (`src/lib/auth/portal-roles.ts`) and `PortalKind` (`src/lib/portal-types.ts`) —
@@ -258,7 +257,9 @@ scoped to `vendor_user_id = auth.uid()` — defense in depth alongside the
 existing service-role API routes, matching the `auth.uid()` pattern on the
 financials tables. `/api/portal-work-orders` resolves `vendorId` (a
 `manager_vendor_records.id` string) → `vendor_user_id` via
-`resolveVendorUserId()` at write time so vendor GET requests can scope directly
+`resolveVendorUserId()` scoped to the work order's owning manager (never
+trusting a client-supplied directory id from another landlord) at write time so
+vendor GET requests can scope directly
 by `.eq("vendor_user_id", user.id)`; vendor writes to that route are rejected
 (vendor is read-only — the manager owns assignment/scheduling).
 

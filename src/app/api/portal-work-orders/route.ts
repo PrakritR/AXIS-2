@@ -122,15 +122,40 @@ function actorOwnsRecord(actor: Actor, rec: OwnerCols | null): boolean {
 }
 
 /** Resolve a vendor directory row's linked auth user, so the record can be scoped
- * for the vendor's own GET query and inbox notifications without a join at read time. */
+ * for the vendor's own GET query and inbox notifications without a join at read time.
+ * Scoped to the owning manager so a caller cannot attach another landlord's vendor. */
 async function resolveVendorUserId(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
   vendorId: string | null | undefined,
+  managerUserId: string,
 ): Promise<string | null> {
   const id = vendorId?.trim();
-  if (!id) return null;
-  const { data } = await db.from("manager_vendor_records").select("vendor_user_id").eq("id", id).maybeSingle();
+  const managerId = managerUserId.trim();
+  if (!id || !managerId) return null;
+  const { data } = await db
+    .from("manager_vendor_records")
+    .select("vendor_user_id")
+    .eq("id", id)
+    .eq("manager_user_id", managerId)
+    .maybeSingle();
   return (data?.vendor_user_id as string | null) ?? null;
+}
+
+/** Which manager's vendor directory a vendorId lookup must be scoped to. */
+async function managerUserIdForVendorScope(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  actor: Actor,
+  row: DemoManagerWorkOrderRow,
+): Promise<string> {
+  if (!actor.admin) return actor.userId;
+  const fromRow = row.managerUserId?.trim();
+  if (fromRow) return fromRow;
+  const { data } = await db
+    .from("portal_work_order_records")
+    .select("manager_user_id")
+    .eq("id", row.id)
+    .maybeSingle();
+  return (data?.manager_user_id as string | undefined)?.trim() || "";
 }
 
 /** Build the persisted record, binding scope columns to the authenticated caller
@@ -210,7 +235,8 @@ export async function POST(req: Request) {
         if (!row?.id) continue;
         if (!(await ownsExisting(row.id))) continue;
         if (!(await residentMayTargetRowManager(row))) continue;
-        const vendorUserId = await resolveVendorUserId(db, row.vendorId);
+        const managerScope = await managerUserIdForVendorScope(db, actor, row);
+        const vendorUserId = await resolveVendorUserId(db, row.vendorId, managerScope);
         await db.from("portal_work_order_records").upsert(recordForActor(actor, row, vendorUserId), { onConflict: "id" });
       }
       return NextResponse.json({ ok: true });
@@ -240,7 +266,8 @@ export async function POST(req: Request) {
     if (!(await residentMayTargetRowManager(body.row))) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
-    const vendorUserId = await resolveVendorUserId(db, body.row.vendorId);
+    const managerScope = await managerUserIdForVendorScope(db, actor, body.row);
+    const vendorUserId = await resolveVendorUserId(db, body.row.vendorId, managerScope);
     const { error } = await db
       .from("portal_work_order_records")
       .upsert(recordForActor(actor, body.row, vendorUserId), { onConflict: "id" });
