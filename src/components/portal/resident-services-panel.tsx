@@ -12,9 +12,7 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -236,7 +234,7 @@ export function ServiceRequestCard({
   }
 
   return (
-        <div className="glass-card rounded-2xl border border-border p-4">
+        <>
       <input
         ref={returnPhotoRef}
         type="file"
@@ -244,37 +242,37 @@ export function ServiceRequestCard({
         className="sr-only"
         onChange={(e) => { void handleReturnPhoto(e.target.files); }}
       />
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-semibold text-foreground">{req.offerName}</p>
-          {req.offerDescription ? (
-            <p className="mt-0.5 text-xs text-muted">{req.offerDescription}</p>
-          ) : null}
-        </div>
-        <ServiceStatusBadge status={req.status} />
-      </div>
-
-      {/* Price / deposit / return date */}
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {req.price ? (
-          <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-[10px] font-semibold text-muted">
-            {req.price}
-          </span>
-        ) : null}
-        {needsReturn ? (
-          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-            Deposit {req.deposit}
-          </span>
-        ) : null}
-        {req.returnByDate ? (
-          <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">
-            Return by {formatDate(req.returnByDate)}
-          </span>
-        ) : null}
-      </div>
-
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">Status</p>
+      <ServiceStatusBadge status={req.status} />
+      {req.price ? (
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Service fee</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{req.price}</p>
+        </>
+      ) : null}
+      {needsReturn ? (
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Deposit</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{req.deposit}</p>
+        </>
+      ) : null}
+      {req.returnByDate ? (
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Return by</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{formatDate(req.returnByDate)}</p>
+        </>
+      ) : null}
+      {req.offerDescription ? (
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Description</p>
+          <p className="mt-1.5 text-sm whitespace-pre-wrap leading-relaxed">{req.offerDescription}</p>
+        </>
+      ) : null}
       {req.notes ? (
-        <p className="mt-2 text-xs text-muted italic">&ldquo;{req.notes}&rdquo;</p>
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Note</p>
+          <p className="mt-1.5 text-sm text-muted italic">&ldquo;{req.notes}&rdquo;</p>
+        </>
       ) : null}
 
       {/* Charges section (approved) */}
@@ -357,28 +355,28 @@ export function ServiceRequestCard({
         </div>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap justify-start gap-2 border-t border-border pt-3">
+      <PortalTableDetailActions>
         {req.status === "pending" || req.status === "approved" ? (
           <Button
             type="button"
             variant="outline"
-            className="rounded-full px-3 text-xs font-semibold"
+            className={PORTAL_DETAIL_BTN}
             data-attr="resident-service-request-edit"
             onClick={onEdit}
           >
             Edit request
           </Button>
         ) : null}
-            <Button
-              type="button"
-              variant="danger"
-              className="rounded-full px-3 text-xs font-semibold"
-              onClick={removeRequest}
-            >
+        <Button
+          type="button"
+          variant="danger"
+          className={PORTAL_DETAIL_BTN}
+          onClick={removeRequest}
+        >
           Delete request
         </Button>
-      </div>
-    </div>
+      </PortalTableDetailActions>
+    </>
   );
 }
 
@@ -924,10 +922,9 @@ export function ResidentServicesPanel({
     <ManagerPortalPageShell
       title="Services"
       titleAside={
-        <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} shrink-0 gap-2`}>
+        activeTab === "work-orders" ? (
           <Button
             type="button"
-            variant="outline"
             className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
             disabled={!servicesUnlocked}
             onClick={() => {
@@ -938,8 +935,9 @@ export function ResidentServicesPanel({
               setModalMode("maintenance");
             }}
           >
-            Report maintenance
+            Report
           </Button>
+        ) : (
           <Button
             type="button"
             className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
@@ -954,7 +952,7 @@ export function ResidentServicesPanel({
           >
             Submit request
           </Button>
-        </div>
+        )
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -965,38 +963,6 @@ export function ResidentServicesPanel({
               { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
             ]}
           />
-          <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_HEADER_ACTION_BTN}
-              disabled={!servicesUnlocked}
-              onClick={() => {
-                if (!servicesUnlocked) {
-                  showToast("Services unlock after your lease is fully signed.");
-                  return;
-                }
-                setModalMode("maintenance");
-              }}
-            >
-              Maintenance
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_HEADER_ACTION_BTN}
-              disabled={!servicesUnlocked}
-              onClick={() => {
-                if (!servicesUnlocked) {
-                  showToast("Services unlock after your lease is fully signed.");
-                  return;
-                }
-                setModalMode("service");
-              }}
-            >
-              Request
-            </Button>
-          </div>
         </ManagerPortalFilterRow>
       }
     >
@@ -1333,7 +1299,6 @@ export function ResidentServicesPanel({
         {availableOffers.length === 0 ? (
           <div className="py-8 text-center">
             <p className="text-sm font-medium text-muted">No request options available yet</p>
-            <p className="mt-1 text-xs text-muted">Your property manager hasn&apos;t added any request options yet. Check back later.</p>
           </div>
         ) : (
           <>

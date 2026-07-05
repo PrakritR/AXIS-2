@@ -104,6 +104,7 @@ export function PortalMobileSummaryCard({
         <div
           role="button"
           tabIndex={0}
+          aria-expanded={expanded}
           className="w-full cursor-pointer text-left"
           onClick={(e: MouseEvent<HTMLDivElement>) => {
             if (isPortalRowClickIgnored(e.target)) return;
@@ -125,11 +126,6 @@ export function PortalMobileSummaryCard({
       {children ? (
         <div className={`${onClick ? "mt-2.5" : ""} border-t border-border pt-2.5 [html[data-native]_&]:mt-2 [html[data-native]_&]:pt-2`}>
           {children}
-        </div>
-      ) : null}
-      {onClick && children == null ? (
-        <div className="mt-2">
-          <span className="text-[11px] font-semibold text-primary">{expanded ? "Less" : "Details"}</span>
         </div>
       ) : null}
     </div>

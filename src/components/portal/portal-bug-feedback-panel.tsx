@@ -157,6 +157,7 @@ export function PortalBugFeedbackPanel({
                   type="button"
                   className="w-full text-left"
                   onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                  aria-expanded={open}
                 >
                   <div className="flex items-start justify-between gap-2.5">
                     <div className="min-w-0 flex-1">
@@ -170,16 +171,6 @@ export function PortalBugFeedbackPanel({
                     </span>
                   </div>
                 </button>
-                <div className="mt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={PORTAL_DETAIL_BTN}
-                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                  >
-                    {open ? "Less" : "Details"}
-                  </Button>
-                </div>
                 {open ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
               </div>
             );

@@ -456,6 +456,7 @@ export function ManagerPromotion() {
                     type="button"
                     className="w-full text-left"
                     onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                    aria-expanded={isOpen}
                     data-attr="promotion-row"
                   >
                     <p className="truncate font-semibold text-foreground">{row.propertyLabel || "—"}</p>
@@ -466,16 +467,6 @@ export function ManagerPromotion() {
                       Created {formatDate(row.createdAt)}
                     </p>
                   </button>
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_DETAIL_BTN}
-                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                    >
-                      {isOpen ? "Less" : "Details"}
-                    </Button>
-                  </div>
                   {isOpen ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
               );
