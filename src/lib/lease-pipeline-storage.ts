@@ -263,9 +263,13 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
   );
   const residentSignature = normalizeLeaseSignature(r.residentSignature, "resident") ?? legacyResidentSignature;
   const managerSignature = normalizeLeaseSignature(r.managerSignature, "manager");
-  let bucket: ManagerLeaseBucket =
-    b === "manager" || b === "resident" || b === "signed" ? b : "manager";
-  if (typeof b === "string" && b === "admin") bucket = "manager";
+  const legacyBucket = String(b ?? "");
+  let bucket: ManagerLeaseBucket = "manager";
+  if (legacyBucket === "manager" || legacyBucket === "resident" || legacyBucket === "signed") {
+    bucket = legacyBucket;
+  } else if (legacyBucket === "admin") {
+    bucket = "manager";
+  }
   const residentSigned = Boolean(residentSignature?.name && residentSignature.signedAtIso);
   if (residentSigned && !managerSignature && bucket === "resident") bucket = "signed";
   const status = workflowStatusForRow({

@@ -1,7 +1,6 @@
 import { GET_STARTED_PATH } from "@/lib/auth/get-started-path";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
-import { normalizePortalRoles } from "@/lib/auth/portal-access";
-import { portalDashboardPath } from "@/lib/auth/portal-roles";
+import { normalizePortalRoles, portalDashboardPath } from "@/lib/auth/portal-roles";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
