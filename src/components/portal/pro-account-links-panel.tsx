@@ -3,7 +3,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { ManagerPortalPageShell, MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT } from "@/components/portal/portal-metrics";
+import {
+  ManagerPortalFilterRow,
+  ManagerPortalPageShell,
+  ManagerPortalStatusPills,
+  MANAGER_TABLE_TH,
+  PORTAL_HEADER_ACTION_BTN,
+  PORTAL_TOOLBAR_SELECT,
+} from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -48,6 +55,9 @@ import { maxAccountLinksForTier, normalizeManagerSkuTier } from "@/lib/manager-a
 
 const CO_MANAGER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+
+const LINKED_COUNT_TRIGGER =
+  "inline-flex items-center gap-1 rounded-full text-xs font-semibold text-foreground underline decoration-dotted decoration-muted-foreground/50 underline-offset-4 transition hover:text-primary";
 
 const OWNER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -191,6 +201,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null);
   const [addPropertySelect, setAddPropertySelect] = useState<Record<string, string>>({});
+  const [coManagerBucket, setCoManagerBucket] = useState<"all" | "active" | "pending">("all");
+  const [linkedPropertiesPopup, setLinkedPropertiesPopup] = useState<{
+    label: string;
+    propertyIds: string[];
+  } | null>(null);
 
   const [transferPropertyId, setTransferPropertyId] = useState<string | null>(null);
   const [transferCoManagerUserId, setTransferCoManagerUserId] = useState<string | null>(null);
@@ -301,6 +316,22 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const outgoingPending = useMemo(
     () => remoteInvites.filter((i) => i.status === "pending" && i.direction === "outgoing"),
     [remoteInvites],
+  );
+
+  const coManagerBucketCounts = useMemo(() => {
+    const active = useRemote ? activeRemote.length : localRows.length;
+    const pending = useRemote ? incomingPending.length + outgoingPending.length : 0;
+    return { all: active + pending, active, pending };
+  }, [useRemote, activeRemote, localRows, incomingPending, outgoingPending]);
+
+  const coManagerBucketTabs = useMemo(
+    () =>
+      [
+        { id: "all" as const, label: "All", count: coManagerBucketCounts.all, dataAttr: "co-manager-filter-all" },
+        { id: "active" as const, label: "Active", count: coManagerBucketCounts.active, dataAttr: "co-manager-filter-active" },
+        { id: "pending" as const, label: "Pending", count: coManagerBucketCounts.pending, dataAttr: "co-manager-filter-pending" },
+      ] as const,
+    [coManagerBucketCounts],
   );
 
   const propertyOptions = useMemo(() => {
@@ -1052,6 +1083,15 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           Link account
         </Button>
       }
+      filterRow={
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills
+            tabs={[...coManagerBucketTabs]}
+            activeId={coManagerBucket}
+            onChange={(id) => setCoManagerBucket(id as typeof coManagerBucket)}
+          />
+        </ManagerPortalFilterRow>
+      }
     >
       <div className="space-y-6">
         {linkCap != null ? (
@@ -1067,13 +1107,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                 {linksUsed}/{linkCap}
               </span>
               <span className="text-muted">links in use</span>
-              {tierShort ? (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${atLinkCap ? "bg-card/80 text-[var(--status-overdue-fg)]" : "bg-card text-muted"}`}
-                >
-                  {tierShort}
-                </span>
-              ) : null}
             </div>
           </div>
         ) : null}
@@ -1142,7 +1175,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </div>
         ) : null}
 
-        {useRemote && incomingPending.length > 0 ? (
+        {coManagerBucket !== "active" && useRemote && incomingPending.length > 0 ? (
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground">Pending approvals (incoming)</p>
             <ul className="space-y-2">
@@ -1172,7 +1205,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </div>
         ) : null}
 
-        {useRemote && outgoingPending.length > 0 ? (
+        {coManagerBucket !== "active" && useRemote && outgoingPending.length > 0 ? (
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground">Waiting on them</p>
             <ul className="space-y-2">
@@ -1194,7 +1227,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </div>
         ) : null}
 
-        {activeCards.length === 0 && ownedProperties.length === 0 ? (
+        {coManagerBucket === "pending" ? (
+          incomingPending.length === 0 && outgoingPending.length === 0 ? (
+            <PortalDataTableEmpty message="No pending invites." icon="team" />
+          ) : null
+        ) : activeCards.length === 0 && ownedProperties.length === 0 ? (
           <PortalDataTableEmpty message="No team members yet." icon="team" />
         ) : (
           <>
@@ -1223,7 +1260,22 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                         key={inv.id}
                         title={inv.linkedDisplayName ?? inv.linkedAxisId}
                         subtitle={readOnly ? "Linked to you" : "Co-manager"}
-                        meta={`${draft.assignedPropertyIds.length} linked`}
+                        trailing={
+                          <button
+                            type="button"
+                            className={LINKED_COUNT_TRIGGER}
+                            data-attr="co-manager-linked-properties"
+                            onClick={() =>
+                              setLinkedPropertiesPopup({
+                                label: inv.linkedDisplayName ?? inv.linkedAxisId,
+                                propertyIds: draft.assignedPropertyIds,
+                              })
+                            }
+                          >
+                            <span className="tabular-nums">{draft.assignedPropertyIds.length}</span>
+                            <span>linked</span>
+                          </button>
+                        }
                         badge={
                           <span className={CO_MANAGER_ROLE_BADGE}>{readOnly ? "Linked to you" : "Co-manager"}</span>
                         }
@@ -1241,7 +1293,22 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                         key={r.id}
                         title={r.linkedDisplayName ?? r.linkedAxisId}
                         subtitle="Co-manager"
-                        meta={`${r.assignedPropertyIds.length} linked`}
+                        trailing={
+                          <button
+                            type="button"
+                            className={LINKED_COUNT_TRIGGER}
+                            data-attr="co-manager-linked-properties"
+                            onClick={() =>
+                              setLinkedPropertiesPopup({
+                                label: r.linkedDisplayName ?? r.linkedAxisId,
+                                propertyIds: r.assignedPropertyIds,
+                              })
+                            }
+                          >
+                            <span className="tabular-nums">{r.assignedPropertyIds.length}</span>
+                            <span>linked</span>
+                          </button>
+                        }
                         badge={<span className={CO_MANAGER_ROLE_BADGE}>Co-manager</span>}
                         expanded={expanded}
                         onClick={() => setExpandedLinkId((cur) => (cur === r.id ? null : r.id))}
@@ -1316,8 +1383,20 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                   </span>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
-                                  <span className="tabular-nums">{draft.assignedPropertyIds.length}</span>
-                                  <span className="text-muted"> linked</span>
+                                  <button
+                                    type="button"
+                                    className={LINKED_COUNT_TRIGGER}
+                                    data-attr="co-manager-linked-properties"
+                                    onClick={() =>
+                                      setLinkedPropertiesPopup({
+                                        label: inv.linkedDisplayName ?? inv.linkedAxisId,
+                                        propertyIds: draft.assignedPropertyIds,
+                                      })
+                                    }
+                                  >
+                                    <span className="tabular-nums">{draft.assignedPropertyIds.length}</span>
+                                    <span>linked</span>
+                                  </button>
                                 </td>
                               </tr>
                               {expandedLinkId === inv.id ? (
@@ -1348,8 +1427,20 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                   <span className={CO_MANAGER_ROLE_BADGE}>Co-manager</span>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
-                                  <span className="tabular-nums">{r.assignedPropertyIds.length}</span>
-                                  <span className="text-muted"> linked</span>
+                                  <button
+                                    type="button"
+                                    className={LINKED_COUNT_TRIGGER}
+                                    data-attr="co-manager-linked-properties"
+                                    onClick={() =>
+                                      setLinkedPropertiesPopup({
+                                        label: r.linkedDisplayName ?? r.linkedAxisId,
+                                        propertyIds: r.assignedPropertyIds,
+                                      })
+                                    }
+                                  >
+                                    <span className="tabular-nums">{r.assignedPropertyIds.length}</span>
+                                    <span>linked</span>
+                                  </button>
                                 </td>
                               </tr>
                               {expandedLinkId === r.id ? (
@@ -1403,6 +1494,27 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
               </Button>
             </div>
           </form>
+        </Modal>
+
+        <Modal
+          open={linkedPropertiesPopup !== null}
+          title={linkedPropertiesPopup ? `Linked properties — ${linkedPropertiesPopup.label}` : "Linked properties"}
+          onClose={() => setLinkedPropertiesPopup(null)}
+        >
+          {linkedPropertiesPopup && linkedPropertiesPopup.propertyIds.length > 0 ? (
+            <ul className="space-y-2">
+              {linkedPropertiesPopup.propertyIds.map((pid) => (
+                <li
+                  key={pid}
+                  className="rounded-xl border border-border bg-accent/25 px-3 py-2 text-sm text-foreground"
+                >
+                  {resolvePropertyLabel(pid, pid)}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">No properties linked yet.</p>
+          )}
         </Modal>
 
         {transferPropertyId ? (

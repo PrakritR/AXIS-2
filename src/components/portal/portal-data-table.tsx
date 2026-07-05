@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { MouseEvent, ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalListPreviewLimit, sliceForPortalPreview } from "@/lib/portal-mobile-preview";
 
@@ -101,9 +101,24 @@ export function PortalMobileSummaryCard({
   return (
     <div className={PORTAL_MOBILE_CARD_CLASS}>
       {onClick ? (
-        <button type="button" className="w-full text-left" onClick={onClick}>
+        <div
+          role="button"
+          tabIndex={0}
+          className="w-full cursor-pointer text-left"
+          onClick={(e: MouseEvent<HTMLDivElement>) => {
+            if (isPortalRowClickIgnored(e.target)) return;
+            onClick();
+          }}
+          onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+            if (isPortalRowClickIgnored(e.target)) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onClick();
+            }
+          }}
+        >
           {body}
-        </button>
+        </div>
       ) : (
         body
       )}
