@@ -1197,6 +1197,18 @@ export function createDefaultListingServiceOptions(): ManagerListingServiceOptio
   return [];
 }
 
+export function createManagerListingServiceOption(name = "", description = ""): ManagerListingServiceOption {
+  return {
+    id: `offer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    description,
+    price: "",
+    deposit: "",
+    available: true,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 /** One-click presets for the listing services step (not added until the manager chooses). */
 export const LISTING_SERVICE_QUICK_ADDS: { name: string; description: string }[] = [
   { name: "Weekly cleaning", description: "Regular cleaning of your room or shared areas." },

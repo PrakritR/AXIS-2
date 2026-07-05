@@ -9,6 +9,7 @@ import {
   updatePendingManagerProperty,
 } from "@/lib/demo-property-pipeline";
 import {
+  createManagerListingServiceOption,
   LISTING_SERVICE_QUICK_ADDS,
   type ManagerListingServiceOption,
   type ManagerListingSubmissionV1,
@@ -19,18 +20,6 @@ type ServiceOptionsSaveTarget =
   | { mode: "listing"; saveId: string }
   | { mode: "requestChange"; saveId: string }
   | null;
-
-function newOfferRow(name = "", description = ""): ManagerListingServiceOption {
-  return {
-    id: `offer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    name,
-    description,
-    price: "",
-    deposit: "",
-    available: true,
-    createdAt: new Date().toISOString(),
-  };
-}
 
 /**
  * Per-property "offered service requests" editor — the amenity/add-on catalog
@@ -67,12 +56,12 @@ export function ManagerPropertyServiceOptionsPanel({
 
   const removeRow = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
 
-  const addRow = () => setRows((prev) => [newOfferRow(), ...prev]);
+  const addRow = () => setRows((prev) => [createManagerListingServiceOption(), ...prev]);
 
   const addQuickAdd = (preset: { name: string; description: string }) => {
     setRows((prev) => {
       if (prev.some((r) => r.name.trim().toLowerCase() === preset.name.toLowerCase())) return prev;
-      return [newOfferRow(preset.name, preset.description), ...prev];
+      return [createManagerListingServiceOption(preset.name, preset.description), ...prev];
     });
   };
 

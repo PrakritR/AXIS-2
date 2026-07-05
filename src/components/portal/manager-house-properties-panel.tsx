@@ -47,6 +47,7 @@ import {
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
+import { resolvePropertySaveTarget } from "@/lib/manager-property-save-target";
 import {
   legacyAdminFieldsToSubmission,
   normalizeManagerListingSubmissionV1,
@@ -192,12 +193,13 @@ function ManagerPropertyInlineDetails({
 
   const houseSaveTarget = useMemo(() => {
     if (!row) return null;
-    if (portalSub?.saveMode === "pending") return { mode: "pending" as const, saveId: portalSub.saveId };
-    if (portalSub?.saveMode === "listing") return { mode: "listing" as const, saveId: portalSub.saveId };
-    if (portalSub?.saveMode === "requestChange") return { mode: "requestChange" as const, saveId: portalSub.saveId };
-    if (bucket === 0 && row.adminRefId) return { mode: "pending" as const, saveId: row.adminRefId };
-    if (listingId?.trim()) return { mode: "listing" as const, saveId: listingId.trim() };
-    return null;
+    return resolvePropertySaveTarget({
+      portalSaveMode: portalSub?.saveMode,
+      portalSaveId: portalSub?.saveId,
+      bucket,
+      adminRefId: row.adminRefId,
+      listingId,
+    });
   }, [portalSub, bucket, row, listingId]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
