@@ -41,7 +41,6 @@ export function ManagerPaymentsLedgerPanel({
   managerUserId,
   activeBucket,
   scheduledMessages = [],
-  onScheduleEdit,
   onOpenReminderSettings,
   onRowsChanged,
   onScheduleChanged,
@@ -50,7 +49,6 @@ export function ManagerPaymentsLedgerPanel({
   managerUserId: string | null;
   activeBucket: ManagerPaymentBucket;
   scheduledMessages?: ScheduledPaymentMessage[];
-  onScheduleEdit?: (message: ScheduledPaymentMessage) => void;
   onOpenReminderSettings?: () => void;
   onRowsChanged?: () => void;
   onScheduleChanged?: () => void;
@@ -339,11 +337,6 @@ export function ManagerPaymentsLedgerPanel({
                 </span>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}>
-                {expanded ? "Less" : "More"}
-              </Button>
-            </div>
             {expanded ? (
               <div className="mt-3 border-t border-border pt-3">
                 {renderDetailActions(row)}
@@ -424,10 +417,7 @@ export function ManagerPaymentsLedgerPanel({
         chargeTitle={chargeRemindersRow.chargeTitle}
         dueDate={chargeRemindersRow.dueDate}
         messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersRow.householdChargeId)}
-        onEdit={(message) => {
-          setChargeRemindersRow(null);
-          onScheduleEdit?.(message);
-        }}
+        onMessageSaved={() => onScheduleChanged?.()}
         onToggleCancel={async (msg, cancelled) => {
           try {
             await patchScheduledMessage(msg.id, { cancelled });

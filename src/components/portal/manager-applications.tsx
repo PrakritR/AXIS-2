@@ -614,9 +614,6 @@ export function ManagerApplications() {
                     </Button>
                   </>
                 ) : null}
-                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}>
-                  {expanded ? "Less" : "Review"}
-                </Button>
                 <Button
                   type="button"
                   variant="outline"

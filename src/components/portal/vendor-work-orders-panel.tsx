@@ -572,11 +572,6 @@ export function VendorWorkOrdersPanel() {
                       ) : null}
                     </div>
                   </button>
-                  <div className="mt-2">
-                    <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}>
-                      {isExpanded ? "Less" : "Details"}
-                    </Button>
-                  </div>
                   {isExpanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
               );

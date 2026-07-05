@@ -421,16 +421,6 @@ export function ManagerAllServicesPanel({
                     </p>
                     <p className="mt-0.5 truncate text-[11px] text-muted/90">{summary}</p>
                   </button>
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_DETAIL_BTN}
-                      onClick={() => setExpandedId(isExpanded ? null : id)}
-                    >
-                      {isExpanded ? "Less" : "Details"}
-                    </Button>
-                  </div>
                   {isExpanded ? (
                     <div className="mt-3 border-t border-border pt-3">{renderRequestDetail(req)}</div>
                   ) : null}

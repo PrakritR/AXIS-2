@@ -156,7 +156,7 @@ export function ChargeRemindersModal({
   chargeTitle,
   dueDate,
   messages,
-  onEdit,
+  onMessageSaved,
   onToggleCancel,
   onOpenSettings,
   onAddSetDate,
@@ -167,13 +167,26 @@ export function ChargeRemindersModal({
   chargeTitle: string;
   dueDate: string;
   messages: ScheduledPaymentMessage[];
-  onEdit: (message: ScheduledPaymentMessage) => void;
+  onMessageSaved?: () => void;
   onToggleCancel: (message: ScheduledPaymentMessage, cancelled: boolean) => void | Promise<void>;
   onOpenSettings?: () => void;
   onAddSetDate?: (isoDate: string) => void | Promise<void>;
 }) {
+  const [editingMessage, setEditingMessage] = useState<ScheduledPaymentMessage | null>(null);
+
   return (
     <Modal open={open} onClose={onClose} title="Automated reminders">
+      {editingMessage ? (
+        <ScheduledMessageEditForm
+          key={editingMessage.id}
+          message={editingMessage}
+          onClose={() => setEditingMessage(null)}
+          onSaved={() => {
+            onMessageSaved?.();
+            setEditingMessage(null);
+          }}
+        />
+      ) : (
       <div className="space-y-4">
         <p className="text-sm text-muted">
           <span className="font-medium text-foreground">{residentName}</span> · {chargeTitle} · due {dueDate}
@@ -195,13 +208,13 @@ export function ChargeRemindersModal({
                   <button
                     type="button"
                     className={`min-w-0 flex-1 text-left text-sm ${cancelled ? "line-through" : ""}`}
-                    onClick={() => onEdit(m)}
+                    onClick={() => setEditingMessage(m)}
                   >
                     <span className="font-medium text-foreground">{label}</span>
                     <span className="mt-0.5 block text-xs text-muted">Sends {formatSendDate(m.sendAt)}</span>
                   </button>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => onEdit(m)}>
+                    <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => setEditingMessage(m)}>
                       Edit
                     </Button>
                     <Button
@@ -232,11 +245,12 @@ export function ChargeRemindersModal({
           </Button>
         ) : null}
       </div>
+      )}
     </Modal>
   );
 }
 
-function ScheduledMessageEditForm({
+export function ScheduledMessageEditForm({
   message,
   onClose,
   onSaved,
@@ -339,26 +353,6 @@ function ScheduledMessageEditForm({
           </Button>
         </div>
     </div>
-  );
-}
-
-export function ScheduledMessageEditModal({
-  open,
-  message,
-  onClose,
-  onSaved,
-}: {
-  open: boolean;
-  message: ScheduledPaymentMessage | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  if (!message) return null;
-
-  return (
-    <Modal open={open} onClose={onClose} title="Edit scheduled message">
-      <ScheduledMessageEditForm key={message.id} message={message} onClose={onClose} onSaved={onSaved} />
-    </Modal>
   );
 }
 

@@ -629,11 +629,6 @@ export function ResidentPaymentsPanel() {
                         </div>
                       </button>
                     </div>
-                    <div className="mt-2">
-                      <button type="button" className="text-[11px] font-semibold text-primary" onClick={toggleExpand}>
-                        {expanded ? "Less" : "Details"}
-                      </button>
-                    </div>
                     {expanded ? (
                       <div className="mt-2.5 border-t border-border pt-2.5 text-sm text-muted">
                         {renderRowDetail(row)}

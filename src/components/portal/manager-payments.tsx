@@ -37,12 +37,9 @@ import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import {
-  ChargeRemindersModal,
   ReminderSettingsModal,
-  ScheduledMessageEditModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
-import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -78,7 +75,6 @@ export function ManagerPayments() {
   const [residentFilter, setResidentFilter] = useState("");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
-  const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
@@ -350,7 +346,6 @@ export function ManagerPayments() {
         managerUserId={userId ?? null}
         activeBucket={bucket}
         scheduledMessages={scheduledMessages}
-        onScheduleEdit={setScheduleEdit}
         onOpenReminderSettings={() => setReminderSettingsOpen(true)}
         onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
@@ -363,12 +358,6 @@ export function ManagerPayments() {
           setReminderSettings(next);
           void reloadSchedule();
         }}
-      />
-      <ScheduledMessageEditModal
-        open={Boolean(scheduleEdit)}
-        message={scheduleEdit}
-        onClose={() => setScheduleEdit(null)}
-        onSaved={() => void reloadSchedule()}
       />
       <ManagerAddPaymentModal
         open={addOpen}

@@ -406,16 +406,6 @@ export function ManagerDocumentsPanel({
                                 </span>
                               </div>
                             </button>
-                            <div className="mt-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId))}
-                              >
-                                {expanded ? "Less" : "Details"}
-                              </Button>
-                            </div>
                             {expanded ? (
                               <div className="mt-3 border-t border-border pt-3">
                                 {renderVendorDetail(vendorId, vendorName)}

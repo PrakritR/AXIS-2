@@ -7,14 +7,17 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
-import { ScheduleInboxComposeModal } from "@/components/portal/schedule-inbox-compose-modal";
+import { ScheduleInboxComposeForm } from "@/components/portal/schedule-inbox-compose-modal";
 import {
-  ScheduledMessageEditModal,
+  ScheduledMessageEditForm,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -82,8 +85,7 @@ export function ManagerInboxSchedulePanel({
   const [manualLoading, setManualLoading] = useState(true);
   const [contactTick, setContactTick] = useState(0);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [editAutomation, setEditAutomation] = useState<ScheduledPaymentMessage | null>(null);
-  const [editManual, setEditManual] = useState<ScheduledInboxMessageRecord | null>(null);
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   const reloadManual = useCallback(async () => {
     setManualLoading(true);
@@ -160,12 +162,29 @@ export function ManagerInboxSchedulePanel({
     }
   };
 
-  const openRowEdit = (row: ScheduleRow) => {
-    if (row.kind === "manual") setEditManual(row.message);
-    else setEditAutomation(row.message);
+  const toggleRowExpand = (row: ScheduleRow) => {
+    const id = rowId(row);
+    setComposeOpen(false);
+    setExpandedRowId((cur) => (cur === id ? null : id));
   };
 
   const horizonLabel = INBOX_SCHEDULE_HORIZON_OPTIONS.find((opt) => opt.id === horizonId)?.label ?? "Show upcoming";
+
+  const renderRowEditPanel = (row: ScheduleRow) =>
+    row.kind === "manual" ? (
+      <ScheduleInboxComposeForm
+        contacts={liveContacts}
+        editMessage={row.message}
+        onSaved={reloadAll}
+        onClose={() => setExpandedRowId(null)}
+        onToggleCancelled={async (cancelled) => {
+          await toggleManualCancelled(row.message, cancelled);
+          setExpandedRowId(null);
+        }}
+      />
+    ) : (
+      <ScheduledMessageEditForm message={row.message} onSaved={reloadAll} onClose={() => setExpandedRowId(null)} />
+    );
 
   return (
     <div className="space-y-4">
@@ -188,11 +207,32 @@ export function ManagerInboxSchedulePanel({
               ))}
             </select>
           </label>
-          <Button type="button" variant="primary" className={`rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
+          <Button
+            type="button"
+            variant="primary"
+            className={`rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => {
+              setExpandedRowId(null);
+              setComposeOpen((v) => !v);
+            }}
+          >
             Schedule message
           </Button>
         </div>
       </div>
+
+      {composeOpen ? (
+        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <ScheduleInboxComposeForm
+            contacts={liveContacts}
+            onSaved={() => {
+              reloadAll();
+              setComposeOpen(false);
+            }}
+            onClose={() => setComposeOpen(false)}
+          />
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="text-sm text-muted">Loading schedule…</p>
@@ -216,9 +256,11 @@ export function ManagerInboxSchedulePanel({
               const status = row.message.status;
               const sendAt = row.message.sendAt;
 
+              const isRowExpanded = expandedRowId === id;
+
               return (
                 <div key={id} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <button type="button" className="w-full text-left" onClick={() => openRowEdit(row)}>
+                  <button type="button" className="w-full text-left" onClick={() => toggleRowExpand(row)}>
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-semibold text-foreground">{subject}</p>
                       <span className="shrink-0 rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
@@ -238,6 +280,9 @@ export function ManagerInboxSchedulePanel({
                     <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">{messagePreview(body)}</p>
                     <p className={`mt-1.5 text-xs font-medium capitalize ${statusClass(status)}`}>{status}</p>
                   </button>
+                  {isRowExpanded ? (
+                    <div className="mt-3 border-t border-border pt-3">{renderRowEditPanel(row)}</div>
+                  ) : null}
                 </div>
               );
             })}
@@ -273,11 +318,14 @@ export function ManagerInboxSchedulePanel({
                   const status = row.message.status;
                   const sendAt = row.message.sendAt;
 
+                  const isRowExpanded = expandedRowId === id;
+
                   return (
                     <Fragment key={id}>
                       <tr
-                        className={`${PORTAL_TABLE_TR_EXPANDABLE} cursor-pointer`}
-                        onClick={() => openRowEdit(row)}
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() => toggleRowExpand(row))}
+                        aria-expanded={isRowExpanded}
                       >
                         <td className={PORTAL_TABLE_TD}>{formatSendDate(sendAt)}</td>
                         <td className={PORTAL_TABLE_TD}>
@@ -305,6 +353,13 @@ export function ManagerInboxSchedulePanel({
                         </td>
                         <td className={`${PORTAL_TABLE_TD} capitalize ${statusClass(status)}`}>{status}</td>
                       </tr>
+                      {isRowExpanded ? (
+                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                          <td colSpan={8} className={PORTAL_TABLE_DETAIL_CELL}>
+                            {renderRowEditPanel(row)}
+                          </td>
+                        </tr>
+                      ) : null}
                     </Fragment>
                   );
                 })}
@@ -314,34 +369,6 @@ export function ManagerInboxSchedulePanel({
           </div>
         </>
       )}
-
-      <ScheduleInboxComposeModal
-        open={composeOpen}
-        onClose={() => setComposeOpen(false)}
-        onSaved={reloadAll}
-        contacts={liveContacts}
-      />
-      <ScheduleInboxComposeModal
-        open={Boolean(editManual)}
-        onClose={() => setEditManual(null)}
-        onSaved={reloadAll}
-        contacts={liveContacts}
-        editMessage={editManual}
-        onToggleCancelled={
-          editManual
-            ? async (cancelled) => {
-                await toggleManualCancelled(editManual, cancelled);
-                setEditManual(null);
-              }
-            : undefined
-        }
-      />
-      <ScheduledMessageEditModal
-        open={Boolean(editAutomation)}
-        message={editAutomation}
-        onClose={() => setEditAutomation(null)}
-        onSaved={reloadAll}
-      />
     </div>
   );
 }

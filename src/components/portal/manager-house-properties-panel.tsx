@@ -18,12 +18,12 @@ import {
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
   PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_DETAIL_BTN,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   adminKpiCounts,
+  adminPropertyRentDisplayLabel,
   deleteManagerLiveListing,
   deleteUnlistedManagerProperty,
   listAdminRow,
@@ -37,6 +37,7 @@ import {
   type AdminPropertyBucketIndex,
   type AdminPropertyRow,
 } from "@/lib/demo-admin-property-inventory";
+import { parseMonthlyRent } from "@/lib/listings-search";
 import {
   PROPERTY_PIPELINE_EVENT,
   deletePendingSubmissionForManager,
@@ -65,7 +66,7 @@ function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListin
 
 function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
   if (p.listingSubmission) return normalizeManagerListingSubmissionV1(p.listingSubmission);
-  const rentNum = Number.parseFloat(String(p.rentLabel).replace(/[^\d.]/g, "")) || 0;
+  const rentNum = parseMonthlyRent(String(p.rentLabel ?? "")) ?? 0;
   return normalizeManagerListingSubmissionV1(
     legacyAdminFieldsToSubmission({
       buildingName: p.buildingName,
@@ -413,6 +414,7 @@ function ManagerPropertyInlineDetails({
 
   return (
     <div className="space-y-4">
+      {row.tagline.trim() ? <p className="text-sm text-muted">{row.tagline}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Preview</p>
         {publicHref ? (
@@ -593,21 +595,10 @@ export function ManagerHousePropertiesPanel({
                       {row.zip ? `, ${row.zip}` : ""}
                     </p>
                     <p className="mt-1.5 text-xs text-muted">
-                      <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
+                      <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
                       ba · {row.neighborhood}
                     </p>
-                    {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
                   </button>
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_DETAIL_BTN}
-                      onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
-                    >
-                      {expanded ? "Less" : "Details"}
-                    </Button>
-                  </div>
                   {expanded ? (
                     <div className="mt-3 border-t border-border pt-3">
                       {renderRowDetail(sourceBucket, row, rowKey)}
@@ -651,10 +642,9 @@ export function ManagerHousePropertiesPanel({
                           </td>
                           <td className={PORTAL_TABLE_TD}>
                             <p className="text-xs text-muted">
-                              <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
+                              <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
                               ba · {row.neighborhood}
                             </p>
-                            {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
                           </td>
                         </tr>
                         {expanded ? (

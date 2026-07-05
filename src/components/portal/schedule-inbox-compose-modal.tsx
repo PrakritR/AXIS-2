@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   axisAdminScheduleContact,
@@ -54,15 +53,14 @@ async function postScheduledMessage(payload: Record<string, unknown>): Promise<v
   }
 }
 
-export function ScheduleInboxComposeModal({
-  open,
+/** Inline compose/edit form for a scheduled inbox message — hosted as an accordion panel, never a modal. */
+export function ScheduleInboxComposeForm({
   onClose,
   onSaved,
   contacts,
   editMessage,
   onToggleCancelled,
 }: {
-  open: boolean;
   onClose: () => void;
   onSaved: () => void;
   contacts: InboxScopedContact[];
@@ -70,38 +68,22 @@ export function ScheduleInboxComposeModal({
   onToggleCancelled?: (cancelled: boolean) => void | Promise<void>;
 }) {
   const { showToast } = useAppUi();
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [sendAtLocal, setSendAtLocal] = useState(defaultSendAtLocal());
-  const [recipientKey, setRecipientKey] = useState<ScheduleRecipientKey>("admin");
-  const [deliverViaEmail, setDeliverViaEmail] = useState(true);
+  const [subject, setSubject] = useState(editMessage?.subject ?? "");
+  const [body, setBody] = useState(editMessage?.body ?? "");
+  const [sendAtLocal, setSendAtLocal] = useState(
+    editMessage ? toLocalInputValue(editMessage.sendAt) : defaultSendAtLocal(),
+  );
+  const [recipientKey, setRecipientKey] = useState<ScheduleRecipientKey>(() => {
+    if (!editMessage) return defaultRecipientKey(contacts);
+    if (editMessage.broadcastCategories?.includes("resident")) return "broadcast:resident";
+    if (editMessage.broadcastCategories?.includes("management")) return "broadcast:management";
+    if (editMessage.recipientUserId) return `id:${editMessage.recipientUserId}`;
+    if (editMessage.recipientEmail === axisAdminScheduleContact().email) return "admin";
+    const match = contacts.find((c) => c.email.toLowerCase() === editMessage.recipientEmail.toLowerCase());
+    return match ? `id:${match.id}` : "admin";
+  });
+  const [deliverViaEmail, setDeliverViaEmail] = useState(editMessage?.deliverViaEmail ?? true);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    queueMicrotask(() => {
-      if (editMessage) {
-        setSubject(editMessage.subject);
-        setBody(editMessage.body);
-        setSendAtLocal(toLocalInputValue(editMessage.sendAt));
-        setDeliverViaEmail(editMessage.deliverViaEmail);
-        if (editMessage.broadcastCategories?.includes("resident")) setRecipientKey("broadcast:resident");
-        else if (editMessage.broadcastCategories?.includes("management")) setRecipientKey("broadcast:management");
-        else if (editMessage.recipientUserId) setRecipientKey(`id:${editMessage.recipientUserId}`);
-        else if (editMessage.recipientEmail === axisAdminScheduleContact().email) setRecipientKey("admin");
-        else {
-          const match = contacts.find((c) => c.email.toLowerCase() === editMessage.recipientEmail.toLowerCase());
-          setRecipientKey(match ? `id:${match.id}` : "admin");
-        }
-        return;
-      }
-      setSubject("");
-      setBody("");
-      setSendAtLocal(defaultSendAtLocal());
-      setRecipientKey(defaultRecipientKey(contacts));
-      setDeliverViaEmail(true);
-    });
-  }, [open, editMessage, contacts]);
 
   const submit = async () => {
     const subjectTrim = subject.trim();
@@ -202,8 +184,10 @@ export function ScheduleInboxComposeModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={editMessage ? "Edit scheduled message" : "Schedule inbox message"}>
       <div className="space-y-4">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">
+          {editMessage ? "Edit scheduled message" : "Schedule inbox message"}
+        </p>
         <p className="text-sm text-muted">
           Compose a message to deliver later through the portal inbox{deliverViaEmail ? " and email" : ""}.
         </p>
@@ -284,6 +268,5 @@ export function ScheduleInboxComposeModal({
           </Button>
         </div>
       </div>
-    </Modal>
   );
 }

@@ -11,7 +11,6 @@ import { PropertyRequestEditForm } from "@/components/portal/property-request-ed
 import { getListingRichContent } from "@/data/listing-rich-content";
 import {
   PORTAL_DATA_TABLE_WRAP,
-  PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
@@ -29,6 +28,7 @@ import {
 import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import {
   adminKpiCounts,
+  adminPropertyRentDisplayLabel,
   approveFromRequestChange,
   declineFromRequestChange,
   listAdminRow,
@@ -331,6 +331,7 @@ function AdminPropertyInlineDetails({
 
   return (
     <div className="space-y-4">
+      {row.tagline.trim() ? <p className="text-sm text-muted">{row.tagline}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Public listing preview</p>
         {publicHref ? (
@@ -434,7 +435,7 @@ export function AdminPropertiesClient() {
                           {row.buildingName} · {row.unitLabel}
                         </p>
                         <p className="mt-0.5 truncate text-xs text-muted">
-                          <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
+                          <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths} ba ·{" "}
                           {row.neighborhood}
                         </p>
                         <p className="mt-0.5 truncate text-[11px] text-muted/90">
@@ -447,16 +448,6 @@ export function AdminPropertiesClient() {
                       </div>
                     </div>
                   </button>
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_DETAIL_BTN}
-                      onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
-                    >
-                      {expanded ? "Less" : "Details"}
-                    </Button>
-                  </div>
                   {expanded ? (
                     <div className="mt-3 border-t border-border pt-3">
                       <AdminPropertyInlineDetails
@@ -507,12 +498,9 @@ export function AdminPropertiesClient() {
                           </td>
                           <td className={PORTAL_TABLE_TD}>
                             <p className="text-xs text-muted">
-                              <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths} ba ·{" "}
+                              <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths} ba ·{" "}
                               {row.neighborhood}
                             </p>
-                            {String(row.tagline ?? "").trim() ? (
-                              <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p>
-                            ) : null}
                           </td>
                           <td className={PORTAL_TABLE_TD}>
                             <StatusPill label={status.label} tone={status.tone} />

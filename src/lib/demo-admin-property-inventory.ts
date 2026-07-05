@@ -21,6 +21,8 @@ import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-st
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { collectLinkedPropertyIds, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
 import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
+import { parseMonthlyRent } from "@/lib/listings-search";
+import { monthlyRentListingLabel } from "@/lib/rental-application/listing-fees-display";
 
 /** Admin-wide queue (all managers). Manager portal passes `forManagerUserId` for isolated side-buckets. */
 const SIDE_KEY_GLOBAL = "axis_admin_property_buckets_v1";
@@ -51,6 +53,8 @@ export type AdminPropertyRow = {
   monthlyRent: number;
   petFriendly: boolean;
   tagline: string;
+  /** Formatted rent for display, e.g. "$1,100.00/mo" or "$1,100.00–$1,250.00/mo" when room rents differ. Falls back to `monthlyRent` when absent. */
+  rentRangeLabel?: string;
   listingId?: string;
   /** Owning manager (Supabase user id) for scoped demo data. */
   managerUserId?: string;
@@ -149,6 +153,7 @@ export function normalizeAdminPropertyRow(row: Partial<AdminPropertyRow> & { adm
     monthlyRent: Math.max(0, n(row.monthlyRent, 0)),
     petFriendly: Boolean(row.petFriendly),
     tagline: str(row.tagline),
+    rentRangeLabel: row.rentRangeLabel || undefined,
     listingId: row.listingId,
     managerUserId: row.managerUserId,
     editRequestNote: row.editRequestNote,
@@ -171,6 +176,7 @@ export function pendingToAdminRow(row: ManagerPendingPropertyRow): AdminProperty
       petFriendly: row.petFriendly,
       tagline: row.tagline ?? "",
       managerUserId: row.submittedByUserId,
+      rentRangeLabel: row.submission?.v ? monthlyRentListingLabel(row.submission) : undefined,
     }),
     submission: row.submission,
   };
@@ -197,7 +203,7 @@ export function publicListingHrefForPropertyRow(row: AdminPropertyRow): string |
 }
 
 export function mockToAdminRow(prop: MockProperty, listingId: string): AdminPropertyRow {
-  const rentNum = Number(String(prop.rentLabel ?? "").replace(/[^\d.]/g, "")) || 0;
+  const rentNum = parseMonthlyRent(prop.rentLabel ?? "") ?? 0;
   return normalizeAdminPropertyRow({
     adminRefId: listingId,
     buildingName: prop.buildingName,
@@ -210,10 +216,16 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
     monthlyRent: rentNum,
     petFriendly: prop.petFriendly,
     tagline: prop.tagline ?? "",
+    rentRangeLabel: prop.listingSubmission?.v ? monthlyRentListingLabel(prop.listingSubmission) : undefined,
     listingId,
     managerUserId: prop.managerUserId,
     submission: prop.listingSubmission,
   });
+}
+
+/** Rent to show on property cards: the formatted range label when rooms have distinct rents, else a plain single price. */
+export function adminPropertyRentDisplayLabel(row: AdminPropertyRow): string {
+  return row.rentRangeLabel || `$${row.monthlyRent}/mo`;
 }
 
 function dedupeAdminPropertyRows(rows: AdminPropertyRow[]): AdminPropertyRow[] {

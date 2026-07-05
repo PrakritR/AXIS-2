@@ -218,19 +218,6 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                     </p>
                     <p className="mt-0.5 truncate text-[11px] text-muted/90">{bucketStatusLabel(row.bucket)}</p>
                   </button>
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_DETAIL_BTN}
-                      onClick={() => {
-                        setExpandedId((cur) => (cur === row.id ? null : row.id));
-                        setEditingId(null);
-                      }}
-                    >
-                      {expanded ? "Less" : "Details"}
-                    </Button>
-                  </div>
                   {expanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
               );

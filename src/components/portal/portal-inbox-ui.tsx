@@ -305,17 +305,6 @@ export function PortalInboxMessageTable({
             ) : null}
             {isExpanded ? (
               <div className="mt-3 border-t border-border pt-3">{renderExpandedContent(row, detailText, extra)}</div>
-            ) : rowExpandable ? (
-              <div className="mt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  onClick={() => onToggleExpand?.(row.id)}
-                >
-                  {isExpanded ? "Less" : "Open"}
-                </Button>
-              </div>
             ) : null}
           </div>
         );
