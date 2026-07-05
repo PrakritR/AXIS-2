@@ -297,7 +297,7 @@ export function ManagerPaymentsLedgerPanel({
     <div className="space-y-2 lg:hidden">
       {rows.map((row) => {
         const reminders = row.householdChargeId
-          ? manageableRemindersForCharge(scheduledMessages, row.householdChargeId)
+          ? manageableRemindersForCharge(scheduledMessages, row.householdChargeId).filter((m) => m.status !== "cancelled")
           : [];
         const expanded = expandedId === row.id;
         const propertyShort = stripPropertyRoomCountSuffix(row.propertyName || "");
@@ -379,7 +379,9 @@ export function ManagerPaymentsLedgerPanel({
                   <td className={`${PORTAL_TABLE_TD} text-muted`}>
                     <div>{row.dueDate}</div>
                     {row.householdChargeId ? (() => {
-                      const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
+                      const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId).filter(
+                        (m) => m.status !== "cancelled",
+                      );
                       if (!reminders.length) return null;
                       return (
                         <button

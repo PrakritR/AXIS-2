@@ -787,29 +787,6 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
   }, []);
 
   useEffect(() => {
-    if (isDemoModeActive()) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/portal/scheduled-messages${query}`, { credentials: "include", cache: "no-store" });
-        if (!res.ok || cancelled) return;
-        const body = (await res.json()) as { settings: ManagerAutomationSettings; messages: ScheduledPaymentMessage[] };
-        setSettings(body.settings);
-        setRawMessages(body.messages);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
-
-  useEffect(() => {
     queueMicrotask(() => void reload());
   }, [chargeRevision, settingsRevision, reload]);
 
