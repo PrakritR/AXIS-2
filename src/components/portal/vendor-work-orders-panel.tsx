@@ -67,6 +67,8 @@ export function VendorWorkOrdersPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, BidDraft>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [doneNoteById, setDoneNoteById] = useState<Record<string, string>>({});
+  const [markingDoneId, setMarkingDoneId] = useState<string | null>(null);
 
   const loadBids = useCallback(async () => {
     const bids = await fetchWorkOrderBids();
@@ -129,10 +131,31 @@ export function VendorWorkOrdersPanel() {
     }
   };
 
+  const markDone = async (row: DemoManagerWorkOrderRow) => {
+    setMarkingDoneId(row.id);
+    try {
+      const res = await fetch("/api/portal/work-orders/mark-done", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ workOrderId: row.id, note: doneNoteById[row.id] ?? "" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not mark done.");
+      await syncManagerWorkOrdersFromServer({ force: true });
+      showToast("Marked done — the manager has been notified.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not mark done.");
+    } finally {
+      setMarkingDoneId(null);
+    }
+  };
+
   const renderRowDetail = (row: DemoManagerWorkOrderRow) => {
     const bid = bidsByWorkOrderId[row.id];
     const draft = draftById[row.id] ?? defaultBidDraft(bid);
     const canEditBid = row.biddingOpen && (!bid || bid.status === "submitted");
+    const canMarkDone = row.bucket === "scheduled" && !row.automationStatus;
 
     return (
       <>
@@ -141,6 +164,11 @@ export function VendorWorkOrdersPanel() {
           <p className="mt-1.5 text-xs text-muted">
             Visit scheduled for <span className="font-medium text-foreground">{row.scheduled}</span>
           </p>
+        ) : null}
+        {row.automationStatus === "vendor_marked_done" ? (
+          <p className="mt-1.5 text-xs font-medium text-muted">Marked done — awaiting manager approval.</p>
+        ) : row.automationStatus === "paid" ? (
+          <p className="mt-1.5 text-xs font-medium text-muted">Approved and paid.</p>
         ) : null}
 
         {row.biddingOpen || bid ? (
@@ -227,6 +255,33 @@ export function VendorWorkOrdersPanel() {
             </Button>
           </PortalTableDetailActions>
         ) : null}
+
+        {canMarkDone ? (
+          <div className="mt-3 border-t border-border pt-3">
+            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+              Note for the manager (optional)
+              <Input
+                type="text"
+                placeholder="Anything the manager should know"
+                value={doneNoteById[row.id] ?? ""}
+                onChange={(e) => setDoneNoteById((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                className="h-8 rounded-md text-sm"
+              />
+            </label>
+            <PortalTableDetailActions>
+              <Button
+                type="button"
+                variant="primary"
+                data-attr="vendor-mark-done"
+                className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                disabled={markingDoneId === row.id}
+                onClick={() => void markDone(row)}
+              >
+                {markingDoneId === row.id ? "Marking done…" : "Mark done"}
+              </Button>
+            </PortalTableDetailActions>
+          </div>
+        ) : null}
       </>
     );
   };
@@ -251,6 +306,15 @@ export function VendorWorkOrdersPanel() {
                       {row.biddingOpen ? (
                         <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                           {bid ? "Bid submitted" : "Open for bids"}
+                        </span>
+                      ) : null}
+                      {row.automationStatus === "vendor_marked_done" ? (
+                        <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                          Awaiting approval
+                        </span>
+                      ) : row.automationStatus === "paid" ? (
+                        <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                          Paid
                         </span>
                       ) : null}
                     </div>
@@ -295,7 +359,18 @@ export function VendorWorkOrdersPanel() {
                           <td className={PORTAL_TABLE_TD}>{propertyLabel(row)}</td>
                           <td className={PORTAL_TABLE_TD}>{row.scheduled || "Not yet scheduled"}</td>
                           <td className={PORTAL_TABLE_TD}>
-                            <WorkOrderStatusBadge bucket={row.bucket} />
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <WorkOrderStatusBadge bucket={row.bucket} />
+                              {row.automationStatus === "vendor_marked_done" ? (
+                                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                                  Awaiting approval
+                                </span>
+                              ) : row.automationStatus === "paid" ? (
+                                <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                                  Paid
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                           <td className={PORTAL_TABLE_TD}>
                             {row.biddingOpen ? (

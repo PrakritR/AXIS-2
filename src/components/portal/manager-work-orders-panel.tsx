@@ -12,6 +12,7 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
+  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
@@ -86,6 +87,20 @@ function formatScheduledLabel(iso: string): string {
 // recognition sees the check (see commit 924bd45 for the same fix elsewhere).
 const SAFE_PHOTO_HREF_RE = /^(?:data:image\/|https?:\/\/)/;
 
+/** $500+ triggers a confirm-preview before Approve + Pay; below it, one tap completes
+ * and pays immediately. Bump this single constant to change the cutoff. */
+const APPROVE_PAY_CONFIRM_THRESHOLD_CENTS = 50_000;
+
+function approvePayDefaults(row: DemoManagerWorkOrderRow) {
+  return {
+    category: row.category ?? parseWorkOrderCategoryFromDescription(row.description),
+    vendorCostCents: row.vendorCostCents ?? Math.round(parseMoneyAmount(row.cost) * 100),
+    materialsCostCents: row.materialsCostCents ?? 0,
+    materialsMemo: row.materialsMemo ?? "",
+    workDoneSummary: row.workDoneSummary || row.vendorMarkedDoneNote || row.title,
+  };
+}
+
 export function ManagerWorkOrdersPanel({
   allRows,
   bucket,
@@ -118,6 +133,8 @@ export function ManagerWorkOrdersPanel({
   const [offersByWorkOrderId, setOffersByWorkOrderId] = useState<Record<string, WorkOrderVendorOffer[]>>({});
   const [selectedVendorIdsByWorkOrderId, setSelectedVendorIdsByWorkOrderId] = useState<Record<string, string[]>>({});
   const [sendingOffersId, setSendingOffersId] = useState<string | null>(null);
+  const [approvePayRow, setApprovePayRow] = useState<DemoManagerWorkOrderRow | null>(null);
+  const [approvePayBusy, setApprovePayBusy] = useState(false);
 
   useEffect(() => {
     void syncManagerVendorsFromServer();
@@ -411,6 +428,41 @@ export function ManagerWorkOrdersPanel({
     openCompleteModal(row);
   };
 
+  /** Runs the same completion + expense-logging as "Mark complete", then marks the vendor
+   * paid (bookkeeping status only — see APPROVE_PAY_CONFIRM_THRESHOLD_CENTS for the
+   * one-tap vs confirm-preview gate). */
+  const submitApprovePay = async (row: DemoManagerWorkOrderRow) => {
+    setApprovePayBusy(true);
+    try {
+      const res = await fetch("/api/portal/work-orders/approve-pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ workOrder: row, ...approvePayDefaults(row) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not approve payment.");
+      updateManagerWorkOrder(row.id, () => data.workOrder as DemoManagerWorkOrderRow);
+      void syncManagerWorkOrdersFromServer();
+      showToast("Approved and paid.");
+      setApprovePayRow(null);
+      setExpandedId(null);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not approve payment.");
+    } finally {
+      setApprovePayBusy(false);
+    }
+  };
+
+  const approvePay = (row: DemoManagerWorkOrderRow) => {
+    const { vendorCostCents, materialsCostCents } = approvePayDefaults(row);
+    if (vendorCostCents + materialsCostCents < APPROVE_PAY_CONFIRM_THRESHOLD_CENTS) {
+      void submitApprovePay(row);
+    } else {
+      setApprovePayRow(row);
+    }
+  };
+
   const createBillingCharge = (row: DemoManagerWorkOrderRow) => {
     const existing = findWorkOrderCharge(row.id);
     if (existing) {
@@ -651,6 +703,13 @@ export function ManagerWorkOrdersPanel({
                           <p className="mt-1.5 text-xs text-muted">
                             Visit scheduled for <span className="font-medium text-foreground">{row.scheduled}</span>
                           </p>
+                        ) : null}
+                        {row.automationStatus === "vendor_marked_done" ? (
+                          <p className="mt-1.5 text-xs font-medium text-muted">
+                            Vendor marked this done{row.vendorMarkedDoneNote ? ` — "${row.vendorMarkedDoneNote}"` : ""}. Awaiting your approval.
+                          </p>
+                        ) : row.automationStatus === "paid" ? (
+                          <p className="mt-1.5 text-xs font-medium text-muted">Approved and paid.</p>
                         ) : null}
                         {row.photoDataUrls?.length ? (
                           <div className="mt-4">
@@ -978,7 +1037,18 @@ export function ManagerWorkOrdersPanel({
                               </Button>
                             </>
                           ) : null}
-                          {row.bucket === "scheduled" ? (
+                          {row.bucket === "scheduled" && row.automationStatus === "vendor_marked_done" ? (
+                            <Button
+                              type="button"
+                              variant="primary"
+                              data-attr="work-order-approve-pay"
+                              className={`${PORTAL_DETAIL_BTN_PRIMARY} rounded-full`}
+                              disabled={approvePayBusy}
+                              onClick={() => approvePay(row)}
+                            >
+                              Approve &amp; pay
+                            </Button>
+                          ) : row.bucket === "scheduled" ? (
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markComplete(row)}>
                               Mark complete
                             </Button>
@@ -1185,6 +1255,53 @@ export function ManagerWorkOrdersPanel({
               </Button>
               <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
                 Complete &amp; log expenses
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={Boolean(approvePayRow)} onClose={() => setApprovePayRow(null)} title="Approve & pay">
+        {approvePayRow ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              {approvePayRow.propertyName} · {approvePayRow.title}
+            </p>
+            <p className="text-sm text-foreground">
+              Pay{" "}
+              <span className="font-semibold">
+                $
+                {(
+                  (approvePayDefaults(approvePayRow).vendorCostCents + approvePayDefaults(approvePayRow).materialsCostCents) /
+                  100
+                ).toFixed(2)}
+              </span>
+              {approvePayRow.vendorName ? (
+                <>
+                  {" "}
+                  to <span className="font-semibold">{approvePayRow.vendorName}</span>
+                </>
+              ) : null}
+            </p>
+            {approvePayRow.vendorMarkedDoneNote ? (
+              <p className="text-xs text-muted">Vendor note: &ldquo;{approvePayRow.vendorMarkedDoneNote}&rdquo;</p>
+            ) : null}
+            <p className="text-xs text-muted">
+              This logs the expense, marks the work order completed, and records the vendor as paid (bookkeeping
+              only — no funds are transferred).
+            </p>
+            <div className="flex justify-start gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setApprovePayRow(null)} disabled={approvePayBusy}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                data-attr="work-order-approve-pay-confirm"
+                onClick={() => void submitApprovePay(approvePayRow)}
+                disabled={approvePayBusy}
+              >
+                {approvePayBusy ? "Approving…" : "Approve & pay"}
               </Button>
             </div>
           </div>

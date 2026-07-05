@@ -88,3 +88,8 @@ export function mergeWorkOrderCompletion(
     expenseEntryIds: [...(row.expenseEntryIds ?? []), ...expenseEntryIds],
   };
 }
+
+/** Bookkeeping-only "paid" flag — no real money movement (Stripe vendor payout is a later slice). */
+export function markWorkOrderPaid(row: DemoManagerWorkOrderRow, paidAt: string = new Date().toISOString()): DemoManagerWorkOrderRow {
+  return { ...row, automationStatus: "paid", paidAt };
+}

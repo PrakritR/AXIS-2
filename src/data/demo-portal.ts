@@ -177,6 +177,13 @@ export type DemoManagerWorkOrderRow = {
   biddingOpen?: boolean;
   biddingOpenedAt?: string;
   biddingResolvedAt?: string;
+  /** Vendor tapped "Mark done" (work-orders/mark-done route) and is awaiting manager
+   * approve + pay, or the manager has since approved + paid (bookkeeping status only —
+   * no real money movement; see work-orders/approve-pay route). */
+  automationStatus?: "vendor_marked_done" | "paid";
+  vendorMarkedDoneAt?: string;
+  vendorMarkedDoneNote?: string;
+  paidAt?: string;
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];
