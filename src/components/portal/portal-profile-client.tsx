@@ -224,6 +224,7 @@ export function PortalProfileClient({
     return (
       <ManagerPortalPageShell
         title="Settings"
+        titleAsideInline
         titleAside={
           <div className="flex flex-wrap gap-2">
             {headerActions.map((a) => (
@@ -259,7 +260,7 @@ export function PortalProfileClient({
 
   return (
     <div className={PORTAL_SECTION_SURFACE}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center justify-between gap-4">
         <h1 className={PORTAL_PAGE_TITLE}>Settings</h1>
         <div className="flex flex-wrap gap-2">
           {headerActions.map((a) => (
