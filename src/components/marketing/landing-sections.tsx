@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RevealOnView } from "@/components/motion/reveal-on-view";
+import { PropertyListingsBrowser } from "@/components/marketing/property-listings-browser";
 
 const OWNER_FEATURES = [
   "Property records & unit setup",
@@ -64,6 +65,46 @@ export function LandingAudienceBento() {
               Partner with Axis
               <ArrowIcon />
             </span>
+          </Link>
+        </div>
+      </RevealOnView>
+    </section>
+  );
+}
+
+export function LandingProperties() {
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-16 sm:px-5 sm:py-20">
+      <RevealOnView>
+        <div className="text-center">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Available now</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
+            Properties
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted">
+            Search available homes managed on Axis and open any listing for details.
+          </p>
+        </div>
+      </RevealOnView>
+
+      <RevealOnView delayMs={80}>
+        <div className="mt-10">
+          <PropertyListingsBrowser
+            analyticsPrefix="home-properties"
+            listClassName="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          />
+        </div>
+      </RevealOnView>
+
+      <RevealOnView delayMs={120}>
+        <div className="mt-8 text-center">
+          <Link
+            href="/rent/browse"
+            data-attr="home-properties-browse-all"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors duration-200 hover:opacity-90"
+          >
+            Browse all properties
+            <ArrowIcon />
           </Link>
         </div>
       </RevealOnView>

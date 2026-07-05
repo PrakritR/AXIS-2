@@ -5,6 +5,9 @@ import { LandingHero } from "@/components/marketing/landing-hero";
 const LandingAudienceBento = dynamic(
   () => import("@/components/marketing/landing-sections").then((m) => ({ default: m.LandingAudienceBento })),
 );
+const LandingProperties = dynamic(
+  () => import("@/components/marketing/landing-sections").then((m) => ({ default: m.LandingProperties })),
+);
 const LandingVendorCta = dynamic(
   () => import("@/components/marketing/landing-sections").then((m) => ({ default: m.LandingVendorCta })),
 );
@@ -23,6 +26,7 @@ export default function HomePage() {
         <LandingHero />
       </div>
 
+      <LandingProperties />
       <LandingAudienceBento />
       <LandingVendorCta />
       <LandingHowItWorks />

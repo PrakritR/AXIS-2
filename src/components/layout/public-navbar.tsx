@@ -51,27 +51,21 @@ export function PublicNavbar() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  const pricingActive = useMemo(
-    () => pathname === "/pricing" || pathname.startsWith("/partner/pricing"),
-    [pathname],
-  );
-  const partnerActive = useMemo(
-    () => pathname.startsWith("/partner") && !pathname.startsWith("/partner/pricing"),
-    [pathname],
-  );
-  const contactActive = useMemo(() => pathname === "/contact", [pathname]);
+  const residentActive = useMemo(() => pathname.startsWith("/rent"), [pathname]);
+  const managerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
+  const vendorActive = useMemo(() => pathname.startsWith("/vendors"), [pathname]);
   const demoActive = useMemo(() => pathname === "/demo" || pathname.startsWith("/demo/"), [pathname]);
-  const vendorsActive = useMemo(() => pathname.startsWith("/vendors"), [pathname]);
+  const contactActive = useMemo(() => pathname === "/contact", [pathname]);
 
   const menu: NavbarMenuItem[] = useMemo(
     () => [
-      { title: "Partners", url: "/partner", active: partnerActive },
-      { title: "Demo", url: "/demo", active: demoActive },
-      { title: "Pricing", url: "/partner/pricing", active: pricingActive },
-      { title: "Vendors", url: "/vendors", active: vendorsActive, dataAttr: "nav-vendors" },
-      { title: "Contact", url: "/contact", active: contactActive },
+      { title: "Resident", url: "/rent/browse", active: residentActive, dataAttr: "nav-resident" },
+      { title: "Manager", url: "/partner", active: managerActive, dataAttr: "nav-manager" },
+      { title: "Vendor", url: "/vendors", active: vendorActive, dataAttr: "nav-vendor" },
+      { title: "Demo", url: "/demo", active: demoActive, dataAttr: "nav-demo" },
+      { title: "Contact", url: "/contact", active: contactActive, dataAttr: "nav-contact" },
     ],
-    [demoActive, partnerActive, pricingActive, vendorsActive, contactActive],
+    [residentActive, managerActive, vendorActive, demoActive, contactActive],
   );
 
   if (hideOnNative) return null;

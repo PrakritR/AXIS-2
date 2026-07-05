@@ -53,3 +53,8 @@ export function propertyWithinMaxBudget(rentLabel: string, maxBudget: number | n
   if (rent === null) return false;
   return rent <= maxBudget;
 }
+
+export function propertyMatchesMinBeds(beds: number, minBeds: number | null): boolean {
+  if (minBeds === null || !Number.isFinite(minBeds)) return true;
+  return beds >= minBeds;
+}
