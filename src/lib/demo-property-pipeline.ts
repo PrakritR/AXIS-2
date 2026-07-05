@@ -385,6 +385,36 @@ async function fetchPublicPropertyLead(id: string): Promise<MockProperty | null>
   }
 }
 
+let residentPropertyInFlight: Promise<MockProperty | null> | null = null;
+
+/**
+ * Hydrates the signed-in resident's own property (any publish status) so
+ * resident-portal views (e.g. offered service request types) see it even
+ * though the resident never calls the manager/admin-scoped `/api/property-records`
+ * sync or the live-only public catalog.
+ */
+export async function loadResidentPropertyFromServer(): Promise<MockProperty | null> {
+  if (!isBrowser()) return null;
+  if (residentPropertyInFlight) return residentPropertyInFlight;
+  residentPropertyInFlight = (async () => {
+    try {
+      const res = await fetch("/api/portal/resident-property", { credentials: "include", cache: "no-store" });
+      const body = (await res.json()) as { property?: MockProperty };
+      if (!res.ok || !body.property) return null;
+      cachePublicExtraListings([body.property], { silent: true });
+      window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+      return body.property;
+    } catch {
+      return null;
+    }
+  })();
+  try {
+    return await residentPropertyInFlight;
+  } finally {
+    residentPropertyInFlight = null;
+  }
+}
+
 /**
  * One-time: moves flat legacy arrays into the signed-in user's bucket so other accounts stay isolated.
  */

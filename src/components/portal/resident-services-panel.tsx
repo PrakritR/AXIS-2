@@ -44,6 +44,7 @@ import {
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import {
   PROPERTY_PIPELINE_EVENT,
+  loadResidentPropertyFromServer,
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import type { ManagerListingServiceOption } from "@/lib/manager-listing-submission";
@@ -564,7 +565,12 @@ export function ResidentServicesPanel({
       .then(() => setAppTick((t) => t + 1))
       .then(() => syncPropertyPipelineFromServer())
       .then(() => setPropertyTick((t) => t + 1))
-      .then(() => syncLeasePipelineFromServer());
+      .then(() => syncLeasePipelineFromServer())
+      // The resident/admin-scoped sync above never returns a resident's own
+      // property (it's scoped to properties the caller manages), so hydrate
+      // it separately — needed for e.g. manager-offered service requests.
+      .then(() => loadResidentPropertyFromServer())
+      .then(() => setPropertyTick((t) => t + 1));
     
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, onProperty);
