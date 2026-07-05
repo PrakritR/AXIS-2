@@ -93,6 +93,16 @@ export function usePortalSession(initial?: {
   // never touches Supabase and is scoped to `/demo` by pathname.
   const demoRole = useSyncExternalStore(subscribeDemoRole, getDemoRole, () => "manager" as const);
 
+  // `isDemoModeActive()` reads `window.location`, which the server can't see —
+  // the page is server-rendered normally, so evaluating it during render would
+  // report "not demo" on the server and "demo" on the client's first paint,
+  // a hydration mismatch. Only switch to the demo session after mount.
+  const [demoActive, setDemoActive] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration-safe demo-mode detection on mount
+    setDemoActive(isDemoModeActive());
+  }, []);
+
   useEffect(() => {
     if (isDemoModeActive()) return;
     ensurePortalSessionStore();
@@ -115,7 +125,7 @@ export function usePortalSession(initial?: {
     };
   }, [initial?.email, initial?.userId]);
 
-  if (isDemoModeActive()) return demoSessionForRole(demoRole);
+  if (demoActive) return demoSessionForRole(demoRole);
 
   return state;
 }
