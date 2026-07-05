@@ -7,102 +7,145 @@ vi.mock("@/lib/stripe-connect", () => ({
 }));
 
 import { getStripe } from "@/lib/stripe";
-import { connectAccountTransfersActive, retrieveManagerConnectAccountOrNull } from "@/lib/stripe-connect";
+import { retrieveManagerConnectAccountOrNull, connectAccountTransfersActive } from "@/lib/stripe-connect";
 import { payoutVendorForWorkOrder } from "@/lib/stripe-vendor-payout";
 
-type PayoutRow = {
-  work_order_id: string;
-  status: string;
-  stripe_transfer_id?: string | null;
-  failure_reason?: string | null;
-};
+type Row = Record<string, unknown>;
 
-function mockDb(opts?: { existingPayout?: PayoutRow; insertError?: { code: string } }) {
-  const inserts: PayoutRow[] = [];
+/** Minimal fake Supabase client covering vendor_payouts / work_order_bids / profiles reads+writes. */
+function fakeDb(opts: { acceptedBidAmountCents?: number | null; connectAccountId?: string | null; existingPayout?: Row | null }) {
+  const inserted: Row[] = [];
+  const updated: Row[] = [];
+  let insertShouldConflict = false;
+  const setConflict = (v: boolean) => (insertShouldConflict = v);
+
   const client = {
     from(table: string) {
-      if (table === "vendor_payouts") {
-        const filters: Record<string, string> = {};
-        const chain: Record<string, unknown> = {
-          select: () => chain,
-          eq: (col: string, val: string) => {
-            filters[col] = val;
-            return chain;
-          },
-          maybeSingle: async () => ({
-            data:
-              opts?.existingPayout && filters.work_order_id === opts.existingPayout.work_order_id
-                ? { id: "existing" }
-                : null,
-            error: null,
+      if (table === "work_order_bids") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({
+                  data: opts.acceptedBidAmountCents != null ? { amount_cents: opts.acceptedBidAmountCents } : null,
+                  error: null,
+                }),
+              }),
+            }),
           }),
-          insert: async (row: PayoutRow) => {
-            inserts.push(row);
-            if (opts?.insertError) return { error: opts.insertError };
-            return { error: null };
-          },
         };
-        return chain;
       }
       if (table === "profiles") {
         return {
           select: () => ({
             eq: () => ({
-              maybeSingle: async () => ({ data: { stripe_connect_account_id: "acct_vendor" } }),
+              maybeSingle: async () => ({ data: { stripe_connect_account_id: opts.connectAccountId ?? null }, error: null }),
             }),
           }),
         };
       }
-      return {};
+      if (table === "vendor_payouts") {
+        return {
+          insert: (row: Row) => ({
+            select: () => ({
+              single: async () => {
+                if (insertShouldConflict) {
+                  return { data: null, error: { message: "duplicate key value violates unique constraint" } };
+                }
+                inserted.push(row);
+                return { data: { id: "payout-1" }, error: null };
+              },
+            }),
+          }),
+          update: (row: Row) => ({
+            eq: async () => {
+              updated.push(row);
+              return { error: null };
+            },
+          }),
+        };
+      }
+      throw new Error(`unexpected table ${table}`);
     },
   };
-  return { client, inserts };
+  return { client, inserted, updated, setConflict };
 }
 
 describe("payoutVendorForWorkOrder", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(connectAccountTransfersActive).mockReturnValue(true);
-    vi.mocked(retrieveManagerConnectAccountOrNull).mockResolvedValue({ id: "acct_vendor" } as never);
-    vi.mocked(getStripe).mockReturnValue({
-      transfers: { create: vi.fn().mockResolvedValue({ id: "tr_test" }) },
-    } as never);
-  });
+  beforeEach(() => vi.clearAllMocks());
 
-  it("skips when a payout row already exists for the work order", async () => {
-    const { client, inserts } = mockDb({ existingPayout: { work_order_id: "WO-1", status: "paid" } });
+  it("anchors the transferred amount to the accepted bid, ignoring a forged caller amount", async () => {
+    const { client, inserted, updated } = fakeDb({ acceptedBidAmountCents: 20000, connectAccountId: "acct_1" });
+    vi.mocked(getStripe).mockReturnValue({
+      transfers: { create: vi.fn().mockResolvedValue({ id: "tr_1" }) },
+    } as never);
+    vi.mocked(retrieveManagerConnectAccountOrNull).mockResolvedValue({ id: "acct_1" } as never);
+    vi.mocked(connectAccountTransfersActive).mockReturnValue(true);
+
     await payoutVendorForWorkOrder(client as never, {
       workOrderId: "WO-1",
       managerUserId: "mgr-1",
       vendorUserId: "vendor-1",
-      amountCents: 5000,
+      amountCents: 999_999, // forged/mismatched client-supplied amount — must be ignored
     });
-    expect(inserts).toHaveLength(0);
-    expect(getStripe().transfers.create).not.toHaveBeenCalled();
-  });
 
-  it("passes a stable Stripe idempotency key per work order", async () => {
-    const { client } = mockDb();
-    await payoutVendorForWorkOrder(client as never, {
-      workOrderId: "WO-42",
-      managerUserId: "mgr-1",
-      vendorUserId: "vendor-1",
-      amountCents: 5000,
-    });
-    expect(getStripe().transfers.create).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 5000, destination: "acct_vendor" }),
-      { idempotencyKey: "vendor_payout_WO-42" },
+    expect(inserted[0]!.amount_cents).toBe(20000);
+    const stripe = vi.mocked(getStripe).mock.results[0]!.value;
+    expect(stripe.transfers.create).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 20000 }),
+      expect.objectContaining({ idempotencyKey: "vendor-payout:WO-1" }),
     );
+    expect(updated[0]).toMatchObject({ status: "paid", stripe_transfer_id: "tr_1" });
   });
 
-  it("treats a duplicate payout insert as already handled", async () => {
-    const { client, inserts } = mockDb({ insertError: { code: "23505" } });
+  it("falls back to the caller-supplied amount when no bid was accepted (manual assignment)", async () => {
+    const { client, inserted } = fakeDb({ acceptedBidAmountCents: null, connectAccountId: "acct_1" });
+    vi.mocked(getStripe).mockReturnValue({
+      transfers: { create: vi.fn().mockResolvedValue({ id: "tr_2" }) },
+    } as never);
+    vi.mocked(retrieveManagerConnectAccountOrNull).mockResolvedValue({ id: "acct_1" } as never);
+    vi.mocked(connectAccountTransfersActive).mockReturnValue(true);
+
     await payoutVendorForWorkOrder(client as never, {
-      workOrderId: "WO-race",
+      workOrderId: "WO-2",
+      managerUserId: "mgr-1",
+      vendorUserId: "vendor-1",
+      amountCents: 15000,
+    });
+
+    expect(inserted[0]!.amount_cents).toBe(15000);
+  });
+
+  it("never calls Stripe when the payout claim insert loses the race (duplicate/concurrent request)", async () => {
+    const { client, setConflict } = fakeDb({ acceptedBidAmountCents: 5000, connectAccountId: "acct_1" });
+    setConflict(true);
+    const transferCreate = vi.fn().mockResolvedValue({ id: "tr_3" });
+    vi.mocked(getStripe).mockReturnValue({ transfers: { create: transferCreate } } as never);
+
+    await payoutVendorForWorkOrder(client as never, {
+      workOrderId: "WO-3",
       managerUserId: "mgr-1",
       vendorUserId: "vendor-1",
       amountCents: 5000,
     });
-    expect(inserts).toHaveLength(1);
+
+    expect(transferCreate).not.toHaveBeenCalled();
+  });
+
+  it("records a failed payout without transferring when the vendor has no Connect account", async () => {
+    const { client, inserted, updated } = fakeDb({ acceptedBidAmountCents: 5000, connectAccountId: null });
+    const transferCreate = vi.fn();
+    vi.mocked(getStripe).mockReturnValue({ transfers: { create: transferCreate } } as never);
+
+    await payoutVendorForWorkOrder(client as never, {
+      workOrderId: "WO-4",
+      managerUserId: "mgr-1",
+      vendorUserId: "vendor-1",
+      amountCents: 5000,
+    });
+
+    expect(transferCreate).not.toHaveBeenCalled();
+    expect(inserted[0]!.status).toBe("pending");
+    expect(updated[0]).toMatchObject({ status: "failed" });
   });
 });

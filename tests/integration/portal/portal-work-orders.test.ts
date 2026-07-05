@@ -11,15 +11,16 @@ import { GET, POST } from "@/app/api/portal-work-orders/route";
 
 type Rec = { id: string; manager_user_id: string | null; resident_email: string | null; row_data: unknown; vendor_user_id?: string | null };
 type AppRec = { id: string; manager_user_id: string; resident_email: string };
-type VendorRec = { id: string; manager_user_id: string; vendor_user_id: string | null };
+type VendorDirRec = { id: string; manager_user_id: string | null; vendor_user_id: string | null; row_data?: { sharedWithManagers?: boolean } };
 
 function mockDb(
   seed: Rec[],
   profile: { email: string; role: string } | null,
   appSeed: AppRec[] = [],
-  vendorSeed: VendorRec[] = [],
+  vendorDirSeed: VendorDirRec[] = [],
 ) {
   const store = new Map(seed.map((r) => [r.id, r]));
+  const vendorDirs = new Map(vendorDirSeed.map((r) => [r.id, r]));
   const upserts: Rec[] = [];
   const deletes: string[] = [];
   let lastOr: string | null = null;
@@ -64,23 +65,13 @@ function mockDb(
         return builder;
       }
       if (table === "manager_vendor_records") {
-        const filters: Record<string, string> = {};
-        const builder: Record<string, unknown> = {
-          select: () => builder,
-          eq: (col: string, val: string) => {
-            filters[col] = val;
-            return builder;
-          },
-          maybeSingle: async () => {
-            const row = vendorSeed.find(
-              (v) =>
-                (!filters.id || v.id === filters.id) &&
-                (!filters.manager_user_id || v.manager_user_id === filters.manager_user_id),
-            );
-            return { data: row ? { vendor_user_id: row.vendor_user_id } : null, error: null };
-          },
+        return {
+          select: () => ({
+            eq: (_col: string, val: string) => ({
+              maybeSingle: async () => ({ data: vendorDirs.get(val) ?? null, error: null }),
+            }),
+          }),
         };
-        return builder;
       }
       // portal_work_order_records — GET uses select/order/limit/(or|eq); POST uses select/eq/maybeSingle, upsert, delete/eq.
       const chain: Record<string, unknown> = {
@@ -234,39 +225,65 @@ describe("/api/portal-work-orders security", () => {
     expect((await parseJsonResponse(foreign)).status).toBe(403);
   });
 
-  it("does not link another manager's vendor directory row on upsert (IDOR)", async () => {
+  it("rejects attaching another manager's private vendor via vendorId (IDOR)", async () => {
     asUser("mgr-a", "a@test.com");
     const { client, upserts } = mockDb([], { email: "a@test.com", role: "manager" }, [], [
-      { id: "VEND-b", manager_user_id: "mgr-b", vendor_user_id: "vendor-b-user" },
+      { id: "vendor-b-private", manager_user_id: "mgr-b", vendor_user_id: "vendor-user-b", row_data: { sharedWithManagers: false } },
     ]);
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
 
     const res = await POST(
-      jsonRequest("http://t", {
-        method: "POST",
-        body: { row: { id: "WO-new", vendorId: "VEND-b", title: "Leak vendor" } },
-      }),
+      jsonRequest("http://t", { method: "POST", body: { row: { id: "WO-new", vendorId: "vendor-b-private" } } }),
     );
     const { status } = await parseJsonResponse(res);
-    expect(status).toBe(200);
-    expect(upserts[0]!.vendor_user_id).toBeNull();
+    expect(status).toBe(403);
+    expect(upserts).toHaveLength(0);
   });
 
-  it("links a vendor directory row only when it belongs to the acting manager", async () => {
+  it("allows attaching a vendor the manager owns", async () => {
     asUser("mgr-a", "a@test.com");
     const { client, upserts } = mockDb([], { email: "a@test.com", role: "manager" }, [], [
-      { id: "VEND-a", manager_user_id: "mgr-a", vendor_user_id: "vendor-a-user" },
+      { id: "vendor-a-own", manager_user_id: "mgr-a", vendor_user_id: "vendor-user-a", row_data: { sharedWithManagers: false } },
+    ]);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const res = await POST(
+      jsonRequest("http://t", { method: "POST", body: { row: { id: "WO-new", vendorId: "vendor-a-own" } } }),
+    );
+    const { status } = await parseJsonResponse(res);
+    expect(status).toBe(200);
+    expect(upserts[0]!.vendor_user_id).toBe("vendor-user-a");
+  });
+
+  it("allows attaching another manager's vendor when it's marked shared", async () => {
+    asUser("mgr-a", "a@test.com");
+    const { client, upserts } = mockDb([], { email: "a@test.com", role: "manager" }, [], [
+      { id: "vendor-b-shared", manager_user_id: "mgr-b", vendor_user_id: "vendor-user-b", row_data: { sharedWithManagers: true } },
+    ]);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const res = await POST(
+      jsonRequest("http://t", { method: "POST", body: { row: { id: "WO-new", vendorId: "vendor-b-shared" } } }),
+    );
+    const { status } = await parseJsonResponse(res);
+    expect(status).toBe(200);
+    expect(upserts[0]!.vendor_user_id).toBe("vendor-user-b");
+  });
+
+  it("skips (does not persist) a replace-batch row that references an unowned vendor", async () => {
+    asUser("mgr-a", "a@test.com");
+    const { client, upserts } = mockDb(SEED, { email: "a@test.com", role: "manager" }, [], [
+      { id: "vendor-b-private", manager_user_id: "mgr-b", vendor_user_id: "vendor-user-b", row_data: { sharedWithManagers: false } },
     ]);
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
 
     const res = await POST(
       jsonRequest("http://t", {
         method: "POST",
-        body: { row: { id: "WO-new", vendorId: "VEND-a", title: "Assign vendor" } },
+        body: { action: "replace", rows: [{ id: "WO-a", title: "still mine", vendorId: "vendor-b-private" }] },
       }),
     );
-    const { status } = await parseJsonResponse(res);
-    expect(status).toBe(200);
-    expect(upserts[0]!.vendor_user_id).toBe("vendor-a-user");
+    expect((await parseJsonResponse(res)).status).toBe(200);
+    expect(upserts).toHaveLength(0);
   });
 });

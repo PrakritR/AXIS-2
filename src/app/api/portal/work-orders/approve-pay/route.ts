@@ -84,12 +84,15 @@ export async function POST(req: Request) {
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    if (existing.vendor_user_id && body.vendorCostCents) {
+    if (existing.vendor_user_id) {
+      // amountCents here is only a fallback for jobs assigned without formal bidding —
+      // payoutVendorForWorkOrder anchors to the work order's accepted bid when one exists,
+      // so a forged body.vendorCostCents can't inflate a payout beyond the agreed bid.
       await payoutVendorForWorkOrder(auth.db, {
         workOrderId: workOrder.id,
         managerUserId: auth.userId,
         vendorUserId: existing.vendor_user_id,
-        amountCents: body.vendorCostCents,
+        amountCents: body.vendorCostCents ?? 0,
       }).catch(() => undefined);
     }
 
