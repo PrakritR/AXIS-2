@@ -34,8 +34,9 @@ export function isHiddenFromMobileNav(kind: PortalKind, section: string): boolea
 
 const PRO_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "properties", label: "Properties", sections: ["properties", "residents", "applications", "leases"] },
-  { id: "financials", label: "Financials", sections: ["documents", "financials", "payments"] },
+  { id: "portfolio", label: "Portfolio", sections: ["properties", "leases"] },
+  { id: "leasing", label: "Leasing", sections: ["applications", "residents"] },
+  { id: "finances", label: "Finances", sections: ["payments", "financials", "documents"] },
   { id: "operations", label: "Operations", sections: ["calendar", "services", "inbox"] },
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
@@ -44,17 +45,17 @@ const PRO_GROUPS: NavGroupConfig[] = [
 
 const ADMIN_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "properties", label: "Properties", sections: ["properties", "leases"] },
-  { id: "operations", label: "Operations", sections: ["events", "inbox"] },
+  { id: "portfolio", label: "Portfolio", sections: ["properties", "leases"] },
   { id: "people", label: "People", sections: ["axis-users"] },
+  { id: "operations", label: "Operations", sections: ["events", "inbox"] },
   { id: "account", label: null, sections: ["bugs-feedback"] },
 ];
 
 const RESIDENT_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "living", label: "Living", sections: ["lease", "move-in", "services"] },
-  { id: "financials", label: "Financials", sections: ["payments", "documents"] },
-  { id: "operations", label: "Operations", sections: ["inbox"] },
+  { id: "my-home", label: "My home", sections: ["lease", "move-in", "services"] },
+  { id: "finances", label: "Finances", sections: ["payments", "documents"] },
+  { id: "messages", label: "Messages", sections: ["inbox"] },
   { id: "account", label: null, sections: ["profile"] },
 ];
 

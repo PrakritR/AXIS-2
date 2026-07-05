@@ -94,8 +94,8 @@ describe("groupNavItems", () => {
     const result = groupNavItems("pro", items);
 
     expect(result[0]).toEqual({ id: "home", label: null, items: [{ section: "dashboard" }] });
-    const financials = result.find((g) => g.id === "financials");
-    expect(financials?.items.map((i) => i.section)).toEqual(["documents", "financials", "payments"]);
+    const finances = result.find((g) => g.id === "finances");
+    expect(finances?.items.map((i) => i.section)).toEqual(["payments", "financials", "documents"]);
     // profile was filtered out of `items` above (pro's sidebar otherwise surfaces it)
     expect(result.flatMap((g) => g.items).map((i) => i.section)).not.toContain("profile");
   });
