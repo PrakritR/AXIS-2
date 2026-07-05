@@ -259,16 +259,19 @@ export function PortalDashboardTile({
   sub,
   href,
   urgent,
+  dataAttr,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   href: string;
   urgent?: boolean;
+  dataAttr?: string;
 }) {
   return (
     <Link
       href={href}
+      data-attr={dataAttr}
       className={`surface-panel group flex min-h-[88px] flex-col justify-center gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] [html[data-native]_&]:min-h-[4.25rem] [html[data-native]_&]:gap-0.5 [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-3.5 ${
         urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
       }`}
@@ -286,12 +289,14 @@ export function PortalDashboardSectionHeader({
   href,
   linkLabel,
   badge,
+  dataAttr,
 }: {
   title: string;
   href?: string;
   linkLabel?: string;
   /** Stable notification indicator rendered on the right, next to the section link (e.g. overdue count). */
   badge?: ReactNode;
+  dataAttr?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -300,7 +305,11 @@ export function PortalDashboardSectionHeader({
         <div className="flex shrink-0 items-center gap-2.5">
           {badge ?? null}
           {href && linkLabel ? (
-            <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
+            <Link
+              href={href}
+              data-attr={dataAttr}
+              className="text-xs font-semibold text-primary hover:underline underline-offset-2"
+            >
               {linkLabel}
             </Link>
           ) : null}
