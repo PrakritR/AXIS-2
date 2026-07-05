@@ -50,6 +50,9 @@ export function DocumentInlineViewer({
   onDownload,
   extraActions,
   children,
+  downloadLabel = "Download",
+  downloadPosition = "top",
+  downloadAttr = "resident-document-download",
 }: {
   title: string;
   /** Same-origin PDF URL (or data URL) rendered via iframe src. */
@@ -62,6 +65,12 @@ export function DocumentInlineViewer({
   extraActions?: ReactNode;
   /** Custom frame content (e.g. an image) used instead of the iframe. */
   children?: ReactNode;
+  /** Label for the download action; defaults to "Download". */
+  downloadLabel?: string;
+  /** Where the download action renders — alongside Close (default), or in its own bar below the document. */
+  downloadPosition?: "top" | "bottom";
+  /** data-attr override for the download button. */
+  downloadAttr?: string;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -79,9 +88,11 @@ export function DocumentInlineViewer({
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Close
           </Button>
-          <Button type="button" className="rounded-full" data-attr="resident-document-download" onClick={onDownload}>
-            Download
-          </Button>
+          {downloadPosition === "top" ? (
+            <Button type="button" className="rounded-full" data-attr={downloadAttr} onClick={onDownload}>
+              {downloadLabel}
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
@@ -103,6 +114,13 @@ export function DocumentInlineViewer({
           </div>
         )}
       </div>
+      {downloadPosition === "bottom" ? (
+        <div className="mt-4 flex justify-start">
+          <Button type="button" className="rounded-full" data-attr={downloadAttr} onClick={onDownload}>
+            {downloadLabel}
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -230,11 +248,11 @@ export function ResidentAddDocumentModal({
   return (
     <Modal open={mode !== null} title={isPhoto ? "Add photo" : "Add document"} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-sm leading-relaxed text-muted">
-          {isPhoto
-            ? "Scan or photograph lease pages, IDs, or other paperwork. On the mobile app this opens your camera; on the web you can choose a photo from your device."
-            : "Upload a PDF or file you want to keep with your housing records. It appears in the Other documents tab."}
-        </p>
+        {!isPhoto ? (
+          <p className="text-sm leading-relaxed text-muted">
+            Upload a PDF or file you want to keep with your housing records. It appears in the Other documents tab.
+          </p>
+        ) : null}
 
         {!isPhoto ? (
           <input

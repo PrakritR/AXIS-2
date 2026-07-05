@@ -571,6 +571,9 @@ function SignedLeaseDocumentsTable() {
           srcDoc={leaseHtml}
           onClose={() => setPreviewOpen(false)}
           onDownload={onDownload}
+          downloadLabel="Download PDF"
+          downloadPosition="bottom"
+          downloadAttr="resident-documents-lease-download-pdf"
         />
       ) : null}
     </>
