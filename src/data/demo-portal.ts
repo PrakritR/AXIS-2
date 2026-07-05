@@ -49,7 +49,7 @@ export type DemoApplicantRow = {
   signedMonthlyRent?: number | null;
   /** Listing owner scope — who should receive this application in the portal. */
   managerUserId?: string | null;
-  /** True for residents added directly by the manager (no rental application). */
+  /** True when the manager (not the applicant) created or completed this application, e.g. via the Residents-tab Add flow — exempts it from the applicant-facing application fee. */
   manuallyAdded?: boolean;
   /** Move-in instructions set by the manager from the Residents tab. */
   moveInInstructions?: string;

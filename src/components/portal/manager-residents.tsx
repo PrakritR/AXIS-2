@@ -1,6 +1,7 @@
 "use client";
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { track } from "@/lib/analytics/track-client";
 import Link from "next/link";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { ChevronDown } from "lucide-react";
@@ -15,9 +16,7 @@ import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -58,6 +57,7 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
   upsertApplicationRowToServer,
+  upsertApplicationRowToServerAwait,
   writeManagerApplicationRows,
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
@@ -65,7 +65,9 @@ import {
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { transitionApplicationBucket } from "@/lib/application-review";
 import {
   buildMockPropertyFromDraft,
   PROPERTY_PIPELINE_EVENT,
@@ -238,7 +240,17 @@ function shortDateLabel(iso: string): string {
 }
 
 function isPreviousResidentRow(row: DemoApplicantRow): boolean {
+  // Pending/denied applications added from this tab haven't moved in (or out) yet — they
+  // belong in Current, not Previous, regardless of isCurrentResidentApplicationRow's
+  // approved-only assumption.
+  if (row.bucket !== "approved") return false;
   return !isCurrentResidentApplicationRow(row);
+}
+
+function applicationStatusLabel(bucket: DemoApplicantRow["bucket"]): string {
+  if (bucket === "approved") return "Approved";
+  if (bucket === "rejected") return "Denied";
+  return "Pending review";
 }
 
 const AR_LEASE_TERM_CUSTOM = "__custom__";
@@ -335,6 +347,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   // Add resident manually
   const [addResidentOpen, setAddResidentOpen] = useState(false);
+  const [addResidentSaving, setAddResidentSaving] = useState(false);
   const [arName, setArName] = useState("");
   const [arEmail, setArEmail] = useState("");
   const [arPropertyId, setArPropertyId] = useState("");
@@ -535,7 +548,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
     return readManagerApplicationRows()
-      .filter((row) => row.bucket === "approved" && applicationVisibleToPortalUser(row, userId))
+      .filter(
+        (row) =>
+          // Approved residents, plus applications created via this tab's Add flow while
+          // they're still awaiting (or denied) manager review — public applicant submissions
+          // stay exclusively in the Applications tab until a manager places/approves them.
+          (row.bucket === "approved" || (row.manuallyAdded && (row.bucket === "pending" || row.bucket === "rejected"))) &&
+          applicationVisibleToPortalUser(row, userId),
+      )
       .map((row) => {
         const propId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
         const prop = propId ? getPropertyById(propId) : null;
@@ -791,6 +811,40 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     if (!selected) return null;
     return readManagerApplicationRows().find((row) => row.id === selected.id) ?? null;
   }, [selected, hcTick]);
+
+  const [applicationActionBusyId, setApplicationActionBusyId] = useState<string | null>(null);
+
+  async function approveSelectedApplication() {
+    if (!selectedApplicationRow) return;
+    const row = selectedApplicationRow;
+    setApplicationActionBusyId(row.id);
+    const result = await transitionApplicationBucket(row.id, "approved", { userId: userId ?? null });
+    setApplicationActionBusyId(null);
+    if (!result) {
+      showToast("Could not approve application.");
+      return;
+    }
+    setHcTick((n) => n + 1);
+    showToast(
+      result.welcomeSent
+        ? "Application approved. A welcome email with portal setup was sent to the resident."
+        : "Application approved.",
+    );
+  }
+
+  async function denySelectedApplication() {
+    if (!selectedApplicationRow) return;
+    const row = selectedApplicationRow;
+    setApplicationActionBusyId(row.id);
+    const result = await transitionApplicationBucket(row.id, "rejected", { userId: userId ?? null });
+    setApplicationActionBusyId(null);
+    if (!result) {
+      showToast("Could not deny application.");
+      return;
+    }
+    setHcTick((n) => n + 1);
+    showToast("Application denied.");
+  }
 
   const residentUnifiedServiceItems = useMemo<UnifiedItem[]>(() => {
     const items: UnifiedItem[] = [];
@@ -1261,52 +1315,73 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
-  function saveManualResident() {
+  /**
+   * Submits the same application record a resident would fill out (RentalWizardFormState),
+   * completed here by the manager on the prospective resident's behalf. This creates a
+   * pending application — visible in both this tab and the Applications tab's Pending
+   * bucket — rather than an already-active resident; the manager approves it from the
+   * Application section below once it's ready.
+   */
+  async function submitResidentApplication() {
     if (!arName.trim()) { showToast("Enter the resident's name."); return; }
     if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
-    const rent = arRent.trim() ? Number(arRent.replace(/[^\d.]/g, "")) : null;
-    const utilities = arUtilities.trim() ? Number(arUtilities.replace(/[^\d.]/g, "")) : null;
-    const moveInFee = arMoveInFee.trim() ? Number(arMoveInFee.replace(/[^\d.]/g, "")) : null;
-    const secDeposit = arSecurityDeposit.trim() ? Number(arSecurityDeposit.replace(/[^\d.]/g, "")) : null;
+    if (addResidentSaving) return;
+    setAddResidentSaving(true);
     const axisId = `AXIS-${Date.now().toString(36).toUpperCase().slice(-8)}`;
     const propLabel = arPropertyId
       ? (propertyOptions.find((p) => p.id === arPropertyId)?.label ?? arPropertyId)
       : "—";
-    const selectedRoomLabel = arRoomId ? arRoomOptions.find((room) => room.id === arRoomId)?.name?.trim() ?? "" : "";
+    const roomChoice = arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined;
+    const rentTrim = arRent.trim();
     const nextRow: DemoApplicantRow = {
       id: axisId,
       name: arName.trim(),
       email: arEmail.trim(),
       property: propLabel,
-      stage: "Active",
-      bucket: "approved",
-      detail: "",
+      propertyId: arPropertyId || undefined,
+      stage: "Submitted",
+      bucket: "pending",
+      detail: `Submitted ${new Date().toLocaleString()}`,
       assignedPropertyId: arPropertyId || undefined,
-      assignedRoomChoice: arPropertyId && arRoomId ? `${arPropertyId}${LISTING_ROOM_CHOICE_SEP}${arRoomId}` : undefined,
-      signedMonthlyRent: rent ?? undefined,
+      assignedRoomChoice: roomChoice,
+      signedMonthlyRent: rentTrim ? Number(rentTrim.replace(/[^\d.]/g, "")) : undefined,
       managerUserId: userId ?? undefined,
       manuallyAdded: true,
-      manualResidentDetails: {
-        moveInDate: arMoveInDate || undefined,
-        moveOutDate: arMoveOutDate || undefined,
-        monthlyUtilities: utilities ?? undefined,
-        moveInFee: moveInFee ?? undefined,
-        securityDeposit: secDeposit ?? undefined,
-        roomNumber: selectedRoomLabel || undefined,
-        leaseTerm: arLeaseTerm || undefined,
-        notes: arNotes.trim() || undefined,
+      application: {
+        ...createInitialRentalWizardState(),
+        fullLegalName: arName.trim(),
+        email: arEmail.trim(),
+        propertyId: arPropertyId,
+        roomChoice1: roomChoice ?? "",
+        leaseTerm: arLeaseTerm,
+        leaseStart: arMoveInDate,
+        leaseEnd: arMoveOutDate,
+        managerRentOverride: arRent.trim(),
+        managerUtilitiesOverride: arUtilities.trim(),
+        managerSecurityDepositOverride: arSecurityDeposit.trim(),
+        managerMoveInFeeOverride: arMoveInFee.trim(),
       },
+      manualResidentDetails: arNotes.trim() ? { notes: arNotes.trim() } : undefined,
     };
     appendManagerApplicationRow(nextRow);
-    recordApprovedApplicationCharges(nextRow, userId ?? null);
-    void syncHouseholdChargesFromServer(true).then(() => setHcTick((n) => n + 1));
-    setChargeTab("pending");
+    const sync = await upsertApplicationRowToServerAwait(nextRow);
+    setAddResidentSaving(false);
+    if (!sync.ok) {
+      showToast(sync.error ?? "Could not submit the application. Try again.");
+      return;
+    }
+    track("rental_application_submitted", {
+      axis_id: axisId,
+      property_id: arPropertyId || undefined,
+      synced_to_server: true,
+      source: "manager_added",
+    });
     setArName(""); setArEmail(""); setArPropertyId(""); setArRoomId(""); setArLeaseTerm("");
     setArMoveInDate(""); setArMoveOutDate(""); setArRent(""); setArUtilities("");
     setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
     setAddResidentOpen(false);
     setHcTick((n) => n + 1);
-    showToast(`Resident added — Axis ID: ${axisId}`);
+    showToast(`Application submitted — Axis ID: ${axisId}. Approve it below to activate this resident.`);
   }
 
   function openEditResidentModal() {
@@ -1678,7 +1753,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               title="Application"
                               summary={
                                 selectedApplicationRow
-                                  ? `Application — Approved · ${selected.name}`
+                                  ? `Application — ${applicationStatusLabel(selectedApplicationRow.bucket)} · ${selected.name}`
                                   : "No application on file for this resident."
                               }
                               expanded={expandedResidentSection === "application"}
@@ -1689,6 +1764,34 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               {selectedApplicationRow ? (
                                 <>
                                   <div className="mb-4 flex flex-wrap items-center gap-2">
+                                    {selectedApplicationRow.bucket === "pending" ? (
+                                      <>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_DETAIL_BTN_PRIMARY}
+                                          disabled={applicationActionBusyId === selectedApplicationRow.id}
+                                          data-attr="resident-application-approve"
+                                          onClick={() => void approveSelectedApplication()}
+                                        >
+                                          {applicationActionBusyId === selectedApplicationRow.id ? "Approving…" : "Approve"}
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_DETAIL_BTN}
+                                          disabled={applicationActionBusyId === selectedApplicationRow.id}
+                                          data-attr="resident-application-deny"
+                                          onClick={() => void denySelectedApplication()}
+                                        >
+                                          Deny
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <Badge tone={selectedApplicationRow.bucket === "approved" ? "approved" : "overdue"}>
+                                        {applicationStatusLabel(selectedApplicationRow.bucket)}
+                                      </Badge>
+                                    )}
                                     <Button
                                       type="button"
                                       variant="outline"
@@ -2399,17 +2502,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       ) : null}
       <ManagerPortalPageShell
         title="Residents"
+        titleAsideInline
         titleAside={
-          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={setPropertyFilter}
-            />
-            <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddResidentOpen(true)}>
-              + Add resident
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="primary"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => setAddResidentOpen(true)}
+            data-attr="residents-add-open"
+          >
+            <span className="sm:hidden">+ Add</span>
+            <span className="hidden sm:inline">+ Add resident</span>
+          </Button>
         }
         filterRow={
           <ManagerPortalFilterRow>
@@ -2425,16 +2529,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                 navigate(`${portalBase}/residents/${next}`);
               }}
             />
-            <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
-              <PortalPropertyFilterPill
-                propertyOptions={propertyOptions}
-                propertyValue={propertyFilter}
-                onPropertyChange={setPropertyFilter}
-              />
-              <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setAddResidentOpen(true)}>
-                + Add
-              </Button>
-            </div>
+            <PortalPropertyFilterPill
+              propertyOptions={propertyOptions}
+              propertyValue={propertyFilter}
+              onPropertyChange={setPropertyFilter}
+            />
           </ManagerPortalFilterRow>
         }
       >
@@ -2623,7 +2722,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
         <div className="space-y-3">
-          <p className="text-xs text-muted">Creates an active resident record with an Axis ID. No application or lease is generated.</p>
+          <p className="text-xs text-muted">
+            Fills out the standard rental application on this resident&apos;s behalf and submits it for review — the
+            same application used everywhere else in Axis. It appears here (and in Applications) as pending; approve
+            it below once you&apos;re ready to activate them as a resident.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Full name *</span>
@@ -2738,7 +2841,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           </div>
           <div className="flex justify-start gap-2 pt-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setAddResidentOpen(false)}>Cancel</Button>
-            <Button type="button" variant="primary" className="rounded-full" onClick={saveManualResident}>Add resident</Button>
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={addResidentSaving}
+              data-attr="residents-submit-application"
+              onClick={() => void submitResidentApplication()}
+            >
+              {addResidentSaving ? "Submitting…" : "Submit application"}
+            </Button>
           </div>
         </div>
       </Modal>

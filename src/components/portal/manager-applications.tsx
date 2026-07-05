@@ -43,7 +43,6 @@ import {
   normalizeApplicationAxisId,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
-  writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
 import {
   MANAGER_PORTFOLIO_REFRESH_EVENTS,
@@ -59,10 +58,7 @@ import {
 } from "@/lib/cosigner-submissions-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
-  recordApprovedApplicationCharges,
-  recordSubmittedApplicationFeeCharge,
   removeAllApplicationCharges,
-  removeApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
@@ -79,51 +75,13 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
+import { transitionApplicationBucket } from "@/lib/application-review";
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
   for (const r of rows) {
     c[r.bucket] += 1;
   }
   return c;
-}
-
-async function syncResidentApproval(row: DemoApplicantRow, nextBucket: ManagerApplicationBucket) {
-  const email = row.email?.trim().toLowerCase();
-  if (!email) return;
-  await fetch("/api/portal/resident-approval", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      email,
-      approved: nextBucket === "approved",
-    }),
-  });
-}
-
-/** POST welcome email; does not open mailto (used for auto-send on approve). */
-async function requestResidentWelcomeEmail(row: DemoApplicantRow): Promise<{
-  status: "sent" | "failed" | "no_email";
-  mailtoHref?: string;
-  error?: string;
-}> {
-  const email = row.email?.trim();
-  if (!email) return { status: "no_email" };
-  const res = await fetch("/api/portal/send-resident-welcome", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ to: email, residentName: row.name, axisId: row.id }),
-  });
-  const data = (await res.json()) as { ok?: boolean; error?: string; mailtoHref?: string };
-  if (res.ok && data.ok) return { status: "sent" };
-  return { status: "failed", mailtoHref: typeof data.mailtoHref === "string" ? data.mailtoHref : undefined, error: data.error };
-}
-
-function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucket) {
-  if (bucket === "approved") return "Approved";
-  if (bucket === "rejected") return "Rejected";
-  return "Submitted";
 }
 
 /** Client-resolved room label used by both the PDF download and the inline document view. */
@@ -283,11 +241,6 @@ export function ManagerApplications() {
     };
   }, []);
 
-  const persist = useCallback((next: DemoApplicantRow[]) => {
-    setRows(next);
-    writeManagerApplicationRows(next);
-  }, []);
-
   const handleScreeningUpdated = useCallback(() => {
     void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
   }, [userId]);
@@ -342,45 +295,12 @@ export function ManagerApplications() {
   }, [scopedRows, pathname, router]);
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    const next = rows.map((r) =>
-      r.id === id
-        ? {
-            ...r,
-            bucket: nextBucket,
-            stage: stageLabelForRow(r, nextBucket),
-            managerUserId: r.managerUserId ?? (nextBucket === "approved" ? (userId ?? undefined) : r.managerUserId),
-          }
-        : r,
-    );
-    persist(next);
-    const updatedRow = next.find((r) => r.id === id) ?? row;
-    try {
-      if (nextBucket === "approved") {
-        recordApprovedApplicationCharges(updatedRow, userId ?? null);
-      } else if (nextBucket === "pending") {
-        removeApprovedApplicationCharges(id, userId ?? null);
-        recordSubmittedApplicationFeeCharge(updatedRow, userId ?? null);
-      } else {
-        removeAllApplicationCharges(id, userId ?? null);
-      }
-    } catch {
-      /* Keep approval flow moving even if charge reconciliation fails. */
-    }
-    if (row) {
-      try {
-        await syncResidentApproval(row, nextBucket);
-      } catch {
-        /* keep local workflow moving even if profile sync fails */
-      }
-    }
-
-    let welcomeSent = false;
-    if (nextBucket === "approved" && updatedRow.email?.trim() && !opts?.skipWelcomeEmail) {
-      const welcome = await requestResidentWelcomeEmail(updatedRow);
-      welcomeSent = welcome.status === "sent";
-    }
+    const result = await transitionApplicationBucket(id, nextBucket, {
+      userId: userId ?? null,
+      skipWelcomeEmail: opts?.skipWelcomeEmail,
+    });
+    if (!result) return;
+    setRows(readManagerApplicationRows());
 
     setExpandedId(null);
     setBucket(nextBucket);
@@ -388,7 +308,7 @@ export function ManagerApplications() {
       nextBucket === "approved"
         ? opts?.skipWelcomeEmail
           ? "Application approved (no setup email sent)."
-          : welcomeSent
+          : result.welcomeSent
             ? "Application approved. A welcome email with portal setup was sent to the applicant."
             : "Application approved."
         : nextBucket === "rejected"

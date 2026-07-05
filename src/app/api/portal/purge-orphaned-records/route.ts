@@ -72,6 +72,15 @@ export async function POST(req: Request) {
     for (const record of applications ?? []) {
       const email = typeof record.resident_email === "string" ? record.resident_email.trim().toLowerCase() : "";
       if (currentOnly) {
+        const rowBucket = (record.row_data as { bucket?: unknown } | null)?.bucket;
+        const stillUnderReview = typeof rowBucket === "string" && rowBucket.trim().toLowerCase() !== "approved";
+        if (stillUnderReview) {
+          // Pending/rejected applications are open review items, not deleted residents —
+          // never sweep them up here, or every pending application (including ones added
+          // from the Residents tab) would be wiped the moment this cleanup next runs.
+          if (email) activeEmails.add(email);
+          continue;
+        }
         const keep = email && isCurrentResidentRow(record.row_data);
         if (keep) {
           activeEmails.add(email);
