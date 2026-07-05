@@ -5,13 +5,15 @@ import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { createExpensesFromWorkOrder, markWorkOrderPaid, mergeWorkOrderCompletion } from "@/lib/work-order-expenses";
+import { payoutVendorForWorkOrder } from "@/lib/stripe-vendor-payout";
 
 export const runtime = "nodejs";
 
 /** Manager's one-tap (or confirm-preview, for larger amounts — gated client-side) "Approve
- * + Pay": runs the same completion + expense-logging as /work-orders/complete, then marks
- * the vendor paid as a bookkeeping status only — no real money movement (a future slice
- * wires an actual Stripe vendor payout). Notifies the resident and vendor. */
+ * + Pay": runs the same completion + expense-logging as /work-orders/complete, marks the
+ * vendor paid, and (best-effort) transfers the vendor's labor cost to their connected Stripe
+ * account if they've finished Connect onboarding — see payoutVendorForWorkOrder. Notifies the
+ * resident and vendor. */
 export async function POST(req: Request) {
   try {
     const auth = await getReportsAuthContext({ preferRole: "manager" });
@@ -81,6 +83,15 @@ export async function POST(req: Request) {
       { onConflict: "id" },
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    if (existing.vendor_user_id && body.vendorCostCents) {
+      await payoutVendorForWorkOrder(auth.db, {
+        workOrderId: workOrder.id,
+        managerUserId: auth.userId,
+        vendorUserId: existing.vendor_user_id,
+        amountCents: body.vendorCostCents,
+      }).catch(() => undefined);
+    }
 
     const propertyLabel = paid.propertyName ? `${paid.propertyName}${paid.unit ? ` · ${paid.unit}` : ""}` : "";
     const title = paid.title || "Work order";

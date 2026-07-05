@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
+import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { DEMO_VENDOR_EMAIL, DEMO_VENDOR_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
 import { isoDateOnly } from "@/lib/demo/demo-data";
@@ -838,9 +839,17 @@ export function VendorSettingsPanel() {
         <section className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-sm)]">
           <p className="text-sm font-semibold text-foreground">Payments</p>
           <p className="mt-1 text-sm text-muted">
-            Direct payouts aren&apos;t connected yet — coming soon. Once available, you&apos;ll connect a payout
-            account here to get paid directly through Axis.
+            Connect your own Stripe account to get paid directly for completed work orders.
           </p>
+          <div className="mt-3">
+            <PortalStripeConnectPanel
+              basePath="/vendor"
+              apiBase="/api/vendor/stripe-connect"
+              returnPath="/vendor/profile"
+              dataAttrPrefix="vendor-stripe-connect"
+              variant="embedded"
+            />
+          </div>
         </section>
 
         <PortalBugFeedbackPanel reporterRole="vendor" embedded />

@@ -80,6 +80,7 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
   const [profileComplete, setProfileComplete] = useState(false);
+  const [paymentsConnected, setPaymentsConnected] = useState(false);
 
   useEffect(() => {
     void Promise.allSettled([
@@ -102,6 +103,19 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       .then((r) => r.json())
       .then((data: { profile?: { w9_attestation?: boolean; legal_name?: string } | null }) => {
         setProfileComplete(Boolean(data.profile?.w9_attestation || data.profile?.legal_name));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (isDemoModeActive()) {
+      setPaymentsConnected(true);
+      return;
+    }
+    void fetch("/api/vendor/stripe-connect/status", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data: { paymentReady?: boolean; transfersEnabled?: boolean; payoutsEnabled?: boolean }) => {
+        setPaymentsConnected(Boolean(data.paymentReady ?? (data.transfersEnabled && data.payoutsEnabled)));
       })
       .catch(() => undefined);
   }, []);
@@ -264,9 +278,9 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
                 dataAttr="vendor-dashboard-checklist-profile"
               />
               <ChecklistItem
-                done={false}
+                done={paymentsConnected}
                 title="Connect payments"
-                description="Coming soon — direct payouts through Axis."
+                description="Link your Stripe account to get paid directly for completed work orders."
                 href="/vendor/profile"
                 dataAttr="vendor-dashboard-checklist-payments"
               />

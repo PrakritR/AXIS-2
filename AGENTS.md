@@ -338,3 +338,49 @@ auth.uid()`), manager gets `FOR SELECT` only (`manager_user_id = auth.uid()`,
 denormalized onto the bid row at submit time so no join is needed) —
 defense-in-depth only, since real writes go through the service-role API
 exactly like every other portal table in this codebase.
+
+# Vendor portal (Phase 3: Stripe Connect payouts + invoices)
+
+**Connect account reuses the manager's column.** `profiles.stripe_connect_account_id`
+(added for managers in `20250421120000_profiles_stripe_connect_account.sql`) is generic —
+keyed by `userId` only — so it's reused as-is for a vendor's own Connect Express account
+rather than adding a new column; a vendor and a manager are always different auth users, so
+there's no collision risk. `ensureVendorConnectAccountId` (`src/lib/stripe-connect-account.ts`)
+is a thin wrapper over the existing `ensureManagerConnectAccountId`, passing
+`axisPortal: "vendor"` so the Stripe account's `metadata.axis_portal` distinguishes vendor
+from manager accounts in the Stripe Dashboard.
+
+**Vendor-specific onboarding routes.** `/api/vendor/stripe-connect/{onboard,status}` are
+clones of the manager `/api/stripe/connect/{onboard,status}` routes (not a generalized single
+route) because the manager routes hardcode `basePath = "/portal"` for the Account Link
+return/refresh URLs; the vendor routes hardcode `/vendor/profile` instead and additionally
+gate on `profiles.role === "vendor"`. The shared `PortalStripeConnectPanel` component
+(`src/components/portal/portal-stripe-connect-panel.tsx`) gained optional `apiBase`,
+`returnPath`, and `dataAttrPrefix` props (all defaulting to the original manager behavior) so
+it could be reused for the vendor Settings → Payments panel (`variant="embedded"`, previously
+unused) instead of forking the whole component.
+
+**Demo-mode mock.** `PortalStripeConnectPanel` now short-circuits in `isDemoModeActive()`:
+`loadStatus` returns a canned "already connected" `ConnectStatus` instead of leaving status
+`null`, and `startConnect` shows a toast instead of opening a real Stripe popup/fetch — this
+also incidentally fixes the same latent gap on the manager's demo Payments page (clicking
+"Link"/"Update" there previously hit the real (unauthenticated, in `/demo`) API and 401'd).
+
+**Payouts are best-effort, never block the bookkeeping flow.** `payoutVendorForWorkOrder`
+(`src/lib/stripe-vendor-payout.ts`) is called from `/api/portal/work-orders/approve-pay` right
+after the existing bookkeeping-only `markWorkOrderPaid` write. It attempts a
+`stripe.transfers.create` (destination = the vendor's Connect account, amount = the work
+order's `vendorCostCents` labor cost — materials are not transferred, they're the manager's
+own expense) and always writes exactly one `vendor_payouts` row per work order (`status:
+"paid"` with the transfer id, or `"failed"` with a human-readable reason for any error: no
+Connect account, incomplete onboarding, Stripe not configured, insufficient platform balance,
+etc.). It never throws — approve-pay's manager-facing "Approved and paid." always succeeds
+regardless of payout outcome, and a failed payout is surfaced to the vendor (with a link back
+to Settings) rather than to the manager.
+
+**Invoices/work history reuse the existing Completed tab.** No new top-level portal section
+was added; `vendor-work-orders-panel.tsx`'s Completed tab renders an "Invoice" block per row
+(labor + materials from the work order's own `vendorCostCents`/`materialsCostCents`, the same
+fields `approve-pay` already logs as expenses) plus the matching `vendor_payouts` row's status,
+fetched via `GET /api/vendor/payouts` (vendor's own rows only, no join — the client already has
+full work-order context from `readVendorWorkOrderRows()`).

@@ -31,12 +31,32 @@ type OnboardResponse = {
   code?: string;
 };
 
+/** Realistic "already connected" mock shown in the /demo sandbox — never hits real Stripe. */
+const DEMO_CONNECT_STATUS: ConnectStatus = {
+  connected: true,
+  accountId: "acct_demo_sandbox",
+  chargesEnabled: true,
+  payoutsEnabled: true,
+  transfersEnabled: true,
+  paymentReady: true,
+  detailsSubmitted: true,
+};
+
 export function PortalStripeConnectPanel({
   basePath,
   variant = "page",
+  apiBase = "/api/stripe/connect",
+  returnPath,
+  dataAttrPrefix = "stripe-connect",
 }: {
   basePath: string;
   variant?: "page" | "embedded" | "inline";
+  /** Base path for the status/onboard API pair — defaults to the manager Connect routes. */
+  apiBase?: string;
+  /** Path the client cleans `?connect=` params off of after returning from Stripe. Defaults to `${basePath}/payments`. */
+  returnPath?: string;
+  /** Prefix for data-attr hooks on the connect/update button. */
+  dataAttrPrefix?: string;
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
@@ -44,14 +64,16 @@ export function PortalStripeConnectPanel({
   const [status, setStatus] = useState<ConnectStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const handledConnectParam = useRef(false);
+  const resolvedReturnPath = returnPath ?? `${basePath}/payments`;
 
   const loadStatus = useCallback(async () => {
     if (isDemoModeActive()) {
+      setStatus(DEMO_CONNECT_STATUS);
       setStatusLoaded(true);
       return;
     }
     try {
-      const res = await fetch("/api/stripe/connect/status", { credentials: "include" });
+      const res = await fetch(`${apiBase}/status`, { credentials: "include" });
       const body = (await res.json()) as ConnectStatus & { error?: string };
       if (!res.ok) {
         setStatus(null);
@@ -63,7 +85,7 @@ export function PortalStripeConnectPanel({
     } finally {
       setStatusLoaded(true);
     }
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     const id = window.setTimeout(() => void loadStatus(), 0);
@@ -96,14 +118,19 @@ export function PortalStripeConnectPanel({
     } else {
       showToast("Setup link expired — try again.");
     }
-    window.history.replaceState({}, "", `${basePath}/payments`);
+    window.history.replaceState({}, "", resolvedReturnPath);
     queueMicrotask(() => {
       if (q === "done") setActionError(null);
       void loadStatus();
     });
-  }, [basePath, loadStatus, showToast]);
+  }, [loadStatus, resolvedReturnPath, showToast]);
 
   const startConnect = useCallback(async () => {
+    if (isDemoModeActive()) {
+      showToast("Demo mode — payouts are already linked to a sandbox account.");
+      return;
+    }
+
     setBusy(true);
     setActionError(null);
 
@@ -131,7 +158,7 @@ export function PortalStripeConnectPanel({
     }
 
     try {
-      const res = await fetch("/api/stripe/connect/onboard", {
+      const res = await fetch(`${apiBase}/onboard`, {
         method: "POST",
         credentials: "include",
       });
@@ -169,7 +196,7 @@ export function PortalStripeConnectPanel({
     } finally {
       setBusy(false);
     }
-  }, [showToast]);
+  }, [apiBase, showToast]);
 
   const ready =
     status &&
@@ -209,6 +236,7 @@ export function PortalStripeConnectPanel({
         </span>
         <button
           type="button"
+          data-attr={`${dataAttrPrefix}-link`}
           className={`flex min-h-9 shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 disabled:opacity-60 ${
             ready
               ? "border border-border bg-card/80 text-foreground shadow-[var(--shadow-sm)] hover:border-primary/30"
@@ -278,6 +306,7 @@ export function PortalStripeConnectPanel({
               <Button
                 type="button"
                 variant="outline"
+                data-attr={`${dataAttrPrefix}-update`}
                 className="rounded-full"
                 disabled={busy}
                 onClick={() => void startConnect()}
@@ -293,6 +322,7 @@ export function PortalStripeConnectPanel({
               <Button
                 type="button"
                 variant="primary"
+                data-attr={`${dataAttrPrefix}-link`}
                 className="rounded-full"
                 disabled={busy}
                 onClick={() => void startConnect()}

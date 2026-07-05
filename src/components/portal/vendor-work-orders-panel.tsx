@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import { WorkOrderStatusBadge } from "@/components/portal/resident-services-pane
 import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
 import { parseMoneyAmount } from "@/lib/household-charges";
 import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
+import { fetchVendorPayouts, type VendorPayout } from "@/lib/vendor-payouts";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 function propertyLabel(row: DemoManagerWorkOrderRow): string {
@@ -86,6 +88,7 @@ export function VendorWorkOrdersPanel() {
   const { showToast } = useAppUi();
   const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
   const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid>>({});
+  const [payoutsByWorkOrderId, setPayoutsByWorkOrderId] = useState<Record<string, VendorPayout>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, BidDraft>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -102,13 +105,19 @@ export function VendorWorkOrdersPanel() {
     setBidsByWorkOrderId(Object.fromEntries(bids.map((b) => [b.workOrderId, b])));
   }, []);
 
+  const loadPayouts = useCallback(async () => {
+    const payouts = await fetchVendorPayouts();
+    setPayoutsByWorkOrderId(Object.fromEntries(payouts.map((p) => [p.workOrderId, p])));
+  }, []);
+
   useEffect(() => {
     const sync = () => setRows(readVendorWorkOrderRows());
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     void syncManagerWorkOrdersFromServer().then(() => sync());
     void loadBids();
+    void loadPayouts();
     return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
-  }, [loadBids]);
+  }, [loadBids, loadPayouts]);
 
   const sorted = useMemo(
     () => [...rows].sort((a, b) => (b.scheduledAtIso ?? "").localeCompare(a.scheduledAtIso ?? "")),
@@ -234,6 +243,50 @@ export function VendorWorkOrdersPanel() {
     }
   };
 
+  const renderInvoice = (row: DemoManagerWorkOrderRow) => {
+    const laborCents = row.vendorCostCents ?? 0;
+    const materialsCents = row.materialsCostCents ?? 0;
+    const totalCents = laborCents + materialsCents;
+    if (totalCents <= 0) return null;
+    const payout = payoutsByWorkOrderId[row.id];
+
+    return (
+      <div className="mt-3 border-t border-border pt-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted">Invoice</p>
+        <p className="mt-1.5 text-xs text-muted">
+          Labor ${(laborCents / 100).toFixed(2)}
+          {materialsCents > 0 ? ` + materials $${(materialsCents / 100).toFixed(2)}` : ""} ={" "}
+          <span className="font-medium text-foreground">${(totalCents / 100).toFixed(2)}</span>
+        </p>
+        {row.automationStatus !== "paid" ? (
+          <p className="mt-1 text-xs text-muted">Awaiting manager approval and payment.</p>
+        ) : payout?.status === "paid" ? (
+          <p className="mt-1 text-xs text-muted">
+            Payout sent — ${(payout.amountCents / 100).toFixed(2)} on{" "}
+            {new Date(payout.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+            {payout.stripeTransferId ? ` · ${payout.stripeTransferId}` : ""}
+          </p>
+        ) : payout?.status === "failed" ? (
+          <p className="mt-1 text-xs text-muted">
+            Paid by the manager, but the payout to your bank couldn&apos;t be sent — check your{" "}
+            <Link href="/vendor/profile" className="font-medium text-foreground underline underline-offset-2">
+              Stripe payout setup
+            </Link>
+            .
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-muted">
+            Paid by the manager.{" "}
+            <Link href="/vendor/profile" className="font-medium text-foreground underline underline-offset-2">
+              Connect Stripe
+            </Link>{" "}
+            to receive future payouts directly.
+          </p>
+        )}
+      </div>
+    );
+  };
+
   const renderRowDetail = (row: DemoManagerWorkOrderRow) => {
     const bid = bidsByWorkOrderId[row.id];
     const draft = draftById[row.id] ?? defaultBidDraft(bid);
@@ -259,6 +312,8 @@ export function VendorWorkOrdersPanel() {
         ) : row.automationStatus === "paid" ? (
           <p className="mt-1.5 text-xs font-medium text-muted">Approved and paid.</p>
         ) : null}
+
+        {row.bucket === "completed" ? renderInvoice(row) : null}
 
         {row.biddingOpen || bid ? (
           <div className="mt-4 border-t border-border pt-3">
