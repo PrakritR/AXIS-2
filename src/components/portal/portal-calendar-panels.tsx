@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { PORTAL_CALENDAR_FRAME, PortalSegmentedControl } from "./portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { formatPacificDate, formatPacificDateTime } from "@/lib/pacific-time";
+import { formatPacificDate } from "@/lib/pacific-time";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
@@ -48,6 +48,7 @@ import {
   type CoManagerAvailabilityOverlay,
   type ScheduledTourFilter,
 } from "@/lib/co-manager-calendar";
+import { useIsSmallPortalViewport } from "@/hooks/use-is-native-app";
 
 type CalendarMode = "day" | "week" | "month";
 type RecurrenceCadence = "once" | "weekly" | "biweekly" | "monthly";
@@ -188,7 +189,7 @@ function formatSlotEndLabel(slotIndexExclusive: number): string {
   const h24 = Math.floor(mins / 60);
   const m = mins % 60;
   const d = new Date(2000, 0, 1, h24, m);
-  return formatPacificDateTime(d).replace(/^\w{3} \d{1,2}, /, "");
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 function localIsoForSlot(dateStr: string, slotIndex: number): string {
@@ -310,9 +311,18 @@ export function PortalCalendarPanels({
     };
   }, [storageKey]);
 
+  const isSmallViewport = useIsSmallPortalViewport();
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
   const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
+  // Mobile shows a 5-day rolling window starting at the anchor date (not
+  // Monday-aligned) so the day-picker never has to wrap to a second row;
+  // desktop keeps the full Mon-Sun week untouched.
+  const mobileWindowDates = useMemo(
+    () => (isSmallViewport ? [0, 1, 2, 3, 4].map((i) => addDays(anchorDate, i)) : fullWeekDates),
+    [isSmallViewport, anchorDate, fullWeekDates],
+  );
+  const mobileWindowDateStrs = useMemo(() => mobileWindowDates.map(toLocalDateStr), [mobileWindowDates]);
 
   const meetings = useMemo<DemoMeeting[]>(() => {
     void calendarRefreshSignal;
@@ -648,7 +658,7 @@ export function PortalCalendarPanels({
     (isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting");
 
   const timeWindowControl = (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-nowrap items-center gap-1.5 sm:gap-2">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Show</p>
       <select
         className="h-9 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary/25"
@@ -702,9 +712,12 @@ export function PortalCalendarPanels({
     setMonthPick({ start: null, end: null });
   }, [today]);
 
-  const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
-    setAnchorDate((d) => addDays(d, dir * 7));
-  }, []);
+  const shiftAvailabilityWeek = useCallback(
+    (dir: -1 | 1) => {
+      setAnchorDate((d) => addDays(d, dir * (isSmallViewport ? 5 : 7)));
+    },
+    [isSmallViewport],
+  );
 
   const copyPreviousWeek = useCallback(() => {
     const previousWeekDates = fullWeekDates.map((date) => addDays(date, -7));
@@ -1095,16 +1108,24 @@ export function PortalCalendarPanels({
       <>
         <Card className="p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
+            <div className="flex w-full min-w-0 flex-nowrap items-center gap-2 sm:w-auto sm:flex-1">
+              <Button type="button" variant="outline" className="h-9 w-9 shrink-0 rounded-full px-0" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
                 ←
               </Button>
-              <div className="min-w-0 rounded-2xl border border-border bg-accent/30 px-4 py-2 [html[data-theme=dark]_&]:portal-calendar-week-banner">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">{availabilityHeading}</p>
-                <p className="truncate text-sm font-semibold text-foreground">Week of {formatWeekRangeMonSun(weekMonday)}</p>
-                {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
+              <div className="min-w-0 flex-1 rounded-2xl border border-border bg-accent/30 px-3 py-2 [html[data-theme=dark]_&]:portal-calendar-week-banner">
+                <p className="truncate text-[13px] font-semibold text-foreground sm:text-sm">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted sm:text-[11px] sm:tracking-[0.14em]">{availabilityHeading}</span>
+                  <span className="mx-1 font-normal text-muted">·</span>
+                  {formatWeekRangeMonSun(weekMonday)}
+                  {tourScopeLabel ? (
+                    <>
+                      <span className="mx-1 font-normal text-muted">·</span>
+                      <span className="font-medium text-primary">{tourScopeLabel}</span>
+                    </>
+                  ) : null}
+                </p>
               </div>
-              <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
+              <Button type="button" variant="outline" className="h-9 w-9 shrink-0 rounded-full px-0" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
                 →
               </Button>
             </div>
@@ -1120,9 +1141,6 @@ export function PortalCalendarPanels({
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {timeWindowControl}
-            <Button type="button" variant="outline" className="rounded-full" onClick={jumpToToday}>
-              Today
-            </Button>
             {!readOnly ? (
               <>
                 <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
@@ -1241,15 +1259,19 @@ export function PortalCalendarPanels({
               );
             };
 
-            const mobileDs = fullWeekDateStrs[mobileDayIndex] ?? fullWeekDateStrs[0]!;
-            const mobileDate = fullWeekDates[mobileDayIndex] ?? fullWeekDates[0]!;
+            // Clamp against the mobile window length (5) in case the index was set while
+            // viewing the desktop 7-day week (e.g. viewport resized after selecting day 6).
+            const clampedMobileDayIndex = Math.min(mobileDayIndex, mobileWindowDates.length - 1);
+            const mobileDs = mobileWindowDateStrs[clampedMobileDayIndex] ?? mobileWindowDateStrs[0]!;
+            const mobileDate = mobileWindowDates[clampedMobileDayIndex] ?? mobileWindowDates[0]!;
 
             return (
               <>
-                {/* Mobile: one day at a time — the 7-column grid never fits a phone width. */}
+                {/* Mobile: one day at a time, 5-day rolling window in the picker — a 7-column
+                    row never fits a phone width and a 7-pill picker wraps to two rows. */}
                 <div className="mt-4 lg:hidden">
-                  <div className="flex flex-wrap gap-1.5">
-                    {fullWeekDates.map((d, idx) => {
+                  <div className="flex flex-nowrap gap-1.5">
+                    {mobileWindowDates.map((d, idx) => {
                       const ds = toLocalDateStr(d);
                       const count = readOnly
                         ? meetings.filter((meeting) => meeting.dateStr === ds).length
@@ -1257,13 +1279,13 @@ export function PortalCalendarPanels({
                             (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
                             0,
                           );
-                      const isActive = idx === mobileDayIndex;
+                      const isActive = idx === clampedMobileDayIndex;
                       return (
                         <button
                           key={ds}
                           type="button"
                           onClick={() => setMobileDayIndex(idx)}
-                          className={`flex shrink-0 flex-col items-center rounded-xl px-3 py-1.5 text-center transition ${
+                          className={`flex min-w-0 flex-1 basis-0 flex-col items-center rounded-xl px-1.5 py-1.5 text-center transition ${
                             isActive ? "bg-primary text-primary-foreground" : "bg-accent/40 text-muted"
                           }`}
                         >
