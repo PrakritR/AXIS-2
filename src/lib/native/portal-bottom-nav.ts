@@ -78,27 +78,43 @@ export function orderNativeBottomNavItems<T extends { section: string }>(
  * manager-properties.tsx). Keep in sync with `src/lib/platform/parity.ts`.
  */
 export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
-  "dashboard",
   "properties",
+  "calendar",
   "residents",
-  "documents",
-  "profile",
+  "services",
+  "inbox",
 ] as const;
 
-export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = ["dashboard", "lease", "payments", "documents"] as const;
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
+  "lease",
+  "move-in",
+  "services",
+  "payments",
+  "inbox",
+] as const;
 
 export const NATIVE_BOTTOM_NAV_ADMIN_PRIMARY = ["dashboard", "properties", "axis-users", "events"] as const;
 
-export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["dashboard", "work-orders", "calendar", "inbox"] as const;
+export const NATIVE_BOTTOM_NAV_VENDOR_PRIMARY = ["work-orders", "calendar", "inbox"] as const;
 
 /**
- * Resident: the Dashboard is the hub and every section drills back to it
- * (PortalMobileBackBar/ResidentMobileNavBar) instead of switching via a fixed
- * tab bar — Settings and Sign out live in the top-right profile menu there
- * instead. Every other role keeps its fixed native bottom bar.
+ * Every role gets the fixed native bottom bar — Dashboard and Settings are
+ * reached via the shared `PortalMobileNavBar` (back arrow + profile menu)
+ * instead of a bar slot.
  */
-export function nativeBottomBarEnabledForKind(kind?: PortalDefinition["kind"]): boolean {
-  return kind !== "resident";
+export function nativeBottomBarEnabledForKind(_kind?: PortalDefinition["kind"]): boolean {
+  return true;
+}
+
+/**
+ * Whether the fixed bar also gets a trailing "More" tab that opens the full
+ * section sheet. Kinds whose curated primary set — plus the shared back
+ * arrow (Dashboard) and profile menu (Settings) — already reaches every
+ * section don't need one. Vendor's 5 sections are fully covered by 3 primary
+ * tabs + back + profile, so it's the one role that skips it.
+ */
+export function nativeBottomNavShowMoreTab(kind?: PortalDefinition["kind"]): boolean {
+  return kind === "pro" || kind === "manager" || kind === "resident";
 }
 
 function primaryOrderFor(kind?: PortalDefinition["kind"]): readonly string[] {

@@ -225,13 +225,17 @@ extended in lockstep — when adding a 5th role, grep for `"resident" ===` /
 `"manager" ===` literal chains rather than assuming one canonical `isAuthRole`.
 
 **Portal registry.** `src/lib/portals/vendor.ts` defines 5 sections: Home
-(`dashboard`), Work Orders, Calendar, Inbox, Profile. Routes live at
-`src/app/vendor/layout.tsx` + `src/app/vendor/[section]/[[...tab]]/page.tsx`,
-copied from the resident portal shell. Render handlers are in
-`render-portal-section.tsx` under `kind === "vendor"` blocks (after the resident
-blocks, before the generic tabbed-workspace fallback). Native bottom bar primary
-set (`NATIVE_BOTTOM_NAV_VENDOR_PRIMARY` in `src/lib/native/portal-bottom-nav.ts`)
-is Home/Work Orders/Calendar/Inbox — Profile lives in the swipe-up More sheet.
+(`dashboard`), Services (section key stays `work-orders`, relabeled from "Work
+Orders" as part of the mobile-nav-m1 overhaul), Calendar, Inbox, Profile.
+Routes live at `src/app/vendor/layout.tsx` +
+`src/app/vendor/[section]/[[...tab]]/page.tsx`, copied from the resident
+portal shell. Render handlers are in `render-portal-section.tsx` under
+`kind === "vendor"` blocks (after the resident blocks, before the generic
+tabbed-workspace fallback). Native bottom bar primary set
+(`NATIVE_BOTTOM_NAV_VENDOR_PRIMARY` in `src/lib/native/portal-bottom-nav.ts`)
+is Services/Calendar/Inbox (3 tabs, no "More" tab) — Dashboard and Profile are
+reached via the shared `PortalMobileNavBar` (back arrow + top-right profile
+menu), which every portal's mobile/native layout renders now.
 
 **Invite → signup linking.** A manager's "Send invite" (Vendors — reachable at
 `/portal/services/vendors`, the `ManagerAllServicesPanel` component with

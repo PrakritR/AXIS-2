@@ -8,7 +8,7 @@ export const vendorPortal: PortalDefinition = {
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Home", tabs: [] },
-    { section: "work-orders", label: "Work Orders", tabs: [] },
+    { section: "work-orders", label: "Services", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
     {
       section: "inbox",
@@ -27,7 +27,7 @@ export const vendorPortal: PortalDefinition = {
 /** Default smoke-test paths for web + native WebView (vendor portal). */
 export const VENDOR_PORTAL_SMOKE_PATHS = [
   { label: "Home", path: "/vendor/dashboard" },
-  { label: "Work Orders", path: "/vendor/work-orders" },
+  { label: "Services", path: "/vendor/work-orders" },
   { label: "Calendar", path: "/vendor/calendar" },
   { label: "Inbox", path: "/vendor/inbox/unopened" },
   { label: "Settings", path: "/vendor/profile" },

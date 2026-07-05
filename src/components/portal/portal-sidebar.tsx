@@ -4,6 +4,7 @@ import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import {
+  PortalNativeMoreNavButton,
   PortalNativeMoreSheet,
   type PortalMoreNavItem,
 } from "@/components/portal/portal-native-more-sheet";
@@ -15,6 +16,7 @@ import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from
 import { shouldOpenNativeSectionsSheet } from "@/lib/native/open-portal-sections-sheet";
 import {
   nativeBottomBarEnabledForKind,
+  nativeBottomNavShowMoreTab,
   orderNativeBottomNavItems,
   splitNativeBottomNavItems,
 } from "@/lib/native/portal-bottom-nav";
@@ -188,6 +190,8 @@ export function PortalSidebar({
     () => nativeBottomNavSplit.primary.filter((item) => !isSectionLocked(item.section)),
     [nativeBottomNavSplit, isSectionLocked],
   );
+  const showMoreTab = showNativeChrome && nativeBottomNavShowMoreTab(definition.kind);
+  const moreTabActive = !nativeBottomNavItems.some((item) => item.section === activeSection);
   const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
   const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);
   const bottomNavScrollRef = useRef<HTMLDivElement>(null);
@@ -316,15 +320,6 @@ export function PortalSidebar({
         : `${label} — locked on Pro or Business`
       : label;
 
-  // Manager/pro only: the native bottom bar's Documents tab is the combined
-  // "Files" tab (Documents + Finances, switch at the top of the Documents
-  // page) — desktop and the More sheet still say "Documents" since those keep
-  // Documents/Finances as separate items.
-  const bottomBarLabel = (s: (typeof navItems)[number]) =>
-    (definition.kind === "pro" || definition.kind === "manager") && s.section === "documents"
-      ? "Files"
-      : s.label;
-
   const renderMobileNavLink = (
     s: (typeof navItems)[number],
     variant: "top" | "bottom",
@@ -347,7 +342,7 @@ export function PortalSidebar({
           className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 py-2 transition ${
             active ? "text-primary" : "text-foreground"
           }`}
-          aria-label={lockAriaLabel(bottomBarLabel(s), locked)}
+          aria-label={lockAriaLabel(s.label, locked)}
           aria-current={active ? "page" : undefined}
         >
           {showNavIcons ? (
@@ -637,6 +632,9 @@ export function PortalSidebar({
                 aria-label="Scroll portal sections"
               >
                 {nativeBottomNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
+                {showMoreTab ? (
+                  <PortalNativeMoreNavButton active={moreTabActive} onClick={() => setSectionsSheetOpen(true)} />
+                ) : null}
               </div>
             </nav>,
             document.body,

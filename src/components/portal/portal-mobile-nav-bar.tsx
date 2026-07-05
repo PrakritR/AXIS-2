@@ -38,11 +38,13 @@ function initials(name: string | null, email: string | null): string {
 }
 
 /**
- * Resident mobile/native top row: a "‹ Dashboard" back button (when not on
- * the Dashboard hub itself) plus a top-right profile menu (Settings, Sign
- * out) — the resident's only path to those since there's no bottom tab bar.
+ * Shared mobile/native top row for every portal: a "‹ <label>" back button
+ * (resolvePortalMobileBackTarget; null on Dashboard) plus a top-right profile
+ * menu (Settings, Sign out). Manager/resident/vendor native bottom bars no
+ * longer carry Dashboard or Settings tabs directly, so this is their only path
+ * to both.
  */
-export function ResidentMobileNavBar({
+export function PortalMobileNavBar({
   definition,
   name,
   email,
@@ -73,7 +75,7 @@ export function ResidentMobileNavBar({
       <div className="ml-auto">
         <DropdownMenu>
           <DropdownMenuTrigger
-            data-attr="resident-mobile-profile-menu"
+            data-attr="portal-mobile-profile-menu"
             aria-label="Account menu"
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-[var(--cobalt-deep,#16233f)] text-[12px] font-bold text-white outline-none transition focus-visible:ring-2 focus-visible:ring-primary/40"
           >
@@ -87,7 +89,7 @@ export function ResidentMobileNavBar({
             </div>
 
             <DropdownMenuItem asChild>
-              <Link href={`${definition.basePath}/profile`} data-attr="resident-mobile-profile-settings">
+              <Link href={`${definition.basePath}/profile`} data-attr="portal-mobile-profile-settings">
                 <User aria-hidden />
                 Settings
               </Link>
@@ -96,7 +98,7 @@ export function ResidentMobileNavBar({
             <DropdownMenuSeparator />
 
             <PortalSignOutButton
-              dataAttr="resident-mobile-profile-sign-out"
+              dataAttr="portal-mobile-profile-sign-out"
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium text-red-600 transition hover:bg-accent/70 disabled:opacity-60"
             />
           </DropdownMenuContent>

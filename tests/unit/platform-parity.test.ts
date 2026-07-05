@@ -22,6 +22,7 @@ import { vendorPortal, VENDOR_PORTAL_SMOKE_PATHS } from "@/lib/portals/vendor";
 import { proPortal, MANAGER_PORTAL_SMOKE_PATHS } from "@/lib/portals/pro";
 import {
   NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
+  NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
   NATIVE_BOTTOM_NAV_VENDOR_PRIMARY,
 } from "@/lib/native/portal-bottom-nav";
 
@@ -76,6 +77,13 @@ describe("platform parity (web + native WebView)", () => {
     for (const { path } of RESIDENT_PORTAL_SMOKE_PATHS) {
       expect(isInAppPath(path)).toBe(true);
       expect(isNativeDeepLinkPath(path)).toBe(true);
+    }
+  });
+
+  it("resident native bottom bar primary items are real resident sections", () => {
+    const sectionIds = new Set(RESIDENT_PORTAL_SECTION_IDS as readonly string[]);
+    for (const section of NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY) {
+      expect(sectionIds.has(section)).toBe(true);
     }
   });
 

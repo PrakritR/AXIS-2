@@ -32,10 +32,6 @@ export function isHiddenFromMobileNav(kind: PortalKind, section: string): boolea
   return section === "bugs-feedback" && kind !== "admin";
 }
 
-// Order mirrors the native bottom bar (Dashboard, Properties, Residents, Documents,
-// Finances, ..., Settings) — see NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY in
-// portal-bottom-nav.ts. Documents and Finances stay separate sidebar items on
-// desktop; only the mobile bar combines them into one "Files" tab.
 const PRO_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
   { id: "properties", label: "Properties", sections: ["properties", "residents", "applications", "leases"] },

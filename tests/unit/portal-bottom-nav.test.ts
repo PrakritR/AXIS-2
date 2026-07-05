@@ -5,7 +5,9 @@ import {
   NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
   NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
+  NATIVE_BOTTOM_NAV_VENDOR_PRIMARY,
   nativeBottomBarEnabledForKind,
+  nativeBottomNavShowMoreTab,
   orderNativeBottomNavItems,
   pickNativeBottomNavItems,
   splitNativeBottomNavItems,
@@ -85,15 +87,19 @@ describe("splitNativeBottomNavItems", () => {
         (section) => !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section),
       ),
     );
-    expect(overflow.map((item) => item.section)).toContain("calendar");
-    expect(overflow.map((item) => item.section)).toContain("services");
+    expect(overflow.map((item) => item.section)).toContain("dashboard");
+    expect(overflow.map((item) => item.section)).toContain("documents");
     expect(primary.length + overflow.length).toBe(items.length);
   });
 
-  it("curates the resident bar (limited) to the primary set and overflows the rest", () => {
+  it("curates the resident bar (limited) to the primary set minus the missing 'services' section", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
-    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
+    // Limited tier has no "services" section — splitNativeBottomNavItems intersects
+    // with real sections, so the bar gracefully shows the other 4 primary tabs.
+    expect(primary.map((item) => item.section)).toEqual(
+      NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY.filter((section) => section !== "services"),
+    );
     expect(primary.length + overflow.length).toBe(items.length);
   });
 
@@ -101,7 +107,7 @@ describe("splitNativeBottomNavItems", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
-    expect(overflow.map((item) => item.section)).toContain("services");
+    expect(overflow.map((item) => item.section)).toContain("documents");
     expect(primary.length + overflow.length).toBe(items.length);
   });
 
@@ -130,15 +136,32 @@ describe("splitNativeBottomNavItems", () => {
 });
 
 describe("nativeBottomBarEnabledForKind", () => {
-  it("is disabled only for resident — Dashboard is the hub, no fixed tab bar", () => {
-    expect(nativeBottomBarEnabledForKind("resident")).toBe(false);
-  });
-
-  it("stays enabled for every other role", () => {
+  it("is enabled for every role, including resident", () => {
     expect(nativeBottomBarEnabledForKind("pro")).toBe(true);
     expect(nativeBottomBarEnabledForKind("manager")).toBe(true);
     expect(nativeBottomBarEnabledForKind("admin")).toBe(true);
     expect(nativeBottomBarEnabledForKind("vendor")).toBe(true);
+    expect(nativeBottomBarEnabledForKind("resident")).toBe(true);
     expect(nativeBottomBarEnabledForKind(undefined)).toBe(true);
+  });
+});
+
+describe("nativeBottomNavShowMoreTab", () => {
+  it("shows the More tab for pro/manager and resident, whose primary sets don't cover every section", () => {
+    expect(nativeBottomNavShowMoreTab("pro")).toBe(true);
+    expect(nativeBottomNavShowMoreTab("manager")).toBe(true);
+    expect(nativeBottomNavShowMoreTab("resident")).toBe(true);
+  });
+
+  it("skips the More tab for vendor and admin", () => {
+    expect(nativeBottomNavShowMoreTab("vendor")).toBe(false);
+    expect(nativeBottomNavShowMoreTab("admin")).toBe(false);
+    expect(nativeBottomNavShowMoreTab(undefined)).toBe(false);
+  });
+
+  it("vendor's 3 primary tabs plus back arrow (dashboard) and profile menu (settings) cover all 5 vendor sections", () => {
+    const coveredByBackAndProfile = new Set(["dashboard", "profile"]);
+    const coveredSections = new Set([...NATIVE_BOTTOM_NAV_VENDOR_PRIMARY, ...coveredByBackAndProfile]);
+    expect(coveredSections.size).toBe(5);
   });
 });

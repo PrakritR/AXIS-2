@@ -1,6 +1,6 @@
 import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
-import { PortalMobileBackBar } from "@/components/portal/portal-mobile-back-bar";
+import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
@@ -46,7 +46,11 @@ export default async function VendorLayout({ children }: { children: React.React
           />
           <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
             <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
-              <PortalMobileBackBar definition={vendorPortal} />
+              <PortalMobileNavBar
+                definition={vendorPortal}
+                name={profile?.full_name ?? null}
+                email={profile?.email ?? null}
+              />
               {children}
             </div>
           </main>
