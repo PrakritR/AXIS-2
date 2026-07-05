@@ -423,7 +423,13 @@ export function ManagerPortalPageShell({
 }) {
   return (
     <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
-      <div className={`flex items-center justify-between gap-x-3 gap-y-2 ${titleAsideInline ? "" : "flex-wrap"}`}>
+      <div
+        className={
+          titleAsideInline
+            ? "flex items-center justify-between gap-x-3 gap-y-2"
+            : "flex flex-wrap items-center justify-between gap-x-3 gap-y-2"
+        }
+      >
         <div className="min-w-0 shrink-0">
           <h1
             className={`text-[1.35rem] font-bold tracking-[-0.02em] text-foreground sm:text-[1.75rem] [html[data-native]_&]:text-[1.2rem] ${
