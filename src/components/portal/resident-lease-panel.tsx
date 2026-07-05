@@ -323,34 +323,50 @@ export function ResidentLeasePanel() {
       <ManagerPortalPageShell
         title="Lease"
         titleAside={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 rounded-full"
-              onClick={() => setShowMoveOutModal(true)}
-            >
-              Renew or extend lease
-            </Button>
-            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
-              Download PDF
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 rounded-full"
-              onClick={() => uploadRef.current?.click()}
-              disabled={uploadingPdf}
-            >
-              {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
-            </Button>
-            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
-              Send to manager
-            </Button>
-            <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => onSignLease()}>
-              {pipelineRow?.residentSignature ? "Resident signed" : "Sign lease"}
-            </Button>
-          </>
+          pipelineRow?.residentSignature ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 rounded-full"
+                onClick={() => setShowMoveOutModal(true)}
+              >
+                Renew lease
+              </Button>
+              <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
+                Download
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 rounded-full"
+                onClick={() => setShowMoveOutModal(true)}
+              >
+                Renew or extend lease
+              </Button>
+              <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
+                Download PDF
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 rounded-full"
+                onClick={() => uploadRef.current?.click()}
+                disabled={uploadingPdf}
+              >
+                {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
+              </Button>
+              <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
+                Send to manager
+              </Button>
+              <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => onSignLease()}>
+                Sign lease
+              </Button>
+            </>
+          )
         }
       >
         {leaseVisibleToResident && pipelineRow ? (
