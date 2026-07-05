@@ -66,6 +66,7 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
+  const [vendorIdentity, setVendorIdentity] = useState({ name: "Vendor", email: "vendor@example.com" });
 
   useEffect(() => {
     if (isDemoModeActive()) return;
@@ -78,6 +79,23 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
       .catch(() => {
         if (active) setEligibleContacts([]);
       });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isDemoModeActive()) return;
+    let active = true;
+    void fetch("/api/vendor/profile", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : { profile: null }))
+      .then((data: { profile?: { name?: string; email?: string } | null }) => {
+        if (!active || !data.profile) return;
+        const name = String(data.profile.name ?? "").trim();
+        const email = String(data.profile.email ?? "").trim();
+        if (name || email) setVendorIdentity((prev) => ({ name: name || prev.name, email: email || prev.email }));
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -289,6 +307,7 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
               fromName: p.senderName,
               fromEmail: p.senderEmail,
               toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
+              toBroadcast: p.broadcastCategories,
               subject: p.subject.trim(),
               text: p.body.trim(),
               deliverToPortalInbox: true,
@@ -320,7 +339,7 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
       if (!thread) return;
       const reply: InboxThreadMessage = {
         id: `reply-${Date.now().toString(36)}`,
-        from: "Vendor",
+        from: vendorIdentity.name,
         body: text,
         at: new Date().toLocaleString(),
       };
@@ -340,6 +359,8 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
+          fromName: vendorIdentity.name,
+          fromEmail: vendorIdentity.email,
           threadId: thread.id,
           subject,
           text,
@@ -349,7 +370,7 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
       });
       void syncPersistedInboxFromServer(VENDOR_INBOX_STORAGE_KEY, { force: true });
     },
-    [local],
+    [local, vendorIdentity],
   );
 
   const renderExtraActions = useCallback(
@@ -442,8 +463,8 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
         onClose={() => setComposeOpen(false)}
         onSend={handleComposeSend}
         portal="vendor"
-        senderName="Vendor"
-        senderEmail="vendor@example.com"
+        senderName={vendorIdentity.name}
+        senderEmail={vendorIdentity.email}
         liveContacts={eligibleContacts}
       />
 

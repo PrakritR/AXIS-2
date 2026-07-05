@@ -254,11 +254,7 @@ export function PortalInboxMessageTable({
             >
               {replyBusyId === row.id ? "Sending…" : "Send reply"}
             </Button>
-          ) : (
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply sent.")}>
-              Reply
-            </Button>
-          )}
+          ) : null}
         </PortalTableDetailActions>
       </>
     );

@@ -87,6 +87,25 @@ async function resolveBroadcastRecipients(
     return out;
   }
 
+  // Vendor sender — "management" resolves to the manager(s) who invited/own them.
+  if (normalizedRole === "vendor") {
+    if (categories.includes("management")) {
+      const filter = senderEmail
+        ? `vendor_user_id.eq.${senderId},row_data->>email.eq.${senderEmail}`
+        : `vendor_user_id.eq.${senderId}`;
+      const { data } = await db.from("manager_vendor_records").select("manager_user_id").or(filter);
+      const managerIds = [...new Set((data ?? []).map((r) => String(r.manager_user_id ?? "").trim()).filter(Boolean))];
+      if (managerIds.length > 0) {
+        const { data: mgrProfiles } = await db.from("profiles").select("id, email").in("id", managerIds);
+        for (const p of mgrProfiles ?? []) {
+          const email = String(p.email ?? "").trim().toLowerCase();
+          if (email) out.push({ email, userId: (p.id as string) ?? null, role: "manager" });
+        }
+      }
+    }
+    return out;
+  }
+
   // Resident sender — "management" resolves to their property manager plus linked co-managers.
   if (categories.includes("management")) {
     const { data } = await db
@@ -196,16 +215,32 @@ export async function POST(req: Request) {
       { email: string; userId: string | null; role: string | null; scope: string }
     >();
 
-    for (const email of normalizeEmails(body.toEmails)
+    const toEmailsNormalized = normalizeEmails(body.toEmails)
       .filter((e) => e.includes("@"))
-      .map((e) => e.trim().toLowerCase())) {
-      if (email === senderEmail || recipientsByEmail.has(email)) continue;
-      recipientsByEmail.set(email, {
-        email,
-        userId: null,
-        role: null,
-        scope: RESIDENT_INBOX_SCOPE,
-      });
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e !== senderEmail && !recipientsByEmail.has(e));
+
+    if (toEmailsNormalized.length > 0) {
+      const { data: emailProfiles } = await db
+        .from("profiles")
+        .select("id, email, role")
+        .in("email", toEmailsNormalized);
+      const profileByEmail = new Map(
+        (emailProfiles ?? []).map((p) => [String(p.email ?? "").trim().toLowerCase(), p]),
+      );
+      for (const email of toEmailsNormalized) {
+        if (recipientsByEmail.has(email)) continue;
+        // No matching profile (e.g. not yet signed up) — best-effort resident
+        // scope so the row still shows up if/when they sign in by that email.
+        const profile = profileByEmail.get(email);
+        const role = profile ? String(profile.role ?? "").trim().toLowerCase() || null : null;
+        recipientsByEmail.set(email, {
+          email,
+          userId: profile?.id ?? null,
+          role,
+          scope: scopeForRole(role),
+        });
+      }
     }
 
     if (toUserIds.length > 0) {
