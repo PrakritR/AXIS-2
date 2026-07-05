@@ -20,7 +20,7 @@ export const vendorPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
-    { section: "profile", label: "Profile", tabs: [] },
+    { section: "profile", label: "Settings", tabs: [] },
   ],
 };
 
@@ -30,5 +30,5 @@ export const VENDOR_PORTAL_SMOKE_PATHS = [
   { label: "Work Orders", path: "/vendor/work-orders" },
   { label: "Calendar", path: "/vendor/calendar" },
   { label: "Inbox", path: "/vendor/inbox/unopened" },
-  { label: "Profile", path: "/vendor/profile" },
+  { label: "Settings", path: "/vendor/profile" },
 ] as const;

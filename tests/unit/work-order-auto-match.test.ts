@@ -119,4 +119,17 @@ describe("suggestVendorsForWorkOrder", () => {
     const result = suggestVendorsForWorkOrder(workOrder({ category: "mold" }), [vendor()], { now: NOW });
     expect(result).toEqual([]);
   });
+
+  it("matches on any of a vendor's self-selected trades[] capabilities, not just the legacy single trade", () => {
+    const multiTrade = vendor({ trade: "Plumbing", trades: ["Electrical", "HVAC"] });
+    expect(suggestVendorsForWorkOrder(workOrder({ category: "electrical" }), [multiTrade], { now: NOW })).toHaveLength(1);
+    expect(suggestVendorsForWorkOrder(workOrder({ category: "hvac" }), [multiTrade], { now: NOW })).toHaveLength(1);
+    expect(suggestVendorsForWorkOrder(workOrder({ category: "plumbing" }), [multiTrade], { now: NOW })).toEqual([]);
+  });
+
+  it("reflects all selected trades in the match reason", () => {
+    const multiTrade = vendor({ trade: "Plumbing", trades: ["Electrical", "HVAC"] });
+    const result = suggestVendorsForWorkOrder(workOrder({ category: "hvac" }), [multiTrade], { now: NOW });
+    expect(result[0].reason).toBe("no prior assignments");
+  });
 });

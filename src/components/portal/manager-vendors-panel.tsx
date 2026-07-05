@@ -29,18 +29,9 @@ import {
   PORTAL_TABLE_TD,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
+import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
 
-const TRADE_OPTIONS = [
-  "General maintenance",
-  "Plumbing",
-  "Electrical",
-  "HVAC",
-  "Appliance repair",
-  "Landscaping",
-  "Cleaning",
-  "Pest control",
-  "Other",
-];
+const TRADE_OPTIONS: readonly string[] = VENDOR_TRADE_OPTIONS;
 
 type VendorDraft = {
   name: string;

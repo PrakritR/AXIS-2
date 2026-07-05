@@ -52,7 +52,7 @@ const VendorDashboard = dynamic(() => import("@/components/portal/vendor-dashboa
 const VendorWorkOrdersPanel = dynamic(() => import("@/components/portal/vendor-work-orders-panel").then((m) => m.VendorWorkOrdersPanel), { ssr: false, loading });
 const VendorCalendarPanel = dynamic(() => import("@/components/portal/vendor-calendar-panel").then((m) => m.VendorCalendarPanel), { ssr: false, loading });
 const VendorInboxPanel = dynamic(() => import("@/components/portal/vendor-inbox-panel").then((m) => m.VendorInboxPanel), { ssr: false, loading });
-const VendorProfilePanel = dynamic(() => import("@/components/portal/vendor-profile-panel").then((m) => m.VendorProfilePanel), { ssr: false, loading });
+const VendorSettingsPanel = dynamic(() => import("@/components/portal/vendor-settings-panel").then((m) => m.VendorSettingsPanel), { ssr: false, loading });
 
 function Placeholder({ title, message }: { title: string; message: string }) {
   return (
@@ -88,7 +88,7 @@ export function DemoSectionRenderer({
       case "inbox":
         return <VendorInboxPanel tabId={tabId} />;
       case "profile":
-        return <VendorProfilePanel />;
+        return <VendorSettingsPanel />;
       default:
         return <Placeholder title={meta?.label ?? "Section"} message="Nothing to show yet." />;
     }

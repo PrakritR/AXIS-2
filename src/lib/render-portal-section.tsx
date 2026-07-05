@@ -28,7 +28,7 @@ import { VendorDashboard } from "@/components/portal/vendor-dashboard";
 import { VendorWorkOrdersPanel } from "@/components/portal/vendor-work-orders-panel";
 import { VendorCalendarPanel } from "@/components/portal/vendor-calendar-panel";
 import { VendorInboxPanel } from "@/components/portal/vendor-inbox-panel";
-import { VendorProfilePanel } from "@/components/portal/vendor-profile-panel";
+import { VendorSettingsPanel } from "@/components/portal/vendor-settings-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
@@ -657,7 +657,7 @@ export async function renderPortalSection(
 
   if (kind === "vendor" && section === "profile") {
     if (tabParts?.length) notFound();
-    return <VendorProfilePanel />;
+    return <VendorSettingsPanel />;
   }
 
   if (!meta.tabs.length) {

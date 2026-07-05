@@ -3,7 +3,10 @@ export type ManagerVendorRow = {
   id: string;
   managerUserId: string | null;
   name: string;
+  /** Legacy single-trade field, still set by the manager's Add/Edit vendor form. */
   trade: string;
+  /** Vendor self-selected work capabilities (multi-select); falls back to [trade] when unset. */
+  trades?: string[];
   phone: string;
   email: string;
   notes: string;
@@ -11,6 +14,10 @@ export type ManagerVendorRow = {
   propertyIds?: string[];
   /** When true, other managers on Axis can use this vendor for work orders. */
   sharedWithManagers?: boolean;
+  insuranceProvider?: string;
+  insurancePolicyNumber?: string;
+  /** ISO date (yyyy-mm-dd) the vendor's insurance coverage expires. */
+  insuranceExpiresAt?: string;
   createdAt?: string;
   updatedAt?: string;
 };

@@ -64,3 +64,30 @@ export function categoriesForVendorTrade(trade: string): WorkOrderCategory[] {
 export function vendorTradeMatchesCategory(trade: string, category: WorkOrderCategory): boolean {
   return categoriesForVendorTrade(trade).includes(category);
 }
+
+/** Canonical work-order categories serviceable across ALL of a vendor's self-selected trade capabilities. */
+export function categoriesForVendorTrades(trades: string[]): WorkOrderCategory[] {
+  const out = new Set<WorkOrderCategory>();
+  for (const trade of trades) {
+    for (const category of categoriesForVendorTrade(trade)) out.add(category);
+  }
+  return [...out];
+}
+
+/** Whether ANY of a vendor's trade capabilities can service the given work-order `category`. */
+export function vendorCapabilitiesMatchCategory(trades: string[], category: WorkOrderCategory): boolean {
+  return trades.some((trade) => vendorTradeMatchesCategory(trade, category));
+}
+
+/** Trade/category options a vendor can pick as their own work capabilities. */
+export const VENDOR_TRADE_OPTIONS = [
+  "General maintenance",
+  "Plumbing",
+  "Electrical",
+  "HVAC",
+  "Appliance repair",
+  "Landscaping",
+  "Cleaning",
+  "Pest control",
+  "Other",
+] as const;

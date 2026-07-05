@@ -237,7 +237,9 @@ export function PortalBugFeedbackPanel({
     );
 
   const addFeedbackButton = (
-    <PortalSectionPrimaryButton onClick={() => setSubmitOpen(true)}>Add feedback</PortalSectionPrimaryButton>
+    <PortalSectionPrimaryButton onClick={() => setSubmitOpen(true)} data-attr="feedback-add">
+      Add feedback
+    </PortalSectionPrimaryButton>
   );
 
   return (

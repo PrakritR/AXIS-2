@@ -6,7 +6,17 @@
  */
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
-import { vendorTradeMatchesCategory } from "@/lib/work-order-taxonomy";
+import { vendorCapabilitiesMatchCategory } from "@/lib/work-order-taxonomy";
+
+/** A vendor's work capabilities: self-selected `trades[]` if set, else the legacy single `trade`. */
+function vendorCapabilities(vendor: ManagerVendorRow): string[] {
+  return vendor.trades && vendor.trades.length > 0 ? vendor.trades : [vendor.trade];
+}
+
+/** Human-readable label for a vendor's capabilities, used in the match reason. */
+function vendorCapabilityLabel(vendor: ManagerVendorRow): string {
+  return vendorCapabilities(vendor).join(", ");
+}
 
 export type VendorMatchCandidate = {
   vendorId: string;
@@ -49,7 +59,7 @@ export function suggestVendorsForWorkOrder(
     if (vendor.active === false) return false;
     const ownedByManager = Boolean(workOrder.managerUserId) && vendor.managerUserId === workOrder.managerUserId;
     if (!ownedByManager && vendor.sharedWithManagers !== true) return false;
-    if (!vendorTradeMatchesCategory(vendor.trade, category)) return false;
+    if (!vendorCapabilitiesMatchCategory(vendorCapabilities(vendor), category)) return false;
     if (workOrder.propertyId && vendor.propertyIds && vendor.propertyIds.length > 0) {
       if (!vendor.propertyIds.includes(workOrder.propertyId)) return false;
     }
@@ -64,7 +74,7 @@ export function suggestVendorsForWorkOrder(
       vendorName: vendor.name,
       trade: vendor.trade,
       lastAssignedAt,
-      reason: buildReason(vendor.trade, lastAssignedAt, now),
+      reason: buildReason(vendorCapabilityLabel(vendor), lastAssignedAt, now),
     }));
 }
 

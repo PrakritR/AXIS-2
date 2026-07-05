@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   categoriesForVendorTrade,
+  categoriesForVendorTrades,
+  vendorCapabilitiesMatchCategory,
   vendorTradeMatchesCategory,
   workOrderCategoryForResidentLabel,
 } from "@/lib/work-order-taxonomy";
@@ -48,5 +50,31 @@ describe("categoriesForVendorTrade / vendorTradeMatchesCategory", () => {
     expect(vendorTradeMatchesCategory("Plumbing", "electrical")).toBe(false);
     expect(vendorTradeMatchesCategory("General maintenance", "access")).toBe(true);
     expect(vendorTradeMatchesCategory("Landscaping", "general")).toBe(false);
+  });
+});
+
+describe("categoriesForVendorTrades / vendorCapabilitiesMatchCategory (multi-capability vendors)", () => {
+  it("unions categories across all of a vendor's selected trades", () => {
+    expect(categoriesForVendorTrades(["Plumbing", "Electrical"])).toEqual(
+      expect.arrayContaining(["plumbing", "electrical"]),
+    );
+    expect(categoriesForVendorTrades(["Plumbing", "Electrical"])).toHaveLength(2);
+  });
+
+  it("dedupes overlapping categories from different trades", () => {
+    expect(categoriesForVendorTrades(["General maintenance", "Appliance repair"])).toEqual(
+      expect.arrayContaining(["general", "appliance", "access"]),
+    );
+    expect(categoriesForVendorTrades(["General maintenance", "Appliance repair"])).toHaveLength(3);
+  });
+
+  it("matches when any selected trade services the category", () => {
+    expect(vendorCapabilitiesMatchCategory(["Plumbing", "Electrical"], "electrical")).toBe(true);
+    expect(vendorCapabilitiesMatchCategory(["Plumbing", "Electrical"], "hvac")).toBe(false);
+  });
+
+  it("returns false for an empty capability list", () => {
+    expect(vendorCapabilitiesMatchCategory([], "plumbing")).toBe(false);
+    expect(categoriesForVendorTrades([])).toEqual([]);
   });
 });
