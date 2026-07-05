@@ -47,6 +47,8 @@ const residentPassword = process.env.E2E_RESIDENT_PASSWORD ?? "TestResident123!"
 // resident's `profiles.manager_id` stores the same axis id — that is where the
 // app reads it (resident-portal-access.ts, resident-profile-panel.tsx).
 const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID ?? "AXIS-TESTRSID";
+const vendorEmail = (process.env.E2E_VENDOR_EMAIL ?? "vendor@test.axis.local").toLowerCase();
+const vendorPassword = process.env.E2E_VENDOR_PASSWORD ?? "TestVendor123!";
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
@@ -60,6 +62,7 @@ for (const [label, email] of [
   ["E2E_ADMIN_EMAIL", adminEmail],
   ["E2E_MANAGER_EMAIL", managerEmail],
   ["E2E_RESIDENT_EMAIL", residentEmail],
+  ["E2E_VENDOR_EMAIL", vendorEmail],
 ]) {
   if (email === PRODUCTION_ADMIN_EMAIL) {
     console.error(`${label} is the production admin (${PRODUCTION_ADMIN_EMAIL}) — that account lives only in production.`);
@@ -83,7 +86,7 @@ const NOW = new Date();
 const isoDate = (d) => d.toISOString().slice(0, 10);
 const daysFromNow = (n) => new Date(NOW.getTime() + n * 86400000);
 
-async function ensureUser(email, password, role, { managerId = null, metadata = {} } = {}) {
+async function ensureUser(email, password, role, { managerId = null, metadata = {}, onlyRole = false } = {}) {
   const { data: created, error: createErr } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -127,6 +130,16 @@ async function ensureUser(email, password, role, { managerId = null, metadata = 
     supabase.from("profile_roles").upsert({ user_id: userId, role }, { onConflict: "user_id,role" }),
     `profile_roles(${email})`,
   );
+  // Some canonical test accounts must stay single-role (e.g. manual testing of
+  // the vendor self-serve signup flow can silently bolt a "vendor" row onto the
+  // test manager's own email) — strip anything else so re-seeding is a real fix,
+  // not just a one-time cleanup.
+  if (onlyRole) {
+    await must(
+      supabase.from("profile_roles").delete().eq("user_id", userId).neq("role", role),
+      `profile_roles(strip stray roles for ${email})`,
+    );
+  }
   return userId;
 }
 
@@ -148,7 +161,7 @@ try {
       .maybeSingle();
     if (managerProfile?.manager_id?.trim()) managerId = managerProfile.manager_id.trim();
   }
-  const managerUserId = await ensureUser(managerEmail, managerPassword, "manager", { managerId });
+  const managerUserId = await ensureUser(managerEmail, managerPassword, "manager", { managerId, onlyRole: true });
 
   // Paid-tier purchase (FREE100 waiver = authorized paid access without Stripe; see
   // manager-tier-sync.ts) so tier-gated manager tabs (Financials/Documents/Services/
@@ -342,6 +355,7 @@ try {
 
   // ── Resident account ──────────────────────────────────────────────────────
   const residentUserId = await ensureUser(residentEmail, residentPassword, "resident", {
+    onlyRole: true,
     metadata: { axis_id: residentAxisId },
   });
 
@@ -566,6 +580,77 @@ try {
     "portal_schedule_records",
   );
 
+  // ── Vendor account, linked to the test manager ────────────────────────────
+  // Vendor-only role (never manager) so signing in lands straight in the vendor
+  // portal, matching manager/resident being single-role above.
+  const vendorUserId = await ensureUser(vendorEmail, vendorPassword, "vendor", { onlyRole: true });
+
+  const vendorDirectoryId = "test-vendor-e2e";
+  await must(
+    supabase.from("manager_vendor_records").upsert(
+      {
+        id: vendorDirectoryId,
+        manager_user_id: managerUserId,
+        vendor_user_id: vendorUserId,
+        row_data: {
+          id: vendorDirectoryId,
+          managerUserId,
+          name: "Test Vendor Co",
+          trade: "General maintenance",
+          trades: ["General maintenance", "Plumbing"],
+          phone: "(206) 555-0111",
+          email: vendorEmail,
+          notes: "",
+          active: true,
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    "manager_vendor_records(vendor)",
+  );
+
+  // A scheduled work order assigned to the vendor so it has work to see on sign-in.
+  const vendorWorkOrderId = "test-workorder-vendor-e2e";
+  await must(
+    supabase.from("portal_work_order_records").upsert(
+      {
+        id: vendorWorkOrderId,
+        manager_user_id: managerUserId,
+        resident_email: residentEmail,
+        property_id: propertyId,
+        assigned_property_id: propertyId,
+        vendor_user_id: vendorUserId,
+        row_data: {
+          id: vendorWorkOrderId,
+          propertyName,
+          unit: "Room 1",
+          title: "Leaky kitchen faucet",
+          priority: "normal",
+          status: "Scheduled",
+          bucket: "scheduled",
+          description: "Resident reports a slow drip under the kitchen sink.",
+          scheduled: isoDate(daysFromNow(5)),
+          scheduledAtIso: daysFromNow(5).toISOString(),
+          cost: "",
+          residentName: "Test Resident",
+          residentEmail,
+          propertyId,
+          assignedPropertyId: propertyId,
+          managerUserId,
+          vendorId: vendorDirectoryId,
+          vendorName: "Test Vendor Co",
+          vendorAssignedAt: NOW.toISOString(),
+          category: "plumbing",
+          testRunId,
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    "portal_work_order_records(vendor)",
+  );
+
   // ══════════════════════════════════════════════════════════════════════════
   // Coherent browse catalog: every home shown by the public browse/apply flow
   // is manager-owned, fully listed (listingSubmission v:1), and has at least
@@ -585,7 +670,7 @@ try {
       .maybeSingle();
     if (manager2Profile?.manager_id?.trim()) manager2Id = manager2Profile.manager_id.trim();
   }
-  const manager2UserId = await ensureUser(manager2Email, manager2Password, "manager", { managerId: manager2Id });
+  const manager2UserId = await ensureUser(manager2Email, manager2Password, "manager", { managerId: manager2Id, onlyRole: true });
 
   const { data: purchases2 } = await supabase
     .from("manager_purchases")
@@ -1194,24 +1279,33 @@ try {
     };
   });
 
-  // The primary E2E property also gets a lease (manager-review, no generated
-  // HTML yet) so no browse property is lease-less. Same id the portal's
-  // approved-application sync would mint, so it adopts this row.
+  // The primary E2E resident's own lease: fully signed (an ACTIVE lease), so the
+  // resident Documents tab has a signed lease to show (fullySigned gates it —
+  // see resident-documents-panel.tsx) and Payments reflects a real ongoing tenancy.
+  const primaryLeaseGenIso = daysFromNow(-4).toISOString();
+  const primaryLeaseSentIso = daysFromNow(-3).toISOString();
+  const primaryLeaseResSignIso = daysFromNow(-2).toISOString();
+  const primaryLeaseMgrSignIso = daysFromNow(-1).toISOString();
+  const primaryLeaseHtml =
+    `<section class="lease-doc"><h1>Residential Lease Agreement</h1>` +
+    `<p><strong>Tenant:</strong> Test Resident</p><p><strong>Premises:</strong> ${propertyName} · Room 1</p>` +
+    `<p><strong>Monthly Rent:</strong> $${monthlyRent.toFixed(2)}</p><p><strong>Term:</strong> 12 months</p>` +
+    `<p>This agreement is generated from the approved rental application and governed by Washington State (Seattle) law.</p></section>`;
   leaseRows.push({
     id: `lease_app_${residentAxisId}`,
     manager_user_id: managerUserId,
     resident_user_id: residentUserId,
     resident_email: residentEmail,
     property_id: propertyId,
-    status: "manager",
+    status: "signed",
     row_data: {
       id: `lease_app_${residentAxisId}`,
       residentName: "Test Resident",
       residentEmail,
       unit: `${propertyName} · Room 1`,
       updated: "just now",
-      pdfVersion: 1,
-      versionNumber: 1,
+      pdfVersion: 2,
+      versionNumber: 2,
       notes: "Created from approved application.",
       updatedAtIso: NOW.toISOString(),
       axisId: residentAxisId,
@@ -1221,29 +1315,107 @@ try {
       roomChoice,
       signedRentLabel: `$${monthlyRent.toFixed(2)} / month`,
       application,
-      generatedHtml: null,
-      generatedAtIso: null,
+      generatedHtml: primaryLeaseHtml,
+      generatedAtIso: primaryLeaseGenIso,
       managerUploadedPdf: null,
       thread: [],
-      managerSignature: null,
-      residentSignature: null,
-      signatureName: null,
-      signedAtIso: null,
-      residentSignedAt: null,
-      managerSignedAt: null,
+      managerSignature: { name: "Test Manager", signedAtIso: primaryLeaseMgrSignIso, role: "manager" },
+      residentSignature: { name: "Test Resident", signedAtIso: primaryLeaseResSignIso, role: "resident" },
+      signatureName: "Test Resident",
+      signedAtIso: primaryLeaseResSignIso,
+      residentSignedAt: primaryLeaseResSignIso,
+      managerSignedAt: primaryLeaseMgrSignIso,
       adminReviewRequestedAt: null,
-      sentToResidentAt: null,
-      fullySignedAt: null,
+      sentToResidentAt: primaryLeaseSentIso,
+      fullySignedAt: primaryLeaseMgrSignIso,
       voidedAt: null,
-      bucket: "manager",
-      status: "Manager Review",
-      stageLabel: "Manager Review",
-      currentActorRole: "manager",
+      bucket: "signed",
+      status: "Fully Signed",
+      stageLabel: "Signed",
+      currentActorRole: "system",
       testRunId,
     },
     updated_at: NOW.toISOString(),
   });
   await must(supabase.from("portal_lease_pipeline_records").upsert(leaseRows, { onConflict: "id" }), "portal_lease_pipeline_records(catalog)");
+
+  // ── Resident payment history: some paid (income history), one due soon ────
+  const priorRentCharges = [1, 2].map((monthsBack) => {
+    const monthDate = new Date(NOW.getFullYear(), NOW.getMonth() - monthsBack, 15, 12, 0, 0);
+    const id = `test-charge-e2e-paid-${monthsBack}`;
+    const monthLabel = isoDate(monthDate).slice(0, 7);
+    return {
+      id,
+      manager_user_id: managerUserId,
+      resident_user_id: residentUserId,
+      resident_email: residentEmail,
+      property_id: propertyId,
+      kind: "rent",
+      status: "paid",
+      row_data: {
+        id,
+        kind: "rent",
+        title: `Rent — ${monthLabel}`,
+        status: "paid",
+        createdAt: monthDate.toISOString(),
+        paidAt: monthDate.toISOString(),
+        propertyId,
+        amountLabel: `$${monthlyRent.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+        balanceLabel: "$0.00",
+        dueDateLabel: isoDate(monthDate),
+        residentName: "Test Resident",
+        residentEmail,
+        residentUserId,
+        managerUserId,
+        propertyLabel: propertyName,
+        applicationId: residentAxisId,
+        blocksLeaseUntilPaid: false,
+        axisPaymentsEnabledSnapshot: true,
+        testRunId,
+      },
+      updated_at: NOW.toISOString(),
+    };
+  });
+  await must(
+    supabase.from("portal_household_charge_records").upsert(priorRentCharges, { onConflict: "id" }),
+    "portal_household_charge_records(paid history)",
+  );
+
+  // ── Resident service/amenity request (Services tab) ───────────────────────
+  const serviceRequestId = "test-service-request-e2e";
+  await must(
+    supabase.from("portal_service_request_records").upsert(
+      {
+        id: serviceRequestId,
+        manager_user_id: managerUserId,
+        resident_email: residentEmail,
+        property_id: propertyId,
+        status: "pending",
+        row_data: {
+          id: serviceRequestId,
+          offerId: "test-offer-storage",
+          offerName: "Extra storage bin",
+          offerDescription: "A lockable storage bin in the basement.",
+          price: "$25.00",
+          deposit: "$50.00",
+          residentEmail,
+          residentName: "Test Resident",
+          managerUserId,
+          propertyId,
+          returnByDate: "",
+          notes: "Would like the bin closest to the stairs if possible.",
+          requestedAt: daysFromNow(-1).toISOString(),
+          status: "pending",
+          servicePaid: false,
+          depositPaid: false,
+          testRunId,
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    "portal_service_request_records",
+  );
 
   // ── Cleanup: make every tab agree on the canonical catalog. ───────────────
   const canonicalIds = new Set([propertyId, ...catalog.map((p) => p.id)]);
@@ -1390,6 +1562,7 @@ try {
     managerEmail,
     manager2Email,
     residentEmail,
+    vendorEmail,
     ...people.map((p) => p.email),
     ...DEMO_WORKFLOW_RESIDENT_EMAILS,
   ]);
@@ -1496,6 +1669,11 @@ try {
       applicationId: residentAxisId,
       chargeId,
       tourId,
+      vendorUserId,
+      vendorEmail,
+      vendorDirectoryId,
+      vendorWorkOrderId,
+      serviceRequestId,
       catalogTours: catalogTours.map((t) => t.id),
       catalogProperties: catalog.map((p) => p.id),
       catalogApplications: people.length,

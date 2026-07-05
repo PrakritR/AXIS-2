@@ -156,6 +156,13 @@ async function ensureManager() {
     sb.from("profile_roles").upsert({ user_id: uid, role: "manager" }, { onConflict: "user_id,role" }),
     "profile_roles(manager)",
   );
+  // Defensive: the demo manager must stay manager-only (e.g. manually testing the
+  // vendor self-serve signup flow with this same email would otherwise bolt a
+  // "vendor" row onto it, landing sign-in on the "Choose a portal" screen).
+  await must(
+    sb.from("profile_roles").delete().eq("user_id", uid).neq("role", "manager"),
+    "profile_roles(strip stray manager roles)",
+  );
 
   // Ensure a Pro/Business tier purchase so Residents / Leases / Finances sections
   // are unlocked. Skip if the manager already has an unexpired paid tier (the
