@@ -11,6 +11,7 @@ import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { ManagerPlanBillingToggle, ManagerPlanTierCards } from "@/components/auth/manager-plan-tier-cards";
 import { ManagerSignupPanel } from "@/components/auth/manager-signup-panel";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
+import { VendorSignupForm } from "@/components/auth/vendor-signup-form";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { Button } from "@/components/ui/button";
@@ -146,8 +147,8 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
-  // Native-only manager signup state — the webview keeps plan selection in this hub,
-  // while the web sends managers to the pricing page instead.
+  // Manager plan selection state — the plan picker + signup form render inline here
+  // on both web and native.
   const [billing, setBilling] = useState<"monthly" | "annual">(initialBilling);
   const [selectedTierId, setSelectedTierId] = useState<PlanTierId>(initialTier);
   const [planTiers, setPlanTiers] = useState<ManagerPlanTierDefinition[]>(MANAGER_PLAN_TIERS);
@@ -382,19 +383,9 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
                   Create a vendor account to see work orders offered to you, track scheduled visits, and message
                   your property manager directly.
                 </p>
-                <Button
-                  type="button"
-                  data-attr="auth-hub-vendor-get-started"
-                  className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                  disabled={locked}
-                  onClick={() => router.push("/auth/vendor-register")}
-                >
-                  Create vendor account
-                </Button>
+                <VendorSignupForm />
               </>
-            ) : isNative ? (
-              // Native keeps the full plan + signup flow inside this hub; the web's single
-              // manager signup surface is the pricing page.
+            ) : (
               <>
                 <ManagerPlanBillingToggle billing={billing} onChange={setBilling} disabled={locked} />
                 <ManagerPlanTierCards
@@ -412,21 +403,6 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
                   returnSurface="mobile-plan"
                   initialEmail={email}
                 />
-              </>
-            ) : (
-              <>
-                <p className="pt-1 text-center text-sm leading-relaxed text-muted">
-                  Manager accounts start with a plan — pick Free, Pro, or Business and sign up in one step.
-                </p>
-                <Button
-                  type="button"
-                  data-attr="auth-hub-manager-get-started"
-                  className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                  disabled={locked}
-                  onClick={() => router.push("/partner/pricing")}
-                >
-                  Choose a plan & get started
-                </Button>
               </>
             )}
           </div>
