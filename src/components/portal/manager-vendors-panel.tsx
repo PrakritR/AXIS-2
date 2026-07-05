@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -20,7 +21,6 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
-  PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
@@ -218,6 +218,10 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
       </>
     ) : (
       <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 lg:hidden">
+          <span className="text-sm font-medium text-foreground">{row.trade || "—"}</span>
+          {renderVendorStatusBadges(row)}
+        </div>
         {sharedByOther ? (
           <p className="text-sm text-muted">
             Shared by another manager on Axis. You can view contact details but can&apos;t edit or remove this vendor.
@@ -315,30 +319,17 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
               <div key={`vendor-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                 <button
                   type="button"
-                  className="w-full text-left"
+                  className="flex w-full items-center justify-between gap-2 text-left transition-opacity active:opacity-70"
                   onClick={() => setExpandedId(open ? null : row.id)}
+                  aria-expanded={open}
+                  data-attr="vendor-card-toggle"
                 >
-                  <div className="flex items-start justify-between gap-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-foreground">{row.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-muted">{row.trade || "—"}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-muted/90">
-                        {[row.phone, row.email].filter(Boolean).join(" · ") || "—"}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end">{renderVendorStatusBadges(row)}</div>
-                  </div>
+                  <p className="min-w-0 flex-1 truncate font-semibold text-foreground">{row.name}</p>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+                    aria-hidden
+                  />
                 </button>
-                <div className="mt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={PORTAL_DETAIL_BTN}
-                    onClick={() => setExpandedId(open ? null : row.id)}
-                  >
-                    {open ? "Less" : "Details"}
-                  </Button>
-                </div>
                 {open ? (
                   <div className="mt-3 border-t border-border pt-3">{renderVendorDetail(row)}</div>
                 ) : null}
