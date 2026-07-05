@@ -85,7 +85,7 @@ describe("splitNativeBottomNavItems", () => {
       ),
     );
     expect(overflow.map((item) => item.section)).toContain("calendar");
-    expect(overflow.map((item) => item.section)).toContain("vendors");
+    expect(overflow.map((item) => item.section)).toContain("services");
     expect(primary.length + overflow.length).toBe(items.length);
   });
 

@@ -233,10 +233,10 @@ blocks, before the generic tabbed-workspace fallback). Native bottom bar primary
 set (`NATIVE_BOTTOM_NAV_VENDOR_PRIMARY` in `src/lib/native/portal-bottom-nav.ts`)
 is Home/Work Orders/Calendar/Inbox — Profile lives in the swipe-up More sheet.
 
-**Invite → signup linking.** A manager's "Send invite" (Vendors — its own
-top-level nav section since the Instagram-style bottom-bar restyle; still
-also reachable at `/portal/services/vendors`, same `ManagerAllServicesPanel`
-component with `tabId="vendors"`)
+**Invite → signup linking.** A manager's "Send invite" (Vendors — reachable at
+`/portal/services/vendors`, the `ManagerAllServicesPanel` component with
+`tabId="vendors"`; no longer a standalone top-level nav section — that was
+removed as redundant with the Services sub-tab)
 writes a `vendor_invites` row (`manager_user_id`, `vendor_directory_id`,
 `vendor_email`, status) — the invitee has no account yet, so this can't use the
 `account_link_invites` Axis-ID-lookup shape; it's matched by lowercased email at

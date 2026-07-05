@@ -260,6 +260,12 @@ export async function renderPortalSection(
     redirect(`${def.basePath}/services/work-orders`);
   }
 
+  // Legacy path support: Vendors was briefly its own top-level nav section;
+  // it's back to being the Services "vendors" tab (redundant otherwise).
+  if ((kind === "manager" || kind === "pro") && section === "vendors") {
+    redirect(`${def.basePath}/services/vendors`);
+  }
+
   const meta = findSection(def, section);
   if (!meta) notFound();
 
@@ -415,19 +421,6 @@ export async function renderPortalSection(
         <ManagerAllServicesPanel tabId={servicesTab as "requests" | "work-orders" | "vendors"} basePath={def.basePath} />,
         kind,
         "services",
-        managerOwnerSubscriptionTier,
-      );
-    }
-
-    // Vendors — promoted to its own primary nav entry; renders the same panel
-    // (and same tier gate) as the "vendors" tab under Services.
-    if (section === "vendors") {
-      if (tabParts?.length) notFound();
-      const ManagerAllServicesPanel = await loadManagerAllServicesPanel();
-      return subscriptionGated(
-        <ManagerAllServicesPanel tabId="vendors" basePath={def.basePath} />,
-        kind,
-        "vendors",
         managerOwnerSubscriptionTier,
       );
     }

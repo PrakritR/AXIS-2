@@ -39,11 +39,6 @@ export const proPortal: PortalDefinition = {
       ],
     },
     {
-      section: "vendors",
-      label: "Vendors",
-      tabs: [],
-    },
-    {
       section: "inbox",
       label: "Inbox",
       tabs: [
@@ -93,7 +88,6 @@ export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Leases", path: "/portal/leases" },
   { label: "Payments", path: "/portal/payments" },
   { label: "Services", path: "/portal/services/requests" },
-  { label: "Vendors", path: "/portal/vendors" },
   { label: "Inbox", path: "/portal/inbox/unopened" },
   { label: "Documents", path: "/portal/documents/income-documents" },
   { label: "Finances", path: "/portal/financials/income" },
