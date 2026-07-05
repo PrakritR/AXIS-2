@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ManagerPortalPageShell,
+  ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
   PORTAL_TOOLBAR_GROUP,
   PORTAL_TOOLBAR_PILL_BUTTON,
@@ -69,6 +70,16 @@ function formatVisitLabel(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+type VendorWorkOrderTab = "to_bid" | "scheduled" | "completed";
+
+/** Bidding takes priority over the underlying bucket — a row stays in "To bid" until the
+ * manager accepts a bid (which clears biddingOpen), even if its bucket is still "open". */
+function vendorWorkOrderTab(row: DemoManagerWorkOrderRow): VendorWorkOrderTab {
+  if (row.biddingOpen) return "to_bid";
+  if (row.bucket === "completed") return "completed";
+  return "scheduled";
+}
+
 /** Work orders offered/assigned to the signed-in vendor. Read-only except for submitting a
  * cost/time bid once the manager has opened a work order for bids. */
 export function VendorWorkOrdersPanel() {
@@ -84,6 +95,7 @@ export function VendorWorkOrdersPanel() {
   const [modeById, setModeById] = useState<Record<string, "upfront" | "after_consultation">>({});
   const [consultationDraftById, setConsultationDraftById] = useState<Record<string, string>>({});
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<VendorWorkOrderTab>("to_bid");
 
   const loadBids = useCallback(async () => {
     const bids = await fetchWorkOrderBids();
@@ -102,6 +114,23 @@ export function VendorWorkOrdersPanel() {
     () => [...rows].sort((a, b) => (b.scheduledAtIso ?? "").localeCompare(a.scheduledAtIso ?? "")),
     [rows],
   );
+
+  const tabCounts = useMemo(() => {
+    const c: Record<VendorWorkOrderTab, number> = { to_bid: 0, scheduled: 0, completed: 0 };
+    for (const row of sorted) c[vendorWorkOrderTab(row)] += 1;
+    return c;
+  }, [sorted]);
+
+  const tabs = useMemo(
+    () => [
+      { id: "to_bid", label: "To bid", count: tabCounts.to_bid, dataAttr: "vendor-wo-tab-to-bid" },
+      { id: "scheduled", label: "Scheduled", count: tabCounts.scheduled, dataAttr: "vendor-wo-tab-scheduled" },
+      { id: "completed", label: "Completed", count: tabCounts.completed, dataAttr: "vendor-wo-tab-completed" },
+    ],
+    [tabCounts],
+  );
+
+  const visible = useMemo(() => sorted.filter((row) => vendorWorkOrderTab(row) === tab), [sorted, tab]);
 
   const openExpand = (row: DemoManagerWorkOrderRow) => {
     setExpandedId(row.id);
@@ -435,14 +464,30 @@ export function VendorWorkOrdersPanel() {
     );
   };
 
+  const emptyMessage =
+    sorted.length === 0
+      ? "No work orders offered to you yet."
+      : tab === "to_bid"
+        ? "No work orders awaiting your price."
+        : tab === "scheduled"
+          ? "No scheduled work orders."
+          : "No completed work orders yet.";
+
   return (
-    <ManagerPortalPageShell title="Work Orders">
-      {sorted.length === 0 ? (
-        <PortalDataTableEmpty message="No work orders offered to you yet." icon="work-order" />
+    <ManagerPortalPageShell
+      title="Work Orders"
+      filterRow={
+        sorted.length > 0 ? (
+          <ManagerPortalStatusPills tabs={tabs} activeId={tab} onChange={(id) => setTab(id as VendorWorkOrderTab)} />
+        ) : null
+      }
+    >
+      {visible.length === 0 ? (
+        <PortalDataTableEmpty message={emptyMessage} icon="work-order" />
       ) : (
         <div>
           <div className="space-y-2 lg:hidden">
-            {sorted.map((row) => {
+            {visible.map((row) => {
               const bid = bidsByWorkOrderId[row.id];
               const isExpanded = expandedId === row.id;
               return (
@@ -495,7 +540,7 @@ export function VendorWorkOrdersPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((row) => {
+                  {visible.map((row) => {
                     const bid = bidsByWorkOrderId[row.id];
                     const isExpanded = expandedId === row.id;
                     return (

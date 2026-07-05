@@ -207,7 +207,7 @@ export function ManagerPortalStatusPills({
   /** `primary` = blue active pill (inbox-style); default = white active chip (leases/applications). */
   activeTone = "default",
 }: {
-  tabs: { id: string; label: string; count: number; alert?: boolean }[];
+  tabs: { id: string; label: string; count: number; alert?: boolean; dataAttr?: string }[];
   activeId: string;
   onChange: (id: string) => void;
   activeTone?: "default" | "primary";
@@ -221,6 +221,7 @@ export function ManagerPortalStatusPills({
           <button
             key={tab.id}
             type="button"
+            data-attr={tab.dataAttr}
             onClick={() => onChange(tab.id)}
             className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
               active
