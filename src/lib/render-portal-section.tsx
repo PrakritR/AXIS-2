@@ -598,7 +598,7 @@ export async function renderPortalSection(
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
     }
     const inboxTab = tabParts[0]!;
-    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+    if (!["unopened", "opened", "schedule", "sent", "trash"].includes(inboxTab)) notFound();
     return <ResidentInboxPanel tabId={inboxTab} />;
   }
 

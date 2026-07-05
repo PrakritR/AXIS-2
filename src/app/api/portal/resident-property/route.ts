@@ -44,8 +44,8 @@ export async function GET() {
       .limit(50);
     if (appError) return NextResponse.json({ error: appError.message }, { status: 500 });
 
-    const approvedRow =
-      (appRows ?? []).find((row) => applicationBucket(row.row_data) === "approved") ?? appRows?.[0];
+    const approvedRow = (appRows ?? []).find((row) => applicationBucket(row.row_data) === "approved");
+    if (!approvedRow) return NextResponse.json({ error: "No approved property linked to this resident." }, { status: 404 });
     const propertyId = approvedRow?.assigned_property_id?.trim() || approvedRow?.property_id?.trim() || "";
     if (!propertyId) return NextResponse.json({ error: "No property linked to this resident." }, { status: 404 });
 

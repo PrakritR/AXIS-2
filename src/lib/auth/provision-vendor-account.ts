@@ -169,6 +169,11 @@ export async function provisionVendorAccountByEmail(
         .from("manager_vendor_records")
         .update({ vendor_user_id: opts.userId, updated_at: new Date().toISOString() })
         .eq("id", invite.vendor_directory_id);
+      await supabase
+        .from("work_order_vendor_offers")
+        .update({ vendor_user_id: opts.userId, updated_at: new Date().toISOString() })
+        .eq("vendor_directory_id", invite.vendor_directory_id)
+        .is("vendor_user_id", null);
     } else {
       const directoryId = makeVendorId();
       await supabase.from("manager_vendor_records").upsert(

@@ -22,6 +22,7 @@ export type ResidentFreeTierSectionId = (typeof RESIDENT_FREE_TIER_SECTION_IDS)[
 const INBOX_TABS = [
   { id: "unopened", label: "Unopened" },
   { id: "opened", label: "Opened" },
+  { id: "schedule", label: "Schedule" },
   { id: "sent", label: "Sent" },
   { id: "trash", label: "Trash" },
 ] as const;

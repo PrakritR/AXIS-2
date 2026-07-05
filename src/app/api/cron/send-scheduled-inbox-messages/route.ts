@@ -36,6 +36,7 @@ export async function GET(req: Request) {
           toUserIds: message.recipientUserId ? [message.recipientUserId] : [],
           deliverViaEmail: message.deliverViaEmail,
           deliverViaSms: message.deliverViaSms,
+          senderRole: "resident",
         });
 
         if (!result.ok) {

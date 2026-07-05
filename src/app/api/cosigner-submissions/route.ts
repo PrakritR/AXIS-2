@@ -33,13 +33,19 @@ export async function GET(req: Request) {
 
       let allowed = appRow.manager_user_id === user.id;
       if (!allowed) {
-        const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
-        const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+        const [{ data: profile }, { data: roleRows }] = await Promise.all([
+          db.from("profiles").select("email, role").eq("id", user.id).maybeSingle(),
+          db.from("profile_roles").select("role").eq("user_id", user.id),
+        ]);
+        const profileRoles = (roleRows ?? []).map((r) => String(r.role ?? "").toLowerCase());
+        const legacyRole = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+        const hasResidentRole = profileRoles.includes("resident") || legacyRole === "resident";
         const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
-        if (role === "resident") {
+        if (hasResidentRole) {
           const recordEmail = String(appRow.resident_email ?? "").trim().toLowerCase();
           allowed = Boolean(email) && recordEmail === email;
-        } else {
+        }
+        if (!allowed) {
           const linked = await collectLinkedPropertyIdsForUser(db, user.id);
           const propertyId = String(appRow.property_id ?? "").trim();
           const assignedPropertyId = String(appRow.assigned_property_id ?? "").trim();

@@ -22,12 +22,25 @@ async function sessionUser() {
  * vendors can be offered the same not-yet-assigned work order at once, so this can't
  * rely on the single vendor_user_id column alone. */
 async function vendorScopedWorkOrderRows(db: Db, vendorUserId: string): Promise<DemoManagerWorkOrderRow[]> {
-  const { data: offers } = await db
+  const { data: vendorDirectoryRows } = await db.from("manager_vendor_records").select("id").eq("vendor_user_id", vendorUserId);
+  const vendorDirectoryIds = (vendorDirectoryRows ?? []).map((row) => String(row.id ?? "")).filter(Boolean);
+
+  const offeredIds = new Set<string>();
+  const { data: offersByUser } = await db
     .from("work_order_vendor_offers")
     .select("work_order_id")
     .eq("vendor_user_id", vendorUserId)
     .eq("status", "sent");
-  const offeredIds = [...new Set((offers ?? []).map((o) => o.work_order_id as string))];
+  for (const offer of offersByUser ?? []) offeredIds.add(offer.work_order_id as string);
+
+  if (vendorDirectoryIds.length > 0) {
+    const { data: offersByDirectory } = await db
+      .from("work_order_vendor_offers")
+      .select("work_order_id")
+      .in("vendor_directory_id", vendorDirectoryIds)
+      .eq("status", "sent");
+    for (const offer of offersByDirectory ?? []) offeredIds.add(offer.work_order_id as string);
+  }
 
   const { data: assigned } = await db
     .from("portal_work_order_records")
@@ -42,7 +55,7 @@ async function vendorScopedWorkOrderRows(db: Db, vendorUserId: string): Promise<
     if (row) byId.set(record.id as string, row);
   }
 
-  const missingIds = offeredIds.filter((id) => !byId.has(id));
+  const missingIds = [...offeredIds].filter((id) => !byId.has(id));
   if (missingIds.length > 0) {
     const { data: offeredRows } = await db.from("portal_work_order_records").select("id, row_data").in("id", missingIds);
     for (const record of offeredRows ?? []) {

@@ -102,7 +102,10 @@ export async function GET(req: Request) {
 
     let query = db.from("work_order_vendor_offers").select("*").order("created_at", { ascending: true });
     if (!actor.admin && actor.role === "vendor") {
-      query = query.eq("vendor_user_id", actor.userId);
+      const { data: vendorDirectoryRows } = await db.from("manager_vendor_records").select("id").eq("vendor_user_id", actor.userId);
+      const vendorDirectoryIds = (vendorDirectoryRows ?? []).map((row) => String(row.id ?? "")).filter(Boolean);
+      const filters = [`vendor_user_id.eq.${actor.userId}`, ...vendorDirectoryIds.map((id) => `vendor_directory_id.eq.${id}`)];
+      query = query.or(filters.join(","));
     } else if (!actor.admin) {
       query = query.eq("manager_user_id", actor.userId);
     }

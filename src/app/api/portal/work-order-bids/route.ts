@@ -84,6 +84,13 @@ async function vendorNamesById(db: Db, ids: string[]): Promise<Map<string, { nam
   return out;
 }
 
+async function vendorDirectoryIdsForUser(db: Db, vendorUserId: string, managerUserId?: string): Promise<string[]> {
+  let query = db.from("manager_vendor_records").select("id").eq("vendor_user_id", vendorUserId);
+  if (managerUserId) query = query.eq("manager_user_id", managerUserId);
+  const { data } = await query;
+  return (data ?? []).map((row) => String(row.id ?? "")).filter(Boolean);
+}
+
 function toJson(bid: BidRecord, vendors: Map<string, { name: string; email: string }>): BidJson {
   const vendor = bid.vendor_directory_id ? vendors.get(bid.vendor_directory_id) : undefined;
   return {
@@ -155,14 +162,25 @@ async function resolveVendorWorkOrderAccess(
   const isAssignedVendor = workOrder.vendor_user_id === actor.userId;
   let isOfferedVendor = false;
   if (!isAssignedVendor) {
-    const { data: offer } = await db
+    const vendorDirectoryIds = await vendorDirectoryIdsForUser(db, actor.userId);
+    const { data: offerByUser } = await db
       .from("work_order_vendor_offers")
       .select("id")
       .eq("work_order_id", workOrderId)
       .eq("vendor_user_id", actor.userId)
       .eq("status", "sent")
       .maybeSingle();
-    isOfferedVendor = Boolean(offer);
+    isOfferedVendor = Boolean(offerByUser);
+    if (!isOfferedVendor && vendorDirectoryIds.length > 0) {
+      const { data: offerByDirectory } = await db
+        .from("work_order_vendor_offers")
+        .select("id")
+        .eq("work_order_id", workOrderId)
+        .in("vendor_directory_id", vendorDirectoryIds)
+        .eq("status", "sent")
+        .limit(1);
+      isOfferedVendor = Boolean(offerByDirectory?.length);
+    }
   }
   if (!isAssignedVendor && !isOfferedVendor) {
     return { ok: false, response: NextResponse.json({ error: "Forbidden." }, { status: 403 }) };

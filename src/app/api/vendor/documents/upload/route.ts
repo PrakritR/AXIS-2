@@ -2,13 +2,22 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
-import { isVendorDocumentKind, upsertVendorDocument, type VendorDocumentKind } from "@/lib/vendor-documents";
-import { resolveOwnVendorRecord } from "@/lib/vendor-own-record";
+import { isVendorDocumentKind, type VendorDocumentKind, type VendorDocumentRecord } from "@/lib/vendor-documents";
+import { resolveOwnVendorRecords } from "@/lib/vendor-own-record";
 
 export const runtime = "nodejs";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+
+function mergeVendorDocuments(existing: VendorDocumentRecord[], next: VendorDocumentRecord): VendorDocumentRecord[] {
+  const byKind = new Map<VendorDocumentKind, VendorDocumentRecord>();
+  for (const doc of existing) {
+    if (isVendorDocumentKind(doc.kind)) byKind.set(doc.kind, doc);
+  }
+  byKind.set(next.kind, next);
+  return [...byKind.values()];
+}
 
 export async function POST(req: Request) {
   try {
@@ -24,8 +33,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    const own = await resolveOwnVendorRecord(db, user.id);
-    if (!own) {
+    const records = await resolveOwnVendorRecords(db, user.id);
+    if (records.length === 0) {
       return NextResponse.json({ error: "No linked manager found for this vendor account." }, { status: 400 });
     }
 
@@ -78,21 +87,25 @@ export async function POST(req: Request) {
       uploadedAt: new Date().toISOString(),
     };
 
-    const nextRow: ManagerVendorRow = {
-      ...own.row,
-      id: own.id,
-      managerUserId: own.managerUserId,
-      vendorDocuments: upsertVendorDocument(own.row.vendorDocuments, record),
-      updatedAt: new Date().toISOString(),
-    };
+    const now = new Date().toISOString();
+    const vendorDocuments = mergeVendorDocuments(records.flatMap((own) => own.row.vendorDocuments ?? []), record);
+    for (const own of records) {
+      const nextRow: ManagerVendorRow = {
+        ...own.row,
+        id: own.id,
+        managerUserId: own.managerUserId,
+        vendorDocuments,
+        updatedAt: now,
+      };
 
-    const { error } = await db
-      .from("manager_vendor_records")
-      .update({ row_data: nextRow, updated_at: new Date().toISOString() })
-      .eq("id", own.id);
+      const { error } = await db
+        .from("manager_vendor_records")
+        .update({ row_data: nextRow, updated_at: now })
+        .eq("id", own.id);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ document: record, documents: nextRow.vendorDocuments ?? [] });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ document: record, documents: vendorDocuments });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Upload failed.";
     return NextResponse.json({ error: message }, { status: 500 });

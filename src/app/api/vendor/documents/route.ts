@@ -8,7 +8,7 @@ import {
   type VendorDocumentKind,
   type VendorDocumentRecord,
 } from "@/lib/vendor-documents";
-import { resolveOwnVendorRecord } from "@/lib/vendor-own-record";
+import { resolveOwnVendorRecords, type OwnVendorRecord } from "@/lib/vendor-own-record";
 
 export const runtime = "nodejs";
 
@@ -30,15 +30,46 @@ async function requireVendor(): Promise<
   return { ok: true, userId: user.id, db };
 }
 
+function expectedDocumentUrl(kind: VendorDocumentKind): string {
+  return `/api/vendor/documents/file?kind=${encodeURIComponent(kind)}`;
+}
+
+function isStoredVendorDocument(userId: string, doc: VendorDocumentRecord): boolean {
+  const storagePath = doc.storagePath?.trim() ?? "";
+  return (
+    isVendorDocumentKind(doc.kind) &&
+    typeof doc.fileName === "string" &&
+    typeof doc.url === "string" &&
+    doc.url === expectedDocumentUrl(doc.kind) &&
+    storagePath.startsWith(`vendor-documents/${userId}/`) &&
+    typeof doc.uploadedAt === "string"
+  );
+}
+
+function mergedVendorDocuments(records: OwnVendorRecord[]): VendorDocumentRecord[] {
+  const byKind = new Map<VendorDocumentKind, VendorDocumentRecord>();
+  for (const record of records) {
+    for (const doc of record.row.vendorDocuments ?? []) {
+      if (!isVendorDocumentKind(doc.kind)) continue;
+      const current = byKind.get(doc.kind);
+      if (!current || String(doc.uploadedAt ?? "").localeCompare(String(current.uploadedAt ?? "")) > 0) {
+        byKind.set(doc.kind, doc);
+      }
+    }
+  }
+  return [...byKind.values()];
+}
+
 export async function GET() {
   try {
     const auth = await requireVendor();
     if (!auth.ok) return auth.response;
 
-    const own = await resolveOwnVendorRecord(auth.db, auth.userId);
+    const records = await resolveOwnVendorRecords(auth.db, auth.userId);
+    const own = records[0];
     return NextResponse.json({
-      linked: own !== null,
-      documents: own?.row.vendorDocuments ?? [],
+      linked: records.length > 0,
+      documents: mergedVendorDocuments(records),
       insuranceProvider: own?.row.insuranceProvider ?? "",
       insurancePolicyNumber: own?.row.insurancePolicyNumber ?? "",
       insuranceExpiresAt: own?.row.insuranceExpiresAt ?? "",
@@ -54,8 +85,8 @@ export async function PATCH(req: Request) {
     const auth = await requireVendor();
     if (!auth.ok) return auth.response;
 
-    const own = await resolveOwnVendorRecord(auth.db, auth.userId);
-    if (!own) {
+    const records = await resolveOwnVendorRecords(auth.db, auth.userId);
+    if (records.length === 0) {
       return NextResponse.json({ error: "No linked manager found for this vendor account." }, { status: 400 });
     }
 
@@ -67,48 +98,48 @@ export async function PATCH(req: Request) {
       documents?: VendorDocumentRecord[];
     };
 
-    let vendorDocuments = own.row.vendorDocuments ?? [];
+    let vendorDocuments = mergedVendorDocuments(records);
     if (typeof body.removeKind === "string" && isVendorDocumentKind(body.removeKind)) {
       vendorDocuments = removeVendorDocument(vendorDocuments, body.removeKind as VendorDocumentKind);
     }
     if (Array.isArray(body.documents)) {
-      vendorDocuments = body.documents.filter(
-        (d) =>
-          d &&
-          isVendorDocumentKind(d.kind) &&
-          typeof d.fileName === "string" &&
-          typeof d.url === "string" &&
-          typeof d.uploadedAt === "string",
-      );
+      const incoming = body.documents.filter(Boolean);
+      if (!incoming.every((d) => isStoredVendorDocument(auth.userId, d))) {
+        return NextResponse.json({ error: "Documents must be uploaded through Axis first." }, { status: 400 });
+      }
+      vendorDocuments = incoming;
     }
 
-    const nextRow: ManagerVendorRow = {
-      ...own.row,
-      id: own.id,
-      managerUserId: own.managerUserId,
-      insuranceProvider:
-        body.insuranceProvider !== undefined ? body.insuranceProvider.trim() : own.row.insuranceProvider,
-      insurancePolicyNumber:
-        body.insurancePolicyNumber !== undefined
-          ? body.insurancePolicyNumber.trim()
-          : own.row.insurancePolicyNumber,
-      insuranceExpiresAt:
-        body.insuranceExpiresAt !== undefined ? body.insuranceExpiresAt.trim() : own.row.insuranceExpiresAt,
-      vendorDocuments,
-      updatedAt: new Date().toISOString(),
-    };
+    const now = new Date().toISOString();
+    for (const own of records) {
+      const nextRow: ManagerVendorRow = {
+        ...own.row,
+        id: own.id,
+        managerUserId: own.managerUserId,
+        insuranceProvider:
+          body.insuranceProvider !== undefined ? body.insuranceProvider.trim() : own.row.insuranceProvider,
+        insurancePolicyNumber:
+          body.insurancePolicyNumber !== undefined
+            ? body.insurancePolicyNumber.trim()
+            : own.row.insurancePolicyNumber,
+        insuranceExpiresAt:
+          body.insuranceExpiresAt !== undefined ? body.insuranceExpiresAt.trim() : own.row.insuranceExpiresAt,
+        vendorDocuments,
+        updatedAt: now,
+      };
 
-    const { error } = await auth.db
-      .from("manager_vendor_records")
-      .update({ row_data: nextRow, updated_at: new Date().toISOString() })
-      .eq("id", own.id);
+      const { error } = await auth.db
+        .from("manager_vendor_records")
+        .update({ row_data: nextRow, updated_at: now })
+        .eq("id", own.id);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     return NextResponse.json({
-      documents: nextRow.vendorDocuments ?? [],
-      insuranceProvider: nextRow.insuranceProvider ?? "",
-      insurancePolicyNumber: nextRow.insurancePolicyNumber ?? "",
-      insuranceExpiresAt: nextRow.insuranceExpiresAt ?? "",
+      documents: vendorDocuments,
+      insuranceProvider: body.insuranceProvider?.trim() ?? records[0]?.row.insuranceProvider ?? "",
+      insurancePolicyNumber: body.insurancePolicyNumber?.trim() ?? records[0]?.row.insurancePolicyNumber ?? "",
+      insuranceExpiresAt: body.insuranceExpiresAt?.trim() ?? records[0]?.row.insuranceExpiresAt ?? "",
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save documents.";

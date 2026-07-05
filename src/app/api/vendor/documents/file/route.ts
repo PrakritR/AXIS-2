@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { findVendorDocument, isVendorDocumentKind } from "@/lib/vendor-documents";
-import { resolveOwnVendorRecord } from "@/lib/vendor-own-record";
+import { resolveOwnVendorRecords } from "@/lib/vendor-own-record";
 
 export const runtime = "nodejs";
 
@@ -26,12 +26,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Valid document kind required." }, { status: 400 });
     }
 
-    const own = await resolveOwnVendorRecord(db, user.id);
-    if (!own) return NextResponse.json({ error: "No linked manager found." }, { status: 404 });
+    const records = await resolveOwnVendorRecords(db, user.id);
+    if (records.length === 0) return NextResponse.json({ error: "No linked manager found." }, { status: 404 });
 
-    const doc = findVendorDocument(own.row.vendorDocuments, kind);
+    const doc = records.map((record) => findVendorDocument(record.row.vendorDocuments, kind)).find(Boolean);
     const storagePath = doc?.storagePath?.trim();
-    if (!doc || !storagePath) {
+    if (!doc || !storagePath || !storagePath.startsWith(`vendor-documents/${user.id}/`)) {
       return NextResponse.json({ error: "Document not found." }, { status: 404 });
     }
 

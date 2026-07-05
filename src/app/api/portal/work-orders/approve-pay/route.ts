@@ -45,16 +45,32 @@ export async function POST(req: Request) {
     const existingRow = (existing.row_data ?? {}) as DemoManagerWorkOrderRow;
 
     const ownerManagerUserId = String(existing.manager_user_id ?? auth.userId);
+    const { data: acceptedBid } = await auth.db
+      .from("work_order_bids")
+      .select("amount_cents, materials_cents, vendor_directory_id")
+      .eq("work_order_id", workOrder.id)
+      .eq("status", "accepted")
+      .maybeSingle();
+    const bidVendorCostCents = acceptedBid?.amount_cents == null ? NaN : Number(acceptedBid.amount_cents);
+    const bidMaterialsCostCents = acceptedBid?.materials_cents == null ? 0 : Number(acceptedBid.materials_cents);
+    const acceptedVendorCostCents =
+      Number.isFinite(bidVendorCostCents) ? bidVendorCostCents : body.vendorCostCents;
+    const acceptedMaterialsCostCents =
+      Number.isFinite(bidMaterialsCostCents) ? bidMaterialsCostCents : body.materialsCostCents;
+    const acceptedVendorId =
+      typeof acceptedBid?.vendor_directory_id === "string" && acceptedBid.vendor_directory_id.trim()
+        ? acceptedBid.vendor_directory_id
+        : workOrder.vendorId;
 
     const expenseEntryIds = await createExpensesFromWorkOrder(auth.db, ownerManagerUserId, {
       workOrderId: workOrder.id,
       category: body.category,
-      vendorCostCents: body.vendorCostCents,
-      materialsCostCents: body.materialsCostCents,
+      vendorCostCents: acceptedVendorCostCents,
+      materialsCostCents: acceptedMaterialsCostCents,
       materialsMemo: body.materialsMemo,
       workDoneSummary: body.workDoneSummary,
       propertyId: workOrder.propertyId || workOrder.assignedPropertyId,
-      vendorId: workOrder.vendorId,
+      vendorId: acceptedVendorId,
     });
 
     const completed = mergeWorkOrderCompletion(
@@ -62,12 +78,12 @@ export async function POST(req: Request) {
       {
         workOrderId: workOrder.id,
         category: body.category,
-        vendorCostCents: body.vendorCostCents,
-        materialsCostCents: body.materialsCostCents,
+        vendorCostCents: acceptedVendorCostCents,
+        materialsCostCents: acceptedMaterialsCostCents,
         materialsMemo: body.materialsMemo,
         workDoneSummary: body.workDoneSummary,
         propertyId: workOrder.propertyId,
-        vendorId: workOrder.vendorId,
+        vendorId: acceptedVendorId,
       },
       expenseEntryIds,
     );
@@ -94,7 +110,7 @@ export async function POST(req: Request) {
         workOrderId: workOrder.id,
         managerUserId: ownerManagerUserId,
         vendorUserId: existing.vendor_user_id,
-        amountCents: body.vendorCostCents ?? 0,
+        amountCents: acceptedVendorCostCents ?? 0,
       }).catch(() => undefined);
     }
 

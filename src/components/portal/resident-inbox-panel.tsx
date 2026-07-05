@@ -13,6 +13,7 @@ import { formatPacificDateTime } from "@/lib/pacific-time";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
 import {
   appendPersistedInboxThread,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -75,6 +76,18 @@ function countThreads(threads: InboxThread[]) {
   };
 }
 
+function scheduledToRows(list: ScheduledInboxMessageRecord[]): PortalInboxTableRow[] {
+  return list.map((message) => ({
+    id: message.id,
+    name: message.recipientName || message.recipientEmail,
+    email: message.recipientEmail,
+    topic: message.subject,
+    preview: previewLine(message.body),
+    whenLabel: formatPacificDateTime(message.sendAt),
+    read: message.status !== "scheduled",
+  }));
+}
+
 export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
@@ -89,6 +102,24 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   // Individually-selectable recipients (this resident's own manager[s] + co-managers),
   // scoped server-side by /api/portal/inbox-eligible-contacts.
   const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
+
+  const reloadScheduledMessages = useCallback(async () => {
+    if (isDemoModeActive()) return;
+    setScheduledLoading(true);
+    try {
+      const res = await fetch("/api/portal/scheduled-inbox-messages?as=resident", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
+      setScheduledMessages(Array.isArray(data.messages) ? data.messages : []);
+    } finally {
+      setScheduledLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isDemoModeActive()) return;
@@ -105,6 +136,10 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    void reloadScheduledMessages();
+  }, [reloadScheduledMessages]);
 
   useEffect(() => {
     persistInboxRef.current = false;
@@ -138,17 +173,24 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     persistInbox(RESIDENT_INBOX_STORAGE_KEY, local);
   }, [local, persistReady]);
 
+  const scheduledRows = useMemo(
+    () =>
+      scheduledMessages
+        .filter((message) => isUpcomingScheduledInboxMessage(message.sendAt, message.status))
+        .sort((a, b) => a.sendAt.localeCompare(b.sendAt)),
+    [scheduledMessages],
+  );
+
   const counts = useMemo(() => countThreads(local), [local]);
 
-  // Residents schedule via compose modal; the inbox route has no schedule tab.
   const tabs = useMemo(
     () =>
-      INBOX_TAB_DEFS.filter(({ id }) => id !== "schedule").map(({ id, label }) => ({
+      INBOX_TAB_DEFS.map(({ id, label }) => ({
         id,
         label,
-        count: counts[id as keyof typeof counts],
+        count: id === "schedule" ? scheduledRows.length : counts[id as keyof typeof counts],
       })),
-    [counts],
+    [counts, scheduledRows.length],
   );
 
   const rowsForTab = useMemo(() => {
@@ -164,6 +206,31 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     for (const t of local) m[t.id] = t.body;
     return m;
   }, [local]);
+
+  const scheduledBodyById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const message of scheduledRows) m[message.id] = message.body;
+    return m;
+  }, [scheduledRows]);
+
+  const toggleScheduledCancelled = useCallback(
+    async (id: string, cancelled: boolean) => {
+      try {
+        const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(id)}?as=resident`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ cancelled, senderPortal: "resident" }),
+        });
+        if (!res.ok) throw new Error("Could not update scheduled message.");
+        showToast(cancelled ? "Scheduled message cancelled." : "Scheduled message restored.");
+        void reloadScheduledMessages();
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Could not update scheduled message.");
+      }
+    },
+    [reloadScheduledMessages, showToast],
+  );
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
@@ -341,6 +408,8 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
               return;
             }
             showToast("Message scheduled.");
+            void reloadScheduledMessages();
+            navigate("/resident/inbox/schedule");
             return;
           }
 
@@ -377,7 +446,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         }
       })();
     },
-    [eligibleContacts, navigate, session.email, showToast],
+    [eligibleContacts, navigate, reloadScheduledMessages, session.email, showToast],
   );
 
   const handleReply = useCallback(
@@ -420,6 +489,20 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const renderExtraActions = useCallback(
     (row: PortalInboxTableRow) => {
+      if (tabId === "schedule") {
+        const message = scheduledRows.find((item) => item.id === row.id);
+        const cancelled = message?.status === "cancelled";
+        return (
+          <Button
+            type="button"
+            variant={cancelled ? "outline" : "danger"}
+            className={PORTAL_DETAIL_BTN}
+            onClick={() => void toggleScheduledCancelled(row.id, !cancelled)}
+          >
+            {cancelled ? "Restore" : "Cancel send"}
+          </Button>
+        );
+      }
       if (tabId === "trash") {
         return (
           <>
@@ -465,12 +548,16 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         </Button>
       );
     },
-    [tabId, moveToTrash, restoreFromTrash, deleteForever, markUnread],
+    [tabId, scheduledRows, toggleScheduledCancelled, moveToTrash, restoreFromTrash, deleteForever, markUnread],
   );
 
   const emptyCopy =
     tabId === "trash"
       ? "No trash messages yet."
+      : tabId === "schedule"
+        ? scheduledLoading
+          ? "Loading scheduled messages…"
+          : "No scheduled messages yet."
       : tabId === "sent"
         ? "No sent messages yet."
         : tabId === "opened"
@@ -527,7 +614,21 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         liveContacts={eligibleContacts}
       />
 
-      {rowsForTab.length === 0 ? (
+      {tabId === "schedule" ? (
+        scheduledRows.length === 0 ? (
+          <PortalInboxEmptyState title={emptyCopy} />
+        ) : (
+          <PortalInboxMessageTable
+            rows={scheduledToRows(scheduledRows)}
+            primaryPartyHeader="To"
+            getDetailBody={(row) => scheduledBodyById[row.id]}
+            onReply={undefined}
+            expandedId={expandedId}
+            onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+            renderExtraActions={renderExtraActions}
+          />
+        )
+      ) : rowsForTab.length === 0 ? (
         <PortalInboxEmptyState title={emptyCopy} />
       ) : (
         <PortalInboxMessageTable

@@ -74,6 +74,7 @@ export async function deliverPortalInboxMessage(
     deliverToPortalInbox?: boolean;
     deliverViaEmail?: boolean;
     deliverViaSms?: boolean;
+    senderRole?: string;
   },
 ): Promise<{ ok: true; recipientCount: number } | { ok: false; error: string }> {
   const senderEmail = opts.senderEmail.trim().toLowerCase();
@@ -87,7 +88,7 @@ export async function deliverPortalInboxMessage(
   if (!subject || !text) return { ok: false, error: "subject and text are required." };
 
   const { data: senderProfile } = await db.from("profiles").select("role, sms_from_number").eq("id", opts.senderUserId).maybeSingle();
-  const senderRole = String(senderProfile?.role ?? "manager").trim().toLowerCase() || "manager";
+  const senderRole = String(opts.senderRole ?? senderProfile?.role ?? "manager").trim().toLowerCase() || "manager";
 
   const recipientsByEmail = new Map<string, InboxDeliveryRecipient>();
 
