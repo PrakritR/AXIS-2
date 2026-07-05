@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-export type TabItem = { href: string; label: string; id: string };
+export type TabItem = { href: string; label: string; id: string; dataAttr?: string };
 
 export function TabNav({
   items,
@@ -65,6 +65,7 @@ export function TabNav({
           <Link
             key={t.href}
             href={t.href}
+            data-attr={t.dataAttr}
             ref={(el) => {
               if (el) linkRefs.current.set(t.id, el);
               else linkRefs.current.delete(t.id);

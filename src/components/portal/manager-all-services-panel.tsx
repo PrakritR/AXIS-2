@@ -330,9 +330,9 @@ export function ManagerAllServicesPanel({
           <TabNav
             activeId={typeFilter}
             items={[
-              { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
-              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
-              { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors` },
+              { id: "requests", label: "Requests", href: `${basePath}/services/requests`, dataAttr: "manager-services-tab-requests" },
+              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders`, dataAttr: "manager-services-tab-work-orders" },
+              { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors`, dataAttr: "manager-services-tab-vendors" },
             ]}
           />
           {typeFilter === "vendors" ? (
