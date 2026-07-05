@@ -26,6 +26,7 @@ import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markMana
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
+import { ChargeRemindersModal, patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 
@@ -60,6 +61,7 @@ export function ManagerPaymentsLedgerPanel({
   const [editAmountDraft, setEditAmountDraft] = useState("");
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [reminderPreview, setReminderPreview] = useState<{ row: DemoManagerPaymentLedgerRow; subject: string; body: string } | null>(null);
+  const [chargeRemindersRow, setChargeRemindersRow] = useState<DemoManagerPaymentLedgerRow | null>(null);
 
   const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
     const email = row.residentEmail?.trim();
@@ -288,6 +290,26 @@ export function ManagerPaymentsLedgerPanel({
         onConfirm={(skipMessage) => void doSendReminder(skipMessage)}
       />
     )}
+    {chargeRemindersRow?.householdChargeId ? (
+      <ChargeRemindersModal
+        open
+        onClose={() => setChargeRemindersRow(null)}
+        residentName={chargeRemindersRow.residentName}
+        chargeTitle={chargeRemindersRow.chargeTitle}
+        dueDate={chargeRemindersRow.dueDate}
+        messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersRow.householdChargeId)}
+        onMessageSaved={() => onScheduleChanged?.()}
+        onToggleCancel={async (message, cancelled) => {
+          try {
+            await patchScheduledMessage(message.id, { cancelled });
+            onScheduleChanged?.();
+          } catch {
+            showToast("Could not update reminder.");
+          }
+        }}
+        onOpenSettings={onOpenReminderSettings}
+      />
+    ) : null}
     <div className="space-y-2 lg:hidden">
       {rows.map((row) => {
         const reminders = row.householdChargeId

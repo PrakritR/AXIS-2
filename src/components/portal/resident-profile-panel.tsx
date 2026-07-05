@@ -163,7 +163,6 @@ export function ResidentProfilePanel() {
   return (
     <ManagerPortalPageShell
       title="Settings"
-      titleAsideInline
       titleAside={
         <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => void saveProfile()}>
           Save

@@ -158,7 +158,7 @@ export async function POST(req: Request) {
           role: "resident",
           isAdmin: false,
         },
-        [{ email: recipientEmail }],
+        [{ email: recipientEmail, userId: null }],
       );
       if (!allowed.some((r) => r.email.trim().toLowerCase() === recipientEmail)) {
         return NextResponse.json({ error: "That recipient is not in your messaging scope." }, { status: 403 });

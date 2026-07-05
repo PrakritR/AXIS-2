@@ -224,7 +224,6 @@ export function PortalProfileClient({
     return (
       <ManagerPortalPageShell
         title="Settings"
-        titleAsideInline
         titleAside={
           <div className="flex flex-wrap gap-2">
             {headerActions.map((a) => (
