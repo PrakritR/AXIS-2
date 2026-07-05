@@ -39,6 +39,11 @@ const DOCUMENTS_TABS = [
   { id: "other", label: "Other documents" },
 ] as const;
 
+/** Sections shown before the resident submits any rental application. */
+export const RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS: PortalSection[] = [
+  { section: "applications", label: "Application", tabs: [] },
+];
+
 /** Sections shown before lease access is fully unlocked. */
 export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
@@ -67,6 +72,7 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
 /** Every resident nav section id (union of limited + approved definitions). */
 export const RESIDENT_PORTAL_SECTION_IDS = [
   ...new Set([
+    ...RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS.map((s) => s.section),
     ...RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => s.section),
     ...RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => s.section),
   ]),

@@ -259,57 +259,55 @@ export async function POST(req: Request) {
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
     let row = normalizeRow(body.row);
-    if (!user && row.bucket === "approved") {
-      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ error: "Sign in to submit an application." }, { status: 401 });
     }
-    if (user) {
-      const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
-      const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
-      if (role === "resident") {
-        const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
-        const rowEmail = (row.email ?? "").trim().toLowerCase();
-        if (!email || rowEmail !== email) {
-          return NextResponse.json({ error: "You can only update your own application." }, { status: 403 });
-        }
-        const ids = idVariants(row.id);
-        const { data: records, error: loadError } = await db
-          .from("manager_application_records")
-          .select("id, row_data")
-          .or(ids.map((value) => `id.eq.${value}`).join(","))
-          .limit(1);
-        if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
-        const existing = records?.[0]?.row_data as DemoApplicantRow | undefined;
-        if (existing && existing.bucket !== "pending") {
-          return NextResponse.json({ error: "This application can no longer be edited." }, { status: 403 });
-        }
-        if (row.bucket !== "pending") {
-          return NextResponse.json({ error: "Residents cannot change application status." }, { status: 403 });
-        }
-        row = {
-          ...row,
-          bucket: "pending",
-          assignedPropertyId: existing?.assignedPropertyId ?? row.assignedPropertyId,
-          assignedRoomChoice: existing?.assignedRoomChoice ?? row.assignedRoomChoice,
-          signedMonthlyRent: existing?.signedMonthlyRent ?? row.signedMonthlyRent,
-          managerUserId: existing?.managerUserId ?? row.managerUserId,
-          backgroundCheckStatus: existing?.backgroundCheckStatus ?? row.backgroundCheckStatus,
-          screening: existing?.screening ?? row.screening,
-          manuallyAdded: existing?.manuallyAdded ?? row.manuallyAdded,
-          moveInInstructions: existing?.moveInInstructions ?? row.moveInInstructions,
-          application:
-            row.application && existing?.application
-              ? {
-                  ...row.application,
-                  managerRentOverride: existing.application.managerRentOverride,
-                  managerUtilitiesOverride: existing.application.managerUtilitiesOverride,
-                  managerSecurityDepositOverride: existing.application.managerSecurityDepositOverride,
-                  managerMoveInFeeOverride: existing.application.managerMoveInFeeOverride,
-                  managerOtherCostLabel: existing.application.managerOtherCostLabel,
-                  managerOtherCostAmount: existing.application.managerOtherCostAmount,
-                }
-              : row.application,
-        };
+    const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
+    const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+    if (role === "resident") {
+      const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+      const rowEmail = (row.email ?? "").trim().toLowerCase();
+      if (!email || rowEmail !== email) {
+        return NextResponse.json({ error: "You can only update your own application." }, { status: 403 });
       }
+      const ids = idVariants(row.id);
+      const { data: records, error: loadError } = await db
+        .from("manager_application_records")
+        .select("id, row_data")
+        .or(ids.map((value) => `id.eq.${value}`).join(","))
+        .limit(1);
+      if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
+      const existing = records?.[0]?.row_data as DemoApplicantRow | undefined;
+      if (existing && existing.bucket !== "pending") {
+        return NextResponse.json({ error: "This application can no longer be edited." }, { status: 403 });
+      }
+      if (row.bucket !== "pending") {
+        return NextResponse.json({ error: "Residents cannot change application status." }, { status: 403 });
+      }
+      row = {
+        ...row,
+        bucket: "pending",
+        assignedPropertyId: existing?.assignedPropertyId ?? row.assignedPropertyId,
+        assignedRoomChoice: existing?.assignedRoomChoice ?? row.assignedRoomChoice,
+        signedMonthlyRent: existing?.signedMonthlyRent ?? row.signedMonthlyRent,
+        managerUserId: existing?.managerUserId ?? row.managerUserId,
+        backgroundCheckStatus: existing?.backgroundCheckStatus ?? row.backgroundCheckStatus,
+        screening: existing?.screening ?? row.screening,
+        manuallyAdded: existing?.manuallyAdded ?? row.manuallyAdded,
+        moveInInstructions: existing?.moveInInstructions ?? row.moveInInstructions,
+        application:
+          row.application && existing?.application
+            ? {
+                ...row.application,
+                managerRentOverride: existing.application.managerRentOverride,
+                managerUtilitiesOverride: existing.application.managerUtilitiesOverride,
+                managerSecurityDepositOverride: existing.application.managerSecurityDepositOverride,
+                managerMoveInFeeOverride: existing.application.managerMoveInFeeOverride,
+                managerOtherCostLabel: existing.application.managerOtherCostLabel,
+                managerOtherCostAmount: existing.application.managerOtherCostAmount,
+              }
+            : row.application,
+      };
     }
     await persistNormalizedRow(db, row.id, row);
     if (row.bucket === "pending" && row.application?.consentCredit) {

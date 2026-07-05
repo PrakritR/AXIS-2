@@ -14,6 +14,7 @@ import {
   RESIDENT_APPROVED_PORTAL_SECTIONS,
   RESIDENT_FREE_TIER_SECTION_IDS,
   RESIDENT_LIMITED_PORTAL_SECTIONS,
+  RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS,
   RESIDENT_PORTAL_SECTION_IDS,
   RESIDENT_PORTAL_SMOKE_PATHS,
   RESIDENT_RENDERED_SECTION_IDS,
@@ -22,8 +23,10 @@ import { vendorPortal, VENDOR_PORTAL_SMOKE_PATHS } from "@/lib/portals/vendor";
 import { proPortal, MANAGER_PORTAL_SMOKE_PATHS } from "@/lib/portals/pro";
 import {
   NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
+  NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
   NATIVE_BOTTOM_NAV_VENDOR_PRIMARY,
+  splitNativeBottomNavItems,
 } from "@/lib/native/portal-bottom-nav";
 
 const RENDER_PORTAL_SECTION_SOURCE = readFileSync(
@@ -48,6 +51,13 @@ describe("platform parity (web + native WebView)", () => {
   it("resident free-tier ids match manager-access gating", () => {
     for (const id of RESIDENT_FREE_TIER_SECTION_IDS) {
       expect(RESIDENT_FREE_MANAGER_SECTIONS.has(id)).toBe(true);
+    }
+  });
+
+  it("every pre-application resident section has a render handler", () => {
+    for (const { section } of RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS) {
+      expect(RESIDENT_RENDERED_SECTION_IDS as readonly string[]).toContain(section);
+      expect(RENDER_PORTAL_SECTION_SOURCE).toContain(`section === "${section}"`);
     }
   });
 
@@ -78,6 +88,13 @@ describe("platform parity (web + native WebView)", () => {
       expect(isInAppPath(path)).toBe(true);
       expect(isNativeDeepLinkPath(path)).toBe(true);
     }
+  });
+
+  it("pre-application resident bottom bar uses the applications tab only", () => {
+    const items = RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS.map((section) => ({ section: section.section }));
+    const split = splitNativeBottomNavItems(items, "resident");
+    expect(split.primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY]);
+    expect(split.overflow).toEqual([]);
   });
 
   it("resident native bottom bar primary items are real resident sections", () => {

@@ -60,7 +60,16 @@ export function ManagerPropertyServiceOptionsPanel({
   const offers = sub.serviceRequestOptions ?? [];
   if (!saveTarget || !managerUserId) return null;
 
-  const hasCustomConfig = offers.length > 0;
+  const removeSingleOffer = (offerId: string) => {
+    const nextOffers = offers.filter((o) => o.id !== offerId);
+    const next: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: nextOffers };
+    if (!persistSubmission(saveTarget, managerUserId, next)) {
+      showToast("Could not remove service.");
+      return;
+    }
+    showToast("Service removed.");
+    onUpdated();
+  };
 
   const openModal = () => {
     setRows(offers.map((o) => ({ ...o })));
@@ -103,44 +112,20 @@ export function ManagerPropertyServiceOptionsPanel({
     onUpdated();
   };
 
-  const removeCustomConfig = () => {
-    if (!window.confirm("Remove all service offerings for this property?")) return;
-    const next: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: [] };
-    if (!persistSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not reset services.");
-      return;
-    }
-    showToast("Services reset to default.");
-    onUpdated();
-  };
-
   return (
     <>
       <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
           <p className="text-sm font-semibold text-foreground">Services</p>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {hasCustomConfig ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 rounded-full px-3 text-xs border-rose-200 text-rose-800 portal-danger-outline"
-                data-attr="service-options-remove"
-                onClick={removeCustomConfig}
-              >
-                Remove
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              data-attr="service-options-add"
-              onClick={openModal}
-            >
-              Add
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs"
+            data-attr="service-options-add"
+            onClick={openModal}
+          >
+            Add
+          </Button>
         </div>
 
         {offers.length > 0 ? (
@@ -158,13 +143,25 @@ export function ManagerPropertyServiceOptionsPanel({
                       "No price set"}
                   </p>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                    offer.available ? "portal-badge-success" : "bg-accent/30 text-muted"
-                  }`}
-                >
-                  {offer.available ? "Available" : "Hidden"}
-                </span>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      offer.available ? "portal-badge-success" : "bg-accent/30 text-muted"
+                    }`}
+                  >
+                    {offer.available ? "Available" : "Hidden"}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-full px-3 text-xs border-rose-200 text-rose-800 portal-danger-outline"
+                    data-attr="service-option-remove-one"
+                    title={`Remove ${offer.name}`}
+                    onClick={() => removeSingleOffer(offer.id)}
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

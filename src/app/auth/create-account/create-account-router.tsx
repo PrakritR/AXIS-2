@@ -12,7 +12,7 @@ import CreateAccountClient from "./create-account-client";
  * drifts out of sync. Exceptions render in place:
  * - legacy post-payment links carrying a checkout session_id / resident axis_id
  *   (already-issued Stripe/return URLs keep working),
- * - resident account creation (application-link driven), which renders the hub, and
+ * - resident, vendor, and manager account creation via the auth hub (?mode=create), and
  * - the NATIVE app, whose signup stays in the hub (the pricing page bounces native
  *   users to /auth/manager/plan, which sends signed-out users back here — redirecting
  *   would loop).
@@ -24,7 +24,9 @@ export default function CreateAccountRouter() {
   const hasLegacyContext =
     Boolean(searchParams.get("session_id")?.trim()) || Boolean(searchParams.get("axis_id")?.trim());
   const isResident = searchParams.get("role") === "resident";
-  const redirectToPricing = !hasLegacyContext && !isResident && isNative === false;
+  const isVendor = searchParams.get("role") === "vendor";
+  const modeCreate = searchParams.get("mode") === "create";
+  const redirectToPricing = !hasLegacyContext && !isResident && !isVendor && !modeCreate && isNative === false;
 
   useEffect(() => {
     if (!redirectToPricing) return;
@@ -40,7 +42,7 @@ export default function CreateAccountRouter() {
   if (hasLegacyContext) {
     return <CreateAccountClient />;
   }
-  if (isResident || isNative === true) {
+  if (isResident || isVendor || modeCreate || isNative === true) {
     return <NativeAuthHub defaultMode="create" />;
   }
   return null;

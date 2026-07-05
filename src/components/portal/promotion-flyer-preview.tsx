@@ -44,6 +44,16 @@ export function PromotionFlyerPreview({
   const html = useMemo(() => buildFlyerHtml(promotion), [promotion]);
 
   useEffect(() => {
+    const frame = iframeRef.current;
+    if (!frame) return;
+    const doc = frame.contentDocument;
+    if (!doc) return;
+    doc.open();
+    doc.write(html);
+    doc.close();
+  }, [html]);
+
+  useEffect(() => {
     if (embedded || !onClose) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -65,7 +75,6 @@ export function PromotionFlyerPreview({
         <iframe
           ref={iframeRef}
           title={`Flyer — ${promotion.title || promotion.propertyLabel || "promotion"}`}
-          srcDoc={html}
           sandbox="allow-same-origin"
           className="block h-full min-h-full w-full min-w-0 border-0"
         />
@@ -117,7 +126,6 @@ export function PromotionFlyerPreview({
           <iframe
             ref={iframeRef}
             title="Flyer preview"
-            srcDoc={html}
             sandbox="allow-same-origin allow-modals"
             className="h-full w-full border-0"
           />

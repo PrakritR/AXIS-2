@@ -9,6 +9,7 @@ import { SegmentedTwo } from "@/components/ui/segmented-control";
 import {
   loadPublicPropertyLeadFromServer,
   PROPERTY_PIPELINE_EVENT,
+  isPropertyActiveForLeads,
 } from "@/lib/demo-property-pipeline";
 import {
   ensurePendingApplicationFeeCharge,
@@ -22,6 +23,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   getPropertyById,
   getPropertyForPublicLink,
+  getPropertySelectOptions,
   getRoomOptionsForProperty,
   isRoomApprovedConflict,
   isRoomPendingConflict,
@@ -55,6 +57,15 @@ import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step
 
 const processedApplicationFeeSessions = new Set<string>();
 
+export type RentalApplicationWizardMode = "public" | "portal";
+
+export type RentalApplicationWizardProps = {
+  showToast: (msg: string) => void;
+  mode?: RentalApplicationWizardMode;
+  exitPath?: string;
+  sessionEmail?: string;
+};
+
 function makeNewApplicationId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -77,8 +88,13 @@ const STEP_META = [
   { n: 12, title: "Application fee" },
 ] as const;
 
-function rentalApplicationExitPath(): string {
-  return "/auth/sign-in";
+function rentalApplicationExitPath(mode: RentalApplicationWizardMode, exitPath?: string): string {
+  if (exitPath?.startsWith("/")) return exitPath;
+  return mode === "portal" ? "/resident/applications" : "/auth/sign-in";
+}
+
+function rentalApplicationApplyPath(mode: RentalApplicationWizardMode): string {
+  return mode === "portal" ? "/resident/applications/apply" : "/rent/apply";
 }
 
 function RentalWizardExitButton({ onClick }: { onClick: () => void }) {
@@ -102,19 +118,34 @@ function RentalWizardExitButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function RentalApplicationWizard({ showToast }: { showToast: (msg: string) => void }) {
+export function RentalApplicationWizard({
+  showToast,
+  mode = "public",
+  exitPath,
+  sessionEmail,
+}: RentalApplicationWizardProps) {
   return (
     <Suspense
       fallback={
         <div className="mx-auto max-w-3xl px-4 py-16 text-center text-muted">Loading application…</div>
       }
     >
-      <RentalApplicationWizardInner showToast={showToast} />
+      <RentalApplicationWizardInner
+        showToast={showToast}
+        mode={mode}
+        exitPath={exitPath}
+        sessionEmail={sessionEmail}
+      />
     </Suspense>
   );
 }
 
-function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) => void }) {
+function RentalApplicationWizardInner({
+  showToast,
+  mode = "public",
+  exitPath,
+  sessionEmail,
+}: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(1);
@@ -142,10 +173,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const router = useRouter();
+  const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
+  const wizardApplyPath = rentalApplicationApplyPath(mode);
 
   const exitApplication = useCallback(() => {
-    router.push(rentalApplicationExitPath());
-  }, [router]);
+    router.push(wizardExitPath);
+  }, [router, wizardExitPath]);
 
   const listingPrefillKey = useMemo(() => {
     return [
@@ -199,17 +232,45 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   const propertyOptions = useMemo(() => {
     void extrasTick;
+    if (mode === "portal" && !linkedPropertyId) {
+      return getPropertySelectOptions().filter((option) => {
+        const prop = getPropertyById(option.value);
+        return prop && isPropertyActiveForLeads(prop);
+      });
+    }
     if (!linkedPropertyId) return [];
     const prop = getPropertyForPublicLink(linkedPropertyId);
     if (!prop) return [];
     return [{ value: prop.id, label: prop.title }];
-  }, [extrasTick, linkedPropertyId]);
+  }, [extrasTick, linkedPropertyId, mode]);
 
   const linkedProperty = useMemo(() => {
     void extrasTick;
-    if (!linkedPropertyId) return undefined;
-    return getPropertyForPublicLink(linkedPropertyId);
-  }, [extrasTick, linkedPropertyId]);
+    if (linkedPropertyId) return getPropertyForPublicLink(linkedPropertyId);
+    if (mode === "portal") {
+      const pid = form.propertyId.trim();
+      if (!pid) return undefined;
+      return getPropertyForPublicLink(pid) ?? getPropertyById(pid);
+    }
+    return undefined;
+  }, [extrasTick, form.propertyId, linkedPropertyId, mode]);
+
+  const canRenderWizard = useMemo(() => {
+    if (mode === "portal") {
+      if (linkedPropertyId) return Boolean(linkedProperty);
+      return propertyOptions.length > 0;
+    }
+    return Boolean(linkedPropertyId && linkedProperty);
+  }, [linkedProperty, linkedPropertyId, mode, propertyOptions.length]);
+
+  useEffect(() => {
+    if (mode !== "portal") return;
+    const email = sessionEmail?.trim();
+    if (!email?.includes("@")) return;
+    queueMicrotask(() => {
+      setForm((prev) => (prev.email.trim() ? prev : { ...prev, email }));
+    });
+  }, [mode, sessionEmail]);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -422,6 +483,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       setForm(createInitialRentalWizardState());
       setStep(1);
       setErrors({});
+      setChargeTick((n) => n + 1);
+      setSubmitting(false);
+      if (mode === "portal" && sync.ok) {
+        showToast("Application submitted.");
+        router.replace("/resident/dashboard");
+        return;
+      }
       setPostSubmit({
         axisId,
         email: emailTrim,
@@ -429,15 +497,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         emailSent,
         syncError: sync.ok ? undefined : sync.error,
       });
-      setChargeTick((n) => n + 1);
-      setSubmitting(false);
       if (sync.ok) {
         showToast("Application submitted.");
       } else {
         showToast(sync.error ?? "Application saved locally but could not sync to server. Try again from create account.");
       }
     },
-    [form, showToast, submitting],
+    [form, mode, router, showToast, submitting],
   );
 
   const primaryButtonLabel = useMemo(() => {
@@ -472,7 +538,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const feeCheckout = searchParams.get("fee_checkout");
     if (feeCheckout === "cancel") {
       showToast("Checkout cancelled. You can try again when you are ready.");
-      router.replace("/rent/apply");
+      router.replace(wizardApplyPath);
       return;
     }
     if (feeCheckout !== "success") return;
@@ -484,7 +550,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (!pid || !em.includes("@")) return;
 
     if (processedApplicationFeeSessions.has(sessionId)) {
-      router.replace("/rent/apply");
+      router.replace(wizardApplyPath);
       return;
     }
 
@@ -499,7 +565,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       };
       if (!res.ok) {
         showToast(typeof data.error === "string" ? data.error : "Could not verify payment.");
-        router.replace("/rent/apply");
+        router.replace(wizardApplyPath);
         return;
       }
       if (!data.paid) {
@@ -513,11 +579,11 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           processedApplicationFeeSessions.add(sessionId);
           showToast("Bank transfer submitted. Your application fee will be marked paid when the transfer clears.");
           finalizeApplicationSubmit(feeStepUserId);
-          router.replace("/rent/apply");
+          router.replace(wizardApplyPath);
           return;
         }
         showToast(typeof data.error === "string" ? data.error : "Payment not completed yet.");
-        router.replace("/rent/apply");
+        router.replace(wizardApplyPath);
         return;
       }
       if (
@@ -529,7 +595,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           .toLowerCase() !== em.toLowerCase()
       ) {
         showToast("Payment confirmation does not match this application. Use the same email and listing as before checkout.");
-        router.replace("/rent/apply");
+        router.replace(wizardApplyPath);
         return;
       }
       ensurePendingApplicationFeeCharge({
@@ -541,15 +607,15 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       const marked = markApplicationFeePaidAfterStripe(form.email, pid, feeStepUserId);
       if (!marked) {
         showToast("Payment succeeded, but the application fee line could not be updated.");
-        router.replace("/rent/apply");
+        router.replace(wizardApplyPath);
         return;
       }
       setChargeTick((n) => n + 1);
       processedApplicationFeeSessions.add(sessionId);
       finalizeApplicationSubmit(feeStepUserId);
-      router.replace("/rent/apply");
+      router.replace(wizardApplyPath);
     })();
-  }, [draftReady, searchParams, form.propertyId, form.email, form.fullLegalName, feeStepUserId, router, showToast, finalizeApplicationSubmit]);
+  }, [draftReady, searchParams, form.propertyId, form.email, form.fullLegalName, feeStepUserId, router, showToast, finalizeApplicationSubmit, wizardApplyPath]);
 
   const handleContinue = () => {
     if (step === 12) {
@@ -600,6 +666,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 residentName: form.fullLegalName.trim(),
                 amountCents,
                 managerUserId,
+                returnPath: wizardApplyPath,
               }),
             });
             const payload = (await res.json().catch(() => ({}))) as {
@@ -733,7 +800,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Rental application</h1>
       </div>
 
-      {!linkedPropertyId ? (
+      {!linkedPropertyId && mode !== "portal" ? (
       <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:mt-6 sm:rounded-3xl sm:p-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">Choose your form</p>
         <div className="mt-3 sm:mt-4">
@@ -763,16 +830,28 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       ) : null}
 
       {applicationPath === "signer" ? (
-        !linkedPropertyId || !linkedProperty ? (
+        !canRenderWizard ? (
           <div className="mt-8">
             <ManagerLinkGate
-              title="Open your manager’s apply link"
+              title={mode === "portal" ? "No listings available yet" : "Open your manager’s apply link"}
               body={
-                linkedPropertyId && !linkedProperty
-                  ? "This property link is invalid or no longer active. Ask your property manager for a new apply link."
-                  : "Applications start from a link your property manager shares after you find a unit on Zillow, Redfin, or elsewhere."
+                mode === "portal"
+                  ? "Browse available housing to find a property, or ask your property manager for an apply link."
+                  : linkedPropertyId && !linkedProperty
+                    ? "This property link is invalid or no longer active. Ask your property manager for a new apply link."
+                    : "Applications start from a link your property manager shares after you find a unit on Zillow, Redfin, or elsewhere."
               }
             />
+            {mode === "portal" ? (
+              <div className="mt-4 flex justify-center">
+                <Link
+                  href="/rent/browse"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-border bg-card px-5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent"
+                >
+                  Browse available housing
+                </Link>
+              </div>
+            ) : null}
           </div>
         ) : postSubmit ? (
           <RentalApplicationFinishPanel
@@ -836,7 +915,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 form={form}
                 errors={errors}
                 propertyOptions={propertyOptions}
-                propertyLocked={Boolean(linkedProperty)}
+                propertyLocked={Boolean(linkedPropertyId && linkedProperty)}
+                emailLocked={mode === "portal" && Boolean(sessionEmail?.includes("@"))}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
                 occupancySyncEpoch={occupancySyncEpoch}

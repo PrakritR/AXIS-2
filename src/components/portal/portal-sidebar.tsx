@@ -196,7 +196,7 @@ export function PortalSidebar({
     () => nativeBottomNavSplit.primary.filter((item) => !isSectionLocked(item.section)),
     [nativeBottomNavSplit, isSectionLocked],
   );
-  const showMoreTab = showMobileNav && nativeBottomNavShowMoreTab(definition.kind);
+  const showMoreTab = showMobileNav && nativeBottomNavShowMoreTab(definition.kind, navItems);
   const moreTabActive = !nativeBottomNavItems.some((item) => item.section === activeSection);
   const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
   const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);

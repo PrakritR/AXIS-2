@@ -1,35 +1,37 @@
-const STORAGE_KEY = "axis:resident-signup-axis-id";
-const NEXT_STORAGE_KEY = "axis:resident-signup-next";
+const TOKEN_STORAGE_KEY = "axis:vendor-signup-invite-token";
+const NEXT_STORAGE_KEY = "axis:vendor-signup-next";
 
-export function persistResidentSignupAxisId(axisId: string): void {
+export function persistVendorSignupInviteToken(token: string): void {
   if (typeof window === "undefined") return;
+  const trimmed = token.trim();
+  if (!trimmed) return;
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, axisId.trim());
+    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, trimmed);
   } catch {
     /* ignore */
   }
 }
 
-export function readResidentSignupAxisId(): string | null {
+export function readVendorSignupInviteToken(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
     return raw?.trim() || null;
   } catch {
     return null;
   }
 }
 
-export function clearResidentSignupAxisId(): void {
+export function clearVendorSignupInviteToken(): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
   } catch {
     /* ignore */
   }
 }
 
-export function persistResidentSignupNext(nextPath: string): void {
+export function persistVendorSignupNext(nextPath: string): void {
   if (typeof window === "undefined") return;
   const trimmed = nextPath.trim();
   if (!trimmed.startsWith("/")) return;
@@ -40,7 +42,7 @@ export function persistResidentSignupNext(nextPath: string): void {
   }
 }
 
-export function readResidentSignupNext(): string | null {
+export function readVendorSignupNext(): string | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(NEXT_STORAGE_KEY);
@@ -50,7 +52,7 @@ export function readResidentSignupNext(): string | null {
   }
 }
 
-export function clearResidentSignupNext(): void {
+export function clearVendorSignupNext(): void {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.removeItem(NEXT_STORAGE_KEY);

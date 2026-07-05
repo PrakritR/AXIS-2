@@ -22,6 +22,7 @@ import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
+import { loadResidentPortalAccessState, residentPortalHomePath } from "@/lib/resident-portal-access";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 function isAuthRole(value: string): value is AuthRole {
@@ -32,6 +33,7 @@ function isBypassOAuthGatePath(path: string): boolean {
   return (
     path.startsWith("/auth/manager-") ||
     path.startsWith("/auth/resident-") ||
+    path.startsWith("/auth/vendor-") ||
     path.startsWith("/partner/pricing") ||
     path.startsWith(MANAGER_PRICING_ENTRY_PATH) ||
     path.startsWith("/auth/create-account") ||
@@ -102,7 +104,19 @@ export async function resolveOAuthPortalRedirect(
   }
 
   const soleRole = roles[0] ?? null;
-  if (soleRole === "resident" || soleRole === "admin" || soleRole === "vendor") {
+  if (soleRole === "resident") {
+    const access = await loadResidentPortalAccessState({
+      userId: user.id,
+      role: "resident",
+      email,
+    });
+    const home = residentPortalHomePath(access);
+    if (isGenericOAuthContinuePath(safeIntended) || safeIntended === "/resident/dashboard") {
+      return finish(home);
+    }
+    return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
+  }
+  if (soleRole === "admin" || soleRole === "vendor") {
     return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
   if (soleRole === "manager") {
@@ -178,7 +192,10 @@ export async function resolveOAuthPortalRedirect(
     return finish(MANAGER_PRICING_ENTRY_PATH);
   }
   if (intent === "resident") {
-    return finish("/auth/create-account?role=resident&message=resident_signup_failed");
+    return finish("/auth/create-account?role=resident");
+  }
+  if (intent === "vendor") {
+    return finish("/auth/create-account?role=vendor");
   }
   return finish(GET_STARTED_PATH);
 }

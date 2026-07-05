@@ -1,13 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { mockStripeCheckoutRoutes } from "../helpers/auth";
 
-test.describe("Public rental application", () => {
-  test.beforeEach(async ({ page }) => {
-    await mockStripeCheckoutRoutes(page);
-  });
-
-  test("apply page loads wizard", async ({ page }) => {
-    await page.goto("/rent/apply");
-    await expect(page.getByText(/applying as part of a group/i)).toBeVisible({ timeout: 15_000 });
+test.describe("Public rental application gate", () => {
+  test("unauthenticated apply link redirects to resident signup", async ({ page }) => {
+    await page.goto("/rent/apply?propertyId=test-property");
+    await expect(page).toHaveURL(/\/auth\/create-account\?.*role=resident/, { timeout: 15_000 });
+    await expect(page.url()).toContain(encodeURIComponent("/resident/applications/apply"));
   });
 });

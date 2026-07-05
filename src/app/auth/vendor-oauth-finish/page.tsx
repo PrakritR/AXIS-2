@@ -3,17 +3,17 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
 import {
-  clearResidentSignupAxisId,
-  clearResidentSignupNext,
-  readResidentSignupAxisId,
-  readResidentSignupNext,
-} from "@/lib/auth/resident-oauth-storage";
+  clearVendorSignupInviteToken,
+  clearVendorSignupNext,
+  readVendorSignupInviteToken,
+  readVendorSignupNext,
+} from "@/lib/auth/vendor-oauth-storage";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 
-function ResidentOauthFinishContent() {
+function VendorOauthFinishContent() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
   const [googleName, setGoogleName] = useState<string | null>(null);
@@ -40,27 +40,25 @@ function ResidentOauthFinishContent() {
               : null,
         );
 
-        // Forward the Axis ID the applicant typed on the create-account form so the
-        // Google path enforces the same application email+ID match as the password path.
-        const storedAxisId = readResidentSignupAxisId();
-        const res = await fetch("/api/auth/register-resident-oauth", {
+        const storedToken = readVendorSignupInviteToken();
+        const res = await fetch("/api/auth/register-vendor-oauth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(storedAxisId ? { axisId: storedAxisId } : {}),
+          body: JSON.stringify(storedToken ? { token: storedToken } : {}),
         });
         const body = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setErrorText(body.error ?? "Could not finish resident signup.");
+          setErrorText(body.error ?? "Could not finish vendor signup.");
           return;
         }
 
-        clearResidentSignupAxisId();
-        const next = readResidentSignupNext();
-        clearResidentSignupNext();
-        window.location.replace(next ?? "/resident/applications");
+        clearVendorSignupInviteToken();
+        const next = readVendorSignupNext();
+        clearVendorSignupNext();
+        window.location.replace(next ?? "/vendor/dashboard");
       } catch (e) {
-        const message = e instanceof Error ? e.message : "Could not finish resident signup.";
+        const message = e instanceof Error ? e.message : "Could not finish vendor signup.";
         setErrorText(message);
       }
     })();
@@ -71,7 +69,10 @@ function ResidentOauthFinishContent() {
       <AuthCard>
         <p className="text-center text-sm text-rose-600">{errorText}</p>
         <div className="mt-6 flex justify-center">
-          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/create-account?role=resident&mode=create">
+          <Link
+            className="text-sm font-semibold text-primary hover:underline"
+            href="/auth/create-account?role=vendor&mode=create"
+          >
             Back to create account
           </Link>
         </div>
@@ -85,16 +86,16 @@ function ResidentOauthFinishContent() {
         <GoogleSignedInBanner
           email={googleEmail}
           fullName={googleName}
-          subtitle="Setting up your resident account…"
+          subtitle="Setting up your vendor account…"
         />
       ) : (
-        <p className="text-center text-sm text-muted">Setting up your resident account…</p>
+        <p className="text-center text-sm text-muted">Setting up your vendor account…</p>
       )}
     </AuthCard>
   );
 }
 
-export default function ResidentOauthFinishPage() {
+export default function VendorOauthFinishPage() {
   return (
     <Suspense
       fallback={
@@ -103,7 +104,7 @@ export default function ResidentOauthFinishPage() {
         </AuthCard>
       }
     >
-      <ResidentOauthFinishContent />
+      <VendorOauthFinishContent />
     </Suspense>
   );
 }

@@ -5,6 +5,10 @@ type ManagerSubscriptionTier = "free" | "paid" | null;
 
 export type ResidentPortalAccessState = {
   roleOk: boolean;
+  /** True when any manager_application_records row exists for this resident email. */
+  hasSubmittedApplication: boolean;
+  /** Resident with no submitted application yet — Applications-only portal. */
+  isPreApplicationResident: boolean;
   applicationApproved: boolean;
   applicationId: string | null;
   applicationStage: string | null;
@@ -17,6 +21,8 @@ export type ResidentPortalAccessState = {
 function emptyAccessState(managerSubscriptionTier: ManagerSubscriptionTier): ResidentPortalAccessState {
   return {
     roleOk: false,
+    hasSubmittedApplication: false,
+    isPreApplicationResident: false,
     applicationApproved: false,
     applicationId: null,
     applicationStage: null,
@@ -95,6 +101,7 @@ const loadResidentPortalAccessStateCached = cache(
       .order("updated_at", { ascending: false });
 
     let latestApplication = readLatestApplication(applicationRows ?? [], email);
+    let hasSubmittedApplication = (applicationRows ?? []).length > 0;
     let applicationApproved = latestApplication.bucket === "approved";
 
     if ((!latestApplication.id || !applicationApproved) && userId) {
@@ -114,6 +121,7 @@ const loadResidentPortalAccessStateCached = cache(
 
         if (axisRecord?.row_data && typeof axisRecord.row_data === "object" && !Array.isArray(axisRecord.row_data)) {
           const axisRow = axisRecord.row_data as Record<string, unknown>;
+          hasSubmittedApplication = true;
           latestApplication = {
             id: typeof axisRow.id === "string" ? axisRow.id.trim() || null : null,
             bucket: typeof axisRow.bucket === "string" ? axisRow.bucket.trim().toLowerCase() || null : null,
@@ -130,9 +138,12 @@ const loadResidentPortalAccessStateCached = cache(
     }
 
     const leaseAccessUnlocked = applicationApproved;
+    const isPreApplicationResident = roleOk && !hasSubmittedApplication;
 
     return {
       roleOk,
+      hasSubmittedApplication,
+      isPreApplicationResident,
       applicationApproved,
       applicationId: latestApplication.id,
       applicationStage: latestApplication.stage,
@@ -182,6 +193,13 @@ export async function loadResidentLeaseSignedStatus(email: string): Promise<bool
     const residentSigned = Boolean((res?.name && res?.signedAtIso) || (legacyName && legacyAt));
     return managerSigned && residentSigned;
   });
+}
+
+/** Default resident landing route after sign-in / account creation. */
+export function residentPortalHomePath(
+  access: Pick<ResidentPortalAccessState, "isPreApplicationResident">,
+): string {
+  return access.isPreApplicationResident ? "/resident/applications" : "/resident/dashboard";
 }
 
 export function residentHasFullPortalAccess(params: {

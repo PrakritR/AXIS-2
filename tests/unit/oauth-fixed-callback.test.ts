@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { partnerPricingOAuthCallbackUrl, residentSignupOAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
+import { partnerPricingOAuthCallbackUrl, residentSignupOAuthCallbackUrl, vendorSignupOAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 
 describe("oauth fixed callback urls", () => {
   it("builds partner pricing callback", () => {
@@ -11,6 +11,12 @@ describe("oauth fixed callback urls", () => {
   it("builds resident signup callback", () => {
     expect(residentSignupOAuthCallbackUrl("http://localhost:3000")).toBe(
       "http://localhost:3000/auth/callback/resident-signup",
+    );
+  });
+
+  it("builds vendor signup callback", () => {
+    expect(vendorSignupOAuthCallbackUrl("http://localhost:3000")).toBe(
+      "http://localhost:3000/auth/callback/vendor-signup",
     );
   });
 });

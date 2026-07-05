@@ -43,3 +43,9 @@ export function residentSignupOAuthCallbackUrl(origin: string): string {
   const base = origin.trim().replace(/\/$/, "");
   return `${base}/auth/callback/resident-signup`;
 }
+
+/** Vendor create-account Google signup — fixed callback for Supabase allowlist matching. */
+export function vendorSignupOAuthCallbackUrl(origin: string): string {
+  const base = origin.trim().replace(/\/$/, "");
+  return `${base}/auth/callback/vendor-signup`;
+}

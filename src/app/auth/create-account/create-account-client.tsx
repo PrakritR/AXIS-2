@@ -61,6 +61,10 @@ export default function CreateAccountClient() {
     () => searchParams.get("email")?.trim().toLowerCase() || "",
     [searchParams],
   );
+  const nextFromUrl = useMemo(() => {
+    const raw = searchParams.get("next")?.trim() ?? "";
+    return raw.startsWith("/") ? raw : "";
+  }, [searchParams]);
   const urlDerivedRole: CreateAccountRole = axisIdFromUrl
     ? "resident"
     : sessionIdFromUrl
@@ -366,7 +370,12 @@ export default function CreateAccountClient() {
           fullName: fullName.trim() || undefined,
         }),
       });
-      const body = (await res.json()) as { error?: string; linkedApplication?: boolean; axisId?: string };
+      const body = (await res.json()) as {
+        error?: string;
+        linkedApplication?: boolean;
+        axisId?: string;
+        redirectTo?: string;
+      };
       if (!res.ok) {
         showToast(body.error ?? "Could not create resident account.");
         return;
@@ -385,7 +394,10 @@ export default function CreateAccountClient() {
         posthog.identify(residentSignInData.user.id);
       }
       showToast("Resident account created. You are signed in.");
-      router.push("/resident/dashboard");
+      const destination =
+        nextFromUrl ||
+        (body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/applications");
+      router.push(nativeAwarePath(destination));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign up failed";
       showToast(msg);

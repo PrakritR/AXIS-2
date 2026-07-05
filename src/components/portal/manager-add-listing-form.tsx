@@ -34,11 +34,13 @@ import {
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
+  normalizeCustomApplicationFields,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
   duplicateRoomEntry,
   emptyBathroom,
   emptyBundleRow,
+  emptyCustomFeeRow,
   emptyQuickFactRow,
   emptyRoom,
   emptySharedSpace,
@@ -48,6 +50,7 @@ import {
   type ManagerBundleRow,
   type ManagerCustomApplicationField,
   type ManagerCustomApplicationFieldType,
+  type ManagerCustomFeeRow,
   type ManagerListingSubmissionV1,
   type ManagerListingServiceOption,
   type ManagerQuickFactRow,
@@ -56,6 +59,14 @@ import {
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
+import {
+  addListingApplicationField,
+  patchListingApplicationField,
+  removeListingApplicationField,
+  resolveListingApplicationFields,
+  restoreDefaultApplicationConfig,
+  type ResolvedApplicationField,
+} from "@/lib/rental-application/application-field-catalog";
 import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
   HOUSE_WIDE_AMENITY_PRESETS,
@@ -1082,40 +1093,38 @@ export function ManagerAddListingForm({
     });
   };
 
-  // ── Application step (custom questions per application section) ──────────
-  const applicationMode: "standard" | "custom" =
-    sub.applicationConfigMode ?? ((sub.customApplicationFields?.length ?? 0) > 0 ? "custom" : "standard");
+  // ── Application step (all questions — built-in + custom) ─────────────────
+  const applicationFields = resolveListingApplicationFields(sub, normalizeCustomApplicationFields);
 
-  const patchCustomQuestion = (id: string, patch: Partial<ManagerCustomApplicationField>) => {
-    clearListingFieldError(listingCustomQuestionErrorKey(id));
+  const patchApplicationQuestion = (field: ResolvedApplicationField, patch: Partial<ManagerCustomApplicationField>) => {
+    clearListingFieldError(listingCustomQuestionErrorKey(field.id));
     clearListingFieldError("customApplicationFields");
-    setSub((s) => ({
-      ...s,
-      customApplicationFields: (s.customApplicationFields ?? []).map((f) => (f.id === id ? { ...f, ...patch } : f)),
-    }));
+    setSub((s) => ({ ...s, ...patchListingApplicationField(s, field, patch) }));
   };
 
   const addCustomQuestion = (section: string) => {
     setSub((s) => ({
       ...s,
-      customApplicationFields: [...(s.customApplicationFields ?? []), emptyCustomApplicationField(section)],
+      ...addListingApplicationField(s, emptyCustomApplicationField(section)),
     }));
   };
 
-  const removeCustomQuestion = (id: string) => {
-    clearListingFieldError(listingCustomQuestionErrorKey(id));
-    setSub((s) => ({
-      ...s,
-      customApplicationFields: (s.customApplicationFields ?? []).filter((f) => f.id !== id),
-    }));
+  const removeApplicationQuestion = (field: ResolvedApplicationField) => {
+    clearListingFieldError(listingCustomQuestionErrorKey(field.id));
+    setSub((s) => ({ ...s, ...removeListingApplicationField(s, field) }));
+  };
+
+  const restoreApplicationDefaults = () => {
+    setStepFieldErrors({});
+    setSub((s) => ({ ...s, ...restoreDefaultApplicationConfig() }));
   };
 
   const questionOptionsText = (field: ManagerCustomApplicationField): string =>
     questionOptionsDrafts[field.id] ?? field.options.join(", ");
 
-  const setQuestionOptionsText = (id: string, text: string) => {
-    setQuestionOptionsDrafts((d) => ({ ...d, [id]: text }));
-    patchCustomQuestion(id, { options: parseQuestionOptionsText(text) });
+  const setQuestionOptionsText = (field: ResolvedApplicationField, text: string) => {
+    setQuestionOptionsDrafts((d) => ({ ...d, [field.id]: text }));
+    patchApplicationQuestion(field, { options: parseQuestionOptionsText(text) });
   };
 
   // ── Lease step (custom lease terms / uploaded template) ───────────────────
@@ -1400,6 +1409,25 @@ export function ManagerAddListingForm({
     setSub((s) => ({
       ...s,
       quickFacts: (s.quickFacts ?? []).filter((_, j) => j !== i),
+    }));
+  };
+
+  const setCustomFee = (i: number, patch: Partial<ManagerCustomFeeRow>) => {
+    setSub((s) => {
+      const customFees = [...(s.customFees ?? [])];
+      customFees[i] = { ...customFees[i]!, ...patch };
+      return { ...s, customFees };
+    });
+  };
+
+  const addCustomFee = () => {
+    setSub((s) => ({ ...s, customFees: [...(s.customFees ?? []), emptyCustomFeeRow()] }));
+  };
+
+  const removeCustomFee = (i: number) => {
+    setSub((s) => ({
+      ...s,
+      customFees: (s.customFees ?? []).filter((_, j) => j !== i),
     }));
   };
 
@@ -1810,6 +1838,12 @@ export function ManagerAddListingForm({
       ...sub,
       serviceRequestOptions: serviceOffers,
       customApplicationFields: finalizeCustomApplicationFields(sub.customApplicationFields),
+      disabledStandardApplicationKeys: sub.disabledStandardApplicationKeys ?? [],
+      applicationConfigMode:
+        (sub.disabledStandardApplicationKeys?.length ?? 0) > 0 ||
+        (sub.customApplicationFields?.length ?? 0) > 0
+          ? "custom"
+          : "standard",
       rooms: sub.rooms.map((room) => ({
         ...room,
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
@@ -2836,10 +2870,65 @@ export function ManagerAddListingForm({
                     </GridField>
                   ))}
                 </div>
-                <div className="mt-3">
-                  <FieldLabel hint="Explain all recurring and one-time housing costs (shown on your listing).">Cost summary</FieldLabel>
-                  <Textarea className="" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
-                </div>
+                {(sub.customFees ?? []).length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Additional fees</p>
+                    {(sub.customFees ?? []).map((fee, i) => (
+                      <div key={fee.id} className="grid gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-[1fr_140px_160px_auto] sm:items-end">
+                        <div>
+                          <FieldLabel>Fee name</FieldLabel>
+                          <Input
+                            value={fee.label}
+                            onChange={(e) => setCustomFee(i, { label: sanitizePlaceNameInput(e.target.value) })}
+                            placeholder="e.g. Pet fee, Cleaning fee"
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Amount</FieldLabel>
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                            <Input
+                              className="pl-8"
+                              inputMode="decimal"
+                              value={fee.amount.replace(/^\$/, "").trim()}
+                              onChange={(e) => setCustomFee(i, { amount: sanitizeMoneyInput(e.target.value) })}
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <FieldLabel>Type</FieldLabel>
+                          <div className="relative">
+                            <Select
+                              aria-label={`Additional fee ${i + 1} type`}
+                              className={`${selectInputCls} appearance-none pr-10`}
+                              value={fee.frequency ?? "monthly"}
+                              onChange={(e) =>
+                                setCustomFee(i, { frequency: e.target.value === "one-time" ? "one-time" : "monthly" })
+                              }
+                            >
+                              <option value="monthly">Monthly</option>
+                              <option value="one-time">One-time</option>
+                            </Select>
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
+                              <ChevronDownTiny />
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-rose-600 hover:underline sm:pb-2"
+                          onClick={() => removeCustomFee(i)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <Button type="button" variant="outline" className="mt-4 rounded-full text-xs" onClick={addCustomFee}>
+                  + Add fee
+                </Button>
               </ListingSubsection>
 
               <ListingSubsection
@@ -2869,9 +2958,13 @@ export function ManagerAddListingForm({
               <ListingSubsection
                 id="edit-zelle"
                 title="Resident payment methods"
-                description="How residents pay rent, utilities, and ongoing charges."
+                description="How residents and applicants pay rent, utilities, application fees, and other charges."
               >
-                <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+                <div
+                  data-wizard-field="residentPaymentMethods"
+                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.residentPaymentMethods), "border-border")}`}
+                >
+                  <StepFieldError msg={stepFieldErrors.residentPaymentMethods} />
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
@@ -2881,7 +2974,6 @@ export function ManagerAddListingForm({
                         setSub((s) => ({
                           ...s,
                           axisPaymentsEnabled: e.target.checked,
-                          applicationFeeStripeEnabled: e.target.checked ? true : s.applicationFeeStripeEnabled,
                         }))
                       }
                     />
@@ -2900,7 +2992,6 @@ export function ManagerAddListingForm({
                           setSub((s) => ({
                             ...s,
                             zellePaymentsEnabled: on,
-                            applicationFeeZelleEnabled: on,
                           }));
                         }}
                       />
@@ -2933,7 +3024,6 @@ export function ManagerAddListingForm({
                           setSub((s) => ({
                             ...s,
                             venmoPaymentsEnabled: on,
-                            applicationFeeVenmoEnabled: on,
                           }));
                         }}
                       />
@@ -3020,86 +3110,6 @@ export function ManagerAddListingForm({
                   </GridField>
                 </div>
               </ListingSubsection>
-
-              <ListingSubsection
-                title="Application fee payment methods"
-                description="Choose which resident payment methods applicants can use for the application fee."
-              >
-                <div
-                  data-wizard-field="applicationFeeMethods"
-                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.applicationFeeMethods), "border-border")}`}
-                >
-                  <StepFieldError msg={stepFieldErrors.applicationFeeMethods} />
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-border"
-                      checked={sub.applicationFeeStripeEnabled !== false}
-                      disabled={sub.axisPaymentsEnabled === false}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          applicationFeeStripeEnabled: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="text-sm font-medium text-foreground">Axis payments (ACH)</span>
-                  </label>
-                  {sub.zellePaymentsEnabled ? (
-                    <div className="border-t border-border pt-3">
-                      <label className="flex cursor-pointer items-center gap-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={sub.applicationFeeZelleEnabled !== false}
-                          onChange={(e) => setSub((s) => ({ ...s, applicationFeeZelleEnabled: e.target.checked }))}
-                        />
-                        <span className="text-sm font-medium text-foreground">Zelle</span>
-                      </label>
-                    </div>
-                  ) : null}
-                  {sub.venmoPaymentsEnabled ? (
-                    <div className="border-t border-border pt-3">
-                      <label className="flex cursor-pointer items-center gap-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={sub.applicationFeeVenmoEnabled !== false}
-                          onChange={(e) => setSub((s) => ({ ...s, applicationFeeVenmoEnabled: e.target.checked }))}
-                        />
-                        <span className="text-sm font-medium text-foreground">Venmo</span>
-                      </label>
-                    </div>
-                  ) : null}
-                  <div className="border-t border-border pt-3">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.applicationFeeOtherEnabled)}
-                        onChange={(e) => setSub((s) => ({ ...s, applicationFeeOtherEnabled: e.target.checked }))}
-                      />
-                      <span className="text-sm font-medium text-foreground">Other</span>
-                    </label>
-                    {sub.applicationFeeOtherEnabled ? (
-                      <div className="mt-2 pl-7" data-wizard-field="applicationFeeOtherInstructions">
-                        <FieldLabel hint="Instructions shown to applicants (e.g. check, cash, wire).">Payment instructions</FieldLabel>
-                        <Textarea
-                          rows={2}
-                          value={sub.applicationFeeOtherInstructions ?? ""}
-                          onChange={(e) => {
-                            clearListingFieldError("applicationFeeOtherInstructions");
-                            setSub((s) => ({ ...s, applicationFeeOtherInstructions: e.target.value }));
-                          }}
-                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.applicationFeeOtherInstructions))}
-                          placeholder="e.g. Mail a check to… or pay in person at…"
-                        />
-                        <StepFieldError msg={stepFieldErrors.applicationFeeOtherInstructions} />
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </ListingSubsection>
             </div>
           </FormSection>
           ) : null}
@@ -3183,6 +3193,10 @@ export function ManagerAddListingForm({
                 const roomNameErr = stepFieldErrors[roomNameKey];
                 const roomRentErr = stepFieldErrors[roomRentKey];
                 const roomHasErr = Boolean(roomNameErr || roomRentErr);
+                const roomPresetLabels = new Set(dedupedPresets.room.map((p) => p.label));
+                const customRoomAmenitiesText = splitLineList(room.roomAmenitiesText)
+                  .filter((line) => !roomPresetLabels.has(line))
+                  .join("\n");
                 return (
                   <div
                     key={room.id}
@@ -3293,8 +3307,8 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel>Room amenities</FieldLabel>
-                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2">
+                        <FieldLabel hint="Check common room amenities — use the field below for anything not listed.">Room amenities</FieldLabel>
+                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2 lg:grid-cols-3">
                           {dedupedPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
                             return (
@@ -3317,9 +3331,15 @@ export function ManagerAddListingForm({
                         <Textarea
                           className="mt-2"
                           rows={2}
-                          value={room.roomAmenitiesText}
-                          onChange={(e) => setRoom(i, { roomAmenitiesText: e.target.value })}
-                          placeholder="Add custom amenities not listed above (one per line)."
+                          value={customRoomAmenitiesText}
+                          onChange={(e) => {
+                            const presetLines = splitLineList(room.roomAmenitiesText).filter((line) =>
+                              roomPresetLabels.has(line),
+                            );
+                            const customLines = splitLineList(e.target.value);
+                            setRoom(i, { roomAmenitiesText: [...presetLines, ...customLines].join("\n") });
+                          }}
+                          placeholder="Other amenities not listed above (one per line)."
                         />
                       </div>
 
@@ -3801,7 +3821,7 @@ export function ManagerAddListingForm({
                           <StepFieldError msg={spaceNameErr} />
                         </div>
                         <div>
-                          <FieldLabel hint="Controls which amenity checkboxes appear for this space.">Space type</FieldLabel>
+                          <FieldLabel>Space type</FieldLabel>
                           <div className="relative">
                             <Select
                               aria-label={`Shared space ${i + 1} type`}
@@ -4085,36 +4105,23 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-application"
             title="Rental application"
-            description="Review — this is the application every applicant completes for this property. Add any extra information you want applicants to provide."
+            description="Review and adjust every question applicants answer. Built-in Axis questions can be edited or removed; add your own in any section."
           >
             <div className="space-y-6">
-              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-card p-4">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-border text-primary"
-                  data-attr="listing-application-standard-toggle"
-                  checked={applicationMode === "standard"}
-                  onChange={(e) => {
-                    setStepFieldErrors({});
-                    setSub((s) => ({ ...s, applicationConfigMode: e.target.checked ? "standard" : "custom" }));
-                  }}
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-foreground">Use Axis standard system</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Applicants complete the standard Axis rental application below. Uncheck to add your own questions to
-                    any section.
-                  </span>
-                </span>
-              </label>
-
-              {applicationMode === "standard" && (sub.customApplicationFields?.length ?? 0) > 0 ? (
-                <p className="rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs leading-relaxed text-muted">
-                  Your {sub.customApplicationFields!.length} saved custom question
-                  {sub.customApplicationFields!.length === 1 ? "" : "s"} are kept but won&apos;t be asked while the
-                  standard application is selected.
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted">
+                  {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on this application
                 </p>
-              ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 rounded-full px-3 text-xs"
+                  data-attr="listing-application-restore-defaults"
+                  onClick={restoreApplicationDefaults}
+                >
+                  Restore Axis defaults
+                </Button>
+              </div>
 
               {stepFieldErrors.customApplicationFields ? (
                 <div data-wizard-field="customApplicationFields">
@@ -4124,121 +4131,104 @@ export function ManagerAddListingForm({
 
               <div className="space-y-4">
                 {RENTAL_APPLICATION_SECTIONS.map((section, sectionIdx) => {
-                  const sectionQuestions =
-                    applicationMode === "custom"
-                      ? (sub.customApplicationFields ?? []).filter(
-                          (f) => (f.section ?? "additional") === section.id,
-                        )
-                      : [];
+                  const sectionQuestions = applicationFields.filter(
+                    (f) => (f.section ?? "additional") === section.id,
+                  );
                   return (
                     <div key={section.id} className="overflow-hidden rounded-2xl border border-border bg-card">
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
                         <p className="text-sm font-semibold text-foreground">
                           <span className="mr-2 text-xs font-bold text-muted">{sectionIdx + 1}.</span>
                           {section.title}
+                          <span className="ml-2 text-xs font-medium text-muted">· {sectionQuestions.length}</span>
                         </p>
-                        {applicationMode === "custom" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 rounded-full px-3 text-xs"
-                            data-attr="listing-application-add-question"
-                            onClick={() => addCustomQuestion(section.id)}
-                          >
-                            + Add custom question
-                          </Button>
-                        ) : null}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 rounded-full px-3 text-xs"
+                          data-attr="listing-application-add-question"
+                          onClick={() => addCustomQuestion(section.id)}
+                        >
+                          + Add question
+                        </Button>
                       </div>
                       <div className="space-y-3 px-4 py-3">
-                        <div>
-                          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                            Standard questions
-                          </p>
-                          <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                            {section.standardFields.map((f) => (
-                              <li
-                                key={f}
-                                className="rounded-full bg-accent/40 px-2.5 py-1 text-[11px] font-medium text-muted"
-                              >
-                                {f}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
                         {sectionQuestions.length > 0 ? (
-                          <div className="space-y-3 border-t border-border pt-3">
-                            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                              Your custom questions
-                            </p>
-                            {sectionQuestions.map((field) => {
-                              const err = stepFieldErrors[listingCustomQuestionErrorKey(field.id)];
-                              return (
-                                <div
-                                  key={field.id}
-                                  data-wizard-field={listingCustomQuestionErrorKey(field.id)}
-                                  className={`space-y-3 rounded-xl border p-3 ${err ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
-                                >
-                                  <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                                    <div>
-                                      <FieldLabel>Question</FieldLabel>
-                                      <Input
-                                        value={field.label}
-                                        onChange={(e) => patchCustomQuestion(field.id, { label: e.target.value })}
-                                        placeholder="e.g. Do you smoke?"
-                                      />
-                                    </div>
-                                    <button
-                                      type="button"
-                                      className="pb-2 text-xs font-semibold text-rose-600 hover:underline"
-                                      onClick={() => removeCustomQuestion(field.id)}
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                  <div className="grid gap-3 sm:grid-cols-2">
-                                    <div>
-                                      <FieldLabel>Answer type</FieldLabel>
-                                      <Select
-                                        value={field.type}
-                                        onChange={(e) =>
-                                          patchCustomQuestion(field.id, {
-                                            type: e.target.value as ManagerCustomApplicationFieldType,
-                                          })
-                                        }
-                                      >
-                                        {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
-                                          <option key={o.id} value={o.id}>
-                                            {o.label}
-                                          </option>
-                                        ))}
-                                      </Select>
-                                    </div>
-                                    <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
-                                      <input
-                                        type="checkbox"
-                                        className="h-4 w-4 rounded border-border text-primary"
-                                        checked={field.required}
-                                        onChange={(e) => patchCustomQuestion(field.id, { required: e.target.checked })}
-                                      />
-                                      <span className="text-sm font-medium text-foreground">Required</span>
-                                    </label>
-                                  </div>
-                                  {field.type === "select" ? (
-                                    <div>
-                                      <FieldLabel>Dropdown options</FieldLabel>
-                                      <Input
-                                        value={questionOptionsText(field)}
-                                        onChange={(e) => setQuestionOptionsText(field.id, e.target.value)}
-                                        placeholder="Comma-separated, e.g. Yes, No, Occasionally"
-                                      />
-                                    </div>
-                                  ) : null}
-                                  <StepFieldError msg={err} />
+                          sectionQuestions.map((field) => {
+                            const err = stepFieldErrors[listingCustomQuestionErrorKey(field.id)];
+                            return (
+                              <div
+                                key={field.id}
+                                data-wizard-field={listingCustomQuestionErrorKey(field.id)}
+                                className={`space-y-3 rounded-xl border p-3 ${err ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${field.isStandard ? "bg-sky-100 text-sky-900 dark:bg-sky-950/40 dark:text-sky-100" : "bg-violet-100 text-violet-900 dark:bg-violet-950/40 dark:text-violet-100"}`}
+                                  >
+                                    {field.isStandard ? "Built-in" : "Custom"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="text-xs font-semibold text-rose-600 hover:underline"
+                                    onClick={() => removeApplicationQuestion(field)}
+                                  >
+                                    Remove
+                                  </button>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        ) : null}
+                                <div>
+                                  <FieldLabel>Question</FieldLabel>
+                                  <Input
+                                    value={field.label}
+                                    onChange={(e) => patchApplicationQuestion(field, { label: e.target.value })}
+                                    placeholder="e.g. Do you smoke?"
+                                  />
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div>
+                                    <FieldLabel>Answer type</FieldLabel>
+                                    <Select
+                                      value={field.type}
+                                      onChange={(e) =>
+                                        patchApplicationQuestion(field, {
+                                          type: e.target.value as ManagerCustomApplicationFieldType,
+                                        })
+                                      }
+                                    >
+                                      {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
+                                        <option key={o.id} value={o.id}>
+                                          {o.label}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                  </div>
+                                  <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-border text-primary"
+                                      checked={field.required}
+                                      onChange={(e) => patchApplicationQuestion(field, { required: e.target.checked })}
+                                    />
+                                    <span className="text-sm font-medium text-foreground">Required</span>
+                                  </label>
+                                </div>
+                                {field.type === "select" ? (
+                                  <div>
+                                    <FieldLabel>Dropdown options</FieldLabel>
+                                    <Input
+                                      value={questionOptionsText(field)}
+                                      onChange={(e) => setQuestionOptionsText(field, e.target.value)}
+                                      placeholder="Comma-separated, e.g. Yes, No, Occasionally"
+                                    />
+                                  </div>
+                                ) : null}
+                                <StepFieldError msg={err} />
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="text-xs text-muted">No questions in this section — add one or restore defaults.</p>
+                        )}
                       </div>
                     </div>
                   );

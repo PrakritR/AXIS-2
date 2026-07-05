@@ -31,6 +31,11 @@ const nextConfig: NextConfig = {
   // Lets the iOS/Android WebView load from your Mac's LAN IP during `npm run dev`.
   allowedDevOrigins: capacitorDevOrigins(),
   skipTrailingSlashRedirect: true,
+  experimental: {
+    // Persist Turbopack compiler output between dev restarts — faster cold starts.
+    turbopackFileSystemCacheForDev: true,
+    optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
+  },
   async rewrites() {
     return [
       {

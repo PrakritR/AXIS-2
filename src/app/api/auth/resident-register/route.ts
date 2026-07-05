@@ -1,6 +1,7 @@
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
+import { sendResidentApplyInviteEmail } from "@/lib/resident-apply-invite-email";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
     });
 
     let userId: string;
+    let isNewUser = false;
 
     if (createErr) {
       const exists =
@@ -58,6 +60,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Could not create account." }, { status: 500 });
       }
       userId = created.user.id;
+      isNewUser = true;
     }
 
     const provisioned = await provisionResidentAccountByEmail(supabase, {
@@ -69,11 +72,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: provisioned.error }, { status: provisioned.status });
     }
 
+    if (isNewUser) {
+      void sendResidentApplyInviteEmail({
+        to: email,
+        residentName: fullName || undefined,
+      }).catch(() => undefined);
+    }
+
     return NextResponse.json({
       ok: true,
       axisId: provisioned.axisId,
       linkedApplication: provisioned.linkedApplication,
-      redirectTo: "/resident/dashboard",
+      redirectTo: "/resident/applications",
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not create resident account.";

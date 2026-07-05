@@ -262,6 +262,11 @@ export function ShareLeadLinkModal({
                   <Button type="button" variant="outline" className="mt-2 rounded-full" disabled={!linkUrl} onClick={() => void handleCopy()}>
                     Copy link
                   </Button>
+                  {kind === "apply" ? (
+                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                      Applicants create a resident account first, then complete the application in their portal.
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 

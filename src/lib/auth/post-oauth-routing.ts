@@ -1,7 +1,7 @@
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { portalDashboardPath, type AuthRole } from "@/lib/auth/portal-roles";
 
-export type OAuthSignInIntent = "manager" | "resident";
+export type OAuthSignInIntent = "manager" | "resident" | "vendor";
 export type OAuthSurface = "native" | "web";
 
 export const OAUTH_INTENT_STORAGE_KEY = "axis_oauth_intent";
@@ -22,7 +22,8 @@ function isAuthRole(value: string): value is AuthRole {
 
 /** Default post-auth path for Google sign-in — matches website sign-in intent. */
 export function defaultOAuthNextPath(intent?: OAuthSignInIntent | null): string {
-  if (intent === "resident") return portalDashboardPath("resident");
+  if (intent === "resident") return "/resident/applications";
+  if (intent === "vendor") return "/vendor/dashboard";
   if (intent === "manager") return portalDashboardPath("manager");
   return GENERIC_CONTINUE;
 }
@@ -82,7 +83,7 @@ function roleMatchesPath(role: AuthRole, path: string): boolean {
 }
 
 export function parseOAuthSignInIntent(raw: string | null | undefined): OAuthSignInIntent | null {
-  if (raw === "manager" || raw === "resident") return raw;
+  if (raw === "manager" || raw === "resident" || raw === "vendor") return raw;
   return null;
 }
 

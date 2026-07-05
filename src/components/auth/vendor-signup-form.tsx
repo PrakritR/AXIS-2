@@ -3,6 +3,9 @@
 import posthog from "posthog-js";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthDivider } from "@/components/auth/auth-mobile-primitives";
+import { VendorGoogleSignUpButton } from "@/components/auth/vendor-google-sign-up-button";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -17,17 +20,25 @@ type RegisterResponse = {
   confirmLink?: string;
 };
 
-/** Vendor account creation form — reused standalone (`/auth/vendor-register`) and inline (public `/vendors` tab). */
+/** Vendor account creation — Google or email/password; reused in auth hub, invite page, and public marketing. */
 export function VendorSignupForm({
   inviteToken,
   initialEmail = "",
   initialFullName = "",
+  nextPath = "/vendor/dashboard",
+  variant = "default",
+  disabled = false,
 }: {
   inviteToken?: string;
   initialEmail?: string;
   initialFullName?: string;
+  nextPath?: string;
+  /** Hub-style signup matches resident create-account layout. */
+  variant?: "default" | "compact";
+  disabled?: boolean;
 }) {
   const router = useRouter();
+  const { showToast } = useAppUi();
   const [email, setEmail] = useState(initialEmail);
   const [fullName, setFullName] = useState(initialFullName);
   const [password, setPassword] = useState("");
@@ -37,8 +48,16 @@ export function VendorSignupForm({
   const [devConfirmLink, setDevConfirmLink] = useState<string | null>(null);
   const [confirmLinkNotice, setConfirmLinkNotice] = useState<string | null>(null);
 
+  const compact = variant === "compact";
+  const locked = disabled || busy;
+  const resolvedNext = nextPath.startsWith("/") ? nextPath : "/vendor/dashboard";
+
   const submit = async () => {
     setError(null);
+    if (compact && !inviteToken && (!fullName.trim() || !email.trim() || password.length < 8)) {
+      showToast("Enter your name, email, and an 8+ character password.");
+      return;
+    }
     if (!inviteToken && !email.trim().includes("@")) {
       setError("Enter a valid email address.");
       return;
@@ -87,7 +106,7 @@ export function VendorSignupForm({
         return;
       }
       if (signInData?.user) posthog.identify(signInData.user.id);
-      router.push(body.redirectTo?.startsWith("/") ? body.redirectTo : "/vendor/dashboard");
+      window.location.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : resolvedNext);
     } catch {
       setError("Could not create vendor account.");
     } finally {
@@ -116,8 +135,46 @@ export function VendorSignupForm({
     );
   }
 
-  return (
-    <div className="space-y-4">
+  const googleBlock = (
+    <VendorGoogleSignUpButton
+      inviteToken={inviteToken}
+      nextPath={resolvedNext}
+      disabled={locked}
+    />
+  );
+
+  const passwordFieldsCompact = (
+    <>
+      <Input
+        placeholder="Full name"
+        autoComplete="name"
+        value={fullName}
+        onChange={(e) => setFullName(e.target.value)}
+        disabled={locked}
+      />
+      <Input
+        type="email"
+        autoComplete="email"
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        disabled={Boolean(inviteToken) || locked}
+      />
+      <PasswordInput
+        autoComplete="new-password"
+        placeholder="Password (8+ characters)"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        disabled={locked}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void submit();
+        }}
+      />
+    </>
+  );
+
+  const passwordFieldsDefault = (
+    <>
       <div>
         <label className={FIELD_LABEL_CLASS} htmlFor="vendor-email">
           Email
@@ -128,7 +185,7 @@ export function VendorSignupForm({
           className="mt-1.5"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          disabled={Boolean(inviteToken)}
+          disabled={Boolean(inviteToken) || locked}
         />
       </div>
       <div>
@@ -141,6 +198,7 @@ export function VendorSignupForm({
           className="mt-1.5"
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
+          disabled={locked}
         />
       </div>
       <div>
@@ -152,16 +210,56 @@ export function VendorSignupForm({
           className="mt-1.5"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          disabled={locked}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
         />
       </div>
+    </>
+  );
 
+  if (compact) {
+    return (
+      <div className="vendor-signup-form space-y-3">
+        <p className="text-center text-xs text-muted">
+          Create a vendor account to see work orders offered to you, track scheduled visits, and message your
+          property manager directly.
+        </p>
+
+        {googleBlock}
+
+        <AuthDivider label="or enter your details" />
+
+        {passwordFieldsCompact}
+
+        <Button
+          type="button"
+          data-attr="vendor-signup-submit"
+          className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+          disabled={locked}
+          onClick={() => void submit()}
+          event="vendor_signup_submitted"
+        >
+          {busy ? "Creating…" : "Create vendor account"}
+        </Button>
+
+        {error ? <p className="text-center text-xs text-rose-600">{error}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {googleBlock}
+      <AuthDivider label="or enter your details" />
+      {passwordFieldsDefault}
       {error ? <p className="text-sm text-danger">{error}</p> : null}
-
       <Button
         type="button"
         className="w-full rounded-full py-3 text-base font-semibold"
-        onClick={submit}
-        disabled={busy}
+        onClick={() => void submit()}
+        disabled={locked}
         data-attr="vendor-signup-submit"
         event="vendor_signup_submitted"
       >

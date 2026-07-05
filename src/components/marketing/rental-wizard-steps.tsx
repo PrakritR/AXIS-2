@@ -107,6 +107,7 @@ export type WizardStepsProps = {
   errors: RentalWizardErrors;
   propertyOptions: { value: string; label: string }[];
   propertyLocked?: boolean;
+  emailLocked?: boolean;
   patch: (p: Partial<RentalWizardFormState>) => void;
   applicationFeeGate: {
     needsFee: boolean;
@@ -797,6 +798,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 value={form.email}
                 onChange={(e) => patch({ email: e.target.value })}
                 placeholder="you@example.com"
+                readOnly={Boolean(p.emailLocked)}
+                disabled={Boolean(p.emailLocked)}
                 className={errors.email ? "border-red-400 ring-2 ring-red-100" : ""}
               />
               <FieldError msg={errors.email} />

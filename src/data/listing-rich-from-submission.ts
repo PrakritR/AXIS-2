@@ -771,6 +771,22 @@ export function listingRichFromManagerSubmission(
       body: sub.otherMonthlyFees.trim(),
     });
   }
+  for (const fee of sub.customFees ?? []) {
+    if (!fee.label.trim() || !feeMeaningfulForListing(fee.amount)) continue;
+    const price = formatListingFeeDisplay(fee.amount);
+    const monthly = fee.frequency !== "one-time";
+    houseCostRows.push({
+      id: `custom-fee-${fee.id}`,
+      icon: "💵",
+      title: fee.label.trim(),
+      detail: monthly ? "Additional monthly charge" : "One-time charge",
+      price,
+      status: monthly ? "Monthly" : "One-time",
+      body: monthly
+        ? `${fee.label.trim()}: ${price} per month.`
+        : `${fee.label.trim()}: ${price} (one-time).`,
+    });
+  }
 
   const amenities = houseWideAmenityItems(sub.amenitiesText);
 

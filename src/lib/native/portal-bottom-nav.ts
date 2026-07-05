@@ -92,6 +92,8 @@ export const NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY = [
   "inbox",
 ] as const;
 
+export const NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY = ["applications"] as const;
+
 export const NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY = [
   "lease",
   "move-in",
@@ -120,11 +122,27 @@ export function nativeBottomBarEnabledForKind(_kind?: PortalDefinition["kind"]):
  * section don't need one. Vendor now has 7 sections — Documents is reachable via
  * the More sheet alongside the 4 primary tabs + back + profile.
  */
-export function nativeBottomNavShowMoreTab(kind?: PortalDefinition["kind"]): boolean {
+export function nativeBottomNavShowMoreTab(
+  kind?: PortalDefinition["kind"],
+  items?: { section: string }[],
+): boolean {
+  if (kind === "resident" && items) {
+    const navSections = items.filter((item) => item.section !== "profile").map((item) => item.section);
+    if (navSections.length === 1 && navSections[0] === "applications") return false;
+  }
   return kind === "pro" || kind === "manager" || kind === "resident" || kind === "vendor";
 }
 
-function primaryOrderFor(kind?: PortalDefinition["kind"]): readonly string[] {
+function primaryOrderFor(
+  kind?: PortalDefinition["kind"],
+  items?: { section: string }[],
+): readonly string[] {
+  if (kind === "resident" && items) {
+    const navSections = new Set(items.filter((item) => item.section !== "profile").map((item) => item.section));
+    if (navSections.size === 1 && navSections.has("applications")) {
+      return NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY;
+    }
+  }
   switch (kind) {
     case "pro":
     case "manager":
@@ -149,7 +167,7 @@ export function splitNativeBottomNavItems<T extends { section: string }>(
   kind?: PortalDefinition["kind"],
 ): { primary: T[]; overflow: T[] } {
   const ordered = orderNativeBottomNavItems(items, kind);
-  const primaryOrder = primaryOrderFor(kind);
+  const primaryOrder = primaryOrderFor(kind, items);
   // Fail closed: an unrecognized role with no curated primary set must not dump
   // every section onto the fixed bar — everything goes to the More sheet instead.
   if (primaryOrder.length === 0) return { primary: [], overflow: ordered };

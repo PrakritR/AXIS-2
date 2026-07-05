@@ -7,9 +7,10 @@ import {
 } from "@/lib/auth/post-oauth-routing";
 
 describe("post-oauth routing", () => {
-  it("defaults manager and resident next paths to portal dashboards", () => {
+  it("defaults manager, resident, and vendor next paths", () => {
     expect(defaultOAuthNextPath("manager")).toBe("/portal/dashboard");
-    expect(defaultOAuthNextPath("resident")).toBe("/resident/dashboard");
+    expect(defaultOAuthNextPath("resident")).toBe("/resident/applications");
+    expect(defaultOAuthNextPath("vendor")).toBe("/vendor/dashboard");
     expect(defaultOAuthNextPath(null)).toBe("/auth/continue");
   });
 

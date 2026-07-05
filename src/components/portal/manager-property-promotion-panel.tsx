@@ -62,6 +62,7 @@ export function ManagerPropertyPromotionPanel({
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [previewEpoch, setPreviewEpoch] = useState(0);
 
   useEffect(() => {
     if (!authReady) return;
@@ -111,6 +112,7 @@ export function ManagerPropertyPromotionPanel({
     setShowForm(false);
     setEditingId(null);
     setDraft(EMPTY_DRAFT);
+    setPreviewEpoch((n) => n + 1);
   }, []);
 
   async function generate() {
@@ -205,12 +207,31 @@ export function ManagerPropertyPromotionPanel({
         </div>
         {promotion?.copy ? (
           <div className="min-w-0 max-w-full overflow-x-auto px-4 py-3">
-            <PromotionFlyerPreview promotion={promotion} embedded />
+            <PromotionFlyerPreview
+              key={`${promotion.id}-${promotion.updatedAt}-${previewEpoch}`}
+              promotion={promotion}
+              embedded
+            />
           </div>
         ) : null}
       </div>
 
-      <Modal open={showForm} title="Create flyer" onClose={closeForm} panelClassName="max-w-2xl">
+      <Modal
+        open={showForm}
+        title={editingId ? "Edit flyer" : "Create flyer"}
+        onClose={closeForm}
+        panelClassName="max-w-2xl"
+      >
+        {promotion?.copy && editingId ? (
+          <div className="mb-4 min-w-0">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted">Current flyer</p>
+            <PromotionFlyerPreview
+              key={`modal-${promotion.id}-${promotion.updatedAt}`}
+              promotion={promotion}
+              embedded
+            />
+          </div>
+        ) : null}
         <PromotionForm
           draft={draft}
           setDraft={setDraft}

@@ -168,38 +168,42 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
 
   const body = (
     <>
-      <ManagerPortalFilterRow>
-        <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-      </ManagerPortalFilterRow>
-
-      {!sessionReady ? (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
-        </div>
-      ) : rowsForBucket.length === 0 ? (
-        <div className="space-y-4">
-          <PortalDataTableEmpty
-            icon="application"
-            message={
-              rows.length === 0
-                ? "No applications are linked to your account yet."
-                : "No applications in this tab yet."
-            }
-          />
-          {rows.length === 0 ? (
-            <div className="flex justify-center">
-              <Link
-                href="/rent/apply"
-                className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-border bg-card px-5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent"
-              >
-                Start an application
-              </Link>
-            </div>
-          ) : null}
+      {rows.length === 0 ? (
+        <div className="mx-auto max-w-lg space-y-6 py-6 text-center sm:py-10">
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Apply for housing</h2>
+            <p className="text-sm leading-relaxed text-muted">
+              Start your rental application here. You&apos;ll choose a property and room, then complete the standard Axis application.
+            </p>
+          </div>
+          <Link
+            href="/resident/applications/apply"
+            className="btn-cobalt inline-flex min-h-[48px] items-center justify-center rounded-full px-8 text-base font-semibold"
+            data-attr="resident-start-application"
+          >
+            Start application
+          </Link>
+          <p className="text-sm text-muted">
+            <Link href="/rent/browse" className="font-semibold text-primary underline-offset-4 hover:underline">
+              Browse available housing
+            </Link>
+          </p>
         </div>
       ) : (
         <>
-          <div className="space-y-2 lg:hidden">
+          <ManagerPortalFilterRow>
+            <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+          </ManagerPortalFilterRow>
+
+          {!sessionReady ? (
+            <div className={PORTAL_DATA_TABLE_WRAP}>
+              <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
+            </div>
+          ) : rowsForBucket.length === 0 ? (
+            <PortalDataTableEmpty icon="application" message="No applications in this tab yet." />
+          ) : (
+            <>
+              <div className="space-y-2 lg:hidden">
             {rowsForBucket.map((row) => {
               const expanded = expandedId === row.id;
               return (
@@ -267,6 +271,8 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
               </table>
             </div>
           </div>
+        </>
+          )}
         </>
       )}
     </>

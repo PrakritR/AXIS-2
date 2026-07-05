@@ -101,8 +101,6 @@ export function ManagerPropertyApplicationQuestionsPanel({
   const fields = normalizeCustomApplicationFields(sub.customApplicationFields);
   if (!saveTarget || !managerUserId) return null;
 
-  const hasCustomConfig = fields.length > 0 || sub.applicationConfigMode === "custom";
-
   const openModal = () => {
     setRows(draftRowsFromFields(fields));
     setRowErrors({});
@@ -188,22 +186,18 @@ export function ManagerPropertyApplicationQuestionsPanel({
     onUpdated();
   };
 
-  const removeCustomConfig = () => {
-    if (
-      !window.confirm("Remove custom application questions and reset to the default application?")
-    ) {
-      return;
-    }
+  const removeSingleField = (fieldId: string) => {
+    const nextFields = fields.filter((f) => f.id !== fieldId);
     const next: ManagerListingSubmissionV1 = {
       ...sub,
-      customApplicationFields: [],
-      applicationConfigMode: "standard",
+      customApplicationFields: nextFields,
+      applicationConfigMode: nextFields.length > 0 ? "custom" : "standard",
     };
     if (!persistSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not reset application.");
+      showToast("Could not remove question.");
       return;
     }
-    showToast("Application reset to default.");
+    showToast("Question removed.");
     onUpdated();
   };
 
@@ -212,34 +206,21 @@ export function ManagerPropertyApplicationQuestionsPanel({
       <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
           <p className="text-sm font-semibold text-foreground">Application</p>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {hasCustomConfig ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 rounded-full px-3 text-xs border-rose-200 text-rose-800 portal-danger-outline"
-                data-attr="application-questions-remove"
-                onClick={removeCustomConfig}
-              >
-                Remove
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              data-attr="application-questions-add"
-              onClick={openModal}
-            >
-              Add
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs"
+            data-attr="application-questions-add"
+            onClick={openModal}
+          >
+            Add
+          </Button>
         </div>
 
         {fields.length > 0 ? (
           <div>
             {fields.map((field, idx) => (
-              <div key={field.id} className="flex gap-4 border-t border-border px-4 py-3 first:border-t-0">
+              <div key={field.id} className="flex gap-3 border-t border-border px-4 py-3 first:border-t-0">
                 <p className="w-6 shrink-0 pt-0.5 text-xs font-semibold text-muted">{idx + 1}.</p>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground">{field.label}</p>
@@ -249,6 +230,16 @@ export function ManagerPropertyApplicationQuestionsPanel({
                     {field.type === "select" && field.options.length > 0 ? ` · ${field.options.join(" / ")}` : ""}
                   </p>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 shrink-0 rounded-full px-3 text-xs border-rose-200 text-rose-800 portal-danger-outline"
+                  data-attr="application-question-remove-one"
+                  title={`Remove ${field.label}`}
+                  onClick={() => removeSingleField(field.id)}
+                >
+                  Remove
+                </Button>
               </div>
             ))}
           </div>

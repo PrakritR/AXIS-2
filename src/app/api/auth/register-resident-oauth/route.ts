@@ -1,5 +1,6 @@
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
+import { sendResidentApplyInviteEmail } from "@/lib/resident-apply-invite-email";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -44,6 +45,13 @@ export async function POST(req: Request) {
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    if (!result.linkedApplication) {
+      void sendResidentApplyInviteEmail({
+        to: user.email,
+        residentName: fullName ?? undefined,
+      }).catch(() => undefined);
     }
 
     return NextResponse.json({ ok: true, axisId: result.axisId, linkedApplication: result.linkedApplication });
