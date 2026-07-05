@@ -143,7 +143,24 @@ async function submitBid(
     .select("manager_user_id, vendor_user_id, row_data")
     .eq("id", workOrderId)
     .maybeSingle();
-  if (!workOrder || workOrder.vendor_user_id !== actor.userId) {
+  if (!workOrder) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+
+  // A vendor may bid if they're the currently assigned vendor, or if the manager sent
+  // them a consultation/quote offer for this work order (several vendors can be offered
+  // the same not-yet-assigned work order at once — see work_order_vendor_offers).
+  const isAssignedVendor = workOrder.vendor_user_id === actor.userId;
+  let isOfferedVendor = false;
+  if (!isAssignedVendor) {
+    const { data: offer } = await db
+      .from("work_order_vendor_offers")
+      .select("id")
+      .eq("work_order_id", workOrderId)
+      .eq("vendor_user_id", actor.userId)
+      .eq("status", "sent")
+      .maybeSingle();
+    isOfferedVendor = Boolean(offer);
+  }
+  if (!isAssignedVendor && !isOfferedVendor) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
   const rowData = (workOrder.row_data ?? {}) as DemoManagerWorkOrderRow;
@@ -230,6 +247,15 @@ async function acceptBid(
       .update({ status: "declined", updated_at: now })
       .in("id", declined.map((b) => b.id));
   }
+
+  // Once a vendor is assigned, no other offered vendor should keep seeing this work
+  // order in their portal (same "loses read access on reassignment" behavior as the
+  // single-vendor Phase 2 flow) — withdraw every offer on this work order.
+  await db
+    .from("work_order_vendor_offers")
+    .update({ status: "withdrawn", updated_at: now })
+    .eq("work_order_id", record.work_order_id)
+    .eq("status", "sent");
 
   const { data: workOrder } = await db
     .from("portal_work_order_records")

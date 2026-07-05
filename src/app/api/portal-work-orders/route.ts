@@ -7,12 +7,51 @@ import { residentBelongsToManager } from "@/lib/resident-manager-scope";
 
 export const runtime = "nodejs";
 
+type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
+
 async function sessionUser() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
+}
+
+/** A vendor sees work orders they're currently assigned to (vendor_user_id) plus any
+ * they were sent a consultation/quote offer for (work_order_vendor_offers) — several
+ * vendors can be offered the same not-yet-assigned work order at once, so this can't
+ * rely on the single vendor_user_id column alone. */
+async function vendorScopedWorkOrderRows(db: Db, vendorUserId: string): Promise<DemoManagerWorkOrderRow[]> {
+  const { data: offers } = await db
+    .from("work_order_vendor_offers")
+    .select("work_order_id")
+    .eq("vendor_user_id", vendorUserId)
+    .eq("status", "sent");
+  const offeredIds = [...new Set((offers ?? []).map((o) => o.work_order_id as string))];
+
+  const { data: assigned } = await db
+    .from("portal_work_order_records")
+    .select("id, row_data, updated_at")
+    .eq("vendor_user_id", vendorUserId)
+    .order("updated_at", { ascending: false })
+    .limit(500);
+
+  const byId = new Map<string, DemoManagerWorkOrderRow>();
+  for (const record of assigned ?? []) {
+    const row = record.row_data as DemoManagerWorkOrderRow | null;
+    if (row) byId.set(record.id as string, row);
+  }
+
+  const missingIds = offeredIds.filter((id) => !byId.has(id));
+  if (missingIds.length > 0) {
+    const { data: offeredRows } = await db.from("portal_work_order_records").select("id, row_data").in("id", missingIds);
+    for (const record of offeredRows ?? []) {
+      const row = record.row_data as DemoManagerWorkOrderRow | null;
+      if (row) byId.set(record.id as string, row);
+    }
+  }
+
+  return [...byId.values()];
 }
 
 function normalizeRow(row: DemoManagerWorkOrderRow): DemoManagerWorkOrderRow {
@@ -33,6 +72,11 @@ export async function GET() {
     const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
 
+    if (!admin && role === "vendor") {
+      const rows = await vendorScopedWorkOrderRows(db, user.id);
+      return NextResponse.json({ rows });
+    }
+
     let query = db
       .from("portal_work_order_records")
       .select("row_data, updated_at")
@@ -41,9 +85,6 @@ export async function GET() {
 
     if (!admin && role === "resident") {
       query = query.eq("resident_email", email);
-    } else if (!admin && role === "vendor") {
-      // A vendor sees only work orders assigned to them, never another vendor's or landlord's.
-      query = query.eq("vendor_user_id", user.id);
     } else if (!admin) {
       // Managers see only their own work orders (plus legacy unassigned rows),
       // never other landlords'. This matches the manager panel's client filter.
