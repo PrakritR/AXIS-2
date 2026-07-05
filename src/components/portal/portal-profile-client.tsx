@@ -12,6 +12,7 @@ import { ManagerPlan } from "@/components/portal/manager-plan";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { PortalKind } from "@/lib/portal-types";
 
 function dashToEmpty(v: string) {
@@ -81,6 +82,7 @@ export function PortalProfileClient({
   idValue: string;
 }) {
   const { showToast } = useAppUi();
+  const demo = isDemoModeActive();
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(dashToEmpty(initialFullName));
   const [phone, setPhone] = useState(dashToEmpty(initialPhone));
@@ -106,6 +108,12 @@ export function PortalProfileClient({
   }, [initialFullName, initialPhone, editing]);
 
   const save = useCallback(async () => {
+    if (demo) {
+      showToast("Profile changes are simulated in this demo.");
+      setPendingSkipServerPropsSync(true);
+      setEditing(false);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/profile", {
@@ -135,7 +143,7 @@ export function PortalProfileClient({
     } finally {
       setSaving(false);
     }
-  }, [fullName, phone, showToast]);
+  }, [demo, fullName, phone, showToast]);
 
   const cancel = useCallback(() => {
     setFullName(dashToEmpty(initialFullName));
@@ -235,9 +243,11 @@ export function PortalProfileClient({
       >
         <div className="space-y-3 [html[data-native]_&]:space-y-2.5">
           <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">{inner}</Card>
-          <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">
-            <ManagerPlan embedded showCurrentPlan={false} />
-          </Card>
+          {demo ? null : (
+            <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">
+              <ManagerPlan embedded showCurrentPlan={false} />
+            </Card>
+          )}
           <NotificationsToggle />
           <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
           <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />

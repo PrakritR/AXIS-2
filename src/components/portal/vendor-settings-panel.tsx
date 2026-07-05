@@ -6,7 +6,8 @@ import { Input, Select } from "@/components/ui/input";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { DEMO_VENDOR_EMAIL, DEMO_VENDOR_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
+import { isoDateOnly } from "@/lib/demo/demo-data";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
 import type { VendorTaxDraft } from "@/components/portal/vendor-tax-profile-modal";
 import {
@@ -64,16 +65,51 @@ type VendorProfileApiRow = {
   insuranceExpiresAt?: string;
 };
 
+const DEMO_VENDOR_PROFILE: VendorProfileDraft = {
+  name: DEMO_VENDOR_NAME,
+  phone: "(206) 555-0142",
+  email: DEMO_VENDOR_EMAIL,
+  insuranceProvider: "Pemco Commercial",
+  insurancePolicyNumber: "PC-482913",
+  insuranceExpiresAt: isoDateOnly(150),
+};
+const DEMO_VENDOR_TRADES = ["HVAC", "Appliance repair"];
+const DEMO_VENDOR_TAX: VendorTaxDraft = {
+  legalName: "Cascade Mechanical LLC",
+  businessName: "Cascade Mechanical",
+  entityType: "business",
+  addressLine1: "4110 Stone Way N",
+  addressLine2: "",
+  city: "Seattle",
+  state: "WA",
+  zip: "98103",
+  tinType: "ein",
+  tin: "",
+  w9Attestation: true,
+};
+
 function todayDateInputValue(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+const DEMO_VENDOR_AVAILABILITY_RULES: VendorAvailabilityRule[] = [
+  { id: "demo-avail-mon", kind: "weekly", weekday: 1, startMinute: 8 * 60, endMinute: 17 * 60 },
+  { id: "demo-avail-tue", kind: "weekly", weekday: 2, startMinute: 8 * 60, endMinute: 17 * 60 },
+  { id: "demo-avail-wed", kind: "weekly", weekday: 3, startMinute: 8 * 60, endMinute: 17 * 60 },
+  { id: "demo-avail-thu", kind: "weekly", weekday: 4, startMinute: 8 * 60, endMinute: 17 * 60 },
+  { id: "demo-avail-fri", kind: "weekly", weekday: 5, startMinute: 8 * 60, endMinute: 15 * 60 },
+  { id: "demo-avail-block-1", kind: "block", specificDate: isoDateOnly(9), startMinute: 0, endMinute: 1440, note: "Company holiday" },
+];
+
+let demoAvailabilityRuleCounter = 0;
+
 /** Weekly recurring hours + one-off blocked dates, editable inline. */
 function VendorAvailabilityEditor() {
   const { showToast } = useAppUi();
-  const [rules, setRules] = useState<VendorAvailabilityRule[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const demo = isDemoModeActive();
+  const [rules, setRules] = useState<VendorAvailabilityRule[]>(() => (demo ? DEMO_VENDOR_AVAILABILITY_RULES : []));
+  const [loaded, setLoaded] = useState(demo);
   const [weeklyFormOpen, setWeeklyFormOpen] = useState(false);
   const [weeklyDraft, setWeeklyDraft] = useState({ weekday: 1, start: "09:00", end: "17:00" });
   const [blockFormOpen, setBlockFormOpen] = useState(false);
@@ -82,6 +118,7 @@ function VendorAvailabilityEditor() {
   const [saving, setSaving] = useState(false);
 
   const reload = async () => {
+    if (demo) return;
     const next = await fetchVendorAvailability();
     setRules(next);
     setLoaded(true);
@@ -118,6 +155,16 @@ function VendorAvailabilityEditor() {
       showToast("Choose a valid start and end time.");
       return;
     }
+    if (demo) {
+      demoAvailabilityRuleCounter += 1;
+      setRules((cur) => [
+        ...cur,
+        { id: `demo-avail-new-${demoAvailabilityRuleCounter}`, kind: "weekly", weekday: weeklyDraft.weekday, startMinute: start, endMinute: end },
+      ]);
+      setWeeklyFormOpen(false);
+      showToast("Weekly window added.");
+      return;
+    }
     setSaving(true);
     const result = await saveVendorWeeklyRule({ weekday: weeklyDraft.weekday, startMinute: start, endMinute: end });
     setSaving(false);
@@ -147,6 +194,24 @@ function VendorAvailabilityEditor() {
       startMinute = start;
       endMinute = end;
     }
+    if (demo) {
+      demoAvailabilityRuleCounter += 1;
+      setRules((cur) => [
+        ...cur,
+        {
+          id: `demo-avail-new-${demoAvailabilityRuleCounter}`,
+          kind: "block",
+          specificDate: blockDraft.date,
+          startMinute: startMinute ?? 0,
+          endMinute: endMinute ?? 1440,
+          note: blockDraft.note || null,
+        },
+      ]);
+      setBlockFormOpen(false);
+      setBlockDraft({ date: todayDateInputValue(), allDay: true, start: "09:00", end: "17:00", note: "" });
+      showToast("Date blocked.");
+      return;
+    }
     setSaving(true);
     const result = await saveVendorBlockRule({
       specificDate: blockDraft.date,
@@ -166,6 +231,10 @@ function VendorAvailabilityEditor() {
   };
 
   const removeRule = async (id: string) => {
+    if (demo) {
+      setRules((cur) => cur.filter((r) => r.id !== id));
+      return;
+    }
     setBusyId(id);
     const ok = await deleteVendorAvailabilityRule(id);
     setBusyId(null);
@@ -398,13 +467,13 @@ export function VendorSettingsPanel() {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
 
-  const [profileDraft, setProfileDraft] = useState<VendorProfileDraft>(EMPTY_PROFILE);
-  const [trades, setTrades] = useState<string[]>([]);
+  const [profileDraft, setProfileDraft] = useState<VendorProfileDraft>(() => (demo ? DEMO_VENDOR_PROFILE : EMPTY_PROFILE));
+  const [trades, setTrades] = useState<string[]>(() => (demo ? DEMO_VENDOR_TRADES : []));
   const [profileLoading, setProfileLoading] = useState(() => !demo);
   const [profileSaving, setProfileSaving] = useState(false);
   const [capabilitiesSaving, setCapabilitiesSaving] = useState(false);
 
-  const [taxDraft, setTaxDraft] = useState<VendorTaxDraft>(EMPTY_TAX);
+  const [taxDraft, setTaxDraft] = useState<VendorTaxDraft>(() => (demo ? DEMO_VENDOR_TAX : EMPTY_TAX));
   const [taxLoading, setTaxLoading] = useState(() => !demo);
   const [taxSaving, setTaxSaving] = useState(false);
 

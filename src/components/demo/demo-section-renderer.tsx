@@ -9,6 +9,8 @@ import { ResidentMoveInResolvedView } from "@/components/portal/resident-move-in
 import { demoApplications, demoProperties } from "@/lib/demo/demo-data";
 import type { DemoPortalRole } from "@/lib/demo/demo-session";
 import {
+  DEMO_MANAGER_EMAIL,
+  DEMO_MANAGER_NAME,
   DEMO_MANAGER_USER_ID,
   DEMO_RESIDENT_EMAIL,
   DEMO_RESIDENT_NAME,
@@ -37,6 +39,7 @@ const PortalCalendar = dynamic(() => import("@/components/portal/portal-calendar
 const ProAccountLinksPanel = dynamic(() => import("@/components/portal/pro-account-links-panel").then((m) => m.ProAccountLinksPanel), { ssr: false, loading });
 const ManagerPromotion = dynamic(() => import("@/components/portal/manager-promotion").then((m) => m.ManagerPromotion), { ssr: false, loading });
 const PortalBugFeedbackPanel = dynamic(() => import("@/components/portal/portal-bug-feedback-panel").then((m) => m.PortalBugFeedbackPanel), { ssr: false, loading });
+const PortalProfileClient = dynamic(() => import("@/components/portal/portal-profile-client").then((m) => m.PortalProfileClient), { ssr: false, loading });
 
 // Resident panels
 const ResidentDashboard = dynamic(() => import("@/components/portal/resident-dashboard").then((m) => m.ResidentDashboard), { ssr: false, loading });
@@ -131,7 +134,17 @@ export function DemoSectionRenderer({
         // The demo manager portal mirrors the real "pro" portal definition.
         return <PortalBugFeedbackPanel reporterRole="pro" />;
       case "profile":
-        return <Placeholder title="Settings" message="Profile settings appear here for your real account." />;
+        return (
+          <PortalProfileClient
+            variant="manager"
+            portalKind="pro"
+            initialFullName={DEMO_MANAGER_NAME}
+            initialEmail={DEMO_MANAGER_EMAIL}
+            initialPhone="(206) 555-0101"
+            idLabel="Axis ID"
+            idValue="AXIS-DEMO4821"
+          />
+        );
       default:
         return <Placeholder title={meta?.label ?? "Section"} message="Nothing to show yet." />;
     }
