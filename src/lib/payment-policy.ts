@@ -128,3 +128,29 @@ export function residentPaymentMethodsSummary(
   if (methods.length === 0) methods.push("Zelle, Venmo, ACH, or cash — your manager marks payments received.");
   return methods;
 }
+
+/** The payment method a resident settles a charge with — manager-controlled per property, chosen by the resident. */
+export type ResidentAcceptedPaymentMethod = "zelle" | "venmo" | "ach" | "card";
+
+export const RESIDENT_ACCEPTED_PAYMENT_METHODS: ResidentAcceptedPaymentMethod[] = ["zelle", "venmo", "ach", "card"];
+
+export const RESIDENT_ACCEPTED_PAYMENT_METHOD_LABELS: Record<ResidentAcceptedPaymentMethod, string> = {
+  zelle: "Zelle",
+  venmo: "Venmo",
+  ach: "ACH",
+  card: "Credit card",
+};
+
+export function isResidentAcceptedPaymentMethod(value: unknown): value is ResidentAcceptedPaymentMethod {
+  return typeof value === "string" && (RESIDENT_ACCEPTED_PAYMENT_METHODS as string[]).includes(value);
+}
+
+/** Payment methods a property accepts from residents. Unset/empty = every method is accepted (default). */
+export function acceptedPaymentMethodsForListing(
+  sub: Pick<ManagerListingSubmissionV1, "acceptedPaymentMethods"> | null | undefined,
+): ResidentAcceptedPaymentMethod[] {
+  const raw = sub?.acceptedPaymentMethods;
+  if (!Array.isArray(raw) || raw.length === 0) return [...RESIDENT_ACCEPTED_PAYMENT_METHODS];
+  const filtered = RESIDENT_ACCEPTED_PAYMENT_METHODS.filter((m) => raw.includes(m));
+  return filtered.length > 0 ? filtered : [...RESIDENT_ACCEPTED_PAYMENT_METHODS];
+}

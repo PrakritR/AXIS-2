@@ -25,6 +25,7 @@ import {
 } from "@/lib/household-charges";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
+import { ManagerPaymentMethodsModal } from "@/components/portal/manager-payment-methods-modal";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { usePaidPortalBasePath } from "@/lib/portal-base-path-client";
 import {
@@ -71,6 +72,7 @@ export function ManagerPayments() {
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const [paymentMethodsOpen, setPaymentMethodsOpen] = useState(false);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [applicationTick, setApplicationTick] = useState(0);
@@ -308,6 +310,15 @@ export function ManagerPayments() {
         <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setReminderSettingsOpen(true)}>
           Reminders
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_HEADER_ACTION_BTN}
+          onClick={() => setPaymentMethodsOpen(true)}
+          data-attr="manager-open-payment-methods"
+        >
+          Payment methods
+        </Button>
       </div>
     </ManagerPortalFilterRow>
   );
@@ -333,6 +344,15 @@ export function ManagerPayments() {
             <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setReminderSettingsOpen(true)}>
               Auto reminders
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => setPaymentMethodsOpen(true)}
+              data-attr="manager-open-payment-methods-desktop"
+            >
+              Payment methods
+            </Button>
           </div>
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
             Add payment
@@ -349,6 +369,11 @@ export function ManagerPayments() {
         onOpenReminderSettings={() => setReminderSettingsOpen(true)}
         onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
+      />
+      <ManagerPaymentMethodsModal
+        open={paymentMethodsOpen}
+        onClose={() => setPaymentMethodsOpen(false)}
+        managerUserId={userId ?? null}
       />
       <ReminderSettingsModal
         open={reminderSettingsOpen}

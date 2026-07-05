@@ -216,6 +216,12 @@ export type ManagerListingSubmissionV1 = {
   /** External bank/ACH payment link (e.g. a bank bill-pay URL), shown to applicants/residents. */
   achPaymentLink?: string;
   /**
+   * Payment methods this property accepts from residents, manager-controlled (Zelle/Venmo/ACH/Credit
+   * card). Unset/empty = every method is accepted (see `acceptedPaymentMethodsForListing`). Read by the
+   * resident's "Set payment method" selector to gate which choices are offered.
+   */
+  acceptedPaymentMethods?: ("zelle" | "venmo" | "ach" | "card")[];
+  /**
    * When manual payment methods are enabled for the listing, applicants can still use the default “portal / online” path
    * for the application fee (manager marks received). Default true.
    */
@@ -1005,6 +1011,12 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     })(),
     lateFeeAmount: typeof sub.lateFeeAmount === "string" ? sub.lateFeeAmount : "50",
     axisPaymentsEnabled: sub.axisPaymentsEnabled !== false,
+    acceptedPaymentMethods: Array.isArray(sub.acceptedPaymentMethods)
+      ? sub.acceptedPaymentMethods.filter(
+          (m): m is "zelle" | "venmo" | "ach" | "card" =>
+            m === "zelle" || m === "venmo" || m === "ach" || m === "card",
+        )
+      : undefined,
     housePhotoDataUrls,
     houseVideoDataUrl: typeof (sub as Record<string, unknown>).houseVideoDataUrl === "string"
       ? ((sub as Record<string, unknown>).houseVideoDataUrl as string) || null

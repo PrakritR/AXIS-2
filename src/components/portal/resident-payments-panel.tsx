@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { track } from "@/lib/analytics/track-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
 import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -42,8 +43,13 @@ import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment
 import {
   residentPaymentMethodLabel,
   residentProcessingFeeDisplayLabel,
+  acceptedPaymentMethodsForListing,
+  isResidentAcceptedPaymentMethod,
+  RESIDENT_ACCEPTED_PAYMENT_METHOD_LABELS,
   type ResidentAxisPaymentMethod,
+  type ResidentAcceptedPaymentMethod,
 } from "@/lib/payment-policy";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { nativePlatformRequestHeaders } from "@/lib/platform/native-client";
 import { residentPaymentMethodsForSurface } from "@/lib/platform/resident-payments";
 import { safeFormatDateTime } from "@/lib/pacific-time";
@@ -119,6 +125,9 @@ export function ResidentPaymentsPanel() {
   const [paymentMethod, setPaymentMethod] = useState<ResidentAxisPaymentMethod>("ach");
   const [tick, setTick] = useState(0);
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
+  const [preferredMethod, setPreferredMethod] = useState<ResidentAcceptedPaymentMethod | null>(null);
+  const [preferredMethodModalOpen, setPreferredMethodModalOpen] = useState(false);
+  const [preferredMethodSaving, setPreferredMethodSaving] = useState(false);
   const email = session.email?.trim() ?? null;
   const userId = session.userId;
 
@@ -156,6 +165,29 @@ export function ResidentPaymentsPanel() {
       await syncHouseholdChargesFromServer(true, { skipReconcile: true });
     })().finally(refresh);
   }, [email, refresh, session.ready, session.userId]);
+
+  useEffect(() => {
+    if (!session.ready || !session.userId || isDemoModeActive()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data } = await supabase
+          .from("profiles")
+          .select("preferred_payment_method")
+          .eq("id", session.userId)
+          .maybeSingle();
+        if (cancelled) return;
+        const raw = data?.preferred_payment_method;
+        setPreferredMethod(isResidentAcceptedPaymentMethod(raw) ? raw : null);
+      } catch {
+        /* env missing */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.ready, session.userId]);
 
   useEffect(() => {
     const achCheckout = searchParams.get("ach_checkout");
@@ -210,6 +242,15 @@ export function ResidentPaymentsPanel() {
     [charges],
   );
 
+  const acceptedMethods = useMemo(() => {
+    const withSnapshot = charges.find((c) => c.acceptedPaymentMethodsSnapshot?.length);
+    return acceptedPaymentMethodsForListing(
+      withSnapshot ? { acceptedPaymentMethods: withSnapshot.acceptedPaymentMethodsSnapshot } : null,
+    );
+  }, [charges]);
+
+  const effectivePreferredMethod = preferredMethod && acceptedMethods.includes(preferredMethod) ? preferredMethod : null;
+
   const rows = useMemo(() => {
     const filtered = charges.filter((c) => (tab === "pending" ? c.status === "pending" : c.status === "paid"));
     if (tab !== "pending") return filtered;
@@ -221,13 +262,6 @@ export function ResidentPaymentsPanel() {
       return 0;
     });
   }, [charges, tab]);
-  const pendingTotal = useMemo(
-    () =>
-      charges
-        .filter((c) => c.status === "pending")
-        .reduce((sum, c) => sum + centsFromLabel(c.balanceLabel), 0),
-    [charges],
-  );
 
   const counts = useMemo(() => {
     return {
@@ -320,28 +354,35 @@ export function ResidentPaymentsPanel() {
     [nativePlatform, showToast],
   );
 
-  useEffect(() => {
-    if (!expandedId) return;
-    const row = charges.find((c) => c.id === expandedId);
-    if (!row || row.status !== "pending" || !canPayHouseholdChargeWithAxisAch(row)) {
-      return;
+  async function savePreferredMethod(method: ResidentAcceptedPaymentMethod) {
+    setPreferredMethodSaving(true);
+    try {
+      if (isDemoModeActive()) {
+        setPreferredMethod(method);
+        showToast("Payment method simulated in this demo.");
+        setPreferredMethodModalOpen(false);
+        return;
+      }
+      if (!userId) {
+        showToast("Sign in to set a payment method.");
+        return;
+      }
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase
+        .from("profiles")
+        .update({ preferred_payment_method: method })
+        .eq("id", userId);
+      if (error) {
+        showToast("Could not save payment method.");
+        return;
+      }
+      setPreferredMethod(method);
+      showToast("Payment method saved.");
+      setPreferredMethodModalOpen(false);
+    } finally {
+      setPreferredMethodSaving(false);
     }
-    const ids =
-      selectedIds.has(expandedId) && selectedIds.size > 1 ? [...selectedIds] : [expandedId];
-    const key = checkoutKey(ids, paymentMethod);
-    if (checkout?.key === key && (checkout.loading || checkout.clientSecret || checkout.error)) return;
-    void Promise.resolve().then(() => void loadCheckout(ids, paymentMethod));
-  }, [
-    charges,
-    checkout?.key,
-    checkout?.clientSecret,
-    checkout?.error,
-    checkout?.loading,
-    expandedId,
-    loadCheckout,
-    paymentMethod,
-    selectedIds,
-  ]);
+  }
 
   const toggleSelected = (chargeId: string) => {
     setSelectedIds((prev) => {
@@ -356,12 +397,7 @@ export function ResidentPaymentsPanel() {
     setSelectedIds(new Set(unpaidAchCharges.map((c) => c.id)));
   };
 
-  const showCheckoutInExpandedRow = Boolean(
-    checkout && expandedId && checkout.chargeIds.includes(expandedId),
-  );
-  const showBulkCheckoutBar = Boolean(
-    checkout && checkout.chargeIds.length > 1 && !showCheckoutInExpandedRow,
-  );
+  const showBulkCheckoutBar = Boolean(checkout);
 
   const renderPaymentMethodPicker = () => {
     if (paymentMethodOptions.length <= 1) {
@@ -440,54 +476,18 @@ export function ResidentPaymentsPanel() {
   };
 
   const renderRowDetail = (row: HouseholdCharge) => {
-    const achPayable = row.status === "pending" && canPayHouseholdChargeWithAxisAch(row);
     return (
       <>
-        <p className="mb-3 text-sm text-muted">
-          Due: <span className="font-semibold text-foreground">{chargeDueLabel(row)}</span>
-        </p>
-        {row.zelleContactSnapshot ? (
-          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
-            <p className="text-xs font-semibold">Pay with Zelle</p>
-            <p className="mt-1 text-sm leading-relaxed">
-              Send to <span className="font-mono font-medium">{row.zelleContactSnapshot}</span>. Include your name and unit in
-              the memo. Your manager marks this paid when they receive it.
-            </p>
-          </div>
-        ) : row.venmoContactSnapshot ? (
-          <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
-            <p className="text-xs font-semibold">Pay with Venmo</p>
-            <p className="mt-1 text-sm leading-relaxed">
-              Send to <span className="font-mono font-medium">{row.venmoContactSnapshot}</span>. Include your name and unit in
-              the note. Your manager marks this paid when they receive it.
-            </p>
-          </div>
-        ) : null}
-        {achPayable ? (
-          <div className="mb-4">
-            {renderCheckoutBlock(
-              checkout && checkout.chargeIds.length > 1 && checkout.chargeIds.includes(row.id)
-                ? `Pay ${checkout.chargeIds.length} selected charges`
-                : `Pay online (${residentPaymentMethodLabel(checkout?.paymentMethod ?? paymentMethod)})`,
-            )}
-          </div>
-        ) : !row.zelleContactSnapshot && !row.venmoContactSnapshot ? (
-          <p className="mb-4 leading-relaxed">
-            All charges are updated by your manager when they receive payment via Zelle, Venmo, ACH, or cash.
+        {row.status === "paid" ? (
+          <p className="mb-3 text-sm text-foreground">
+            <span className="font-semibold">{row.title}</span> — Paid
+            {row.paidAt ? <span className="ml-1 text-xs text-muted">({safeFormatDateTime(row.paidAt)})</span> : null}
           </p>
-        ) : null}
-        {row.status === "paid" && row.paidAt ? (
-          <p className="mt-2 text-xs text-muted">Marked paid {safeFormatDateTime(row.paidAt)}</p>
-        ) : null}
-        {row.blocksLeaseUntilPaid && row.status === "pending" ? (
-          <p className="mt-3 text-sm text-amber-900">
-            Pay this before signing your lease.{" "}
-            <Link href="/resident/lease" className="font-semibold text-primary underline underline-offset-2">
-              Open lease tab
-            </Link>
-            .
+        ) : (
+          <p className="mb-3 text-sm text-muted">
+            Due: <span className="font-semibold text-foreground">{chargeDueLabel(row)}</span>
           </p>
-        ) : null}
+        )}
         <PortalTableDetailActions>
           <Button
             type="button"
@@ -512,8 +512,39 @@ export function ResidentPaymentsPanel() {
   };
 
   return (
+    <>
     <ManagerPortalPageShell
       title="Payments"
+      titleAside={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => setPreferredMethodModalOpen(true)}
+            data-attr="resident-set-payment-method"
+          >
+            {effectivePreferredMethod
+              ? `Payment method: ${RESIDENT_ACCEPTED_PAYMENT_METHOD_LABELS[effectivePreferredMethod]}`
+              : "Set payment method"}
+          </Button>
+          {tab === "pending" && unpaidAchCharges.length > 0 ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => {
+                const ids = selectedIds.size > 0 ? [...selectedIds] : unpaidAchCharges.map((c) => c.id);
+                setExpandedId(null);
+                void loadCheckout(ids, paymentMethod);
+              }}
+              data-attr="resident-pay-charges"
+            >
+              {selectedIds.size > 0 ? "Pay selected" : "Pay all"}
+            </Button>
+          ) : null}
+        </>
+      }
       filterRow={
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills
@@ -525,9 +556,6 @@ export function ResidentPaymentsPanel() {
               setCheckout(null);
             }}
           />
-          <div className="inline-flex shrink-0 items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted">
-            Unpaid: <span className="ms-1 tabular-nums text-foreground">${(pendingTotal / 100).toFixed(2)}</span>
-          </div>
           {counts.overdue > 0 ? (
             <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
               <span aria-hidden className="size-1.5 rounded-full bg-current" />
@@ -535,24 +563,9 @@ export function ResidentPaymentsPanel() {
             </div>
           ) : null}
           {tab === "pending" && unpaidAchCharges.length > 0 ? (
-            <>
-              <Button type="button" variant="outline" className={`shrink-0 rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`} onClick={selectAllUnpaidAch}>
-                Select all
-              </Button>
-              {selectedIds.size > 0 ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  className={`shrink-0 rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`}
-                  onClick={() => {
-                    setExpandedId(null);
-                    void loadCheckout([...selectedIds], paymentMethod);
-                  }}
-                >
-                  Pay {selectedIds.size}
-                </Button>
-              ) : null}
-            </>
+            <Button type="button" variant="outline" className={`shrink-0 rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`} onClick={selectAllUnpaidAch}>
+              Select all
+            </Button>
           ) : null}
         </ManagerPortalFilterRow>
       }
@@ -722,5 +735,32 @@ export function ResidentPaymentsPanel() {
         </>
       )}
     </ManagerPortalPageShell>
+      <Modal
+        open={preferredMethodModalOpen}
+        title="Set payment method"
+        onClose={() => setPreferredMethodModalOpen(false)}
+      >
+        <div className="space-y-2">
+          {acceptedMethods.map((method) => (
+            <button
+              key={method}
+              type="button"
+              onClick={() => void savePreferredMethod(method)}
+              disabled={preferredMethodSaving}
+              className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                effectivePreferredMethod === method
+                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                  : "border-border bg-card hover:border-primary/30"
+              }`}
+              data-attr={`resident-payment-method-option-${method}`}
+            >
+              <span className="text-sm font-semibold text-foreground">
+                {RESIDENT_ACCEPTED_PAYMENT_METHOD_LABELS[method]}
+              </span>
+            </button>
+          ))}
+        </div>
+      </Modal>
+    </>
   );
 }

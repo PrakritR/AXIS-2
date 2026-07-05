@@ -13,6 +13,7 @@ import {
   rentDueDayModeFromSubmission,
   resolveRentDueDayForMonth,
   type RentDueDayMode,
+  type ResidentAcceptedPaymentMethod,
 } from "@/lib/payment-policy";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
@@ -79,6 +80,8 @@ export type HouseholdCharge = {
   venmoContactSnapshot?: string;
   /** Snapshot of whether Axis ACH was enabled on the listing when the charge was created or synced. */
   axisPaymentsEnabledSnapshot?: boolean;
+  /** Payment methods the property currently accepts, refreshed from the listing on each server sync. */
+  acceptedPaymentMethodsSnapshot?: ResidentAcceptedPaymentMethod[];
   /** When true, lease signing stays disabled until this line is paid */
   blocksLeaseUntilPaid: boolean;
   /** When this charge was created from a manager work order pass-through */
