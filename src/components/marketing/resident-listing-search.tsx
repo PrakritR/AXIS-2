@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import posthog from "posthog-js";
 import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
 import { usePublicListings } from "@/hooks/use-public-listings";
 import { filterRoomListings } from "@/lib/room-listings-catalog";
+import { track } from "@/lib/analytics/track-client";
 
-const BUDGET_MIN = 400;
-const BUDGET_MAX = 2500;
-const BUDGET_STEP = 50;
-const BUDGET_MARKERS = [400, 900, 1500, 2000, 2500] as const;
+const BUDGET_MIN = 500;
+const BUDGET_MAX = 6500;
+const BUDGET_STEP = 100;
+const BUDGET_MARKERS = [500, 1500, 2500, 3500, 4500, 5500, 6500] as const;
 
 const BATHROOM_OPTIONS = [
   { id: "any", label: "Any" },
@@ -17,6 +19,14 @@ const BATHROOM_OPTIONS = [
   { id: "2-share", label: "2-share" },
   { id: "3-share", label: "3-share" },
   { id: "4-share", label: "4-share" },
+] as const;
+
+const BEDROOM_OPTIONS = [
+  { id: "any", label: "Any" },
+  { id: "studio", label: "Studio" },
+  { id: "1", label: "1 bed" },
+  { id: "2", label: "2 beds" },
+  { id: "3", label: "3+ beds" },
 ] as const;
 
 const inputCls =
@@ -27,16 +37,40 @@ function clampBudget(n: number) {
   return Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, stepped));
 }
 
+type ChatAppliedFilters = {
+  moveIn?: string;
+  moveOut?: string;
+  maxBudget?: number;
+  bedroom?: string;
+  bathroom?: string;
+  petFriendly?: boolean;
+  neighborhood?: string;
+};
+
 export function ResidentListingSearch() {
   const { listings, loading } = usePublicListings();
   const [moveIn, setMoveIn] = useState("");
   const [moveOut, setMoveOut] = useState("");
   const [budget, setBudget] = useState(BUDGET_MAX);
   const [bathroom, setBathroom] = useState("any");
+  const [bedroom, setBedroom] = useState("any");
+  const [petFriendly, setPetFriendly] = useState(false);
+  const [neighborhood, setNeighborhood] = useState("any");
+
+  const neighborhoodOptions = useMemo(
+    () => [...new Set(listings.map((p) => p.neighborhood).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [listings],
+  );
 
   const budgetActive = budget < BUDGET_MAX;
   const budgetLabel = budgetActive ? `$${budget.toLocaleString()}` : "Any";
-  const hasActiveFilter = moveIn.trim().length > 0 || budgetActive || bathroom !== "any";
+  const hasActiveFilter =
+    moveIn.trim().length > 0 ||
+    budgetActive ||
+    bathroom !== "any" ||
+    bedroom !== "any" ||
+    petFriendly ||
+    neighborhood !== "any";
   const pct = ((clampBudget(budget) - BUDGET_MIN) / (BUDGET_MAX - BUDGET_MIN)) * 100;
 
   const results = useMemo(() => {
@@ -46,33 +80,52 @@ export function ResidentListingSearch() {
       radiusMiles: 50,
       maxBudgetNum: budgetActive ? budget : null,
       bathroom,
+      bedroom,
+      petFriendly,
+      neighborhood,
       moveIn,
       moveOut,
     });
-  }, [listings, hasActiveFilter, budgetActive, budget, bathroom, moveIn, moveOut]);
+  }, [listings, hasActiveFilter, budgetActive, budget, bathroom, bedroom, petFriendly, neighborhood, moveIn, moveOut]);
+
+  function applyChatFilters(applied: ChatAppliedFilters) {
+    // Replace the full filter set rather than merging: the search results the chat
+    // reports were computed from exactly these fields, so any field NOT mentioned in
+    // this query must reset to "Any" — otherwise a leftover filter from an earlier
+    // query silently disagrees with the count the assistant just reported.
+    setMoveIn(applied.moveIn ?? "");
+    setMoveOut(applied.moveOut ?? "");
+    setBudget(typeof applied.maxBudget === "number" ? clampBudget(applied.maxBudget) : BUDGET_MAX);
+    setBedroom(applied.bedroom ?? "any");
+    setBathroom(applied.bathroom ?? "any");
+    setPetFriendly(applied.petFriendly === true);
+    setNeighborhood(applied.neighborhood ?? "any");
+  }
 
   return (
     <div className="hero-search-panel relative mx-auto w-full max-w-[1060px] overflow-hidden rounded-[1.35rem] px-4 py-6 sm:rounded-[1.75rem] sm:px-8 sm:py-8">
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <FieldBlock label="Move-in date">
-          <input
-            type="date"
-            value={moveIn}
-            onChange={(e) => setMoveIn(e.target.value)}
-            data-attr="resident-search-move-in"
-            className={inputCls}
-          />
-        </FieldBlock>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3">
+          <FieldBlock label="Move-in date">
+            <input
+              type="date"
+              value={moveIn}
+              onChange={(e) => setMoveIn(e.target.value)}
+              data-attr="resident-search-move-in"
+              className={inputCls}
+            />
+          </FieldBlock>
 
-        <FieldBlock label="Move-out date" optional>
-          <input
-            type="date"
-            value={moveOut}
-            onChange={(e) => setMoveOut(e.target.value)}
-            data-attr="resident-search-move-out"
-            className={inputCls}
-          />
-        </FieldBlock>
+          <FieldBlock label="Move-out date">
+            <input
+              type="date"
+              value={moveOut}
+              onChange={(e) => setMoveOut(e.target.value)}
+              data-attr="resident-search-move-out"
+              className={inputCls}
+            />
+          </FieldBlock>
+        </div>
 
         <div>
           <div className="flex items-center justify-between">
@@ -101,6 +154,22 @@ export function ResidentListingSearch() {
           </div>
         </div>
 
+        <FieldBlock label="Bedrooms">
+          <select
+            value={bedroom}
+            onChange={(e) => setBedroom(e.target.value)}
+            aria-label="Bedrooms"
+            data-attr="resident-search-bedrooms"
+            className={inputCls}
+          >
+            {BEDROOM_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </FieldBlock>
+
         <FieldBlock label="Bathroom type">
           <select
             value={bathroom}
@@ -115,6 +184,37 @@ export function ResidentListingSearch() {
               </option>
             ))}
           </select>
+        </FieldBlock>
+
+        <FieldBlock label="Neighborhood">
+          <select
+            value={neighborhood}
+            onChange={(e) => setNeighborhood(e.target.value)}
+            aria-label="Neighborhood"
+            data-attr="resident-search-neighborhood"
+            className={inputCls}
+          >
+            <option value="any">Any area</option>
+            {neighborhoodOptions.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </FieldBlock>
+
+        <FieldBlock label="Pet policy">
+          <label className={`${inputCls} flex cursor-pointer items-center justify-between gap-2`}>
+            <span>Pet friendly only</span>
+            <input
+              type="checkbox"
+              checked={petFriendly}
+              onChange={(e) => setPetFriendly(e.target.checked)}
+              aria-label="Pet friendly only"
+              data-attr="resident-search-pet-friendly"
+              className="h-4 w-4 shrink-0 accent-primary"
+            />
+          </label>
         </FieldBlock>
       </div>
 
@@ -152,6 +252,11 @@ export function ResidentListingSearch() {
                       <span className="rounded-full border border-border/60 bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted">
                         {room.availabilityLabel}
                       </span>
+                      {room.petFriendly && (
+                        <span className="rounded-full border border-border/60 bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted">
+                          Pet friendly
+                        </span>
+                      )}
                     </div>
                   </Link>
                 </li>
@@ -160,26 +265,131 @@ export function ResidentListingSearch() {
           )}
         </div>
       )}
+
+      <div className="mt-6 border-t border-border pt-6">
+        <ResidentHousingChat onApplyFilters={applyChatFilters} />
+      </div>
     </div>
   );
 }
 
-function FieldBlock({
-  label,
-  optional,
-  children,
-}: {
-  label: string;
-  optional?: boolean;
-  children: React.ReactNode;
-}) {
+function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
       <div className="mb-2 flex items-baseline gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</span>
-        {optional && <span className="text-[11px] font-normal text-muted/50">(optional)</span>}
+        <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+          {label}
+        </span>
       </div>
       {children}
+    </div>
+  );
+}
+
+type ChatListing = {
+  key: string;
+  propertyId: string;
+  headlineAddress: string;
+  neighborhood: string;
+  priceLabel: string;
+};
+
+function ResidentHousingChat({ onApplyFilters }: { onApplyFilters: (filters: ChatAppliedFilters) => void }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [summary, setSummary] = useState<string | null>(null);
+  const [listings, setListings] = useState<ChatListing[]>([]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const message = query.trim();
+    if (!message || status === "loading") return;
+
+    setStatus("loading");
+    setSummary(null);
+    track("housing_search_chat_started", { messageLength: message.length });
+
+    try {
+      let sessionId: string | undefined;
+      try {
+        sessionId = posthog.get_distinct_id();
+      } catch {
+        sessionId = undefined;
+      }
+      const res = await fetch("/api/agent/housing-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, sessionId }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setStatus("error");
+        setSummary(body?.error || "Couldn't understand that — try mentioning bedrooms, budget, or a neighborhood.");
+        return;
+      }
+
+      onApplyFilters(body.filters ?? {});
+      setListings(body.listings ?? []);
+      setStatus("idle");
+      setSummary(
+        body.matchCount === 0
+          ? "No listings match that yet — filters above were still updated."
+          : `Found ${body.matchCount} matching listing${body.matchCount === 1 ? "" : "s"} — filters applied above.`,
+      );
+    } catch {
+      setStatus("error");
+      setSummary("The assistant ran into an error. Please try again.");
+    }
+  }
+
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Ask Axis</p>
+      <p className="mt-1 text-sm text-muted">
+        Describe what you need — e.g. &ldquo;2 bed pet-friendly under $2000 in Ballard, moving in August&rdquo;
+      </p>
+      <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Tell us what you're looking for…"
+          aria-label="Describe the home you're looking for"
+          data-attr="resident-search-ai-chat-input"
+          className={`${inputCls} flex-1`}
+        />
+        <button
+          type="submit"
+          disabled={status === "loading" || !query.trim()}
+          data-attr="resident-search-ai-chat-submit"
+          className="min-h-[44px] shrink-0 rounded-xl bg-primary px-5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {status === "loading" ? "Searching…" : "Search"}
+        </button>
+      </form>
+
+      {summary && (
+        <p className={`mt-3 text-sm ${status === "error" ? "text-red-500" : "text-foreground"}`}>{summary}</p>
+      )}
+
+      {listings.length > 0 && status !== "error" && (
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="AI-matched listings">
+          {listings.map((room) => (
+            <li key={room.key}>
+              <Link
+                href={`/rent/listings/${encodeURIComponent(room.propertyId)}`}
+                data-attr="resident-search-ai-chat-listing-card"
+                className="flex flex-col gap-0.5 rounded-xl border border-border/60 bg-card/50 p-3 text-sm transition hover:border-primary/25 hover:bg-card [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/[0.05]"
+              >
+                <span className="font-semibold text-foreground">{room.headlineAddress}</span>
+                <span className="text-xs text-muted">
+                  {room.neighborhood} · {room.priceLabel}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -35,6 +35,7 @@ export type RoomListingRow = {
   fullAddress: string;
   propertyBeds: number;
   propertyBaths: number;
+  petFriendly: boolean;
   descriptionBlurb: string;
   listingTags: readonly string[];
   /** Shown on image overlay, e.g. "$775" or "$750–$875" */
@@ -190,6 +191,15 @@ function roomMatchesBathroomFilterHeuristic(room: ListingRoomRow, bathroomId: st
   return true;
 }
 
+/** "any" | "studio" | "1" | "2" | "3" (3 means 3+). */
+export function roomMatchesBedroomFilter(propertyBeds: number, bedroomId: string | undefined): boolean {
+  if (!bedroomId || bedroomId === "any") return true;
+  if (bedroomId === "studio") return propertyBeds === 0;
+  if (bedroomId === "3") return propertyBeds >= 3;
+  const n = Number.parseInt(bedroomId, 10);
+  return Number.isFinite(n) ? propertyBeds === n : true;
+}
+
 export function roomMatchesBathroomFilter(room: ListingRoomRow, bathroomId: string): boolean {
   if (bathroomId === "any") return true;
 
@@ -234,6 +244,9 @@ export function filterRoomListings(
     radiusMiles: number;
     maxBudgetNum: number | null;
     bathroom: string;
+    bedroom?: string;
+    petFriendly?: boolean;
+    neighborhood?: string;
     moveIn?: string;
     moveOut?: string;
   },
@@ -256,6 +269,15 @@ export function filterRoomListings(
     const mediaSlides = collectPropertyMediaSlides(rich);
     const geoOk = centerZip === null ? true : propertyMatchesZipRadius(p.zip, opts.zipRaw, opts.radiusMiles);
     if (!geoOk) continue;
+    if (!roomMatchesBedroomFilter(p.beds, opts.bedroom)) continue;
+    if (opts.petFriendly && !p.petFriendly) continue;
+    if (
+      opts.neighborhood &&
+      opts.neighborhood !== "any" &&
+      p.neighborhood.trim().toLowerCase() !== opts.neighborhood.trim().toLowerCase()
+    ) {
+      continue;
+    }
 
     for (const floor of rich.floorPlans) {
       for (const room of floor.rooms) {
@@ -293,6 +315,7 @@ export function filterRoomListings(
           fullAddress: p.address,
           propertyBeds: p.beds,
           propertyBaths: p.baths,
+          petFriendly: p.petFriendly,
           descriptionBlurb: descriptionBlurb(p, room),
           listingTags: listingTags(p),
           priceOverlayLabel: priceOverlayLabelForProperty(p),

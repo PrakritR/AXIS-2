@@ -97,6 +97,76 @@ export function buildTraceObserver(trace: TraceLike, ctx: AgentContext): AgentOb
   };
 }
 
+/**
+ * Trace a single-shot LLM extraction + tool call from an ANONYMOUS public
+ * surface (no authenticated user, so no landlordId/userId to carry — e.g. the
+ * resident marketing housing-search chat). Carries a client-supplied sessionId
+ * so one visitor's turns group together for replay. Degrades to a no-op the
+ * same way `traceAgentTurn` does when Langfuse env is unset.
+ */
+export async function tracePublicToolTurn<T>(opts: {
+  name: string;
+  sessionId: string;
+  input: string;
+  run: (record: {
+    llmCall: (e: {
+      model: string;
+      usage: { inputTokens: number; outputTokens: number };
+      input: unknown;
+      output: unknown;
+      metadata?: Record<string, unknown>;
+    }) => void;
+    toolCall: (e: { name: string; input: unknown; output: unknown }) => void;
+  }) => Promise<T>;
+}): Promise<T> {
+  const lf = getClient();
+  if (!lf) return opts.run({ llmCall: () => {}, toolCall: () => {} });
+
+  let trace: ReturnType<Langfuse["trace"]> | null = null;
+  try {
+    trace = lf.trace({ name: opts.name, sessionId: opts.sessionId, input: opts.input, metadata: { public: true } });
+  } catch {
+    trace = null;
+  }
+
+  const record = {
+    llmCall: (e: {
+      model: string;
+      usage: { inputTokens: number; outputTokens: number };
+      input: unknown;
+      output: unknown;
+      metadata?: Record<string, unknown>;
+    }) =>
+      safe(() =>
+        trace?.generation({
+          name: "housing-search-extract",
+          model: e.model,
+          usage: { input: e.usage.inputTokens, output: e.usage.outputTokens, unit: "TOKENS" },
+          input: e.input,
+          output: e.output,
+          metadata: { ...e.metadata, estimatedCostUsd: estimateCostUsd(e.model, e.usage) },
+        }),
+      ),
+    toolCall: (e: { name: string; input: unknown; output: unknown }) =>
+      safe(() => trace?.span({ name: `tool:${e.name}`, input: e.input, output: e.output })),
+  };
+
+  try {
+    const result = await opts.run(record);
+    safe(() => trace?.update({ output: result as unknown as Record<string, unknown> }));
+    return result;
+  } catch (e) {
+    safe(() => trace?.update({ output: e instanceof Error ? e.message : "error" }));
+    throw e;
+  } finally {
+    try {
+      await lf.flushAsync();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 type TurnInput = { role: string; content: string }[];
 
 type TurnUsage = { inputTokens: number; outputTokens: number };
