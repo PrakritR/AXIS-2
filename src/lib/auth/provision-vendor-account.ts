@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { migratePortalUserId } from "@/lib/auth/migrate-portal-user-id";
 import { primaryRoleWhenAddingVendor } from "@/lib/auth/profile-primary-role";
@@ -6,23 +7,35 @@ import { generateAxisId } from "@/lib/manager-id";
 import { makeVendorId } from "@/lib/manager-vendors-storage";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type VendorInviteRow = {
+/** Opaque, unguessable, single-use invite token — stored on the row, never derived from the email. */
+export function generateVendorInviteToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export type VendorInviteRow = {
   id: string;
   manager_user_id: string;
   vendor_directory_id: string | null;
   vendor_email: string;
   vendor_name: string | null;
+  expires_at?: string | null;
 };
 
+const VENDOR_INVITE_COLUMNS = "id, manager_user_id, vendor_directory_id, vendor_email, vendor_name, expires_at";
+
+/**
+ * Exact-match only — an `ilike` pattern here would let a signup email containing
+ * `%`/`_` wildcard characters match (and hijack) an unrelated pending invite.
+ */
 async function findPendingVendorInviteByEmail(
   supabase: SupabaseClient,
   email: string,
 ): Promise<VendorInviteRow | null> {
   const { data, error } = await supabase
     .from("vendor_invites")
-    .select("id, manager_user_id, vendor_directory_id, vendor_email, vendor_name")
+    .select(VENDOR_INVITE_COLUMNS)
     .eq("status", "pending")
-    .ilike("vendor_email", email)
+    .eq("vendor_email", email)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -31,21 +44,84 @@ async function findPendingVendorInviteByEmail(
   return (data as VendorInviteRow | null) ?? null;
 }
 
+/** Resolves an invite from its emailed single-use token — never trust a client-supplied email instead. */
+export async function findPendingVendorInviteByToken(
+  supabase: SupabaseClient,
+  token: string,
+): Promise<VendorInviteRow | null> {
+  const trimmed = token.trim();
+  if (!trimmed) return null;
+
+  const { data, error } = await supabase
+    .from("vendor_invites")
+    .select(VENDOR_INVITE_COLUMNS)
+    .eq("status", "pending")
+    .eq("invite_token", trimmed)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  const invite = (data as VendorInviteRow | null) ?? null;
+  if (!invite) return null;
+  if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) return null;
+  return invite;
+}
+
+/** Defense in depth: a directory row's owning manager must match the invite that names it. */
+async function directoryBelongsToManager(
+  supabase: SupabaseClient,
+  vendorDirectoryId: string,
+  managerUserId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("manager_vendor_records")
+    .select("manager_user_id")
+    .eq("id", vendorDirectoryId)
+    .maybeSingle();
+  return data?.manager_user_id === managerUserId;
+}
+
 export type ProvisionVendorResult =
   | { ok: true; axisId: string; linkedManagerId: string | null }
   | { ok: false; status: number; error: string };
 
-/** Vendor signup via invite link — links the new vendor user to the inviting manager's vendor directory row. */
+/**
+ * Vendor signup — links the new vendor user to the inviting manager's vendor directory
+ * row when an invite applies. Pass `invite` when it was already resolved from a signed
+ * token (never re-derive it from a client-supplied email in that case); omit it to fall
+ * back to an exact-match lookup by the account's own email (self-serve convenience link).
+ */
 export async function provisionVendorAccountByEmail(
   supabase: SupabaseClient,
-  opts: { userId: string; email: string; fullName?: string | null },
+  opts: {
+    userId: string;
+    email: string;
+    fullName?: string | null;
+    invite?: VendorInviteRow | null;
+    /**
+     * Defaults to true (invite links and existing-account password verification are
+     * already a possession proof). Pass false only when the caller is about to send its
+     * own Supabase email-confirmation link — confirming here would skip that check.
+     */
+    confirmEmail?: boolean;
+  },
 ): Promise<ProvisionVendorResult> {
   const normalEmail = opts.email.trim().toLowerCase();
   if (!normalEmail.includes("@")) {
     return { ok: false, status: 400, error: "Enter a valid email address." };
   }
 
-  const invite = await findPendingVendorInviteByEmail(supabase, normalEmail);
+  let invite = opts.invite !== undefined ? opts.invite : await findPendingVendorInviteByEmail(supabase, normalEmail);
+
+  if (invite?.vendor_directory_id) {
+    const ownershipOk = await directoryBelongsToManager(supabase, invite.vendor_directory_id, invite.manager_user_id);
+    if (!ownershipOk) {
+      // Directory row was reassigned/deleted since the invite was sent — the invite is
+      // stale rather than actionable. Consume it so it can't be retried and proceed as if
+      // no invite applied.
+      await supabase.from("vendor_invites").update({ status: "cancelled" }).eq("id", invite.id);
+      invite = null;
+    }
+  }
 
   const existingAuthId = await findAuthUserIdByEmail(supabase, normalEmail);
   if (existingAuthId && existingAuthId !== opts.userId) {
@@ -57,7 +133,7 @@ export async function provisionVendorAccountByEmail(
   const axisId = metadata?.axis_id?.toString() ?? generateAxisId();
 
   await supabase.auth.admin.updateUserById(opts.userId, {
-    email_confirm: true,
+    ...(opts.confirmEmail === false ? {} : { email_confirm: true }),
     user_metadata: {
       ...(metadata ?? {}),
       role: "vendor",

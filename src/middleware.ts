@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { legacyPaidPortalToPortal } from "@/lib/legacy-portal-redirect";
 
-const PROTECTED_PREFIXES = ["/portal", "/pro", "/manager", "/owner", "/resident", "/admin"];
+const PROTECTED_PREFIXES = ["/portal", "/pro", "/manager", "/owner", "/resident", "/admin", "/vendor"];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -64,5 +64,15 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/", "/portal/:path*", "/pro/:path*", "/manager/:path*", "/owner/:path*", "/resident/:path*", "/admin/:path*"],
+  matcher: [
+    "/dashboard",
+    "/dashboard/",
+    "/portal/:path*",
+    "/pro/:path*",
+    "/manager/:path*",
+    "/owner/:path*",
+    "/resident/:path*",
+    "/admin/:path*",
+    "/vendor/:path*",
+  ],
 };

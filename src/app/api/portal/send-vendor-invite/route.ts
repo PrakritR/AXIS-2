@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { resolveAppOrigin } from "@/lib/app-url";
+import { generateVendorInviteToken } from "@/lib/auth/provision-vendor-account";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import {
@@ -9,6 +10,8 @@ import {
   buildVendorInviteMailtoHref,
   vendorInviteSubject,
 } from "@/lib/vendor-invite-email";
+
+const VENDOR_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const runtime = "nodejs";
 
@@ -60,18 +63,23 @@ export async function POST(req: Request) {
 
     // One pending invite per vendor directory row — replace rather than pile up.
     await db.from("vendor_invites").delete().eq("vendor_directory_id", vendorId).eq("status", "pending");
+    const inviteToken = generateVendorInviteToken();
+    const expiresAt = new Date(Date.now() + VENDOR_INVITE_TTL_MS).toISOString();
     const { error: insertError } = await db.from("vendor_invites").insert({
       manager_user_id: user.id,
       vendor_directory_id: vendorId,
       vendor_email: vendorEmail,
       vendor_name: vendorName || null,
+      invite_token: inviteToken,
+      expires_at: expiresAt,
     });
     if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
 
+    // The link carries only the opaque token, never the email — the register route
+    // resolves the invited email server-side from the token so a caller can't hijack
+    // another vendor's pending invite by supplying an arbitrary email/pattern.
     const origin = resolveAppOrigin(req);
-    const params = new URLSearchParams({ email: vendorEmail });
-    if (vendorName) params.set("name", vendorName);
-    const linkUrl = `${origin}/auth/vendor-register?${params.toString()}`;
+    const linkUrl = `${origin}/auth/vendor-register?token=${encodeURIComponent(inviteToken)}`;
     const managerName = profile?.full_name?.trim() || profile?.email?.trim() || "Your property manager";
 
     const subject = vendorInviteSubject(managerName);

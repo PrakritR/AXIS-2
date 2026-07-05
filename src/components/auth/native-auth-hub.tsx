@@ -31,7 +31,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 type AuthMode = "sign-in" | "create";
-type AccountRole = "resident" | "manager";
+type AccountRole = "resident" | "manager" | "vendor";
 
 async function tryResidentAutoConfirm(email: string): Promise<boolean> {
   try {
@@ -103,6 +103,7 @@ function RoleToggle({
         [
           { id: "resident" as const, label: "Resident" },
           { id: "manager" as const, label: "Manager" },
+          { id: "vendor" as const, label: "Vendor" },
         ] as const
       ).map((opt) => (
         <button
@@ -130,7 +131,8 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
   const modeParam = searchParams.get("mode");
   const initialMode: AuthMode =
     modeParam === "create" ? "create" : modeParam === "sign-in" ? "sign-in" : defaultMode;
-  const initialRole = searchParams.get("role") === "manager" ? "manager" : "resident";
+  const roleParam = searchParams.get("role");
+  const initialRole: AccountRole = roleParam === "manager" ? "manager" : roleParam === "vendor" ? "vendor" : "resident";
   const tierParam = searchParams.get("tier");
   const initialTier: PlanTierId =
     tierParam === "pro" || tierParam === "business" || tierParam === "free" ? tierParam : "free";
@@ -303,11 +305,8 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
 
         {mode === "sign-in" ? (
           <>
-            <div className="native-auth-hub-toggle-row mt-3">
-              <RoleToggle role={role} onChange={setRole} disabled={locked} />
-            </div>
             <div className="mt-4">
-              <GoogleSignInButton nextPath="" intent={role} disabled={locked} />
+              <GoogleSignInButton nextPath="" intent={null} disabled={locked} />
             </div>
             <div className="my-4">
               <AuthDivider label="or email" />
@@ -392,6 +391,22 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
                     Browse all properties
                   </Link>
                 </p>
+              </>
+            ) : role === "vendor" ? (
+              <>
+                <p className="pt-1 text-center text-sm leading-relaxed text-muted">
+                  Create a vendor account to see work orders offered to you, track scheduled visits, and message
+                  your property manager directly.
+                </p>
+                <Button
+                  type="button"
+                  data-attr="auth-hub-vendor-get-started"
+                  className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+                  disabled={locked}
+                  onClick={() => router.push("/auth/vendor-register")}
+                >
+                  Create vendor account
+                </Button>
               </>
             ) : isNative ? (
               // Native keeps the full plan + signup flow inside this hub; the web's single
