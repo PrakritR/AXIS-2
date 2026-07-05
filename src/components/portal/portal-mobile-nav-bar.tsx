@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { resolvePortalMobileBackTarget } from "@/lib/portal-mobile-back";
+import { portalDashboardMobileHeaderLabel, resolvePortalMobileBackTarget } from "@/lib/portal-mobile-back";
 import type { PortalDefinition } from "@/lib/portal-types";
 
 function ChevronLeftIcon() {
@@ -39,10 +39,10 @@ function initials(name: string | null, email: string | null): string {
 
 /**
  * Shared mobile/native top row for every portal: a "‹ <label>" back button
- * (resolvePortalMobileBackTarget; null on Dashboard) plus a top-right profile
- * menu (Settings, Sign out). Manager/resident/vendor native bottom bars no
- * longer carry Dashboard or Settings tabs directly, so this is their only path
- * to both.
+ * (resolvePortalMobileBackTarget; null on Dashboard, where a plain "Dashboard"
+ * label shows instead) plus a top-right profile menu (Settings, Sign out).
+ * Manager/resident/vendor native bottom bars no longer carry Dashboard or
+ * Settings tabs directly, so this is their only path to both.
  */
 export function PortalMobileNavBar({
   definition,
@@ -56,6 +56,10 @@ export function PortalMobileNavBar({
   const pathname = usePathname();
   const router = useRouter();
   const back = useMemo(() => resolvePortalMobileBackTarget(pathname, definition), [pathname, definition]);
+  const dashboardLabel = useMemo(
+    () => (back ? null : portalDashboardMobileHeaderLabel(pathname, definition)),
+    [back, pathname, definition],
+  );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
 
   return (
@@ -70,6 +74,10 @@ export function PortalMobileNavBar({
           <ChevronLeftIcon />
           <span className="truncate">{back.label}</span>
         </button>
+      ) : dashboardLabel ? (
+        <span className="-ml-2 inline-flex min-h-11 min-w-0 items-center truncate px-2 py-2 text-sm font-semibold text-foreground">
+          {dashboardLabel}
+        </span>
       ) : null}
 
       <div className="ml-auto">

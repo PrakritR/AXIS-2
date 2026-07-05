@@ -6,7 +6,6 @@ import {
   PortalDashboardCompactRow,
   PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
-  PortalDashboardTile,
   PORTAL_DASHBOARD_SECTION_CARD,
   PORTAL_DASHBOARD_STACK,
   formatCompactChargeLine,
@@ -49,10 +48,6 @@ import {
 const BASE = "/resident";
 
 type AppStatus = "pending" | "approved" | "rejected";
-
-function dollars(cents: number) {
-  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function leaseBadge(row: LeasePipelineRow | null, approved: boolean): {
   label: string;
@@ -215,7 +210,6 @@ export function ResidentDashboard({
         inbox: 0,
         inboxThreads: [] as ReturnType<typeof loadPersistedInbox>,
         pendingCharges: [] as ReturnType<typeof readChargesForResident>,
-        pendingTotal: 0,
       };
     }
 
@@ -243,15 +237,10 @@ export function ResidentDashboard({
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         return 0;
       });
-    const pendingTotal = pendingCharges.reduce((s, c) => {
-      const n = Number(c.balanceLabel.replace(/[^\d.]/g, ""));
-      return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
-    }, 0);
-
-    return { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges, pendingTotal };
+    return { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges };
   }, [tick, email, appStatus, residentUserId, clientReady]);
 
-  const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges, pendingTotal } = data;
+  const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges } = data;
 
   const welcomeTitle = `Welcome${displayName && displayName !== "Resident" ? `, ${displayName.split(" ")[0]}` : ""}`;
 
@@ -264,25 +253,8 @@ export function ResidentDashboard({
 
         {appStatus === "approved" ? (
           <>
-            <div className="grid grid-cols-2 gap-3">
-              <PortalDashboardTile
-                label="Outstanding balance"
-                value={pendingCharges.length === 0 ? "$0.00" : dollars(pendingTotal)}
-                sub={pendingCharges.length > 0 ? `${pendingCharges.length} pending charge${pendingCharges.length === 1 ? "" : "s"}` : "All caught up"}
-                href={`${BASE}/payments`}
-                urgent={pendingTotal > 0}
-              />
-              <PortalDashboardTile
-                label="Open maintenance"
-                value={canUseFullPortal ? openWO : "—"}
-                sub={canUseFullPortal && scheduledWO > 0 ? `${scheduledWO} scheduled` : canUseFullPortal ? "No open requests" : "Available on upgraded plans"}
-                href={`${BASE}/services/work-orders`}
-                urgent={canUseFullPortal && openWO > 0}
-              />
-            </div>
-
             <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Payments"
                   href={`${BASE}/payments`}
@@ -322,7 +294,7 @@ export function ResidentDashboard({
                 />
               </div>
 
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <StatusBadge label={lease.label} tone={lease.tone} />
@@ -339,15 +311,15 @@ export function ResidentDashboard({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader title="Move-in" href={`${BASE}/move-in`} linkLabel="Move-in →" />
                 {appProperty || appRoom || moveInDateLabel ? (
                   <ul className="mt-3 space-y-2">
                     {appProperty ? (
                       <li className="rounded-xl bg-accent/30 px-3 py-2.5">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Property</p>
-                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appProperty}</p>
-                        {appId ? <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p> : null}
+                        <p className="mt-0.5 break-words text-sm font-semibold text-foreground">{appProperty}</p>
+                        {appId ? <p className="mt-0.5 break-all text-xs font-mono text-muted">{appId}</p> : null}
                       </li>
                     ) : null}
                     {appRoom ? (
@@ -368,7 +340,7 @@ export function ResidentDashboard({
                 )}
               </div>
 
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Services"
                   href={canUseFullPortal ? `${BASE}/services/work-orders` : `${BASE}/services`}
@@ -428,13 +400,13 @@ export function ResidentDashboard({
           </>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
               <PortalDashboardSectionHeader title="Application" />
               <p className="mt-4 text-sm font-semibold text-foreground">{appStage}</p>
-              {appId ? <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p> : null}
-              {appProperty ? <p className="mt-1 text-xs text-muted">{appProperty}</p> : null}
+              {appId ? <p className="mt-0.5 break-all text-xs font-mono text-muted">{appId}</p> : null}
+              {appProperty ? <p className="mt-1 break-words text-xs text-muted">{appProperty}</p> : null}
             </div>
-            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
               <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
               {inbox > 0 ? (
                 <p className="mt-4 text-sm font-semibold text-foreground">{inbox} unread message{inbox === 1 ? "" : "s"}</p>

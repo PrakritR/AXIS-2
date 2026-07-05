@@ -301,7 +301,7 @@ export function PortalDashboardSectionHeader({
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <h2 className="truncate text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
+      <h2 className="min-w-0 truncate text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
       {badge || (href && linkLabel) ? (
         <div className="flex shrink-0 items-center gap-2.5">
           {badge ?? null}
