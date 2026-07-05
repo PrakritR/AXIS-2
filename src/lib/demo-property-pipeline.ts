@@ -1,4 +1,9 @@
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import {
+  DEMO_MANAGER_USER_ID,
+  isDemoModeActive,
+  resolveManagerScopeUserId,
+} from "@/lib/demo/demo-session";
+import { demoProperties } from "@/lib/demo/demo-data";
 import type { MockProperty } from "@/data/types";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
@@ -469,6 +474,16 @@ export function readExtraListingsPublic(): MockProperty[] {
   return [...byPropertyKey.values()];
 }
 
+/** Listed properties for one manager (portal). Falls back to demo seed data in `/demo`. */
+export function readScopedExtraListings(userId: string | null): MockProperty[] {
+  const scopeUserId = resolveManagerScopeUserId(userId);
+  if (!scopeUserId) return [];
+  const stored = readExtraListingsForUser(scopeUserId);
+  if (stored.length > 0) return stored;
+  if (isDemoModeActive() && scopeUserId === DEMO_MANAGER_USER_ID) return demoProperties();
+  return stored;
+}
+
 /** Listed properties for one manager (portal). */
 export function readExtraListingsForUser(userId: string | null): MockProperty[] {
   if (!userId) return [];
@@ -486,8 +501,9 @@ export function readExtraListings(): MockProperty[] {
 
 /** Pending + live listings for one manager (property cap). */
 export function countManagerManagedPropertiesForUser(userId: string | null): number {
-  if (!userId) return 0;
-  return readPendingManagerPropertiesForUser(userId).length + readExtraListingsForUser(userId).length;
+  const scopeUserId = resolveManagerScopeUserId(userId);
+  if (!scopeUserId) return 0;
+  return readPendingManagerPropertiesForUser(scopeUserId).length + readScopedExtraListings(scopeUserId).length;
 }
 
 /** @deprecated Use countManagerManagedPropertiesForUser */

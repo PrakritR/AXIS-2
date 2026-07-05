@@ -78,7 +78,6 @@ function ChecklistItem({
 export function VendorDashboard({ displayName }: { displayName: string }) {
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
-  const [profileComplete, setProfileComplete] = useState(false);
   const [paymentsConnected, setPaymentsConnected] = useState(false);
 
   useEffect(() => {
@@ -94,16 +93,6 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
-  }, []);
-
-  useEffect(() => {
-    if (isDemoModeActive()) return;
-    void fetch("/api/vendor/tax-profile", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data: { profile?: { w9_attestation?: boolean; legal_name?: string } | null }) => {
-        setProfileComplete(Boolean(data.profile?.w9_attestation || data.profile?.legal_name));
-      })
-      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -242,16 +231,9 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
             <PortalDashboardSectionHeader title="Getting started" />
             <div className="mt-3 space-y-2">
               <ChecklistItem
-                done={profileComplete}
-                title="Complete tax info"
-                description="Add your W-9 details under Payments so managers can pay you correctly."
-                href="/vendor/payments"
-                dataAttr="vendor-dashboard-checklist-profile"
-              />
-              <ChecklistItem
                 done={paymentsConnected}
-                title="Connect payments"
-                description="Link your Stripe account to get paid directly for completed work orders."
+                title="Link your bank"
+                description="Connect Stripe under Payments so managers can pay you directly for completed work."
                 href="/vendor/payments"
                 dataAttr="vendor-dashboard-checklist-payments"
               />

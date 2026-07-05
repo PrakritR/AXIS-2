@@ -6,6 +6,8 @@ import { Modal } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import {
   buildLeadInviteEmailBody,
   leadInviteSubject,
@@ -140,6 +142,17 @@ export function ShareLeadLinkModal({
     const roomName = roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
     setSendBusy(true);
     try {
+      if (isDemoModeActive()) {
+        logDemoOutboundEmail(
+          prospectEmail.trim(),
+          leadInviteSubject(kind, propertyTitle),
+          invitePreviewBody,
+        );
+        showToast(kind === "listing" ? "Listing sent (demo)." : "Invite sent (demo).");
+        setSendPreviewOpen(false);
+        onClose();
+        return;
+      }
       const res = await fetch("/api/portal/send-lead-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

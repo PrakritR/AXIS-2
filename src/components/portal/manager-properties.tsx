@@ -19,7 +19,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
@@ -45,6 +45,7 @@ export function ManagerProperties() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userId } = useManagerUserId();
+  const scopeUserId = resolveManagerScopeUserId(userId);
   const [skuLoaded, setSkuLoaded] = useState(false);
   const [skuTier, setSkuTier] = useState<string | null>(null);
   const [propCount, setPropCount] = useState(0);
@@ -67,18 +68,20 @@ export function ManagerProperties() {
   );
 
   const refreshPortfolio = useCallback(async () => {
-    if (!userId) {
+    if (!scopeUserId) {
       setPropCount(0);
       return;
     }
-    try {
-      await syncManagerPortfolioFromServer(userId, { force: true });
-    } catch {
-      /* offline or dev server recompiling */
+    if (!isDemoModeActive()) {
+      try {
+        await syncManagerPortfolioFromServer(scopeUserId, { force: true });
+      } catch {
+        /* offline or dev server recompiling */
+      }
     }
-    setPropCount(countManagerManagedPropertiesForUser(userId));
+    setPropCount(countManagerManagedPropertiesForUser(scopeUserId));
     setPortfolioTick((t) => t + 1);
-  }, [userId]);
+  }, [scopeUserId]);
 
   const refreshPending = refreshPortfolio;
 
@@ -125,19 +128,19 @@ export function ManagerProperties() {
 
   const stageCounts = useMemo(() => {
     void portfolioTick;
-    const kpiValues = adminKpiCounts(userId);
+    const kpiValues = adminKpiCounts(scopeUserId);
     return {
       pending: kpiValues[0] + kpiValues[1],
       listed: kpiValues[2],
       unlisted: kpiValues[3],
       rejected: kpiValues[4],
     };
-  }, [portfolioTick, userId]);
+  }, [portfolioTick, scopeUserId]);
 
   const shareableProperties = useMemo(() => {
     void portfolioTick;
-    return buildManagerShareablePropertyOptions(userId);
-  }, [userId, portfolioTick]);
+    return buildManagerShareablePropertyOptions(scopeUserId);
+  }, [scopeUserId, portfolioTick]);
 
   const atPropertyLimit = skuLoaded && managerTierPropertyLimitReached(skuTier, propCount);
   const limitMax = maxPropertiesForManagerTier(skuTier);
@@ -148,7 +151,7 @@ export function ManagerProperties() {
       void loadSku();
       return;
     }
-    if (!userId) {
+    if (!scopeUserId) {
       showToast("Sign in to create a listing.");
       return;
     }

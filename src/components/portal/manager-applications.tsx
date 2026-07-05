@@ -74,6 +74,7 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
+import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { transitionApplicationBucket } from "@/lib/application-review";
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
@@ -244,13 +245,15 @@ export function ManagerApplications() {
     void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
   }, [userId]);
 
-  const propertyOptions = buildManagerPropertyFilterOptions(userId);
-  const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(userId), [userId, portfolioTick]);
+  const scopeUserId = resolveManagerScopeUserId(userId);
+
+  const propertyOptions = buildManagerPropertyFilterOptions(scopeUserId);
+  const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(scopeUserId), [scopeUserId, portfolioTick]);
 
   const scopedRows = useMemo(() => {
-    if (!userId) return [];
-    return rows.filter((r) => applicationVisibleToPortalUser(r, userId));
-  }, [rows, userId]);
+    if (!scopeUserId) return [];
+    return rows.filter((r) => applicationVisibleToPortalUser(r, scopeUserId));
+  }, [rows, scopeUserId]);
 
   const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
   const tabs = useMemo(

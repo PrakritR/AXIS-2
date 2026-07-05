@@ -145,7 +145,7 @@ export function PortalCalendar({
     calendarPropertyId && managerProperties.some((property) => property.id === calendarPropertyId) ? calendarPropertyId : "";
 
   const shareableProperties = useMemo(() => {
-    if (portal !== "manager" || !userId) return [];
+    if (portal !== "manager") return [];
     void propertyTick;
     return buildManagerShareablePropertyOptions(userId);
   }, [portal, userId, propertyTick]);

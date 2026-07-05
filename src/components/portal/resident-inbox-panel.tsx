@@ -570,7 +570,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       titleAside={
         <>
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
-            New
+            New message
           </Button>
           {tabId === "trash" && counts.trash > 0 ? (
             <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>

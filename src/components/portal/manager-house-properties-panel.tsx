@@ -23,6 +23,7 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
   adminKpiCounts,
   adminPropertyRentDisplayLabel,
@@ -508,17 +509,26 @@ export function ManagerHousePropertiesPanel({
   onSendToProspect?: (listingId: string) => void;
 }) {
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
+  const scopeUserId = resolveManagerScopeUserId(managerUserId);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!managerUserId) return;
-    void syncManagerPortfolioFromServer(managerUserId, { force: true }).then(() => {
+    if (!scopeUserId) return;
+    if (!isDemoModeActive()) {
+      void syncManagerPortfolioFromServer(scopeUserId, { force: true }).then(() => {
+        setTick((t) => t + 1);
+        void mirrorLocalPropertyPipelineToServer();
+      });
+    } else {
       setTick((t) => t + 1);
-      void mirrorLocalPropertyPipelineToServer();
-    });
+    }
     const on = () => {
-      void syncManagerPortfolioFromServer(managerUserId, { force: true }).then(() => setTick((t) => t + 1));
+      if (isDemoModeActive()) {
+        setTick((t) => t + 1);
+        return;
+      }
+      void syncManagerPortfolioFromServer(scopeUserId, { force: true }).then(() => setTick((t) => t + 1));
     };
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     window.addEventListener("axis-pro-relationships", on);
@@ -526,12 +536,12 @@ export function ManagerHousePropertiesPanel({
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("axis-pro-relationships", on);
     };
-  }, [managerUserId]);
+  }, [scopeUserId]);
 
   const kpiValues = useMemo(() => {
     void tick;
-    return adminKpiCounts(managerUserId);
-  }, [tick, managerUserId]);
+    return adminKpiCounts(scopeUserId);
+  }, [tick, scopeUserId]);
 
   const stageCounts = useMemo(
     () => ({
@@ -545,13 +555,13 @@ export function ManagerHousePropertiesPanel({
 
   const rows = useMemo(() => {
     void tick;
-    if (!managerUserId) return [] as Array<{ sourceBucket: AdminPropertyBucketIndex; row: AdminPropertyRow }>;
+    if (!scopeUserId) return [] as Array<{ sourceBucket: AdminPropertyBucketIndex; row: AdminPropertyRow }>;
     const stage = MANAGER_STAGES.find((item) => item.key === activeStage);
     if (!stage) return [];
     return stage.buckets.flatMap((bucket) =>
-      readAdminPropertyRows(bucket, managerUserId).map((row) => ({ sourceBucket: bucket, row })),
+      readAdminPropertyRows(bucket, scopeUserId).map((row) => ({ sourceBucket: bucket, row })),
     );
-  }, [tick, managerUserId, activeStage]);
+  }, [tick, scopeUserId, activeStage]);
 
   useEffect(() => {
     if (activeStage !== "pending") return;
@@ -563,7 +573,7 @@ export function ManagerHousePropertiesPanel({
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;
   }
-  if (!managerUserId) {
+  if (!scopeUserId) {
     return <p className="text-sm text-muted">Sign in to view and manage your properties.</p>;
   }
 

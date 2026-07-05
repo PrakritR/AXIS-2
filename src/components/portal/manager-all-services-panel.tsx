@@ -33,6 +33,7 @@ import {
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
 import { ManagerCreateServiceRequestModal } from "@/components/portal/manager-create-service-request-modal";
+import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
 import {
   ManagerVendorsPanel,
   type ManagerVendorsPanelHandle,
@@ -98,6 +99,7 @@ export function ManagerAllServicesPanel({
   const [reqEditPrice, setReqEditPrice] = useState("");
   const [reqEditDeposit, setReqEditDeposit] = useState("");
   const [addRequestOpen, setAddRequestOpen] = useState(false);
+  const [addWorkOrderOpen, setAddWorkOrderOpen] = useState(false);
   const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
   const typeFilter: FilterType = tabId;
 
@@ -401,6 +403,17 @@ export function ManagerAllServicesPanel({
               Add request
             </Button>
           ) : null}
+          {typeFilter === "work-orders" ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              data-attr="manager-work-order-add"
+              onClick={() => setAddWorkOrderOpen(true)}
+            >
+              Add work order
+            </Button>
+          ) : null}
         </>
       }
       filterRow={
@@ -545,6 +558,17 @@ export function ManagerAllServicesPanel({
         onSubmitted={() => {
           setDataTick((t) => t + 1);
           setReqBucket("pending");
+        }}
+      />
+
+      <ManagerCreateWorkOrderModal
+        open={addWorkOrderOpen}
+        onClose={() => setAddWorkOrderOpen(false)}
+        managerUserId={userId}
+        defaultPropertyId={propertyFilter || undefined}
+        onSubmitted={(bucket) => {
+          setDataTick((t) => t + 1);
+          setWoBucket(bucket);
         }}
       />
     </ManagerPortalPageShell>

@@ -126,6 +126,45 @@ mirrored.
 > **linked**. Keep dev/test linked by default; only link production for a
 > deliberate deploy, and relink to dev/test immediately after.
 
+## Production demo seed (live site only)
+
+The public `/demo` route is a client-side localStorage sandbox — it never writes
+to Supabase. To exercise **real** signed-in portals on the production deployment
+(manager / resident / vendor), run the one-shot CLI seed against the production
+project:
+
+```bash
+# Pull production creds locally (never commit the pulled file)
+vercel env pull .env.production.local --environment=production
+
+# Set AXIS_PRODUCTION_SEED_KEY + AXIS_PROD_DEMO_PASSWORD in Vercel Production
+ALLOW_PRODUCTION_SEED=1 AXIS_PROD_DEMO_PASSWORD='your-demo-password' \
+  node --env-file=.env.production.local scripts/seed-production-portal.mjs
+# or: ALLOW_PRODUCTION_SEED=1 AXIS_PROD_DEMO_PASSWORD='…' npm run seed:production -- --env-file=.env.production.local
+```
+
+Guards (fail closed):
+
+- `assertProductionProjectUrl` — URL must be the production project ref
+- `assertProductionSeedGate` — requires `ALLOW_PRODUCTION_SEED=1` and
+  `AXIS_PRODUCTION_SEED_KEY` (server-only; set in Vercel Production scope only)
+- Test seeds (`test:seed`, `seed-demo-manager-workflow.mjs`) refuse the
+  production project via `assertTestProjectUrl`; production seed refuses
+  dev/test via `assertProductionProjectUrl`
+
+Demo accounts use `@axis.local` emails (no outbound email). Sign in on the live
+site after seeding:
+
+| Role | Email |
+|---|---|
+| Manager | `alex.morgan@axis.local` |
+| Resident | `jordan.lee@axis.local` |
+| Vendor | `cascade.mechanical@axis.local` |
+
+Password: value of `AXIS_PROD_DEMO_PASSWORD`. Re-run the seed anytime to refresh
+relative dates and upsert rows — it only touches the demo manager scope plus
+those three accounts.
+
 ## A note on MCP
 
 There is no Supabase MCP server configured in this repo (only a Neon MCP). The

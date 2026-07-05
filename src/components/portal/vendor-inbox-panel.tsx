@@ -447,7 +447,7 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
           />
           <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
             <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setComposeOpen(true)}>
-              New
+              New message
             </Button>
             {tabId === "trash" && counts.trash > 0 ? (
               <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={emptyTrash}>

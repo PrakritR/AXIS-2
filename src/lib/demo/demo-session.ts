@@ -33,6 +33,24 @@ export function isDemoModeActive(): boolean {
   return typeof window !== "undefined" && Boolean(window.location?.pathname?.startsWith("/demo"));
 }
 
+/** Re-render portal hooks when demo navigation changes the pathname or in-frame section. */
+export function subscribeDemoPath(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("popstate", listener);
+  window.addEventListener(DEMO_NAVIGATE_EVENT, listener);
+  return () => {
+    window.removeEventListener("popstate", listener);
+    window.removeEventListener(DEMO_NAVIGATE_EVENT, listener);
+  };
+}
+
+/** Manager/resident scope id for portal reads — includes the demo sandbox when signed out. */
+export function resolveManagerScopeUserId(userId: string | null): string | null {
+  if (userId?.trim()) return userId.trim();
+  if (isDemoModeActive()) return getDemoSessionSnapshot().userId;
+  return null;
+}
+
 /**
  * Window event a reused portal panel dispatches (instead of a real router push)
  * when it wants to navigate while inside the demo sandbox. `DemoPortalShell`

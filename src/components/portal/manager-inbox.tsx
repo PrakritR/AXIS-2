@@ -430,7 +430,7 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             </Button>
           ) : null}
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
-            New
+            New message
           </Button>
         </>
       }

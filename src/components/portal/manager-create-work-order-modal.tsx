@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { PreferredArrivalField } from "@/components/portal/preferred-arrival-field";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import {
   HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE,
@@ -29,8 +31,15 @@ import {
   readManagerWorkOrderRows,
   writeManagerWorkOrderRows,
 } from "@/lib/manager-work-orders-storage";
+import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
+import { formatPreferredArrival } from "@/lib/preferred-arrival";
+import {
+  type ResidentMaintenanceCategoryLabel,
+  workOrderCategoryForResidentLabel,
+} from "@/lib/work-order-taxonomy";
 
 type WorkOrderCategory = "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
+type CreateMode = "request" | "log";
 
 type PropertyOption = { propertyId: string; propertyLabel: string };
 
@@ -42,6 +51,15 @@ type ResidentOption = {
   roomLabel: string;
   assignedRoomChoice?: string;
 };
+
+const RESIDENT_CATEGORY_OPTIONS: ResidentMaintenanceCategoryLabel[] = [
+  "Plumbing",
+  "Electrical",
+  "HVAC",
+  "Appliance",
+  "Access / Locks",
+  "General",
+];
 
 function displayPropertyLabel(raw: string): string {
   const trimmed = raw.trim();
@@ -118,7 +136,7 @@ function residentMatchesProperty(resident: ResidentOption, property: PropertyOpt
   return resident.propertyLabel.toLowerCase() === property.propertyLabel.toLowerCase();
 }
 
-const CATEGORY_LABELS: Record<WorkOrderCategory, string> = {
+const LOG_CATEGORY_LABELS: Record<WorkOrderCategory, string> = {
   cleaning: "Cleaning",
   plumbing: "Plumbing",
   mold: "Mold remediation",
@@ -141,12 +159,19 @@ export function ManagerCreateWorkOrderModal({
   defaultPropertyId?: string;
 }) {
   const { showToast } = useAppUi();
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [tick, setTick] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<CreateMode>("request");
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<WorkOrderCategory>("general");
+  const [categoryLabel, setCategoryLabel] = useState<ResidentMaintenanceCategoryLabel>("General");
+  const [logCategory, setLogCategory] = useState<WorkOrderCategory>("general");
   const [priority, setPriority] = useState("Medium");
+  const [arrivalPreset, setArrivalPreset] = useState("Anytime");
+  const [arrivalCustom, setArrivalCustom] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
   const [propertyId, setPropertyId] = useState("");
   const [residentEmail, setResidentEmail] = useState("");
   const [cost, setCost] = useState("");
@@ -170,15 +195,21 @@ export function ManagerCreateWorkOrderModal({
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
+      setMode("request");
       setTitle("");
       setDescription("");
-      setCategory("general");
+      setCategoryLabel("General");
+      setLogCategory("general");
       setPriority("Medium");
+      setArrivalPreset("Anytime");
+      setArrivalCustom("");
+      setPhotos([]);
       setPropertyId(defaultPropertyId?.trim() || "");
       setResidentEmail("");
       setCost("");
       setPaymentStatus("paid");
       setBucket("completed");
+      if (photoInputRef.current) photoInputRef.current.value = "";
     });
   }, [open, defaultPropertyId]);
 
@@ -208,8 +239,114 @@ export function ManagerCreateWorkOrderModal({
     [propertyId, propertyOptions],
   );
 
-  const submit = () => {
-    if (busy) return;
+  const fileToDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+      reader.readAsDataURL(file);
+    });
+
+  const onPickPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const remaining = 6 - photos.length;
+    if (remaining <= 0) {
+      showToast("Up to 6 photos.");
+      return;
+    }
+    const next = [...photos];
+    for (let i = 0; i < Math.min(files.length, remaining); i++) {
+      const file = files[i];
+      if (!file) continue;
+      if (!file.type.startsWith("image/")) {
+        showToast("Images only.");
+        return;
+      }
+      next.push(await fileToDataUrl(file));
+    }
+    setPhotos(next);
+  };
+
+  const submitRequest = async () => {
+    if (!title.trim()) {
+      showToast("Add a title for the work order.");
+      return;
+    }
+    if (!propertyId || !selectedProperty) {
+      showToast("Choose a property.");
+      return;
+    }
+    if (!residentEmail || !selectedResident) {
+      showToast("Choose a resident.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const id = `REQ-${Date.now()}`;
+      const preferredArrival = formatPreferredArrival(arrivalPreset, arrivalCustom);
+      const details =
+        description.trim() ||
+        `${categoryLabel}: Maintenance request logged by your property manager.`;
+      const row: DemoManagerWorkOrderRow = {
+        id,
+        propertyName: selectedProperty.propertyLabel,
+        propertyId,
+        assignedPropertyId: propertyId,
+        assignedRoomChoice: selectedResident.assignedRoomChoice,
+        managerUserId,
+        unit: selectedResident.roomLabel || "—",
+        title: title.trim(),
+        priority,
+        status: "Submitted",
+        bucket: "open",
+        category: workOrderCategoryForResidentLabel(categoryLabel),
+        description: details,
+        scheduled: "—",
+        cost: "—",
+        preferredArrival,
+        residentName: selectedResident.residentName,
+        residentEmail: selectedResident.residentEmail,
+        photoDataUrls: photos.length > 0 ? photos : undefined,
+        managerInitiated: true,
+      };
+
+      writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
+
+      const notify = await deliverPortalInboxMessage({
+        fromName: "Property Manager",
+        toEmails: [selectedResident.residentEmail],
+        subject: `Maintenance request opened: ${title.trim()}`,
+        text: [
+          `Hi ${selectedResident.residentName || "there"},`,
+          "",
+          "Your property manager logged a maintenance request on your behalf:",
+          "",
+          `Title: ${title.trim()}`,
+          `Category: ${categoryLabel}`,
+          `Priority: ${priority}`,
+          `Preferred arrival: ${preferredArrival}`,
+          details ? `Details: ${details}` : "",
+          photos.length > 0 ? `Photos attached: ${photos.length}` : "",
+          "",
+          "Sign in to your Axis resident portal to view updates under Services → Work orders.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      });
+
+      showToast("Work order created.");
+      if (!notify.ok) {
+        showToast("Work order saved, but resident notification could not be sent.");
+      }
+      onSubmitted("open");
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitLog = () => {
     if (!title.trim()) {
       showToast("Add a title for the work order.");
       return;
@@ -253,13 +390,16 @@ export function ManagerCreateWorkOrderModal({
         bucket,
         description:
           description.trim() ||
-          `${CATEGORY_LABELS[category]} — logged by manager.${amt > 0 ? ` Cost: ${costLabel}.` : ""}`,
-        scheduled: bucket === "scheduled" ? now.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—",
+          `${LOG_CATEGORY_LABELS[logCategory]} — logged by manager.${amt > 0 ? ` Cost: ${costLabel}.` : ""}`,
+        scheduled:
+          bucket === "scheduled"
+            ? now.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+            : "—",
         scheduledAtIso: bucket === "scheduled" ? now.toISOString() : undefined,
         cost: costLabel,
         residentName: selectedResident.residentName,
         residentEmail: selectedResident.residentEmail,
-        category,
+        category: logCategory,
         managerInitiated: true,
         completedAt: bucket === "completed" ? now.toISOString() : undefined,
         workDoneSummary: bucket === "completed" ? title.trim() : undefined,
@@ -301,58 +441,62 @@ export function ManagerCreateWorkOrderModal({
     }
   };
 
+  const submit = () => {
+    if (busy) return;
+    if (mode === "request") {
+      void submitRequest();
+      return;
+    }
+    submitLog();
+  };
+
   return (
-    <Modal open={open} onClose={onClose} title="Log work order">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={mode === "request" ? "Add work order" : "Log completed work"}
+      panelClassName="max-w-lg"
+    >
       <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={mode === "request" ? "primary" : "outline"}
+            className="rounded-full text-xs"
+            onClick={() => setMode("request")}
+            disabled={busy}
+            data-attr="manager-work-order-mode-request"
+          >
+            New request
+          </Button>
+          <Button
+            type="button"
+            variant={mode === "log" ? "primary" : "outline"}
+            className="rounded-full text-xs"
+            onClick={() => setMode("log")}
+            disabled={busy}
+            data-attr="manager-work-order-mode-log"
+          >
+            Log completed work
+          </Button>
+        </div>
+
         <p className="text-sm text-muted">
-          Record work you already performed (e.g. lockout assistance) with optional cost and payment status for Finances.
+          {mode === "request"
+            ? "Create a maintenance request on behalf of a resident. It appears in Pending until you schedule or complete it."
+            : "Record work you already performed (e.g. lockout assistance) with optional cost and payment status for Finances."}
         </p>
 
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-          Title *
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Lockout assistance"
-            disabled={busy}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-          Details
-          <Textarea
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="What was done, when, any notes for your records…"
-            disabled={busy}
-          />
-        </label>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-            Category
-            <Select value={category} onChange={(e) => setCategory(e.target.value as WorkOrderCategory)} disabled={busy}>
-              {(Object.keys(CATEGORY_LABELS) as WorkOrderCategory[]).map((key) => (
-                <option key={key} value={key}>
-                  {CATEGORY_LABELS[key]}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-            Priority
-            <Select value={priority} onChange={(e) => setPriority(e.target.value)} disabled={busy}>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </Select>
-          </label>
-        </div>
-
-        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
           Property *
-          <Select value={propertyId} onChange={(e) => { setPropertyId(e.target.value); setResidentEmail(""); }} disabled={busy}>
+          <Select
+            value={propertyId}
+            onChange={(e) => {
+              setPropertyId(e.target.value);
+              setResidentEmail("");
+            }}
+            disabled={busy}
+          >
             <option value="">Select property</option>
             {propertyOptions.map((p) => (
               <option key={p.propertyId} value={p.propertyId}>
@@ -368,58 +512,180 @@ export function ManagerCreateWorkOrderModal({
             <option value="">{propertyId ? "Select resident" : "Choose a property first"}</option>
             {residentsForProperty.map((r) => (
               <option key={r.residentEmail} value={r.residentEmail}>
-                {r.residentName}{r.roomLabel ? ` · ${r.roomLabel}` : ""}
+                {r.residentName}
+                {r.roomLabel ? ` · ${r.roomLabel}` : ""}
               </option>
             ))}
           </Select>
         </label>
 
+        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+          Title *
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={mode === "request" ? "Short summary of the issue" : "e.g. Lockout assistance"}
+            disabled={busy}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+          Details
+          <Textarea
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={
+              mode === "request"
+                ? "Describe the issue, access notes, or context from the resident…"
+                : "What was done, when, any notes for your records…"
+            }
+            disabled={busy}
+          />
+        </label>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-            Cost (USD)
-            <Input
-              type="text"
-              inputMode="decimal"
-              value={cost}
-              onChange={(e) => {
-                const next = e.target.value;
-                setCost(next);
-                if (!next.trim()) setPaymentStatus("none");
-                else if (paymentStatus === "none") setPaymentStatus("paid");
-              }}
-              placeholder="e.g. 25"
-              disabled={busy}
-            />
+            Category
+            {mode === "request" ? (
+              <Select
+                value={categoryLabel}
+                onChange={(e) => setCategoryLabel(e.target.value as ResidentMaintenanceCategoryLabel)}
+                disabled={busy}
+              >
+                {RESIDENT_CATEGORY_OPTIONS.map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Select value={logCategory} onChange={(e) => setLogCategory(e.target.value as WorkOrderCategory)} disabled={busy}>
+                {(Object.keys(LOG_CATEGORY_LABELS) as WorkOrderCategory[]).map((key) => (
+                  <option key={key} value={key}>
+                    {LOG_CATEGORY_LABELS[key]}
+                  </option>
+                ))}
+              </Select>
+            )}
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-            Payment status
-            <Select
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value as "none" | "pending" | "paid")}
-              disabled={busy || !cost.trim()}
-            >
-              <option value="none">No charge</option>
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
+            Priority
+            <Select value={priority} onChange={(e) => setPriority(e.target.value)} disabled={busy}>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
             </Select>
           </label>
         </div>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-          Status
-          <Select value={bucket} onChange={(e) => setBucket(e.target.value as ManagerWorkOrderBucket)} disabled={busy}>
-            <option value="completed">Completed — work already done</option>
-            <option value="open">Open — needs scheduling</option>
-            <option value="scheduled">Scheduled — visit planned</option>
-          </Select>
-        </label>
+        {mode === "request" ? (
+          <>
+            <PreferredArrivalField
+              preset={arrivalPreset}
+              custom={arrivalCustom}
+              onPresetChange={setArrivalPreset}
+              onCustomChange={setArrivalCustom}
+            />
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-muted">Photos (up to 6)</p>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  void onPickPhotos(e.target.files);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-fit rounded-full text-xs"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={busy}
+              >
+                Attach photos
+              </Button>
+              {photos.length > 0 ? (
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {photos.map((src, i) => (
+                    <div key={i} className="overflow-hidden rounded-xl border border-border bg-accent/30">
+                      <Image src={src} alt={`Photo ${i + 1}`} width={240} height={180} className="h-24 w-full object-cover" unoptimized />
+                      <div className="flex justify-start p-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 rounded-full px-3 text-[11px]"
+                          onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
+                          disabled={busy}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+                Cost (USD)
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={cost}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setCost(next);
+                    if (!next.trim()) setPaymentStatus("none");
+                    else if (paymentStatus === "none") setPaymentStatus("paid");
+                  }}
+                  placeholder="e.g. 25"
+                  disabled={busy}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+                Payment status
+                <Select
+                  value={paymentStatus}
+                  onChange={(e) => setPaymentStatus(e.target.value as "none" | "pending" | "paid")}
+                  disabled={busy || !cost.trim()}
+                >
+                  <option value="none">No charge</option>
+                  <option value="paid">Paid</option>
+                  <option value="pending">Pending</option>
+                </Select>
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Status
+              <Select value={bucket} onChange={(e) => setBucket(e.target.value as ManagerWorkOrderBucket)} disabled={busy}>
+                <option value="completed">Completed — work already done</option>
+                <option value="open">Open — needs scheduling</option>
+                <option value="scheduled">Scheduled — visit planned</option>
+              </Select>
+            </label>
+          </>
+        )}
 
         <div className="flex justify-start gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="button" variant="primary" onClick={submit} disabled={busy}>
-            {busy ? "Saving…" : "Save work order"}
+          <Button
+            type="button"
+            variant="primary"
+            onClick={submit}
+            disabled={busy}
+            data-attr="manager-work-order-submit"
+          >
+            {busy ? "Saving…" : mode === "request" ? "Create work order" : "Save work order"}
           </Button>
         </div>
       </div>

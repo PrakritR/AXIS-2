@@ -1,376 +1,304 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
-import { triggerDocumentDownload } from "@/components/portal/resident-other-documents";
-import { useAppUi } from "@/components/providers/app-ui-provider";
-import { isoDateOnly } from "@/lib/demo/demo-data";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { safeFormatDateTime } from "@/lib/pacific-time";
+import { TabNav } from "@/components/ui/tabs";
 import {
-  findVendorDocument,
-  VENDOR_DOCUMENT_HINTS,
-  VENDOR_DOCUMENT_LABELS,
-  VENDOR_DOCUMENT_SECTIONS,
-  type VendorDocumentKind,
-  type VendorDocumentRecord,
-} from "@/lib/vendor-documents";
+  ManagerPortalFilterRow,
+  ManagerPortalPageShell,
+  PORTAL_HEADER_ACTION_BTN,
+} from "@/components/portal/portal-metrics";
+import { ReportFilterBar, type ReportFilterState } from "@/components/portal/reports/report-filter-bar";
+import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
+import { ReportTable } from "@/components/portal/reports/report-table";
+import { useAppUi } from "@/components/providers/app-ui-provider";
+import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import {
+  MANAGER_WORK_ORDERS_EVENT,
+  readVendorWorkOrderRows,
+  syncManagerWorkOrdersFromServer,
+} from "@/lib/manager-work-orders-storage";
+import { safeFormatDateTime } from "@/lib/pacific-time";
+import type { ReportResult } from "@/lib/reports/types";
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const INCOME_DOCUMENT_TAB = { id: "income-documents", label: "Income documents" } as const;
 
-type InsuranceDraft = {
-  insuranceProvider: string;
-  insurancePolicyNumber: string;
-  insuranceExpiresAt: string;
+type VendorDocumentScope = "portfolio" | "property";
+
+type VendorDocumentScopeState = {
+  scope: VendorDocumentScope;
+  propertyName: string;
 };
 
-const EMPTY_INSURANCE: InsuranceDraft = {
-  insuranceProvider: "",
-  insurancePolicyNumber: "",
-  insuranceExpiresAt: "",
-};
-
-const DEMO_DOCUMENTS: VendorDocumentRecord[] = [
-  {
-    kind: "insurance",
-    fileName: "pemco-certificate.pdf",
-    url: "",
-    uploadedAt: new Date(Date.now() - 86400000 * 30).toISOString(),
-  },
-];
-
-const DEMO_INSURANCE: InsuranceDraft = {
-  insuranceProvider: "Pemco Commercial",
-  insurancePolicyNumber: "PC-482913",
-  insuranceExpiresAt: isoDateOnly(150),
-};
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(new Error("Could not read file."));
-    reader.readAsDataURL(file);
-  });
+function defaultFilters(): ReportFilterState {
+  const now = new Date();
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  return {
+    propertyId: "",
+    from: yearStart.toISOString().slice(0, 10),
+    to: now.toISOString().slice(0, 10),
+    daysAhead: "90",
+    taxYear: String(now.getFullYear() - 1),
+  };
 }
 
-function DocumentRow({
-  kind,
-  doc,
-  uploading,
-  disabled,
-  onUpload,
-  onRemove,
-}: {
-  kind: VendorDocumentKind;
-  doc: VendorDocumentRecord | undefined;
-  uploading: boolean;
-  disabled: boolean;
-  onUpload: (file: File) => void;
-  onRemove: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function defaultScopeFilters(): VendorDocumentScopeState {
+  return { scope: "portfolio", propertyName: "" };
+}
 
+function propertyLabel(row: DemoManagerWorkOrderRow): string {
+  const unit = row.unit?.trim();
+  return unit && unit !== "—" ? `${row.propertyName} · ${unit}` : row.propertyName;
+}
+
+function workOrderAmountCents(row: DemoManagerWorkOrderRow): number {
+  const labor = row.vendorCostCents ?? 0;
+  const materials = row.materialsCostCents ?? 0;
+  if (labor + materials > 0) return labor + materials;
+  const parsed = parseFloat((row.cost ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0;
+}
+
+function formatMoney(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function inDateRange(iso: string | undefined, from: string, to: string): boolean {
+  if (!iso) return false;
+  const day = iso.slice(0, 10);
+  return day >= from && day <= to;
+}
+
+function buildVendorIncomeReport(
+  rows: DemoManagerWorkOrderRow[],
+  filters: ReportFilterState,
+  scopeFilters: VendorDocumentScopeState,
+): ReportResult {
+  const paidRows = rows.filter((row) => {
+    if (row.automationStatus !== "paid") return false;
+    const paidDay = row.paidAt ?? row.completedAt;
+    if (!inDateRange(paidDay, filters.from, filters.to)) return false;
+    if (scopeFilters.scope === "property" && scopeFilters.propertyName) {
+      return row.propertyName === scopeFilters.propertyName;
+    }
+    return true;
+  });
+
+  let totalCents = 0;
+  const reportRows = paidRows.map((row) => {
+    const labor = row.vendorCostCents ?? 0;
+    const materials = row.materialsCostCents ?? 0;
+    const total = workOrderAmountCents(row);
+    totalCents += total;
+    return {
+      date: safeFormatDateTime(row.paidAt ?? row.completedAt ?? ""),
+      property: propertyLabel(row),
+      workOrder: row.title,
+      labor: labor > 0 ? formatMoney(labor) : "—",
+      materials: materials > 0 ? formatMoney(materials) : "—",
+      total: total > 0 ? formatMoney(total) : row.cost || "—",
+    };
+  });
+
+  return {
+    id: "vendor-income-documents",
+    title: "Income documents",
+    columns: [
+      { key: "date", label: "Date", format: "date" },
+      { key: "property", label: "Property" },
+      { key: "workOrder", label: "Work order" },
+      { key: "labor", label: "Labor", align: "right", format: "money" },
+      { key: "materials", label: "Materials", align: "right", format: "money" },
+      { key: "total", label: "Total", align: "right", format: "money" },
+    ],
+    rows: reportRows,
+    totals: reportRows.length
+      ? {
+          date: "",
+          property: "",
+          workOrder: "Total",
+          labor: "",
+          materials: "",
+          total: formatMoney(totalCents),
+        }
+      : undefined,
+  };
+}
+
+function VendorDocumentScopeBar({
+  filters,
+  onChange,
+  propertyOptions,
+}: {
+  filters: VendorDocumentScopeState;
+  onChange: (next: Partial<VendorDocumentScopeState>) => void;
+  propertyOptions: { id: string; label: string }[];
+}) {
   return (
-    <div className="border-b border-border py-4 last:border-b-0">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">{VENDOR_DOCUMENT_LABELS[kind]}</p>
-          <p className="mt-1 text-xs text-muted">{VENDOR_DOCUMENT_HINTS[kind]}</p>
-          {doc ? (
-            <p className="mt-2 text-xs text-muted">
-              <span className="font-medium text-foreground">{doc.fileName}</span>
-              {" · "}
-              Uploaded {safeFormatDateTime(doc.uploadedAt)}
-            </p>
-          ) : (
-            <p className="mt-2 text-xs text-muted">No file uploaded yet.</p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {doc?.url ? (
-            <>
-              <Button
-                type="button"
-                variant="secondary"
-                className="rounded-full"
-                data-attr={`vendor-documents-view-${kind}`}
-                onClick={() => window.open(doc.url, "_blank", "noopener,noreferrer")}
-              >
-                View
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="rounded-full"
-                data-attr={`vendor-documents-download-${kind}`}
-                onClick={() => triggerDocumentDownload(doc.url, doc.fileName)}
-              >
-                Download
-              </Button>
-            </>
-          ) : null}
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) onUpload(file);
-            }}
-          />
-          <Button
-            type="button"
-            variant="primary"
-            className="rounded-full"
-            disabled={disabled || uploading}
-            data-attr={`vendor-documents-upload-${kind}`}
-            onClick={() => inputRef.current?.click()}
+    <>
+      <label className="flex min-w-[9rem] flex-col gap-1.5 text-xs font-medium text-muted">
+        Scope
+        <select
+          className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
+          value={filters.scope}
+          onChange={(e) =>
+            onChange({
+              scope: e.target.value as VendorDocumentScope,
+              propertyName: "",
+            })
+          }
+        >
+          <option value="portfolio">All properties</option>
+          <option value="property">Per property</option>
+        </select>
+      </label>
+      {filters.scope === "property" ? (
+        <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
+          Property
+          <select
+            className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
+            value={filters.propertyName}
+            onChange={(e) => onChange({ propertyName: e.target.value })}
           >
-            {uploading ? "Uploading…" : doc ? "Replace" : "Upload"}
-          </Button>
-          {doc ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="rounded-full text-danger"
-              disabled={disabled || uploading}
-              data-attr={`vendor-documents-remove-${kind}`}
-              onClick={onRemove}
-            >
-              Remove
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </div>
+            <option value="">Select property</option>
+            {propertyOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+    </>
   );
 }
 
-/** Vendor Documents — insurance details + compliance file uploads for managers. */
+/** Vendor Documents — income from approved work orders (manager Documents layout, income tab only). */
 export function VendorDocumentsPanel() {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
 
-  const [documents, setDocuments] = useState<VendorDocumentRecord[]>(() => (demo ? DEMO_DOCUMENTS : []));
-  const [insuranceDraft, setInsuranceDraft] = useState<InsuranceDraft>(() => (demo ? DEMO_INSURANCE : EMPTY_INSURANCE));
-  const [loading, setLoading] = useState(() => !demo);
-  const [savingInsurance, setSavingInsurance] = useState(false);
-  const [uploadingKind, setUploadingKind] = useState<VendorDocumentKind | null>(null);
+  const [filters, setFilters] = useState(defaultFilters);
+  const [scopeFilters, setScopeFilters] = useState(defaultScopeFilters);
+  const [report, setReport] = useState<ReportResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
+  const [tick, setTick] = useState(0);
   const [unlinked, setUnlinked] = useState(false);
 
   useEffect(() => {
+    const bump = () => setTick((n) => n + 1);
+    void syncManagerWorkOrdersFromServer().then(bump);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+    return () => window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+  }, []);
+
+  useEffect(() => {
     if (demo) return;
-    void fetch("/api/vendor/documents", { credentials: "include" })
+    void fetch("/api/vendor/profile", { credentials: "include" })
       .then((r) => r.json())
-      .then(
-        (data: {
-          linked?: boolean;
-          documents?: VendorDocumentRecord[];
-          insuranceProvider?: string;
-          insurancePolicyNumber?: string;
-          insuranceExpiresAt?: string;
-        }) => {
-          setUnlinked(data.linked === false);
-          if (Array.isArray(data.documents)) setDocuments(data.documents);
-          setInsuranceDraft({
-            insuranceProvider: data.insuranceProvider ?? "",
-            insurancePolicyNumber: data.insurancePolicyNumber ?? "",
-            insuranceExpiresAt: data.insuranceExpiresAt ?? "",
-          });
-        },
-      )
-      .finally(() => setLoading(false));
+      .then((data: { linked?: boolean }) => setUnlinked(data.linked === false))
+      .catch(() => undefined);
   }, [demo]);
 
-  async function saveInsurance() {
-    setSavingInsurance(true);
-    try {
-      if (demo) {
-        showToast("Insurance details saved.");
-        return;
-      }
-      const res = await fetch("/api/vendor/documents", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(insuranceDraft),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save.");
-      showToast("Insurance details saved.");
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to save.");
-    } finally {
-      setSavingInsurance(false);
+  const propertyOptions = useMemo(() => {
+    void tick;
+    const seen = new Map<string, string>();
+    for (const row of readVendorWorkOrderRows()) {
+      const name = row.propertyName?.trim();
+      if (!name || seen.has(name)) continue;
+      seen.set(name, name);
     }
-  }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [tick]);
 
-  async function uploadDocument(kind: VendorDocumentKind, file: File) {
-    if (file.size > MAX_UPLOAD_BYTES) {
-      showToast("File must be 5 MB or smaller.");
-      return;
-    }
-    setUploadingKind(kind);
+  const runReport = useCallback(async () => {
+    setLoading(true);
     try {
-      if (demo) {
-        setDocuments((cur) => {
-          const next = cur.filter((d) => d.kind !== kind);
-          next.push({
-            kind,
-            fileName: file.name,
-            url: URL.createObjectURL(file),
-            uploadedAt: new Date().toISOString(),
-          });
-          return next;
-        });
-        showToast("Document uploaded.");
-        return;
-      }
-      const dataUrl = await readFileAsDataUrl(file);
-      const ext = file.name.split(".").pop()?.toLowerCase();
-      const res = await fetch("/api/vendor/documents/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ dataUrl, kind, fileName: file.name, ext }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Upload failed.");
-      if (Array.isArray(data.documents)) setDocuments(data.documents);
-      showToast("Document uploaded.");
+      void tick;
+      const rows = readVendorWorkOrderRows();
+      const next = buildVendorIncomeReport(rows, filters, scopeFilters);
+      setReport(next);
+      setGenerated(true);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Upload failed.");
+      showToast(e instanceof Error ? e.message : "Failed to load income documents.");
+      setReport(null);
+      setGenerated(false);
     } finally {
-      setUploadingKind(null);
+      setLoading(false);
     }
-  }
+  }, [filters, scopeFilters, showToast, tick]);
 
-  async function removeDocument(kind: VendorDocumentKind) {
-    setUploadingKind(kind);
-    try {
-      if (demo) {
-        setDocuments((cur) => cur.filter((d) => d.kind !== kind));
-        showToast("Document removed.");
-        return;
-      }
-      const res = await fetch("/api/vendor/documents", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ removeKind: kind }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to remove.");
-      if (Array.isArray(data.documents)) setDocuments(data.documents);
-      showToast("Document removed.");
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to remove.");
-    } finally {
-      setUploadingKind(null);
-    }
-  }
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    queueMicrotask(() => void runReport());
+  }, [runReport]);
+
+  const documentTabItems = useMemo(
+    () => [{ ...INCOME_DOCUMENT_TAB, href: "/vendor/documents" }],
+    [],
+  );
 
   return (
-    <ManagerPortalPageShell title="Documents">
-      <div className="space-y-6">
+    <ManagerPortalPageShell
+      title="Documents"
+      titleAside={
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_HEADER_ACTION_BTN}
+          onClick={() => void runReport()}
+          disabled={loading}
+          data-attr="vendor-documents-generate-report"
+        >
+          {loading ? "Generating…" : "Generate report"}
+        </Button>
+      }
+      filterRow={
+        <ManagerPortalFilterRow>
+          <TabNav activeId={INCOME_DOCUMENT_TAB.id} items={documentTabItems} />
+        </ManagerPortalFilterRow>
+      }
+    >
+      <div className="space-y-4">
         {unlinked ? (
-          <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending" data-attr="vendor-documents-unlinked-banner">
-            Waiting on a property manager to connect with you — you&apos;ll be able to upload documents once linked.
+          <p
+            className="rounded-xl border px-4 py-3 text-sm portal-banner-pending"
+            data-attr="vendor-documents-unlinked-banner"
+          >
+            Waiting on a property manager to connect with you — income documents will appear once you&apos;re linked.
           </p>
         ) : null}
 
-        <section>
-          <p className="text-sm font-semibold text-foreground">Insurance details</p>
-          <p className="mt-1 text-xs text-muted">Policy information managers see alongside your certificate.</p>
+        <ReportFilterBar
+          showProperty={false}
+          showDateRange
+          showDaysAhead={false}
+          showTaxYear={false}
+          showRunButton={false}
+          filters={filters}
+          onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
+          onRun={() => void runReport()}
+          loading={loading}
+          leading={
+            <VendorDocumentScopeBar
+              filters={scopeFilters}
+              onChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
+              propertyOptions={propertyOptions}
+            />
+          }
+        />
 
-          {loading ? (
-            <p className="mt-4 text-sm text-muted">Loading…</p>
-          ) : (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
-                Insurance provider
-                <Input
-                  value={insuranceDraft.insuranceProvider}
-                  onChange={(e) => setInsuranceDraft({ ...insuranceDraft, insuranceProvider: e.target.value })}
-                  data-attr="vendor-documents-insurance-provider"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-                Policy number
-                <Input
-                  value={insuranceDraft.insurancePolicyNumber}
-                  onChange={(e) => setInsuranceDraft({ ...insuranceDraft, insurancePolicyNumber: e.target.value })}
-                  data-attr="vendor-documents-insurance-policy"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-                Coverage expires
-                <Input
-                  type="date"
-                  value={insuranceDraft.insuranceExpiresAt}
-                  onChange={(e) => setInsuranceDraft({ ...insuranceDraft, insuranceExpiresAt: e.target.value })}
-                  data-attr="vendor-documents-insurance-expires"
-                />
-              </label>
-            </div>
-          )}
-
-          <div className="mt-5">
-            <Button
-              variant="primary"
-              onClick={() => void saveInsurance()}
-              disabled={savingInsurance || loading || unlinked}
-              data-attr="vendor-documents-insurance-save"
-            >
-              {savingInsurance ? "Saving…" : "Save insurance details"}
-            </Button>
-          </div>
-        </section>
-
-        <div className="border-t border-border" />
-
-        <section>
-          <p className="text-sm font-semibold text-foreground">Required documents</p>
-          <p className="mt-1 text-xs text-muted">
-            Upload what your manager requests — PDF or image files, up to 5 MB each. Items marked optional may not
-            apply to every vendor.
-          </p>
-
-          {loading ? (
-            <p className="mt-4 text-sm text-muted">Loading…</p>
-          ) : (
-            <div className="mt-4 space-y-8">
-              {VENDOR_DOCUMENT_SECTIONS.map((section) => (
-                <div key={section.id}>
-                  <div className="mb-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">{section.label}</p>
-                    {section.description ? (
-                      <p className="mt-1 text-xs text-muted">{section.description}</p>
-                    ) : null}
-                  </div>
-                  <div>
-                    {section.kinds.map((kind) => (
-                      <DocumentRow
-                        key={kind}
-                        kind={kind}
-                        doc={findVendorDocument(documents, kind)}
-                        uploading={uploadingKind === kind}
-                        disabled={unlinked}
-                        onUpload={(file) => void uploadDocument(kind, file)}
-                        onRemove={() => void removeDocument(kind)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        {loading ? (
+          <ReportGeneratePrompt loading loadingTitle="Generating documents…" />
+        ) : !generated ? (
+          <ReportGeneratePrompt title="No income documents yet." />
+        ) : (
+          <ReportTable report={report} loading={loading} generated={generated} />
+        )}
       </div>
     </ManagerPortalPageShell>
   );

@@ -1,4 +1,4 @@
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import type { MockProperty } from "@/data/types";
 import {
   appendExtraListing,
@@ -10,6 +10,7 @@ import {
   readAllExtraListings,
   readAllPendingManagerProperties,
   readExtraListingsForUser,
+  readScopedExtraListings,
   readPendingManagerPropertiesForUser,
   removeExtraListing,
   submitManagerPendingProperty,
@@ -280,18 +281,19 @@ function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, user
 /** When `forManagerUserId` is set, counts only that manager’s pipeline + side buckets (property portal). */
 export function adminKpiCounts(forManagerUserId?: string | null): [number, number, number, number, number] {
   try {
-    if (forManagerUserId) {
-      const extras = readExtraListingsForUser(forManagerUserId);
-      const pending = readPendingManagerPropertiesForUser(forManagerUserId).length;
+    const scopeUserId = resolveManagerScopeUserId(forManagerUserId ?? null);
+    if (scopeUserId) {
+      const extras = readScopedExtraListings(scopeUserId);
+      const pending = readPendingManagerPropertiesForUser(scopeUserId).length;
       const awaitingReapproval = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive !== true).length;
-      const side = readSide(forManagerUserId);
+      const side = readSide(scopeUserId);
       const listed = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true).length;
       return [
-        pending + awaitingReapproval + linkedAdminPropertyRowsForBucket(0, forManagerUserId).length,
-        side.requestChange.length + linkedAdminPropertyRowsForBucket(1, forManagerUserId).length,
-        listed + linkedAdminPropertyRowsForBucket(2, forManagerUserId).length,
-        side.unlisted.length + linkedAdminPropertyRowsForBucket(3, forManagerUserId).length,
-        side.rejected.length + linkedAdminPropertyRowsForBucket(4, forManagerUserId).length,
+        pending + awaitingReapproval + linkedAdminPropertyRowsForBucket(0, scopeUserId).length,
+        side.requestChange.length + linkedAdminPropertyRowsForBucket(1, scopeUserId).length,
+        listed + linkedAdminPropertyRowsForBucket(2, scopeUserId).length,
+        side.unlisted.length + linkedAdminPropertyRowsForBucket(3, scopeUserId).length,
+        side.rejected.length + linkedAdminPropertyRowsForBucket(4, scopeUserId).length,
       ];
     }
     const pending = readAllPendingManagerProperties().length;
@@ -317,7 +319,7 @@ export function readAdminPropertyRows(
       : readAllPendingManagerProperties();
     const pendingRows = pendingSource.map(pendingToAdminRow);
     const awaitingExtras = forManagerUserId
-      ? readExtraListingsForUser(forManagerUserId).filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true)
+      ? readScopedExtraListings(forManagerUserId).filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true)
       : readAllExtraListings().filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true);
     const awaitingRows = awaitingExtras.map((p) => mockToAdminRow(p, p.id));
     const linked = forManagerUserId ? linkedAdminPropertyRowsForBucket(0, forManagerUserId) : [];
@@ -330,7 +332,7 @@ export function readAdminPropertyRows(
     ]);
   }
   if (bucket === 2) {
-    const extras = forManagerUserId ? readExtraListingsForUser(forManagerUserId) : readAllExtraListings();
+    const extras = forManagerUserId ? readScopedExtraListings(forManagerUserId) : readAllExtraListings();
     /** Must match {@link adminKpiCounts}: only catalog-live mgr listings. Edits set `adminPublishLive: false` until admin re-approves (see {@link updateExtraListingFromSubmission}). */
     const live = extras.filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive === true);
     const linked = forManagerUserId ? linkedAdminPropertyRowsForBucket(2, forManagerUserId) : [];
