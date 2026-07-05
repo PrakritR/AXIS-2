@@ -1851,9 +1851,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <div className="mt-4">
                                   <div className="rounded-2xl border border-border bg-accent/30 p-3">
                                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Lease document</p>
-                                    <p className="mt-1 text-xs text-muted">
-                                      Single active lease document. Signatures are applied to this same lease as the workflow advances.
-                                    </p>
                                   </div>
                                   <LeaseDocumentPreview
                                     className="mt-3"

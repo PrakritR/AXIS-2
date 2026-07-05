@@ -299,19 +299,25 @@ export function PortalDashboardSectionHeader({
   badge?: ReactNode;
   dataAttr?: string;
 }) {
+  const { isNative } = useIsNativeApp();
+  const compactLink = isNative && linkLabel ? "→" : linkLabel;
+
   return (
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="min-w-0 truncate text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
-      {badge || (href && linkLabel) ? (
-        <div className="flex shrink-0 items-center gap-2.5">
+    <div className="flex items-start justify-between gap-2 [html[data-native]_&]:gap-1.5 sm:items-center sm:gap-3">
+      <h2 className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] text-muted [html[data-native]_&]:leading-snug">
+        {title}
+      </h2>
+      {badge || (href && compactLink) ? (
+        <div className="flex shrink-0 items-center gap-2 [html[data-native]_&]:gap-1.5">
           {badge ?? null}
-          {href && linkLabel ? (
+          {href && compactLink ? (
             <Link
               href={href}
               data-attr={dataAttr}
-              className="text-xs font-semibold text-primary hover:underline underline-offset-2"
+              aria-label={isNative && linkLabel ? linkLabel : undefined}
+              className="whitespace-nowrap text-xs font-semibold text-primary hover:underline underline-offset-2 [html[data-native]_&]:px-0.5 [html[data-native]_&]:text-sm"
             >
-              {linkLabel}
+              {compactLink}
             </Link>
           ) : null}
         </div>
@@ -332,20 +338,30 @@ export function PortalDashboardCompactRow({
   title,
   subtitle,
   badge,
+  stackBadge,
 }: {
   title: string;
   subtitle?: string;
   badge?: ReactNode;
+  /** Stack badge below title on narrow/native screens instead of squeezing beside it. */
+  stackBadge?: boolean;
 }) {
+  const { isNative } = useIsNativeApp();
+  const stacked = stackBadge ?? isNative;
+
   return (
-    <li className="flex items-start justify-between gap-2.5 rounded-xl bg-accent/30 px-3 py-2 [html[data-native]_&]:gap-2 [html[data-native]_&]:px-2.5 [html[data-native]_&]:py-1.5">
+    <li
+      className={`rounded-xl bg-accent/30 px-3 py-2 [html[data-native]_&]:px-2.5 [html[data-native]_&]:py-1.5 ${
+        stacked ? "flex flex-col items-stretch gap-1.5 [html[data-native]_&]:gap-1" : "flex items-start justify-between gap-2.5 [html[data-native]_&]:gap-2"
+      }`}
+    >
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px]">{title}</p>
+        <p className="text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px] [html[data-native]_&]:leading-snug">{title}</p>
         {subtitle ? (
-          <p className="truncate text-xs text-muted [html[data-native]_&]:text-[11px]">{subtitle}</p>
+          <p className="mt-0.5 text-xs text-muted [html[data-native]_&]:text-[11px] [html[data-native]_&]:leading-snug">{subtitle}</p>
         ) : null}
       </div>
-      {badge ? <div className="shrink-0">{badge}</div> : null}
+      {badge ? <div className={stacked ? "self-start" : "shrink-0"}>{badge}</div> : null}
     </li>
   );
 }

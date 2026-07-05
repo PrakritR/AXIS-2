@@ -299,9 +299,6 @@ export function ResidentAddDocumentModal({
         </label>
 
         <div className="flex justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
           <Button type="button" className="rounded-full" onClick={() => void onSave()} disabled={busy || !file}>
             {busy ? "Saving…" : "Save"}
           </Button>

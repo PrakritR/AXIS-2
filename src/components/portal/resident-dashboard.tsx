@@ -278,16 +278,22 @@ export function ResidentDashboard({
                     return (
                       <PortalDashboardCompactRow
                         title={charge.title || "Charge"}
-                        subtitle={formatCompactChargeLine(charge.title || "Charge", charge.balanceLabel, chargeDueLabel(charge))}
+                        subtitle={formatCompactChargeLine(
+                          charge.title || "Charge",
+                          charge.balanceLabel,
+                          chargeDueLabel(charge),
+                          { omitBalance: true },
+                        )}
                         badge={
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
                               overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
                             }`}
                           >
                             {overdue ? `${charge.balanceLabel} · Overdue` : charge.balanceLabel}
                           </span>
                         }
+                        stackBadge
                       />
                     );
                   }}
@@ -296,10 +302,10 @@ export function ResidentDashboard({
 
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
-                <div className="mt-4 flex flex-wrap items-center gap-3">
+                <div className="mt-4 flex flex-col items-start gap-2 [html[data-native]_&]:mt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                   <StatusBadge label={lease.label} tone={lease.tone} />
                   {leaseRow?.application?.leaseStart ? (
-                    <span className="text-xs text-muted">
+                    <span className="text-xs leading-snug text-muted [html[data-native]_&]:text-[11px]">
                       {leaseRow.application.leaseStart}
                       {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
                     </span>

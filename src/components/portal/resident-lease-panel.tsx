@@ -129,6 +129,8 @@ export function ResidentLeasePanel() {
   /** Both manager AND resident signatures present. */
   const leaseFullyExecuted = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow) && leaseAuthorized;
+  const residentAlreadySigned = Boolean(pipelineRow?.residentSignature);
+  const showSigningWorkflowActions = !leaseFullyExecuted && pipelineRow?.status !== "Fully Signed";
 
   const upgradeBreakdown = useMemo(() => {
     const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? leaseCtx.application?.propertyId;
@@ -323,54 +325,55 @@ export function ResidentLeasePanel() {
       <ManagerPortalPageShell
         title="Lease"
         titleAside={
-          pipelineRow?.residentSignature ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0 rounded-full"
-                onClick={() => setShowMoveOutModal(true)}
-              >
-                Renew lease
-              </Button>
-              <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
-                Download
-              </Button>
-            </>
-          ) : (
-            <Button type="button" variant="primary" className="shrink-0 rounded-full" onClick={() => onSignLease()}>
-              Sign lease
-            </Button>
-          )
-        }
-      >
-        {!pipelineRow?.residentSignature ? (
-          <div className="mb-6 flex flex-wrap gap-2">
+          <div className="flex w-full max-w-full flex-wrap items-center justify-end gap-2 [html[data-native]_&]:flex-col [html[data-native]_&]:items-stretch">
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 rounded-full"
+              className="shrink-0 rounded-full [html[data-native]_&]:w-full"
               onClick={() => setShowMoveOutModal(true)}
             >
               Renew or extend lease
             </Button>
-            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onDownloadLeasePackage}>
-              Download PDF
-            </Button>
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 rounded-full"
-              onClick={() => uploadRef.current?.click()}
-              disabled={uploadingPdf}
+              className="shrink-0 rounded-full [html[data-native]_&]:w-full"
+              onClick={onDownloadLeasePackage}
             >
-              {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
+              Download PDF
             </Button>
-            <Button type="button" variant="outline" className="shrink-0 rounded-full" onClick={onSendToManager}>
-              Send to manager
-            </Button>
+            {showSigningWorkflowActions && !residentAlreadySigned ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0 rounded-full [html[data-native]_&]:w-full"
+                  onClick={() => uploadRef.current?.click()}
+                  disabled={uploadingPdf}
+                >
+                  {uploadingPdf ? "Uploading PDF..." : "Upload signed PDF"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0 rounded-full [html[data-native]_&]:w-full"
+                  onClick={onSendToManager}
+                >
+                  Send to manager
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="shrink-0 rounded-full [html[data-native]_&]:w-full"
+                  onClick={() => onSignLease()}
+                >
+                  Sign lease
+                </Button>
+              </>
+            ) : null}
           </div>
-        ) : null}
+        }
+      >
         {leaseVisibleToResident && pipelineRow ? (
           <div className="mb-6">
             <LeaseDocumentPreview
@@ -381,7 +384,7 @@ export function ResidentLeasePanel() {
             {pipelineRow.managerSignature || pipelineRow.residentSignature ? (
               <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-confirmed-fg)_25%,transparent)] p-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-[var(--status-confirmed-fg)]">Signature status</p>
-                <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                <div className="mt-3 grid gap-3 text-sm [html[data-native]_&]:gap-2 sm:grid-cols-2">
                   <div>
                     <p className="font-semibold text-foreground">Manager</p>
                     <p className={pipelineRow.managerSignature ? "text-[var(--status-confirmed-fg)]" : "text-[var(--status-pending-fg)]"}>

@@ -31,6 +31,7 @@ import {
   PRODUCTION_ADMIN_EMAIL,
 } from "./canonical-test-accounts.mjs";
 import { ensureManagerStripeCustomer, getSeedStripeClient } from "./ensure-stripe-test-customer.mjs";
+import { buildSeedLeaseHtml } from "./build-seed-lease-html.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -49,6 +50,7 @@ const residentPassword = process.env.E2E_RESIDENT_PASSWORD ?? "TestResident123!"
 const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID ?? "AXIS-TESTRSID";
 const vendorEmail = (process.env.E2E_VENDOR_EMAIL ?? "vendor@test.axis.local").toLowerCase();
 const vendorPassword = process.env.E2E_VENDOR_PASSWORD ?? "TestVendor123!";
+const PRIMARY_RESIDENT_NAME = "Alex Rivera";
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
@@ -205,14 +207,14 @@ try {
   // leases render "—" and "[ROOM NUMBER]" placeholders. Address stays in San
   // Francisco — a supported lease jurisdiction (lease-jurisdiction.ts).
   const propertyId = "mgr-test-e2e";
-  const propertyName = "Test Property — E2E";
-  const propertyAddress = "123 Test St, San Francisco, CA 94105";
+  const propertyName = "SoMa Loft House";
+  const propertyAddress = "847 Brannan St, San Francisco, CA 94103";
   const monthlyRent = 2500;
   const listingSubmission = {
     v: 1,
     buildingName: propertyName,
     address: propertyAddress,
-    zip: "94105",
+    zip: "94103",
     neighborhood: "SoMa",
     homeStructureNote: "3-story townhouse",
     listingPlaceCategoryId: "private_room",
@@ -325,7 +327,7 @@ try {
           title: propertyName,
           tagline: listingSubmission.tagline,
           address: propertyAddress,
-          zip: "94105",
+          zip: "94103",
           neighborhood: "SoMa",
           beds: 3,
           baths: 2,
@@ -367,7 +369,7 @@ try {
   const leaseStart = isoDate(daysFromNow(10));
   const leaseEnd = isoDate(daysFromNow(375));
   const application = {
-    fullLegalName: "Test Resident",
+    fullLegalName: PRIMARY_RESIDENT_NAME,
     email: residentEmail,
     phone: "(415) 555-0134",
     dateOfBirth: "1996-04-18",
@@ -441,7 +443,7 @@ try {
     consentTruth: true,
     consentCredit: true,
     dateSigned: isoDate(daysFromNow(-2)),
-    digitalSignature: "Test Resident",
+    digitalSignature: PRIMARY_RESIDENT_NAME,
     applicationFeePayChannel: "stripe",
     applicationFeeAcknowledged: true,
     applicationFeeZelleSentConfirmed: false,
@@ -465,7 +467,7 @@ try {
           stage: "Approved - placed",
           detail: "Approved for Room 1",
           email: residentEmail,
-          name: "Test Resident",
+          name: PRIMARY_RESIDENT_NAME,
           property: propertyName,
           application,
           backgroundCheck: {
@@ -504,7 +506,7 @@ try {
         email: residentEmail,
         role: "resident",
         manager_id: residentAxisId,
-        full_name: "Test Resident",
+        full_name: PRIMARY_RESIDENT_NAME,
         application_approved: true,
       },
       { onConflict: "id" },
@@ -538,7 +540,7 @@ try {
           // Within 7 days — pending charges further out are hidden by
           // shouldDisplayChargeInPayments (household-charges.ts).
           dueDateLabel: isoDate(daysFromNow(3)),
-          residentName: "Test Resident",
+          residentName: PRIMARY_RESIDENT_NAME,
           residentEmail,
           residentUserId,
           managerUserId,
@@ -633,7 +635,7 @@ try {
           scheduled: isoDate(daysFromNow(5)),
           scheduledAtIso: daysFromNow(5).toISOString(),
           cost: "",
-          residentName: "Test Resident",
+          residentName: PRIMARY_RESIDENT_NAME,
           residentEmail,
           propertyId,
           assignedPropertyId: propertyId,
@@ -1177,11 +1179,30 @@ try {
   //    Ids use the app's own convention (lease_app_<axisId>, see
   //    lease-pipeline-storage.ts syncApprovedApplications) so the portal reuses
   //    these rows instead of auto-creating duplicates. ───────────────────────
-  const leaseHtml = (p) =>
+  const leaseHtmlStub = (p) =>
     `<section class="lease-doc"><h1>Residential Lease Agreement</h1>` +
     `<p><strong>Tenant:</strong> ${p.name}</p><p><strong>Premises:</strong> ${p.prop.name} · ${p.room.name}</p>` +
     `<p><strong>Monthly Rent:</strong> ${usd(p.rent)}</p><p><strong>Term:</strong> 12 months</p>` +
     `<p>This agreement is generated from the approved rental application and governed by Washington State (Seattle) law.</p></section>`;
+
+  function buildCatalogLeaseHtml(p) {
+    try {
+      return buildSeedLeaseHtml({
+        application: buildCatalogApplication(p),
+        propertyData: {
+          id: p.propId,
+          title: p.prop.name,
+          address: p.prop.address,
+          managerUserId: p.prop.ownerUserId,
+          listingSubmission: buildListingSubmission(p.prop),
+        },
+        monthlyRent: p.rent,
+      });
+    } catch (err) {
+      console.error(`buildSeedLeaseHtml failed for ${p.axisId}: ${err.message}`);
+      return leaseHtmlStub(p);
+    }
+  }
 
   function buildCatalogLeaseRow(p) {
     const genIso = daysFromNow(-4).toISOString();
@@ -1205,7 +1226,7 @@ try {
       roomChoice: p.roomChoice,
       signedRentLabel: `${usd(p.rent)} / month`,
       application: buildCatalogApplication(p),
-      generatedHtml: leaseHtml(p),
+      generatedHtml: buildCatalogLeaseHtml(p),
       generatedAtIso: genIso,
       managerUploadedPdf: null,
       thread: [],
@@ -1286,11 +1307,27 @@ try {
   const primaryLeaseSentIso = daysFromNow(-3).toISOString();
   const primaryLeaseResSignIso = daysFromNow(-2).toISOString();
   const primaryLeaseMgrSignIso = daysFromNow(-1).toISOString();
-  const primaryLeaseHtml =
-    `<section class="lease-doc"><h1>Residential Lease Agreement</h1>` +
-    `<p><strong>Tenant:</strong> Test Resident</p><p><strong>Premises:</strong> ${propertyName} · Room 1</p>` +
-    `<p><strong>Monthly Rent:</strong> $${monthlyRent.toFixed(2)}</p><p><strong>Term:</strong> 12 months</p>` +
-    `<p>This agreement is generated from the approved rental application and governed by Washington State (Seattle) law.</p></section>`;
+  let primaryLeaseHtml;
+  try {
+    primaryLeaseHtml = buildSeedLeaseHtml({
+      application,
+      propertyData: {
+        id: propertyId,
+        title: propertyName,
+        address: propertyAddress,
+        managerUserId,
+        listingSubmission,
+      },
+      monthlyRent,
+    });
+  } catch (err) {
+    console.error(`buildSeedLeaseHtml failed for primary resident: ${err.message}`);
+    primaryLeaseHtml =
+      `<section class="lease-doc"><h1>Residential Lease Agreement</h1>` +
+      `<p><strong>Tenant:</strong> ${PRIMARY_RESIDENT_NAME}</p><p><strong>Premises:</strong> ${propertyName} · Room 1</p>` +
+      `<p><strong>Monthly Rent:</strong> $${monthlyRent.toFixed(2)}</p><p><strong>Term:</strong> 12 months</p>` +
+      `<p>This agreement is generated from the approved rental application.</p></section>`;
+  }
   leaseRows.push({
     id: `lease_app_${residentAxisId}`,
     manager_user_id: managerUserId,
@@ -1300,7 +1337,7 @@ try {
     status: "signed",
     row_data: {
       id: `lease_app_${residentAxisId}`,
-      residentName: "Test Resident",
+      residentName: PRIMARY_RESIDENT_NAME,
       residentEmail,
       unit: `${propertyName} · Room 1`,
       updated: "just now",
@@ -1320,8 +1357,8 @@ try {
       managerUploadedPdf: null,
       thread: [],
       managerSignature: { name: "Test Manager", signedAtIso: primaryLeaseMgrSignIso, role: "manager" },
-      residentSignature: { name: "Test Resident", signedAtIso: primaryLeaseResSignIso, role: "resident" },
-      signatureName: "Test Resident",
+      residentSignature: { name: PRIMARY_RESIDENT_NAME, signedAtIso: primaryLeaseResSignIso, role: "resident" },
+      signatureName: PRIMARY_RESIDENT_NAME,
       signedAtIso: primaryLeaseResSignIso,
       residentSignedAt: primaryLeaseResSignIso,
       managerSignedAt: primaryLeaseMgrSignIso,
@@ -1363,7 +1400,7 @@ try {
         amountLabel: `$${monthlyRent.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
         balanceLabel: "$0.00",
         dueDateLabel: isoDate(monthDate),
-        residentName: "Test Resident",
+        residentName: PRIMARY_RESIDENT_NAME,
         residentEmail,
         residentUserId,
         managerUserId,
@@ -1399,7 +1436,7 @@ try {
           price: "$25.00",
           deposit: "$50.00",
           residentEmail,
-          residentName: "Test Resident",
+          residentName: PRIMARY_RESIDENT_NAME,
           managerUserId,
           propertyId,
           returnByDate: "",
