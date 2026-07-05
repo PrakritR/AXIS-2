@@ -164,7 +164,8 @@ export function PortalSidebar({
     definition.kind === "admin" ||
     definition.kind === "pro" ||
     definition.kind === "resident" ||
-    definition.kind === "manager";
+    definition.kind === "manager" ||
+    definition.kind === "vendor";
 
   const showManagerTierLocks =
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
