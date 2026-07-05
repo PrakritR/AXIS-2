@@ -463,66 +463,46 @@ export function ManagerWorkOrdersPanel({
     }
   };
 
-  const createBillingCharge = (row: DemoManagerWorkOrderRow) => {
-    const existing = findWorkOrderCharge(row.id);
-    if (existing) {
-      showToast("A payment line already exists for this work order.");
-      return;
-    }
-    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-    const amt = parseMoneyAmount(draft.cost);
-    const residentEmail = (row.residentEmail ?? "").trim();
-    if (!draft.cost.trim() || !Number.isFinite(amt) || amt <= 0) {
-      showToast("Enter a valid cost first.");
-      return;
-    }
-    if (!residentEmail.includes("@")) {
-      showToast("No resident is linked to this work order, so it can't be billed.");
-      return;
-    }
-    const created = recordWorkOrderResidentCharge({
-      managerUserId: effectiveManagerId,
-      workOrderId: row.id,
-      propertyId: row.propertyId || row.assignedPropertyId,
-      propertyLabel: row.propertyName,
-      unit: row.unit,
-      workOrderTitle: row.title,
-      amountInput: draft.cost,
-      residentEmail,
-      residentName: row.residentName ?? "",
-      initialStatus: draft.paymentStatus,
-    });
-    if (!created) {
-      showToast("Could not create payment line.");
-      return;
-    }
-    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
-    setHcTick((n) => n + 1);
-    showToast(created.status === "paid" ? "Payment recorded as paid." : "Pending payment line created.");
-  };
-
-  /** Persist cost without changing bucket. */
-  const saveLoggedCost = (row: DemoManagerWorkOrderRow, linkedCharge: ReturnType<typeof findWorkOrderCharge>) => {
-    if (linkedCharge) {
-      showToast("Cost is locked while a payment line exists.");
-      return;
-    }
-    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-    const trimmed = draft.cost.trim();
-    if (!trimmed) {
-      updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
-      showToast("Cost cleared.");
-      return;
-    }
-    const amt = parseMoneyAmount(trimmed);
-    if (!Number.isFinite(amt) || amt < 0) {
-      showToast("Enter a valid dollar amount (0 or more) or clear the field.");
-      return;
-    }
-    const costLabel = `$${amt.toFixed(2)}`;
-    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: costLabel }));
-    showToast("Cost saved — the resident will see it on their work order.");
-  };
+  /** Auto-save the Cost field and, once a resident is linked and the amount warrants it,
+   * auto-create the payment line — replaces the old separate "Save cost" / "Create payment
+   * line" buttons. Fires on Cost blur and on Payment-status change; a no-op once a payment
+   * line already exists (cost is locked at that point). */
+  const commitBilling = useCallback(
+    (row: DemoManagerWorkOrderRow, overrides?: Partial<BillDraft>) => {
+      if (findWorkOrderCharge(row.id)) return;
+      const draft = { ...(billDraftById[row.id] ?? defaultBillDraft(row)), ...overrides };
+      const trimmed = draft.cost.trim();
+      if (!trimmed) {
+        if (row.cost !== "—") updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
+        return;
+      }
+      const amt = parseMoneyAmount(trimmed);
+      if (!Number.isFinite(amt) || amt < 0) return;
+      const residentEmail = (row.residentEmail ?? "").trim();
+      if (amt > 0 && residentEmail.includes("@")) {
+        const created = recordWorkOrderResidentCharge({
+          managerUserId: effectiveManagerId,
+          workOrderId: row.id,
+          propertyId: row.propertyId || row.assignedPropertyId,
+          propertyLabel: row.propertyName,
+          unit: row.unit,
+          workOrderTitle: row.title,
+          amountInput: draft.cost,
+          residentEmail,
+          residentName: row.residentName ?? "",
+          initialStatus: draft.paymentStatus,
+        });
+        if (created) {
+          updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
+          setHcTick((n) => n + 1);
+          showToast(created.status === "paid" ? "Payment recorded as paid." : "Pending payment line created.");
+        }
+      } else {
+        updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
+      }
+    },
+    [billDraftById, effectiveManagerId, showToast],
+  );
 
   const onDeleteWorkOrder = (row: DemoManagerWorkOrderRow) => {
     if (!window.confirm(`Delete work order ${row.id} (${row.title})? This cannot be undone.`)) return;
@@ -749,12 +729,15 @@ export function ManagerWorkOrdersPanel({
                               inputMode="decimal"
                               placeholder="$0"
                               value={draft.cost}
+                              disabled={!!linkedCharge}
+                              data-attr="work-order-cost-input"
                               onChange={(e) =>
                                 setBillDraftById((prev) => ({
                                   ...prev,
                                   [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
                                 }))
                               }
+                              onBlur={() => commitBilling(row)}
                               className="h-8 w-24 rounded-md text-sm"
                             />
                           </label>
@@ -764,15 +747,18 @@ export function ManagerWorkOrdersPanel({
                               <Select
                                 className="h-8 rounded-md text-xs"
                                 value={draft.paymentStatus}
-                                onChange={(e) =>
+                                data-attr="work-order-payment-status-select"
+                                onChange={(e) => {
+                                  const paymentStatus = e.target.value as "pending" | "paid";
                                   setBillDraftById((prev) => ({
                                     ...prev,
                                     [row.id]: {
                                       ...(prev[row.id] ?? defaultBillDraft(row)),
-                                      paymentStatus: e.target.value as "pending" | "paid",
+                                      paymentStatus,
                                     },
-                                  }))
-                                }
+                                  }));
+                                  commitBilling(row, { paymentStatus });
+                                }}
                               >
                                 <option value="pending">Pending</option>
                                 <option value="paid">Paid</option>
@@ -1044,26 +1030,6 @@ export function ManagerWorkOrdersPanel({
                             >
                               {autoSchedulingId === row.id ? "Finding a slot…" : "Auto-schedule"}
                             </Button>
-                          ) : null}
-                          {!linkedCharge ? (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => saveLoggedCost(row, linkedCharge)}
-                              >
-                                Save cost
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="primary"
-                                className={`${PORTAL_DETAIL_BTN} rounded-full`}
-                                onClick={() => createBillingCharge(row)}
-                              >
-                                Create payment line
-                              </Button>
-                            </>
                           ) : null}
                           {row.bucket === "scheduled" && row.automationStatus === "vendor_marked_done" ? (
                             <Button

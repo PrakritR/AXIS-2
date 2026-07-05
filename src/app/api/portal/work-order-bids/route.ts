@@ -440,6 +440,8 @@ async function acceptBid(
         propertyLabel,
         unit,
       });
+      // Best-effort notification: the bid + work-order reassignment above have already
+      // committed, so a delivery failure here must not surface as an "accept failed" error.
       await deliverPortalInboxMessage(db, {
         senderUserId: actor.userId,
         senderEmail: actor.email,
@@ -450,7 +452,7 @@ async function acceptBid(
         deliverToPortalInbox: true,
         deliverViaEmail: false,
         deliverViaSms: false,
-      });
+      }).catch(() => undefined);
     }
 
     for (const other of declined) {
