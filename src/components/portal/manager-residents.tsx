@@ -64,6 +64,7 @@ import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { isPreviousResidentDirectoryRow, isResidentDirectoryRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
 import {
   buildMockPropertyFromDraft,
   PROPERTY_PIPELINE_EVENT,

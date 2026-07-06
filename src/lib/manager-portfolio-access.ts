@@ -18,7 +18,12 @@ import {
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readProRelationships, syncProRelationshipsFromServer } from "@/lib/pro-relationships";
 import { readCachedAccountLinkInvites } from "@/lib/portal-data-store";
-import { hasCoManagerPermission, hasCoManagerPermissionForProperty, permissionsForProperty } from "@/lib/co-manager-permissions";
+import {
+  hasCoManagerPermission,
+  hasCoManagerPermissionForProperty,
+  permissionsForProperty,
+  type PropertyCoManagerPermissions,
+} from "@/lib/co-manager-permissions";
 
 function ownedPropertyIdsForUser(userId: string): Set<string> {
   const owned = new Set<string>();
@@ -259,7 +264,7 @@ export function readLinkedListingsForUser(userId: string): { listing: MockProper
       listing,
       canEdit:
         hasCoManagerPermissionForProperty(rel?.propertyCoManagerPermissions, pid, "properties") ||
-        hasCoManagerPermissionForProperty({ [pid]: perms }, pid, "properties") ||
+        hasCoManagerPermission(perms, "properties") ||
         hasCoManagerPermission(rel?.coManagerPermissions, "properties") ||
         rel?.canEditListing === true,
       ownerUserId,
