@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/
 
+# Nested fork (separate git repo)
+axis-crm-outreach/
+
 # Dependencies
 node_modules/
 .pnp

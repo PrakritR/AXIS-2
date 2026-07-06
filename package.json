@@ -42,7 +42,10 @@
     "cap:prod": "CAP_SERVER_URL=https://www.axis-seattle-housing.com cap sync",
     "cap:copy": "cap copy",
     "cap:ios": "cap open ios",
-    "cap:android": "cap open android"
+    "cap:android": "cap open android",
+    "scrape:apm": "node scripts/scrape-allpropertymanagement.mjs",
+    "scrape:apm:quick": "node scripts/scrape-allpropertymanagement.mjs --quick",
+    "scrape:apm:contacts": "node scripts/scrape-apm-contacts.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
