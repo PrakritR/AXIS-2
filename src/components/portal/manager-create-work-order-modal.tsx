@@ -37,20 +37,14 @@ import {
   type ResidentMaintenanceCategoryLabel,
   workOrderCategoryForResidentLabel,
 } from "@/lib/work-order-taxonomy";
+import type { ManagerServiceResidentOption } from "@/components/portal/manager-create-service-request-modal";
 
 type WorkOrderCategory = "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
 type CreateMode = "request" | "log";
 
 type PropertyOption = { propertyId: string; propertyLabel: string };
 
-type ResidentOption = {
-  residentName: string;
-  residentEmail: string;
-  propertyId: string;
-  propertyLabel: string;
-  roomLabel: string;
-  assignedRoomChoice?: string;
-};
+type ResidentOption = ManagerServiceResidentOption & { assignedRoomChoice?: string };
 
 const RESIDENT_CATEGORY_OPTIONS: ResidentMaintenanceCategoryLabel[] = [
   "Plumbing",
@@ -151,12 +145,15 @@ export function ManagerCreateWorkOrderModal({
   onSubmitted,
   managerUserId,
   defaultPropertyId,
+  defaultResident,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmitted: (bucket: ManagerWorkOrderBucket) => void;
   managerUserId: string | null;
   defaultPropertyId?: string;
+  /** When set, the work order is created for this resident (property + resident fields locked). */
+  defaultResident?: (ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null;
 }) {
   const { showToast } = useAppUi();
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -204,14 +201,19 @@ export function ManagerCreateWorkOrderModal({
       setArrivalPreset("Anytime");
       setArrivalCustom("");
       setPhotos([]);
-      setPropertyId(defaultPropertyId?.trim() || "");
-      setResidentEmail("");
+      if (defaultResident) {
+        setPropertyId(defaultResident.propertyId.trim());
+        setResidentEmail(defaultResident.residentEmail.trim().toLowerCase());
+      } else {
+        setPropertyId(defaultPropertyId?.trim() || "");
+        setResidentEmail("");
+      }
       setCost("");
       setPaymentStatus("paid");
       setBucket("completed");
       if (photoInputRef.current) photoInputRef.current.value = "";
     });
-  }, [open, defaultPropertyId]);
+  }, [open, defaultPropertyId, defaultResident]);
 
   const propertyOptions = useMemo(() => {
     void tick;
@@ -223,21 +225,36 @@ export function ManagerCreateWorkOrderModal({
     return buildResidentOptions(managerUserId);
   }, [managerUserId, tick]);
 
+  const lockedResident = defaultResident ?? null;
+
   const residentsForProperty = useMemo(() => {
     const property = propertyOptions.find((p) => p.propertyId === propertyId);
     if (!property) return residentOptions;
     return residentOptions.filter((r) => residentMatchesProperty(r, property));
   }, [propertyId, propertyOptions, residentOptions]);
 
-  const selectedResident = useMemo(
-    () => residentOptions.find((r) => r.residentEmail === residentEmail) ?? null,
-    [residentEmail, residentOptions],
-  );
+  const selectedResident = useMemo(() => {
+    if (lockedResident) {
+      const match = residentOptions.find((r) => r.residentEmail === lockedResident.residentEmail);
+      return {
+        ...lockedResident,
+        assignedRoomChoice: lockedResident.assignedRoomChoice ?? match?.assignedRoomChoice,
+      };
+    }
+    return residentOptions.find((r) => r.residentEmail === residentEmail) ?? null;
+  }, [lockedResident, residentEmail, residentOptions]);
 
-  const selectedProperty = useMemo(
-    () => propertyOptions.find((p) => p.propertyId === propertyId) ?? null,
-    [propertyId, propertyOptions],
-  );
+  const selectedProperty = useMemo(() => {
+    if (lockedResident?.propertyId) {
+      return (
+        propertyOptions.find((p) => p.propertyId === lockedResident.propertyId) ?? {
+          propertyId: lockedResident.propertyId,
+          propertyLabel: lockedResident.propertyLabel,
+        }
+      );
+    }
+    return propertyOptions.find((p) => p.propertyId === propertyId) ?? null;
+  }, [lockedResident, propertyId, propertyOptions]);
 
   const fileToDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -482,11 +499,25 @@ export function ManagerCreateWorkOrderModal({
         </div>
 
         <p className="text-sm text-muted">
-          {mode === "request"
-            ? "Create a maintenance request on behalf of a resident. It appears in Pending until you schedule or complete it."
-            : "Record work you already performed (e.g. lockout assistance) with optional cost and payment status for Finances."}
+          {lockedResident
+            ? mode === "request"
+              ? "Create a maintenance request for this resident. It appears in their portal under Services → Work orders."
+              : "Record completed work for this resident. Optional cost updates their Payments tab."
+            : mode === "request"
+              ? "Create a maintenance request on behalf of a resident. It appears in Pending until you schedule or complete it."
+              : "Record work you already performed (e.g. lockout assistance) with optional cost and payment status for Finances."}
         </p>
 
+        {lockedResident ? (
+          <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-sm">
+            <p className="font-semibold text-foreground">
+              {lockedResident.residentName}
+              {lockedResident.roomLabel ? ` · ${lockedResident.roomLabel}` : ""}
+            </p>
+            <p className="mt-0.5 text-xs text-muted">{lockedResident.propertyLabel}</p>
+          </div>
+        ) : (
+          <>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">
           Property *
           <Select
@@ -518,6 +549,8 @@ export function ManagerCreateWorkOrderModal({
             ))}
           </Select>
         </label>
+          </>
+        )}
 
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">
           Title *

@@ -17,16 +17,38 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { MANAGER_APPLICATIONS_EVENT, readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import { readProRelationships, syncProRelationshipsFromServer } from "@/lib/pro-relationships";
-import { hasCoManagerPermission, hasCoManagerPermissionForProperty } from "@/lib/co-manager-permissions";
+import { readCachedAccountLinkInvites } from "@/lib/portal-data-store";
+import { hasCoManagerPermission, hasCoManagerPermissionForProperty, permissionsForProperty } from "@/lib/co-manager-permissions";
+
+function ownedPropertyIdsForUser(userId: string): Set<string> {
+  const owned = new Set<string>();
+  for (const p of readExtraListingsForUser(userId)) owned.add(p.id);
+  for (const r of readPendingManagerPropertiesForUser(userId)) owned.add(r.id);
+  return owned;
+}
+
+function addIncomingAssignedPropertyIds(userId: string, target: Set<string>): void {
+  const owned = ownedPropertyIdsForUser(userId);
+  for (const rel of readProRelationships(userId)) {
+    if (rel.linkDirection === "outgoing") continue;
+    for (const id of rel.assignedPropertyIds) {
+      const pid = id.trim();
+      if (pid && !owned.has(pid)) target.add(pid);
+    }
+  }
+  for (const inv of readCachedAccountLinkInvites()) {
+    if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
+    for (const id of inv.assignedPropertyIds) {
+      const pid = id.trim();
+      if (pid && !owned.has(pid)) target.add(pid);
+    }
+  }
+}
 
 /** Property ids explicitly assigned via accepted co-manager account links. */
 export function collectLinkedPropertyIds(userId: string): Set<string> {
   const s = new Set<string>();
-  for (const rel of readProRelationships(userId)) {
-    for (const id of rel.assignedPropertyIds) {
-      if (id.trim()) s.add(id.trim());
-    }
-  }
+  addIncomingAssignedPropertyIds(userId, s);
   return s;
 }
 
@@ -44,7 +66,12 @@ export async function syncManagerPortfolioFromServer(userId: string, opts?: { fo
   if (!userId.trim()) return;
   try {
     await syncProRelationshipsFromServer(userId, { force: opts?.force === true });
-    await syncPropertyPipelineFromServer({ force: opts?.force === true });
+    const linkedPropertyIds = collectLinkedPropertyIds(userId);
+    await syncPropertyPipelineFromServer({
+      force: opts?.force === true,
+      userId,
+      linkedPropertyIds,
+    });
   } catch {
     /* offline or dev server recompiling */
   }
@@ -107,6 +134,25 @@ export function safePropertyOptionLabel(candidates: Array<string | null | undefi
   return "Untitled property";
 }
 
+/** Human-readable label for a property id across owned, linked, and pending pipeline rows. */
+export function resolvePropertyLabelForId(id: string, fallback?: string): string {
+  const pid = id.trim();
+  if (!pid) return fallback?.trim() || "Untitled property";
+  const fromExtras = readAllExtraListings().find((p) => p.id === pid);
+  if (fromExtras) {
+    return safePropertyOptionLabel(
+      [fromExtras.buildingName, fromExtras.unitLabel, fromExtras.title, fromExtras.address],
+      pid,
+    );
+  }
+  const pending = readAllPendingManagerProperties().find((p) => p.id === pid);
+  if (pending) {
+    const joined = [pending.buildingName, pending.unitLabel, pending.address].filter(Boolean).join(" · ");
+    return safePropertyOptionLabel([joined, pending.buildingName, pending.address], pid);
+  }
+  return safePropertyOptionLabel([fallback], pid);
+}
+
 /** Labels for Applications / Payments property dropdowns. */
 export function buildManagerPropertyFilterOptions(userId: string | null): ManagerPropertyFilterOption[] {
   const scopeUserId = resolveManagerScopeUserId(userId);
@@ -126,8 +172,28 @@ export function buildManagerPropertyFilterOptions(userId: string | null): Manage
     for (const pid of rel.assignedPropertyIds) {
       if (!pid.trim() || labelById.has(pid)) continue;
       const found = allExtras.find((x) => x.id === pid);
-      labelById.set(pid, safePropertyOptionLabel([found?.title, found?.buildingName, found?.address], pid));
+      const pending = readAllPendingManagerProperties().find((x) => x.id === pid);
+      const pendingJoined = pending
+        ? [pending.buildingName, pending.unitLabel, pending.address].filter(Boolean).join(" · ")
+        : undefined;
+      labelById.set(
+        pid,
+        safePropertyOptionLabel([found?.title, found?.buildingName, pendingJoined, found?.address], pid),
+      );
     }
+  }
+
+  for (const pid of collectLinkedPropertyIds(scopeUserId)) {
+    if (labelById.has(pid)) continue;
+    const found = allExtras.find((x) => x.id === pid);
+    const pending = readAllPendingManagerProperties().find((x) => x.id === pid);
+    const pendingJoined = pending
+      ? [pending.buildingName, pending.unitLabel, pending.address].filter(Boolean).join(" · ")
+      : undefined;
+    labelById.set(
+      pid,
+      safePropertyOptionLabel([found?.title, found?.buildingName, pendingJoined, found?.address], pid),
+    );
   }
 
   for (const row of readManagerApplicationRows()) {
@@ -164,23 +230,40 @@ export function readLinkedListingsForUser(userId: string): { listing: MockProper
     return null;
   };
 
-  for (const rel of readProRelationships(userId)) {
-    for (const pid of rel.assignedPropertyIds) {
-      if (seen.has(pid)) continue;
-      const resolved = resolveListing(pid);
-      if (!resolved) continue;
-      const { listing, ownerUserId } = resolved;
-      if (ownerUserId === userId) continue;
-      seen.add(pid);
-      result.push({
-        listing,
-        canEdit:
-          hasCoManagerPermissionForProperty(rel.propertyCoManagerPermissions, pid, "editListings") ||
-          hasCoManagerPermission(rel.coManagerPermissions, "editListings") ||
-          rel.canEditListing === true,
-        ownerUserId,
-      });
+  const permissionsForPropertyId = (pid: string): PropertyCoManagerPermissions[string] | undefined => {
+    for (const rel of readProRelationships(userId)) {
+      if (rel.linkDirection === "outgoing") continue;
+      if (!rel.assignedPropertyIds.includes(pid)) continue;
+      return permissionsForProperty(rel.propertyCoManagerPermissions, pid);
     }
+    for (const inv of readCachedAccountLinkInvites()) {
+      if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
+      if (!inv.assignedPropertyIds.includes(pid)) continue;
+      return permissionsForProperty(inv.propertyCoManagerPermissions, pid);
+    }
+    return undefined;
+  };
+
+  for (const pid of collectLinkedPropertyIds(userId)) {
+    if (seen.has(pid)) continue;
+    const resolved = resolveListing(pid);
+    if (!resolved) continue;
+    const { listing, ownerUserId } = resolved;
+    if (ownerUserId === userId) continue;
+    seen.add(pid);
+    const perms = permissionsForPropertyId(pid);
+    const rel = readProRelationships(userId).find(
+      (row) => row.linkDirection !== "outgoing" && row.assignedPropertyIds.includes(pid),
+    );
+    result.push({
+      listing,
+      canEdit:
+        hasCoManagerPermissionForProperty(rel?.propertyCoManagerPermissions, pid, "properties") ||
+        hasCoManagerPermissionForProperty({ [pid]: perms }, pid, "properties") ||
+        hasCoManagerPermission(rel?.coManagerPermissions, "properties") ||
+        rel?.canEditListing === true,
+      ownerUserId,
+    });
   }
   return result;
 }

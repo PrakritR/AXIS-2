@@ -9,7 +9,6 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
@@ -75,6 +74,7 @@ export function ManagerPayments() {
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
+  const [bankLinkBanner, setBankLinkBanner] = useState(false);
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
@@ -160,6 +160,9 @@ export function ManagerPayments() {
         window.close();
         return;
       }
+      if (connect === "done") {
+        setBankLinkBanner(true);
+      }
       // Same-tab return: PortalStripeConnectPanel clears ?connect= and refreshes status.
       return;
     }
@@ -173,9 +176,10 @@ export function ManagerPayments() {
       if (e.origin !== window.location.origin) return;
       if (e.data?.type !== "axis-stripe-connect") return;
       if (e.data?.connect === "done") {
-        showToast("Bank account linked.");
+        showToast("Bank account linked. You're ready to receive resident payments.");
+        setBankLinkBanner(true);
       } else if (e.data?.connect === "refresh") {
-        showToast("Setup link expired — open Payouts to try again.");
+        showToast("Setup link expired — click Finish setup to try again.");
       }
       window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
     };
@@ -288,66 +292,66 @@ export function ManagerPayments() {
   }, [mergedRows, bucket, propertyFilter, activeResidentFilter]);
 
   const filterRow = (
-    <>
-      <ManagerPortalFilterRow>
-        <ManagerPortalStatusPills compact tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
-      </ManagerPortalFilterRow>
-      <div className="mt-2.5 flex flex-col gap-2 lg:hidden [html[data-native]_&]:mt-2">
-        <PortalPropertyFilterPill
-          propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={(nextProperty) => {
-            setPropertyFilter(nextProperty);
-            setResidentFilter("");
-          }}
-          residents={true}
-          residentOptions={residentOptions}
-          residentValue={activeResidentFilter}
-          onResidentChange={setResidentFilter}
-        />
-      </div>
-    </>
+    <ManagerPortalFilterRow>
+      <ManagerPortalStatusPills compact tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
+      <PortalPropertyFilterPill
+        propertyOptions={propertyOptions}
+        propertyValue={propertyFilter}
+        onPropertyChange={(nextProperty) => {
+          setPropertyFilter(nextProperty);
+          setResidentFilter("");
+        }}
+        residents={true}
+        residentOptions={residentOptions}
+        residentValue={activeResidentFilter}
+        onResidentChange={setResidentFilter}
+      />
+    </ManagerPortalFilterRow>
   );
 
   return (
     <ManagerPortalPageShell
       title="Payments"
       titleAside={
-        <>
-          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(nextProperty) => {
-                setPropertyFilter(nextProperty);
-                setResidentFilter("");
-              }}
-              residents={true}
-              residentOptions={residentOptions}
-              residentValue={activeResidentFilter}
-              onResidentChange={setResidentFilter}
+        <div className="flex min-w-0 flex-col items-stretch gap-2">
+          <div className="flex items-center justify-end gap-2">
+            <PortalStripeConnectPanel
+              basePath="/portal"
+              variant="header"
+              onConnectDone={() => setBankLinkBanner(true)}
             />
-          </div>
-          <div className="flex min-w-0 flex-col items-stretch gap-2">
-            <div className="flex items-center justify-end gap-2">
-              <PortalStripeConnectPanel basePath="/portal" variant="header" />
-              <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setAddOpen(true)}>
-                Add
-              </Button>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => setReminderSettingsOpen(true)}
-            >
-              Reminders
+            <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setAddOpen(true)}>
+              Add
             </Button>
           </div>
-        </>
+          <Button
+            type="button"
+            variant="outline"
+            className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => setReminderSettingsOpen(true)}
+          >
+            Reminders
+          </Button>
+        </div>
       }
       filterRow={filterRow}
     >
+      {bankLinkBanner ? (
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-success">
+          <p>
+            <span className="font-semibold text-foreground">Bank account linked.</span> Resident payments will deposit to
+            your connected account. You can update bank details anytime with Update.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 rounded-full px-3 py-1 text-xs"
+            onClick={() => setBankLinkBanner(false)}
+          >
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}

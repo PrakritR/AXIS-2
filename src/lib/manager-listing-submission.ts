@@ -1252,11 +1252,48 @@ export function createManagerListingServiceOption(name = "", description = ""): 
 }
 
 /** One-click presets for the listing services step (not added until the manager chooses). */
-export const LISTING_SERVICE_QUICK_ADDS: { name: string; description: string }[] = [
-  { name: "Weekly cleaning", description: "Regular cleaning of your room or shared areas." },
-  { name: "Linen refresh", description: "Fresh sheets and towels on request." },
-  { name: "Storage locker", description: "Personal storage space on the property." },
+export type ListingServiceQuickAdd = {
+  name: string;
+  description: string;
+  /** Suggested recurring price shown when managers add or submit this request type. */
+  price?: string;
+  /** Suggested deposit when the offering requires one (e.g. equipment rental). */
+  deposit?: string;
+};
+
+export const LISTING_SERVICE_QUICK_ADDS: ListingServiceQuickAdd[] = [
+  {
+    name: "Weekly cleaning",
+    description: "Regular cleaning of your room or shared areas.",
+    price: "$35.00",
+  },
+  {
+    name: "Linen refresh",
+    description: "Fresh sheets and towels on request.",
+    price: "$20.00",
+  },
+  {
+    name: "Storage locker",
+    description: "Personal storage space on the property.",
+    price: "$45.00",
+    deposit: "$100.00",
+  },
 ];
+
+/** Price/deposit for an offering — uses saved values, then preset defaults by name. */
+export function resolveServiceOfferPricing(offer: {
+  name: string;
+  price?: string;
+  deposit?: string;
+}): { price: string; deposit: string } {
+  const price = offer.price?.trim() ?? "";
+  const deposit = offer.deposit?.trim() ?? "";
+  if (price || deposit) return { price, deposit };
+  const preset = LISTING_SERVICE_QUICK_ADDS.find(
+    (p) => p.name.trim().toLowerCase() === offer.name.trim().toLowerCase(),
+  );
+  return { price: preset?.price?.trim() ?? "", deposit: preset?.deposit?.trim() ?? "" };
+}
 
 export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
   return {

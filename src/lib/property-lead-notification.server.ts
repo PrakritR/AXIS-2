@@ -2,6 +2,11 @@
  * Notify property manager when a prospect sends a leasing message.
  */
 
+import {
+  resolveManagerRecipientProfiles,
+  resolvePropertyScopedManagerRecipientIds,
+} from "@/lib/co-manager-notification-recipients.server";
+
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 
 type Db = ReturnType<typeof import("@/lib/supabase/service").createSupabaseServiceRoleClient>;
@@ -60,9 +65,13 @@ export async function notifyManagerPropertyLeadMessage(input: {
   body: string;
 }): Promise<void> {
   const db = (await import("@/lib/supabase/service")).createSupabaseServiceRoleClient();
-  const { data: profile } = await db.from("profiles").select("email").eq("id", input.managerUserId).maybeSingle();
-  const managerEmail = (profile?.email ?? "").trim().toLowerCase();
-  if (!managerEmail.includes("@")) return;
+  const recipientIds = await resolvePropertyScopedManagerRecipientIds(db, {
+    ownerManagerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+    channel: "inbox",
+  });
+  const recipients = await resolveManagerRecipientProfiles(db, recipientIds);
+  if (recipients.length === 0) return;
 
   const origin = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") || "http://localhost:3000";
   const property = input.propertyTitle?.trim() || input.propertyId;
@@ -82,11 +91,17 @@ export async function notifyManagerPropertyLeadMessage(input: {
   ].filter(Boolean);
 
   const text = lines.join("\n");
-  await deliverEmail([managerEmail], subject, text);
-  await upsertManagerInbox(db, input.managerUserId, {
+  await deliverEmail(
+    recipients.map((recipient) => recipient.email),
     subject,
-    body: text,
-    fromName: input.name,
-    fromEmail: input.email,
-  });
+    text,
+  );
+  for (const recipient of recipients) {
+    await upsertManagerInbox(db, recipient.userId, {
+      subject,
+      body: text,
+      fromName: input.name,
+      fromEmail: input.email,
+    });
+  }
 }

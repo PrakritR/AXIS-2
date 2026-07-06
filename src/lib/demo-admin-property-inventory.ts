@@ -342,6 +342,15 @@ export function readAdminPropertyRows(
   return dedupeAdminPropertyRows([...side.rejected.map((r) => normalizeAdminPropertyRow(r)), ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(4, forManagerUserId) : [])]);
 }
 
+/** Deduped property rows for a manager portal stage tab (matches visible table rows). */
+export function managerPropertyRowsForStage(
+  stageBuckets: AdminPropertyBucketIndex[],
+  forManagerUserId: string | null,
+): AdminPropertyRow[] {
+  if (!forManagerUserId) return [];
+  return dedupeAdminPropertyRows(stageBuckets.flatMap((bucket) => readAdminPropertyRows(bucket, forManagerUserId)));
+}
+
 export function movePendingToRequestChange(
   pendingId: string,
   forManagerUserId?: string | null,

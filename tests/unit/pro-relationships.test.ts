@@ -33,13 +33,13 @@ describe("pro-relationships", () => {
     expect(row?.coManagerPermissions).toEqual({ applications: true, payments: true });
   });
 
-  it("migrates legacy canEditListing to editListings permission", () => {
+  it("migrates legacy canEditListing to properties permission", () => {
     const row = normalizeProRelationshipRecord({
       id: "rel-2",
       linkedAxisId: "legacy@example.com",
       canEditListing: true,
     });
-    expect(row?.coManagerPermissions?.editListings).toBe(true);
+    expect(row?.coManagerPermissions?.properties).toBe(true);
   });
 
   it("defaults payout percent when missing", () => {

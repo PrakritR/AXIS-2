@@ -1,20 +1,26 @@
 /** Permissions a primary manager grants to linked co-managers (account links). */
 
+/** Shown in the co-manager permissions editor. `editListings` is implied by `properties`. */
 export const CO_MANAGER_PERMISSION_OPTIONS = [
-  { id: "properties", label: "Properties & listings" },
-  { id: "editListings", label: "Edit assigned listings" },
+  { id: "properties", label: "Properties" },
   { id: "applications", label: "Applications" },
   { id: "residents", label: "Residents" },
   { id: "leases", label: "Leases" },
   { id: "payments", label: "Payments" },
   { id: "documents", label: "Documents" },
   { id: "financials", label: "Finances" },
-  { id: "services", label: "Services & work orders" },
+  { id: "services", label: "Services" },
+  { id: "promotion", label: "Promotion" },
   { id: "inbox", label: "Inbox" },
   { id: "calendar", label: "Calendar" },
 ] as const;
 
-export type CoManagerPermissionId = (typeof CO_MANAGER_PERMISSION_OPTIONS)[number]["id"];
+/** Legacy ids still accepted when reading stored rows. */
+const LEGACY_CO_MANAGER_PERMISSION_IDS = ["editListings"] as const;
+
+export type CoManagerPermissionId =
+  | (typeof CO_MANAGER_PERMISSION_OPTIONS)[number]["id"]
+  | (typeof LEGACY_CO_MANAGER_PERMISSION_IDS)[number];
 
 export type CoManagerPermissions = Partial<Record<CoManagerPermissionId, boolean>>;
 
@@ -23,7 +29,10 @@ export type PropertyCoManagerPermissions = Record<string, CoManagerPermissions>;
 
 export const EMPTY_CO_MANAGER_PERMISSIONS: CoManagerPermissions = {};
 
-const CO_MANAGER_PERMISSION_ID_SET = new Set<string>(CO_MANAGER_PERMISSION_OPTIONS.map(({ id }) => id));
+const CO_MANAGER_PERMISSION_ID_SET = new Set<string>([
+  ...CO_MANAGER_PERMISSION_OPTIONS.map(({ id }) => id),
+  ...LEGACY_CO_MANAGER_PERMISSION_IDS,
+]);
 
 function isFlatCoManagerPermissionsObject(raw: Record<string, unknown>): boolean {
   const keys = Object.keys(raw);
@@ -37,6 +46,10 @@ export function normalizeCoManagerPermissions(raw: unknown): CoManagerPermission
   for (const { id } of CO_MANAGER_PERMISSION_OPTIONS) {
     if ((raw as Record<string, unknown>)[id] === true) out[id] = true;
   }
+  for (const id of LEGACY_CO_MANAGER_PERMISSION_IDS) {
+    if ((raw as Record<string, unknown>)[id] === true) out[id] = true;
+  }
+  if (out.editListings && !out.properties) out.properties = true;
   return out;
 }
 
@@ -110,8 +123,11 @@ export function coManagerPermissionsFromLegacy(input: {
   coManagerPermissions?: unknown;
 }): CoManagerPermissions {
   const base = normalizeCoManagerPermissions(input.coManagerPermissions);
-  if (input.canEditListing && !base.editListings) {
-    return { ...base, editListings: true };
+  if (input.canEditListing && !base.properties) {
+    return { ...base, properties: true };
+  }
+  if (base.editListings && !base.properties) {
+    return { ...base, properties: true };
   }
   return base;
 }
@@ -120,6 +136,9 @@ export function hasCoManagerPermission(
   permissions: CoManagerPermissions | undefined,
   id: CoManagerPermissionId,
 ): boolean {
+  if (id === "editListings") {
+    return permissions?.properties === true || permissions?.editListings === true;
+  }
   return permissions?.[id] === true;
 }
 
@@ -154,6 +173,7 @@ export const PORTAL_SECTION_CO_MANAGER_PERMISSION: Partial<Record<string, CoMana
   inbox: "inbox",
   calendar: "calendar",
   services: "services",
+  promotion: "promotion",
 };
 
 function coManagerHasSectionPermission(

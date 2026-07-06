@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
-import { formatPacificDateTime } from "@/lib/pacific-time";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -25,7 +24,6 @@ import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
-import { LeaseReportIssueModal } from "@/components/portal/lease-report-issue-modal";
 import {
   appendLeaseThreadMessage,
   deleteLeasePipelineRow,
@@ -83,8 +81,6 @@ export function ManagerLeasesPipelinePanel({
     body: string;
   } | null>(null);
   const [amendLeaseRow, setAmendLeaseRow] = useState<LeasePipelineRow | null>(null);
-  const [reportIssueRow, setReportIssueRow] = useState<LeasePipelineRow | null>(null);
-  const [reportIssueBusy, setReportIssueBusy] = useState(false);
 
   const handleAmendLeaseSuccess = useCallback(async () => {
     await syncLeasePipelineFromServer(managerUserId, { force: true });
@@ -236,45 +232,6 @@ export function ManagerLeasesPipelinePanel({
     }, 0);
   };
 
-  function leaseReportIssueLabel(row: LeasePipelineRow): string {
-    const unit = row.unit.trim() || "unit";
-    return [row.residentName || "Resident", unit].filter(Boolean).join(" — ");
-  }
-
-  const onSubmitReportIssue = async (subject: string, message: string) => {
-    const row = reportIssueRow;
-    if (!row || reportIssueBusy) return;
-    const recipient = row.residentEmail.trim();
-    if (!recipient || !recipient.includes("@")) {
-      showToast("Resident email is missing or invalid.");
-      return;
-    }
-    setReportIssueBusy(true);
-    try {
-      const fullSubject = `Lease issue — ${leaseReportIssueLabel(row)}: ${subject}`;
-      const body = [`Lease: ${leaseReportIssueLabel(row)}`, "", message, "", "Property Manager"].join("\n");
-      const delivery = await deliverPortalInboxMessage({
-        fromName: "Property Manager",
-        toEmails: [recipient],
-        subject: fullSubject,
-        text: body,
-      });
-      appendLeaseThreadMessage(row.id, "manager", `${subject}\n\n${message}`, managerUserId);
-      if (delivery.ok) {
-        showToast(
-          delivery.skipped
-            ? "Message sent to resident's Axis inbox."
-            : "Message sent to resident's Axis inbox and email.",
-        );
-        setReportIssueRow(null);
-      } else {
-        showToast(delivery.error ?? "Could not send message.");
-      }
-    } finally {
-      setReportIssueBusy(false);
-    }
-  };
-
   const onDownload = (row: LeasePipelineRow) => {
     if (row.managerUploadedPdf?.dataUrl) {
       downloadLeaseFromRow(row);
@@ -344,9 +301,9 @@ export function ManagerLeasesPipelinePanel({
   };
 
   const onDeleteLease = (row: LeasePipelineRow) => {
-    if (!window.confirm(`Delete lease for ${row.residentName} (${row.unit})? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete the lease document for ${row.residentName} (${row.unit})? Generate or upload can recreate it.`)) return;
     if (deleteLeasePipelineRow(row.id, managerUserId)) {
-      showToast("Lease deleted.");
+      showToast("Lease document deleted.");
     } else showToast("Could not delete lease.");
   };
 
@@ -404,43 +361,6 @@ export function ManagerLeasesPipelinePanel({
 
   const renderLeaseRowDetail = (row: LeasePipelineRow) => (
     <>
-      {row.managerSignature || row.residentSignature ? (
-        <div className="mt-2 grid gap-2 rounded-xl border px-3 py-2.5 text-xs portal-banner-success sm:grid-cols-2">
-          <div>
-            <span className="font-semibold">Manager signature</span>
-            {row.managerSignature ? (
-              <p>
-                <span
-                  className="text-sm text-foreground"
-                  style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
-                >
-                  {row.managerSignature.name}
-                </span>
-                <span className="ml-2 text-emerald-700">{formatPacificDateTime(row.managerSignature.signedAtIso)}</span>
-              </p>
-            ) : (
-              <p className="text-amber-700">Pending</p>
-            )}
-          </div>
-          <div>
-            <span className="font-semibold">Resident signature</span>
-            {row.residentSignature ? (
-              <p>
-                <span
-                  className="text-sm text-foreground"
-                  style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic" }}
-                >
-                  {row.residentSignature.name}
-                </span>
-                <span className="ml-2 text-emerald-700">{formatPacificDateTime(row.residentSignature.signedAtIso)}</span>
-              </p>
-            ) : (
-              <p className="text-amber-700">Pending</p>
-            )}
-          </div>
-        </div>
-      ) : null}
-
       <PortalTableDetailActions placement="top">
             {!hasLeaseDocument(row) && leaseAllowsManagerDocumentEdits(row) ? (
               <Button
@@ -454,6 +374,7 @@ export function ManagerLeasesPipelinePanel({
                 {generatingRowId === row.id ? "Generating..." : "Generate lease"}
               </Button>
             ) : null}
+            {hasLeaseDocument(row) ? (
             <Button
               type="button"
               variant="outline"
@@ -462,14 +383,7 @@ export function ManagerLeasesPipelinePanel({
             >
               Download lease
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              onClick={() => setReportIssueRow(row)}
-            >
-              Report issue
-            </Button>
+            ) : null}
             {hasBothLeaseSignatures(row) && row.status === "Fully Signed" ? (
               <Button
                 type="button"
@@ -609,17 +523,6 @@ export function ManagerLeasesPipelinePanel({
           onClose={() => setSigningRow(null)}
         />
       ) : null}
-      <LeaseReportIssueModal
-        open={reportIssueRow !== null}
-        recipientLabel={reportIssueRow ? `${reportIssueRow.residentName || "the resident"}` : ""}
-        leaseLabel={reportIssueRow ? leaseReportIssueLabel(reportIssueRow) : ""}
-        busy={reportIssueBusy}
-        onClose={() => {
-          if (reportIssueBusy) return;
-          setReportIssueRow(null);
-        }}
-        onSubmit={(subject, message) => void onSubmitReportIssue(subject, message)}
-      />
       <PortalNotificationPreviewModal
         open={leaseSentPreview !== null}
         title="Send lease to resident — preview"

@@ -25,8 +25,10 @@ import {
   createManagerListingServiceOption,
   LISTING_SERVICE_QUICK_ADDS,
   normalizeManagerListingSubmissionV1,
+  resolveServiceOfferPricing,
   type ManagerListingServiceOption,
   type ManagerListingSubmissionV1,
+  type ListingServiceQuickAdd,
 } from "@/lib/manager-listing-submission";
 import { resolvePropertySaveTargetById } from "@/lib/manager-property-save-target";
 import { createServiceRequest, hasDeposit } from "@/lib/service-requests-storage";
@@ -40,6 +42,8 @@ type ResidentOption = {
   propertyLabel: string;
   roomLabel: string;
 };
+
+export type ManagerServiceResidentOption = ResidentOption;
 
 function displayPropertyLabel(raw: string): string {
   const trimmed = raw.trim();
@@ -121,12 +125,15 @@ export function ManagerCreateServiceRequestModal({
   onSubmitted,
   managerUserId,
   defaultPropertyId,
+  defaultResident,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmitted: () => void;
   managerUserId: string | null;
   defaultPropertyId?: string;
+  /** When set, the request is created for this resident (property + resident fields locked). */
+  defaultResident?: ManagerServiceResidentOption | null;
 }) {
   const { showToast } = useAppUi();
   const [tick, setTick] = useState(0);
@@ -134,13 +141,14 @@ export function ManagerCreateServiceRequestModal({
   const [propertyId, setPropertyId] = useState("");
   const [residentEmail, setResidentEmail] = useState("");
   const [offerId, setOfferId] = useState("");
-  const [returnByDate, setReturnByDate] = useState("");
   const [notes, setNotes] = useState("");
   const [addingOffer, setAddingOffer] = useState(false);
   const [savingOffer, setSavingOffer] = useState(false);
   const [newOfferName, setNewOfferName] = useState("");
   const [newOfferPrice, setNewOfferPrice] = useState("");
   const [newOfferDeposit, setNewOfferDeposit] = useState("");
+  const [requestPrice, setRequestPrice] = useState("");
+  const [requestDeposit, setRequestDeposit] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -159,17 +167,23 @@ export function ManagerCreateServiceRequestModal({
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
-      setPropertyId(defaultPropertyId?.trim() || "");
-      setResidentEmail("");
+      if (defaultResident) {
+        setPropertyId(defaultResident.propertyId.trim());
+        setResidentEmail(defaultResident.residentEmail.trim().toLowerCase());
+      } else {
+        setPropertyId(defaultPropertyId?.trim() || "");
+        setResidentEmail("");
+      }
       setOfferId("");
-      setReturnByDate("");
       setNotes("");
       setAddingOffer(false);
       setNewOfferName("");
       setNewOfferPrice("");
       setNewOfferDeposit("");
+      setRequestPrice("");
+      setRequestDeposit("");
     });
-  }, [open, defaultPropertyId]);
+  }, [open, defaultPropertyId, defaultResident]);
 
   const propertyOptions = useMemo(() => {
     void tick;
@@ -181,21 +195,33 @@ export function ManagerCreateServiceRequestModal({
     return buildResidentOptions(managerUserId);
   }, [managerUserId, tick]);
 
+  const lockedResident = defaultResident ?? null;
+  const effectiveResident = useMemo(() => {
+    if (lockedResident) return lockedResident;
+    return residentOptions.find((r) => r.residentEmail === residentEmail) ?? null;
+  }, [lockedResident, residentEmail, residentOptions]);
+
+  const effectiveProperty = useMemo(() => {
+    if (lockedResident?.propertyId) {
+      return (
+        propertyOptions.find((p) => p.propertyId === lockedResident.propertyId) ?? {
+          propertyId: lockedResident.propertyId,
+          propertyLabel: lockedResident.propertyLabel,
+        }
+      );
+    }
+    return propertyOptions.find((p) => p.propertyId === propertyId) ?? null;
+  }, [lockedResident, propertyId, propertyOptions]);
+
   const residentsForProperty = useMemo(() => {
     const property = propertyOptions.find((p) => p.propertyId === propertyId);
     if (!property) return residentOptions;
     return residentOptions.filter((r) => residentMatchesProperty(r, property));
   }, [propertyId, propertyOptions, residentOptions]);
 
-  const selectedResident = useMemo(
-    () => residentOptions.find((r) => r.residentEmail === residentEmail) ?? null,
-    [residentEmail, residentOptions],
-  );
+  const selectedResident = effectiveResident;
 
-  const selectedProperty = useMemo(
-    () => propertyOptions.find((p) => p.propertyId === propertyId) ?? null,
-    [propertyId, propertyOptions],
-  );
+  const selectedProperty = effectiveProperty;
 
   const propertySubmission = useMemo<ManagerListingSubmissionV1 | null>(() => {
     void tick;
@@ -220,12 +246,23 @@ export function ManagerCreateServiceRequestModal({
     [offerId, offersForProperty],
   );
 
+  useEffect(() => {
+    if (!selectedOffer) {
+      setRequestPrice("");
+      setRequestDeposit("");
+      return;
+    }
+    const defaults = resolveServiceOfferPricing(selectedOffer);
+    setRequestPrice(defaults.price);
+    setRequestDeposit(defaults.deposit);
+  }, [selectedOffer]);
+
   const propertySaveTarget = useMemo(
     () => resolvePropertySaveTargetById(managerUserId, propertyId),
     [managerUserId, propertyId],
   );
 
-  const addOffer = (preset?: { name: string; description: string }) => {
+  const addOffer = (preset?: ListingServiceQuickAdd) => {
     if (savingOffer) return;
     if (!managerUserId) {
       showToast("Could not identify your manager account.");
@@ -246,10 +283,11 @@ export function ManagerCreateServiceRequestModal({
     }
     setSavingOffer(true);
     try {
+      const pricing = preset ? resolveServiceOfferPricing({ name, price: preset.price, deposit: preset.deposit }) : { price: newOfferPrice.trim(), deposit: newOfferDeposit.trim() };
       const offer: ManagerListingServiceOption = {
         ...createManagerListingServiceOption(name, preset?.description ?? ""),
-        price: preset ? "" : newOfferPrice.trim(),
-        deposit: preset ? "" : newOfferDeposit.trim(),
+        price: pricing.price,
+        deposit: pricing.deposit,
       };
       const nextSubmission: ManagerListingSubmissionV1 = {
         ...propertySubmission,
@@ -267,6 +305,8 @@ export function ManagerCreateServiceRequestModal({
       }
       showToast(`${offer.name} added to this property's offerings.`);
       setOfferId(offer.id);
+      setRequestPrice(pricing.price);
+      setRequestDeposit(pricing.deposit);
       setAddingOffer(false);
       setNewOfferName("");
       setNewOfferPrice("");
@@ -294,23 +334,19 @@ export function ManagerCreateServiceRequestModal({
       showToast("Choose a request type.");
       return;
     }
-    if (hasDeposit(selectedOffer.deposit) && !returnByDate.trim()) {
-      showToast("Please enter a return-by date.");
-      return;
-    }
     setBusy(true);
     try {
       createServiceRequest({
         offerId: selectedOffer.id,
         offerName: selectedOffer.name,
         offerDescription: selectedOffer.description,
-        price: selectedOffer.price,
-        deposit: selectedOffer.deposit,
+        price: requestPrice.trim(),
+        deposit: requestDeposit.trim(),
         residentEmail: selectedResident.residentEmail,
         residentName: selectedResident.residentName,
         managerUserId,
         propertyId,
-        returnByDate: returnByDate.trim(),
+        returnByDate: "",
         notes: notes.trim(),
       });
       showToast(`${selectedOffer.name} request created for ${selectedResident.residentName}.`);
@@ -325,9 +361,21 @@ export function ManagerCreateServiceRequestModal({
     <Modal open={open} onClose={onClose} title="Add request">
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Log a service request on behalf of a resident. Only offerings the property makes available appear below.
+          {lockedResident
+            ? "Log a service request for this resident. It appears in their portal under Services → Requests."
+            : "Log a service request on behalf of a resident. Only offerings the property makes available appear below."}
         </p>
 
+        {lockedResident ? (
+          <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-sm">
+            <p className="font-semibold text-foreground">
+              {lockedResident.residentName}
+              {lockedResident.roomLabel ? ` · ${lockedResident.roomLabel}` : ""}
+            </p>
+            <p className="mt-0.5 text-xs text-muted">{lockedResident.propertyLabel}</p>
+          </div>
+        ) : (
+          <>
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">
           Property *
           <Select
@@ -368,6 +416,8 @@ export function ManagerCreateServiceRequestModal({
             ))}
           </Select>
         </label>
+          </>
+        )}
 
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">
           Request type *
@@ -392,6 +442,29 @@ export function ManagerCreateServiceRequestModal({
             </span>
           ) : null}
         </label>
+
+        {selectedOffer ? (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Payment amount
+              <Input
+                value={requestPrice}
+                onChange={(e) => setRequestPrice(e.target.value)}
+                placeholder="e.g. $35.00"
+                disabled={busy}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+              Deposit
+              <Input
+                value={requestDeposit}
+                onChange={(e) => setRequestDeposit(e.target.value)}
+                placeholder="e.g. $100.00"
+                disabled={busy}
+              />
+            </label>
+          </div>
+        ) : null}
 
         {propertyId ? (
           <div className="rounded-xl border border-dashed border-border p-3">
@@ -481,22 +554,6 @@ export function ManagerCreateServiceRequestModal({
               </div>
             )}
           </div>
-        ) : null}
-
-        {selectedOffer && hasDeposit(selectedOffer.deposit) ? (
-          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-            Return by date *
-            <Input
-              type="date"
-              value={returnByDate}
-              onChange={(e) => setReturnByDate(e.target.value)}
-              min={new Date().toISOString().slice(0, 10)}
-              disabled={busy}
-            />
-            <span className="text-[11px] font-normal normal-case text-muted">
-              Required — the deposit is held until the item is returned.
-            </span>
-          </label>
         ) : null}
 
         <label className="flex flex-col gap-1 text-xs font-medium text-muted">

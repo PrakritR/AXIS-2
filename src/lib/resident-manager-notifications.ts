@@ -57,6 +57,8 @@ export async function notifyManagerOfResidentSubmission(
       body: JSON.stringify({
         fromName: input.residentName || input.residentEmail || "Resident",
         toUserIds: [managerUserId],
+        propertyId: input.propertyId?.trim() || undefined,
+        fanOutPropertyInbox: true,
         subject: subjectFor(input.kind, input.title),
         text: bodyFor(input),
         deliverToPortalInbox: true,

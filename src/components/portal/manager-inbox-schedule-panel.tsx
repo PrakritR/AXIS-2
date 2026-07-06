@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { MANAGER_TABLE_TH, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -16,9 +16,16 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
+import {
+  PortalInboxSelectionToolbar,
+  sendAutomationScheduledMessageNow,
+  sendManualScheduledMessageNow,
+  useInboxRowSelection,
+} from "@/components/portal/portal-inbox-selection";
 import { ScheduleInboxComposeForm } from "@/components/portal/schedule-inbox-compose-modal";
 import {
   ScheduledMessageEditForm,
+  patchScheduledMessage,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -36,14 +43,9 @@ import {
   type ScheduledInboxMessageRecord,
 } from "@/lib/scheduled-inbox-messages";
 import {
-  inboxScheduleTypeLabel,
+  formatScheduledSendAt,
   type ScheduledPaymentMessage,
 } from "@/lib/scheduled-payment-messages";
-
-function formatSendDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
 
 function messagePreview(body: string, max = 120): string {
   const text = body.trim().replace(/\s+/g, " ");
@@ -85,8 +87,8 @@ export function ManagerInboxSchedulePanel({
   const [manualMessages, setManualMessages] = useState<ScheduledInboxMessageRecord[]>([]);
   const [manualLoading, setManualLoading] = useState(true);
   const [contactTick, setContactTick] = useState(0);
-  const [composeOpen, setComposeOpen] = useState(false);
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const reloadManual = useCallback(async () => {
     setManualLoading(true);
@@ -135,6 +137,18 @@ export function ManagerInboxSchedulePanel({
       .sort((a, b) => a.message.sendAt.localeCompare(b.message.sendAt));
   }, [manualMessages, automationMessages, horizonDays, filterResidentEmail]);
 
+  const selectableIds = useMemo(
+    () => rows.filter((row) => row.message.status === "scheduled").map((row) => rowId(row)),
+    [rows],
+  );
+  const { selectedIds, allSelected, toggleSelected, toggleSelectAll, clearSelection } =
+    useInboxRowSelection(selectableIds);
+
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedIds.has(rowId(row))),
+    [rows, selectedIds],
+  );
+
   const scheduledCount = useMemo(
     () => rows.filter((row) => row.message.status === "scheduled").length,
     [rows],
@@ -165,11 +179,87 @@ export function ManagerInboxSchedulePanel({
 
   const toggleRowExpand = (row: ScheduleRow) => {
     const id = rowId(row);
-    setComposeOpen(false);
     setExpandedRowId((cur) => (cur === id ? null : id));
   };
 
   const horizonLabel = INBOX_SCHEDULE_HORIZON_OPTIONS.find((opt) => opt.id === horizonId)?.label ?? "Show upcoming";
+
+  const sendRowNow = async (row: ScheduleRow) => {
+    if (row.message.status !== "scheduled") return;
+    if (row.kind === "manual") {
+      await sendManualScheduledMessageNow(row.message.id);
+    } else {
+      await sendAutomationScheduledMessageNow(row.message.id);
+    }
+  };
+
+  const bulkSendNow = async () => {
+    const targets = selectedRows.filter((row) => row.message.status === "scheduled");
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      let ok = 0;
+      for (const row of targets) {
+        try {
+          await sendRowNow(row);
+          ok += 1;
+        } catch {
+          /* continue */
+        }
+      }
+      showToast(ok === 1 ? "Message sent." : `Sent ${ok} of ${targets.length} messages.`);
+      clearSelection();
+      reloadAll();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not send messages.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkCancelSend = async () => {
+    const targets = selectedRows.filter((row) => row.message.status === "scheduled");
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      for (const row of targets) {
+        if (row.kind === "manual") {
+          await toggleManualCancelled(row.message, true);
+        } else {
+          await patchScheduledMessage(row.message.id, { cancelled: true });
+        }
+      }
+      showToast(targets.length === 1 ? "Send cancelled." : `Cancelled ${targets.length} sends.`);
+      clearSelection();
+      reloadAll();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not cancel sends.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkRestoreSend = async () => {
+    const targets = selectedRows.filter((row) => row.message.status === "cancelled");
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      for (const row of targets) {
+        if (row.kind === "manual") {
+          await toggleManualCancelled(row.message, false);
+        } else {
+          await patchScheduledMessage(row.message.id, { cancelled: false });
+        }
+      }
+      showToast(targets.length === 1 ? "Send restored." : `Restored ${targets.length} sends.`);
+      clearSelection();
+      reloadAll();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not restore sends.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const renderRowEditPanel = (row: ScheduleRow) =>
     row.kind === "manual" ? (
@@ -182,13 +272,40 @@ export function ManagerInboxSchedulePanel({
           await toggleManualCancelled(row.message, cancelled);
           setExpandedRowId(null);
         }}
+        onSendNow={async () => {
+          await sendRowNow(row);
+          showToast("Message sent.");
+          setExpandedRowId(null);
+          reloadAll();
+        }}
       />
     ) : (
-      <ScheduledMessageEditForm message={row.message} onSaved={reloadAll} onClose={() => setExpandedRowId(null)} />
+      <ScheduledMessageEditForm
+        message={row.message}
+        onSaved={reloadAll}
+        onClose={() => setExpandedRowId(null)}
+        onSendNow={async () => {
+          await sendRowNow(row);
+          showToast("Reminder sent.");
+          setExpandedRowId(null);
+          reloadAll();
+        }}
+      />
     );
 
   return (
     <div className="space-y-4">
+      <PortalInboxSelectionToolbar count={selectedIds.size} onClear={clearSelection}>
+        <Button type="button" variant="primary" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkSendNow()}>
+          Send now
+        </Button>
+        <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkCancelSend()}>
+          Cancel send
+        </Button>
+        <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkRestoreSend()}>
+          Restore send
+        </Button>
+      </PortalInboxSelectionToolbar>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted">
           {scheduledCount} scheduled in view · {horizonLabel.toLowerCase()}
@@ -208,32 +325,8 @@ export function ManagerInboxSchedulePanel({
               ))}
             </select>
           </label>
-          <Button
-            type="button"
-            variant="primary"
-            className={`rounded-full text-xs ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => {
-              setExpandedRowId(null);
-              setComposeOpen((v) => !v);
-            }}
-          >
-            Schedule message
-          </Button>
         </div>
       </div>
-
-      {composeOpen ? (
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-          <ScheduleInboxComposeForm
-            contacts={liveContacts}
-            onSaved={() => {
-              reloadAll();
-              setComposeOpen(false);
-            }}
-            onClose={() => setComposeOpen(false)}
-          />
-        </div>
-      ) : null}
 
       {loading ? (
         <p className="text-sm text-muted">Loading schedule…</p>
@@ -249,19 +342,29 @@ export function ManagerInboxSchedulePanel({
               const recipientEmail = isManual ? row.message.recipientEmail : row.message.residentEmail;
               const topic = isManual ? "Inbox message" : row.message.chargeTitle;
               const topicMeta = isManual ? null : row.message.propertyLabel;
-              const timing = isManual
-                ? "Scheduled send"
-                : inboxScheduleTypeLabel(row.message.kind, row.message.daysBeforeDue);
               const subject = row.message.subject;
               const body = row.message.body;
               const status = row.message.status;
               const sendAt = row.message.sendAt;
+              const sendLabel = formatScheduledSendAt(sendAt);
 
               const isRowExpanded = expandedRowId === id;
 
               return (
                 <div key={id} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <button type="button" className="w-full text-left" onClick={() => toggleRowExpand(row)}>
+                  <div className="flex items-start gap-3">
+                    {status === "scheduled" ? (
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-border accent-primary"
+                        checked={selectedIds.has(id)}
+                        onChange={() => toggleSelected(id)}
+                        aria-label={`Select ${subject}`}
+                      />
+                    ) : (
+                      <span className="w-4 shrink-0" />
+                    )}
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleRowExpand(row)}>
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-semibold text-foreground">{subject}</p>
                       <span className="shrink-0 rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
@@ -275,12 +378,11 @@ export function ManagerInboxSchedulePanel({
                       {[topic, topicMeta].filter(Boolean).join(" · ")}
                       {!isManual && row.message.dueDateLabel ? ` · Due ${row.message.dueDateLabel}` : ""}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted">
-                      {formatSendDate(sendAt)} · {timing}
-                    </p>
+                    <p className="mt-0.5 text-xs text-muted">{sendLabel}</p>
                     <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">{messagePreview(body)}</p>
                     <p className={`mt-1.5 text-xs font-medium capitalize ${statusClass(status)}`}>{status}</p>
-                  </button>
+                    </button>
+                  </div>
                   {isRowExpanded ? (
                     <div className="mt-3 border-t border-border pt-3">{renderRowEditPanel(row)}</div>
                   ) : null}
@@ -293,11 +395,21 @@ export function ManagerInboxSchedulePanel({
               <table className={PORTAL_DATA_TABLE}>
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Send date</th>
+                  <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
+                    {selectableIds.length > 0 ? (
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border accent-primary"
+                        checked={allSelected}
+                        onChange={() => toggleSelectAll()}
+                        aria-label="Select all scheduled messages"
+                      />
+                    ) : null}
+                  </th>
+                  <th className={`${MANAGER_TABLE_TH} text-left`}>Send date &amp; time</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Source</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Recipient</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Timing</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Subject</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Message</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
@@ -311,13 +423,11 @@ export function ManagerInboxSchedulePanel({
                   const recipientEmail = isManual ? row.message.recipientEmail : row.message.residentEmail;
                   const topic = isManual ? "Inbox message" : row.message.chargeTitle;
                   const topicMeta = isManual ? null : row.message.propertyLabel;
-                  const timing = isManual
-                    ? "Scheduled send"
-                    : inboxScheduleTypeLabel(row.message.kind, row.message.daysBeforeDue);
                   const subject = row.message.subject;
                   const body = row.message.body;
                   const status = row.message.status;
                   const sendAt = row.message.sendAt;
+                  const sendLabel = formatScheduledSendAt(sendAt);
 
                   const isRowExpanded = expandedRowId === id;
 
@@ -328,7 +438,19 @@ export function ManagerInboxSchedulePanel({
                         onClick={createPortalRowExpandClick(() => toggleRowExpand(row))}
                         aria-expanded={isRowExpanded}
                       >
-                        <td className={PORTAL_TABLE_TD}>{formatSendDate(sendAt)}</td>
+                        <td className={`${PORTAL_TABLE_TD} w-10 align-middle`}>
+                          {status === "scheduled" ? (
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border accent-primary"
+                              checked={selectedIds.has(id)}
+                              onChange={() => toggleSelected(id)}
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label={`Select ${subject}`}
+                            />
+                          ) : null}
+                        </td>
+                        <td className={PORTAL_TABLE_TD}>{sendLabel}</td>
                         <td className={PORTAL_TABLE_TD}>
                           <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
                             {isManual ? "Manual" : "Automated"}
@@ -345,7 +467,6 @@ export function ManagerInboxSchedulePanel({
                             <div className="text-xs text-muted">Due {row.message.dueDateLabel}</div>
                           ) : null}
                         </td>
-                        <td className={PORTAL_TABLE_TD}>{timing}</td>
                         <td className={`${PORTAL_TABLE_TD} max-w-[180px]`}>
                           <div className="truncate font-medium text-foreground">{subject}</div>
                         </td>

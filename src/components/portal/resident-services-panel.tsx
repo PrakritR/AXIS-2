@@ -62,6 +62,7 @@ import {
   submitReturnPhoto,
   updateServiceRequest,
   hasDeposit,
+  isServiceRequestFeePaid,
   CUSTOM_SERVICE_REQUEST_OFFER_ID,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
@@ -175,19 +176,15 @@ export function WorkOrderStatusBadge({ bucket }: { bucket: ResidentWorkBucket })
   );
 }
 
-/** "Service fee $45 · Paid · Deposit $100 · Pending" style summary for a request row. */
+/** Service fee summary for a request row (payments live on the Payments tab). */
 export function requestChargesSummary(req: ServiceRequest): string {
-  const charged = req.status === "approved" || req.status === "returned";
-  const parts: string[] = [];
-  if (req.price) {
-    parts.push(charged ? `Service fee ${req.price} · ${req.servicePaid ? "Paid" : "Pending"}` : `Service fee ${req.price}`);
-  } else if (req.priceLimit?.trim()) {
-    parts.push(`Price limit ${req.priceLimit.trim()}`);
+  if (req.price?.trim()) {
+    const paid = isServiceRequestFeePaid(req);
+    if (req.status === "pending") return `Service fee ${req.price.trim()}`;
+    return `Service fee ${req.price.trim()} · ${paid ? "Paid" : "Pending"}`;
   }
-  if (hasDeposit(req.deposit)) {
-    parts.push(charged ? `Deposit ${req.deposit} · ${req.depositPaid ? "Refunded" : "Pending"}` : `Deposit ${req.deposit}`);
-  }
-  return parts.join(" · ") || "—";
+  if (req.priceLimit?.trim()) return `Price limit ${req.priceLimit.trim()}`;
+  return "—";
 }
 
 export function ServiceRequestCard({
@@ -206,8 +203,9 @@ export function ServiceRequestCard({
   const [uploading, setUploading] = useState(false);
 
   const needsReturn = hasDeposit(req.deposit);
-  // Show checkout procedure once service charge is paid (and item has deposit, so needs return)
-  const showCheckout = req.status === "approved" && req.servicePaid && needsReturn && !req.returnPhotoDataUrl;
+  const feePaid = isServiceRequestFeePaid(req);
+  // Show checkout once the service fee is paid (or on return) and the item needs a return photo.
+  const showCheckout = req.status === "approved" && feePaid && needsReturn && !req.returnPhotoDataUrl;
 
   async function handleReturnPhoto(files: FileList | null) {
     if (!files?.[0]) return;
@@ -280,12 +278,6 @@ export function ServiceRequestCard({
           <p className="mt-1 text-sm font-medium text-foreground">{req.deposit}</p>
         </>
       ) : null}
-      {req.returnByDate ? (
-        <>
-          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Return by</p>
-          <p className="mt-1 text-sm font-medium text-foreground">{formatDate(req.returnByDate)}</p>
-        </>
-      ) : null}
       {req.notes ? (
         <>
           <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Notes</p>
@@ -293,35 +285,17 @@ export function ServiceRequestCard({
         </>
       ) : null}
 
-      {req.status === "approved" || req.status === "returned" ? (
-        <>
-          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Charges</p>
-          <div className="mt-1.5 space-y-1.5">
-            {req.price ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted">Request fee</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"}`}>
-                  {req.servicePaid ? `Paid · ${req.price}` : `Pending · ${req.price}`}
-                </span>
-              </div>
-            ) : null}
-            {needsReturn ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted">Deposit (refundable)</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.depositPaid ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"}`}>
-                  {req.depositPaid ? `Paid · ${req.deposit}` : `Pending · ${req.deposit}`}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        </>
+      {req.status === "approved" && req.price?.trim() && !feePaid ? (
+        <p className="mt-3 text-xs text-muted">
+          Pay the service fee under <span className="font-medium text-foreground">Payments</span> before returning the item.
+        </p>
       ) : null}
 
       {showCheckout ? (
         <>
           <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Return checklist</p>
           <ol className="mt-1.5 space-y-1 pl-4 text-xs text-muted list-decimal">
-            <li>Clean and prepare the item for return{req.returnByDate ? ` by ${formatDate(req.returnByDate)}` : ""}.</li>
+            <li>Clean and prepare the item for return.</li>
             <li>Take a clear photo showing the item&apos;s current condition.</li>
             <li>Upload the photo below — your manager will review it.</li>
             <li>Your deposit will be refunded once the return is confirmed.</li>
@@ -486,7 +460,6 @@ export function ResidentServicesPanel({
   // edit modals (resident edits their own items)
   const [editingRequest, setEditingRequest] = useState<ServiceRequest | null>(null);
   const [eNotes, setENotes] = useState("");
-  const [eReturnBy, setEReturnBy] = useState("");
   const [editingWorkOrder, setEditingWorkOrder] = useState<DemoManagerWorkOrderRow | null>(null);
   const [wTitle, setWTitle] = useState("");
   const [wPriority, setWPriority] = useState("Medium");
@@ -509,7 +482,6 @@ export function ResidentServicesPanel({
   const [customDescription, setCustomDescription] = useState("");
   const [customPriceLimit, setCustomPriceLimit] = useState("");
   const [sNotes, setSNotes] = useState("");
-  const [sReturnBy, setSReturnBy] = useState("");
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
   const [serviceSubmitting, setServiceSubmitting] = useState(false);
 
@@ -666,18 +638,12 @@ export function ResidentServicesPanel({
   function openRequestEdit(req: ServiceRequest) {
     setEditingRequest(req);
     setENotes(req.notes);
-    setEReturnBy(req.returnByDate);
   }
 
   function saveRequestEdit() {
     if (!editingRequest) return;
-    if (hasDeposit(editingRequest.deposit) && !eReturnBy.trim()) {
-      showToast("Please enter a return-by date.");
-      return;
-    }
     updateServiceRequest(editingRequest.id, {
       notes: eNotes.trim(),
-      returnByDate: eReturnBy.trim(),
     });
     setEditingRequest(null);
     reloadServiceRequests();
@@ -770,7 +736,6 @@ export function ResidentServicesPanel({
     setCustomDescription("");
     setCustomPriceLimit("");
     setSNotes("");
-    setSReturnBy("");
   };
 
   function getApplication() {
@@ -876,10 +841,6 @@ export function ResidentServicesPanel({
       }
     } else {
       if (!selectedOffer) { showToast("Select a service first."); return; }
-      if (hasDeposit(selectedOffer.deposit) && !sReturnBy.trim()) {
-        showToast("Please enter a return-by date.");
-        return;
-      }
     }
 
     setServiceSubmitting(true);
@@ -906,7 +867,6 @@ export function ResidentServicesPanel({
     let price: string;
     let priceLimit: string | undefined;
     let deposit: string;
-    let returnByDate: string;
     let notifyTitle: string;
     let notifyDetails: string[];
 
@@ -920,7 +880,6 @@ export function ResidentServicesPanel({
       price = "";
       priceLimit = limitLabel;
       deposit = "";
-      returnByDate = "";
       notifyTitle = offerName;
       notifyDetails = [
         "Custom request",
@@ -940,14 +899,12 @@ export function ResidentServicesPanel({
       offerDescription = currentOffer.description;
       price = currentOffer.price;
       deposit = currentOffer.deposit;
-      returnByDate = sReturnBy.trim();
       notifyTitle = currentOffer.name;
       notifyDetails = [
         `Offer: ${currentOffer.name}`,
         currentOffer.description ? `Offer details: ${currentOffer.description}` : "",
         currentOffer.price ? `Price: ${currentOffer.price}` : "",
         hasDeposit(currentOffer.deposit) ? `Deposit: ${currentOffer.deposit}` : "",
-        sReturnBy.trim() ? `Return by: ${sReturnBy.trim()}` : "",
         sNotes.trim() ? `Resident notes: ${sNotes.trim()}` : "",
       ];
     }
@@ -963,7 +920,7 @@ export function ResidentServicesPanel({
       residentName: application?.name || residentEmail,
       managerUserId,
       propertyId,
-      returnByDate,
+      returnByDate: "",
       notes: sNotes.trim(),
     });
     const propertyLabel =
@@ -1316,7 +1273,6 @@ export function ResidentServicesPanel({
               onChange={(id) => {
                 setServiceMode(id as "catalog" | "custom");
                 setSelectedOffer(null);
-                setSReturnBy("");
               }}
             />
           </div>
@@ -1324,13 +1280,13 @@ export function ResidentServicesPanel({
 
         {serviceMode === "catalog" && availableOffers.length > 0 ? (
           <>
-            <p className="text-xs text-muted">Select a request option from your manager&apos;s catalog. If a deposit is required, you&apos;ll also need to set a return date.</p>
+            <p className="text-xs text-muted">Select a request option from your manager&apos;s catalog.</p>
             <div className="mt-4 space-y-2">
               {availableOffers.map((offer) => (
                 <button
                   key={offer.id}
                   type="button"
-                  onClick={() => { setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer)); setSReturnBy(""); }}
+                  onClick={() => { setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer)); }}
                   className={`w-full rounded-xl border px-4 py-3 text-left transition ${
                     selectedOffer?.id === offer.id
                       ? "border-primary/30 bg-accent/30 ring-1 ring-primary/20"
@@ -1357,21 +1313,6 @@ export function ResidentServicesPanel({
 
             {selectedOffer ? (
               <div className="mt-4 space-y-3">
-                {hasDeposit(selectedOffer.deposit) ? (
-                  <div>
-                    <p className="mb-1 text-[11px] font-medium text-muted">
-                      Return by date <span className="text-rose-500">*</span>
-                    </p>
-                    <Input
-                      type="date"
-                      value={sReturnBy}
-                      onChange={(e) => setSReturnBy(e.target.value)}
-                      min={new Date().toISOString().slice(0, 10)}
-                      className="bg-card"
-                    />
-                    <p className="mt-1 text-[10px] text-muted">Required — your deposit is held until the item is returned.</p>
-                  </div>
-                ) : null}
                 <div>
                   <p className="mb-1 text-[11px] font-medium text-muted">Additional notes (optional)</p>
                   <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Preferred timing, special instructions…" className="bg-card" />
@@ -1457,20 +1398,6 @@ export function ResidentServicesPanel({
               Pricing is set by your manager and can&apos;t be changed here.
             </p>
             <div className="mt-4 grid gap-3">
-              {hasDeposit(editingRequest.deposit) ? (
-                <div>
-                  <p className="mb-1 text-[11px] font-medium text-muted">
-                    Return by date <span className="text-rose-500">*</span>
-                  </p>
-                  <Input
-                    type="date"
-                    value={eReturnBy}
-                    onChange={(e) => setEReturnBy(e.target.value)}
-                    className="bg-card"
-                  />
-                  <p className="mt-1 text-[10px] text-muted">Required — your deposit is held until the item is returned.</p>
-                </div>
-              ) : null}
               <div>
                 <p className="mb-1 text-[11px] font-medium text-muted">Notes</p>
                 <Textarea

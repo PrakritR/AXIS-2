@@ -1,10 +1,9 @@
 "use client";
 
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import Link from "next/link";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
-import { ChevronDown } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -48,6 +47,7 @@ import {
   recordApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
+  updateHouseholdChargeAmount,
   updatePendingRentAmountForResident,
   type HouseholdCharge,
 } from "@/lib/household-charges";
@@ -61,7 +61,7 @@ import {
   normalizeApplicationAxisId,
 } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
-import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
+import { isPreviousResidentDirectoryRow, isResidentDirectoryRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
@@ -72,8 +72,8 @@ import {
   syncPropertyPipelineFromServer,
   updateExtraListingFromSubmissionOnServer,
 } from "@/lib/demo-property-pipeline";
-import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
-import { AXIS_ACH_FEE_PERCENT } from "@/lib/payment-policy";
+import { openStripeConnectOnboarding } from "@/lib/stripe-connect-onboarding-client";
+import { AXIS_ACH_FEE_PERCENT, acceptedPaymentMethodsForListing } from "@/lib/payment-policy";
 import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import {
   appendLeaseThreadMessage,
@@ -103,21 +103,17 @@ import {
   deleteManagerWorkOrdersForResident,
   readManagerWorkOrderRows,
   syncManagerWorkOrdersFromServer,
-  updateManagerWorkOrder,
   deleteManagerWorkOrderRow,
 } from "@/lib/manager-work-orders-storage";
 import {
   SERVICE_REQUESTS_EVENT,
   readServiceRequestsForResident,
   readServiceRequestsForManager,
-  hasDeposit,
   deleteServiceRequestsForResident,
-  updateServiceRequest,
-  deleteServiceRequest,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
-import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
-import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { DemoApplicantRow, DemoManagerWorkOrderRow, ManagerApplicationBucket, ManagerWorkOrderBucket } from "@/data/demo-portal";
+import { transitionApplicationBucket, stageLabelForApplicationBucket } from "@/lib/application-review";
 import {
   invalidatePersistedInboxCache,
   loadPersistedInbox,
@@ -139,6 +135,8 @@ import { Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PillTabs } from "@/components/ui/tabs";
 import { ApplicationDocumentPreview, downloadApplicationPdf } from "@/components/portal/manager-applications";
+import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
+import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import {
   INBOX_TAB_DEFS,
   PortalInboxEmptyState,
@@ -146,22 +144,22 @@ import {
   type PortalInboxTableRow,
 } from "@/components/portal/portal-inbox-ui";
 import {
-  REQUEST_STATUS_TABS,
-  WORK_ORDER_FILTER_TABS,
-  ServiceRequestCard,
   ServiceStatusBadge,
-  WorkOrderDetail,
-  WorkOrderStatusBadge,
-  formatDate as serviceRequestDateLabel,
-  pillLabelWithCount,
-  requestChargesSummary,
-  serviceRequestStatusBucket,
-  workOrderFilterBucket,
-  type RequestStatusBucket,
-  type WorkOrderFilterBucket,
 } from "@/components/portal/resident-services-panel";
+import {
+  ManagerServiceRequestDetail,
+  managerServiceRequestBucket,
+  managerServiceRequestPricingSummary,
+  type ManagerServiceRequestBucket,
+} from "@/components/portal/manager-service-request-detail";
+import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
 import { isHouseholdChargeOverdue } from "@/lib/household-charges";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
+import {
+  ManagerCreateServiceRequestModal,
+  type ManagerServiceResidentOption,
+} from "@/components/portal/manager-create-service-request-modal";
+import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
@@ -182,33 +180,25 @@ function ResidentDetailSection({
   summary: ReactNode;
   expanded: boolean;
   onToggle: () => void;
-  /** Extra control (e.g. a button) rendered next to the toggle, outside the clickable header. */
   headerAction?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          data-attr="resident-section-toggle"
-          className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-left"
-        >
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{title}</p>
-            <p className="mt-1 text-sm text-muted">{summary}</p>
-          </div>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-muted transition-transform ${expanded ? "rotate-180" : ""}`}
-            aria-hidden
-          />
-        </button>
-        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
-      </div>
-      {expanded ? <div className="mt-4">{children}</div> : null}
-    </div>
+    <PortalCollapsibleSection
+      title={title}
+      titleVariant="resident"
+      subtitle={summary}
+      expanded={expanded}
+      onExpandedChange={(open) => {
+        if (open !== expanded) onToggle();
+      }}
+      headerActions={headerAction}
+      contentClassName="px-4 pb-4 pt-0"
+      surfaceMuted={false}
+      toggleDataAttr="resident-section-toggle"
+    >
+      {children}
+    </PortalCollapsibleSection>
   );
 }
 
@@ -237,10 +227,6 @@ function shortDateLabel(iso: string): string {
   const d = new Date(parts[0], parts[1] - 1, parts[2]);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
-}
-
-function isPreviousResidentRow(row: DemoApplicantRow): boolean {
-  return !isCurrentResidentApplicationRow(row);
 }
 
 const AR_LEASE_TERM_CUSTOM = "__custom__";
@@ -304,20 +290,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [welcomeEmailBusyForResident, setWelcomeEmailBusyForResident] = useState<string | null>(null);
   const [welcomePreviewFor, setWelcomePreviewFor] = useState<ActiveResident | null>(null);
   const [welcomePreviewContent, setWelcomePreviewContent] = useState("");
+  const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
+  const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
+  const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
 
   // Services tab replica (Requests / Work orders — mirrors resident-services-panel.tsx)
   const [svcSubTab, setSvcSubTab] = useState<"requests" | "work-orders">("requests");
-  const [svcRequestsFilter, setSvcRequestsFilter] = useState<RequestStatusBucket>("pending");
-  const [svcWorkOrderFilter, setSvcWorkOrderFilter] = useState<WorkOrderFilterBucket>("pending");
+  const [svcReqBucket, setSvcReqBucket] = useState<ManagerServiceRequestBucket>("pending");
+  const [svcWoBucket, setSvcWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [svcExpandedId, setSvcExpandedId] = useState<string | null>(null);
-  const [editingServiceRequest, setEditingServiceRequest] = useState<ServiceRequest | null>(null);
-  const [srEditNotes, setSrEditNotes] = useState("");
-  const [srEditReturnBy, setSrEditReturnBy] = useState("");
-  const [editingWorkOrderRow, setEditingWorkOrderRow] = useState<DemoManagerWorkOrderRow | null>(null);
-  const [woEditTitle, setWoEditTitle] = useState("");
-  const [woEditPriority, setWoEditPriority] = useState("Medium");
-  const [woEditArrival, setWoEditArrival] = useState("");
-  const [woEditDetails, setWoEditDetails] = useState("");
 
   // Inbox tab replica (Unopened / Opened / Sent / Trash — mirrors resident-inbox-panel.tsx)
   const [inboxSubTab, setInboxSubTab] = useState<"unopened" | "opened" | "schedule" | "sent" | "trash">("unopened");
@@ -328,15 +309,22 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     "application" | "lease" | "payments" | "services" | "inbox" | null
   >(null);
   const [chargeExpandedId, setChargeExpandedId] = useState<string | null>(null);
+  const [editingChargeId, setEditingChargeId] = useState<string | null>(null);
+  const [editChargeTitleDraft, setEditChargeTitleDraft] = useState("");
+  const [editChargeAmountDraft, setEditChargeAmountDraft] = useState("");
   const [addPaymentMethodOpen, setAddPaymentMethodOpen] = useState(false);
   const [addResidentPaymentOpen, setAddResidentPaymentOpen] = useState(false);
+  const [addResidentRequestOpen, setAddResidentRequestOpen] = useState(false);
+  const [addResidentWorkOrderOpen, setAddResidentWorkOrderOpen] = useState(false);
   const [pmPropertyId, setPmPropertyId] = useState("");
   const [pmZelleEnabled, setPmZelleEnabled] = useState(false);
   const [pmZelleContact, setPmZelleContact] = useState("");
   const [pmVenmoEnabled, setPmVenmoEnabled] = useState(false);
   const [pmVenmoContact, setPmVenmoContact] = useState("");
   const [pmAxisPaymentsEnabled, setPmAxisPaymentsEnabled] = useState(true);
+  const [pmCardEnabled, setPmCardEnabled] = useState(true);
   const [pmConnectReady, setPmConnectReady] = useState<boolean | null>(null);
+  const [pmPayoutSetupBusy, setPmPayoutSetupBusy] = useState(false);
   const [pmSaving, setPmSaving] = useState(false);
 
   // Add resident manually
@@ -451,7 +439,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         readManagerApplicationRows()
           .filter(
             (row) =>
-              row.bucket === "approved" &&
+              isResidentDirectoryRow(row) &&
               row.email?.trim() &&
               applicationVisibleToPortalUser(row, userId),
           )
@@ -506,7 +494,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         void syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY, { force: true }).then(() => { if (!cancelled) setInboxTick((n) => n + 1); });
         const activeEmails = new Set(
           readManagerApplicationRows()
-            .filter((row) => row.bucket === "approved" && !isPreviousResidentRow(row))
+            .filter((row) => isResidentDirectoryRow(row) && !isPreviousResidentDirectoryRow(row))
             .map((r) => r.email?.trim().toLowerCase())
             .filter((e): e is string => Boolean(e)),
         );
@@ -541,7 +529,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
     return readManagerApplicationRows()
-      .filter((row) => row.bucket === "approved" && applicationVisibleToPortalUser(row, userId))
+      .filter((row) => isResidentDirectoryRow(row) && applicationVisibleToPortalUser(row, userId))
       .map((row) => {
         const propId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
         const prop = propId ? getPropertyById(propId) : null;
@@ -566,7 +554,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           manuallyAdded: row.manuallyAdded,
           moveInInstructions: row.moveInInstructions,
           manualResidentDetails: row.manualResidentDetails,
-          isPrevious: isPreviousResidentRow(row),
+          isPrevious: isPreviousResidentDirectoryRow(row),
         };
       });
   }, [userId, hcTick]);
@@ -669,8 +657,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     if (selectedId) {
       setChargeTab("pending");
       setSvcSubTab("requests");
-      setSvcRequestsFilter("pending");
-      setSvcWorkOrderFilter("pending");
+      setSvcReqBucket("pending");
+      setSvcWoBucket("open");
       setSvcExpandedId(null);
       setInboxSubTab("unopened");
       setInboxExpandedId(null);
@@ -790,27 +778,45 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     return readManagerApplicationRows().find((row) => row.id === selected.id) ?? null;
   }, [selected, hcTick]);
 
+  const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
+    if (!selected?.email?.trim()) return null;
+    const appRow = selectedApplicationRow;
+    const assignedRoomChoice =
+      appRow?.assignedRoomChoice?.trim() || appRow?.application?.roomChoice1?.trim() || "";
+    return {
+      residentEmail: selected.email.trim().toLowerCase(),
+      residentName: selected.name.trim() || "Resident",
+      propertyId: selected.propertyId.trim(),
+      propertyLabel: selected.propertyLabel.trim() || "Property",
+      roomLabel: selected.roomLabel.trim(),
+      assignedRoomChoice: assignedRoomChoice || undefined,
+    };
+  }, [selected, selectedApplicationRow]);
+
+  const canAddResidentServiceItem = Boolean(
+    selectedServiceResident?.residentEmail && selectedServiceResident.propertyId,
+  );
+
   const residentServiceRequestsCounts = useMemo(() => {
-    const c: Record<RequestStatusBucket, number> = { pending: 0, completed: 0 };
-    for (const req of residentServiceRequests) c[serviceRequestStatusBucket(req)] += 1;
+    const c: Record<ManagerServiceRequestBucket, number> = { pending: 0, approved: 0, completed: 0 };
+    for (const req of residentServiceRequests) c[managerServiceRequestBucket(req.status)] += 1;
     return c;
   }, [residentServiceRequests]);
 
   const residentFilteredServiceRequests = useMemo(
-    () => residentServiceRequests.filter((req) => serviceRequestStatusBucket(req) === svcRequestsFilter),
-    [residentServiceRequests, svcRequestsFilter],
+    () =>
+      residentServiceRequests
+        .filter((req) => managerServiceRequestBucket(req.status) === svcReqBucket)
+        .slice()
+        .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()),
+    [residentServiceRequests, svcReqBucket],
   );
 
-  const residentWorkOrderFilterCounts = useMemo(() => {
-    const c: Record<WorkOrderFilterBucket, number> = { pending: 0, scheduled: 0, completed: 0 };
-    for (const row of residentWorkOrders) c[workOrderFilterBucket(row)] += 1;
+  const residentWorkOrderCounts = useMemo(() => {
+    const c: Record<ManagerWorkOrderBucket, number> = { open: 0, scheduled: 0, completed: 0 };
+    for (const row of residentWorkOrders) c[row.bucket] += 1;
     return c;
   }, [residentWorkOrders]);
-
-  const residentWorkOrdersInBucket = useMemo(
-    () => residentWorkOrders.filter((row) => workOrderFilterBucket(row) === svcWorkOrderFilter),
-    [residentWorkOrders, svcWorkOrderFilter],
-  );
 
   // Scheduled-message count for this resident's Inbox → Schedule tab (mirrors manager-inbox.tsx's scheduleCount).
   const { messages: residentScheduledAutomationMessages } = useScheduledPaymentMessages({ includeHidden: false });
@@ -972,69 +978,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setMessageSendAt(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
     setMessageScheduleLater(false);
     setMessageOpen(true);
-  }
-
-  function openServiceRequestEdit(req: ServiceRequest) {
-    setEditingServiceRequest(req);
-    setSrEditNotes(req.notes);
-    setSrEditReturnBy(req.returnByDate);
-  }
-
-  function saveServiceRequestEdit() {
-    if (!editingServiceRequest) return;
-    if (hasDeposit(editingServiceRequest.deposit) && !srEditReturnBy.trim()) {
-      showToast("Please enter a return-by date.");
-      return;
-    }
-    updateServiceRequest(editingServiceRequest.id, {
-      notes: srEditNotes.trim(),
-      returnByDate: srEditReturnBy.trim(),
-    });
-    setEditingServiceRequest(null);
-    setSrTick((n) => n + 1);
-    showToast("Request updated.");
-  }
-
-  function deleteResidentServiceRequest(id: string) {
-    if (!window.confirm("Delete this service request? This cannot be undone.")) return;
-    deleteServiceRequest(id);
-    setSrTick((n) => n + 1);
-    setSvcExpandedId(null);
-    showToast("Request deleted.");
-  }
-
-  function openWorkOrderRowEdit(row: DemoManagerWorkOrderRow) {
-    setEditingWorkOrderRow(row);
-    setWoEditTitle(row.title);
-    setWoEditPriority(row.priority || "Medium");
-    setWoEditArrival(row.preferredArrival && row.preferredArrival !== "Anytime" ? row.preferredArrival : "");
-    setWoEditDetails(row.description);
-  }
-
-  function saveWorkOrderRowEdit() {
-    if (!editingWorkOrderRow) return;
-    if (!woEditTitle.trim()) {
-      showToast("Add a title first.");
-      return;
-    }
-    updateManagerWorkOrder(editingWorkOrderRow.id, (r) => ({
-      ...r,
-      title: woEditTitle.trim(),
-      priority: woEditPriority,
-      preferredArrival: woEditArrival.trim() || "Anytime",
-      description: woEditDetails.trim() || r.description,
-    }));
-    setEditingWorkOrderRow(null);
-    setWorkOrderTick((n) => n + 1);
-    showToast("Work order updated.");
-  }
-
-  function cancelResidentWorkOrder(id: string) {
-    if (!window.confirm("Cancel this work order? This cannot be undone.")) return;
-    deleteManagerWorkOrderRow(id);
-    setWorkOrderTick((n) => n + 1);
-    setSvcExpandedId(null);
-    showToast("Work order removed.");
   }
 
   function markResidentInboxThreadRead(id: string) {
@@ -1301,6 +1244,35 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     }
   }
 
+  const setApplicationBucket = async (
+    id: string,
+    nextBucket: ManagerApplicationBucket,
+    opts?: { skipWelcomeEmail?: boolean },
+  ) => {
+    const result = await transitionApplicationBucket(id, nextBucket, {
+      userId: userId ?? null,
+      skipWelcomeEmail: opts?.skipWelcomeEmail,
+    });
+    if (!result) return;
+    setHcTick((n) => n + 1);
+    setLeaseTick((n) => n + 1);
+    const msg =
+      nextBucket === "approved"
+        ? opts?.skipWelcomeEmail
+          ? "Application approved (no setup email sent)."
+          : result.welcomeSent
+            ? "Application approved. A welcome email with portal setup was sent to the applicant."
+            : "Application approved."
+        : nextBucket === "rejected"
+          ? "Application rejected."
+          : "Moved to pending.";
+    showToast(msg);
+  };
+
+  const handleScreeningUpdated = useCallback(() => {
+    void syncManagerApplicationsFromServer({ force: true, managerUserId: userId }).then(() => setHcTick((n) => n + 1));
+  }, [userId]);
+
   function saveManualResident() {
     if (!arName.trim()) { showToast("Enter the resident's name."); return; }
     if (!arEmail.trim()) { showToast("Enter the resident's email."); return; }
@@ -1485,7 +1457,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setPmZelleContact(sub?.zelleContact ?? "");
     setPmVenmoEnabled(Boolean(sub?.venmoPaymentsEnabled));
     setPmVenmoContact(sub?.venmoContact ?? "");
-    setPmAxisPaymentsEnabled(sub?.axisPaymentsEnabled !== false);
+    const accepted = acceptedPaymentMethodsForListing(sub);
+    setPmAxisPaymentsEnabled(sub?.axisPaymentsEnabled !== false && accepted.includes("ach"));
+    setPmCardEnabled(sub?.axisPaymentsEnabled !== false && accepted.includes("card"));
     setPmConnectReady(null);
     setAddPaymentMethodOpen(true);
     if (isDemoModeActive()) {
@@ -1519,6 +1493,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       showToast("Enter a Venmo username, phone, or email, or turn Venmo off.");
       return;
     }
+    if (!pmZelleEnabled && !pmVenmoEnabled && !pmAxisPaymentsEnabled && !pmCardEnabled) {
+      showToast("Enable at least one payment method.");
+      return;
+    }
     // Scoped to this manager's own properties only — readExtraListingsForUser(userId) can never
     // resolve a listing owned by another manager, and the server re-checks ownership on write.
     const listing = readExtraListingsForUser(userId).find((p) => p.id === pmPropertyId);
@@ -1527,14 +1505,22 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       return;
     }
     setPmSaving(true);
+    const acceptedPaymentMethods = [
+      ...(pmZelleEnabled && zelleContact ? (["zelle"] as const) : []),
+      ...(pmVenmoEnabled && venmoContact ? (["venmo"] as const) : []),
+      ...(pmAxisPaymentsEnabled ? (["ach"] as const) : []),
+      ...(pmCardEnabled ? (["card"] as const) : []),
+    ];
+    const stripeEnabled = pmAxisPaymentsEnabled || pmCardEnabled;
     const nextSubmission = {
       ...normalizeManagerListingSubmissionV1(listing.listingSubmission),
       zellePaymentsEnabled: pmZelleEnabled,
       zelleContact,
       venmoPaymentsEnabled: pmVenmoEnabled,
       venmoContact,
-      axisPaymentsEnabled: pmAxisPaymentsEnabled,
-      applicationFeeStripeEnabled: pmAxisPaymentsEnabled ? true : undefined,
+      axisPaymentsEnabled: stripeEnabled,
+      applicationFeeStripeEnabled: stripeEnabled ? true : undefined,
+      acceptedPaymentMethods: [...acceptedPaymentMethods],
     };
     const ok = await updateExtraListingFromSubmissionOnServer(pmPropertyId, userId, nextSubmission);
     setPmSaving(false);
@@ -1545,6 +1531,38 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setPropertyTick((n) => n + 1);
     showToast("Payment methods saved.");
     setAddPaymentMethodOpen(false);
+  }
+
+  function goToPayoutSetup() {
+    if (pmPayoutSetupBusy) return;
+    setPmPayoutSetupBusy(true);
+    void openStripeConnectOnboarding({ showToast }).then((opened) => {
+      setPmPayoutSetupBusy(false);
+      if (!opened) return;
+      const refresh = () => {
+        if (isDemoModeActive()) {
+          setPmConnectReady(true);
+          return;
+        }
+        void fetch("/api/stripe/connect/status", { credentials: "include", cache: "no-store" })
+          .then(async (res) => {
+            if (!res.ok) {
+              setPmConnectReady(false);
+              return;
+            }
+            const body = (await res.json()) as { paymentReady?: boolean; payoutsEnabled?: boolean; transfersEnabled?: boolean };
+            setPmConnectReady(Boolean(body.paymentReady ?? (body.payoutsEnabled && body.transfersEnabled)));
+          })
+          .catch(() => setPmConnectReady(false));
+      };
+      window.addEventListener("message", function onMsg(e: MessageEvent) {
+        if (e.origin !== window.location.origin) return;
+        if (e.data?.type !== "axis-stripe-connect") return;
+        refresh();
+        window.removeEventListener("message", onMsg);
+      });
+      window.addEventListener("axis-stripe-connect-refresh", refresh, { once: true });
+    });
   }
 
   async function deleteSelectedResident() {
@@ -1591,8 +1609,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const residentLeases = readLeasePipeline(userId).filter(
       (row) => row.residentEmail.trim().toLowerCase() === residentEmail,
     );
-    for (const leaseRow of residentLeases) {
-      deleteLeasePipelineRow(leaseRow.id, userId);
+    if (residentLeases.length > 0) {
+      deleteLeasePipelineRowsForResident(selectedResident.email, selectedResident.id, userId);
     }
 
     const residentWorkOrders = readManagerWorkOrderRows().filter(
@@ -1728,7 +1746,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               title="Application"
                               summary={
                                 selectedApplicationRow
-                                  ? `Application — Approved · ${selected.name}`
+                                  ? `Application — ${stageLabelForApplicationBucket(selectedApplicationRow.bucket)} · ${selected.name}`
                                   : "No application on file for this resident."
                               }
                               expanded={expandedResidentSection === "application"}
@@ -1737,19 +1755,62 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               }
                             >
                               {selectedApplicationRow ? (
-                                <>
-                                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                                <div className="space-y-8">
+                                  <PortalTableDetailActions placement="top">
+                                    {selectedApplicationRow.bucket === "pending" ? (
+                                      <>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_DETAIL_BTN_PRIMARY}
+                                          onClick={() => setApprovePreviewRow(selectedApplicationRow)}
+                                        >
+                                          Approve
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_DETAIL_BTN}
+                                          data-attr="open-run-screening"
+                                          onClick={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
+                                        >
+                                          Run screening
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_DETAIL_BTN}
+                                          onClick={() => void setApplicationBucket(selectedApplicationRow.id, "rejected")}
+                                        >
+                                          Reject
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className={PORTAL_DETAIL_BTN}
+                                        onClick={() => void setApplicationBucket(selectedApplicationRow.id, "pending")}
+                                      >
+                                        Move to pending
+                                      </Button>
+                                    )}
                                     <Button
                                       type="button"
                                       variant="outline"
-                                      className="rounded-full px-3 py-1 text-xs"
+                                      className={PORTAL_DETAIL_BTN}
                                       onClick={() => downloadApplicationPdf(selectedApplicationRow)}
                                     >
                                       Download PDF
                                     </Button>
-                                  </div>
+                                  </PortalTableDetailActions>
                                   <ApplicationDocumentPreview row={selectedApplicationRow} />
-                                </>
+                                  <ApplicationScreeningPanel
+                                    row={selectedApplicationRow}
+                                    onUpdated={handleScreeningUpdated}
+                                    onOpenScreeningModal={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
+                                  />
+                                </div>
                               ) : (
                                 <p className="text-sm text-muted">No application on file for this resident.</p>
                               )}
@@ -1820,6 +1881,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         Sign as manager
                                       </Button>
                                     ) : null}
+                                    {residentLease.generatedHtml || residentLease.managerUploadedPdf?.dataUrl ? (
                                     <Button
                                       type="button"
                                       variant="outline"
@@ -1829,15 +1891,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           downloadLeaseFromRow(residentLease);
                                         } else if (residentLease.generatedHtml) {
                                           printLeaseAsPdf(residentLease);
-                                        } else {
-                                          showToast("Generate or upload a lease first.");
-                                          return;
                                         }
                                         showToast("Lease download started.");
                                       }}
                                     >
                                       Download lease
                                     </Button>
+                                    ) : null}
                                     {residentLease.status === "Manager Review" || residentLease.status === "Draft" ? (
                                       <Button
                                         type="button"
@@ -1883,12 +1943,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       variant="outline"
                                       className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
                                       onClick={() => {
-                                        if (!window.confirm(`Delete the lease for ${selected.name}? This cannot be undone.`)) return;
+                                        if (!window.confirm(`Delete the lease document for ${selected.name}? Generate or upload can recreate it.`)) return;
                                         if (deleteLeasePipelineRow(residentLease.id, userId)) {
                                           setLeaseTick((n) => n + 1);
-                                          showToast("Lease deleted.");
+                                          showToast("Lease document deleted.");
                                         } else {
-                                          showToast("Could not delete lease.");
+                                          showToast("Could not delete lease document.");
                                         }
                                       }}
                                     >
@@ -1899,11 +1959,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               </div>
                               {residentLease ? (
                                 <div className="mt-4">
-                                  <div className="rounded-2xl border border-border bg-accent/30 p-3">
-                                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Lease document</p>
-                                  </div>
                                   <LeaseDocumentPreview
-                                    className="mt-3"
                                     row={residentLease}
                                     emptyHint="No lease document yet. Generate or upload one from Manager Review first."
                                   />
@@ -1954,7 +2010,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 setExpandedResidentSection((cur) => (cur === "payments" ? null : "payments"))
                               }
                               headerAction={
-                                <div className="flex shrink-0 flex-col items-stretch gap-2">
+                                <div className="flex shrink-0 flex-row items-center gap-2">
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -1962,7 +2018,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     onClick={openPaymentMethodEditor}
                                     data-attr="resident-payment-method-open"
                                   >
-                                    Add payment method
+                                    Payment method
                                   </Button>
                                   <Button
                                     type="button"
@@ -2061,23 +2117,100 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                     </div>
                                                     <PortalTableDetailActions>
                                                       {c.status !== "paid" ? (
-                                                        <>
-                                                          <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            className={PORTAL_DETAIL_BTN_PRIMARY}
-                                                            onClick={() => {
-                                                              if (markHouseholdChargePaid(c.id, userId)) {
-                                                                showToast("Marked as paid.");
-                                                                setChargeExpandedId(null);
-                                                              } else {
-                                                                showToast("Could not update this charge.");
-                                                              }
-                                                            }}
-                                                          >
-                                                            Mark as paid
-                                                          </Button>
-                                                        </>
+                                                        editingChargeId === c.id ? (
+                                                          <div className="flex flex-wrap items-end gap-2">
+                                                            <div className="min-w-[12rem] flex-1">
+                                                              <p className="mb-1 text-[11px] font-medium text-muted">Charge title</p>
+                                                              <Input
+                                                                value={editChargeTitleDraft}
+                                                                onChange={(e) => setEditChargeTitleDraft(e.target.value)}
+                                                                className="h-8 rounded-lg text-sm"
+                                                              />
+                                                            </div>
+                                                            <div className="w-28">
+                                                              <p className="mb-1 text-[11px] font-medium text-muted">Amount</p>
+                                                              <div className="flex items-center gap-1">
+                                                                <span className="text-sm text-muted">$</span>
+                                                                <Input
+                                                                  value={editChargeAmountDraft}
+                                                                  onChange={(e) => setEditChargeAmountDraft(e.target.value)}
+                                                                  inputMode="decimal"
+                                                                  className="h-8 rounded-lg px-2 text-sm"
+                                                                />
+                                                              </div>
+                                                            </div>
+                                                            <Button
+                                                              type="button"
+                                                              variant="outline"
+                                                              className={PORTAL_DETAIL_BTN_PRIMARY}
+                                                              onClick={() => {
+                                                                const amt = parseFloat(editChargeAmountDraft.replace(/[^\d.]/g, ""));
+                                                                if (!editChargeTitleDraft.trim()) {
+                                                                  showToast("Enter a charge title.");
+                                                                  return;
+                                                                }
+                                                                if (!Number.isFinite(amt) || amt < 0) {
+                                                                  showToast("Enter a valid amount.");
+                                                                  return;
+                                                                }
+                                                                if (
+                                                                  updateHouseholdChargeAmount(
+                                                                    c.id,
+                                                                    amt,
+                                                                    userId,
+                                                                    editChargeTitleDraft,
+                                                                  )
+                                                                ) {
+                                                                  showToast("Payment updated.");
+                                                                  setEditingChargeId(null);
+                                                                } else {
+                                                                  showToast("Could not update this charge.");
+                                                                }
+                                                              }}
+                                                            >
+                                                              Save
+                                                            </Button>
+                                                            <Button
+                                                              type="button"
+                                                              variant="outline"
+                                                              className={PORTAL_DETAIL_BTN}
+                                                              onClick={() => setEditingChargeId(null)}
+                                                            >
+                                                              Cancel
+                                                            </Button>
+                                                          </div>
+                                                        ) : (
+                                                          <>
+                                                            <Button
+                                                              type="button"
+                                                              variant="outline"
+                                                              className={PORTAL_DETAIL_BTN_PRIMARY}
+                                                              onClick={() => {
+                                                                if (markHouseholdChargePaid(c.id, userId)) {
+                                                                  showToast("Marked as paid.");
+                                                                  setChargeExpandedId(null);
+                                                                } else {
+                                                                  showToast("Could not update this charge.");
+                                                                }
+                                                              }}
+                                                            >
+                                                              Mark as paid
+                                                            </Button>
+                                                            <Button
+                                                              type="button"
+                                                              variant="outline"
+                                                              className={PORTAL_DETAIL_BTN}
+                                                              data-attr="resident-charge-edit"
+                                                              onClick={() => {
+                                                                setEditingChargeId(c.id);
+                                                                setEditChargeTitleDraft(c.title);
+                                                                setEditChargeAmountDraft(c.balanceLabel.replace(/[^\d.]/g, ""));
+                                                              }}
+                                                            >
+                                                              Edit payment
+                                                            </Button>
+                                                          </>
+                                                        )
                                                       ) : (
                                                         <Button
                                                           type="button"
@@ -2120,6 +2253,26 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               onToggle={() =>
                                 setExpandedResidentSection((cur) => (cur === "services" ? null : "services"))
                               }
+                              headerAction={
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  className={PORTAL_HEADER_ACTION_BTN}
+                                  data-attr={svcSubTab === "requests" ? "resident-add-service-request" : "resident-add-work-order"}
+                                  disabled={!canAddResidentServiceItem}
+                                  title={
+                                    canAddResidentServiceItem
+                                      ? undefined
+                                      : "Link this resident to a property before adding services."
+                                  }
+                                  onClick={() => {
+                                    if (svcSubTab === "requests") setAddResidentRequestOpen(true);
+                                    else setAddResidentWorkOrderOpen(true);
+                                  }}
+                                >
+                                  Add
+                                </Button>
+                              }
                             >
                               <div className="mb-4">
                                 <PillTabs
@@ -2138,13 +2291,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               {svcSubTab === "requests" ? (
                                 <div>
                                   <div className="mb-3">
-                                    <PillTabs
-                                      items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
+                                    <ManagerPortalStatusPills
+                                      tabs={(
+                                        ["pending", "approved"] as const
+                                      ).map((id) => ({
                                         id,
-                                        label: pillLabelWithCount(label, residentServiceRequestsCounts[id]),
+                                        label: id === "pending" ? "Pending" : "Approved",
+                                        count: residentServiceRequestsCounts[id],
                                       }))}
-                                      activeId={svcRequestsFilter}
-                                      onChange={(id) => setSvcRequestsFilter(id as RequestStatusBucket)}
+                                      activeId={svcReqBucket}
+                                      onChange={(id) => setSvcReqBucket(id as ManagerServiceRequestBucket)}
                                     />
                                   </div>
                                   {residentServiceRequests.length === 0 ? (
@@ -2152,15 +2308,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   ) : residentFilteredServiceRequests.length === 0 ? (
                                     <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
                                   ) : (
-                                    <div className={PORTAL_DATA_TABLE_WRAP}>
-                                        <table className="w-full border-collapse text-left text-sm">
+                                    <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
+                                      <div className={PORTAL_DATA_TABLE_SCROLL}>
+                                        <table className="w-full table-fixed border-collapse text-left text-sm">
                                           <thead>
                                             <tr className={PORTAL_TABLE_HEAD_ROW}>
                                               <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>Type</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Item</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                                               <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>Charges</th>
-                                              <th className={`${MANAGER_TABLE_TH} hidden text-left md:table-cell`}>Return by</th>
                                             </tr>
                                           </thead>
                                           <tbody>
@@ -2183,17 +2339,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                     <td className={PORTAL_TABLE_TD}>
                                                       <ServiceStatusBadge status={req.status} />
                                                     </td>
-                                                    <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{requestChargesSummary(req)}</td>
-                                                    <td className={`${PORTAL_TABLE_TD} hidden md:table-cell`}>{req.returnByDate ? serviceRequestDateLabel(req.returnByDate) : "—"}</td>
+                                                    <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>
+                                                      {managerServiceRequestPricingSummary(req)}
+                                                    </td>
                                                   </tr>
                                                   {svcExpandedId === rowId ? (
                                                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                      <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                                                        <ServiceRequestCard
+                                                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                                                        <ManagerServiceRequestDetail
                                                           req={req}
-                                                          onReturnPhotoUploaded={() => setSrTick((n) => n + 1)}
-                                                          onDelete={() => deleteResidentServiceRequest(req.id)}
-                                                          onEdit={() => openServiceRequestEdit(req)}
+                                                          propertyLabel={selected.propertyLabel || "—"}
+                                                          onUpdated={() => setSrTick((n) => n + 1)}
+                                                          onApproved={() => setSvcReqBucket("approved")}
+                                                          onCollapsed={() => setSvcExpandedId(null)}
                                                         />
                                                       </td>
                                                     </tr>
@@ -2203,70 +2361,30 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                             })}
                                           </tbody>
                                         </table>
+                                      </div>
                                     </div>
                                   )}
                                 </div>
                               ) : (
                                 <div>
                                   <div className="mb-3 w-fit max-w-full">
-                                    <PillTabs
-                                      items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
+                                    <ManagerPortalStatusPills
+                                      tabs={(
+                                        ["open", "scheduled", "completed"] as const
+                                      ).map((id) => ({
                                         id,
-                                        label: pillLabelWithCount(label, residentWorkOrderFilterCounts[id]),
+                                        label: id === "open" ? "Pending" : id === "scheduled" ? "Scheduled" : "Completed",
+                                        count: residentWorkOrderCounts[id],
                                       }))}
-                                      activeId={svcWorkOrderFilter}
-                                      onChange={(id) => setSvcWorkOrderFilter(id as WorkOrderFilterBucket)}
+                                      activeId={svcWoBucket}
+                                      onChange={(id) => setSvcWoBucket(id as ManagerWorkOrderBucket)}
                                     />
                                   </div>
-                                  {residentWorkOrdersInBucket.length === 0 ? (
-                                    <PortalDataTableEmpty
-                                      icon="work-order"
-                                      message={residentWorkOrders.length === 0 ? "No work orders yet." : "No work orders in this status yet."}
-                                    />
-                                  ) : (
-                                    <div className={PORTAL_DATA_TABLE_WRAP}>
-                                        <table className="w-full border-collapse text-left text-sm">
-                                          <thead>
-                                            <tr className={PORTAL_TABLE_HEAD_ROW}>
-                                              <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>ID</th>
-                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                                              <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {residentWorkOrdersInBucket.map((row) => (
-                                              <Fragment key={row.id}>
-                                                <tr
-                                                  className={PORTAL_TABLE_TR_EXPANDABLE}
-                                                  onClick={createPortalRowExpandClick(() =>
-                                                    setSvcExpandedId((c) => (c === row.id ? null : row.id)),
-                                                  )}
-                                                  aria-expanded={svcExpandedId === row.id}
-                                                >
-                                                  <td className={`${PORTAL_TABLE_TD} hidden font-mono text-xs text-muted sm:table-cell`}>{row.id}</td>
-                                                  <td className={`${PORTAL_TABLE_TD} min-w-0 font-medium text-foreground`}>
-                                                    <span className="block font-mono text-[10px] text-muted sm:hidden">{row.id}</span>
-                                                    <span className="break-words">{row.title}</span>
-                                                  </td>
-                                                  <td className={PORTAL_TABLE_TD}>{row.status}</td>
-                                                </tr>
-                                                {svcExpandedId === row.id ? (
-                                                  <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                    <td colSpan={3} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
-                                                      <WorkOrderDetail
-                                                        row={row}
-                                                        onEdit={() => openWorkOrderRowEdit(row)}
-                                                        onCancel={() => cancelResidentWorkOrder(row.id)}
-                                                      />
-                                                    </td>
-                                                  </tr>
-                                                ) : null}
-                                              </Fragment>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                    </div>
-                                  )}
+                                  <ManagerWorkOrdersPanel
+                                    allRows={residentWorkOrders}
+                                    bucket={svcWoBucket}
+                                    onAfterSchedule={() => setSvcWoBucket("scheduled")}
+                                  />
                                 </div>
                               )}
                             </ResidentDetailSection>
@@ -2516,6 +2634,32 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         }}
       />
 
+      <ManagerCreateServiceRequestModal
+        open={addResidentRequestOpen}
+        onClose={() => setAddResidentRequestOpen(false)}
+        managerUserId={userId ?? null}
+        defaultResident={selectedServiceResident}
+        onSubmitted={() => {
+          setAddResidentRequestOpen(false);
+          setSrTick((n) => n + 1);
+          setHcTick((n) => n + 1);
+          setSvcReqBucket("pending");
+        }}
+      />
+
+      <ManagerCreateWorkOrderModal
+        open={addResidentWorkOrderOpen}
+        onClose={() => setAddResidentWorkOrderOpen(false)}
+        managerUserId={userId ?? null}
+        defaultResident={selectedServiceResident}
+        onSubmitted={(bucket) => {
+          setAddResidentWorkOrderOpen(false);
+          setWorkOrderTick((n) => n + 1);
+          setHcTick((n) => n + 1);
+          setSvcWoBucket(bucket);
+        }}
+      />
+
       <Modal open={addPaymentMethodOpen} title="Payment methods" onClose={() => setAddPaymentMethodOpen(false)}>
         <div className="space-y-4 text-sm">
           <p className="text-muted">
@@ -2543,12 +2687,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <span className="text-sm font-medium text-foreground">Zelle</span>
                 </label>
                 {pmZelleEnabled ? (
-                  <Input
-                    value={pmZelleContact}
-                    onChange={(e) => setPmZelleContact(sanitizePaymentContactInput(e.target.value))}
-                    placeholder="+1 555 010 8899 or name@email.com"
-                    data-attr="resident-payment-zelle-contact-input"
-                  />
+                  <div className="pl-7">
+                    <label className="text-xs font-semibold text-muted">Zelle phone or email</label>
+                    <Input
+                      className="mt-1"
+                      value={pmZelleContact}
+                      onChange={(e) => setPmZelleContact(sanitizePaymentContactInput(e.target.value))}
+                      placeholder="+1 555 010 8899 or name@email.com"
+                      data-attr="resident-payment-zelle-contact-input"
+                    />
+                  </div>
                 ) : null}
               </div>
               <div className="space-y-2 rounded-xl border border-border bg-card p-4">
@@ -2563,12 +2711,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <span className="text-sm font-medium text-foreground">Venmo</span>
                 </label>
                 {pmVenmoEnabled ? (
-                  <Input
-                    value={pmVenmoContact}
-                    onChange={(e) => setPmVenmoContact(sanitizePaymentContactInput(e.target.value))}
-                    placeholder="@username, +1 555 010 8899, or name@email.com"
-                    data-attr="resident-payment-venmo-contact-input"
-                  />
+                  <div className="pl-7">
+                    <label className="text-xs font-semibold text-muted">Venmo username, phone, or email</label>
+                    <Input
+                      className="mt-1"
+                      value={pmVenmoContact}
+                      onChange={(e) => setPmVenmoContact(sanitizePaymentContactInput(e.target.value))}
+                      placeholder="@username, +1 555 010 8899, or name@email.com"
+                      data-attr="resident-payment-venmo-contact-input"
+                    />
+                  </div>
                 ) : null}
               </div>
               <div className="space-y-2 rounded-xl border border-border bg-card p-4">
@@ -2585,16 +2737,54 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   </span>
                 </label>
                 {pmAxisPaymentsEnabled ? (
-                  <p className="text-xs leading-relaxed text-muted">
-                    Residents pay through Stripe Checkout with bank (ACH), card, or Link. Funds transfer to your
-                    connected payout account after checkout.
+                  <p className="pl-7 text-xs leading-relaxed text-muted">
+                    Residents pay through Stripe Checkout with bank (ACH) or Link. Funds transfer to your connected payout
+                    account after checkout.
                     {pmConnectReady === false ? (
                       <>
                         {" "}
-                        <Link href={`${portalBase}/payments/payouts`} className="font-medium text-primary underline">
-                          Complete payout setup
-                        </Link>{" "}
+                        <button
+                          type="button"
+                          className="font-medium text-primary underline disabled:opacity-60"
+                          onClick={goToPayoutSetup}
+                          disabled={pmPayoutSetupBusy}
+                          data-attr="resident-payment-payout-setup"
+                        >
+                          {pmPayoutSetupBusy ? "Opening Stripe…" : "Complete payout setup"}
+                        </button>{" "}
                         before residents can pay by bank.
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+                    checked={pmCardEnabled}
+                    onChange={(e) => setPmCardEnabled(e.target.checked)}
+                    data-attr="resident-payment-card-toggle"
+                  />
+                  <span className="text-sm font-medium text-foreground">Credit card with Stripe</span>
+                </label>
+                {pmCardEnabled ? (
+                  <p className="pl-7 text-xs leading-relaxed text-muted">
+                    Residents can pay by card through Stripe Checkout. Card processing fees apply per Stripe&apos;s rates.
+                    {pmConnectReady === false ? (
+                      <>
+                        {" "}
+                        <button
+                          type="button"
+                          className="font-medium text-primary underline disabled:opacity-60"
+                          onClick={goToPayoutSetup}
+                          disabled={pmPayoutSetupBusy}
+                          data-attr="resident-payment-payout-setup-card"
+                        >
+                          {pmPayoutSetupBusy ? "Opening Stripe…" : "Complete payout setup"}
+                        </button>{" "}
+                        first.
                       </>
                     ) : null}
                   </p>
@@ -2888,6 +3078,53 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         </div>
       </Modal>
 
+      <CheckrScreeningModal
+        key={checkrScreeningRowId ?? "none"}
+        row={
+          checkrScreeningRowId
+            ? readManagerApplicationRows().find((r) => r.id === checkrScreeningRowId) ?? null
+            : null
+        }
+        open={checkrScreeningRowId !== null}
+        onClose={() => setCheckrScreeningRowId(null)}
+        onUpdated={handleScreeningUpdated}
+      />
+
+      <PortalNotificationPreviewModal
+        open={approvePreviewRow !== null}
+        title="Approve application — account setup email"
+        onClose={() => setApprovePreviewRow(null)}
+        recipient={approvePreviewRow?.email ?? ""}
+        subject={RESIDENT_WELCOME_EMAIL_SUBJECT}
+        body={
+          approvePreviewRow
+            ? buildResidentWelcomeEmailBody({
+                residentName: approvePreviewRow.name || undefined,
+                axisId: approvePreviewRow.id,
+                signupUrl: residentAccountCreationUrl("", approvePreviewRow.id),
+              })
+            : ""
+        }
+        intro={
+          approvePreviewRow
+            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their Axis resident account setup email.`
+            : undefined
+        }
+        confirmLabel="Approve & send setup email"
+        confirmLabelWithoutMessage="Approve only"
+        confirmBusy={approvePreviewRow !== null && approveBusyId === approvePreviewRow.id}
+        confirmBusyLabel="Approving…"
+        onConfirm={(skipMessage) => {
+          if (!approvePreviewRow) return;
+          const row = approvePreviewRow;
+          setApprovePreviewRow(null);
+          setApproveBusyId(row.id);
+          void setApplicationBucket(row.id, "approved", { skipWelcomeEmail: skipMessage }).finally(() =>
+            setApproveBusyId(null),
+          );
+        }}
+      />
+
       <PortalNotificationPreviewModal
         open={welcomePreviewFor !== null}
         title="Email account setup — preview"
@@ -3005,102 +3242,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         </div>
       </Modal>
       </ManagerPortalPageShell>
-
-      <Modal
-        open={editingServiceRequest !== null}
-        title="Edit request"
-        onClose={() => setEditingServiceRequest(null)}
-        panelClassName="max-w-lg"
-      >
-        {editingServiceRequest ? (
-          <>
-            <p className="text-xs text-muted">
-              Update the details of <span className="font-semibold text-foreground">{editingServiceRequest.offerName}</span>.
-              Pricing is set by the listing and can&apos;t be changed here.
-            </p>
-            <div className="mt-4 grid gap-3">
-              {hasDeposit(editingServiceRequest.deposit) ? (
-                <div>
-                  <p className="mb-1 text-[11px] font-medium text-muted">
-                    Return by date <span className="text-rose-500">*</span>
-                  </p>
-                  <Input
-                    type="date"
-                    value={srEditReturnBy}
-                    onChange={(e) => setSrEditReturnBy(e.target.value)}
-                    className="bg-card"
-                  />
-                </div>
-              ) : null}
-              <div>
-                <p className="mb-1 text-[11px] font-medium text-muted">Notes</p>
-                <Textarea
-                  value={srEditNotes}
-                  onChange={(e) => setSrEditNotes(e.target.value)}
-                  placeholder="Preferred timing, special instructions…"
-                  rows={3}
-                  className="bg-card"
-                />
-              </div>
-            </div>
-          </>
-        ) : null}
-        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditingServiceRequest(null)}>
-            Cancel
-          </Button>
-          <Button type="button" className="rounded-full" onClick={saveServiceRequestEdit}>
-            Save changes
-          </Button>
-        </div>
-      </Modal>
-
-      <Modal
-        open={editingWorkOrderRow !== null}
-        title="Edit work order"
-        onClose={() => setEditingWorkOrderRow(null)}
-        panelClassName="max-w-lg"
-      >
-        <p className="text-xs text-muted">Update this maintenance request.</p>
-        <div className="mt-4 grid gap-3">
-          <div>
-            <p className="mb-1 text-[11px] font-medium text-muted">Title</p>
-            <Input value={woEditTitle} onChange={(e) => setWoEditTitle(e.target.value)} placeholder="Short summary of the issue" className="bg-card" />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted">Priority</p>
-              <Select value={woEditPriority} onChange={(e) => setWoEditPriority(e.target.value)} className="bg-card">
-                <option>Low</option>
-                <option>Medium</option>
-                <option>High</option>
-              </Select>
-            </div>
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted">Preferred arrival time</p>
-              <Input value={woEditArrival} onChange={(e) => setWoEditArrival(e.target.value)} placeholder='e.g. Weekdays after 5pm — or "anytime"' className="bg-card" />
-            </div>
-          </div>
-          <div>
-            <p className="mb-1 text-[11px] font-medium text-muted">Details</p>
-            <Textarea
-              value={woEditDetails}
-              onChange={(e) => setWoEditDetails(e.target.value)}
-              placeholder="Describe the issue"
-              rows={4}
-              className="bg-card"
-            />
-          </div>
-        </div>
-        <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditingWorkOrderRow(null)}>
-            Cancel
-          </Button>
-          <Button type="button" className="rounded-full" onClick={saveWorkOrderRowEdit}>
-            Save changes
-          </Button>
-        </div>
-      </Modal>
     </>
   );
 }

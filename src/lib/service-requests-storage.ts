@@ -4,6 +4,8 @@ import {
   deleteHouseholdCharge,
   markHouseholdChargePaid,
   parseMoneyAmount,
+  readChargesForManagerResident,
+  updateHouseholdChargeAmount,
 } from "@/lib/household-charges";
 import { getPropertyById } from "@/lib/rental-application/data";
 
@@ -73,6 +75,53 @@ function resolvePropertyLabel(propertyId: string): string {
   if (!resolved) return "Property";
   const street = resolved.address.split(",")[0]?.trim();
   return street || resolved.buildingName || resolved.title || "Property";
+}
+
+function ensureServiceRequestPendingCharge(row: ServiceRequest): string | undefined {
+  const serviceAmount = toPositiveDollarAmount(row.price);
+  if (!serviceAmount) return row.serviceChargeId;
+
+  const propertyLabel = resolvePropertyLabel(row.propertyId);
+  const title = `${row.offerName} service fee`;
+
+  if (row.serviceChargeId) {
+    updateHouseholdChargeAmount(row.serviceChargeId, serviceAmount, row.managerUserId ?? null, title);
+    return row.serviceChargeId;
+  }
+
+  const created = createManagerCharge({
+    residentEmail: row.residentEmail,
+    residentName: row.residentName,
+    propertyId: row.propertyId,
+    propertyLabel,
+    managerUserId: row.managerUserId,
+    title,
+    amount: serviceAmount,
+    blocksLeaseUntilPaid: false,
+    initialStatus: "pending",
+  });
+  return created?.id;
+}
+
+/** True when the linked household charge is paid (or the request row is already marked paid). */
+export function isServiceRequestFeePaid(req: ServiceRequest): boolean {
+  if (req.servicePaid) return true;
+  if (!req.serviceChargeId) return false;
+  const charge = readChargesForManagerResident(req.residentEmail, req.managerUserId ?? null).find(
+    (c) => c.id === req.serviceChargeId,
+  );
+  return charge?.status === "paid";
+}
+
+/** After a household charge is marked paid, mirror that on the linked service request. */
+export function syncServiceRequestPaidFromCharge(chargeId: string): boolean {
+  const all = readAll();
+  const idx = all.findIndex((r) => r.serviceChargeId === chargeId && !r.servicePaid);
+  if (idx === -1) return false;
+  all[idx] = { ...all[idx]!, servicePaid: true, servicePaidAt: new Date().toISOString() };
+  writeAll(all);
+  mirrorServiceRequestToServer(all[idx]!);
+  return true;
 }
 
 function readAll(): ServiceRequest[] {
@@ -160,6 +209,8 @@ export function createServiceRequest(
     servicePaid: false,
     depositPaid: false,
   };
+  const serviceChargeId = ensureServiceRequestPendingCharge(newReq);
+  if (serviceChargeId) newReq.serviceChargeId = serviceChargeId;
   writeAll([newReq, ...readAll()]);
   mirrorServiceRequestToServer(newReq);
   return newReq;
@@ -183,7 +234,12 @@ export function updateServiceRequest(id: string, updates: Partial<ServiceRequest
   const all = readAll();
   const idx = all.findIndex((r) => r.id === id);
   if (idx === -1) return;
-  all[idx] = { ...all[idx]!, ...updates };
+  let next = { ...all[idx]!, ...updates };
+  if (next.status === "pending" && (updates.price !== undefined || updates.offerName !== undefined)) {
+    const serviceChargeId = ensureServiceRequestPendingCharge(next);
+    if (serviceChargeId) next = { ...next, serviceChargeId };
+  }
+  all[idx] = next;
   writeAll(all);
   mirrorServiceRequestToServer(all[idx]!);
 }
@@ -193,44 +249,7 @@ export function approveServiceRequest(id: string, managerNote?: string): void {
   const idx = all.findIndex((r) => r.id === id);
   if (idx === -1) return;
   const row = all[idx]!;
-  const propertyLabel = resolvePropertyLabel(row.propertyId);
-
-  let serviceChargeId = row.serviceChargeId;
-  let depositChargeId = row.depositChargeId;
-
-  if (!serviceChargeId) {
-    const serviceAmount = toPositiveDollarAmount(row.price);
-    if (serviceAmount) {
-      const createdServiceCharge = createManagerCharge({
-        residentEmail: row.residentEmail,
-        residentName: row.residentName,
-        propertyId: row.propertyId,
-        propertyLabel,
-        managerUserId: row.managerUserId,
-        title: `${row.offerName} service fee`,
-        amount: serviceAmount,
-        blocksLeaseUntilPaid: false,
-      });
-      if (createdServiceCharge) serviceChargeId = createdServiceCharge.id;
-    }
-  }
-
-  if (!depositChargeId) {
-    const depositAmount = toPositiveDollarAmount(row.deposit);
-    if (depositAmount) {
-      const createdDepositCharge = createManagerCharge({
-        residentEmail: row.residentEmail,
-        residentName: row.residentName,
-        propertyId: row.propertyId,
-        propertyLabel,
-        managerUserId: row.managerUserId,
-        title: `${row.offerName} refundable deposit`,
-        amount: depositAmount,
-        blocksLeaseUntilPaid: false,
-      });
-      if (createdDepositCharge) depositChargeId = createdDepositCharge.id;
-    }
-  }
+  const serviceChargeId = ensureServiceRequestPendingCharge(row) ?? row.serviceChargeId;
 
   all[idx] = {
     ...row,
@@ -238,7 +257,6 @@ export function approveServiceRequest(id: string, managerNote?: string): void {
     approvedAt: new Date().toISOString(),
     managerNote: managerNote?.trim() || row.managerNote,
     serviceChargeId,
-    depositChargeId,
   };
   writeAll(all);
   mirrorServiceRequestToServer(all[idx]!);
@@ -248,11 +266,15 @@ export function denyServiceRequest(id: string, managerNote?: string): void {
   const all = readAll();
   const idx = all.findIndex((r) => r.id === id);
   if (idx === -1) return;
+  const row = all[idx]!;
+  if (row.serviceChargeId && !row.servicePaid) {
+    deleteHouseholdCharge(row.serviceChargeId, row.managerUserId ?? null);
+  }
   all[idx] = {
-    ...all[idx]!,
+    ...row,
     status: "denied",
     deniedAt: new Date().toISOString(),
-    managerNote: managerNote?.trim() || all[idx]!.managerNote,
+    managerNote: managerNote?.trim() || row.managerNote,
   };
   writeAll(all);
   mirrorServiceRequestToServer(all[idx]!);
@@ -286,9 +308,6 @@ export function deleteServiceRequest(id: string): void {
   if (target?.serviceChargeId && !target.servicePaid) {
     deleteHouseholdCharge(target.serviceChargeId, target.managerUserId ?? null);
   }
-  if (target?.depositChargeId && !target.depositPaid) {
-    deleteHouseholdCharge(target.depositChargeId, target.managerUserId ?? null);
-  }
   const next = all.filter((r) => r.id !== id);
   if (next.length === all.length) return;
   writeAll(next);
@@ -313,11 +332,17 @@ export function submitReturnPhoto(id: string, photoDataUrl: string): void {
   const all = readAll();
   const idx = all.findIndex((r) => r.id === id);
   if (idx === -1) return;
+  const row = all[idx]!;
+  if (row.serviceChargeId && !isServiceRequestFeePaid(row)) {
+    markHouseholdChargePaid(row.serviceChargeId, row.managerUserId ?? null);
+  }
   all[idx] = {
-    ...all[idx]!,
+    ...row,
     status: "returned",
     returnPhotoDataUrl: photoDataUrl,
     returnedAt: new Date().toISOString(),
+    servicePaid: true,
+    servicePaidAt: row.servicePaidAt ?? new Date().toISOString(),
   };
   writeAll(all);
   mirrorServiceRequestToServer(all[idx]!);

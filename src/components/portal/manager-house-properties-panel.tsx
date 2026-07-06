@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { getListingRichContent } from "@/data/listing-rich-content";
@@ -25,11 +26,11 @@ import {
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
-  adminKpiCounts,
   adminPropertyRentDisplayLabel,
   deleteManagerLiveListing,
   deleteUnlistedManagerProperty,
   listAdminRow,
+  managerPropertyRowsForStage,
   publicListingHrefForPropertyRow,
   readAdminPropertyRows,
   resolveAdminPropertyRowPreview,
@@ -151,6 +152,8 @@ function ManagerPropertyInlineDetails({
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const rich = useMemo(() => (mock ? getListingRichContent(mock) : null), [mock]);
+  const hasPreview = Boolean(mock && rich);
+  const [previewExpanded, setPreviewExpanded] = useState(true);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
@@ -420,30 +423,40 @@ function ManagerPropertyInlineDetails({
   return (
     <div className="space-y-4">
       {row.tagline.trim() ? <p className="text-sm text-muted">{row.tagline}</p> : null}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Preview</p>
-        {publicHref ? (
-          <Link
-            href={publicHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-attr="listing-open-public-page"
-            className="text-xs font-semibold text-muted underline-offset-2 hover:underline"
+      <PortalCollapsibleSection
+        title="Preview"
+        titleVariant="label"
+        expanded={previewExpanded}
+        onExpandedChange={setPreviewExpanded}
+        collapsible={hasPreview}
+        surfaceMuted={false}
+        toggleDataAttr="listing-preview-toggle"
+        headerActions={
+          publicHref ? (
+            <Link
+              href={publicHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-attr="listing-open-public-page"
+              className="text-xs font-semibold text-muted underline-offset-2 hover:underline"
+            >
+              Open public page
+            </Link>
+          ) : (
+            <span className="text-xs text-muted">Exact layout renters see once approved</span>
+          )
+        }
+        contentClassName="p-0"
+      >
+        {hasPreview ? (
+          <div
+            data-listing-preview-scroll
+            className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-b-2xl border-t border-border bg-background"
           >
-            Open public page
-          </Link>
-        ) : (
-          <span className="text-xs text-muted">Exact layout renters see once approved</span>
-        )}
-      </div>
-      {mock && rich ? (
-        <div
-          data-listing-preview-scroll
-          className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-background"
-        >
-          <ListingDetailSections property={mock} rich={rich} previewModal />
-        </div>
-      ) : null}
+            <ListingDetailSections property={mock!} rich={rich!} previewModal />
+          </div>
+        ) : null}
+      </PortalCollapsibleSection>
 
       <ManagerPropertyHouseDetailsPanel
         noteKey={noteKey}
@@ -518,7 +531,7 @@ export function ManagerHousePropertiesPanel({
     if (!isDemoModeActive()) {
       void syncManagerPortfolioFromServer(scopeUserId, { force: true }).then(() => {
         setTick((t) => t + 1);
-        void mirrorLocalPropertyPipelineToServer();
+        void mirrorLocalPropertyPipelineToServer(scopeUserId);
       });
     } else {
       setTick((t) => t + 1);
@@ -538,20 +551,19 @@ export function ManagerHousePropertiesPanel({
     };
   }, [scopeUserId]);
 
-  const kpiValues = useMemo(() => {
-    void tick;
-    return adminKpiCounts(scopeUserId);
-  }, [tick, scopeUserId]);
 
-  const stageCounts = useMemo(
-    () => ({
-      pending: kpiValues[0] + kpiValues[1],
-      listed: kpiValues[2],
-      unlisted: kpiValues[3],
-      rejected: kpiValues[4],
-    }),
-    [kpiValues],
-  );
+  const stageCounts = useMemo(() => {
+    void tick;
+    if (!scopeUserId) {
+      return { pending: 0, listed: 0, unlisted: 0, rejected: 0 };
+    }
+    return {
+      pending: managerPropertyRowsForStage([0, 1], scopeUserId).length,
+      listed: managerPropertyRowsForStage([2], scopeUserId).length,
+      unlisted: managerPropertyRowsForStage([3], scopeUserId).length,
+      rejected: managerPropertyRowsForStage([4], scopeUserId).length,
+    };
+  }, [tick, scopeUserId]);
 
   const rows = useMemo(() => {
     void tick;

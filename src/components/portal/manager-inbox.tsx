@@ -27,6 +27,10 @@ import {
   type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "./portal-inbox-ui";
+import {
+  PortalInboxSelectionToolbar,
+  useInboxRowSelection,
+} from "@/components/portal/portal-inbox-selection";
 import { ManagerInboxSchedulePanel } from "@/components/portal/manager-inbox-schedule-panel";
 import { useScheduledPaymentMessages } from "@/components/portal/payment-schedule-ui";
 import { MANAGER_APPLICATIONS_EVENT } from "@/lib/manager-applications-storage";
@@ -181,6 +185,9 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
     return [...filtered].sort((a, b) => threadTimestamp(b) - threadTimestamp(a));
   }, [local, tabId]);
+
+  const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
+  const threadSelection = useInboxRowSelection(threadRowIds);
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
@@ -414,6 +421,27 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
             ? "No unopened messages yet."
             : "No messages yet.";
 
+  const bulkMarkRead = () => {
+    for (const id of threadSelection.selectedIds) markRead(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkMoveToTrash = () => {
+    for (const id of threadSelection.selectedIds) moveToTrash(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkRestoreFromTrash = () => {
+    for (const id of threadSelection.selectedIds) restoreFromTrash(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkDeleteForever = () => {
+    if (!window.confirm(`Delete ${threadSelection.selectedIds.size} message(s) permanently?`)) return;
+    for (const id of threadSelection.selectedIds) deleteForever(id);
+    threadSelection.clearSelection();
+  };
+
   return (
     <ManagerPortalPageShell
       title="Inbox"
@@ -459,43 +487,79 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
       ) : rowsForTab.length === 0 ? (
         <PortalInboxEmptyState title={emptyCopy} />
       ) : (
-        <PortalInboxMessageTable
-          rows={toRows(rowsForTab, tabId)}
-          primaryPartyHeader={tabId === "sent" ? "To" : "From"}
-          onMarkRead={tabId === "unopened" ? markRead : undefined}
-          getDetailBody={(row) => bodyById[row.id]}
-          getThreadMessages={(row) => {
-            const thread = local.find((t) => t.id === row.id);
-            return thread ? inboxThreadMessages(thread) : [];
-          }}
-          onReply={tabId === "trash" ? undefined : handleReply}
-          expandedId={expandedId}
-          onToggleExpand={toggleExpand}
-          renderExtraActions={(row) => {
-            if (tabId === "trash") {
-              return (
-                <>
-                  <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs" onClick={() => restoreFromTrash(row.id)}>
-                    Restore
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
-                    onClick={() => deleteForever(row.id)}
-                  >
-                    Delete
-                  </Button>
-                </>
-              );
-            }
-            return (
-              <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs" onClick={() => moveToTrash(row.id)}>
+        <div className="space-y-3">
+          <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
+            {tabId === "unopened" ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
+                  Mark read
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
+                  Trash
+                </Button>
+              </>
+            ) : null}
+            {tabId === "opened" || tabId === "sent" ? (
+              <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
                 Trash
               </Button>
-            );
-          }}
-        />
+            ) : null}
+            {tabId === "trash" ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreFromTrash}>
+                  Restore
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={bulkDeleteForever}>
+                  Delete
+                </Button>
+              </>
+            ) : null}
+          </PortalInboxSelectionToolbar>
+          <PortalInboxMessageTable
+            rows={toRows(rowsForTab, tabId)}
+            primaryPartyHeader={tabId === "sent" ? "To" : "From"}
+            onMarkRead={tabId === "unopened" ? markRead : undefined}
+            getDetailBody={(row) => bodyById[row.id]}
+            getThreadMessages={(row) => {
+              const thread = local.find((t) => t.id === row.id);
+              return thread ? inboxThreadMessages(thread) : [];
+            }}
+            onReply={tabId === "trash" ? undefined : handleReply}
+            expandedId={expandedId}
+            onToggleExpand={toggleExpand}
+            selection={{
+              selectedIds: threadSelection.selectedIds,
+              onToggleSelected: threadSelection.toggleSelected,
+              onToggleSelectAll: threadSelection.toggleSelectAll,
+              allSelected: threadSelection.allSelected,
+              selectableCount: threadRowIds.length,
+            }}
+            renderExtraActions={(row) => {
+              if (tabId === "trash") {
+                return (
+                  <>
+                    <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs" onClick={() => restoreFromTrash(row.id)}>
+                      Restore
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full border-rose-200 px-3 py-1.5 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+                      onClick={() => deleteForever(row.id)}
+                    >
+                      Delete
+                    </Button>
+                  </>
+                );
+              }
+              return (
+                <Button type="button" variant="outline" className="rounded-full px-3 py-1.5 text-xs" onClick={() => moveToTrash(row.id)}>
+                  Trash
+                </Button>
+              );
+            }}
+          />
+        </div>
       )}
     </ManagerPortalPageShell>
   );

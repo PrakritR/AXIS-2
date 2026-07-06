@@ -41,8 +41,6 @@ import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-docu
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
 import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
-import { fetchWorkOrderVendorOffers, sendWorkOrderToVendors, type WorkOrderVendorOffer } from "@/lib/work-order-vendor-offers";
-import { suggestVendorsForWorkOrder, type VendorMatchCandidate } from "@/lib/work-order-auto-match";
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -139,9 +137,6 @@ export function ManagerWorkOrdersPanel({
   const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid[]>>({});
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
   const [autoSchedulingId, setAutoSchedulingId] = useState<string | null>(null);
-  const [offersByWorkOrderId, setOffersByWorkOrderId] = useState<Record<string, WorkOrderVendorOffer[]>>({});
-  const [selectedVendorIdsByWorkOrderId, setSelectedVendorIdsByWorkOrderId] = useState<Record<string, string[]>>({});
-  const [sendingOffersId, setSendingOffersId] = useState<string | null>(null);
   const [approvePayRow, setApprovePayRow] = useState<DemoManagerWorkOrderRow | null>(null);
   const [approvePayBusy, setApprovePayBusy] = useState(false);
 
@@ -170,11 +165,6 @@ export function ManagerWorkOrdersPanel({
     setBidsByWorkOrderId((prev) => ({ ...prev, [workOrderId]: bids }));
   }, []);
 
-  const loadOffers = useCallback(async (workOrderId: string) => {
-    const offers = await fetchWorkOrderVendorOffers(workOrderId);
-    setOffersByWorkOrderId((prev) => ({ ...prev, [workOrderId]: offers }));
-  }, []);
-
   const openExpand = useCallback(
     (row: DemoManagerWorkOrderRow) => {
       setExpandedId(row.id);
@@ -187,9 +177,8 @@ export function ManagerWorkOrdersPanel({
         [row.id]: prev[row.id] ?? defaultBillDraft(row),
       }));
       if (!row.selfAssigned && (row.vendorId || row.biddingOpen || row.biddingResolvedAt)) void loadBids(row.id);
-      if (!row.selfAssigned && row.bucket !== "completed") void loadOffers(row.id);
     },
-    [loadBids, loadOffers],
+    [loadBids],
   );
 
   const effectiveManagerId = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
@@ -560,84 +549,6 @@ export function ManagerWorkOrdersPanel({
     showToast(`Assigned ${vendor.name}.`);
   };
 
-  /** Invite the assigned vendor to submit a cost/time bid — reuses the same email + inbox
-   * notification path as the visit-scheduled email (send-vendor-visit-email), just with
-   * bid-offer copy instead of a scheduled-visit time. */
-  const offerForBids = async (row: DemoManagerWorkOrderRow) => {
-    if (row.selfAssigned || !row.vendorId) {
-      showToast("Assign a vendor before inviting them to bid.");
-      return;
-    }
-    const vendor = activeVendors.find((v) => v.id === row.vendorId);
-    const vendorEmail = vendor?.email?.trim() ?? "";
-    if (!vendor || !vendorEmail.includes("@")) {
-      showToast("That vendor doesn't have a valid email on file.");
-      return;
-    }
-    try {
-      await fetch("/api/portal/send-vendor-visit-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          kind: "bid_offer",
-          workOrderId: row.id,
-          vendorId: vendor.id,
-          vendorEmail,
-          vendorName: vendor.name,
-          workOrderTitle: row.title,
-          propertyLabel: row.propertyName,
-          unit: row.unit,
-          visitLabel: row.scheduled && row.scheduled !== "—" ? row.scheduled : "",
-          description: row.description,
-        }),
-      });
-    } catch {
-      /* best-effort notification; bidding still opens locally */
-    }
-    updateManagerWorkOrder(row.id, (r) => ({ ...r, biddingOpen: true, biddingOpenedAt: new Date().toISOString() }));
-    showToast(`${vendor.name} invited to bid.`);
-  };
-
-  const closeBidding = (row: DemoManagerWorkOrderRow) => {
-    updateManagerWorkOrder(row.id, (r) => ({ ...r, biddingOpen: false }));
-    showToast("Bidding closed.");
-  };
-
-  const toggleSelectedVendor = (workOrderId: string, vendorId: string) => {
-    setSelectedVendorIdsByWorkOrderId((prev) => {
-      const current = prev[workOrderId] ?? [];
-      const next = current.includes(vendorId) ? current.filter((id) => id !== vendorId) : [...current, vendorId];
-      return { ...prev, [workOrderId]: next };
-    });
-  };
-
-  /** Manager's confirm-send step: only fires once the manager picks vendor(s) and
-   * clicks Send — nothing is ever offered automatically. Opens each selected vendor
-   * for a consultation/quote (email + inbox) and leaves bidding open for responses. */
-  const sendToVendors = async (row: DemoManagerWorkOrderRow) => {
-    const vendorIds = selectedVendorIdsByWorkOrderId[row.id] ?? [];
-    if (vendorIds.length === 0) return;
-    setSendingOffersId(row.id);
-    try {
-      const result = await sendWorkOrderToVendors(row.id, vendorIds);
-      if (!result.ok) throw new Error(result.error ?? "Could not send to vendors.");
-      setSelectedVendorIdsByWorkOrderId((prev) => ({ ...prev, [row.id]: [] }));
-      updateManagerWorkOrder(row.id, (r) => ({
-        ...r,
-        biddingOpen: true,
-        biddingOpenedAt: r.biddingOpenedAt ?? new Date().toISOString(),
-      }));
-      await loadOffers(row.id);
-      const count = result.sent?.length ?? vendorIds.length;
-      showToast(count === 1 ? "Sent to 1 vendor for consultation." : `Sent to ${count} vendors for consultation.`);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Could not send to vendors.");
-    } finally {
-      setSendingOffersId(null);
-    }
-  };
-
   const acceptBidHandler = async (bid: WorkOrderBid) => {
     setAcceptingBidId(bid.id);
     try {
@@ -668,18 +579,6 @@ export function ManagerWorkOrdersPanel({
         ? activeVendors.find((v) => v.id === row.vendorId) ?? null
         : null;
     const assignedVendorEmail = assignedVendor?.email?.trim() ?? "";
-    const offers = offersByWorkOrderId[row.id] ?? [];
-    const offeredVendorIdSet = new Set(offers.filter((o) => o.status === "sent").map((o) => o.vendorDirectoryId));
-    const suggestions = suggestVendorsForWorkOrder(row, activeVendors, { allWorkOrders: allRows });
-    const manualFallback: VendorMatchCandidate[] = activeVendors.map((v) => ({
-      vendorId: v.id,
-      vendorName: v.name,
-      trade: v.trade,
-      lastAssignedAt: null,
-      reason: "no auto-match — pick manually",
-    }));
-    const candidates = suggestions.length > 0 ? suggestions : manualFallback;
-    const selectedVendorIds = selectedVendorIdsByWorkOrderId[row.id] ?? [];
 
     return (
       <>
@@ -827,120 +726,10 @@ export function ManagerWorkOrdersPanel({
                           ) : null}
                         </div>
 
-                        {row.bucket === "open" && !row.selfAssigned && !row.vendorId ? (
-                          <div className="mt-3 space-y-2">
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted">
-                              {suggestions.length > 0 ? "Suggested vendors" : "Pick vendors manually"}
-                            </p>
-                            <p className="text-xs text-muted">
-                              {suggestions.length > 0
-                                ? "Review and confirm who to send this to for a consultation/quote. Nothing sends until you confirm."
-                                : candidates.length > 0
-                                  ? "No auto-match for this category — pick vendor(s) manually below."
-                                  : "No active vendors on file yet — add one under Services → Vendors."}
-                            </p>
-                            {candidates.length > 0 ? (
-                              <>
-                                <div className="space-y-1">
-                                  {candidates.map((c) => {
-                                    const alreadyOffered = offeredVendorIdSet.has(c.vendorId);
-                                    const checked = selectedVendorIds.includes(c.vendorId);
-                                    return (
-                                      <label
-                                        key={c.vendorId}
-                                        className={`flex items-start gap-2 py-1 text-xs ${alreadyOffered ? "opacity-60" : "cursor-pointer"}`}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          className="mt-0.5"
-                                          checked={checked}
-                                          disabled={alreadyOffered}
-                                          onChange={() => toggleSelectedVendor(row.id, c.vendorId)}
-                                          data-attr="work-order-select-suggested-vendor"
-                                        />
-                                        <span className="min-w-0 flex-1">
-                                          <span className="font-medium text-foreground">{c.vendorName}</span>{" "}
-                                          <span className="text-muted">· {c.trade}</span>
-                                          <span className="block text-[11px] text-muted">
-                                            {alreadyOffered ? "Already sent" : c.reason}
-                                          </span>
-                                        </span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="primary"
-                                    data-attr="work-order-send-to-vendors"
-                                    className={`${PORTAL_DETAIL_BTN} rounded-full`}
-                                    disabled={selectedVendorIds.length === 0 || sendingOffersId === row.id}
-                                    onClick={() => void sendToVendors(row)}
-                                  >
-                                    {sendingOffersId === row.id
-                                      ? "Sending…"
-                                      : selectedVendorIds.length > 1
-                                        ? `Send to ${selectedVendorIds.length} vendors`
-                                        : "Send to vendor"}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="primary"
-                                    className={`${PORTAL_DETAIL_BTN} rounded-full`}
-                                    onClick={() => void saveScheduleFromOpen(row)}
-                                  >
-                                    Schedule visit
-                                  </Button>
-                                </div>
-                              </>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {!row.selfAssigned && row.bucket !== "completed" && (row.vendorId || row.biddingOpen || offers.length > 0) ? (
+                        {(bidsByWorkOrderId[row.id] ?? []).length > 0 ? (
                           <div className="mt-3 border-t border-border pt-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-xs font-medium uppercase tracking-wide text-muted">Bidding</p>
-                              {row.biddingOpen ? (
-                                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                                  Open for bids
-                                </span>
-                              ) : row.biddingResolvedAt ? (
-                                <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                                  Bid accepted
-                                </span>
-                              ) : null}
-                              {row.biddingOpen ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  data-attr="work-order-close-bidding"
-                                  className={PORTAL_DETAIL_BTN}
-                                  onClick={() => closeBidding(row)}
-                                >
-                                  Close bidding
-                                </Button>
-                              ) : row.vendorId ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  data-attr="work-order-invite-bid"
-                                  className={PORTAL_DETAIL_BTN}
-                                  onClick={() => void offerForBids(row)}
-                                >
-                                  Invite for bids
-                                </Button>
-                              ) : null}
-                            </div>
-                            {offers.length > 0 ? (
-                              <p className="mt-1.5 text-xs text-muted">
-                                Sent to {offers.length} vendor{offers.length === 1 ? "" : "s"}:{" "}
-                                {offers.map((o) => o.vendorName || "Vendor").join(", ")}
-                              </p>
-                            ) : null}
-                            {(bidsByWorkOrderId[row.id] ?? []).length > 0 ? (
-                              <div className="mt-2 space-y-1.5">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted">Bids</p>
+                            <div className="mt-2 space-y-1.5">
                                 {(bidsByWorkOrderId[row.id] ?? []).map((bid) => {
                                   const pricingPending = bid.amountCents == null;
                                   const totalCents = (bid.amountCents ?? 0) + bid.materialsCents;
@@ -1012,26 +801,21 @@ export function ManagerWorkOrdersPanel({
                                   </div>
                                   );
                                 })}
-                              </div>
-                            ) : row.biddingOpen ? (
-                              <p className="mt-2 text-xs text-muted">No bids yet.</p>
-                            ) : null}
+                            </div>
                           </div>
                         ) : null}
 
                         <PortalTableDetailActions>
                           {row.bucket === "open" ? (
                             <>
-                              {!row.selfAssigned && !row.vendorId && candidates.length > 0 ? null : (
-                                <Button
-                                  type="button"
-                                  variant="primary"
-                                  className={`${PORTAL_DETAIL_BTN} rounded-full`}
-                                  onClick={() => void saveScheduleFromOpen(row)}
-                                >
-                                  Schedule visit
-                                </Button>
-                              )}
+                              <Button
+                                type="button"
+                                variant="primary"
+                                className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                                onClick={() => void saveScheduleFromOpen(row)}
+                              >
+                                Schedule visit
+                              </Button>
                               <Button
                                 type="button"
                                 variant="outline"

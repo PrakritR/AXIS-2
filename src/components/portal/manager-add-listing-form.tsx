@@ -30,6 +30,8 @@ import {
   CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS,
   customApplicationFieldKeyFromLabel,
   LISTING_SERVICE_QUICK_ADDS,
+  resolveServiceOfferPricing,
+  type ListingServiceQuickAdd,
   emptyCustomApplicationField,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
@@ -259,6 +261,80 @@ function FormSection({ id, title, description, children }: { id?: string; title:
       </header>
       <div className="space-y-5">{children}</div>
     </section>
+  );
+}
+
+function ListingWizardChevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`mt-0.5 h-4 w-4 shrink-0 text-muted transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const LISTING_WIZARD_ACTION_BTN = "h-8 rounded-full px-3 text-xs";
+const LISTING_WIZARD_REMOVE_BTN = `${LISTING_WIZARD_ACTION_BTN} shrink-0 border-rose-200 text-rose-800 portal-danger-outline`;
+
+function listingItemKey(kind: string, id: string) {
+  return `${kind}:${id}`;
+}
+
+function ListingWizardCollapsibleCard({
+  expanded,
+  onToggle,
+  title,
+  subtitle,
+  headerActions,
+  hasError,
+  bodyClassName = "p-4 sm:p-5",
+  toggleDataAttr,
+  children,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  title: string;
+  subtitle?: string;
+  headerActions?: ReactNode;
+  hasError?: boolean;
+  bodyClassName?: string;
+  toggleDataAttr?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`overflow-hidden rounded-2xl border bg-card shadow-sm ${hasError ? "border-red-300 ring-2 ring-red-100" : "border-border"}`}
+    >
+      <div
+        className={`flex flex-col gap-3 bg-accent/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${expanded ? "border-b border-border" : ""}`}
+      >
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-start gap-2 text-left sm:items-center"
+          aria-expanded={expanded}
+          data-attr={toggleDataAttr}
+          onClick={onToggle}
+        >
+          <ListingWizardChevron open={expanded} />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-foreground">{title}</p>
+            {subtitle ? <p className="mt-0.5 line-clamp-2 text-xs text-muted">{subtitle}</p> : null}
+          </div>
+        </button>
+        {headerActions ? (
+          <div className="flex flex-wrap gap-2 pl-6 sm:pl-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            {headerActions}
+          </div>
+        ) : null}
+      </div>
+      {expanded ? <div className={bodyClassName}>{children}</div> : null}
+    </div>
   );
 }
 
@@ -901,6 +977,23 @@ export function ManagerAddListingForm({
   const [serviceForm, setServiceForm] = useState({ name: "", description: "", price: "", deposit: "" });
   // Application step — free-text drafts for dropdown options so typing commas feels natural.
   const [questionOptionsDrafts, setQuestionOptionsDrafts] = useState<Record<string, string>>({});
+  const [expandedListingItems, setExpandedListingItems] = useState<Set<string>>(() => new Set());
+
+  const toggleListingItem = (key: string) => {
+    setExpandedListingItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const expandListingItem = (key: string) => {
+    setExpandedListingItems((prev) => new Set(prev).add(key));
+  };
+
+  const isListingItemExpanded = (key: string) => expandedListingItems.has(key);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
   // Keyed by a stable id like "room-<id>", "bath-<id>", "space-<id>", "house".
@@ -957,17 +1050,18 @@ export function ManagerAddListingForm({
     setServiceForm({ name: "", description: "", price: "", deposit: "" });
   };
 
-  const addQuickService = (preset: { name: string; description: string }) => {
+  const addQuickService = (preset: ListingServiceQuickAdd) => {
     setServiceOffers((prev) => {
       if (prev.some((o) => o.name.trim().toLowerCase() === preset.name.toLowerCase())) return prev;
+      const pricing = resolveServiceOfferPricing({ name: preset.name, price: preset.price, deposit: preset.deposit });
       return [
         ...prev,
         {
           id: `offer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: preset.name,
           description: preset.description,
-          price: "",
-          deposit: "",
+          price: pricing.price,
+          deposit: pricing.deposit,
           available: true,
           createdAt: new Date().toISOString(),
         },
@@ -1103,6 +1197,7 @@ export function ManagerAddListingForm({
   };
 
   const addCustomQuestion = (section: string) => {
+    expandListingItem(listingItemKey("app-section", section));
     setSub((s) => ({
       ...s,
       ...addListingApplicationField(s, emptyCustomApplicationField(section)),
@@ -1126,6 +1221,43 @@ export function ManagerAddListingForm({
     setQuestionOptionsDrafts((d) => ({ ...d, [field.id]: text }));
     patchApplicationQuestion(field, { options: parseQuestionOptionsText(text) });
   };
+
+  useEffect(() => {
+    const toExpand = new Set<string>();
+    if (stepIndex === 1) {
+      for (const room of sub.rooms) {
+        if (stepFieldErrors[listingRoomNameKey(room.id)] || stepFieldErrors[listingRoomRentKey(room.id)]) {
+          toExpand.add(listingItemKey("room", room.id));
+        }
+      }
+      if (stepFieldErrors.rooms) sub.rooms.forEach((r) => toExpand.add(listingItemKey("room", r.id)));
+    }
+    if (stepIndex === 2) {
+      for (const bath of sub.bathrooms) {
+        if (stepFieldErrors[listingBathroomNameKey(bath.id)]) {
+          toExpand.add(listingItemKey("bathroom", bath.id));
+        }
+      }
+      if (stepFieldErrors.bathrooms) sub.bathrooms.forEach((b) => toExpand.add(listingItemKey("bathroom", b.id)));
+    }
+    if (stepIndex === 3) {
+      for (const sp of sub.sharedSpaces) {
+        if (stepFieldErrors[listingSharedSpaceNameKey(sp.id)]) {
+          toExpand.add(listingItemKey("shared", sp.id));
+        }
+      }
+      if (stepFieldErrors.sharedSpaces) sub.sharedSpaces.forEach((s) => toExpand.add(listingItemKey("shared", s.id)));
+    }
+    if (stepIndex === 7) {
+      for (const field of applicationFields) {
+        if (stepFieldErrors[listingCustomQuestionErrorKey(field.id)]) {
+          toExpand.add(listingItemKey("app-section", field.section ?? "additional"));
+        }
+      }
+    }
+    if (toExpand.size === 0) return;
+    setExpandedListingItems((prev) => new Set([...prev, ...toExpand]));
+  }, [stepFieldErrors, stepIndex, sub.rooms, sub.bathrooms, sub.sharedSpaces, applicationFields]);
 
   // ── Lease step (custom lease terms / uploaded template) ───────────────────
   const leaseMode: "standard" | "custom" = sub.leaseConfigMode ?? "standard";
@@ -1158,7 +1290,9 @@ export function ManagerAddListingForm({
 
   const addRoom = () => {
     if (sub.rooms.length >= 20) return;
-    setSub((s) => ({ ...s, rooms: [...s.rooms, emptyRoom(s.rooms.length)] }));
+    const next = emptyRoom(sub.rooms.length);
+    expandListingItem(listingItemKey("room", next.id));
+    setSub((s) => ({ ...s, rooms: [...s.rooms, next] }));
   };
 
   const removeRoom = (i: number) => {
@@ -1242,6 +1376,7 @@ export function ManagerAddListingForm({
       return;
     }
     const copy = duplicateRoomEntry(sub.rooms[i]!);
+    expandListingItem(listingItemKey("room", copy.id));
     setSub((s) => ({
       ...s,
       rooms: [...s.rooms.slice(0, i + 1), copy, ...s.rooms.slice(i + 1)],
@@ -1251,10 +1386,10 @@ export function ManagerAddListingForm({
 
   const addBathroom = () => {
     if (sub.bathrooms.length >= 12) return;
+    const next = emptyBathroom(sub.bathrooms.length);
+    expandListingItem(listingItemKey("bathroom", next.id));
     setSub((s) => {
-      const next = emptyBathroom(s.bathrooms.length);
       if (s.bathrooms.length === 0) return { ...s, bathrooms: [next] };
-      // New bathrooms stack directly under the first row, above the add button.
       return { ...s, bathrooms: [s.bathrooms[0]!, next, ...s.bathrooms.slice(1)] };
     });
   };
@@ -1267,22 +1402,23 @@ export function ManagerAddListingForm({
 
   const addSharedSpace = () => {
     if (sub.sharedSpaces.length >= 24) return;
-    setSub((s) => ({ ...s, sharedSpaces: [...s.sharedSpaces, emptySharedSpace(s.sharedSpaces.length)] }));
+    const next = emptySharedSpace(sub.sharedSpaces.length);
+    expandListingItem(listingItemKey("shared", next.id));
+    setSub((s) => ({ ...s, sharedSpaces: [...s.sharedSpaces, next] }));
   };
 
   const addSharedSpaceFromTemplate = (template: (typeof SHARED_SPACE_TEMPLATES)[number]) => {
     if (sub.sharedSpaces.length >= 24) return;
-    setSub((s) => {
-      const row = {
-        ...emptySharedSpace(s.sharedSpaces.length),
-        name: template.label,
-        spaceKind: template.kind,
-        detail: template.detail,
-        amenitiesText: template.amenities.join("\n"),
-        roomAccessIds: s.rooms.map((room) => room.id),
-      };
-      return { ...s, sharedSpaces: [...s.sharedSpaces, row] };
-    });
+    const row = {
+      ...emptySharedSpace(sub.sharedSpaces.length),
+      name: template.label,
+      spaceKind: template.kind,
+      detail: template.detail,
+      amenitiesText: template.amenities.join("\n"),
+      roomAccessIds: sub.rooms.map((room) => room.id),
+    };
+    expandListingItem(listingItemKey("shared", row.id));
+    setSub((s) => ({ ...s, sharedSpaces: [...s.sharedSpaces, row] }));
   };
 
   const removeSharedSpace = (i: number) => {
@@ -1341,7 +1477,9 @@ export function ManagerAddListingForm({
   };
 
   const addBundle = () => {
-    setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), emptyBundleRow()] }));
+    const next = emptyBundleRow();
+    expandListingItem(listingItemKey("bundle", next.id));
+    setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), next] }));
   };
 
   const addGeneratedBundle = (kind: "whole_house" | "multi_room") => {
@@ -1365,6 +1503,7 @@ export function ManagerAddListingForm({
         roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
         includedRoomIds,
       };
+      expandListingItem(listingItemKey("bundle", row.id));
       return { ...s, bundles: [...(s.bundles ?? []), row] };
     });
   };
@@ -1402,7 +1541,9 @@ export function ManagerAddListingForm({
   };
 
   const addQuickFact = () => {
-    setSub((s) => ({ ...s, quickFacts: [...(s.quickFacts ?? []), emptyQuickFactRow()] }));
+    const next = emptyQuickFactRow();
+    expandListingItem(listingItemKey("quickfact", next.id));
+    setSub((s) => ({ ...s, quickFacts: [...(s.quickFacts ?? []), next] }));
   };
 
   const removeQuickFact = (i: number) => {
@@ -1421,7 +1562,9 @@ export function ManagerAddListingForm({
   };
 
   const addCustomFee = () => {
-    setSub((s) => ({ ...s, customFees: [...(s.customFees ?? []), emptyCustomFeeRow()] }));
+    const next = emptyCustomFeeRow();
+    expandListingItem(listingItemKey("fee", next.id));
+    setSub((s) => ({ ...s, customFees: [...(s.customFees ?? []), next] }));
   };
 
   const removeCustomFee = (i: number) => {
@@ -2714,31 +2857,26 @@ export function ManagerAddListingForm({
                       const priceNum = bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim();
                       const hasManualPrice = priceNum.length > 0 && Number(priceNum) !== rentSum;
                       return (
-                        <div
+                        <ListingWizardCollapsibleCard
                           key={bundle.id}
-                          className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)]"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-accent/30 px-4 py-3 sm:px-5">
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Package {i + 1}</p>
-                              <p className="mt-1 text-xs text-muted">
-                                {selectedRooms.length} room{selectedRooms.length === 1 ? "" : "s"} selected
-                                {rentSum > 0 ? (
-                                  <>
-                                    {" "}
-                                    · Base rent sum <span className="font-semibold text-foreground">${rentSum}/mo</span>
-                                  </>
-                                ) : null}
-                                {hasManualPrice ? (
-                                  <span className="ml-1 font-medium text-primary">· Custom bundle price</span>
-                                ) : null}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
+                          expanded={isListingItemExpanded(listingItemKey("bundle", bundle.id))}
+                          onToggle={() => toggleListingItem(listingItemKey("bundle", bundle.id))}
+                          title={bundle.label.trim() || `Package ${i + 1}`}
+                          subtitle={[
+                            `${selectedRooms.length} room${selectedRooms.length === 1 ? "" : "s"}`,
+                            rentSum > 0 ? `$${rentSum}/mo base` : null,
+                            hasManualPrice ? "Custom price" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          bodyClassName="grid gap-3 sm:grid-cols-2"
+                          toggleDataAttr={`listing-bundle-toggle-${bundle.id}`}
+                          headerActions={
+                            <>
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="h-8 rounded-full px-3 text-[11px]"
+                                className={LISTING_WIZARD_ACTION_BTN}
                                 onClick={() => applyBundleRoomScope(i, "all_named")}
                                 disabled={namedRooms.length === 0}
                                 aria-label="Select all named rooms"
@@ -2748,21 +2886,17 @@ export function ManagerAddListingForm({
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="h-8 rounded-full px-3 text-[11px]"
+                                className={LISTING_WIZARD_ACTION_BTN}
                                 onClick={() => applyBundleRoomScope(i, "none")}
                               >
                                 Clear
                               </Button>
-                              <button
-                                type="button"
-                                className="rounded-full px-2 text-xs font-semibold text-rose-600 hover:bg-[var(--status-overdue-bg)]"
-                                onClick={() => removeBundle(i)}
-                              >
+                              <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeBundle(i)}>
                                 Remove
-                              </button>
-                            </div>
-                          </div>
-                          <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                              </Button>
+                            </>
+                          }
+                        >
                             <GridField>
                               <FieldLabel>Bundle name</FieldLabel>
                               <Input
@@ -2826,8 +2960,7 @@ export function ManagerAddListingForm({
                                 ))}
                               </div>
                             </div>
-                          </div>
-                        </div>
+                        </ListingWizardCollapsibleCard>
                       );
                     })}
                   </div>
@@ -2874,7 +3007,21 @@ export function ManagerAddListingForm({
                   <div className="mt-4 space-y-3">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Additional fees</p>
                     {(sub.customFees ?? []).map((fee, i) => (
-                      <div key={fee.id} className="grid gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-[1fr_140px_160px_auto] sm:items-end">
+                      <ListingWizardCollapsibleCard
+                        key={fee.id}
+                        expanded={isListingItemExpanded(listingItemKey("fee", fee.id))}
+                        onToggle={() => toggleListingItem(listingItemKey("fee", fee.id))}
+                        title={fee.label.trim() || `Fee ${i + 1}`}
+                        subtitle={`$${fee.amount.replace(/^\$/, "").trim() || "0"} · ${fee.frequency === "one-time" ? "One-time" : "Monthly"}`}
+                        bodyClassName="grid gap-3 sm:grid-cols-2"
+                        toggleDataAttr={`listing-fee-toggle-${fee.id}`}
+                        headerActions={
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeCustomFee(i)}>
+                            Remove
+                          </Button>
+                        }
+                      >
+                        <div className="sm:col-span-2 sm:grid sm:grid-cols-2 sm:gap-3">
                         <div>
                           <FieldLabel>Fee name</FieldLabel>
                           <Input
@@ -2896,7 +3043,7 @@ export function ManagerAddListingForm({
                             />
                           </div>
                         </div>
-                        <div>
+                        <div className="sm:col-span-2">
                           <FieldLabel>Type</FieldLabel>
                           <div className="relative">
                             <Select
@@ -2915,18 +3062,12 @@ export function ManagerAddListingForm({
                             </span>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-rose-600 hover:underline sm:pb-2"
-                          onClick={() => removeCustomFee(i)}
-                        >
-                          Remove
-                        </button>
-                      </div>
+                        </div>
+                      </ListingWizardCollapsibleCard>
                     ))}
                   </div>
                 ) : null}
-                <Button type="button" variant="outline" className="mt-4 rounded-full text-xs" onClick={addCustomFee}>
+                <Button type="button" variant="outline" className={`mt-4 ${LISTING_WIZARD_ACTION_BTN}`} onClick={addCustomFee}>
                   + Add fee
                 </Button>
               </ListingSubsection>
@@ -3139,21 +3280,29 @@ export function ManagerAddListingForm({
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                {sub.rooms.map((room, i) => (
-                  <div key={room.id} className="rounded-2xl border border-border bg-accent/30 p-4 sm:p-5">
-                    <p className="text-sm font-bold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
-                    <div className="mt-3">
-                      <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
-                      <Textarea
-                        rows={3}
-                        value={room.moveInInstructions}
-                        onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
-                        placeholder="Room-specific access, parking, and move-in details…"
-                      />
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {sub.rooms.map((room, i) => {
+                  const moveKey = listingItemKey("move", room.id);
+                  const movePreview = room.moveInInstructions.trim();
+                  return (
+                  <ListingWizardCollapsibleCard
+                    key={room.id}
+                    expanded={isListingItemExpanded(moveKey)}
+                    onToggle={() => toggleListingItem(moveKey)}
+                    title={room.name.trim() || `Room ${i + 1}`}
+                    subtitle={movePreview ? movePreview.slice(0, 80) + (movePreview.length > 80 ? "…" : "") : "No move-in instructions yet"}
+                    toggleDataAttr={`listing-move-toggle-${room.id}`}
+                  >
+                    <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                    <Textarea
+                      rows={3}
+                      value={room.moveInInstructions}
+                      onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
+                      placeholder="Room-specific access, parking, and move-in details…"
+                    />
+                  </ListingWizardCollapsibleCard>
+                  );
+                })}
               </div>
             )}
           </FormSection>
@@ -3174,12 +3323,12 @@ export function ManagerAddListingForm({
               <p className="text-sm text-muted">
                 Layout details only — add optional photos per room if helpful.
               </p>
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
+              <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={addRoom}>
                 + Add room
               </Button>
             </div>
             <div
-              className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.rooms))}`}
+              className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.rooms))}`}
               data-wizard-field="rooms"
             >
               {stepFieldErrors.rooms ? (
@@ -3197,25 +3346,48 @@ export function ManagerAddListingForm({
                 const customRoomAmenitiesText = splitLineList(room.roomAmenitiesText)
                   .filter((line) => !roomPresetLabels.has(line))
                   .join("\n");
+                const roomSubtitle = [
+                  room.floor.trim() || null,
+                  room.furnishing.trim() || null,
+                  room.photoDataUrls.length > 0 ? `${room.photoDataUrls.length} photo${room.photoDataUrls.length === 1 ? "" : "s"}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Tap to add name, floor, and amenities";
+                const roomKey = listingItemKey("room", room.id);
                 return (
-                  <div
+                  <ListingWizardCollapsibleCard
                     key={room.id}
-                    className={`rounded-2xl border p-4 sm:p-5 ${wizardSectionErrorClass(roomHasErr, "border-border bg-accent/30")}`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-bold text-foreground">Room {i + 1}</p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => duplicateRoom(i)} disabled={sub.rooms.length >= 20}>
+                    expanded={isListingItemExpanded(roomKey)}
+                    onToggle={() => toggleListingItem(roomKey)}
+                    title={room.name.trim() || `Room ${i + 1}`}
+                    subtitle={roomSubtitle}
+                    hasError={roomHasErr}
+                    bodyClassName="grid gap-3 sm:grid-cols-2"
+                    toggleDataAttr={`listing-room-toggle-${room.id}`}
+                    headerActions={
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={LISTING_WIZARD_ACTION_BTN}
+                          onClick={() => duplicateRoom(i)}
+                          disabled={sub.rooms.length >= 20}
+                        >
                           Duplicate
                         </Button>
                         {sub.rooms.length > 1 ? (
-                          <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeRoom(i)}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={LISTING_WIZARD_REMOVE_BTN}
+                            onClick={() => removeRoom(i)}
+                          >
                             Remove
-                          </button>
+                          </Button>
                         ) : null}
-                      </div>
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      </>
+                    }
+                  >
                       <GridField>
                         <FieldLabel>Room name *</FieldLabel>
                         <div data-wizard-field={roomNameKey}>
@@ -3429,8 +3601,7 @@ export function ManagerAddListingForm({
                       </div>
                       </>
                       ) : null}
-                    </div>
-                  </div>
+                  </ListingWizardCollapsibleCard>
                 );
               })}
             </div>
@@ -3445,7 +3616,7 @@ export function ManagerAddListingForm({
           >
               <p className="mb-4 text-sm text-muted">Shown in the Bathrooms section on the public listing.</p>
               <div
-                className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.bathrooms))}`}
+                className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.bathrooms))}`}
                 data-wizard-field="bathrooms"
               >
                 {stepFieldErrors.bathrooms ? (
@@ -3454,20 +3625,38 @@ export function ManagerAddListingForm({
                 {sub.bathrooms.map((b, i) => {
                   const bathNameKey = listingBathroomNameKey(b.id);
                   const bathNameErr = stepFieldErrors[bathNameKey];
+                  const fixtures = [b.shower && "Shower", b.toilet && "Toilet", b.bathtub && "Tub"].filter(Boolean).join(", ");
+                  const bathSubtitle = [
+                    b.location?.trim() || null,
+                    fixtures || null,
+                    b.allResidents ? "Whole-house bath" : `${(b.assignedRoomIds ?? []).length} room(s)`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  const bathKey = listingItemKey("bathroom", b.id);
                   return (
-                  <div
+                  <ListingWizardCollapsibleCard
                     key={b.id}
-                    className={`rounded-2xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(bathNameErr), "border-border")}`}
-                  >
-                    <div className="flex justify-between gap-2">
-                      <p className="text-sm font-semibold text-foreground">Bathroom {i + 1}</p>
-                      {sub.bathrooms.length > 1 ? (
-                        <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBathroom(i)}>
+                    expanded={isListingItemExpanded(bathKey)}
+                    onToggle={() => toggleListingItem(bathKey)}
+                    title={b.name.trim() || `Bathroom ${i + 1}`}
+                    subtitle={bathSubtitle || "Tap to set name, location, and fixtures"}
+                    hasError={Boolean(bathNameErr)}
+                    bodyClassName="grid gap-3 sm:grid-cols-2"
+                    toggleDataAttr={`listing-bathroom-toggle-${b.id}`}
+                    headerActions={
+                      sub.bathrooms.length > 1 ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={LISTING_WIZARD_REMOVE_BTN}
+                          onClick={() => removeBathroom(i)}
+                        >
                           Remove
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        </Button>
+                      ) : null
+                    }
+                  >
                       <div className="sm:col-span-2" data-wizard-field={bathNameKey}>
                         <FieldLabel>Name *</FieldLabel>
                         <Input
@@ -3714,15 +3903,14 @@ export function ManagerAddListingForm({
                           )}
                         </div>
                       </div>
-                    </div>
-                  </div>
+                  </ListingWizardCollapsibleCard>
                   );
                 })}
                 <div className="flex justify-center pt-1">
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-full text-xs"
+                    className={LISTING_WIZARD_ACTION_BTN}
                     onClick={addBathroom}
                     disabled={sub.bathrooms.length >= 12}
                   >
@@ -3765,7 +3953,7 @@ export function ManagerAddListingForm({
                 </div>
               ) : (
                 <div
-                  className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.sharedSpaces))}`}
+                  className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.sharedSpaces))}`}
                   data-wizard-field="sharedSpaces"
                 >
                   {stepFieldErrors.sharedSpaces ? (
@@ -3784,28 +3972,29 @@ export function ManagerAddListingForm({
                       SHARED_SPACE_KIND_OPTIONS.find((opt) => opt.id === spaceKind)?.label ?? "Shared space";
 
                     return (
-                    <div
+                    <ListingWizardCollapsibleCard
                       key={sp.id}
-                      className={`overflow-hidden rounded-3xl border bg-card shadow-sm ${wizardSectionErrorClass(Boolean(spaceNameErr), "border-border")}`}
-                    >
-                      <div className="flex flex-col gap-3 border-b border-border bg-accent/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                        <div>
-                          <p className="text-sm font-bold text-foreground">Shared space {i + 1}</p>
-                          <p className="mt-1 text-xs text-muted">{roomAccessSummary(sp, sub.rooms)}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setSharedSpaceRoomAccess(i, "all")}>
+                      expanded={isListingItemExpanded(listingItemKey("shared", sp.id))}
+                      onToggle={() => toggleListingItem(listingItemKey("shared", sp.id))}
+                      title={sp.name.trim() || `Shared space ${i + 1}`}
+                      subtitle={`${spaceKindLabel} · ${roomAccessSummary(sp, sub.rooms)}`}
+                      hasError={Boolean(spaceNameErr)}
+                      bodyClassName="grid gap-4 sm:grid-cols-2"
+                      toggleDataAttr={`listing-shared-toggle-${sp.id}`}
+                      headerActions={
+                        <>
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={() => setSharedSpaceRoomAccess(i, "all")}>
                             All rooms
                           </Button>
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setSharedSpaceRoomAccess(i, "none")}>
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={() => setSharedSpaceRoomAccess(i, "none")}>
                             Clear rooms
                           </Button>
-                          <button type="button" className="rounded-full px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-[var(--status-overdue-bg)]" onClick={() => removeSharedSpace(i)}>
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeSharedSpace(i)}>
                             Remove
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+                          </Button>
+                        </>
+                      }
+                    >
                         <div data-wizard-field={spaceNameKey}>
                           <FieldLabel>Name *</FieldLabel>
                           <Input
@@ -4021,8 +4210,7 @@ export function ManagerAddListingForm({
                             ))}
                           </div>
                         </div>
-                      </div>
-                    </div>
+                    </ListingWizardCollapsibleCard>
                   );
                   })}
                 </div>
@@ -4039,30 +4227,61 @@ export function ManagerAddListingForm({
           >
             <div className="space-y-4">
               {serviceOffers.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-3">
                   {serviceOffers.map((offer) => (
-                    <div
+                    <ListingWizardCollapsibleCard
                       key={offer.id}
-                      className={`flex flex-col rounded-2xl border bg-card p-4 shadow-[0_1px_4px_rgba(15,23,42,0.05)] transition ${offer.available ? "border-border" : "border-border opacity-60"}`}
+                      expanded={isListingItemExpanded(listingItemKey("service", offer.id))}
+                      onToggle={() => toggleListingItem(listingItemKey("service", offer.id))}
+                      title={offer.name}
+                      subtitle={[offer.price, offer.available ? "Active" : "Paused"].filter(Boolean).join(" · ")}
+                      toggleDataAttr={`listing-service-toggle-${offer.id}`}
+                      headerActions={
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={LISTING_WIZARD_ACTION_BTN}
+                            onClick={() => {
+                              setEditingOffer(offer);
+                              setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" });
+                              setServiceModalOpen(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={LISTING_WIZARD_ACTION_BTN}
+                            onClick={() => {
+                              setServiceOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, available: !o.available } : o)));
+                            }}
+                          >
+                            {offer.available ? "Pause" : "Resume"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={LISTING_WIZARD_REMOVE_BTN}
+                            onClick={() => {
+                              setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </>
+                      }
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-semibold text-foreground">{offer.name}</p>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${offer.available ? "portal-badge-success ring-[var(--status-confirmed-bg)]" : "bg-accent/30 text-muted ring-border"}`}>
-                          {offer.available ? "Active" : "Paused"}
-                        </span>
-                      </div>
-                      {offer.price ? <span className="mt-1 text-xs font-medium text-muted">{offer.price}</span> : null}
-                      {offer.description ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{offer.description}</p> : null}
-                      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3">
-                        <button type="button" onClick={() => { setEditingOffer(offer); setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" }); setServiceModalOpen(true); }} className="rounded-full border border-border bg-card px-3 py-0.5 text-[11px] font-semibold text-muted hover:bg-accent/30">Edit</button>
-                        <button type="button" onClick={() => {
-                          setServiceOffers((prev) => prev.map((o) => o.id === offer.id ? { ...o, available: !o.available } : o));
-                        }} className="rounded-full border border-border bg-card px-3 py-0.5 text-[11px] font-semibold text-muted hover:bg-accent/30">{offer.available ? "Pause" : "Resume"}</button>
-                        <button type="button" onClick={() => {
-                          setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
-                        }} className="rounded-full border border-rose-200 bg-card px-3 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]">Remove</button>
-                      </div>
-                    </div>
+                      {offer.description ? (
+                        <p className="text-sm leading-relaxed text-muted">{offer.description}</p>
+                      ) : (
+                        <p className="text-sm text-muted">No description — use Edit to add details.</p>
+                      )}
+                      {offer.deposit ? (
+                        <p className="text-xs text-muted">Deposit: {offer.deposit}</p>
+                      ) : null}
+                    </ListingWizardCollapsibleCard>
                   ))}
                 </div>
               ) : (
@@ -4115,7 +4334,7 @@ export function ManagerAddListingForm({
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-8 rounded-full px-3 text-xs"
+                  className={LISTING_WIZARD_ACTION_BTN}
                   data-attr="listing-application-restore-defaults"
                   onClick={restoreApplicationDefaults}
                 >
@@ -4129,30 +4348,33 @@ export function ManagerAddListingForm({
                 </div>
               ) : null}
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {RENTAL_APPLICATION_SECTIONS.map((section, sectionIdx) => {
                   const sectionQuestions = applicationFields.filter(
                     (f) => (f.section ?? "additional") === section.id,
                   );
+                  const sectionKey = listingItemKey("app-section", section.id);
                   return (
-                    <div key={section.id} className="overflow-hidden rounded-2xl border border-border bg-card">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
-                        <p className="text-sm font-semibold text-foreground">
-                          <span className="mr-2 text-xs font-bold text-muted">{sectionIdx + 1}.</span>
-                          {section.title}
-                          <span className="ml-2 text-xs font-medium text-muted">· {sectionQuestions.length}</span>
-                        </p>
+                    <ListingWizardCollapsibleCard
+                      key={section.id}
+                      expanded={isListingItemExpanded(sectionKey)}
+                      onToggle={() => toggleListingItem(sectionKey)}
+                      title={`${sectionIdx + 1}. ${section.title}`}
+                      subtitle={`${sectionQuestions.length} question${sectionQuestions.length === 1 ? "" : "s"}`}
+                      bodyClassName="space-y-3 px-4 py-3"
+                      toggleDataAttr={`listing-application-section-toggle-${section.id}`}
+                      headerActions={
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-8 rounded-full px-3 text-xs"
+                          className={LISTING_WIZARD_ACTION_BTN}
                           data-attr="listing-application-add-question"
                           onClick={() => addCustomQuestion(section.id)}
                         >
                           + Add question
                         </Button>
-                      </div>
-                      <div className="space-y-3 px-4 py-3">
+                      }
+                    >
                         {sectionQuestions.length > 0 ? (
                           sectionQuestions.map((field) => {
                             const err = stepFieldErrors[listingCustomQuestionErrorKey(field.id)];
@@ -4168,13 +4390,14 @@ export function ManagerAddListingForm({
                                   >
                                     {field.isStandard ? "Built-in" : "Custom"}
                                   </span>
-                                  <button
+                                  <Button
                                     type="button"
-                                    className="text-xs font-semibold text-rose-600 hover:underline"
+                                    variant="outline"
+                                    className={LISTING_WIZARD_REMOVE_BTN}
                                     onClick={() => removeApplicationQuestion(field)}
                                   >
                                     Remove
-                                  </button>
+                                  </Button>
                                 </div>
                                 <div>
                                   <FieldLabel>Question</FieldLabel>
@@ -4229,8 +4452,7 @@ export function ManagerAddListingForm({
                         ) : (
                           <p className="text-xs text-muted">No questions in this section — add one or restore defaults.</p>
                         )}
-                      </div>
-                    </div>
+                    </ListingWizardCollapsibleCard>
                   );
                 })}
               </div>
@@ -4392,9 +4614,22 @@ export function ManagerAddListingForm({
                 title="Quick facts (sidebar)"
                 description="Optional. Rows here replace the auto-generated sidebar. Leave empty to use building, room count, floors, and pet policy from earlier steps."
               >
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {(sub.quickFacts ?? []).map((qf, i) => (
-                    <div key={qf.id} className="grid gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                    <ListingWizardCollapsibleCard
+                      key={qf.id}
+                      expanded={isListingItemExpanded(listingItemKey("quickfact", qf.id))}
+                      onToggle={() => toggleListingItem(listingItemKey("quickfact", qf.id))}
+                      title={qf.label.trim() || `Quick fact ${i + 1}`}
+                      subtitle={qf.value.trim() || "No value set"}
+                      bodyClassName="grid gap-3 sm:grid-cols-2"
+                      toggleDataAttr={`listing-quickfact-toggle-${qf.id}`}
+                      headerActions={
+                        <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeQuickFact(i)}>
+                          Remove
+                        </Button>
+                      }
+                    >
                       <div>
                         <FieldLabel>Label</FieldLabel>
                         <Input value={qf.label} onChange={(e) => setQuickFact(i, { label: sanitizePlaceNameInput(e.target.value) })} placeholder="e.g. Neighborhood" />
@@ -4403,12 +4638,9 @@ export function ManagerAddListingForm({
                         <FieldLabel>Value</FieldLabel>
                         <Input value={qf.value} onChange={(e) => setQuickFact(i, { value: e.target.value })} placeholder="—" />
                       </div>
-                      <button type="button" className="text-xs font-semibold text-rose-600 hover:underline sm:pb-2" onClick={() => removeQuickFact(i)}>
-                        Remove
-                      </button>
-                    </div>
+                    </ListingWizardCollapsibleCard>
                   ))}
-                  <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addQuickFact}>
+                  <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={addQuickFact}>
                     + Add quick fact
                   </Button>
                 </div>

@@ -23,8 +23,10 @@ import { applicationVisibleToPortalUser, leaseVisibleToPortalUser } from "@/lib/
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
 const LEASE_PIPELINE_SESSION_KEY_PREFIX = "axis:lease-pipeline:v2";
+const LEASE_PIPELINE_SUPPRESSED_KEY_PREFIX = "axis:lease-pipeline-suppressed:v1";
 
 let memoryRows: LeasePipelineRow[] = [];
+let suppressedLeaseKeys: Set<string> = new Set();
 let activeLeasePipelineScopeUserId: string | undefined;
 const LEASE_PIPELINE_SYNC_TTL_MS = 15_000;
 let leasePipelineLastSyncedAt = 0;
@@ -195,6 +197,8 @@ export type LeasePipelineRow = {
   fullySignedAt?: string | null;
   voidedAt?: string | null;
   versionNumber?: number;
+  /** Set when manager deletes the saved document — suppresses application draft preview until regenerate/upload. */
+  leaseDocumentRemovedAt?: string | null;
 };
 
 function workflowStatusForRow(
@@ -332,6 +336,7 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
           : null,
     voidedAt: typeof r.voidedAt === "string" ? r.voidedAt : null,
     versionNumber,
+    leaseDocumentRemovedAt: typeof r.leaseDocumentRemovedAt === "string" ? r.leaseDocumentRemovedAt : null,
   };
 }
 
@@ -350,7 +355,76 @@ function ensureLeasePipelineScope(scopeUserId?: string | null) {
     activeLeasePipelineScopeUserId = nextScope;
     memoryRows = [];
     leasePipelineLastSyncedAt = 0;
+    hydrateSuppressedLeaseKeys(nextScope);
   }
+}
+
+function leaseSuppressionSessionKey(scopeUserId?: string | null): string {
+  if (isDemoModeActive()) return `${LEASE_PIPELINE_SUPPRESSED_KEY_PREFIX}:shared`;
+  if (scopeUserId) return `${LEASE_PIPELINE_SUPPRESSED_KEY_PREFIX}:${scopeUserId}`;
+  return `${LEASE_PIPELINE_SUPPRESSED_KEY_PREFIX}:shared`;
+}
+
+function leaseSuppressionKey(axisId?: string | null, email?: string | null): string {
+  const axis = axisId?.trim();
+  if (axis) return `axis:${normalizeApplicationAxisId(axis)}`;
+  const e = email?.trim().toLowerCase();
+  return e ? `email:${e}` : "";
+}
+
+function hydrateSuppressedLeaseKeys(scopeUserId?: string | null) {
+  if (!canUseStorage()) return;
+  try {
+    const raw = window.sessionStorage.getItem(leaseSuppressionSessionKey(scopeUserId));
+    if (!raw) {
+      suppressedLeaseKeys = new Set();
+      return;
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    suppressedLeaseKeys = new Set(Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : []);
+  } catch {
+    suppressedLeaseKeys = new Set();
+  }
+}
+
+function persistSuppressedLeaseKeys(scopeUserId?: string | null) {
+  if (!canUseStorage()) return;
+  try {
+    window.sessionStorage.setItem(
+      leaseSuppressionSessionKey(scopeUserId ?? activeLeasePipelineScopeUserId),
+      JSON.stringify([...suppressedLeaseKeys]),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function isLeasePipelineSuppressed(axisId?: string | null, email?: string | null, managerUserId?: string | null): boolean {
+  hydrateSuppressedLeaseKeys(managerUserId ?? activeLeasePipelineScopeUserId);
+  const key = leaseSuppressionKey(axisId, email);
+  return Boolean(key && suppressedLeaseKeys.has(key));
+}
+
+/** Allow auto-seeding / recreating a lease row after the manager explicitly removed one. */
+export function clearLeasePipelineSuppression(
+  axisId?: string | null,
+  email?: string | null,
+  managerUserId?: string | null,
+): void {
+  hydrateSuppressedLeaseKeys(managerUserId ?? activeLeasePipelineScopeUserId);
+  const key = leaseSuppressionKey(axisId, email);
+  if (!key || !suppressedLeaseKeys.has(key)) return;
+  suppressedLeaseKeys.delete(key);
+  persistSuppressedLeaseKeys(managerUserId);
+  materializeLeasePipeline(managerUserId);
+}
+
+function suppressLeasePipelineRow(row: LeasePipelineRow, managerUserId?: string | null): void {
+  hydrateSuppressedLeaseKeys(managerUserId ?? activeLeasePipelineScopeUserId);
+  const key = leaseSuppressionKey(row.axisId, row.residentEmail);
+  if (!key) return;
+  suppressedLeaseKeys.add(key);
+  persistSuppressedLeaseKeys(managerUserId);
 }
 
 function filterLeasesForManager(rows: LeasePipelineRow[], managerUserId?: string | null): LeasePipelineRow[] {
@@ -534,6 +608,16 @@ function persistLeaseRowToServer(row: LeasePipelineRow) {
   }).catch(() => undefined);
 }
 
+function persistLeaseDeleteToServer(ids: string[]) {
+  if (!canUseStorage() || isDemoModeActive() || ids.length === 0) return;
+  void fetch("/api/portal-lease-pipeline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "deleteIds", ids }),
+  }).catch(() => undefined);
+}
+
 async function persistLeaseRowToServerAwait(row: LeasePipelineRow): Promise<boolean> {
   if (!canUseStorage()) return false;
   if (isDemoModeActive()) return true;
@@ -588,6 +672,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
   let changed = false;
   const next = [...rows];
   for (const app of apps) {
+    if (isLeasePipelineSuppressed(app.id, app.email, managerUserId)) continue;
     const email = app.email!.trim().toLowerCase();
     const propertyId = app.assignedPropertyId?.trim() || app.propertyId?.trim() || app.application?.propertyId?.trim() || "";
     const roomChoice = app.assignedRoomChoice?.trim() || app.application?.roomChoice1?.trim() || "";
@@ -915,6 +1000,9 @@ export function deleteLeasePipelineRow(id: string, managerUserId?: string | null
     voidedAt: null,
     pdfVersion: 1,
     versionNumber: 1,
+    status: "Manager Review",
+    currentActorRole: "manager",
+    leaseDocumentRemovedAt: iso,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
   });
@@ -940,6 +1028,7 @@ export function deleteLeasePipelineRowsForResident(
     if (String(row.residentEmail ?? "").trim()) {
       clearUploadedOwnLease(row.residentEmail);
     }
+    suppressLeasePipelineRow(row, managerUserId);
   }
   const raw = [...(readRaw(managerUserId) ?? [])];
   const removedIds = new Set(removedRows.map((r) => r.id));
@@ -947,6 +1036,7 @@ export function deleteLeasePipelineRowsForResident(
     raw.filter((row) => !removedIds.has(row.id)),
     managerUserId,
   );
+  persistLeaseDeleteToServer([...removedIds]);
   return removedRows.length;
 }
 
@@ -1081,6 +1171,7 @@ export function generateLeaseHtmlForRow(
       versionNumber: version,
       status: "Manager Review",
       currentActorRole: "manager",
+      leaseDocumentRemovedAt: null,
     },
     managerUserId,
   );
@@ -1293,6 +1384,7 @@ export function managerUploadLeasePdf(
         sentToResidentAt: null,
         fullySignedAt: null,
         voidedAt: null,
+        leaseDocumentRemovedAt: null,
       });
       write(rows, managerUserId);
       resolve({ ok: true });

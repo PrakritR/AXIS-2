@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
@@ -38,6 +38,10 @@ function statusTone(label: string) {
   return "bg-accent/30 text-foreground ring-1 ring-border";
 }
 
+function isMarkableAsPaid(row: DemoManagerPaymentLedgerRow): boolean {
+  return row.statusLabel !== "Paid" && row.balanceDue !== "$0.00";
+}
+
 export function ManagerPaymentsLedgerPanel({
   rows,
   managerUserId,
@@ -62,6 +66,112 @@ export function ManagerPaymentsLedgerPanel({
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [reminderPreview, setReminderPreview] = useState<{ row: DemoManagerPaymentLedgerRow; subject: string; body: string } | null>(null);
   const [chargeRemindersRow, setChargeRemindersRow] = useState<DemoManagerPaymentLedgerRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkEditingAmount, setBulkEditingAmount] = useState(false);
+
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedIds.has(row.id)),
+    [rows, selectedIds],
+  );
+  const singleSelectedRow = selectedRows.length === 1 ? selectedRows[0]! : null;
+  const showSelection = rows.length > 0;
+  const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
+  const rowIdsKey = useMemo(() => rows.map((row) => row.id).join(","), [rows]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setBulkEditingAmount(false);
+    setEditAmountDraft("");
+  }, [activeBucket, rowIdsKey]);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(rows.map((row) => row.id)));
+  };
+
+  const markSelectedAsPaid = () => {
+    const targets = rows.filter((row) => selectedIds.has(row.id) && isMarkableAsPaid(row));
+    if (targets.length === 0) return;
+    let ok = 0;
+    for (const row of targets) {
+      if (row.householdChargeId) {
+        if (markHouseholdChargePaid(row.householdChargeId, managerUserId)) ok += 1;
+      } else {
+        markManagerPaymentLedgerPaid(row.id);
+        ok += 1;
+      }
+    }
+    setSelectedIds(new Set());
+    setExpandedId(null);
+    onRowsChanged?.();
+    onScheduleChanged?.();
+    showToast(ok === 1 ? "Marked as paid." : `Marked ${ok} payments as paid.`);
+  };
+
+  const moveSelectedToPending = () => {
+    const targets = selectedRows;
+    if (targets.length === 0) return;
+    let ok = 0;
+    for (const row of targets) {
+      if (row.householdChargeId) {
+        if (markHouseholdChargePending(row.householdChargeId, managerUserId)) ok += 1;
+      } else {
+        markManagerPaymentLedgerPending(row.id);
+        ok += 1;
+      }
+    }
+    setSelectedIds(new Set());
+    setExpandedId(null);
+    onRowsChanged?.();
+    showToast(ok === 1 ? "Moved to pending." : `Moved ${ok} payments to pending.`);
+  };
+
+  const deleteSelected = () => {
+    const targets = selectedRows;
+    if (targets.length === 0) return;
+    if (!window.confirm(`Delete ${targets.length} payment${targets.length === 1 ? "" : "s"}?`)) return;
+    let ok = 0;
+    for (const row of targets) {
+      if (row.householdChargeId) {
+        if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) ok += 1;
+      } else if (deleteManagerPaymentLedgerEntry(row.id)) {
+        ok += 1;
+      }
+    }
+    setSelectedIds(new Set());
+    setExpandedId(null);
+    setBulkEditingAmount(false);
+    onRowsChanged?.();
+    showToast(ok === 1 ? "Payment removed." : `Removed ${ok} payments.`);
+  };
+
+  const saveBulkEditAmount = () => {
+    const row = singleSelectedRow;
+    if (!row?.householdChargeId) return;
+    const amt = parseFloat(editAmountDraft.replace(/[^\d.]/g, ""));
+    if (!Number.isFinite(amt) || amt < 0) {
+      showToast("Enter a valid amount.");
+      return;
+    }
+    if (updateHouseholdChargeAmount(row.householdChargeId, amt, managerUserId)) {
+      showToast("Amount updated.");
+      onRowsChanged?.();
+    }
+    setBulkEditingAmount(false);
+    setEditAmountDraft("");
+  };
 
   const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
     const email = row.residentEmail?.trim();
@@ -263,7 +373,7 @@ export function ManagerPaymentsLedgerPanel({
               setEditingAmountId(row.id);
             }}
           >
-            Edit amount
+            Edit payment
           </Button>
         )
       ) : null}
@@ -310,6 +420,93 @@ export function ManagerPaymentsLedgerPanel({
         onOpenSettings={onOpenReminderSettings}
       />
     ) : null}
+    {selectedIds.size > 0 ? (
+      <div className="mb-3">
+        <PortalTableDetailActions>
+          {selectedRows.some(isMarkableAsPaid) ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN_PRIMARY}
+              data-attr="payments-mark-selected-paid"
+              onClick={markSelectedAsPaid}
+            >
+              Mark as paid
+            </Button>
+          ) : null}
+          {selectedRows.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              disabled={Boolean(sendingReminderId) || selectedRows.length !== 1}
+              title={selectedRows.length !== 1 ? "Select one payment to send a reminder." : undefined}
+              onClick={() => {
+                const row = singleSelectedRow;
+                if (!row) {
+                  showToast("Select one payment to send a reminder.");
+                  return;
+                }
+                openReminderPreview(row);
+              }}
+            >
+              {sendingReminderId ? "Sending…" : "Send reminder"}
+            </Button>
+          ) : null}
+          {activeBucket !== "pending" && selectedRows.length > 0 ? (
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={moveSelectedToPending}>
+              Move to pending
+            </Button>
+          ) : null}
+          {singleSelectedRow?.householdChargeId && singleSelectedRow.statusLabel !== "Paid" ? (
+            bulkEditingAmount ? (
+              <span className="flex items-center gap-1.5">
+                <span className="text-xs text-muted">$</span>
+                <Input
+                  className="h-7 w-24 rounded-lg px-2 py-1 text-xs"
+                  inputMode="decimal"
+                  value={editAmountDraft}
+                  onChange={(e) => setEditAmountDraft(e.target.value)}
+                  autoFocus
+                />
+                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={saveBulkEditAmount}>
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => {
+                    setBulkEditingAmount(false);
+                    setEditAmountDraft("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </span>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => {
+                  setEditAmountDraft(singleSelectedRow.balanceDue.replace(/[^\d.]/g, ""));
+                  setBulkEditingAmount(true);
+                }}
+              >
+                Edit payment
+              </Button>
+            )
+          ) : null}
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={deleteSelected}>
+            Delete
+          </Button>
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setSelectedIds(new Set())}>
+            Clear selection
+          </Button>
+        </PortalTableDetailActions>
+      </div>
+    ) : null}
     <div className="space-y-2 lg:hidden">
       {rows.map((row) => {
         const reminders = row.householdChargeId
@@ -320,6 +517,15 @@ export function ManagerPaymentsLedgerPanel({
         return (
           <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
             <div className="flex items-start justify-between gap-3">
+              {showSelection ? (
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 shrink-0 rounded border-border"
+                  checked={selectedIds.has(row.id)}
+                  onChange={() => toggleSelected(row.id)}
+                  aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
+                />
+              ) : null}
               <div className="min-w-0 flex-1">
                 <button
                   type="button"
@@ -367,6 +573,17 @@ export function ManagerPaymentsLedgerPanel({
         <table className={PORTAL_DATA_TABLE}>
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
+              {showSelection ? (
+                <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-border"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all payments"
+                  />
+                </th>
+              ) : null}
               <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
@@ -386,6 +603,17 @@ export function ManagerPaymentsLedgerPanel({
                   )}
                   aria-expanded={expandedId === row.id}
                 >
+                  {showSelection ? (
+                    <td className={PORTAL_TABLE_TD} onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded border-border"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => toggleSelected(row.id)}
+                        aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
+                      />
+                    </td>
+                  ) : null}
                   <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.propertyName}</td>
                   <td className={PORTAL_TABLE_TD}>Room {row.roomNumber}</td>
                   <td className={PORTAL_TABLE_TD}>{row.residentName}</td>
@@ -416,7 +644,7 @@ export function ManagerPaymentsLedgerPanel({
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                    <td colSpan={showSelection ? 8 : 7} className={PORTAL_TABLE_DETAIL_CELL}>
                       {renderDetailActions(row)}
                     </td>
                   </tr>

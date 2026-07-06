@@ -6,6 +6,7 @@ import {
   type VendorInviteRow,
 } from "@/lib/auth/provision-vendor-account";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
+import { mayLogVendorConfirmLinkLocally } from "@/lib/auth/vendor-register-local-dev";
 import { resolveAppOrigin } from "@/lib/app-url";
 import {
   buildVendorSignupConfirmEmailBody,
@@ -161,6 +162,7 @@ async function registerSelfServe(
     confirmEmail: false,
   });
   if (!provisioned.ok) {
+    await rollbackSelfServeVendorSignup(supabase, linkData.user.id);
     return NextResponse.json({ error: provisioned.error }, { status: provisioned.status });
   }
 
@@ -173,20 +175,31 @@ async function registerSelfServe(
   // fragment. `/auth/confirm` exchanges the hash via `verifyOtp`, which works either way.
   const confirmLink = `${origin}/auth/confirm?token_hash=${encodeURIComponent(linkData.properties.hashed_token)}&type=signup`;
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
-  if (!apiKey) {
-    if (isProduction) {
-      return NextResponse.json(
-        { error: "Email delivery is not configured. Contact support to confirm your account." },
-        { status: 503 },
-      );
+  const logConfirmLinkLocally = mayLogVendorConfirmLinkLocally(req);
+  const createdUserId = linkData.user.id;
+
+  const emailDeliveryFailure = async (errorMessage: string, status: number) => {
+    if (!logConfirmLinkLocally) {
+      await rollbackSelfServeVendorSignup(supabase, createdUserId);
+    } else {
+      console.info("[vendor-register] confirmation link (local dev only):", confirmLink);
     }
-    return NextResponse.json({
-      ok: true,
-      confirmed: false,
-      emailDeliveryConfigured: false,
-      confirmLink,
-    });
+    return NextResponse.json(
+      {
+        error: errorMessage,
+        ...(logConfirmLinkLocally ? { confirmLinkLoggedLocally: true } : {}),
+      },
+      { status },
+    );
+  };
+
+  if (!apiKey) {
+    return emailDeliveryFailure(
+      logConfirmLinkLocally
+        ? "Email delivery is not configured. Check the server console for a local confirmation link."
+        : "Email delivery is not configured. Contact support to confirm your account.",
+      503,
+    );
   }
 
   const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
@@ -200,31 +213,13 @@ async function registerSelfServe(
     });
     if (!res.ok) {
       const payload = (await res.json().catch(() => ({}))) as { message?: string };
-      if (isProduction) {
-        return NextResponse.json(
-          { error: payload.message ?? "Could not send the confirmation email. Try again or contact support." },
-          { status: 502 },
-        );
-      }
-      return NextResponse.json({
-        ok: true,
-        confirmed: false,
-        emailDeliveryConfigured: false,
-        error: payload.message ?? "Could not send the confirmation email.",
-        confirmLink,
-      });
+      return emailDeliveryFailure(
+        payload.message ?? "Could not send the confirmation email. Try again or contact support.",
+        502,
+      );
     }
   } catch {
-    if (isProduction) {
-      return NextResponse.json({ error: "Could not send the confirmation email." }, { status: 502 });
-    }
-    return NextResponse.json({
-      ok: true,
-      confirmed: false,
-      emailDeliveryConfigured: false,
-      error: "Could not send the confirmation email.",
-      confirmLink,
-    });
+    return emailDeliveryFailure("Could not send the confirmation email.", 502);
   }
 
   return NextResponse.json({ ok: true, confirmed: false, emailDeliveryConfigured: true });
@@ -265,4 +260,18 @@ async function createOrLinkAuthUser(
     return { error: NextResponse.json({ error: pwCheck.message }, { status: 401 }) };
   }
   return { userId: existingId };
+}
+
+/** Remove an unconfirmed self-serve vendor signup when confirmation email cannot be sent. */
+async function rollbackSelfServeVendorSignup(
+  supabase: ReturnType<typeof createSupabaseServiceRoleClient>,
+  userId: string,
+): Promise<void> {
+  try {
+    await supabase.from("profile_roles").delete().eq("user_id", userId);
+    await supabase.from("profiles").delete().eq("id", userId);
+    await supabase.auth.admin.deleteUser(userId);
+  } catch {
+    /* best-effort — orphaned row is preferable to leaving a confirmable squat account */
+  }
 }

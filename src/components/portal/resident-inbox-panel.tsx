@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import {
+  PortalInboxSelectionToolbar,
+  sendManualScheduledMessageNow,
+  useInboxRowSelection,
+} from "@/components/portal/portal-inbox-selection";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -85,6 +90,7 @@ function scheduledToRows(list: ScheduledInboxMessageRecord[]): PortalInboxTableR
     preview: previewLine(message.body),
     whenLabel: formatPacificDateTime(message.sendAt),
     read: message.status !== "scheduled",
+    selectable: message.status === "scheduled" || message.status === "cancelled",
   }));
 }
 
@@ -104,6 +110,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
   const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const reloadScheduledMessages = useCallback(async () => {
     if (isDemoModeActive()) return;
@@ -181,6 +188,20 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     [scheduledMessages],
   );
 
+  const scheduleSelectableIds = useMemo(
+    () =>
+      scheduledRows
+        .filter((m) => m.status === "scheduled" || m.status === "cancelled")
+        .map((m) => m.id),
+    [scheduledRows],
+  );
+  const scheduleSelection = useInboxRowSelection(scheduleSelectableIds);
+
+  const selectedScheduledRows = useMemo(
+    () => scheduledRows.filter((m) => scheduleSelection.selectedIds.has(m.id)),
+    [scheduledRows, scheduleSelection.selectedIds],
+  );
+
   const counts = useMemo(() => countThreads(local), [local]);
 
   const tabs = useMemo(
@@ -200,6 +221,9 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     if (tabId === "trash") return local.filter((t) => t.folder === "trash");
     return [];
   }, [local, tabId]);
+
+  const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
+  const threadSelection = useInboxRowSelection(threadRowIds);
 
   const bodyById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -493,14 +517,36 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         const message = scheduledRows.find((item) => item.id === row.id);
         const cancelled = message?.status === "cancelled";
         return (
-          <Button
-            type="button"
-            variant={cancelled ? "outline" : "danger"}
-            className={PORTAL_DETAIL_BTN}
-            onClick={() => void toggleScheduledCancelled(row.id, !cancelled)}
-          >
-            {cancelled ? "Restore" : "Cancel send"}
-          </Button>
+          <>
+            {message?.status === "scheduled" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      await sendManualScheduledMessageNow(row.id, { asResident: true });
+                      showToast("Message sent.");
+                      void reloadScheduledMessages();
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : "Could not send message.");
+                    }
+                  })();
+                }}
+              >
+                Send now
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant={cancelled ? "outline" : "danger"}
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => void toggleScheduledCancelled(row.id, !cancelled)}
+            >
+              {cancelled ? "Restore" : "Cancel send"}
+            </Button>
+          </>
         );
       }
       if (tabId === "trash") {
@@ -548,8 +594,72 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         </Button>
       );
     },
-    [tabId, scheduledRows, toggleScheduledCancelled, moveToTrash, restoreFromTrash, deleteForever, markUnread],
+    [tabId, scheduledRows, toggleScheduledCancelled, moveToTrash, restoreFromTrash, deleteForever, markUnread, reloadScheduledMessages, showToast],
   );
+
+  const bulkScheduleSendNow = async () => {
+    const targets = selectedScheduledRows.filter((m) => m.status === "scheduled");
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      let ok = 0;
+      for (const message of targets) {
+        try {
+          await sendManualScheduledMessageNow(message.id, { asResident: true });
+          ok += 1;
+        } catch {
+          /* continue */
+        }
+      }
+      showToast(ok === 1 ? "Message sent." : `Sent ${ok} messages.`);
+      scheduleSelection.clearSelection();
+      void reloadScheduledMessages();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkScheduleCancel = async () => {
+    const targets = selectedScheduledRows.filter((m) => m.status === "scheduled");
+    for (const message of targets) {
+      await toggleScheduledCancelled(message.id, true);
+    }
+    scheduleSelection.clearSelection();
+  };
+
+  const bulkScheduleRestore = async () => {
+    const targets = selectedScheduledRows.filter((m) => m.status === "cancelled");
+    for (const message of targets) {
+      await toggleScheduledCancelled(message.id, false);
+    }
+    scheduleSelection.clearSelection();
+  };
+
+  const bulkMarkRead = () => {
+    for (const id of threadSelection.selectedIds) markRead(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkMoveToTrash = () => {
+    for (const id of threadSelection.selectedIds) moveToTrash(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkRestoreFromTrash = () => {
+    for (const id of threadSelection.selectedIds) restoreFromTrash(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkDeleteForever = () => {
+    if (!window.confirm(`Delete ${threadSelection.selectedIds.size} message(s) permanently?`)) return;
+    for (const id of threadSelection.selectedIds) deleteForever(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkMarkUnread = () => {
+    for (const id of threadSelection.selectedIds) markUnread(id);
+    threadSelection.clearSelection();
+  };
 
   const emptyCopy =
     tabId === "trash"
@@ -618,33 +728,99 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         scheduledRows.length === 0 ? (
           <PortalInboxEmptyState title={emptyCopy} />
         ) : (
-          <PortalInboxMessageTable
-            rows={scheduledToRows(scheduledRows)}
-            primaryPartyHeader="To"
-            getDetailBody={(row) => scheduledBodyById[row.id]}
-            onReply={undefined}
-            expandedId={expandedId}
-            onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-            renderExtraActions={renderExtraActions}
-          />
+          <div className="space-y-3">
+            <PortalInboxSelectionToolbar count={scheduleSelection.selectedIds.size} onClear={scheduleSelection.clearSelection}>
+              <Button type="button" variant="primary" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleSendNow()}>
+                Send now
+              </Button>
+              <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleCancel()}>
+                Cancel send
+              </Button>
+              <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleRestore()}>
+                Restore send
+              </Button>
+            </PortalInboxSelectionToolbar>
+            <PortalInboxMessageTable
+              rows={scheduledToRows(scheduledRows)}
+              primaryPartyHeader="To"
+              getDetailBody={(row) => scheduledBodyById[row.id]}
+              onReply={undefined}
+              expandedId={expandedId}
+              onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+              renderExtraActions={renderExtraActions}
+              selection={{
+                selectedIds: scheduleSelection.selectedIds,
+                onToggleSelected: scheduleSelection.toggleSelected,
+                onToggleSelectAll: scheduleSelection.toggleSelectAll,
+                allSelected: scheduleSelection.allSelected,
+                selectableCount: scheduleSelectableIds.length,
+              }}
+            />
+          </div>
         )
       ) : rowsForTab.length === 0 ? (
         <PortalInboxEmptyState title={emptyCopy} />
       ) : (
-        <PortalInboxMessageTable
-          rows={toRows(rowsForTab, tabId)}
-          primaryPartyHeader={tabId === "sent" ? "To" : "From"}
-          onMarkRead={tabId === "unopened" ? markRead : undefined}
-          getDetailBody={(row) => bodyById[row.id]}
-          getThreadMessages={(row) => {
-            const thread = local.find((t) => t.id === row.id);
-            return thread ? inboxThreadMessages(thread) : [];
-          }}
-          onReply={tabId === "trash" ? undefined : handleReply}
-          expandedId={expandedId}
-          onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-          renderExtraActions={renderExtraActions}
-        />
+        <div className="space-y-3">
+          <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
+            {tabId === "unopened" ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
+                  Mark read
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
+                  Trash
+                </Button>
+              </>
+            ) : null}
+            {tabId === "opened" ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkUnread}>
+                  Mark unread
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
+                  Trash
+                </Button>
+              </>
+            ) : null}
+            {tabId === "sent" ? (
+              <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
+                Trash
+              </Button>
+            ) : null}
+            {tabId === "trash" ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreFromTrash}>
+                  Restore
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={bulkDeleteForever}>
+                  Delete forever
+                </Button>
+              </>
+            ) : null}
+          </PortalInboxSelectionToolbar>
+          <PortalInboxMessageTable
+            rows={toRows(rowsForTab, tabId)}
+            primaryPartyHeader={tabId === "sent" ? "To" : "From"}
+            onMarkRead={tabId === "unopened" ? markRead : undefined}
+            getDetailBody={(row) => bodyById[row.id]}
+            getThreadMessages={(row) => {
+              const thread = local.find((t) => t.id === row.id);
+              return thread ? inboxThreadMessages(thread) : [];
+            }}
+            onReply={tabId === "trash" ? undefined : handleReply}
+            expandedId={expandedId}
+            onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+            renderExtraActions={renderExtraActions}
+            selection={{
+              selectedIds: threadSelection.selectedIds,
+              onToggleSelected: threadSelection.toggleSelected,
+              onToggleSelectAll: threadSelection.toggleSelectAll,
+              allSelected: threadSelection.allSelected,
+              selectableCount: threadRowIds.length,
+            }}
+          />
+        </div>
       )}
     </ManagerPortalPageShell>
   );

@@ -102,6 +102,8 @@ export type ScheduledMessageOverride = {
   customSubject?: string;
   customBody?: string;
   customDaysBeforeDue?: number;
+  /** ISO timestamp — overrides the computed send time for this reminder slot. */
+  customSendAt?: string;
 };
 
 function normalizePostDueDays(raw: unknown): number[] {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import {
   EMPTY_DRAFT,
   PromotionForm,
@@ -63,6 +64,7 @@ export function ManagerPropertyPromotionPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [previewEpoch, setPreviewEpoch] = useState(0);
+  const [flyerExpanded, setFlyerExpanded] = useState(true);
 
   useEffect(() => {
     if (!authReady) return;
@@ -96,6 +98,10 @@ export function ManagerPropertyPromotionPanel({
         .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0] ?? null
     );
   }, [listingId, tick]);
+
+  useEffect(() => {
+    setFlyerExpanded(true);
+  }, [promotion?.id, promotion?.updatedAt]);
 
   const openForm = useCallback(() => {
     if (promotion) {
@@ -177,19 +183,25 @@ export function ManagerPropertyPromotionPanel({
 
   if (!listingId.trim()) return null;
 
+  const hasFlyer = Boolean(promotion?.copy);
+
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
-          <p className="text-sm font-semibold text-foreground">Promotion</p>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {promotion?.copy ? (
+      <PortalCollapsibleSection
+        title="Promotion"
+        expanded={hasFlyer ? flyerExpanded : true}
+        onExpandedChange={hasFlyer ? setFlyerExpanded : undefined}
+        collapsible={hasFlyer}
+        toggleDataAttr="promotion-section-toggle"
+        headerActions={
+          <>
+            {hasFlyer ? (
               <Button
                 type="button"
                 variant="outline"
                 className="h-8 rounded-full px-3 text-xs"
                 data-attr="promotion-flyer-download"
-                onClick={() => downloadPromotionFlyer(promotion)}
+                onClick={() => downloadPromotionFlyer(promotion!)}
               >
                 Download
               </Button>
@@ -201,20 +213,20 @@ export function ManagerPropertyPromotionPanel({
               data-attr="manager-property-create-flyer"
               onClick={openForm}
             >
-              {promotion?.copy ? "Edit flyer" : "Create flyer"}
+              {hasFlyer ? "Edit flyer" : "Create flyer"}
             </Button>
-          </div>
-        </div>
-        {promotion?.copy ? (
-          <div className="min-w-0 max-w-full overflow-x-auto px-4 py-3">
-            <PromotionFlyerPreview
-              key={`${promotion.id}-${promotion.updatedAt}-${previewEpoch}`}
-              promotion={promotion}
-              embedded
-            />
-          </div>
+          </>
+        }
+        contentClassName="min-w-0 max-w-full overflow-x-auto px-4 py-3"
+      >
+        {hasFlyer ? (
+          <PromotionFlyerPreview
+            key={`${promotion!.id}-${promotion!.updatedAt}-${previewEpoch}`}
+            promotion={promotion!}
+            embedded
+          />
         ) : null}
-      </div>
+      </PortalCollapsibleSection>
 
       <Modal
         open={showForm}

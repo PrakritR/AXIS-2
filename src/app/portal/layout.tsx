@@ -1,4 +1,5 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
+import { PropertyPipelineAccountSync } from "@/components/portal/property-pipeline-account-sync";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
 import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
@@ -30,6 +31,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
         <SurfaceThemeDefault theme="light" />
         <PublicHomePrefetch />
         <PortalDataPrefetch kind="pro" />
+        <PropertyPipelineAccountSync />
         <AccountLinksSync />
         <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
           <PortalSkipLink />

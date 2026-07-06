@@ -41,6 +41,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       customSubject?: string;
       customBody?: string;
       customDaysBeforeDue?: number;
+      customSendAt?: string;
     };
 
     const patch: {
@@ -48,6 +49,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       customSubject?: string;
       customBody?: string;
       customDaysBeforeDue?: number;
+      customSendAt?: string;
     } = {};
 
     if (typeof body.cancelled === "boolean") patch.cancelled = body.cancelled;
@@ -55,6 +57,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (typeof body.customBody === "string") patch.customBody = body.customBody.trim();
     if (typeof body.customDaysBeforeDue === "number" && Number.isFinite(body.customDaysBeforeDue)) {
       patch.customDaysBeforeDue = Math.max(0, Math.min(60, Math.round(body.customDaysBeforeDue)));
+    }
+    if (typeof body.customSendAt === "string" && body.customSendAt.trim()) {
+      const parsed = new Date(body.customSendAt);
+      if (!Number.isNaN(parsed.getTime())) patch.customSendAt = parsed.toISOString();
     }
 
     await upsertScheduledMessageOverride(auth.db, {

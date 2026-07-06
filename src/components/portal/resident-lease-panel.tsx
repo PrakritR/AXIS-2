@@ -6,11 +6,8 @@ import { Card } from "@/components/ui/card";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
-import { LeaseReportIssueModal } from "@/components/portal/lease-report-issue-modal";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
-import { deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
-import { safeFormatDateTime } from "@/lib/pacific-time";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
@@ -21,7 +18,6 @@ import {
 } from "@/lib/generated-lease";
 import {
   LEASE_PIPELINE_EVENT,
-  appendLeaseThreadMessage,
   downloadLeaseFromRow,
   findLeaseForResidentEmail,
   hasBothLeaseSignatures,
@@ -39,10 +35,9 @@ import { usePortalSession } from "@/hooks/use-portal-session";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 /**
- * Self-contained resident Lease tab: review + sign the lease, report an issue
- * to the manager at any point (delivered to their inbox and email), and
- * download or upload the document. General document uploads live in
- * Documents › Other documents, not here.
+ * Self-contained resident Lease tab: review + sign the lease and download or
+ * upload the document. General document uploads live in Documents › Other
+ * documents, not here.
  */
 export function ResidentLeasePanel() {
   const { showToast } = useAppUi();
@@ -52,8 +47,6 @@ export function ResidentLeasePanel() {
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
-  const [reportIssueOpen, setReportIssueOpen] = useState(false);
-  const [reportIssueBusy, setReportIssueBusy] = useState(false);
   const [residentAxisId, setResidentAxisId] = useState("");
   const email = session.email?.trim() || null;
 
@@ -229,36 +222,6 @@ export function ResidentLeasePanel() {
     setPipelineTick((t) => t + 1);
   }, []);
 
-  const onSubmitReportIssue = async (subject: string, message: string) => {
-    if (!pipelineRow || !email || reportIssueBusy) return;
-    setReportIssueBusy(true);
-    try {
-      const leaseLabel = `${pipelineRow.residentName || "Resident"} — ${pipelineRow.unit || "unit"}`;
-      const fullSubject = `Lease issue — ${leaseLabel}: ${subject}`;
-      const body = [`Lease: ${leaseLabel}`, "", message, "", pipelineRow.residentName || "Resident"].join("\n");
-      const delivery = await deliverPortalInboxMessage({
-        fromName: pipelineRow.residentName || "Resident",
-        toBroadcast: ["management"],
-        subject: fullSubject,
-        text: body,
-      });
-      appendLeaseThreadMessage(pipelineRow.id, "resident", `${subject}\n\n${message}`);
-      if (delivery.ok) {
-        showToast(
-          delivery.skipped
-            ? "Message sent to your manager's Axis inbox."
-            : "Message sent to your manager's Axis inbox and email.",
-        );
-        setReportIssueOpen(false);
-        setPipelineTick((t) => t + 1);
-      } else {
-        showToast(delivery.error ?? "Could not send message.");
-      }
-    } finally {
-      setReportIssueBusy(false);
-    }
-  };
-
   if ((!pipelineRow || !leaseVisibleToResident) && email) {
     const preparing = (
       <div className="flex flex-col items-center gap-4 py-16 text-center">
@@ -308,18 +271,6 @@ export function ResidentLeasePanel() {
         checkUrl="/api/resident/check-move-out-availability"
         amendUrl="/api/resident/extend-lease"
         onSuccess={() => void handleMoveOutSuccess()}
-      />
-
-      <LeaseReportIssueModal
-        open={reportIssueOpen}
-        recipientLabel="your property manager"
-        leaseLabel={pipelineRow ? `${pipelineRow.residentName || "You"} — ${pipelineRow.unit || "unit"}` : ""}
-        busy={reportIssueBusy}
-        onClose={() => {
-          if (reportIssueBusy) return;
-          setReportIssueOpen(false);
-        }}
-        onSubmit={(subject, message) => void onSubmitReportIssue(subject, message)}
       />
 
       <ManagerPortalPageShell
@@ -383,46 +334,12 @@ export function ResidentLeasePanel() {
               row={pipelineRow}
               emptyHint="Your manager will generate or upload your lease here. When it's ready, the full agreement appears in this preview."
             />
-            {pipelineRow.managerSignature || pipelineRow.residentSignature ? (
-              <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-confirmed-fg)_25%,transparent)] p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-[var(--status-confirmed-fg)]">Signature status</p>
-                <div className="mt-3 grid gap-3 text-sm [html[data-native]_&]:gap-2 sm:grid-cols-2">
-                  <div>
-                    <p className="font-semibold text-foreground">Manager</p>
-                    <p className={pipelineRow.managerSignature ? "text-[var(--status-confirmed-fg)]" : "text-[var(--status-pending-fg)]"}>
-                      {pipelineRow.managerSignature
-                        ? `Signed by ${pipelineRow.managerSignature.name} · ${safeFormatDateTime(pipelineRow.managerSignature.signedAtIso)}`
-                        : "Pending signature"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground">Resident</p>
-                    <p className={pipelineRow.residentSignature ? "text-[var(--status-confirmed-fg)]" : "text-[var(--status-pending-fg)]"}>
-                      {pipelineRow.residentSignature
-                        ? `Signed by ${pipelineRow.residentSignature.name} · ${safeFormatDateTime(pipelineRow.residentSignature.signedAtIso)}`
-                        : "Pending signature"}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            ) : null}
             {pipelineRow.managerUploadedPdf?.dataUrl && pipelineRow.status === "Resident Signature Pending" ? (
               <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-approved-fg)_25%,transparent)] p-4 text-sm text-[var(--status-approved-fg)]">
                 Sign in the portal to append an electronic signature page, or upload a manually signed PDF if you prefer.
               </Card>
             ) : null}
           </div>
-        ) : null}
-
-        {leaseVisibleToResident && pipelineRow && email ? (
-          <Card className="glass-card border-border p-5">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted">Have a question or issue with this lease?</p>
-            <div className="mt-3">
-              <Button type="button" variant="outline" className="rounded-full" onClick={() => setReportIssueOpen(true)}>
-                Report issue
-              </Button>
-            </div>
-          </Card>
         ) : null}
 
         {upgradeBreakdown ? (

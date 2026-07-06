@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalFeedbackSubmitModal } from "@/components/portal/portal-feedback-submit-modal";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -236,13 +237,15 @@ export function PortalBugFeedbackPanel({
   return (
     <>
       {embedded ? (
-        <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-sm)] sm:p-6">
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm font-semibold text-foreground">Feedback</p>
-            {addFeedbackButton}
-          </div>
+        <PortalCollapsibleSection
+          title="Feedback"
+          surfaceMuted={false}
+          headerActions={addFeedbackButton}
+          contentClassName="px-4 pb-4"
+          toggleDataAttr="portal-feedback-section-toggle"
+        >
           {body}
-        </div>
+        </PortalCollapsibleSection>
       ) : (
         <ManagerPortalPageShell title="Feedback" titleAside={addFeedbackButton}>
           {body}

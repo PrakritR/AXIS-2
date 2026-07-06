@@ -17,6 +17,7 @@ import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import {
   filterScheduledPaymentMessagesForUnpaidCharges,
   filterScheduledPaymentMessagesForVisibility,
+  formatScheduledSendAt,
   projectScheduledPaymentMessages,
   scheduledReminderShortLabel,
 } from "@/lib/scheduled-payment-messages";
@@ -24,6 +25,13 @@ import {
 function formatSendDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function toLocalInputValue(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** One-line summary for automation settings buttons. */
@@ -252,20 +260,25 @@ export function ScheduledMessageEditForm({
   message,
   onClose,
   onSaved,
+  onSendNow,
 }: {
   message: ScheduledPaymentMessage;
   onClose: () => void;
   onSaved: () => void;
+  onSendNow?: () => void | Promise<void>;
 }) {
   const { showToast } = useAppUi();
   const [subject, setSubject] = useState(message.subject);
   const [body, setBody] = useState(message.body);
-  const [daysBeforeDue, setDaysBeforeDue] = useState(
-    message.daysBeforeDue != null ? String(message.daysBeforeDue) : "",
-  );
+  const [sendAtLocal, setSendAtLocal] = useState(toLocalInputValue(message.sendAt));
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
+    const sendAt = new Date(sendAtLocal);
+    if (Number.isNaN(sendAt.getTime())) {
+      showToast("Choose a valid send date and time.");
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch(`/api/portal/scheduled-messages/${encodeURIComponent(message.id)}`, {
@@ -275,9 +288,7 @@ export function ScheduledMessageEditForm({
         body: JSON.stringify({
           customSubject: subject,
           customBody: body,
-          ...(message.kind === "pre_due" && daysBeforeDue.trim()
-            ? { customDaysBeforeDue: Number(daysBeforeDue) }
-            : {}),
+          customSendAt: sendAt.toISOString(),
         }),
       });
       if (!res.ok) {
@@ -317,14 +328,18 @@ export function ScheduledMessageEditForm({
   return (
     <div className="space-y-4">
         <p className="text-sm text-muted">
-          {message.residentName} · {message.chargeTitle} · {message.typeLabel}
+          {message.residentName} · {message.chargeTitle} · sends {formatScheduledSendAt(message.sendAt)}
         </p>
-        {message.kind === "pre_due" ? (
-          <div>
-            <label className="text-xs font-semibold text-muted">Days before send date</label>
-            <Input className="mt-1" value={daysBeforeDue} onChange={(e) => setDaysBeforeDue(e.target.value)} disabled={busy} />
-          </div>
-        ) : null}
+        <div>
+          <label className="text-xs font-semibold text-muted">Send date &amp; time</label>
+          <Input
+            type="datetime-local"
+            className="mt-1"
+            value={sendAtLocal}
+            onChange={(e) => setSendAtLocal(e.target.value)}
+            disabled={busy}
+          />
+        </div>
         <div>
           <label className="text-xs font-semibold text-muted">Subject</label>
           <Input className="mt-1" value={subject} onChange={(e) => setSubject(e.target.value)} disabled={busy} />
@@ -337,6 +352,11 @@ export function ScheduledMessageEditForm({
           <Button type="button" variant="primary" className="rounded-full" onClick={() => void save()} disabled={busy}>
             Save
           </Button>
+          {message.status === "scheduled" && onSendNow ? (
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => void onSendNow()} disabled={busy}>
+              Send now
+            </Button>
+          ) : null}
           {message.status === "cancelled" ? (
             <Button type="button" variant="outline" className="rounded-full" onClick={() => void toggleCancelled(false)} disabled={busy}>
               Restore send
@@ -688,6 +708,7 @@ export async function patchScheduledMessage(
     customSubject?: string;
     customBody?: string;
     customDaysBeforeDue?: number;
+    customSendAt?: string;
   },
 ): Promise<void> {
   const res = await fetch(`/api/portal/scheduled-messages/${encodeURIComponent(messageId)}`, {

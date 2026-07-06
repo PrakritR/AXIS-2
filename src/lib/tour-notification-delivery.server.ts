@@ -4,6 +4,10 @@
 
 import { resolveAppOrigin } from "@/lib/app-url";
 import {
+  resolveManagerRecipientProfiles,
+  resolvePropertyScopedManagerRecipientIds,
+} from "@/lib/co-manager-notification-recipients.server";
+import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
   TOUR_REQUEST_MANAGER_SUBJECT,
   TOUR_REQUEST_TENANT_SUBJECT,
@@ -162,19 +166,33 @@ export async function notifyManagerTourRequest(
   const subject = TOUR_REQUEST_MANAGER_SUBJECT;
   const text = buildTourRequestManagerBody(ctx);
 
-  await upsertInboxThread(db, {
-    scope: MANAGER_INBOX_SCOPE,
-    ownerUserId: managerUserId,
-    participantEmail: managerEmail,
-    folder: "inbox",
-    fromName: "Axis Tours",
-    fromEmail: "tours@axis.local",
-    toLine: managerEmail,
-    subject,
-    body: text,
+  const recipientIds = await resolvePropertyScopedManagerRecipientIds(db, {
+    ownerManagerUserId: managerUserId,
+    propertyId,
+    channel: "calendar",
   });
+  const recipients = await resolveManagerRecipientProfiles(db, recipientIds);
+  if (recipients.length === 0) return { ok: false, error: "Manager email not found." };
 
-  const email = await deliverEmail([managerEmail], subject, text);
+  for (const recipient of recipients) {
+    await upsertInboxThread(db, {
+      scope: MANAGER_INBOX_SCOPE,
+      ownerUserId: recipient.userId,
+      participantEmail: recipient.email,
+      folder: "inbox",
+      fromName: "Axis Tours",
+      fromEmail: "tours@axis.local",
+      toLine: recipient.email,
+      subject,
+      body: text,
+    });
+  }
+
+  const email = await deliverEmail(
+    recipients.map((recipient) => recipient.email),
+    subject,
+    text,
+  );
   if (email.error) return { ok: true, skipped: true, error: email.error };
   return { ok: true, skipped: email.skipped };
 }

@@ -17,7 +17,7 @@ type RegisterResponse = {
   redirectTo?: string;
   confirmed?: boolean;
   emailDeliveryConfigured?: boolean;
-  confirmLink?: string;
+  confirmLinkLoggedLocally?: boolean;
 };
 
 /** Vendor account creation — Google or email/password; reused in auth hub, invite page, and public marketing. */
@@ -45,8 +45,7 @@ export function VendorSignupForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
-  const [devConfirmLink, setDevConfirmLink] = useState<string | null>(null);
-  const [confirmLinkNotice, setConfirmLinkNotice] = useState<string | null>(null);
+  const [localDevConfirmHint, setLocalDevConfirmHint] = useState(false);
 
   const compact = variant === "compact";
   const locked = disabled || busy;
@@ -79,20 +78,14 @@ export function VendorSignupForm({
       });
       const body = (await res.json()) as RegisterResponse;
       if (!res.ok) {
+        setLocalDevConfirmHint(body.confirmLinkLoggedLocally === true);
         setError(body.error ?? "Could not create vendor account.");
         return;
       }
 
       if (body.confirmed === false) {
         setPendingConfirmation(true);
-        if (body.emailDeliveryConfigured === false) {
-          setDevConfirmLink(body.confirmLink ?? null);
-          setConfirmLinkNotice(
-            body.error
-              ? `We couldn't send that email (${body.error}) — use this link directly:`
-              : "Email delivery isn't configured in this environment — use this link directly:",
-          );
-        }
+        setLocalDevConfirmHint(false);
         return;
       }
 
@@ -122,15 +115,6 @@ export function VendorSignupForm({
           We sent a confirmation link to <strong>{email.trim()}</strong>. Click it to finish creating your vendor
           account.
         </p>
-        {devConfirmLink ? (
-          <p className="mt-4 rounded-md border border-border bg-card/40 p-3 text-xs text-muted">
-            {confirmLinkNotice}
-            <br />
-            <a className="break-all font-semibold text-primary" href={devConfirmLink}>
-              {devConfirmLink}
-            </a>
-          </p>
-        ) : null}
       </div>
     );
   }
@@ -245,6 +229,11 @@ export function VendorSignupForm({
         </Button>
 
         {error ? <p className="text-center text-xs text-rose-600">{error}</p> : null}
+        {localDevConfirmHint ? (
+          <p className="text-center text-xs text-muted">
+            Local dev only: check the server console for the confirmation link.
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -255,6 +244,9 @@ export function VendorSignupForm({
       <AuthDivider label="or enter your details" />
       {passwordFieldsDefault}
       {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {localDevConfirmHint ? (
+        <p className="text-xs text-muted">Local dev only: check the server console for the confirmation link.</p>
+      ) : null}
       <Button
         type="button"
         className="w-full rounded-full py-3 text-base font-semibold"

@@ -32,6 +32,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
+import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
@@ -139,8 +140,7 @@ export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
   );
   return (
     <section>
-      <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application</p>
-      <div className="mt-3 overflow-hidden rounded-2xl border border-border shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-border shadow-sm">
         <iframe
           srcDoc={documentHtml}
           title="Application document preview"
@@ -202,6 +202,7 @@ export function ManagerApplications() {
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [editApplicationOpen, setEditApplicationOpen] = useState(false);
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
   useEffect(() => {
@@ -439,7 +440,7 @@ export function ManagerApplications() {
           className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
           onClick={() => void deleteApplication(row.id)}
         >
-          Delete application
+          Delete
         </Button>
       </PortalTableDetailActions>
 
@@ -464,6 +465,17 @@ export function ManagerApplications() {
             type="button"
             variant="outline"
             className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            data-attr="edit-application-open"
+            onClick={() => setEditApplicationOpen(true)}
+            disabled={propertyOptions.length === 0}
+            title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
+          >
+            Edit application
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
             onClick={() => setInviteModalOpen(true)}
             disabled={shareableProperties.length === 0}
             title={shareableProperties.length === 0 ? "List a property as active before inviting prospects" : undefined}
@@ -473,18 +485,14 @@ export function ManagerApplications() {
         </div>
       }
       filterRow={
-        <>
-          <ManagerPortalFilterRow>
-            <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          </ManagerPortalFilterRow>
-          <div className="mt-2.5 w-full min-w-0 [&>div]:w-full [&_select]:w-full [html[data-native]_&]:mt-2">
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(id) => setPropertyFilter(id)}
-            />
-          </div>
-        </>
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={(id) => setPropertyFilter(id)}
+          />
+        </ManagerPortalFilterRow>
       }
     >
       <ManagerScreeningSettingsModal open={screeningModalOpen} onClose={() => setScreeningModalOpen(false)} />
@@ -616,6 +624,14 @@ export function ManagerApplications() {
         onClose={() => setInviteModalOpen(false)}
         kind="apply"
         properties={shareableProperties}
+      />
+      <ManagerEditApplicationModal
+        open={editApplicationOpen}
+        onClose={() => setEditApplicationOpen(false)}
+        propertyOptions={propertyOptions}
+        managerUserId={userId}
+        onSaved={() => setPortfolioTick((n) => n + 1)}
+        showToast={showToast}
       />
     </>
   );

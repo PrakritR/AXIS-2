@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -458,9 +459,12 @@ export function VendorAvailabilityEditor() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-sm)]">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">Weekly hours</p>
+      <PortalCollapsibleSection
+        title="Weekly hours"
+        surfaceMuted={false}
+        contentClassName="px-4 pb-4"
+        toggleDataAttr="vendor-availability-weekly-toggle"
+        headerActions={
           <Button
             type="button"
             variant="outline"
@@ -478,8 +482,8 @@ export function VendorAvailabilityEditor() {
           >
             {weeklyFormOpen ? "Cancel" : "+ Add window"}
           </Button>
-        </div>
-
+        }
+      >
         {weeklyFormOpen ? (
           <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2 rounded-xl border border-border bg-accent/20 p-3">
             <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
@@ -584,14 +588,15 @@ export function VendorAvailabilityEditor() {
             );
           })}
         </div>
-      </div>
+      </PortalCollapsibleSection>
 
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-sm)]">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Open specific dates</p>
-            <p className="text-xs text-muted">Open a one-off date for visits, even outside your weekly hours.</p>
-          </div>
+      <PortalCollapsibleSection
+        title="Open specific dates"
+        subtitle="Open a one-off date for visits, even outside your weekly hours."
+        surfaceMuted={false}
+        contentClassName="px-4 pb-4"
+        toggleDataAttr="vendor-availability-open-dates-toggle"
+        headerActions={
           <Button
             type="button"
             variant="outline"
@@ -609,8 +614,8 @@ export function VendorAvailabilityEditor() {
           >
             {openFormOpen ? "Cancel" : "+ Open a date"}
           </Button>
-        </div>
-
+        }
+      >
         {openFormOpen ? (
           <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2 rounded-xl border border-border bg-accent/20 p-3">
             <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
@@ -714,11 +719,14 @@ export function VendorAvailabilityEditor() {
             ))
           )}
         </div>
-      </div>
+      </PortalCollapsibleSection>
 
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-sm)]">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">Blocked dates</p>
+      <PortalCollapsibleSection
+        title="Blocked dates"
+        surfaceMuted={false}
+        contentClassName="px-4 pb-4"
+        toggleDataAttr="vendor-availability-blocked-toggle"
+        headerActions={
           <Button
             type="button"
             variant="outline"
@@ -736,8 +744,8 @@ export function VendorAvailabilityEditor() {
           >
             {blockFormOpen ? "Cancel" : "+ Block a date"}
           </Button>
-        </div>
-
+        }
+      >
         {blockFormOpen ? (
           <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2 rounded-xl border border-border bg-accent/20 p-3">
             <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
@@ -841,7 +849,7 @@ export function VendorAvailabilityEditor() {
             ))
           )}
         </div>
-      </div>
+      </PortalCollapsibleSection>
       {!loaded ? <p className="text-xs text-muted">Loading availability…</p> : null}
     </div>
   );
@@ -945,14 +953,17 @@ export function VendorSettingsPanel() {
           </p>
         ) : null}
 
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-sm)]">
-          <p className="text-sm font-semibold text-foreground">Business profile</p>
-          <p className="mt-1 text-xs text-muted">Shown to the manager(s) you work with.</p>
-
+        <PortalCollapsibleSection
+          title="Business profile"
+          subtitle="Shown to the manager(s) you work with."
+          surfaceMuted={false}
+          contentClassName="px-4 pb-5"
+          toggleDataAttr="vendor-settings-profile-toggle"
+        >
           {profileLoading ? (
-            <p className="mt-4 text-sm text-muted">Loading…</p>
+            <p className="text-sm text-muted">Loading…</p>
           ) : (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
                 Business name
                 <Input
@@ -991,19 +1002,19 @@ export function VendorSettingsPanel() {
               {profileSaving ? "Saving…" : "Save"}
             </Button>
           </div>
-        </section>
+        </PortalCollapsibleSection>
 
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-sm)]">
-          <p className="text-sm font-semibold text-foreground">Work capabilities</p>
-          <p className="mt-1 text-xs text-muted">
-            Select every type of work you can do. Managers&apos; auto-match uses this to suggest you for the right
-            work orders.
-          </p>
-
+        <PortalCollapsibleSection
+          title="Work capabilities"
+          subtitle="Select every type of work you can do. Managers' auto-match uses this to suggest you for the right work orders."
+          surfaceMuted={false}
+          contentClassName="px-4 pb-5"
+          toggleDataAttr="vendor-settings-capabilities-toggle"
+        >
           {profileLoading ? (
-            <p className="mt-4 text-sm text-muted">Loading…</p>
+            <p className="text-sm text-muted">Loading…</p>
           ) : (
-            <div className="mt-4 grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:grid-cols-2 lg:grid-cols-3">
               {VENDOR_TRADE_OPTIONS.map((option) => {
                 const on = trades.includes(option);
                 return (
@@ -1032,7 +1043,7 @@ export function VendorSettingsPanel() {
               {capabilitiesSaving ? "Saving…" : "Save capabilities"}
             </Button>
           </div>
-        </section>
+        </PortalCollapsibleSection>
 
         <PortalBugFeedbackPanel reporterRole="vendor" embedded />
       </div>

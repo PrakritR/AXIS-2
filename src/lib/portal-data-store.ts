@@ -33,6 +33,12 @@ let vendorPrefetchPromise: Promise<void> | null = null;
 
 let accountLinksAt = 0;
 let accountLinksPromise: Promise<AccountLinksResponse> | null = null;
+let cachedAccountLinksResponse: AccountLinksResponse = { invites: [] };
+
+/** Last successful account-links payload (for co-manager property access before relationship sync settles). */
+export function readCachedAccountLinkInvites(): AccountLinkInviteDto[] {
+  return cachedAccountLinksResponse.invites;
+}
 
 /** Deduped fetch for co-manager nav + account link sync. */
 export async function fetchAccountLinksCached(): Promise<AccountLinksResponse> {
@@ -46,13 +52,18 @@ export async function fetchAccountLinksCached(): Promise<AccountLinksResponse> {
     const res = await fetch("/api/pro/account-links", { credentials: "include", cache: "no-store" });
     const body = (await res.json()) as AccountLinksResponse & { error?: string };
     if (!res.ok) {
-      return { invites: [], migrationRequired: true };
+      cachedAccountLinksResponse = { invites: [], migrationRequired: true };
+      return cachedAccountLinksResponse;
     }
-    return {
+    cachedAccountLinksResponse = {
       invites: body.invites ?? [],
       migrationRequired: body.migrationRequired,
     };
-  })().catch(() => ({ invites: [], migrationRequired: true }));
+    return cachedAccountLinksResponse;
+  })().catch(() => {
+    cachedAccountLinksResponse = { invites: [], migrationRequired: true };
+    return cachedAccountLinksResponse;
+  });
 
   return accountLinksPromise;
 }
@@ -102,6 +113,7 @@ export function prefetchPortalData(kind: PortalKind, userId?: string | null): Pr
 export function invalidateAccountLinksCache(): void {
   accountLinksAt = 0;
   accountLinksPromise = null;
+  cachedAccountLinksResponse = { invites: [] };
 }
 
 /** Bump application storage listeners after prefetch. */

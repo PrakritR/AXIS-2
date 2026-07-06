@@ -56,7 +56,14 @@ function rowFromDb(row: {
       : undefined,
     deliverViaEmail: data.deliverViaEmail !== false,
     deliverViaSms: data.deliverViaSms === true,
-    senderPortal: data.senderPortal === "resident" ? "resident" : data.senderPortal === "manager" ? "manager" : undefined,
+    senderPortal:
+      data.senderPortal === "resident"
+        ? "resident"
+        : data.senderPortal === "manager"
+          ? "manager"
+          : typeof data.senderUserId === "string" && data.senderUserId.trim()
+            ? "resident"
+            : undefined,
     senderUserId: typeof data.senderUserId === "string" ? data.senderUserId : null,
     senderName: typeof data.senderName === "string" ? data.senderName : undefined,
     senderEmail: typeof data.senderEmail === "string" ? data.senderEmail : undefined,
@@ -152,6 +159,47 @@ export async function createScheduledInboxMessage(
   return { ...input, createdAt: now, sentAt: null, cancelledAt: null };
 }
 
+export const RESIDENT_SCHEDULED_MESSAGE_CONTENT_FORBIDDEN =
+  "Managers cannot edit resident-scheduled message content.";
+
+export const RESIDENT_SCHEDULED_MESSAGE_DELETE_FORBIDDEN =
+  "Managers cannot delete resident-scheduled messages.";
+
+/** Includes legacy rows that stored senderUserId before senderPortal existed. */
+export function isResidentOriginatedScheduledRow(rowData: Record<string, unknown>): boolean {
+  if (rowData.senderPortal === "resident") return true;
+  if (rowData.senderPortal === "manager") return false;
+  return Boolean(String(rowData.senderUserId ?? "").trim());
+}
+
+export function isResidentOriginatedScheduledMessage(
+  message: Pick<ScheduledInboxMessageRecord, "senderPortal" | "senderUserId">,
+): boolean {
+  if (message.senderPortal === "resident") return true;
+  if (message.senderPortal === "manager") return false;
+  return Boolean(message.senderUserId?.trim());
+}
+
+function managerContentPatchAttempted(
+  patch: Partial<
+    Pick<
+      ScheduledInboxMessageRecord,
+      "sendAt" | "status" | "subject" | "body" | "recipientEmail" | "recipientName" | "recipientUserId" | "deliverViaEmail" | "deliverViaSms"
+    >
+  > & { sentAt?: string | null; cancelledAt?: string | null },
+): boolean {
+  return (
+    patch.subject != null ||
+    patch.body != null ||
+    patch.sendAt != null ||
+    patch.recipientEmail != null ||
+    patch.recipientName != null ||
+    patch.recipientUserId !== undefined ||
+    patch.deliverViaEmail != null ||
+    patch.deliverViaSms != null
+  );
+}
+
 export async function updateScheduledInboxMessage(
   db: SupabaseClient,
   managerUserId: string,
@@ -172,6 +220,9 @@ export async function updateScheduledInboxMessage(
   if (!existing) throw new Error("Scheduled message not found.");
 
   const prev = (existing.row_data ?? {}) as Record<string, unknown>;
+  if (isResidentOriginatedScheduledRow(prev) && managerContentPatchAttempted(patch)) {
+    throw new Error(RESIDENT_SCHEDULED_MESSAGE_CONTENT_FORBIDDEN);
+  }
   const nextData = {
     ...prev,
     ...(patch.subject != null ? { subject: patch.subject } : {}),

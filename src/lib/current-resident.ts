@@ -20,3 +20,14 @@ export function isCurrentResidentApplicationRow(row: DemoApplicantRow, nowMs = D
   if (hasMoveOutDatePassed(row.manualResidentDetails?.moveOutDate, nowMs)) return false;
   return !isPreviousResidentStage(row.stage);
 }
+
+/** Pending or approved applications shown on the manager Residents tab. */
+export function isResidentDirectoryRow(row: DemoApplicantRow): boolean {
+  return row.bucket === "approved" || row.bucket === "pending";
+}
+
+/** Whether a Residents-tab row belongs under Previous (moved-out approved only). */
+export function isPreviousResidentDirectoryRow(row: DemoApplicantRow, nowMs = Date.now()): boolean {
+  if (row.bucket === "pending") return false;
+  return !isCurrentResidentApplicationRow(row, nowMs);
+}

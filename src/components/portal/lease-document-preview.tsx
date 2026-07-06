@@ -31,10 +31,10 @@ export function LeaseDocumentPreview({ row, emptyHint, className }: Props) {
     emptyHint ??
     "No lease document yet — click Generate lease (from application data) or upload a PDF to preview it here.";
 
-  const syntheticHtml = useMemo(
-    () => (!pdfSrc && !html ? draftHtmlFromApplication(row.application ?? undefined) : null),
-    [pdfSrc, html, row.application],
-  );
+  const syntheticHtml = useMemo(() => {
+    if (pdfSrc || html || row.leaseDocumentRemovedAt) return null;
+    return draftHtmlFromApplication(row.application ?? undefined);
+  }, [pdfSrc, html, row.application, row.leaseDocumentRemovedAt]);
 
   const showSynthetic = Boolean(syntheticHtml);
 

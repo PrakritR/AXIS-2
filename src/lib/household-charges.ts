@@ -1677,6 +1677,9 @@ export function markHouseholdChargePaid(chargeId: string, managerUserId: string 
     rentProfiles: readRentProfiles(),
   }).then((ok) => {
     if (ok) emit();
+    void import("@/lib/service-requests-storage").then(({ syncServiceRequestPaidFromCharge }) => {
+      syncServiceRequestPaidFromCharge(chargeId);
+    });
   });
   return true;
 }

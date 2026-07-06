@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import {
   updateExtraListingFromSubmission,
@@ -68,6 +69,7 @@ export function ManagerPropertyHouseDetailsPanel({
 }) {
   const [notesTick, setNotesTick] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [draft, setDraft] = useState<PortalListingNote>({});
 
   const portalNote = useMemo(
@@ -137,19 +139,28 @@ export function ManagerPropertyHouseDetailsPanel({
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-foreground">House details</p>
-          <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
-        </div>
-        <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => (editing ? setEditing(false) : startEdit())}>
+    <PortalCollapsibleSection
+      title="House details"
+      titleAddon={
+        <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
+      }
+      expanded={expanded}
+      onExpandedChange={setExpanded}
+      headerActions={
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-full px-3 text-xs"
+          onClick={() => (editing ? setEditing(false) : startEdit())}
+        >
           {editing ? "Cancel" : "Edit"}
         </Button>
-      </div>
-
+      }
+      contentClassName={editing ? "space-y-4 px-4 py-4" : undefined}
+      toggleDataAttr="house-details-section-toggle"
+    >
       {editing ? (
-        <div className="space-y-4 px-4 py-4">
+        <>
           <div>
             <div className="mb-0.5 flex items-center gap-2">
               <p className="text-sm font-medium text-foreground">House description</p>
@@ -215,7 +226,7 @@ export function ManagerPropertyHouseDetailsPanel({
               Cancel
             </Button>
           </div>
-        </div>
+        </>
       ) : (
         <div>
           <HouseDetailRow label="Description" value={houseDescription} badge="Manager only" />
@@ -227,6 +238,6 @@ export function ManagerPropertyHouseDetailsPanel({
           ) : null}
         </div>
       )}
-    </div>
+    </PortalCollapsibleSection>
   );
 }

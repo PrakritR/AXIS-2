@@ -327,3 +327,83 @@ export function filterRoomListings(
   }
   return rows;
 }
+
+/** Curated Seattle-area house photos when a listing has no uploads yet. */
+const BROWSE_PLACEHOLDER_PHOTOS = [
+  "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80",
+] as const;
+
+export function browseCardPlaceholderImage(propertyId: string): string {
+  let hash = 0;
+  for (let i = 0; i < propertyId.length; i++) hash = (hash + propertyId.charCodeAt(i) * (i + 1)) % 9973;
+  return BROWSE_PLACEHOLDER_PHOTOS[hash % BROWSE_PLACEHOLDER_PHOTOS.length]!;
+}
+
+export type PropertyBrowseCard = {
+  propertyId: string;
+  headlineAddress: string;
+  neighborhood: string;
+  imageUrl: string;
+  rentNumeric: number | null;
+  priceLabel: string;
+  roomCount: number;
+  petFriendly: boolean;
+};
+
+/** One shopping-style card per property — cheapest available room rent, hero image. */
+export function buildPropertyBrowseCards(properties: MockProperty[]): PropertyBrowseCard[] {
+  const roomRows = filterRoomListings(properties, {
+    zipRaw: "",
+    radiusMiles: 50,
+    maxBudgetNum: null,
+    bathroom: "any",
+    bedroom: "any",
+  });
+
+  const byProperty = new Map<string, PropertyBrowseCard>();
+
+  for (const row of roomRows) {
+    const photo = row.mediaSlides.find((s) => s.kind === "photo")?.src?.trim();
+    const imageUrl = photo || browseCardPlaceholderImage(row.propertyId);
+    const existing = byProperty.get(row.propertyId);
+
+    if (!existing) {
+      byProperty.set(row.propertyId, {
+        propertyId: row.propertyId,
+        headlineAddress: row.headlineAddress,
+        neighborhood: row.neighborhood,
+        imageUrl,
+        rentNumeric: row.rentNumeric,
+        priceLabel: row.priceLabel,
+        roomCount: 1,
+        petFriendly: row.petFriendly,
+      });
+      continue;
+    }
+
+    existing.roomCount += 1;
+    if (
+      row.rentNumeric !== null &&
+      (existing.rentNumeric === null || row.rentNumeric < existing.rentNumeric)
+    ) {
+      existing.rentNumeric = row.rentNumeric;
+      existing.priceLabel = row.priceLabel;
+    }
+    if (!existing.imageUrl && imageUrl) existing.imageUrl = imageUrl;
+  }
+
+  return [...byProperty.values()].sort((a, b) => {
+    if (a.rentNumeric === null && b.rentNumeric === null) {
+      return a.headlineAddress.localeCompare(b.headlineAddress);
+    }
+    if (a.rentNumeric === null) return 1;
+    if (b.rentNumeric === null) return -1;
+    if (a.rentNumeric !== b.rentNumeric) return a.rentNumeric - b.rentNumeric;
+    return a.headlineAddress.localeCompare(b.headlineAddress);
+  });
+}

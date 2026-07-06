@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { safeFormatDateTime } from "@/lib/pacific-time";
@@ -158,11 +159,14 @@ export function VendorDocumentsPanel() {
       ) : (
         <div className="space-y-6">
           {VENDOR_DOCUMENT_SECTIONS.map((section) => (
-            <section key={section.id} className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-sm)] sm:p-5">
-              <div className="mb-4">
-                <h2 className="text-sm font-semibold text-foreground">{section.label}</h2>
-                {section.description ? <p className="mt-1 text-xs text-muted">{section.description}</p> : null}
-              </div>
+            <PortalCollapsibleSection
+              key={section.id}
+              title={section.label}
+              subtitle={section.description}
+              surfaceMuted={false}
+              contentClassName="px-4 pb-4"
+              toggleDataAttr={`vendor-documents-section-${section.id}`}
+            >
               <ul className="space-y-3">
                 {section.kinds.map((kind) => {
                   const doc = documentsByKind.get(kind);
@@ -249,7 +253,7 @@ export function VendorDocumentsPanel() {
                   );
                 })}
               </ul>
-            </section>
+            </PortalCollapsibleSection>
           ))}
         </div>
       )}

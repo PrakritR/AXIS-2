@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
+import {
+  resolveManagerRecipientProfiles,
+  resolvePropertyScopedManagerRecipientIds,
+} from "@/lib/co-manager-notification-recipients.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
@@ -153,6 +157,9 @@ export async function POST(req: Request) {
       deliverToPortalInbox?: boolean;
       deliverViaEmail?: boolean;
       deliverViaSms?: boolean;
+      propertyId?: string;
+      /** When set with a single manager recipient, also notify linked co-managers with inbox access. */
+      fanOutPropertyInbox?: boolean;
     };
 
     const threadId = String(body.threadId ?? "").trim();
@@ -206,9 +213,18 @@ export async function POST(req: Request) {
       }
     }
 
-    const toUserIds = normalizeUserIds(body.toUserIds);
+    let toUserIds = normalizeUserIds(body.toUserIds);
     const { data: senderProfile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
     const senderRole = String(senderProfile?.role ?? "").trim().toLowerCase() || null;
+
+    const propertyId = String(body.propertyId ?? "").trim();
+    if (propertyId && body.fanOutPropertyInbox !== false && toUserIds.length === 1) {
+      toUserIds = await resolvePropertyScopedManagerRecipientIds(db, {
+        ownerManagerUserId: toUserIds[0]!,
+        propertyId,
+        channel: "inbox",
+      });
+    }
 
     const recipientsByEmail = new Map<
       string,

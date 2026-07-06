@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isProductionRuntime } from "@/lib/server-env";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
-import { loadDueScheduledInboxMessages, updateScheduledInboxMessage } from "@/lib/scheduled-inbox-messages";
+import { loadDueScheduledInboxMessages, isResidentOriginatedScheduledMessage, updateScheduledInboxMessage } from "@/lib/scheduled-inbox-messages";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
   for (const message of due) {
     try {
-      if (message.senderPortal === "resident" && message.senderUserId && message.senderEmail) {
+      if (isResidentOriginatedScheduledMessage(message) && message.senderUserId && message.senderEmail) {
         const result = await deliverPortalInboxMessage(db, {
           senderUserId: message.senderUserId,
           senderEmail: message.senderEmail,

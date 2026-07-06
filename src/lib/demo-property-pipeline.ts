@@ -7,6 +7,7 @@ import { demoProperties } from "@/lib/demo/demo-data";
 import type { MockProperty } from "@/data/types";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
+import { scopePropertyPipelineSnapshotForViewer } from "@/lib/persisted-property-records";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { parseRecordOfArrays } from "@/lib/safe-local-storage";
 
@@ -250,7 +251,30 @@ export function hasCachedPropertyPipeline(): boolean {
   return readPropertyPipelineSyncedAt() > 0;
 }
 
-export async function syncPropertyPipelineFromServer(opts?: { force?: boolean }): Promise<boolean> {
+/** Drop cached pipeline data when the signed-in portal user changes. */
+export function resetPropertyPipelineClientCache(): void {
+  if (!isBrowser()) return;
+  memoryStore.delete(PENDING_BY_USER_KEY);
+  memoryStore.delete(EXTRAS_BY_USER_KEY);
+  memoryStore.delete("axis_admin_property_buckets_v1");
+  lastPipelineSnapshotSig = null;
+  writePropertyPipelineSyncedAt(0);
+  try {
+    for (const key of Object.keys(window.sessionStorage)) {
+      if (key.startsWith(SESSION_CACHE_PREFIX)) {
+        window.sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function syncPropertyPipelineFromServer(opts?: {
+  force?: boolean;
+  userId?: string | null;
+  linkedPropertyIds?: Iterable<string>;
+}): Promise<boolean> {
   if (!isBrowser()) return false;
   if (isDemoModeActive()) return true;
   const force = opts?.force === true;
@@ -264,16 +288,25 @@ export async function syncPropertyPipelineFromServer(opts?: { force?: boolean })
       const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
       const body = (await res.json()) as { snapshot?: PropertyPipelineSnapshot };
       if (!res.ok || !body.snapshot) return false;
-      const sig = JSON.stringify(body.snapshot);
+      const viewerUserId = opts?.userId?.trim() ?? "";
+      const snapshot =
+        viewerUserId
+          ? scopePropertyPipelineSnapshotForViewer(
+              body.snapshot,
+              viewerUserId,
+              opts?.linkedPropertyIds ?? [],
+            )
+          : body.snapshot;
+      const sig = JSON.stringify(snapshot);
       const changed = sig !== lastPipelineSnapshotSig;
       lastPipelineSnapshotSig = sig;
-      memoryStore.set(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
-      writeSessionJson(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
-      memoryStore.set(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
-      writeSessionJson(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
-      memoryStore.set("axis_admin_property_buckets_v1", body.snapshot.sideGlobal);
-      writeSessionJson("axis_admin_property_buckets_v1", body.snapshot.sideGlobal);
-      for (const [userId, side] of Object.entries(body.snapshot.sideByUser)) {
+      memoryStore.set(PENDING_BY_USER_KEY, snapshot.pendingByUser);
+      writeSessionJson(PENDING_BY_USER_KEY, snapshot.pendingByUser);
+      memoryStore.set(EXTRAS_BY_USER_KEY, snapshot.extrasByUser);
+      writeSessionJson(EXTRAS_BY_USER_KEY, snapshot.extrasByUser);
+      memoryStore.set("axis_admin_property_buckets_v1", snapshot.sideGlobal);
+      writeSessionJson("axis_admin_property_buckets_v1", snapshot.sideGlobal);
+      for (const [userId, side] of Object.entries(snapshot.sideByUser)) {
         const key = `axis_mgr_property_side_v1_${userId}`;
         memoryStore.set(key, side);
         writeSessionJson(key, side);
@@ -292,23 +325,26 @@ export async function syncPropertyPipelineFromServer(opts?: { force?: boolean })
   }
 }
 
-export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
+export async function mirrorLocalPropertyPipelineToServer(managerUserId?: string | null): Promise<void> {
   if (!isBrowser() || isDemoModeActive()) return;
+  const scopeUserId = managerUserId?.trim() ?? "";
   const pendingMap = readPendingMap();
   const extrasMap = readExtrasMap();
   const jobs: Promise<unknown>[] = [];
-  for (const [managerUserId, rows] of Object.entries(pendingMap)) {
+  for (const [ownerId, rows] of Object.entries(pendingMap)) {
+    if (scopeUserId && ownerId !== scopeUserId) continue;
     for (const row of rows) {
       jobs.push(
         fetch("/api/property-records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "upsert", id: row.id, managerUserId, status: "pending", rowData: row }),
+          body: JSON.stringify({ action: "upsert", id: row.id, managerUserId: ownerId, status: "pending", rowData: row }),
         }).catch(() => {}),
       );
     }
   }
-  for (const [managerUserId, rows] of Object.entries(extrasMap)) {
+  for (const [ownerId, rows] of Object.entries(extrasMap)) {
+    if (scopeUserId && ownerId !== scopeUserId) continue;
     for (const row of rows) {
       jobs.push(
         fetch("/api/property-records", {
@@ -317,7 +353,7 @@ export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
           body: JSON.stringify({
             action: "upsert",
             id: row.id,
-            managerUserId,
+            managerUserId: ownerId,
             status: row.adminPublishLive === true ? "live" : "review",
             propertyData: row,
           }),

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import {
+  RESIDENT_SCHEDULED_MESSAGE_CONTENT_FORBIDDEN,
+  RESIDENT_SCHEDULED_MESSAGE_DELETE_FORBIDDEN,
+  isResidentOriginatedScheduledRow,
   updateScheduledInboxMessage,
   updateScheduledInboxMessageForResident,
 } from "@/lib/scheduled-inbox-messages";
@@ -116,7 +119,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message === RESIDENT_SCHEDULED_MESSAGE_CONTENT_FORBIDDEN ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -138,6 +142,20 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
       return NextResponse.json({ ok: true });
     }
 
+    const { data: existing } = await auth.db
+      .from("portal_scheduled_inbox_message_records")
+      .select("row_data")
+      .eq("id", id)
+      .eq("manager_user_id", auth.userId)
+      .maybeSingle();
+    if (!existing) {
+      return NextResponse.json({ error: "Scheduled message not found." }, { status: 404 });
+    }
+    const prev = (existing.row_data ?? {}) as Record<string, unknown>;
+    if (isResidentOriginatedScheduledRow(prev)) {
+      return NextResponse.json({ error: RESIDENT_SCHEDULED_MESSAGE_DELETE_FORBIDDEN }, { status: 403 });
+    }
+
     const { error } = await auth.db
       .from("portal_scheduled_inbox_message_records")
       .delete()
@@ -147,6 +165,11 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status =
+      message === RESIDENT_SCHEDULED_MESSAGE_CONTENT_FORBIDDEN ||
+      message === RESIDENT_SCHEDULED_MESSAGE_DELETE_FORBIDDEN
+        ? 403
+        : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -39,9 +39,8 @@ import {
   PROPERTY_PIPELINE_EVENT,
   readPendingManagerPropertiesForUser,
   readExtraListingsForUser,
-  readAllExtraListings,
-  syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
+import { resolvePropertyLabelForId, safePropertyOptionLabel, syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import {
   AXIS_ID_LABEL,
   generateRelationshipId,
@@ -72,19 +71,23 @@ function propertyChoices(userId: string): { id: string; label: string }[] {
   const pend = readPendingManagerPropertiesForUser(userId);
   const out: { id: string; label: string }[] = [];
   for (const p of live) {
-    out.push({ id: p.id, label: `${p.buildingName} · ${p.unitLabel || "Unit"}` });
+    out.push({
+      id: p.id,
+      label: safePropertyOptionLabel([`${p.buildingName} · ${p.unitLabel || "Unit"}`, p.buildingName, p.address], p.id),
+    });
   }
   for (const r of pend) {
-    out.push({ id: r.id, label: `${r.buildingName} · ${r.unitLabel} (pending)` });
+    const joined = `${r.buildingName} · ${r.unitLabel} (pending)`;
+    out.push({
+      id: r.id,
+      label: safePropertyOptionLabel([joined, r.buildingName, r.address], r.id),
+    });
   }
   return out;
 }
 
 function resolvePropertyLabel(id: string, fallback: string): string {
-  const all = readAllExtraListings();
-  const found = all.find((p) => p.id === id);
-  if (!found) return fallback || id;
-  return [found.buildingName, found.unitLabel || found.address].filter(Boolean).join(" · ").trim() || id;
+  return resolvePropertyLabelForId(id, fallback);
 }
 
 function CoManagerPermissionsEditor({
@@ -269,7 +272,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    void syncPropertyPipelineFromServer().then(() => {
+    void syncManagerPortfolioFromServer(userId, { force: true }).then(() => {
       if (!cancelled) refreshLocal();
     });
     return () => {
@@ -340,10 +343,18 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
 
   const ownedProperties = useMemo(() => {
     void localTick;
-    return readExtraListingsForUser(userId).map((p) => ({
+    const live = readExtraListingsForUser(userId).map((p) => ({
       id: p.id,
-      label: `${p.buildingName} · ${p.unitLabel || "Unit"}`,
+      label: safePropertyOptionLabel([`${p.buildingName} · ${p.unitLabel || "Unit"}`, p.buildingName, p.address], p.id),
     }));
+    const pending = readPendingManagerPropertiesForUser(userId).map((r) => {
+      const joined = `${r.buildingName} · ${r.unitLabel} (pending)`;
+      return {
+        id: r.id,
+        label: safePropertyOptionLabel([joined, r.buildingName, r.address], r.id),
+      };
+    });
+    return [...live, ...pending];
   }, [userId, localTick]);
 
   const [axisInput, setAxisInput] = useState("");
@@ -836,7 +847,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       setTransferCoManagerUserId(null);
       setTransferPermissions(EMPTY_CO_MANAGER_PERMISSIONS);
       await loadRemoteInvites();
-      await syncPropertyPipelineFromServer({ force: true });
+      await syncManagerPortfolioFromServer(userId, { force: true });
       refreshLocal();
     } catch {
       showToast("Network error.");

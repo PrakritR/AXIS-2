@@ -6,6 +6,7 @@ import {
   type CoManagerPermissionId,
   type PropertyCoManagerPermissions,
 } from "@/lib/co-manager-permissions";
+import { isCrossSandboxPortalPair } from "@/lib/portal-sandbox-accounts";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 type ServiceClient = ReturnType<typeof createSupabaseServiceRoleClient>;
@@ -18,21 +19,44 @@ export type LeaseScopeRecord = {
   row_data?: unknown;
 };
 
-/** Property ids assigned via accepted account_link_invites for this user. */
+/** Property ids assigned via accepted incoming co-manager links for this user. */
 export async function collectLinkedPropertyIdsForUser(db: ServiceClient, userId: string): Promise<Set<string>> {
   const linkedPropertyIds = new Set<string>();
   try {
+    const { data: viewerProfile } = await db.from("profiles").select("email").eq("id", userId).maybeSingle();
+    const viewerEmail = String(viewerProfile?.email ?? "").trim();
+
     const { data: linkRows, error } = await db
       .from("account_link_invites")
-      .select("assigned_property_ids")
+      .select("inviter_user_id, assigned_property_ids")
       .eq("status", "accepted")
-      .or(`inviter_user_id.eq.${userId},invitee_user_id.eq.${userId}`);
+      .eq("invitee_user_id", userId);
     if (error && !String(error.message ?? "").toLowerCase().includes("account_link_invites")) {
       return linkedPropertyIds;
     }
-    for (const row of (linkRows ?? []) as { assigned_property_ids?: unknown }[]) {
-      if (!Array.isArray(row.assigned_property_ids)) continue;
-      for (const id of row.assigned_property_ids) {
+
+    const inviterIds = [
+      ...new Set(
+        (linkRows ?? [])
+          .map((row) => String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    const inviterEmailById = new Map<string, string>();
+    if (inviterIds.length > 0) {
+      const { data: profiles } = await db.from("profiles").select("id, email").in("id", inviterIds);
+      for (const profile of profiles ?? []) {
+        const id = String(profile.id ?? "").trim();
+        const email = String(profile.email ?? "").trim();
+        if (id && email) inviterEmailById.set(id, email);
+      }
+    }
+
+    for (const row of linkRows ?? []) {
+      const inviterId = String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim();
+      if (isCrossSandboxPortalPair(viewerEmail, inviterEmailById.get(inviterId) ?? "")) continue;
+      if (!Array.isArray((row as { assigned_property_ids?: unknown }).assigned_property_ids)) continue;
+      for (const id of (row as { assigned_property_ids: unknown[] }).assigned_property_ids) {
         if (typeof id === "string" && id.trim()) linkedPropertyIds.add(id.trim());
       }
     }

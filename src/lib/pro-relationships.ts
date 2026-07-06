@@ -23,6 +23,8 @@ export type ProRelationshipRecord = {
   linkedDisplayName?: string;
   /** Auth user id for the linked co-manager (when known). */
   linkedUserId?: string;
+  /** Whether this workspace invited (outgoing) or was invited (incoming). */
+  linkDirection?: "outgoing" | "incoming";
   perspective: ProRelationshipPerspective;
   /** Amount of managed revenue this manager receives on the linked properties (0–100). */
   payoutPercentForManager: number;
@@ -40,6 +42,36 @@ const memoryByUser = new Map<string, ProRelationshipRecord[]>();
 const RELATIONSHIPS_SYNC_TTL_MS = 15_000;
 const relationshipsLastSyncedAt = new Map<string, number>();
 const relationshipsSyncPromises = new Map<string, Promise<ProRelationshipRecord[]>>();
+
+function mergeRelationshipRows(previous: ProRelationshipRecord[], incoming: ProRelationshipRecord[]): ProRelationshipRecord[] {
+  const merged = incoming.map((row) => {
+    const prev = previous.find((item) => item.id === row.id);
+    if (!prev) return row;
+    const prevIds = prev.assignedPropertyIds;
+    const nextIds = row.assignedPropertyIds;
+    const keepPrevIds = prevIds.length > 0 && nextIds.length === 0;
+    const keepPrevPerms =
+      Object.keys(prev.propertyCoManagerPermissions ?? {}).length > 0 &&
+      Object.keys(row.propertyCoManagerPermissions ?? {}).length === 0;
+    if (!keepPrevIds && !keepPrevPerms && !prev.linkDirection && row.linkDirection) return row;
+    if (!keepPrevIds && !keepPrevPerms && prev.linkDirection) return row;
+    return {
+      ...row,
+      assignedPropertyIds: keepPrevIds ? prevIds : nextIds.length >= prevIds.length ? nextIds : prevIds,
+      propertyCoManagerPermissions: keepPrevPerms
+        ? prev.propertyCoManagerPermissions
+        : row.propertyCoManagerPermissions ?? prev.propertyCoManagerPermissions,
+      coManagerPermissions: row.coManagerPermissions ?? prev.coManagerPermissions,
+      linkDirection: row.linkDirection ?? prev.linkDirection,
+      linkedUserId: row.linkedUserId ?? prev.linkedUserId,
+      linkedDisplayName: row.linkedDisplayName ?? prev.linkedDisplayName,
+    };
+  });
+  for (const prev of previous) {
+    if (!merged.some((row) => row.id === prev.id)) merged.push(prev);
+  }
+  return merged;
+}
 
 function relationshipsChanged(a: ProRelationshipRecord[], b: ProRelationshipRecord[]): boolean {
   return JSON.stringify(a) !== JSON.stringify(b);
@@ -67,11 +99,14 @@ export function normalizeProRelationshipRecord(raw: unknown): ProRelationshipRec
     coManagerPermissions: flatCoManagerPermissionsFromProperty(propertyCoManagerPermissions),
   });
   const linkedUserId = r.linkedUserId;
+  const linkDirection = r.linkDirection;
   return {
     id,
     linkedAxisId,
     linkedDisplayName: typeof r.linkedDisplayName === "string" ? r.linkedDisplayName : undefined,
     linkedUserId: typeof linkedUserId === "string" ? linkedUserId : undefined,
+    linkDirection:
+      linkDirection === "outgoing" || linkDirection === "incoming" ? linkDirection : undefined,
     perspective,
     payoutPercentForManager: Number.isFinite(payout) ? payout : 15,
     assignedPropertyIds,
@@ -124,12 +159,13 @@ export function proRelationshipRowsFromInvites(invites: AccountLinkInviteDto[]):
         linkedAxisId: inv.linkedAxisId,
         linkedDisplayName: inv.linkedDisplayName ?? undefined,
         linkedUserId: inv.linkedUserId,
+        linkDirection: inv.direction,
         perspective: "manager_tab" as const,
         payoutPercentForManager: inv.payoutPercentForManager,
         assignedPropertyIds: inv.assignedPropertyIds,
         coManagerPermissions: perms,
         propertyCoManagerPermissions,
-        canEditListing: perms.editListings ? true : undefined,
+        canEditListing: perms.properties ? true : undefined,
         createdAt: inv.createdAt,
       };
     });
@@ -187,12 +223,13 @@ export async function syncProRelationshipsFromServer(
         .map((x) => migrateRow(x as Record<string, unknown>))
         .filter(Boolean) as ProRelationshipRecord[];
       const previous = memoryByUser.get(userId) ?? [];
-      memoryByUser.set(userId, rows);
+      const merged = mergeRelationshipRows(previous, rows);
+      memoryByUser.set(userId, merged);
       relationshipsLastSyncedAt.set(userId, Date.now());
-      if (relationshipsChanged(previous, rows)) {
+      if (relationshipsChanged(previous, merged)) {
         window.dispatchEvent(new Event("axis-pro-relationships"));
       }
-      return rows;
+      return merged;
     } catch {
       return memoryByUser.get(userId) ?? [];
     }

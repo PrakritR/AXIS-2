@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { openAppUrl, shouldUseInAppConnectFlow } from "@/lib/native/open-url";
+import { openStripeConnectOnboarding } from "@/lib/stripe-connect-onboarding-client";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 type ConnectStatus = {
@@ -19,16 +19,6 @@ type ConnectStatus = {
   demo?: boolean;
   message?: string;
   stripeError?: string;
-};
-
-type OnboardResponse = {
-  url?: string;
-  accountId?: string;
-  mode?: string;
-  demo?: boolean;
-  message?: string;
-  error?: string;
-  code?: string;
 };
 
 /** Realistic "already connected" mock shown in the /demo sandbox — never hits real Stripe. */
@@ -48,6 +38,7 @@ export function PortalStripeConnectPanel({
   apiBase = "/api/stripe/connect",
   returnPath,
   dataAttrPrefix = "stripe-connect",
+  onConnectDone,
 }: {
   basePath: string;
   variant?: "page" | "embedded" | "inline" | "header";
@@ -57,6 +48,8 @@ export function PortalStripeConnectPanel({
   returnPath?: string;
   /** Prefix for data-attr hooks on the connect/update button. */
   dataAttrPrefix?: string;
+  /** Called after Stripe redirects back with `?connect=done` (same-tab return). */
+  onConnectDone?: () => void;
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
@@ -114,7 +107,8 @@ export function PortalStripeConnectPanel({
     if (q !== "done" && q !== "refresh") return;
     handledConnectParam.current = true;
     if (q === "done") {
-      showToast("Bank account linked.");
+      showToast("Bank account linked. You're ready to receive resident payments.");
+      onConnectDone?.();
     } else {
       showToast("Setup link expired — try again.");
     }
@@ -123,79 +117,22 @@ export function PortalStripeConnectPanel({
       if (q === "done") setActionError(null);
       void loadStatus();
     });
-  }, [loadStatus, resolvedReturnPath, showToast]);
+  }, [loadStatus, onConnectDone, resolvedReturnPath, showToast]);
 
   const startConnect = useCallback(async () => {
-    if (isDemoModeActive()) {
-      showToast("Demo mode — payouts are already linked to a sandbox account.");
-      return;
-    }
-
     setBusy(true);
     setActionError(null);
-
-    const useInAppFlow = shouldUseInAppConnectFlow();
-    let popup: Window | null = null;
-
-    if (!useInAppFlow) {
-      // Open synchronously on click so popup blockers allow a new tab (async window.open is often blocked).
-      popup = window.open("about:blank", "_blank");
-      if (!popup) {
-        const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
-        setActionError(message);
-        showToast(message);
-        setBusy(false);
-        return;
-      }
-
-      try {
-        popup.document.title = "Opening Stripe…";
-        popup.document.body.innerHTML =
-          '<p style="font-family:system-ui,sans-serif;padding:2rem;color:#444">Opening secure bank setup…</p>';
-      } catch {
-        /* cross-origin once navigated; harmless on about:blank */
-      }
-    }
-
-    try {
-      const res = await fetch(`${apiBase}/onboard`, {
-        method: "POST",
-        credentials: "include",
-      });
-      const body = (await res.json()) as OnboardResponse;
-      if (!res.ok) {
-        const message = body.error ?? "Could not start bank linking.";
-        popup?.close();
-        setActionError(message);
-        showToast(message);
-        return;
-      }
-      if (body.demo && body.message) {
-        popup?.close();
-        setActionError(body.message);
-        showToast(body.message);
-        return;
-      }
-      if (body.url) {
-        if (useInAppFlow) {
-          void openAppUrl(body.url);
-          return;
+    const opened = await openStripeConnectOnboarding({
+      apiBase,
+      showToast: (message) => {
+        if (message.startsWith("Could not") || message.includes("pop-ups")) {
+          setActionError(message);
         }
-        popup!.location.href = body.url;
-        return;
-      }
-      popup?.close();
-      const message = "Stripe did not return an onboarding URL.";
-      setActionError(message);
-      showToast(message);
-    } catch {
-      popup?.close();
-      const message = "Could not start bank linking.";
-      setActionError(message);
-      showToast(message);
-    } finally {
-      setBusy(false);
-    }
+        showToast(message);
+      },
+    });
+    if (opened) setActionError(null);
+    setBusy(false);
   }, [apiBase, showToast]);
 
   const ready =
@@ -218,17 +155,36 @@ export function PortalStripeConnectPanel({
       );
     }
 
+    if (ready) {
+      return (
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
+          disabled={busy}
+          onClick={() => void startConnect()}
+          data-attr={`${dataAttrPrefix}-linked`}
+          title={blockingError ?? "Open Stripe to view or update your linked bank account"}
+        >
+          {busy ? "Opening…" : "Bank linked"}
+        </Button>
+      );
+    }
+
+    const needsFinish = Boolean(status?.connected);
+    const label = needsFinish ? "Finish setup" : "Link bank";
+
     return (
       <Button
         type="button"
-        variant="outline"
+        variant={needsFinish ? "primary" : "outline"}
         className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
         disabled={busy}
         onClick={() => void startConnect()}
         data-attr={`${dataAttrPrefix}-link`}
-        title={blockingError ?? (ready ? "Update linked bank account" : "Link bank account for payouts")}
+        title={blockingError ?? (needsFinish ? "Finish bank account setup" : "Link bank account for payouts")}
       >
-        {busy ? "Opening…" : "Link bank"}
+        {busy ? "Opening…" : label}
       </Button>
     );
   }

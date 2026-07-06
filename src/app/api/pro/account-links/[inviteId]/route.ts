@@ -5,6 +5,7 @@ import {
   normalizePropertyCoManagerPermissions,
   prunePropertyCoManagerPermissions,
 } from "@/lib/co-manager-permissions";
+import { isCrossSandboxPortalPair, CROSS_SANDBOX_PORTAL_PAIR_ERROR } from "@/lib/portal-sandbox-accounts";
 import { scopedRelationshipDeletesForRevokedInvite } from "@/lib/pro-relationships";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -194,6 +195,21 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ inviteId: str
 
     if (invite.invitee_user_id !== user.id) {
       return NextResponse.json({ error: "Only the invitee can accept or reject." }, { status: 403 });
+    }
+
+    if (actionNorm === "accept") {
+      const { data: participantProfiles } = await svc
+        .from("profiles")
+        .select("id, email")
+        .in("id", [invite.inviter_user_id, invite.invitee_user_id]);
+      const emailByUserId = new Map(
+        (participantProfiles ?? []).map((row) => [String(row.id ?? "").trim(), String(row.email ?? "").trim()] as const),
+      );
+      const inviterEmail = emailByUserId.get(invite.inviter_user_id) ?? "";
+      const inviteeEmail = emailByUserId.get(invite.invitee_user_id) ?? "";
+      if (isCrossSandboxPortalPair(inviterEmail, inviteeEmail)) {
+        return NextResponse.json({ error: CROSS_SANDBOX_PORTAL_PAIR_ERROR }, { status: 400 });
+      }
     }
 
     const nextStatus = actionNorm === "accept" ? "accepted" : "rejected";

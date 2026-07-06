@@ -3,13 +3,19 @@
 import Link from "next/link";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
 import type { PortalKind } from "@/lib/portal-types";
 
 /** Account actions on the Settings page — theme, portal switch, sign out. */
 export function PortalSettingsExtras({ currentKind }: { currentKind: PortalKind }) {
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-sm)] sm:p-6">
+    <PortalCollapsibleSection
+      title="Account"
+      surfaceMuted={false}
+      contentClassName="space-y-4 px-4 py-4"
+      toggleDataAttr="portal-settings-account-toggle"
+    >
       <div className="flex items-center justify-between gap-4">
         <p className="min-w-0 text-sm font-semibold text-foreground">Appearance</p>
         <ThemeToggle className="shrink-0" />
@@ -29,6 +35,6 @@ export function PortalSettingsExtras({ currentKind }: { currentKind: PortalKind 
       ) : null}
 
       <PortalSignOutButton className="w-full rounded-full border border-border px-4 py-3 text-center text-sm font-semibold text-foreground transition hover:bg-accent/70 disabled:opacity-60" />
-    </div>
+    </PortalCollapsibleSection>
   );
 }
