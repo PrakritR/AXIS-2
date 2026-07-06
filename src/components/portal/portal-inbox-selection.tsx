@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { readPortalApiError } from "@/lib/portal-api-error";
+import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 
 export function useInboxRowSelection(selectableIds: string[]) {
@@ -63,18 +64,17 @@ export async function sendManualScheduledMessageNow(id: string, opts?: { asResid
     credentials: "include",
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error ?? "Could not send message.");
+    throw new Error(await readPortalApiError(res, "Could not send message."));
   }
 }
 
 export async function sendAutomationScheduledMessageNow(id: string): Promise<void> {
-  const res = await fetch(`/api/portal/scheduled-messages/${encodeURIComponent(id)}/send-now`, {
+  const pathId = encodeScheduledMessagePathId(id);
+  const res = await fetch(`/api/portal/scheduled-messages/${pathId}/send-now`, {
     method: "POST",
     credentials: "include",
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error ?? "Could not send reminder.");
+    throw new Error(await readPortalApiError(res, "Could not send reminder."));
   }
 }

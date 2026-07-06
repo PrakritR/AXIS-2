@@ -8,6 +8,7 @@ import {
   loadManagerScheduledMessages,
   parseScheduledMessageListId,
 } from "@/lib/payment-automation-server";
+import { decodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import { deliverPaymentReminder, reminderHtmlFromText } from "@/lib/payment-reminder-delivery";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -38,8 +39,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     const auth = await requireManager();
     if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const { id } = await ctx.params;
-    const decodedId = decodeURIComponent(id);
+    const { id: rawId } = await ctx.params;
+    const decodedId = decodeScheduledMessagePathId(rawId);
     const parsed = parseScheduledMessageListId(decodedId);
     if (!parsed) {
       return NextResponse.json({ error: "Invalid scheduled message id." }, { status: 400 });

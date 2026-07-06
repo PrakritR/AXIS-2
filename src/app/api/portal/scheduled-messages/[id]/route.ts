@@ -1,5 +1,6 @@
 import { parseScheduledMessageListId } from "@/lib/payment-automation-server";
 import { upsertScheduledMessageOverride } from "@/lib/payment-automation-settings";
+import { decodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -30,8 +31,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const auth = await requireManager();
     if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const { id } = await ctx.params;
-    const parsed = parseScheduledMessageListId(decodeURIComponent(id));
+    const { id: rawId } = await ctx.params;
+    const id = decodeScheduledMessagePathId(rawId);
+    const parsed = parseScheduledMessageListId(id);
     if (!parsed) {
       return NextResponse.json({ error: "Invalid scheduled message id." }, { status: 400 });
     }

@@ -16,6 +16,7 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
+import { readPortalApiError } from "@/lib/portal-api-error";
 import {
   PortalInboxSelectionToolbar,
   sendAutomationScheduledMessageNow,
@@ -157,18 +158,14 @@ export function ManagerInboxSchedulePanel({
   };
 
   const toggleManualCancelled = async (message: ScheduledInboxMessageRecord, cancelled: boolean) => {
-    try {
-      const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(message.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ cancelled }),
-      });
-      if (!res.ok) throw new Error("Could not update.");
-      showToast(cancelled ? "Send cancelled." : "Send restored.");
-      reloadAll();
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Could not update.");
+    const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(message.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ cancelled }),
+    });
+    if (!res.ok) {
+      throw new Error(await readPortalApiError(res, "Could not update."));
     }
   };
 
@@ -215,40 +212,20 @@ export function ManagerInboxSchedulePanel({
     if (targets.length === 0) return;
     setBulkBusy(true);
     try {
+      let ok = 0;
       for (const row of targets) {
         if (row.kind === "manual") {
           await toggleManualCancelled(row.message, true);
         } else {
           await patchScheduledMessage(row.message.id, { cancelled: true });
         }
+        ok += 1;
       }
-      showToast(targets.length === 1 ? "Send cancelled." : `Cancelled ${targets.length} sends.`);
+      showToast(ok === 1 ? "Send cancelled." : `Cancelled ${ok} sends.`);
       clearSelection();
       reloadAll();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not cancel sends.");
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
-  const bulkRestoreSend = async () => {
-    const targets = selectedRows.filter((row) => row.message.status === "cancelled");
-    if (targets.length === 0) return;
-    setBulkBusy(true);
-    try {
-      for (const row of targets) {
-        if (row.kind === "manual") {
-          await toggleManualCancelled(row.message, false);
-        } else {
-          await patchScheduledMessage(row.message.id, { cancelled: false });
-        }
-      }
-      showToast(targets.length === 1 ? "Send restored." : `Restored ${targets.length} sends.`);
-      clearSelection();
-      reloadAll();
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Could not restore sends.");
     } finally {
       setBulkBusy(false);
     }
@@ -262,8 +239,14 @@ export function ManagerInboxSchedulePanel({
         onSaved={reloadAll}
         onClose={() => setExpandedRowId(null)}
         onToggleCancelled={async (cancelled) => {
-          await toggleManualCancelled(row.message, cancelled);
-          setExpandedRowId(null);
+          try {
+            await toggleManualCancelled(row.message, cancelled);
+            showToast(cancelled ? "Send cancelled." : "Send restored.");
+            setExpandedRowId(null);
+            reloadAll();
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : "Could not update.");
+          }
         }}
         onSendNow={async () => {
           await sendRowNow(row);
@@ -294,9 +277,6 @@ export function ManagerInboxSchedulePanel({
         </Button>
         <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkCancelSend()}>
           Cancel send
-        </Button>
-        <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkRestoreSend()}>
-          Restore send
         </Button>
       </PortalInboxSelectionToolbar>
       <div className="flex flex-wrap items-center justify-end gap-2">

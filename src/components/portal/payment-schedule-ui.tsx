@@ -13,7 +13,8 @@ import {
   PAYMENT_AUTOMATION_SETTINGS_EVENT,
 } from "@/lib/payment-automation-settings";
 import { HOUSEHOLD_CHARGES_EVENT, readHouseholdCharges } from "@/lib/household-charges";
-import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
+import { readPortalApiError } from "@/lib/portal-api-error";
+import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import {
   filterScheduledPaymentMessagesForUnpaidCharges,
   filterScheduledPaymentMessagesForVisibility,
@@ -281,7 +282,8 @@ export function ScheduledMessageEditForm({
     }
     setBusy(true);
     try {
-      const res = await fetch(`/api/portal/scheduled-messages/${encodeURIComponent(message.id)}`, {
+      const pathId = encodeScheduledMessagePathId(message.id);
+      const res = await fetch(`/api/portal/scheduled-messages/${pathId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -292,8 +294,7 @@ export function ScheduledMessageEditForm({
         }),
       });
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload.error ?? "Could not save.");
+        throw new Error(await readPortalApiError(res, "Could not save."));
       }
       showToast("Scheduled message updated.");
       onSaved();
@@ -308,13 +309,14 @@ export function ScheduledMessageEditForm({
   const toggleCancelled = async (cancelled: boolean) => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/portal/scheduled-messages/${encodeURIComponent(message.id)}`, {
+      const pathId = encodeScheduledMessagePathId(message.id);
+      const res = await fetch(`/api/portal/scheduled-messages/${pathId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ cancelled }),
       });
-      if (!res.ok) throw new Error("Could not update.");
+      if (!res.ok) throw new Error(await readPortalApiError(res, "Could not update."));
       showToast(cancelled ? "Send cancelled." : "Send restored.");
       onSaved();
       onClose();
@@ -711,15 +713,15 @@ export async function patchScheduledMessage(
     customSendAt?: string;
   },
 ): Promise<void> {
-  const res = await fetch(`/api/portal/scheduled-messages/${encodeURIComponent(messageId)}`, {
+  const pathId = encodeScheduledMessagePathId(messageId);
+  const res = await fetch(`/api/portal/scheduled-messages/${pathId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
-    const payload = (await res.json()) as { error?: string };
-    throw new Error(payload.error ?? "Could not update reminder.");
+    throw new Error(await readPortalApiError(res, "Could not update reminder."));
   }
 }
 

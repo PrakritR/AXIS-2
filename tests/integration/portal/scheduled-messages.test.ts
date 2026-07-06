@@ -32,6 +32,10 @@ import {
 import { upsertScheduledMessageOverride } from "@/lib/payment-automation-settings";
 import { GET } from "@/app/api/portal/scheduled-messages/route";
 import { PATCH } from "@/app/api/portal/scheduled-messages/[id]/route";
+import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
+
+const SAMPLE_ID = "sched|charge-1|pre_due|3|2026-07-01";
+const PATH_ID = encodeScheduledMessagePathId(SAMPLE_ID);
 
 function mockManagerAuth(userId = "mgr-a") {
   vi.mocked(createSupabaseServerClient).mockResolvedValue({
@@ -115,11 +119,11 @@ describe("/api/portal/scheduled-messages", () => {
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
     } as never);
 
-    const req = jsonRequest("http://localhost/api/portal/scheduled-messages/sched%7Ccharge-1%7Cpre_due%7C3%7C2026-07-01", {
+    const req = jsonRequest(`http://localhost/api/portal/scheduled-messages/${PATH_ID}`, {
       method: "PATCH",
       body: { cancelled: true },
     });
-    const res = await PATCH(req, { params: Promise.resolve({ id: "sched|charge-1|pre_due|3|2026-07-01" }) });
+    const res = await PATCH(req, { params: Promise.resolve({ id: PATH_ID }) });
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(401);
   });
@@ -127,11 +131,11 @@ describe("/api/portal/scheduled-messages", () => {
   it("PATCH saves override for authenticated manager", async () => {
     mockManagerAuth();
 
-    const req = jsonRequest("http://localhost/api/portal/scheduled-messages/sched%7Ccharge-1%7Cpre_due%7C3%7C2026-07-01", {
+    const req = jsonRequest(`http://localhost/api/portal/scheduled-messages/${PATH_ID}`, {
       method: "PATCH",
       body: { cancelled: true, customSubject: "Custom subject" },
     });
-    const res = await PATCH(req, { params: Promise.resolve({ id: "sched|charge-1|pre_due|3|2026-07-01" }) });
+    const res = await PATCH(req, { params: Promise.resolve({ id: PATH_ID }) });
     const { status, data } = await parseJsonResponse<{ ok?: boolean }>(res);
     expect(status).toBe(200);
     expect(data.ok).toBe(true);
