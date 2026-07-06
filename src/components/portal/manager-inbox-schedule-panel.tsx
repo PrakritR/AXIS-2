@@ -149,11 +149,6 @@ export function ManagerInboxSchedulePanel({
     [rows, selectedIds],
   );
 
-  const scheduledCount = useMemo(
-    () => rows.filter((row) => row.message.status === "scheduled").length,
-    [rows],
-  );
-
   const loading = automationLoading || manualLoading;
 
   const reloadAll = () => {
@@ -181,8 +176,6 @@ export function ManagerInboxSchedulePanel({
     const id = rowId(row);
     setExpandedRowId((cur) => (cur === id ? null : id));
   };
-
-  const horizonLabel = INBOX_SCHEDULE_HORIZON_OPTIONS.find((opt) => opt.id === horizonId)?.label ?? "Show upcoming";
 
   const sendRowNow = async (row: ScheduleRow) => {
     if (row.message.status !== "scheduled") return;
@@ -306,12 +299,8 @@ export function ManagerInboxSchedulePanel({
           Restore send
         </Button>
       </PortalInboxSelectionToolbar>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted">
-          {scheduledCount} scheduled in view · {horizonLabel.toLowerCase()}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="inline-flex items-center gap-2 text-xs font-medium text-muted">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <label className="inline-flex items-center gap-2 text-xs font-medium text-muted">
             <span className="sr-only">Show messages scheduled within</span>
             <select
               className="h-9 rounded-full border border-border bg-card px-3 text-xs font-semibold text-foreground outline-none focus:border-primary"
@@ -325,7 +314,6 @@ export function ManagerInboxSchedulePanel({
               ))}
             </select>
           </label>
-        </div>
       </div>
 
       {loading ? (
