@@ -220,7 +220,7 @@ export function removeListingApplicationField(
   customApplicationFields: ManagerCustomApplicationField[];
   applicationConfigMode: "standard" | "custom";
 } {
-  let disabled = [...(sub.disabledStandardApplicationKeys ?? [])];
+  const disabled = [...(sub.disabledStandardApplicationKeys ?? [])];
   let saved = [...(sub.customApplicationFields ?? [])];
 
   if (field.isStandard && field.standardKey) {
