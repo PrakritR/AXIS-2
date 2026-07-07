@@ -67,6 +67,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "This work order has already been marked done." }, { status: 400 });
     }
 
+    const vendorUserId = String(workOrder.vendor_user_id ?? actor.userId);
+    const { data: bid } = await db
+      .from("work_order_bids")
+      .select("id, status")
+      .eq("work_order_id", workOrderId)
+      .eq("vendor_user_id", vendorUserId)
+      .maybeSingle();
+    if (bid && bid.status === "accepted") {
+      return NextResponse.json(
+        { error: "This bid was already accepted by the manager. Its price is locked and can't be changed here." },
+        { status: 409 },
+      );
+    }
+
     const totalCents = amountCents + materialsCents;
     const now = new Date().toISOString();
     const nextRowData: DemoManagerWorkOrderRow = {
@@ -82,14 +96,7 @@ export async function POST(req: Request) {
       .eq("id", workOrderId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const vendorUserId = String(workOrder.vendor_user_id ?? actor.userId);
-    const { data: bid } = await db
-      .from("work_order_bids")
-      .select("id, status")
-      .eq("work_order_id", workOrderId)
-      .eq("vendor_user_id", vendorUserId)
-      .maybeSingle();
-    if (bid && (bid.status === "submitted" || bid.status === "accepted")) {
+    if (bid && bid.status === "submitted") {
       await db
         .from("work_order_bids")
         .update({
