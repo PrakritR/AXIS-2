@@ -57,7 +57,9 @@ export type HouseholdChargeKind =
   | "other_cost"
   | "payment_at_signing"
   | "work_order_charge"
-  | "late_fee";
+  | "late_fee"
+  /** Not created anywhere yet (Phase 2/6 of the financials buildout) — added now so the category mapping exists ahead of that work. */
+  | "nsf_fee";
 
 export type HouseholdCharge = {
   id: string;

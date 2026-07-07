@@ -1,9 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
-import {
-  dedupeHouseholdCharges,
-  duplicateHouseholdChargeIds,
-} from "@/lib/household-charges";
+import { duplicateHouseholdChargeIds } from "@/lib/household-charges";
 import { categoryCodeForChargeKind } from "@/lib/reports/categories";
 import { dollarsToCents } from "@/lib/reports/money";
 import { parseMoneyAmount } from "@/lib/parse-money";
@@ -33,24 +30,6 @@ function dueDateFromCharge(charge: HouseholdCharge): string | null {
   }
   if (charge.rentMonth?.trim()) return `${charge.rentMonth}-01`;
   return parseIsoDate(charge.createdAt);
-}
-
-/**
- * The DB column `manager_user_id` is set by authenticated server routes and is
- * the trustworthy owner of a charge record; `row_data.managerUserId` is
- * client-synced and can carry stale or placeholder ids (e.g. "demo-manager" or
- * a deleted user's uuid) that would break the uuid FK on ledger_entries.
- * Attribute the charge to the column owner whenever it is a real uuid.
- */
-function normalizeChargeOwner(
-  charge: HouseholdCharge | null,
-  columnManagerUserId: string | null | undefined,
-): HouseholdCharge | null {
-  if (!charge) return null;
-  if (isUuid(columnManagerUserId) && charge.managerUserId !== columnManagerUserId) {
-    return { ...charge, managerUserId: columnManagerUserId as string };
-  }
-  return charge;
 }
 
 function throwIfLedgerError(error: { message: string } | null): void {
@@ -116,8 +95,8 @@ type LedgerEntryRow = {
 /**
  * Row for the `charge` ledger entry mirroring a household charge (null if
  * non-positive). Demo/sample charges carry placeholder ids like
- * "demo-manager" — those can't be written to the uuid columns and would fail
- * the whole backfill, so they are skipped (manager) or nulled (resident).
+ * "demo-manager" — those can't be written to the uuid columns, so they are
+ * skipped (manager) or nulled (resident).
  */
 function buildChargeLedgerRow(charge: HouseholdCharge): LedgerEntryRow | null {
   const amountCents = chargeAmountCents(charge);
@@ -186,66 +165,6 @@ async function upsertLedgerEntryRow(db: SupabaseClient, row: LedgerEntryRow): Pr
   }
 }
 
-/**
- * Mirror many charges into ledger entries in a bounded number of round-trips.
- *
- * Previously this looped over every charge doing a SELECT + INSERT/UPDATE (2–4
- * serial round-trips each). On a manager with many charges that N+1 ran long
- * enough to hang the `/api/reports` request the Finances panel awaits — leaving
- * it stuck on "Loading entries…". Here we fetch all existing entries once, then
- * do a single batched INSERT for new rows and a single batched UPSERT (keyed on
- * the primary key) for changed rows — a fixed ~3 round-trips regardless of
- * volume, which also respects the project's egress budget.
- */
-async function syncDedupedCharges(
-  db: SupabaseClient,
-  rawCharges: HouseholdCharge[],
-): Promise<number> {
-  const charges = dedupeHouseholdCharges(rawCharges);
-  if (charges.length === 0) return 0;
-
-  const desired: LedgerEntryRow[] = [];
-  for (const charge of charges) {
-    const chargeRow = buildChargeLedgerRow(charge);
-    if (chargeRow) desired.push(chargeRow);
-    if (charge.status === "paid") {
-      const paymentRow = buildPaymentLedgerRow(charge, charge.paidAt);
-      if (paymentRow) desired.push(paymentRow);
-    }
-  }
-  if (desired.length === 0) return 0;
-
-  const sourceIds = [...new Set(desired.map((r) => r.source_charge_id))];
-  const existingByKey = new Map<string, string>();
-  for (let i = 0; i < sourceIds.length; i += 200) {
-    const slice = sourceIds.slice(i, i + 200);
-    const { data, error } = await db
-      .from("ledger_entries")
-      .select("id, source_charge_id, entry_type")
-      .in("source_charge_id", slice);
-    if (error) throw new Error(error.message);
-    for (const row of data ?? []) existingByKey.set(`${row.source_charge_id}:${row.entry_type}`, row.id);
-  }
-
-  const toInsert: LedgerEntryRow[] = [];
-  const toUpdate: (LedgerEntryRow & { id: string })[] = [];
-  for (const row of desired) {
-    const id = existingByKey.get(`${row.source_charge_id}:${row.entry_type}`);
-    if (id) toUpdate.push({ ...row, id });
-    else toInsert.push(row);
-  }
-
-  if (toInsert.length) {
-    const { error } = await db.from("ledger_entries").insert(toInsert);
-    throwIfLedgerError(error);
-  }
-  if (toUpdate.length) {
-    const { error } = await db.from("ledger_entries").upsert(toUpdate, { onConflict: "id" });
-    throwIfLedgerError(error);
-  }
-  return charges.length;
-}
-
 export async function syncLedgerChargeEntry(
   db: SupabaseClient,
   charge: HouseholdCharge,
@@ -266,115 +185,4 @@ export async function syncLedgerPaymentEntry(
 ): Promise<void> {
   const row = buildPaymentLedgerRow(charge, paidAt, stripeCheckoutSessionId);
   if (row) await upsertLedgerEntryRow(db, row);
-}
-
-/**
- * Read-time backfill is a repair pass for legacy/missed rows — new charges and
- * payments are mirrored into the ledger at write time (syncLedgerChargeEntry /
- * syncLedgerPaymentEntry). Report routes request it on every load, and running
- * the full 2000-row charge scan + upserts per tab switch is what made the
- * Finances panel slow. Skip repeat runs for the same scope within the TTL and
- * collapse concurrent runs into one.
- */
-const LEDGER_BACKFILL_TTL_MS = 5 * 60_000;
-const ledgerBackfillLastRunAt = new Map<string, number>();
-const ledgerBackfillInFlight = new Map<string, Promise<{ synced: number; removedDuplicates: number }>>();
-
-export function resetLedgerBackfillThrottleForTests(): void {
-  ledgerBackfillLastRunAt.clear();
-  ledgerBackfillInFlight.clear();
-}
-
-async function runThrottledBackfill(
-  key: string,
-  run: () => Promise<{ synced: number; removedDuplicates: number }>,
-): Promise<{ synced: number; removedDuplicates: number }> {
-  const lastRunAt = ledgerBackfillLastRunAt.get(key) ?? 0;
-  if (Date.now() - lastRunAt < LEDGER_BACKFILL_TTL_MS) return { synced: 0, removedDuplicates: 0 };
-  const inFlight = ledgerBackfillInFlight.get(key);
-  if (inFlight) return inFlight;
-  const promise = (async () => {
-    const result = await run();
-    // Only mark success — a failed run may retry on the next request.
-    ledgerBackfillLastRunAt.set(key, Date.now());
-    return result;
-  })();
-  ledgerBackfillInFlight.set(key, promise);
-  try {
-    return await promise;
-  } finally {
-    ledgerBackfillInFlight.delete(key);
-  }
-}
-
-export async function backfillLedgerFromCharges(
-  db: SupabaseClient,
-  managerUserId?: string,
-): Promise<{ synced: number; removedDuplicates: number }> {
-  return runThrottledBackfill(`manager:${managerUserId ?? "__all__"}`, () =>
-    backfillLedgerFromChargesNow(db, managerUserId),
-  );
-}
-
-async function backfillLedgerFromChargesNow(
-  db: SupabaseClient,
-  managerUserId?: string,
-): Promise<{ synced: number; removedDuplicates: number }> {
-  await reconcileDuplicateHouseholdChargeRecords(db, managerUserId);
-
-  let query = db
-    .from("portal_household_charge_records")
-    .select("manager_user_id, row_data")
-    .order("updated_at", { ascending: false })
-    .limit(2000);
-
-  if (managerUserId) {
-    query = query.eq("manager_user_id", managerUserId);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const raw = (data ?? [])
-    .map((record) => normalizeChargeOwner(record.row_data as HouseholdCharge | null, record.manager_user_id))
-    .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
-  const synced = await syncDedupedCharges(db, raw);
-  return { synced, removedDuplicates: 0 };
-}
-
-export async function backfillLedgerForResident(
-  db: SupabaseClient,
-  residentUserId: string,
-  residentEmail: string,
-): Promise<{ synced: number; removedDuplicates: number }> {
-  return runThrottledBackfill(`resident:${residentUserId}`, () =>
-    backfillLedgerForResidentNow(db, residentUserId, residentEmail),
-  );
-}
-
-async function backfillLedgerForResidentNow(
-  db: SupabaseClient,
-  residentUserId: string,
-  residentEmail: string,
-): Promise<{ synced: number; removedDuplicates: number }> {
-  const email = residentEmail.trim().toLowerCase();
-  const { data, error } = await db
-    .from("portal_household_charge_records")
-    .select("manager_user_id, row_data")
-    .or(`resident_user_id.eq.${residentUserId},resident_email.eq.${email}`)
-    .order("updated_at", { ascending: false })
-    .limit(500);
-
-  if (error) throw new Error(error.message);
-
-  const raw = (data ?? [])
-    .map((record) => normalizeChargeOwner(record.row_data as HouseholdCharge | null, record.manager_user_id))
-    .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
-  const managerIds = [...new Set(raw.map((charge) => charge.managerUserId).filter(Boolean))] as string[];
-  for (const managerUserId of managerIds) {
-    await reconcileDuplicateHouseholdChargeRecords(db, managerUserId);
-  }
-
-  const synced = await syncDedupedCharges(db, raw);
-  return { synced, removedDuplicates: 0 };
 }

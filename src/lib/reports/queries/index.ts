@@ -7,6 +7,7 @@ import {
   expenseTaxStatusLabel,
   resolveExpenseTaxDeductible,
 } from "@/lib/reports/categories";
+import { primeSystemChartOfAccounts } from "@/lib/reports/chart-of-accounts-store";
 import { humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import { scopeLabel } from "@/lib/reports/formal-documents/spec";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
@@ -236,6 +237,7 @@ export async function queryIncomeStatement(
   managerUserId: string,
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
+  await primeSystemChartOfAccounts(db);
   const { from, to } = defaultDateRange(filters.from, filters.to);
 
   let incomeQuery = db
@@ -324,6 +326,7 @@ export async function queryExpenses(
   managerUserId: string,
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
+  await primeSystemChartOfAccounts(db);
   const { from, to } = defaultDateRange(filters.from, filters.to);
   const scope = resolveDocumentScope(filters);
   const propertyId = filters.propertyId?.trim();
@@ -395,6 +398,7 @@ export async function queryRentReceipts(
   managerUserId: string,
   filters: ManagerReportFilters,
 ): Promise<ReportResult> {
+  await primeSystemChartOfAccounts(db);
   const { from, to } = defaultDateRange(filters.from, filters.to);
   const displayPromise = loadManagerReportDisplayContext(db, managerUserId);
 

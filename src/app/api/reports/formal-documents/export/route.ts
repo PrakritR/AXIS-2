@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { backfillLedgerFromCharges } from "@/lib/reports/ledger-sync";
 import {
   applyFormalDocumentScope,
   queryFormalDaysRented,
@@ -37,10 +36,6 @@ export async function GET(req: Request) {
         { error: "kind must be rent_receipt, property_rent_receipt, or days_rented." },
         { status: 400 },
       );
-    }
-
-    if (url.searchParams.get("backfill") === "1") {
-      await backfillLedgerFromCharges(auth.db, auth.userId);
     }
 
     const scope = (url.searchParams.get("scope") || "portfolio") as DocumentScope;
