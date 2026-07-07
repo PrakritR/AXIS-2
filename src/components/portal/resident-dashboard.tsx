@@ -338,9 +338,7 @@ export function ResidentDashboard({
                   <p className="mt-4 text-sm text-muted">Move-in details will appear once your placement is assigned.</p>
                 )}
               </div>
-            </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Services"
@@ -378,7 +376,9 @@ export function ResidentDashboard({
                   <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
                 )}
               </div>
+            </div>
 
+            <div className="grid gap-4 lg:grid-cols-2">
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Payments"
@@ -424,27 +424,27 @@ export function ResidentDashboard({
                   }}
                 />
               </div>
-            </div>
 
-            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-              <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
-              <PortalDashboardPreviewList
-                items={inboxThreads}
-                href={`${BASE}/inbox/unopened`}
-                emptyMessage="No unread messages — inbox is clear."
-                keyForItem={(thread) => thread.id}
-                renderRow={(thread) => (
-                  <PortalDashboardCompactRow
-                    title={thread.from || "Unknown sender"}
-                    subtitle={thread.subject || thread.preview || "—"}
-                    badge={
-                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                        Unread
-                      </span>
-                    }
-                  />
-                )}
-              />
+              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+                <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
+                <PortalDashboardPreviewList
+                  items={inboxThreads}
+                  href={`${BASE}/inbox/unopened`}
+                  emptyMessage="No unread messages — inbox is clear."
+                  keyForItem={(thread) => thread.id}
+                  renderRow={(thread) => (
+                    <PortalDashboardCompactRow
+                      title={thread.from || "Unknown sender"}
+                      subtitle={thread.subject || thread.preview || "—"}
+                      badge={
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+                          Unread
+                        </span>
+                      }
+                    />
+                  )}
+                />
+              </div>
             </div>
           </>
         ) : (
