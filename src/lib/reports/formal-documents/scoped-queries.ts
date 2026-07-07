@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import type { RecurringRentProfile } from "@/lib/household-charges";
-import { chartAccountLabel, chartAccountScheduleE, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
+import { chartAccountLabel } from "@/lib/reports/categories";
+import { primeSystemChartOfAccounts, systemChartAccountByCode } from "@/lib/reports/chart-of-accounts-store";
 import {
   receiptNumberForLedgerEntry,
   scopeLabel,
@@ -103,6 +104,7 @@ export async function queryFormalPropertyRentReceipts(
   managerUserId: string,
   filters: FormalDocumentFilters,
 ): Promise<{ documents: PropertyRentReceiptDocument[]; preview: ReportResult }> {
+  await primeSystemChartOfAccounts(db);
   const { from, to } = defaultDateRange(filters.from, filters.to);
   const scope = resolveScope(filters);
   const rangeStart = new Date(from);
@@ -225,7 +227,7 @@ export async function queryFormalPropertyRentReceipts(
     const incomeByCategory: IncomeCategoryRow[] = catMap
       ? [...catMap.entries()]
           .map(([code, cents]) => {
-            const acct = SYSTEM_CHART_ACCOUNTS.find((a) => a.code === code);
+            const acct = systemChartAccountByCode(code);
             return {
               categoryCode: code,
               label: acct?.name ?? chartAccountLabel(code),
@@ -316,6 +318,7 @@ export async function queryFormalRentReceipts(
   managerUserId: string,
   filters: FormalDocumentFilters,
 ): Promise<{ documents: RentReceiptDocument[]; preview: ReportResult }> {
+  await primeSystemChartOfAccounts(db);
   const { from, to } = defaultDateRange(filters.from, filters.to);
   const scope = resolveScope(filters);
   const rangeStart = new Date(from);

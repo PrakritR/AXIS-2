@@ -1,40 +1,22 @@
 import type { HouseholdChargeKind } from "@/lib/household-charges";
+import {
+  systemChartAccountByCode,
+  SYSTEM_CHART_ACCOUNTS_FALLBACK,
+  type ChartAccountRow,
+} from "@/lib/reports/chart-of-accounts-store";
 
-export type ChartAccount = {
-  code: string;
-  name: string;
-  accountType: "income" | "expense";
-  scheduleELine?: number;
-  scheduleERef?: string;
-  scheduleELabel?: string;
-  /** Tax classification for expense accounts: deductible on Schedule E vs non-deductible. */
-  deductible?: boolean;
-};
+export type ChartAccount = ChartAccountRow;
 
-export const SYSTEM_CHART_ACCOUNTS: ChartAccount[] = [
-  { code: "rent_income", name: "Rent Income", accountType: "income", scheduleELine: 3, scheduleERef: "Sch. E, Line 3", scheduleELabel: "Rents Received" },
-  { code: "late_fees", name: "Late Fees", accountType: "income", scheduleELine: 3, scheduleERef: "Sch. E, Line 3", scheduleELabel: "Rents Received" },
-  { code: "pet_rent", name: "Pet Rent", accountType: "income", scheduleELine: 3, scheduleERef: "Sch. E, Line 3", scheduleELabel: "Rents Received" },
-  { code: "application_fee", name: "Application Fee", accountType: "income", scheduleELine: 3, scheduleERef: "Sch. E, Line 3", scheduleELabel: "Rents Received" },
-  { code: "other_income", name: "Other Income", accountType: "income", scheduleELine: 3, scheduleERef: "Sch. E, Line 3", scheduleELabel: "Rents Received" },
-  { code: "maintenance", name: "Maintenance", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs", deductible: true },
-  { code: "cleaning", name: "Cleaning", accountType: "expense", scheduleELine: 7, scheduleERef: "Sch. E, Line 7", scheduleELabel: "Cleaning and Maintenance", deductible: true },
-  { code: "plumbing", name: "Plumbing", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs", deductible: true },
-  { code: "mold_remediation", name: "Mold Remediation", accountType: "expense", scheduleELine: 14, scheduleERef: "Sch. E, Line 14", scheduleELabel: "Repairs", deductible: true },
-  { code: "materials", name: "Materials / Equipment", accountType: "expense", scheduleELine: 15, scheduleERef: "Sch. E, Line 15", scheduleELabel: "Supplies", deductible: true },
-  { code: "mortgage", name: "Mortgage", accountType: "expense", scheduleELine: 12, scheduleERef: "Sch. E, Line 12", scheduleELabel: "Mortgage Interest", deductible: true },
-  { code: "utilities", name: "Utilities", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities", deductible: true },
-  { code: "electricity", name: "Electricity", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities", deductible: true },
-  { code: "heating", name: "Heating / HVAC", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities", deductible: true },
-  { code: "wifi", name: "Wi‑Fi / Internet", accountType: "expense", scheduleELine: 17, scheduleERef: "Sch. E, Line 17", scheduleELabel: "Utilities", deductible: true },
-  { code: "property_tax", name: "Property Tax", accountType: "expense", scheduleELine: 16, scheduleERef: "Sch. E, Line 16", scheduleELabel: "Taxes", deductible: true },
-  { code: "taxes", name: "Taxes", accountType: "expense", scheduleELine: 16, scheduleERef: "Sch. E, Line 16", scheduleELabel: "Taxes", deductible: true },
-  { code: "insurance", name: "Insurance", accountType: "expense", scheduleELine: 9, scheduleERef: "Sch. E, Line 9", scheduleELabel: "Insurance", deductible: true },
-  { code: "management", name: "Management", accountType: "expense", scheduleELine: 11, scheduleERef: "Sch. E, Line 11", scheduleELabel: "Management Fees", deductible: true },
-  { code: "service_fees", name: "Service Fees", accountType: "expense", scheduleELine: 10, scheduleERef: "Sch. E, Line 10", scheduleELabel: "Legal and Professional Fees", deductible: true },
-  { code: "other_expense", name: "Other Expense", accountType: "expense", scheduleELine: 19, scheduleERef: "Sch. E, Line 19", scheduleELabel: "Other", deductible: true },
-  { code: "capital_improvement", name: "Capital Improvement", accountType: "expense", scheduleERef: "Capitalize (Form 4562)", scheduleELabel: "Capital Improvements", deductible: false },
-];
+/**
+ * @deprecated Defense-in-depth fallback only (used by chart-of-accounts-store.ts
+ * when the DB read fails) and the source for the dropdown category pickers in
+ * manager-finances-panel.tsx / manager-add-outgoing-payment-modal.tsx /
+ * the /api/income and /api/expenses routes. The chart_of_accounts table
+ * (src/lib/reports/chart-of-accounts-store.ts) is the runtime source of
+ * truth for report label/Schedule E lookups — do not add new codes here
+ * without also seeding them in supabase/migrations/20260710090000_chart_of_accounts_double_entry.sql.
+ */
+export const SYSTEM_CHART_ACCOUNTS: ChartAccount[] = SYSTEM_CHART_ACCOUNTS_FALLBACK;
 
 export type WorkOrderCategory = "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general" | "appliance" | "access";
 
@@ -49,6 +31,18 @@ export const WORK_ORDER_CATEGORY_TO_EXPENSE: Record<WorkOrderCategory, string> =
   access: "maintenance",
 };
 
+/**
+ * Charge-kind → chart-account-code business mapping. This is a hardcoded rule
+ * (which kind of charge books to which account), independent of the
+ * chart_of_accounts row data itself (names/Schedule E/etc.), so it stays a
+ * plain sync lookup rather than a DB-backed wrapper.
+ *
+ * security_deposit books to the security_deposit_liability account (a
+ * liability, not income) — deposits held for a tenant are not the manager's
+ * income. move_in_fee stays income: it's genuinely non-refundable, unlike a
+ * deposit. Full liability sub-ledger/GL posting lands in a later phase; this
+ * mapping only stops new deposit charges from silently miscategorizing.
+ */
 const KIND_TO_CATEGORY: Record<HouseholdChargeKind, string> = {
   rent: "rent_income",
   first_month_rent: "rent_income",
@@ -59,11 +53,12 @@ const KIND_TO_CATEGORY: Record<HouseholdChargeKind, string> = {
   utilities: "other_income",
   prorated_utilities: "other_income",
   prorated_last_month_utilities: "other_income",
-  security_deposit: "other_income",
+  security_deposit: "security_deposit_liability",
   move_in_fee: "other_income",
   other_cost: "other_income",
   payment_at_signing: "other_income",
   work_order_charge: "other_income",
+  nsf_fee: "nsf_fees",
 };
 
 export function categoryCodeForChargeKind(kind: string | null | undefined): string {
@@ -71,12 +66,19 @@ export function categoryCodeForChargeKind(kind: string | null | undefined): stri
   return KIND_TO_CATEGORY[kind as HouseholdChargeKind] ?? "other_income";
 }
 
+/**
+ * chart_of_accounts-backed (src/lib/reports/chart-of-accounts-store.ts) label
+ * lookup — reads from the store's synchronous system-account cache, which is
+ * warmed by an awaited `primeSystemChartOfAccounts(db)` call at the top of
+ * report-query functions that loop over rows calling this. Falls back to the
+ * SYSTEM_CHART_ACCOUNTS_FALLBACK constant if the cache hasn't been warmed yet.
+ */
 export function chartAccountLabel(code: string): string {
-  return SYSTEM_CHART_ACCOUNTS.find((a) => a.code === code)?.name ?? code;
+  return systemChartAccountByCode(code)?.name ?? code;
 }
 
 export function chartAccountScheduleE(code: string): { ref: string; label: string } | null {
-  const acct = SYSTEM_CHART_ACCOUNTS.find((a) => a.code === code);
+  const acct = systemChartAccountByCode(code);
   if (!acct?.scheduleERef) return null;
   return { ref: acct.scheduleERef, label: acct.scheduleELabel ?? acct.name };
 }
@@ -86,7 +88,8 @@ export function chartAccountScheduleE(code: string): { ref: string; label: strin
  * Schedule E? Unknown/custom codes default to deductible (Sch. E, Line 19 "Other").
  */
 export function isCategoryDeductible(code: string | null | undefined): boolean {
-  const acct = SYSTEM_CHART_ACCOUNTS.find((a) => a.code === code);
+  if (!code) return true;
+  const acct = systemChartAccountByCode(code);
   if (!acct) return true;
   if (typeof acct.deductible === "boolean") return acct.deductible;
   return acct.accountType === "expense";

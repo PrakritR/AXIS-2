@@ -418,3 +418,34 @@ return 409 if it's already `"accepted"` — do not let it fall through to updati
 still set a price when there's no bid, or the bid is merely `"submitted"` (not yet accepted). A
 regression here shipped after the fix commits (`e07b70c`, `eac1439`) added this exact anchoring
 invariant — see `tests/integration/portal/set-vendor-price.test.ts` for the guarding tests.
+
+# Financials Phase 0: chart of accounts + write-through ledger
+
+**`public.chart_of_accounts` is the runtime source of truth for account
+labels/Schedule E lookups** (`src/lib/reports/chart-of-accounts-store.ts`,
+seeded/extended in `supabase/migrations/20260710090000_chart_of_accounts_double_entry.sql`
+with account numbers, `normal_balance`, asset/liability/equity types, and trust-bank
+placeholders). `SYSTEM_CHART_ACCOUNTS` in `src/lib/reports/categories.ts` is a
+defense-in-depth fallback (used when the DB read fails) plus the source for the
+income/expense dropdown pickers — never add a code to one without the other.
+Report-query functions that loop rows calling `chartAccountLabel`/`chartAccountScheduleE`
+must `await primeSystemChartOfAccounts(db)` once up top; the store caches with a 5-min TTL.
+
+**The ledger is write-through only — there is no read-time backfill.** The old
+`backfillLedgerFromCharges`/`?backfill=1` repair pass on every report load was removed
+(it re-scanned up to 2000 charges per page view — the exact Supabase-egress problem
+this file warns about). Every server-side path that creates a charge or marks one paid
+MUST call `syncLedgerChargeEntry`/`syncLedgerPaymentEntry` (`src/lib/reports/ledger-sync.ts`)
+next to the DB write, or the row silently never reaches reports. Current call sites:
+`/api/portal-household-charges` (client mirror upsert), the late-fee creation in
+`/api/cron/send-payment-reminders`, `stripe-household-charge.ts`, and
+`stripe-application-fee.ts` — copy that pattern for any new charge-mutation route.
+
+**`security_deposit` charges book to `security_deposit_liability` (a liability), not
+income**; `move_in_fee` stays income (non-refundable). The `nsf_fee` charge kind exists
+in types/mappings only — nothing creates it until the Stripe-webhook phase. The deposit
+liability sub-ledger, GL posting, and historical reclassification are Phase 3
+(`/Users/prakrit/.claude/plans/idempotent-seeking-hopcroft.md` §1.8/§5) — Phase 0 only
+stops new deposits from miscategorizing. `queryIncomeStatement` still sums all payment
+ledger entries, so a paid deposit shows as a visible "Security Deposits Held" line until
+Phase 3 excludes non-income accounts properly.

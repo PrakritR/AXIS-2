@@ -41,7 +41,7 @@ export function ResidentFinancialsPanel({
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/reports/resident-balance?backfill=1");
+      const res = await fetch("/api/reports/resident-balance");
       const data = await res.json();
       if (res.ok) {
         setBalanceReport(data as ReportResult);
@@ -55,7 +55,7 @@ export function ResidentFinancialsPanel({
   const loadLedger = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ from: range.from, to: range.to, backfill: "1" });
+      const params = new URLSearchParams({ from: range.from, to: range.to });
       const res = await fetch(`/api/reports/resident-ledger?${params}`);
       const data = await res.json();
       if (res.ok) {

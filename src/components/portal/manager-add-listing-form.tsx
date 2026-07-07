@@ -5,6 +5,7 @@ import { Children, useEffect, useMemo, useRef, useState, startTransition } from 
 import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { LeaseConfigForm, readLeaseTemplateFile } from "@/components/portal/lease-config-form";
@@ -14,7 +15,6 @@ import {
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {

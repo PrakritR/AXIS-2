@@ -4,7 +4,6 @@ import {
   assertResidentFinancialsAccess,
   getReportsAuthContext,
 } from "@/lib/reports/auth";
-import { backfillLedgerForResident, backfillLedgerFromCharges } from "@/lib/reports/ledger-sync";
 import { parseManagerReportFilters } from "@/lib/reports/parse-filters";
 import {
   MANAGER_REPORT_IDS,
@@ -25,15 +24,10 @@ export async function GET(
     if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
     const searchParams = new URL(req.url).searchParams;
-    const backfill = searchParams.get("backfill") === "1";
 
     if (isResidentReport) {
       const gate = await assertResidentFinancialsAccess(auth);
       if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
-
-      if (backfill) {
-        await backfillLedgerForResident(auth.db, auth.userId, auth.email);
-      }
 
       const filters = {
         from: searchParams.get("from")?.trim() || undefined,
@@ -59,10 +53,6 @@ export async function GET(
     if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
     const managerUserId = auth.role === "admin" ? searchParams.get("managerUserId")?.trim() || auth.userId : auth.userId;
-
-    if (backfill) {
-      await backfillLedgerFromCharges(auth.db, managerUserId);
-    }
 
     const report = await runManagerReport(auth.db, managerUserId, reportId, parseManagerReportFilters(searchParams));
     if (!report) return NextResponse.json({ error: "Unknown report." }, { status: 404 });

@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { APPLICATION_FEE_CHECKOUT_PURPOSE, axisAchCheckoutPaid } from "@/lib/stripe-axis-ach-checkout";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import { syncLedgerPaymentEntry } from "@/lib/reports/ledger-sync";
 
 export function isApplicationFeeCheckoutSession(session: Stripe.Checkout.Session): boolean {
   return session.metadata?.purpose === APPLICATION_FEE_CHECKOUT_PURPOSE;
@@ -74,5 +75,6 @@ export async function markApplicationFeePaidFromStripeSession(
   );
 
   if (upsertErr) return { ok: false };
+  await syncLedgerPaymentEntry(db, nextCharge, now, session.id);
   return { ok: true, chargeId: match.id as string };
 }

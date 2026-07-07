@@ -168,7 +168,6 @@ export function buildFormalDocumentQuery(
 ): string {
   const params = new URLSearchParams();
   params.set("kind", kind);
-  params.set("backfill", "1");
   appendDocumentScopeParams(params, scopeFilters);
   params.set("from", dateFilters.from);
   params.set("to", dateFilters.to);

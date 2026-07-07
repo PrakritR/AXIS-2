@@ -159,7 +159,6 @@ export function ManagerDocumentsPanel({
         const qs = buildScopedReportQuery(
           { from: filters.from, to: filters.to },
           scopeFilters,
-          { backfill: "1" },
         );
         const res = await fetch(`/api/reports/expenses?${qs}`);
         const data = await res.json();
@@ -185,7 +184,7 @@ export function ManagerDocumentsPanel({
         setPropertyDocuments(null);
         setReport(data as ReportResult);
       } else if (tabId === "tax-summary") {
-        const params = new URLSearchParams({ from: filters.from, to: filters.to, backfill: "1" });
+        const params = new URLSearchParams({ from: filters.from, to: filters.to });
         if (filters.propertyId) params.set("propertyId", filters.propertyId);
         const res = await fetch(`/api/reports/tax-summary?${params}`);
         const data = await res.json();

@@ -477,7 +477,7 @@ export function ManagerFinancesPanel({
     }
     setLoading(true);
     try {
-      const params = new URLSearchParams({ from: filters.from, to: filters.to, backfill: "1" });
+      const params = new URLSearchParams({ from: filters.from, to: filters.to });
       if (filters.propertyId) params.set("propertyId", filters.propertyId);
       const res = await fetch(`/api/reports/${reportId}?${params}`);
       const data = await res.json();

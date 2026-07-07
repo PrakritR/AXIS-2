@@ -213,7 +213,7 @@ function RentReceiptsTab() {
     }
     setLoading(true);
     try {
-      const params = new URLSearchParams({ from, to, backfill: "1" });
+      const params = new URLSearchParams({ from, to });
       const res = await fetch(`/api/reports/resident-ledger?${params}`);
       const data = await res.json();
       if (res.ok) {

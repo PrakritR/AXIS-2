@@ -12,6 +12,7 @@ import {
   DEFAULT_MANAGER_AUTOMATION_SETTINGS,
 } from "@/lib/payment-automation-settings";
 import { loadListingByPropertyId } from "@/lib/payment-automation-server";
+import { syncLedgerChargeEntry } from "@/lib/reports/ledger-sync";
 import {
   deliverPaymentReminder,
   reminderHtmlFromText,
@@ -255,6 +256,7 @@ export async function GET(req: Request) {
             },
             { onConflict: "id" },
           );
+          await syncLedgerChargeEntry(db, lateFeeCharge).catch(() => undefined);
 
           existingLateFeeSources.add(charge.id);
           lateFeesCreated++;
