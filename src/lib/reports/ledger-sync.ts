@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
-import { duplicateHouseholdChargeIds } from "@/lib/household-charges";
+import {
+  dedupeHouseholdCharges,
+  duplicateHouseholdChargeIds,
+} from "@/lib/household-charges";
 import { categoryCodeForChargeKind } from "@/lib/reports/categories";
 import { dollarsToCents } from "@/lib/reports/money";
 import { parseMoneyAmount } from "@/lib/parse-money";
@@ -9,6 +12,24 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function isUuid(value: string | null | undefined): boolean {
   return Boolean(value && UUID_RE.test(value));
+}
+
+/**
+ * The DB column `manager_user_id` is set by authenticated server routes and is
+ * the trustworthy owner of a charge record; `row_data.managerUserId` is
+ * client-synced and can carry stale or placeholder ids (e.g. "demo-manager" or
+ * a deleted user's uuid) that would break the uuid FK on ledger_entries.
+ * Attribute the charge to the column owner whenever it is a real uuid.
+ */
+function normalizeChargeOwner(
+  charge: HouseholdCharge | null,
+  columnManagerUserId: string | null | undefined,
+): HouseholdCharge | null {
+  if (!charge) return null;
+  if (isUuid(columnManagerUserId) && charge.managerUserId !== columnManagerUserId) {
+    return { ...charge, managerUserId: columnManagerUserId as string };
+  }
+  return charge;
 }
 
 function chargeAmountCents(charge: HouseholdCharge): number {
@@ -185,4 +206,93 @@ export async function syncLedgerPaymentEntry(
 ): Promise<void> {
   const row = buildPaymentLedgerRow(charge, paidAt, stripeCheckoutSessionId);
   if (row) await upsertLedgerEntryRow(db, row);
+}
+
+/**
+ * Mirror many charges into ledger entries in a bounded number of round-trips.
+ * Fetches all existing entries for the batch once, then does a single batched
+ * INSERT for new rows and a single batched UPSERT for changed rows — a fixed
+ * ~3 round-trips regardless of volume.
+ */
+async function syncDedupedCharges(
+  db: SupabaseClient,
+  rawCharges: HouseholdCharge[],
+): Promise<number> {
+  const charges = dedupeHouseholdCharges(rawCharges);
+  if (charges.length === 0) return 0;
+
+  const desired: LedgerEntryRow[] = [];
+  for (const charge of charges) {
+    const chargeRow = buildChargeLedgerRow(charge);
+    if (chargeRow) desired.push(chargeRow);
+    if (charge.status === "paid") {
+      const paymentRow = buildPaymentLedgerRow(charge, charge.paidAt);
+      if (paymentRow) desired.push(paymentRow);
+    }
+  }
+  if (desired.length === 0) return 0;
+
+  const sourceIds = [...new Set(desired.map((r) => r.source_charge_id))];
+  const existingByKey = new Map<string, string>();
+  for (let i = 0; i < sourceIds.length; i += 200) {
+    const slice = sourceIds.slice(i, i + 200);
+    const { data, error } = await db
+      .from("ledger_entries")
+      .select("id, source_charge_id, entry_type")
+      .in("source_charge_id", slice);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) existingByKey.set(`${row.source_charge_id}:${row.entry_type}`, row.id);
+  }
+
+  const toInsert: LedgerEntryRow[] = [];
+  const toUpdate: (LedgerEntryRow & { id: string })[] = [];
+  for (const row of desired) {
+    const id = existingByKey.get(`${row.source_charge_id}:${row.entry_type}`);
+    if (id) toUpdate.push({ ...row, id });
+    else toInsert.push(row);
+  }
+
+  if (toInsert.length) {
+    const { error } = await db.from("ledger_entries").insert(toInsert);
+    throwIfLedgerError(error);
+  }
+  if (toUpdate.length) {
+    const { error } = await db.from("ledger_entries").upsert(toUpdate, { onConflict: "id" });
+    throwIfLedgerError(error);
+  }
+  return charges.length;
+}
+
+/**
+ * One-time/historical repair path — NOT called from any report route or page
+ * load (that per-request `?backfill=1` pass was removed; new charges/payments
+ * are mirrored at write time by syncLedgerChargeEntry/syncLedgerPaymentEntry).
+ * Exposed only via the admin-gated /api/admin/backfill-ledger route so an
+ * operator can sweep pre-existing charge history into the ledger once per
+ * environment post-deploy.
+ */
+export async function backfillLedgerFromCharges(
+  db: SupabaseClient,
+  managerUserId?: string,
+): Promise<{ synced: number; removedDuplicates: number }> {
+  await reconcileDuplicateHouseholdChargeRecords(db, managerUserId);
+
+  let query = db
+    .from("portal_household_charge_records")
+    .select("manager_user_id, row_data")
+    .order("updated_at", { ascending: false })
+    .limit(2000);
+
+  if (managerUserId) {
+    query = query.eq("manager_user_id", managerUserId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const raw = (data ?? [])
+    .map((record) => normalizeChargeOwner(record.row_data as HouseholdCharge | null, record.manager_user_id))
+    .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
+  const synced = await syncDedupedCharges(db, raw);
+  return { synced, removedDuplicates: 0 };
 }
