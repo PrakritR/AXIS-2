@@ -4,19 +4,22 @@
  * webhook call — the agent tool layer can reuse it too. Per-manager scoping is
  * enforced by the caller (route) and re-checked here as defense in depth.
  *
- * The manager pays for the run: `chargeManagerForScreening` charges their
- * saved Stripe payment method (same helper the Certn credit-screening
- * pipeline uses) before any Checkr call is made.
+ * Live orders: package + add-ons + Axis surcharge are charged to the manager's
+ * Stripe customer (signup card). Checkr Tenant bills separately on their account.
  */
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { backgroundCheckStatusFromCheckr } from "@/lib/application-background-check";
 import { createBackgroundCheck, fetchBackgroundCheckReport } from "@/lib/checkr/client";
-import { backgroundCheckConfigured, checkrScreeningCostCents } from "@/lib/checkr/config";
+import { backgroundCheckConfigured, checkrSkipsManagerCardCharge } from "@/lib/checkr/config";
+import type { CheckrPackage } from "@/lib/checkr/config";
+import { checkrOrderCostCents, isCheckrAddOn, isCheckrPackage, type CheckrAddOnSlug } from "@/lib/checkr/packages";
 import type {
   ApplicationBackgroundCheck,
   CheckrApplicantInput,
   CheckrPropertyInput,
 } from "@/lib/checkr/types";
+import { managerScreeningAllowedForTier } from "@/lib/manager-access";
+import { getManagerSubscriptionTier } from "@/lib/manager-access-server";
 import { propertyFromRecord } from "@/lib/resident-move-in-resolve";
 import { chargeManagerForScreening } from "@/lib/screening/charge-manager";
 import { getStripe } from "@/lib/stripe";
@@ -135,11 +138,13 @@ function applyBackgroundCheck(row: DemoApplicantRow, bc: ApplicationBackgroundCh
   return { ...row, backgroundCheck: bc, backgroundCheckStatus: backgroundCheckStatusFromCheckr(bc) };
 }
 
-/** Kick off a new Checkr background check for an applicant. Charges the manager first. */
+/** Kick off a new Checkr background check for an applicant. Charges manager card on live orders. */
 export async function runBackgroundCheck(opts: {
   db: SupabaseClient;
   applicationId: string;
   managerUserId: string;
+  packageSlug?: string;
+  addOnProducts?: string[];
 }): Promise<BackgroundCheckResult> {
   if (!backgroundCheckConfigured()) {
     return {
@@ -147,6 +152,16 @@ export async function runBackgroundCheck(opts: {
       status: 503,
       error: "Background checks are not configured. Add CHECKR_API_KEY.",
       code: "not_configured",
+    };
+  }
+
+  const tier = await getManagerSubscriptionTier(opts.managerUserId);
+  if (!managerScreeningAllowedForTier(tier)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Applicant screening requires Pro or Business. Upgrade your plan to run background checks.",
+      code: "upgrade_required",
     };
   }
 
@@ -170,36 +185,46 @@ export async function runBackgroundCheck(opts: {
     };
   }
 
-  const costCents = checkrScreeningCostCents();
-  const charge = await chargeManagerForScreening({
-    managerUserId: opts.managerUserId,
-    applicationId: row.id,
-    amountCents: costCents,
-  });
-  if (!charge.ok) {
-    return { ok: false, status: 402, error: charge.message, code: charge.code };
+  const packageSlug: CheckrPackage = isCheckrPackage(opts.packageSlug ?? "") ? opts.packageSlug! : "essential";
+  const addOnProducts = (opts.addOnProducts ?? []).filter(isCheckrAddOn) as CheckrAddOnSlug[];
+  const costCents = checkrOrderCostCents(packageSlug, addOnProducts);
+
+  let stripePaymentIntentId: string | undefined;
+  if (!checkrSkipsManagerCardCharge()) {
+    const charge = await chargeManagerForScreening({
+      managerUserId: opts.managerUserId,
+      applicationId: row.id,
+      amountCents: costCents,
+    });
+    if (!charge.ok) {
+      return { ok: false, status: 402, error: charge.message, code: charge.code };
+    }
+    stripePaymentIntentId = charge.paymentIntentId;
   }
 
   const property = await loadCheckrProperty(opts.db, row.assignedPropertyId || row.propertyId || row.application.propertyId);
 
   let created;
   try {
-    created = await createBackgroundCheck(applicantInputFromApplication(row.application), property);
+    created = await createBackgroundCheck(applicantInputFromApplication(row.application), property, {
+      packageSlug,
+      addOnProducts,
+    });
   } catch (e) {
     const providerError = e instanceof Error ? e.message : "Checkr request failed.";
-    try {
-      const stripe = getStripe();
-      await stripe.refunds.create({ payment_intent: charge.paymentIntentId, reason: "requested_by_customer" });
-    } catch (refundError) {
-      // The manager was charged but the screening never ran and the refund
-      // itself failed — log everything needed for manual reconciliation.
-      console.error("checkr background check: charge not refunded after order-creation failure", {
-        applicationId: row.id,
-        managerUserId: opts.managerUserId,
-        paymentIntentId: charge.paymentIntentId,
-        providerError,
-        refundError: refundError instanceof Error ? refundError.message : String(refundError),
-      });
+    if (stripePaymentIntentId) {
+      try {
+        const stripe = getStripe();
+        await stripe.refunds.create({ payment_intent: stripePaymentIntentId, reason: "requested_by_customer" });
+      } catch (refundError) {
+        console.error("checkr background check: charge not refunded after order-creation failure", {
+          applicationId: row.id,
+          managerUserId: opts.managerUserId,
+          paymentIntentId: stripePaymentIntentId,
+          providerError,
+          refundError: refundError instanceof Error ? refundError.message : String(refundError),
+        });
+      }
     }
     return {
       ok: false,
@@ -215,13 +240,16 @@ export async function runBackgroundCheck(opts: {
     candidateId: created.applicantId,
     reportId: created.orderId,
     packageSlug: created.packageSlug,
+    addOnProducts: created.addOnProducts.length > 0 ? created.addOnProducts : undefined,
     status: created.status,
     result: created.result,
+    reportSnapshot: created.reportSnapshot,
+    reportResourceId: created.reportResourceId,
     orderedAt: now,
     completedAt: created.status === "complete" ? now : undefined,
     simulated: created.simulated || undefined,
     costCents,
-    stripePaymentIntentId: charge.paymentIntentId,
+    stripePaymentIntentId,
   };
 
   const nextRow = applyBackgroundCheck(row, bc);
@@ -251,6 +279,11 @@ export async function refreshBackgroundCheck(opts: {
 
   const report = await fetchBackgroundCheckReport(existing.reportId, {
     ssn: digitsOnly(row.application?.ssn),
+    firstName: row.application?.fullLegalName?.trim().split(/\s+/)[0],
+    lastName: row.application?.fullLegalName?.trim().split(/\s+/).slice(-1)[0],
+    dob: normalizeDob(row.application?.dateOfBirth),
+    packageSlug: existing.packageSlug,
+    addOnProducts: existing.addOnProducts,
   });
   if (!report) return { ok: true, row, backgroundCheck: existing };
 
@@ -258,6 +291,8 @@ export async function refreshBackgroundCheck(opts: {
     ...existing,
     status: report.status,
     result: report.result,
+    reportSnapshot: report.reportSnapshot ?? existing.reportSnapshot,
+    reportResourceId: report.reportResourceId ?? existing.reportResourceId,
     completedAt: report.status === "complete" ? new Date().toISOString() : existing.completedAt,
   };
   const nextRow = applyBackgroundCheck(row, bc);
@@ -270,7 +305,12 @@ export async function refreshBackgroundCheck(opts: {
 export async function applyBackgroundCheckReport(
   db: SupabaseClient,
   orderId: string,
-  report: { status: ApplicationBackgroundCheck["status"]; result: ApplicationBackgroundCheck["result"] },
+  report: {
+    status: ApplicationBackgroundCheck["status"];
+    result: ApplicationBackgroundCheck["result"];
+    reportSnapshot?: ApplicationBackgroundCheck["reportSnapshot"];
+    reportResourceId?: ApplicationBackgroundCheck["reportResourceId"];
+  },
 ): Promise<DemoApplicantRow | null> {
   const { data } = await db
     .from("screening_orders")
@@ -288,6 +328,8 @@ export async function applyBackgroundCheckReport(
     ...row.backgroundCheck,
     status: report.status,
     result: report.result,
+    reportSnapshot: report.reportSnapshot ?? row.backgroundCheck.reportSnapshot,
+    reportResourceId: report.reportResourceId ?? row.backgroundCheck.reportResourceId,
     completedAt: report.status === "complete" ? new Date().toISOString() : row.backgroundCheck.completedAt,
   };
   const nextRow = applyBackgroundCheck(row, bc);

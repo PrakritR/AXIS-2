@@ -1794,6 +1794,20 @@ html[data-native] .portal-mobile-nav-bar {
   }
 }
 
+/* Portal selects — hide native dropdown arrows (toolbar/filter pickers). */
+.portal-shell select,
+.demo-portal-frame select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: none;
+}
+
+.portal-shell select::-ms-expand,
+.demo-portal-frame select::-ms-expand {
+  display: none;
+}
+
 /* Native portal tabs — keep rounded top corners on the first section card. */
 html[data-native] .portal-main-inner > :first-child.rounded-2xl {
   margin-top: 0.125rem;

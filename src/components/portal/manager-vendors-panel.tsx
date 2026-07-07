@@ -26,7 +26,9 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
+  PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
@@ -338,6 +340,9 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
                   <th className={MANAGER_TABLE_TH}>Phone</th>
                   <th className={MANAGER_TABLE_TH}>Email</th>
                   <th className={MANAGER_TABLE_TH}>Status</th>
+                  <th className={PORTAL_TABLE_EXPAND_TH}>
+                    <span className="sr-only">Expand</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -355,10 +360,11 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
                         <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{renderVendorStatusBadges(row)}</td>
+                        <PortalTableExpandCell expanded={open} />
                       </tr>
                       {open ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderVendorDetail(row)}
                           </td>
                         </tr>

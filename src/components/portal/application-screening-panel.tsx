@@ -3,32 +3,49 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { buildBackgroundCheckReportHtml } from "@/lib/background-check-report-html";
+import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import type { ManagerScreeningSettings } from "@/lib/screening/types";
 
-/**
- * Inline rendered-document view of the applicant's credit/background
- * screening, matching the application document presentation (clean styled
- * HTML in an srcDoc iframe). Renders nothing when there is no screening or
- * background check to show yet.
- */
-function BackgroundCheckReportPreview({ row }: { row: DemoApplicantRow }) {
+function BackgroundCheckReportFrame({ row }: { row: DemoApplicantRow }) {
+  const bg = row.backgroundCheck;
   const reportHtml = useMemo(() => buildBackgroundCheckReportHtml(row), [row]);
-  if (!reportHtml) return null;
-  return (
-    <div className="mt-4 overflow-hidden rounded-2xl border border-border shadow-sm">
+  const useOfficialPdf = bg?.status === "complete" && !bg.simulated;
+  const pdfSrc = useOfficialPdf
+    ? `/api/screening/background-check/document?applicationId=${encodeURIComponent(row.id)}`
+    : null;
+
+  if (pdfSrc) {
+    return (
       <iframe
-        srcDoc={reportHtml}
-        title="Background check report preview"
-        sandbox="allow-same-origin"
-        loading="lazy"
-        className="h-[560px] w-full border-0 bg-white"
+        src={pdfSrc}
+        title="Checkr background check report"
+        className="h-[min(52vh,420px)] w-full border-0 bg-card"
       />
-    </div>
+    );
+  }
+
+  if (!reportHtml) {
+    return (
+      <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
+        No screening report yet.
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      srcDoc={reportHtml}
+      title="Background check report preview"
+      sandbox="allow-same-origin"
+      loading="lazy"
+      className="h-[min(52vh,420px)] w-full border-0 bg-card"
+    />
   );
 }
 
@@ -60,10 +77,9 @@ export function ApplicationScreeningPanel({
   const { showToast } = useAppUi();
   const [settings, setSettings] = useState<ManagerScreeningSettings | null>(null);
   const [configured, setConfigured] = useState(false);
-  const [costCents, setCostCents] = useState(3999);
+  const [screeningAllowed, setScreeningAllowed] = useState(true);
   const [busy, setBusy] = useState(false);
   const [bgConfigured, setBgConfigured] = useState(false);
-  // Optimistic override from run/poll responses; falls back to the synced row.
   const [bgOverride, setBgOverride] = useState<ApplicationBackgroundCheck | undefined>();
   const [bgBusy, setBgBusy] = useState(false);
   const bg = bgOverride ?? row.backgroundCheck;
@@ -75,13 +91,13 @@ export function ApplicationScreeningPanel({
         const body = (await res.json()) as {
           settings?: ManagerScreeningSettings;
           configured?: boolean;
-          costCents?: number;
           backgroundCheckConfigured?: boolean;
+          screeningAllowed?: boolean;
         };
         if (body.settings) setSettings(body.settings);
         setConfigured(Boolean(body.configured));
         setBgConfigured(Boolean(body.backgroundCheckConfigured));
-        if (typeof body.costCents === "number") setCostCents(body.costCents);
+        setScreeningAllowed(body.screeningAllowed !== false);
       })
       .catch(() => undefined);
   }, []);
@@ -107,8 +123,6 @@ export function ApplicationScreeningPanel({
     [onUpdated, row.id],
   );
 
-  // Poll Checkr while a report is pending so the status resolves without a reload.
-  // Starting/re-running is billed, so it only happens via the confirmation modal.
   useEffect(() => {
     if (bg?.status !== "pending") return;
     let cancelled = false;
@@ -149,6 +163,7 @@ export function ApplicationScreeningPanel({
 
   const screening = row.screening;
   const canOrder =
+    screeningAllowed &&
     configured &&
     settings?.mode !== "off" &&
     row.application?.consentCredit &&
@@ -156,77 +171,97 @@ export function ApplicationScreeningPanel({
     screening?.status !== "queued" &&
     screening?.status !== "complete";
 
-  return (
-    <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted">Screening</p>
+  const headerActions = (
+    <>
+      {canOrder ? (
+        <Button
+          type="button"
+          className="h-8 rounded-full px-4 text-xs"
+          disabled={busy}
+          onClick={() => void runScreening()}
+        >
+          {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
+        </Button>
+      ) : null}
+      {screeningAllowed && bgConfigured && row.application?.consentCredit && bg?.status !== "pending" && onOpenScreeningModal ? (
+        <Button
+          type="button"
+          data-attr="run-background-check"
+          className="h-8 rounded-full px-4 text-xs"
+          onClick={onOpenScreeningModal}
+        >
+          {bg ? "Re-run background check" : "Run background check"}
+        </Button>
+      ) : null}
+    </>
+  );
 
-      <BackgroundCheckReportPreview row={row} />
+  return (
+    <PortalCollapsibleSection
+      title="Screening"
+      defaultExpanded={false}
+      surfaceMuted={false}
+      className="mt-4"
+      contentClassName="space-y-4 p-4 pt-0"
+      toggleDataAttr="application-screening-toggle"
+      headerActions={headerActions}
+    >
+      {!screeningAllowed ? (
+        <p className="text-xs text-muted">
+          Screening requires Pro or Business.{" "}
+          <Link href={MANAGER_PLAN_PORTAL_URL} className="font-semibold text-primary hover:underline">
+            Upgrade your plan
+          </Link>
+        </p>
+      ) : null}
+      {bg?.status === "pending" ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span>Checkr is processing — status updates automatically.</span>
+          <button
+            type="button"
+            className="font-semibold text-primary hover:underline disabled:opacity-50"
+            disabled={bgBusy}
+            onClick={() => void callBackgroundCheck("refresh")}
+          >
+            Refresh now
+          </button>
+        </div>
+      ) : null}
+      {screening?.reportUrl ? (
+        <Link
+          href={screening.reportUrl.startsWith("http") ? screening.reportUrl : `https://${screening.reportUrl.replace(/^\/+/, "")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block text-sm font-semibold text-primary hover:underline"
+        >
+          View full vendor report
+        </Link>
+      ) : null}
+      {screeningAllowed && configured && settings?.mode === "off" ? (
+        <p className="text-xs text-muted">Screening is off in Applications settings.</p>
+      ) : null}
+      {screeningAllowed && !bgConfigured ? (
+        <p className="text-xs text-muted">Add CHECKR_API_KEY to enable background checks.</p>
+      ) : screeningAllowed && !row.application?.consentCredit ? (
+        <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
+      ) : null}
+
+      <div className="overflow-hidden rounded-xl border border-border bg-accent/30">
+        <BackgroundCheckReportFrame row={row} />
+      </div>
 
       {screening?.adverseActionRequired ? (
-        <p className="mt-4 rounded-xl border px-3 py-2 text-xs portal-banner-pending">
+        <p className="rounded-xl border px-3 py-2 text-xs portal-banner-pending">
           Adverse action may be required before denying based on this consumer report (FCRA).
         </p>
       ) : null}
 
       {bg?.result === "consider" ? (
-        <p className="mt-4 rounded-xl border px-3 py-2 text-xs portal-banner-pending">
-          Checkr flagged records to review. Consult the full Checkr report and applicable fair-chance rules before
-          any adverse action (FCRA).
+        <p className="rounded-xl border px-3 py-2 text-xs portal-banner-pending">
+          Checkr flagged records to review. Consult the full Checkr report and applicable fair-chance rules before any
+          adverse action (FCRA).
         </p>
       ) : null}
-
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        {canOrder ? (
-          <Button type="button" className="rounded-full px-5" disabled={busy} onClick={() => void runScreening()}>
-            {busy ? "Ordering…" : screening?.status === "failed" ? "Re-run screening" : "Run screening"}
-          </Button>
-        ) : null}
-        {bgConfigured && row.application?.consentCredit && bg?.status !== "pending" && onOpenScreeningModal ? (
-          <Button
-            type="button"
-            data-attr="run-background-check"
-            className="rounded-full px-5"
-            onClick={onOpenScreeningModal}
-          >
-            {bg ? "Re-run background check" : "Run background check"}
-          </Button>
-        ) : null}
-        {bg?.status === "pending" ? (
-          <>
-            <span className="text-xs text-muted">Checkr is processing — status updates automatically.</span>
-            <button
-              type="button"
-              className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
-              disabled={bgBusy}
-              onClick={() => void callBackgroundCheck("refresh")}
-            >
-              Refresh now
-            </button>
-          </>
-        ) : null}
-        {screening?.reportUrl ? (
-          <Link
-            href={screening.reportUrl.startsWith("http") ? screening.reportUrl : `https://${screening.reportUrl.replace(/^\/+/, "")}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-semibold text-primary hover:underline"
-          >
-            View full vendor report
-          </Link>
-        ) : null}
-        {configured && settings?.mode === "off" ? (
-          <p className="text-xs text-muted">Screening is off in Applications settings.</p>
-        ) : settings?.mode === "auto_on_submit" ? (
-          <p className="text-xs text-muted">Auto on submit — ${(costCents / 100).toFixed(2)} / report.</p>
-        ) : (
-          <p className="text-xs text-muted">${(costCents / 100).toFixed(2)} / report.</p>
-        )}
-        {!bgConfigured ? (
-          <p className="text-xs text-muted">Add CHECKR_API_KEY to enable background checks.</p>
-        ) : !row.application?.consentCredit ? (
-          <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
-        ) : null}
-      </div>
-    </div>
+    </PortalCollapsibleSection>
   );
 }

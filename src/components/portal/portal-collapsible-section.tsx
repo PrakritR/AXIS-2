@@ -2,6 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 export type PortalCollapsibleSectionProps = {
   title: ReactNode;
@@ -79,7 +80,7 @@ export function PortalCollapsibleSection({
       } ${className}`.trim()}
     >
       <div
-        className={`flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3 ${
+        className={`flex flex-wrap items-center justify-between gap-2 bg-accent/30 px-4 py-3 ${
           canCollapse ? "cursor-pointer" : ""
         }`}
         role={canCollapse ? "button" : undefined}
@@ -118,7 +119,17 @@ export function PortalCollapsibleSection({
           </div>
         ) : null}
       </div>
-      {showBody ? <div className={contentClassName}>{children}</div> : null}
+      {showBody ? (
+        <div
+          className={cn(
+            "px-4 pb-4 pt-4",
+            contentClassName ??
+              "pb-6 pt-0 [&:not(:has([data-portal-detail-actions]))]:pt-6 sm:[&:not(:has([data-portal-detail-actions]))]:pt-8",
+          )}
+        >
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

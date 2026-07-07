@@ -1,6 +1,8 @@
 import {
   calendarShareAvailabilityStorageKey,
   managerPropertyAvailabilityStorageKey,
+  vendorAvailabilityStorageKey,
+  vendorFlexiblePreferencesStorageKey,
 } from "@/lib/demo-admin-scheduling";
 
 const MANAGER_PROPERTY_AVAIL_PREFIX = "axis_mgr_avail_slots_v2_";
@@ -25,6 +27,12 @@ export function managerScheduleRecordIdOwnedByUser(
   if (recordType === "calendar_share_settings") {
     return id.startsWith(`${CALENDAR_SHARE_PREFIX}${uid}_prop_`);
   }
+  if (recordType === "vendor_availability") {
+    return id === vendorAvailabilityStorageKey(uid);
+  }
+  if (recordType === "vendor_flexible_preferences") {
+    return id === vendorFlexiblePreferencesStorageKey(uid);
+  }
   return true;
 }
 
@@ -32,7 +40,9 @@ export function isManagerScopedScheduleRecordType(recordType: string): boolean {
   return (
     recordType === "manager_availability" ||
     recordType === "manager_property_availability" ||
-    recordType === "calendar_share_settings"
+    recordType === "calendar_share_settings" ||
+    recordType === "vendor_availability" ||
+    recordType === "vendor_flexible_preferences"
   );
 }
 

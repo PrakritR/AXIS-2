@@ -95,7 +95,7 @@ export function DemoSectionRenderer({
       case "payments":
         return <VendorPaymentsPanel />;
       case "documents":
-        return <VendorDocumentsPanel />;
+        return <VendorDocumentsPanel tabId={tabId ?? "tax"} basePath="/vendor" />;
       case "profile":
         return <VendorSettingsPanel />;
       default:

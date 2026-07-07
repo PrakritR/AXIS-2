@@ -21,7 +21,15 @@ export const vendorPortal: PortalDefinition = {
       ],
     },
     { section: "payments", label: "Payments", tabs: [] },
-    { section: "documents", label: "Documents", tabs: [] },
+    {
+      section: "documents",
+      label: "Documents",
+      tabs: [
+        { id: "tax", label: "Tax & income" },
+        { id: "insurance", label: "Insurance" },
+        { id: "licensing", label: "Business & licensing" },
+      ],
+    },
     { section: "profile", label: "Settings", tabs: [] },
   ],
 };
@@ -33,6 +41,6 @@ export const VENDOR_PORTAL_SMOKE_PATHS = [
   { label: "Calendar", path: "/vendor/calendar" },
   { label: "Inbox", path: "/vendor/inbox/unopened" },
   { label: "Payments", path: "/vendor/payments" },
-  { label: "Documents", path: "/vendor/documents" },
+  { label: "Documents", path: "/vendor/documents/tax" },
   { label: "Settings", path: "/vendor/profile" },
 ] as const;

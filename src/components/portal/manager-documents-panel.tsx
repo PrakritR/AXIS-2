@@ -19,26 +19,28 @@ import {
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_DETAIL_BTN,
   PORTAL_DETAIL_BTN_PRIMARY,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   PortalDataTableEmpty,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import {
   ReportExportButtons,
-  ReportFilterBar,
   type ReportFilterState,
 } from "@/components/portal/reports/report-filter-bar";
 import {
-  FormalDocumentScopeBar,
   buildFormalDocumentQuery,
   buildScopedReportQuery,
   type FormalDocumentFilterState,
 } from "@/components/portal/reports/formal-document-scope-bar";
+import { ReportGenerateModal } from "@/components/portal/reports/report-generate-modal";
 import { ReportTable } from "@/components/portal/reports/report-table";
 import { FormalDocumentsPreview, FinancialReportDocumentView, OccupancyDocumentView } from "@/components/portal/reports/formal-document-preview";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
@@ -49,8 +51,14 @@ import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import type { OccupancyReport, PropertyRentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import type { ReportResult } from "@/lib/reports/types";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import {
+  ManagerApplicationDocumentsTab,
+  ManagerLeaseDocumentsTab,
+} from "@/components/portal/manager-documents-leasing-tabs";
 
 export const DOCUMENT_TABS = [
+  { id: "applications", label: "Applications" },
+  { id: "leases", label: "Leases" },
   { id: "income-documents", label: "Income documents" },
   { id: "expense-documents", label: "Expense documents" },
   { id: "occupancy", label: "Occupancy" },
@@ -108,6 +116,7 @@ export function ManagerDocumentsPanel({
   const [taxVendorId, setTaxVendorId] = useState<string | null>(null);
   const [taxVendorName, setTaxVendorName] = useState("");
   const [expanded1099Id, setExpanded1099Id] = useState<string | null>(null);
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
 
   const propertyOptions = useMemo(() => {
     void propertyTick;
@@ -219,15 +228,17 @@ export function ManagerDocumentsPanel({
       setPropertyDocuments(null);
       setOccupancyReport(null);
       setGenerated(false);
+      setGenerateModalOpen(false);
     });
   }, [tabId]);
 
-  // Demo sandbox: generate immediately so every Documents tab opens populated
-  // instead of waiting for a "Generate report" click (re-runs on filter change).
+  // Demo sandbox: generate immediately so every Documents tab opens populated.
   useEffect(() => {
     if (!isDemoModeActive()) return;
     queueMicrotask(() => void runReport());
-  }, [tabId, runReport]);
+    // Only re-run when switching tabs — filter edits happen in the generate modal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabId]);
 
   const incomeReceiptExportHref =
     tabId === "income-documents"
@@ -239,9 +250,17 @@ export function ManagerDocumentsPanel({
       ? buildScopedReportQuery({ from: filters.from, to: filters.to }, scopeFilters)
       : "";
 
-  const showDateRange = tabId !== "1099";
+  const showDateRange = tabId !== "1099" && tabId !== "applications" && tabId !== "leases";
   const showProperty = tabId === "tax-summary" || tabId === "occupancy";
   const showTaxYear = tabId === "1099";
+  const showScope = tabId === "income-documents" || tabId === "expense-documents";
+  const isLeasingDocumentsTab = tabId === "applications" || tabId === "leases";
+  const activeTabLabel = DOCUMENT_TABS.find((tab) => tab.id === tabId)?.label ?? "Documents";
+
+  const handleGenerateReport = useCallback(() => {
+    setGenerateModalOpen(false);
+    void runReport();
+  }, [runReport]);
 
   const documentTabItems = useMemo(
     () => DOCUMENT_TABS.map((tab) => ({ ...tab, href: `${basePath}/documents/${tab.id}` })),
@@ -287,16 +306,18 @@ export function ManagerDocumentsPanel({
           {hasExportActions ? (
             <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div>
           ) : null}
+          {!isLeasingDocumentsTab ? (
           <Button
             type="button"
             variant="primary"
             className={PORTAL_HEADER_ACTION_BTN}
-            onClick={() => void runReport()}
+            onClick={() => setGenerateModalOpen(true)}
             disabled={loading}
             data-attr="documents-generate-report"
           >
             {loading ? "Generating…" : "Generate report"}
           </Button>
+          ) : null}
         </div>
       }
       filterRow={
@@ -307,29 +328,11 @@ export function ManagerDocumentsPanel({
       }
     >
       <div className="space-y-4">
-        <ReportFilterBar
-          showProperty={showProperty}
-          showDateRange={showDateRange}
-          showDaysAhead={false}
-          showTaxYear={showTaxYear}
-          showRunButton={false}
-          propertyOptions={propertyOptions}
-          filters={filters}
-          onChange={(next) => setFilters((f) => ({ ...f, ...next }))}
-          onRun={() => void runReport()}
-          loading={loading}
-          leading={
-            tabId === "income-documents" || tabId === "expense-documents" ? (
-              <FormalDocumentScopeBar
-                inline
-                filters={scopeFilters}
-                onChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
-              />
-            ) : null
-          }
-        />
-
-        {tabId === "income-documents" ? (
+        {tabId === "applications" ? (
+          <ManagerApplicationDocumentsTab userId={userId ?? null} />
+        ) : tabId === "leases" ? (
+          <ManagerLeaseDocumentsTab userId={userId ?? null} />
+        ) : tabId === "income-documents" ? (
           <div>
             {loading ? (
               <ReportGeneratePrompt loading loadingTitle="Generating documents…" />
@@ -387,10 +390,11 @@ export function ManagerDocumentsPanel({
                           <div key={vendorId} className={PORTAL_MOBILE_CARD_CLASS}>
                             <button
                               type="button"
-                              className="w-full text-left"
+                              className="flex w-full items-center justify-between gap-2 text-left"
                               onClick={() => setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId))}
+                              aria-expanded={expanded}
                             >
-                              <div className="flex items-start justify-between gap-2.5">
+                              <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
                                 <div className="min-w-0">
                                   <p className="truncate font-semibold text-foreground">{vendorName}</p>
                                   <p className="mt-0.5 truncate text-xs text-muted tabular-nums">
@@ -403,6 +407,7 @@ export function ManagerDocumentsPanel({
                                   {w9Status || "Unknown"}
                                 </span>
                               </div>
+                              <PortalTableExpandChevron expanded={expanded} />
                             </button>
                             {expanded ? (
                               <div className="mt-3 border-t border-border pt-3">
@@ -421,6 +426,9 @@ export function ManagerDocumentsPanel({
                               <th className={`${MANAGER_TABLE_TH} text-left`}>Vendor</th>
                               <th className={`${MANAGER_TABLE_TH} text-left`}>Total paid</th>
                               <th className={`${MANAGER_TABLE_TH} text-left`}>W-9 status</th>
+                              <th className={PORTAL_TABLE_EXPAND_TH}>
+                                <span className="sr-only">Expand</span>
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -446,10 +454,11 @@ export function ManagerDocumentsPanel({
                                         {w9Status || "Unknown"}
                                       </span>
                                     </td>
+                                    <PortalTableExpandCell expanded={expanded1099Id === vendorId} />
                                   </tr>
                                   {expanded1099Id === vendorId ? (
                                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                      <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                                         {renderVendorDetail(vendorId, vendorName)}
                                       </td>
                                     </tr>
@@ -489,6 +498,23 @@ export function ManagerDocumentsPanel({
         vendorName={taxVendorName}
         onClose={() => setTaxVendorId(null)}
         onSaved={() => void runReport()}
+      />
+
+      <ReportGenerateModal
+        open={generateModalOpen}
+        onClose={() => setGenerateModalOpen(false)}
+        tabLabel={activeTabLabel}
+        showScope={showScope}
+        showProperty={showProperty}
+        showDateRange={showDateRange}
+        showTaxYear={showTaxYear}
+        propertyOptions={propertyOptions}
+        filters={filters}
+        onFiltersChange={(next) => setFilters((f) => ({ ...f, ...next }))}
+        scopeFilters={scopeFilters}
+        onScopeFiltersChange={(next) => setScopeFilters((f) => ({ ...f, ...next }))}
+        onGenerate={handleGenerateReport}
+        loading={loading}
       />
     </ManagerPortalPageShell>
   );

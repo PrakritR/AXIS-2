@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatManagerMonthlyLabel,
+  managerScreeningAllowedForTier,
   managerSectionAllowedForTier,
   managerSectionLockedForTier,
   managerTierPropertyLimitReached,
@@ -37,6 +38,7 @@ describe("manager-access", () => {
 
   it("gates free-tier sections", () => {
     expect(managerSectionAllowedForTier("properties", "free")).toBe(true);
+    expect(managerSectionAllowedForTier("applications", "free")).toBe(true);
     expect(managerSectionAllowedForTier("residents", "free")).toBe(false);
     expect(managerSectionAllowedForTier("leases", "free")).toBe(false);
     expect(managerSectionAllowedForTier("services", "free")).toBe(false);
@@ -45,6 +47,11 @@ describe("manager-access", () => {
     expect(managerSectionAllowedForTier("financials", "free")).toBe(false);
     expect(managerSectionAllowedForTier("documents", "paid")).toBe(true);
     expect(managerSectionAllowedForTier("inbox", "paid")).toBe(true);
+  });
+
+  it("requires paid plan for applicant screening", () => {
+    expect(managerScreeningAllowedForTier("free")).toBe(false);
+    expect(managerScreeningAllowedForTier("paid")).toBe(true);
   });
 
   it("marks paid-only sections as locked on free tier", () => {

@@ -12,16 +12,51 @@ import {
   formatStandardReminderSchedule,
   PAYMENT_AUTOMATION_SETTINGS_EVENT,
 } from "@/lib/payment-automation-settings";
-import { HOUSEHOLD_CHARGES_EVENT, readHouseholdCharges } from "@/lib/household-charges";
+import { HOUSEHOLD_CHARGES_EVENT, isUnpaidHouseholdCharge, readHouseholdCharges } from "@/lib/household-charges";
 import { readPortalApiError } from "@/lib/portal-api-error";
 import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import {
   filterScheduledPaymentMessagesForUnpaidCharges,
   filterScheduledPaymentMessagesForVisibility,
   formatScheduledSendAt,
+  manageableRemindersForCharge,
   projectScheduledPaymentMessages,
   scheduledReminderShortLabel,
+  type ScheduledPaymentMessage,
 } from "@/lib/scheduled-payment-messages";
+
+function mergeLocalChargeReminders(
+  serverMessages: ScheduledPaymentMessage[],
+  settings: ManagerAutomationSettings,
+  includeHidden: boolean,
+): ScheduledPaymentMessage[] {
+  const serverChargeIds = new Set(serverMessages.map((message) => message.chargeId));
+  const localOnly = readHouseholdCharges().filter(
+    (charge) => isUnpaidHouseholdCharge(charge) && !serverChargeIds.has(charge.id) && charge.managerUserId,
+  );
+  if (!localOnly.length) return serverMessages;
+
+  const byManager = new Map<string, typeof localOnly>();
+  for (const charge of localOnly) {
+    const managerUserId = charge.managerUserId!.trim();
+    const list = byManager.get(managerUserId) ?? [];
+    list.push(charge);
+    byManager.set(managerUserId, list);
+  }
+
+  const merged = [...serverMessages];
+  for (const [managerUserId, charges] of byManager) {
+    merged.push(
+      ...projectScheduledPaymentMessages({
+        managerUserId,
+        charges,
+        settings,
+        includeHidden,
+      }),
+    );
+  }
+  return merged.sort((a, b) => a.sendAt.localeCompare(b.sendAt));
+}
 
 function formatSendDate(iso: string): string {
   const d = new Date(iso);
@@ -181,7 +216,7 @@ export function ChargeRemindersModal({
   onAddSetDate?: (isoDate: string) => void | Promise<void>;
 }) {
   const [editingMessage, setEditingMessage] = useState<ScheduledPaymentMessage | null>(null);
-  const upcoming = messages.filter((m) => m.status === "scheduled");
+  const manageable = messages.filter((m) => m.status === "scheduled" || m.status === "cancelled");
 
   return (
     <Modal open={open} onClose={onClose} title="Auto reminders" dense panelClassName="max-w-lg p-3 sm:p-4">
@@ -207,11 +242,11 @@ export function ChargeRemindersModal({
           </p>
           <p className="mt-1.5">Reminders stop automatically when this charge is marked paid. Skip any send below to turn it off for this charge only.</p>
         </div>
-        {upcoming.length === 0 ? (
+        {manageable.length === 0 ? (
           <p className="text-sm text-muted">No upcoming reminders — either this charge is paid, past due for all scheduled sends, or reminders were skipped.</p>
         ) : (
           <ul className="space-y-1.5">
-            {messages.map((m) => {
+            {manageable.map((m) => {
               const cancelled = m.status === "cancelled";
               const label = scheduledReminderShortLabel(m.kind, m.daysBeforeDue);
               return (
@@ -707,6 +742,7 @@ export async function patchScheduledMessage(
   messageId: string,
   patch: {
     cancelled?: boolean;
+    cancelledBecausePaid?: boolean;
     customSubject?: string;
     customBody?: string;
     customDaysBeforeDue?: number;
@@ -722,6 +758,32 @@ export async function patchScheduledMessage(
   });
   if (!res.ok) {
     throw new Error(await readPortalApiError(res, "Could not update reminder."));
+  }
+}
+
+/** Cancel upcoming auto reminders when a charge is marked paid (demo + immediate UI). */
+export async function cancelFutureRemindersForPaidCharge(
+  chargeId: string,
+  messages: ScheduledPaymentMessage[],
+): Promise<void> {
+  const reminders = manageableRemindersForCharge(messages, chargeId, 50).filter((message) => message.status === "scheduled");
+  await Promise.all(
+    reminders.map((message) =>
+      patchScheduledMessage(message.id, { cancelled: true, cancelledBecausePaid: true }),
+    ),
+  );
+}
+
+/** Restore auto reminders cancelled on paid when a charge moves back to pending. */
+export async function restoreFutureRemindersForPendingCharge(chargeId: string): Promise<void> {
+  const res = await fetch("/api/portal/scheduled-messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "restoreForPending", chargeId }),
+  });
+  if (!res.ok) {
+    throw new Error(await readPortalApiError(res, "Could not restore reminders."));
   }
 }
 
@@ -787,7 +849,7 @@ export function useScheduledPaymentMessages(opts?: { includeHidden?: boolean }) 
       if (!res.ok) return;
       const body = (await res.json()) as { settings: ManagerAutomationSettings; messages: ScheduledPaymentMessage[] };
       setSettings(body.settings);
-      setRawMessages(body.messages);
+      setRawMessages(mergeLocalChargeReminders(body.messages, body.settings, opts?.includeHidden ?? false));
     } finally {
       setLoading(false);
     }

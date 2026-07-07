@@ -25,6 +25,7 @@ export function ReportFilterBar({
   loading,
   runLabel = "Generate report",
   showRunButton = true,
+  stacked = false,
   leading,
   trailing,
 }: {
@@ -39,34 +40,19 @@ export function ReportFilterBar({
   loading?: boolean;
   runLabel?: string;
   showRunButton?: boolean;
+  /** Vertical stack for modal forms. */
+  stacked?: boolean;
   /** Extra controls rendered at the start of the row (e.g. a document scope selector). */
   leading?: ReactNode;
   /** Extra controls rendered at the end of the row, before the run button (e.g. row-level filters). */
   trailing?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className={stacked ? "flex flex-col gap-4" : "flex flex-wrap items-end gap-3"}>
       {leading}
-      {showProperty && propertyOptions && propertyOptions.length > 0 ? (
-        <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-          Property
-          <select
-            className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
-            value={filters.propertyId}
-            onChange={(e) => onChange({ propertyId: e.target.value })}
-          >
-            <option value="">All properties</option>
-            {propertyOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
 
       {showDateRange ? (
-        <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:flex sm:w-auto">
+        <div className={stacked ? "grid grid-cols-1 gap-4 sm:grid-cols-2" : "grid w-full min-w-0 grid-cols-2 gap-3 sm:flex sm:w-auto"}>
           <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted">
             From
             <Input
@@ -86,6 +72,24 @@ export function ReportFilterBar({
             />
           </label>
         </div>
+      ) : null}
+
+      {showProperty && propertyOptions && propertyOptions.length > 0 ? (
+        <label className={`flex flex-col gap-1.5 text-xs font-medium text-muted ${stacked ? "w-full" : "min-w-[10rem]"}`}>
+          Property
+          <select
+            className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
+            value={filters.propertyId}
+            onChange={(e) => onChange({ propertyId: e.target.value })}
+          >
+            <option value="">All properties</option>
+            {propertyOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
       ) : null}
 
       {showDaysAhead ? (

@@ -84,6 +84,26 @@ export const VENDOR_DOCUMENT_SECTIONS: {
   },
 ];
 
+export const VENDOR_DOCUMENT_TABS = VENDOR_DOCUMENT_SECTIONS.map((section) => ({
+  id: section.id,
+  label: section.label,
+}));
+
+export function vendorDocumentSectionForTab(tabId: string) {
+  return VENDOR_DOCUMENT_SECTIONS.find((section) => section.id === tabId);
+}
+
+export function vendorDocumentStatusLabel(doc: VendorDocumentRecord | undefined): string {
+  return doc ? "On file" : "Missing";
+}
+
+export function vendorDocumentStatusTone(doc: VendorDocumentRecord | undefined): string {
+  if (doc) {
+    return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  }
+  return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+}
+
 export function isVendorDocumentKind(value: string): value is VendorDocumentKind {
   return (VENDOR_DOCUMENT_KINDS as readonly string[]).includes(value);
 }

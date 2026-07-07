@@ -69,7 +69,7 @@ const LEGACY_FINANCIALS_TAB_MAP: Record<string, string> = {
   "profit-loss": "expenses",
 };
 
-const DOCUMENTS_TABS = ["income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
+const DOCUMENTS_TABS = ["applications", "leases", "income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
 
 const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
   summary: "tax-summary",
@@ -125,7 +125,7 @@ async function renderManagerDocumentsSection(
 ) {
   if (section !== "documents") return null;
   if (!tabParts?.length) {
-    redirect(`${basePath}/documents/income-documents`);
+    redirect(`${basePath}/documents/applications`);
   }
   if (tabParts.length > 1) notFound();
   const docTab = tabParts[0]!;
@@ -660,8 +660,13 @@ export async function renderPortalSection(
   }
 
   if (kind === "vendor" && section === "documents") {
-    if (tabParts?.length) notFound();
-    return <VendorDocumentsPanel />;
+    if (!meta.tabs.length) notFound();
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    }
+    const documentsTab = tabParts[0]!;
+    if (!meta.tabs.some((tab) => tab.id === documentsTab)) notFound();
+    return <VendorDocumentsPanel tabId={documentsTab} basePath={def.basePath} />;
   }
 
   if (kind === "vendor" && section === "profile") {

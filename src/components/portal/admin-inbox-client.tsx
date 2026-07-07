@@ -14,8 +14,10 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_ROW_TOGGLE_CLASS,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
+  PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
@@ -500,6 +502,9 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Preview</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
                     <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -593,10 +598,11 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                               )}
                             </div>
                           </td>
+                          <PortalTableExpandCell expanded={isOpen} />
                         </tr>
                         {isOpen ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                               <div className="space-y-3 text-left">
                                 <div>
                                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Message</p>

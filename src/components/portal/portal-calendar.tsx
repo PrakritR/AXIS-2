@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT } from "./portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT, PortalToolbarSelectWrap } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -52,19 +52,21 @@ function ManagerCalendarPropertyFilter({
         <label htmlFor="portal-calendar-property" className="sr-only">
           Property
         </label>
-        <select
-          id="portal-calendar-property"
-          className={selectClassName}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">Select a house</option>
-          {properties.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <PortalToolbarSelectWrap>
+          <select
+            id="portal-calendar-property"
+            className={selectClassName}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          >
+            <option value="">Select a house</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </PortalToolbarSelectWrap>
       </div>
     </div>
   );

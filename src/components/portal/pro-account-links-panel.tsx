@@ -10,6 +10,7 @@ import {
   MANAGER_TABLE_TH,
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_TOOLBAR_SELECT,
+  PortalToolbarSelectWrap,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -18,9 +19,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
+  PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -170,19 +173,21 @@ function AddPropertyToCoManager({
     <div className="flex flex-wrap items-end gap-2">
       <label className="min-w-[12rem] flex-1 text-xs font-semibold text-muted">
         Add property
-        <select
-          value={selectedPropertyId}
-          disabled={disabled}
-          onChange={(e) => onSelect(linkId, e.target.value)}
-          className="mt-1 h-10 w-full rounded-full border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-        >
-          <option value="">Select property…</option>
-          {unassigned.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <PortalToolbarSelectWrap className="mt-1 block w-full">
+          <select
+            value={selectedPropertyId}
+            disabled={disabled}
+            onChange={(e) => onSelect(linkId, e.target.value)}
+            className={`h-10 w-full ${PORTAL_TOOLBAR_SELECT}`}
+          >
+            <option value="">Select property…</option>
+            {unassigned.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </PortalToolbarSelectWrap>
       </label>
       <Button type="button" variant="outline" className="rounded-full text-xs" disabled={disabled || !selectedPropertyId} onClick={onAdd}>
         Add property
@@ -1336,6 +1341,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Manager</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Role</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Properties</th>
+                      <th className={PORTAL_TABLE_EXPAND_TH}>
+                        <span className="sr-only">Expand</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1359,10 +1367,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             <span className="tabular-nums">{ownedProperties.length}</span>
                             <span className="text-muted"> owned</span>
                           </td>
+                          <PortalTableExpandCell expanded={expandedLinkId === "__self__"} />
                         </tr>
                         {expandedLinkId === "__self__" ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderSelfDetail()}
                             </td>
                           </tr>
@@ -1408,10 +1417,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                     <span>linked</span>
                                   </button>
                                 </td>
+                                <PortalTableExpandCell expanded={expandedLinkId === inv.id} />
                               </tr>
                               {expandedLinkId === inv.id ? (
                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                  <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                                  <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                                     {renderInviteDetail(inv)}
                                   </td>
                                 </tr>
@@ -1452,10 +1462,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                     <span>linked</span>
                                   </button>
                                 </td>
+                                <PortalTableExpandCell expanded={expandedLinkId === r.id} />
                               </tr>
                               {expandedLinkId === r.id ? (
                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                  <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                                  <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                                     {renderLocalRowDetail(r)}
                                   </td>
                                 </tr>

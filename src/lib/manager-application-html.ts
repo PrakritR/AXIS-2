@@ -203,7 +203,7 @@ export function buildApplicationHtml(row: DemoApplicantRow, options: Application
 
   const body = `
 <h1>AXIS RENTAL APPLICATION</h1>
-<p class="sub">Axis Property Management · Official application record</p>
+<p class="sub">Axis · Official application record</p>
 <p class="generated">Axis ID ${escapeHtml(axisId)} · ${escapeHtml(statusLabel(row))} · Generated ${escapeHtml(generatedLabel)}</p>
 
 ${section("Application summary", [
@@ -339,7 +339,7 @@ ${section("Consent & signature", [
 
 ${freeTextSection("Manager notes", clean(row.detail))}
 
-<p class="footnote">Generated from Axis application records. Amounts and placement can change later in the lease or payment portal. Axis Property Management · Confidential</p>
+<p class="footnote">Generated from Axis application records. Amounts and placement can change later in the lease or payment portal. Axis · Confidential</p>
 `;
 
   return `<!DOCTYPE html>

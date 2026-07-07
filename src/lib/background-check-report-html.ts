@@ -1,4 +1,5 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { buildCheckrTenantReportHtml } from "@/lib/checkr/tenant-report-html";
 import { clean, escapeHtml, freeTextSection, section } from "@/lib/manager-application-html";
 import { recommendationLabel } from "@/lib/screening/recommendation";
 import { leaseCss } from "@/lib/lease-templates/types";
@@ -37,6 +38,15 @@ export function buildBackgroundCheckReportHtml(
   const bg = row.backgroundCheck;
   if (!screening && !bg) return "";
 
+  if (bg?.reportSnapshot || (bg && bg.status === "complete")) {
+    // Prefer official Checkr PDF via /api/screening/background-check/document in the UI.
+    // Fall back to inline HTML only for legacy Certn rows or offline demo simulate.
+    if (bg?.simulated) {
+      const tenantHtml = buildCheckrTenantReportHtml(row);
+      if (tenantHtml) return tenantHtml;
+    }
+  }
+
   const applicantName = clean(row.name) || "Applicant";
   const axisId = clean(row.id) || "—";
   const generated = options.generatedAt ? new Date(options.generatedAt) : new Date();
@@ -44,7 +54,7 @@ export function buildBackgroundCheckReportHtml(
 
   const body = `
 <h1>BACKGROUND &amp; CREDIT CHECK REPORT</h1>
-<p class="sub">Axis Property Management · Screening record</p>
+<p class="sub">Axis · Screening record</p>
 <p class="generated">Axis ID ${escapeHtml(axisId)} · ${escapeHtml(applicantName)} · Generated ${escapeHtml(generatedLabel)}</p>
 
 ${
@@ -80,7 +90,7 @@ ${
     : ""
 }
 
-<p class="footnote">Generated from Axis screening records. Consult the full vendor report before any adverse action. Axis Property Management · Confidential</p>
+<p class="footnote">Generated from Axis screening records. Consult the full vendor report before any adverse action. Axis · Confidential</p>
 `;
 
   return `<!DOCTYPE html>

@@ -20,8 +20,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
@@ -210,17 +213,21 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                 <div key={row.id} id={`resident-application-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="w-full text-left"
+                    className="flex w-full items-center justify-between gap-2 text-left"
                     onClick={() => {
                       setExpandedId((cur) => (cur === row.id ? null : row.id));
                       setEditingId(null);
                     }}
+                    aria-expanded={expanded}
                   >
-                    <p className="truncate font-semibold text-foreground">{row.name || "Applicant"}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {[row.property || "—", `Room ${displayRoomForRow(row)}`].join(" · ")}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] text-muted/90">{bucketStatusLabel(row.bucket)}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{row.name || "Applicant"}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {[row.property || "—", `Room ${displayRoomForRow(row)}`].join(" · ")}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">{bucketStatusLabel(row.bucket)}</p>
+                    </div>
+                    <PortalTableExpandChevron expanded={expanded} />
                   </button>
                   {expanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
@@ -236,6 +243,9 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -257,10 +267,11 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                         <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property || "—"}</td>
                         <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
                         <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{bucketStatusLabel(row.bucket)}</td>
+                        <PortalTableExpandCell expanded={expandedId === row.id} />
                       </tr>
                       {expandedId === row.id ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderRowDetail(row)}
                           </td>
                         </tr>

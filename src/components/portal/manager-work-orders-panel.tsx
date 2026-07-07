@@ -18,8 +18,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
@@ -892,28 +895,32 @@ export function ManagerWorkOrdersPanel({
             <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
               <button
                 type="button"
-                className="w-full text-left"
+                className="flex w-full items-center justify-between gap-2 text-left"
                 onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
+                aria-expanded={isExpanded}
               >
-                <p className="truncate font-semibold text-foreground">{row.title}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">
-                  {[row.propertyName, row.unit].filter(Boolean).join(" · ")}
-                </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
-                    {row.priority}
-                  </span>
-                  <span className="text-xs text-muted">{displayWorkOrderCost(row.cost)}</span>
-                  {linkedCharge?.status === "paid" ? (
-                    <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                      Paid
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-foreground">{row.title}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {[row.propertyName, row.unit].filter(Boolean).join(" · ")}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
+                      {row.priority}
                     </span>
-                  ) : linkedCharge?.status === "pending" ? (
-                    <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                      Pending
-                    </span>
-                  ) : null}
+                    <span className="text-xs text-muted">{displayWorkOrderCost(row.cost)}</span>
+                    {linkedCharge?.status === "paid" ? (
+                      <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                        Paid
+                      </span>
+                    ) : linkedCharge?.status === "pending" ? (
+                      <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                        Pending
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
+                <PortalTableExpandChevron expanded={isExpanded} />
               </button>
               {isExpanded ? (
                 <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div>
@@ -931,6 +938,9 @@ export function ManagerWorkOrdersPanel({
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
+                <th className={PORTAL_TABLE_EXPAND_TH}>
+                  <span className="sr-only">Expand</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -974,10 +984,11 @@ export function ManagerWorkOrdersPanel({
                           ) : null}
                         </div>
                       </td>
+                      <PortalTableExpandCell expanded={isExpanded} />
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                           {renderRowDetail(row)}
                         </td>
                       </tr>

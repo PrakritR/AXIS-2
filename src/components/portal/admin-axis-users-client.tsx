@@ -22,6 +22,8 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
+  PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
@@ -307,7 +309,7 @@ function ManagerDetailRow({
 }) {
   return (
     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+      <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
         <ManagerDetailContent row={row} onRefresh={onRefresh} showToast={showToast} />
       </td>
     </tr>
@@ -448,7 +450,7 @@ function SimpleAccountDetailRow({
 }) {
   return (
     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+      <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
         <SimpleAccountDetailContent
           row={row}
           apiPath={apiPath}
@@ -749,6 +751,9 @@ export function AdminAxisUsersClient() {
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Account</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Plan</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -778,6 +783,7 @@ export function AdminAxisUsersClient() {
                           <td className={PORTAL_TABLE_TD}>
                             <StatusPill active={row.active} />
                           </td>
+                          <PortalTableExpandCell expanded={isOpen} />
                         </tr>
                         {isOpen ? (
                           <ExpandedRow

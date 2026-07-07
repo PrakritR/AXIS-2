@@ -25,10 +25,13 @@ import {
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -136,6 +139,7 @@ import { Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PillTabs } from "@/components/ui/tabs";
 import { ApplicationDocumentPreview, downloadApplicationPdf } from "@/components/portal/manager-applications";
+import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import {
@@ -194,7 +198,7 @@ function ResidentDetailSection({
         if (open !== expanded) onToggle();
       }}
       headerActions={headerAction}
-      contentClassName="px-4 pb-4 pt-0"
+      contentClassName="px-4 pb-6 pt-0 [&:not(:has([data-portal-detail-actions]))]:pt-6 sm:[&:not(:has([data-portal-detail-actions]))]:pt-8"
       surfaceMuted={false}
       toggleDataAttr="resident-section-toggle"
     >
@@ -309,6 +313,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [expandedResidentSection, setExpandedResidentSection] = useState<
     "application" | "lease" | "payments" | "services" | "inbox" | null
   >(null);
+  const [applicationEditOpen, setApplicationEditOpen] = useState(false);
   const [chargeExpandedId, setChargeExpandedId] = useState<string | null>(null);
   const [editingChargeId, setEditingChargeId] = useState<string | null>(null);
   const [editChargeTitleDraft, setEditChargeTitleDraft] = useState("");
@@ -799,7 +804,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   );
 
   const residentServiceRequestsCounts = useMemo(() => {
-    const c: Record<ManagerServiceRequestBucket, number> = { pending: 0, approved: 0, completed: 0 };
+    const c: Record<ManagerServiceRequestBucket, number> = { pending: 0, approved: 0, denied: 0 };
     for (const req of residentServiceRequests) c[managerServiceRequestBucket(req.status)] += 1;
     return c;
   }, [residentServiceRequests]);
@@ -1754,6 +1759,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               onToggle={() =>
                                 setExpandedResidentSection((cur) => (cur === "application" ? null : "application"))
                               }
+                              headerAction={
+                                selectedApplicationRow?.application ? (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-8 rounded-full px-3 text-xs"
+                                    data-attr="resident-application-edit"
+                                    onClick={() => setApplicationEditOpen(true)}
+                                  >
+                                    Edit
+                                  </Button>
+                                ) : undefined
+                              }
                             >
                               {selectedApplicationRow ? (
                                 <div className="space-y-8">
@@ -1767,15 +1785,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           onClick={() => setApprovePreviewRow(selectedApplicationRow)}
                                         >
                                           Approve
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN}
-                                          data-attr="open-run-screening"
-                                          onClick={() => setCheckrScreeningRowId(selectedApplicationRow.id)}
-                                        >
-                                          Run screening
                                         </Button>
                                         <Button
                                           type="button"
@@ -1827,53 +1836,55 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               expanded={expandedResidentSection === "lease"}
                               onToggle={() => setExpandedResidentSection((cur) => (cur === "lease" ? null : "lease"))}
                             >
-                              <div className="flex flex-wrap items-center justify-start gap-3">
-                                {residentLease ? (
-                                  <div className="flex flex-wrap gap-2">
+                              {residentLease ? (
+                                <>
+                                  <PortalTableDetailActions placement="top">
                                     {leaseAllowsManagerDocumentEdits(residentLease) ? (
                                       <>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className="rounded-full px-3 py-1 text-xs"
-                                      disabled={
-                                        generatingLeaseRowId === residentLease.id ||
-                                        !leaseGenerationSupportedForRow(residentLease).ok
-                                      }
-                                      title={leaseGenerationGateTitle(residentLease)}
-                                      onClick={() => openGenerateLeaseConfirm(residentLease.id)}
-                                    >
-                                      {generatingLeaseRowId === residentLease.id ? "Generating..." : "Generate lease"}
-                                    </Button>
-                                    <label className="inline-flex cursor-pointer items-center rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground hover:bg-accent/30">
-                                      {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
-                                      <input
-                                        type="file"
-                                        accept="application/pdf"
-                                        className="sr-only"
-                                        onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file || !residentLease) return;
-                                          setUploadingLeaseRowId(residentLease.id);
-                                          const result = await managerUploadLeasePdf(residentLease.id, file, userId);
-                                          setUploadingLeaseRowId(null);
-                                          e.currentTarget.value = "";
-                                          if (result.ok) {
-                                            setLeaseTick((n) => n + 1);
-                                            showToast("Lease PDF uploaded.");
-                                          } else {
-                                            showToast(result.error ?? "Upload failed.");
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className={PORTAL_DETAIL_BTN}
+                                          disabled={
+                                            generatingLeaseRowId === residentLease.id ||
+                                            !leaseGenerationSupportedForRow(residentLease).ok
                                           }
-                                        }}
-                                      />
-                                    </label>
+                                          title={leaseGenerationGateTitle(residentLease)}
+                                          onClick={() => openGenerateLeaseConfirm(residentLease.id)}
+                                        >
+                                          {generatingLeaseRowId === residentLease.id ? "Generating..." : "Generate lease"}
+                                        </Button>
+                                        <label
+                                          className={`inline-flex cursor-pointer items-center ${PORTAL_DETAIL_BTN} hover:bg-accent/30`}
+                                        >
+                                          {uploadingLeaseRowId === residentLease.id ? "Uploading..." : "Upload PDF"}
+                                          <input
+                                            type="file"
+                                            accept="application/pdf"
+                                            className="sr-only"
+                                            onChange={async (e) => {
+                                              const file = e.target.files?.[0];
+                                              if (!file || !residentLease) return;
+                                              setUploadingLeaseRowId(residentLease.id);
+                                              const result = await managerUploadLeasePdf(residentLease.id, file, userId);
+                                              setUploadingLeaseRowId(null);
+                                              e.currentTarget.value = "";
+                                              if (result.ok) {
+                                                setLeaseTick((n) => n + 1);
+                                                showToast("Lease PDF uploaded.");
+                                              } else {
+                                                showToast(result.error ?? "Upload failed.");
+                                              }
+                                            }}
+                                          />
+                                        </label>
                                       </>
                                     ) : null}
                                     {!residentLease.managerSignature && residentHasSignedLease(residentLease) ? (
                                       <Button
                                         type="button"
                                         variant="outline"
-                                        className="rounded-full px-3 py-1 text-xs"
+                                        className={PORTAL_DETAIL_BTN}
                                         disabled={
                                           !residentLease.generatedHtml && !residentLease.managerUploadedPdf?.dataUrl
                                         }
@@ -1883,27 +1894,27 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       </Button>
                                     ) : null}
                                     {residentLease.generatedHtml || residentLease.managerUploadedPdf?.dataUrl ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className="rounded-full px-3 py-1 text-xs"
-                                      onClick={() => {
-                                        if (residentLease.managerUploadedPdf?.dataUrl) {
-                                          downloadLeaseFromRow(residentLease);
-                                        } else if (residentLease.generatedHtml) {
-                                          printLeaseAsPdf(residentLease);
-                                        }
-                                        showToast("Lease download started.");
-                                      }}
-                                    >
-                                      Download lease
-                                    </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className={PORTAL_DETAIL_BTN}
+                                        onClick={() => {
+                                          if (residentLease.managerUploadedPdf?.dataUrl) {
+                                            downloadLeaseFromRow(residentLease);
+                                          } else if (residentLease.generatedHtml) {
+                                            printLeaseAsPdf(residentLease);
+                                          }
+                                          showToast("Lease download started.");
+                                        }}
+                                      >
+                                        Download lease
+                                      </Button>
                                     ) : null}
                                     {residentLease.status === "Manager Review" || residentLease.status === "Draft" ? (
                                       <Button
                                         type="button"
                                         variant="outline"
-                                        className="rounded-full px-3 py-1 text-xs"
+                                        className={PORTAL_DETAIL_BTN}
                                         disabled={leaseSendBusy}
                                         onClick={() => openLeaseSendPreview(selected, residentLease)}
                                       >
@@ -1914,7 +1925,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className="rounded-full px-3 py-1 text-xs"
+                                          className={PORTAL_DETAIL_BTN}
                                           disabled={leaseReminderBusy}
                                           onClick={() => openLeaseSigningReminderPreview(selected, residentLease)}
                                         >
@@ -1923,14 +1934,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         <Button
                                           type="button"
                                           variant="outline"
-                                          className="rounded-full px-3 py-1 text-xs"
+                                          className={PORTAL_DETAIL_BTN}
                                           onClick={() => {
                                             const moveResult = sendLeaseBackToManager(residentLease.id, userId);
                                             if (!moveResult.ok) {
                                               showToast(moveResult.error);
                                               return;
                                             }
-                                            appendLeaseThreadMessage(residentLease.id, "manager", "Moved lease back to manager review.", userId);
+                                            appendLeaseThreadMessage(
+                                              residentLease.id,
+                                              "manager",
+                                              "Moved lease back to manager review.",
+                                              userId,
+                                            );
                                             setLeaseTick((n) => n + 1);
                                             showToast("Lease moved to Manager Review.");
                                           }}
@@ -1942,9 +1958,15 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     <Button
                                       type="button"
                                       variant="outline"
-                                      className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+                                      className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
                                       onClick={() => {
-                                        if (!window.confirm(`Delete the lease document for ${selected.name}? Generate or upload can recreate it.`)) return;
+                                        if (
+                                          !window.confirm(
+                                            `Delete the lease document for ${selected.name}? Generate or upload can recreate it.`,
+                                          )
+                                        ) {
+                                          return;
+                                        }
                                         if (deleteLeasePipelineRow(residentLease.id, userId)) {
                                           setLeaseTick((n) => n + 1);
                                           showToast("Lease document deleted.");
@@ -1955,11 +1977,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     >
                                       Delete lease
                                     </Button>
-                                  </div>
-                                ) : null}
-                              </div>
-                              {residentLease ? (
-                                <div className="mt-4">
+                                  </PortalTableDetailActions>
                                   <LeaseDocumentPreview
                                     row={residentLease}
                                     emptyHint="No lease document yet. Generate or upload one from Manager Review first."
@@ -1993,9 +2011,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       </div>
                                     </div>
                                   ) : null}
-                                </div>
+                                </>
                               ) : (
-                                <p className="mt-3 text-sm text-muted">Approve the application and create or generate a lease here for this resident.</p>
+                                <p className="text-sm text-muted">Approve the application and create or generate a lease here for this resident.</p>
                               )}
                             </ResidentDetailSection>
 
@@ -2011,7 +2029,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 setExpandedResidentSection((cur) => (cur === "payments" ? null : "payments"))
                               }
                               headerAction={
-                                <div className="flex shrink-0 flex-row items-center gap-2">
+                                <div className="flex shrink-0 flex-row items-center gap-3">
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -2074,6 +2092,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
                                           <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
                                           <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                                          <th className={PORTAL_TABLE_EXPAND_TH}>
+                                            <span className="sr-only">Expand</span>
+                                          </th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -2100,10 +2121,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                     {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
                                                   </Badge>
                                                 </td>
+                                                <PortalTableExpandCell expanded={chargeExpandedId === c.id} />
                                               </tr>
                                               {chargeExpandedId === c.id ? (
                                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                  <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                                                  <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
                                                     <div className="space-y-1 text-sm text-muted">
                                                       <p>
                                                         Property: <span className="text-foreground">{selected.propertyLabel || "—"}</span>
@@ -2294,10 +2316,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   <div className="mb-3">
                                     <ManagerPortalStatusPills
                                       tabs={(
-                                        ["pending", "approved"] as const
+                                        ["pending", "approved", "denied"] as const
                                       ).map((id) => ({
                                         id,
-                                        label: id === "pending" ? "Pending" : "Approved",
+                                        label: id === "pending" ? "Pending" : id === "approved" ? "Approved" : "Denied",
                                         count: residentServiceRequestsCounts[id],
                                       }))}
                                       activeId={svcReqBucket}
@@ -2318,6 +2340,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Item</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                                               <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>Charges</th>
+                                              <th className={PORTAL_TABLE_EXPAND_TH}>
+                                                <span className="sr-only">Expand</span>
+                                              </th>
                                             </tr>
                                           </thead>
                                           <tbody>
@@ -2343,15 +2368,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                     <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>
                                                       {managerServiceRequestPricingSummary(req)}
                                                     </td>
+                                                    <PortalTableExpandCell expanded={svcExpandedId === rowId} />
                                                   </tr>
                                                   {svcExpandedId === rowId ? (
                                                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                                                      <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                                                         <ManagerServiceRequestDetail
                                                           req={req}
                                                           propertyLabel={selected.propertyLabel || "—"}
                                                           onUpdated={() => setSrTick((n) => n + 1)}
                                                           onApproved={() => setSvcReqBucket("approved")}
+                                                          onDenied={() => setSvcReqBucket("denied")}
                                                           onCollapsed={() => setSvcExpandedId(null)}
                                                         />
                                                       </td>
@@ -2560,13 +2587,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
             <button
               type="button"
-              className="flex w-full items-baseline justify-between gap-2 text-left"
+              className="flex w-full items-center justify-between gap-2 text-left"
               onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
+              aria-expanded={selectedId === res.id}
             >
-              <p className="min-w-0 flex-1 truncate font-semibold text-foreground">{res.name || "—"}</p>
-              {housingLabel ? (
-                <p className="min-w-0 max-w-[55%] shrink-0 truncate text-right text-xs text-muted">{housingLabel}</p>
-              ) : null}
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-foreground">{res.name || "—"}</p>
+                {housingLabel ? (
+                  <p className="mt-0.5 truncate text-xs text-muted">{housingLabel}</p>
+                ) : null}
+              </div>
+              <PortalTableExpandChevron expanded={selectedId === res.id} />
             </button>
             {selectedId === res.id && selected ? (
               <div className="mt-3 border-t border-border pt-3">{residentDetailPanel}</div>
@@ -2586,6 +2617,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
+                  <th className={PORTAL_TABLE_EXPAND_TH}>
+                    <span className="sr-only">Expand</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -2606,10 +2640,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                       <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
+                      <PortalTableExpandCell expanded={selectedId === res.id} />
                     </tr>
                     {selectedId === res.id && selected ? (
                       <tr>
-                        <td colSpan={6} className="bg-accent/30 px-4 py-5">
+                        <td colSpan={7} className="bg-accent/30 px-4 py-5">
                           {residentDetailPanel}
                         </td>
                       </tr>
@@ -3077,6 +3112,30 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={applicationEditOpen && Boolean(selectedApplicationRow?.application)}
+        title={
+          selectedApplicationRow
+            ? `Edit application — ${selectedApplicationRow.name || selected?.name || "Resident"}`
+            : "Edit application"
+        }
+        onClose={() => setApplicationEditOpen(false)}
+        panelClassName="max-w-4xl w-full"
+      >
+        {selectedApplicationRow?.application ? (
+          <ResidentApplicationEditor
+            row={selectedApplicationRow}
+            residentEmail={(selectedApplicationRow.email ?? selected?.email ?? "").trim().toLowerCase()}
+            preserveReviewStatus
+            onCancel={() => setApplicationEditOpen(false)}
+            onSaved={() => {
+              setApplicationEditOpen(false);
+              setHcTick((n) => n + 1);
+            }}
+          />
+        ) : null}
       </Modal>
 
       <CheckrScreeningModal

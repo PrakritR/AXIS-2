@@ -22,6 +22,16 @@ export type ManagerVendorRow = {
   insuranceExpiresAt?: string;
   /** Uploaded compliance files (insurance cert, W-9 PDF, license). */
   vendorDocuments?: VendorDocumentRecord[];
+  /** When true, managers can pay this vendor via Zelle using `zelleContact`. */
+  zellePaymentsEnabled?: boolean;
+  zelleContact?: string;
+  /** When true, managers can pay this vendor via Venmo using `venmoContact`. */
+  venmoPaymentsEnabled?: boolean;
+  venmoContact?: string;
+  /** When true, vendor accepts bank transfer via Stripe Connect (link bank in Payments). */
+  achPaymentsEnabled?: boolean;
+  /** Derived snapshot of enabled payout methods (zelle / venmo / ach). */
+  acceptedPaymentMethods?: ("zelle" | "venmo" | "ach")[];
   createdAt?: string;
   updatedAt?: string;
 };

@@ -178,6 +178,22 @@ function scheduleRecordScope(key: string): { managerUserId: string | null; prope
       recordType: "manager_availability",
     };
   }
+  const vendorAvail = key.match(/^axis_vendor_avail_slots_v2_(.+)$/);
+  if (vendorAvail) {
+    return {
+      managerUserId: vendorAvail[1] ?? null,
+      propertyId: null,
+      recordType: "vendor_availability",
+    };
+  }
+  const vendorPrefs = key.match(/^axis_vendor_flex_prefs_(.+)$/);
+  if (vendorPrefs) {
+    return {
+      managerUserId: vendorPrefs[1] ?? null,
+      propertyId: null,
+      recordType: "vendor_flexible_preferences",
+    };
+  }
   return { managerUserId: null, propertyId: null, recordType: key };
 }
 
@@ -351,6 +367,16 @@ export function managerAvailabilityStorageKey(userId: string): string {
 export function managerPropertyAvailabilityStorageKey(userId: string, propertyId: string): string {
   const safe = propertyId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
   return `axis_mgr_avail_slots_v2_${userId}_prop_${safe}`;
+}
+
+/** Vendor calendar availability — drag-created open slots for work order visits. */
+export function vendorAvailabilityStorageKey(userId: string): string {
+  return `axis_vendor_avail_slots_v2_${userId}`;
+}
+
+/** Vendor flexible scheduling preferences (morning/afternoon/evening rank). */
+export function vendorFlexiblePreferencesStorageKey(userId: string): string {
+  return `axis_vendor_flex_prefs_${userId}`;
 }
 
 /** Per-property opt-in for co-managers to see this manager's tour availability. */

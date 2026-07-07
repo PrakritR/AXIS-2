@@ -9,10 +9,15 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
+  PORTAL_TOOLBAR_GROUP,
+  PORTAL_TOOLBAR_PILL_BUTTON,
+  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
-import type { ManagerPaymentBucket } from "@/data/demo-portal";
+import { ManagerOutgoingPaymentsPanel } from "@/components/portal/manager-outgoing-payments-panel";
+import { ManagerAddOutgoingPaymentModal } from "@/components/portal/manager-add-outgoing-payment-modal";
+import type { ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
 import {
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
@@ -32,12 +37,33 @@ import {
 } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
-import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { syncPropertyPipelineFromServer, readExtraListingsForUser } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import {
   ReminderSettingsModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
+import {
+  buildManagerOutgoingPaymentRows,
+  MANAGER_OUTGOING_PAYMENTS_EVENT,
+  readManagerOutgoingExpenses,
+  syncManagerOutgoingExpensesFromServer,
+} from "@/lib/manager-outgoing-payments";
+import {
+  MANAGER_WORK_ORDERS_EVENT,
+  readManagerWorkOrderRows,
+  syncManagerWorkOrdersFromServer,
+} from "@/lib/manager-work-orders-storage";
+import {
+  MANAGER_VENDORS_EVENT,
+  readActiveManagerVendorRows,
+  syncManagerVendorsFromServer,
+} from "@/lib/manager-vendors-storage";
+
+const DIRECTION_LABELS: { id: ManagerPaymentDirection; label: string }[] = [
+  { id: "incoming", label: "Incoming" },
+  { id: "outgoing", label: "Outgoing" },
+];
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -66,9 +92,12 @@ export function ManagerPayments() {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
+  const [direction, setDirection] = useState<ManagerPaymentDirection>("incoming");
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
+  const [outgoingTick, setOutgoingTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const [addOutgoingOpen, setAddOutgoingOpen] = useState(false);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [applicationTick, setApplicationTick] = useState(0);
@@ -78,7 +107,22 @@ export function ManagerPayments() {
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
-  const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
+  const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}:${outgoingTick}`;
+
+  useEffect(() => {
+    const onOutgoing = () => setOutgoingTick((n) => n + 1);
+    void syncManagerOutgoingExpensesFromServer().then(onOutgoing);
+    void syncManagerWorkOrdersFromServer().then(onOutgoing);
+    void syncManagerVendorsFromServer();
+    window.addEventListener(MANAGER_OUTGOING_PAYMENTS_EVENT, onOutgoing);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, onOutgoing);
+    window.addEventListener(MANAGER_VENDORS_EVENT, onOutgoing);
+    return () => {
+      window.removeEventListener(MANAGER_OUTGOING_PAYMENTS_EVENT, onOutgoing);
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, onOutgoing);
+      window.removeEventListener(MANAGER_VENDORS_EVENT, onOutgoing);
+    };
+  }, []);
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -217,18 +261,6 @@ export function ManagerPayments() {
       });
   }, [userId, ledgerDataVersion]);
 
-  const propertyOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const row of mergedRows) {
-      const key = normalizePropertyLabel(row.propertyName);
-      if (!key) continue;
-      if (!seen.has(key)) seen.set(key, key);
-    }
-    return [...seen.entries()]
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [mergedRows]);
-
   const residentOptions = useMemo(() => {
     void applicationTick;
     // Use readManagerApplicationRows as source of truth (same as Residents page)
@@ -270,15 +302,82 @@ export function ManagerPayments() {
     return c;
   }, [rowsForCounts]);
 
+  const propertyLabelById = useMemo(() => {
+    void propertyTick;
+    const map = new Map<string, string>();
+    if (!userId) return map;
+    for (const property of [...readExtraListingsForUser(userId)]) {
+      const id = property.id.trim();
+      const label = normalizePropertyLabel(property.buildingName.trim() || property.title);
+      if (id && label) map.set(id, label);
+    }
+    return map;
+  }, [userId, propertyTick]);
+
+  const outgoingRows = useMemo(() => {
+    void ledgerDataVersion;
+    const vendorNameById = new Map(readActiveManagerVendorRows().map((vendor) => [vendor.id, vendor.name]));
+    return buildManagerOutgoingPaymentRows({
+      managerUserId: userId,
+      expenses: readManagerOutgoingExpenses(),
+      workOrders: readManagerWorkOrderRows(),
+      paidCharges: readChargesForManager(userId).filter((charge) => charge.status === "paid"),
+      propertyLabelById,
+      vendorNameById,
+    });
+  }, [userId, ledgerDataVersion, propertyLabelById]);
+
+  const outgoingRowsForCounts = useMemo(() => {
+    return outgoingRows.filter((row) => {
+      if (propertyFilter && normalizePropertyLabel(row.propertyName) !== propertyFilter) return false;
+      return true;
+    });
+  }, [outgoingRows, propertyFilter]);
+
+  const outgoingCounts = useMemo(() => {
+    const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
+    for (const row of outgoingRowsForCounts) c[row.bucket] += 1;
+    return c;
+  }, [outgoingRowsForCounts]);
+
+  const outgoingRowsForBucket = useMemo(() => {
+    return outgoingRowsForCounts.filter((row) => row.bucket === bucket);
+  }, [outgoingRowsForCounts, bucket]);
+
+  const directionCounts = useMemo(
+    () => ({
+      incoming: rowsForCounts.length,
+      outgoing: outgoingRowsForCounts.length,
+    }),
+    [rowsForCounts.length, outgoingRowsForCounts.length],
+  );
+
+  const propertyOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const row of mergedRows) {
+      const key = normalizePropertyLabel(row.propertyName);
+      if (!key) continue;
+      if (!seen.has(key)) seen.set(key, key);
+    }
+    for (const row of outgoingRows) {
+      const key = normalizePropertyLabel(row.propertyName);
+      if (!key) continue;
+      if (!seen.has(key)) seen.set(key, key);
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [mergedRows, outgoingRows]);
+
   const tabs = useMemo(
     () =>
       PAY_LABELS.map(({ id, label }) => ({
         id,
         label,
-        count: counts[id],
-        alert: id === "overdue" && counts.overdue > 0,
+        count: direction === "incoming" ? counts[id] : outgoingCounts[id],
+        alert: id === "overdue" && (direction === "incoming" ? counts.overdue : outgoingCounts.overdue) > 0,
       })),
-    [counts],
+    [counts, outgoingCounts, direction],
   );
   const rowsForBucket = useMemo(() => {
     const filtered = mergedRows.filter((r) => {
@@ -293,6 +392,27 @@ export function ManagerPayments() {
 
   const filterRow = (
     <ManagerPortalFilterRow>
+      <div className={PORTAL_TOOLBAR_GROUP}>
+        {DIRECTION_LABELS.map(({ id, label }) => {
+          const active = direction === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${active ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
+              onClick={() => {
+                setDirection(id);
+                setBucket("pending");
+                setResidentFilter("");
+              }}
+              data-attr={`payments-direction-${id}`}
+            >
+              {label}
+              <span className="ml-1 tabular-nums text-muted">{directionCounts[id]}</span>
+            </button>
+          );
+        })}
+      </div>
       <ManagerPortalStatusPills compact tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
       <PortalPropertyFilterPill
         propertyOptions={propertyOptions}
@@ -301,7 +421,7 @@ export function ManagerPayments() {
           setPropertyFilter(nextProperty);
           setResidentFilter("");
         }}
-        residents={true}
+        residents={direction === "incoming"}
         residentOptions={residentOptions}
         residentValue={activeResidentFilter}
         onResidentChange={setResidentFilter}
@@ -320,18 +440,25 @@ export function ManagerPayments() {
               variant="header"
               onConnectDone={() => setBankLinkBanner(true)}
             />
-            <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setAddOpen(true)}>
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_HEADER_ACTION_BTN}
+              onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
+            >
               Add
             </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
-            onClick={() => setReminderSettingsOpen(true)}
-          >
-            Reminders
-          </Button>
+          {direction === "incoming" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => setReminderSettingsOpen(true)}
+            >
+              Reminders
+            </Button>
+          ) : null}
         </div>
       }
       filterRow={filterRow}
@@ -352,6 +479,7 @@ export function ManagerPayments() {
           </Button>
         </div>
       ) : null}
+      {direction === "incoming" ? (
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}
@@ -361,6 +489,17 @@ export function ManagerPayments() {
         onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
       />
+      ) : (
+      <ManagerOutgoingPaymentsPanel
+        rows={outgoingRowsForBucket}
+        activeBucket={bucket}
+        onRowsChanged={() => {
+          setOutgoingTick((n) => n + 1);
+          void syncManagerOutgoingExpensesFromServer(true);
+          void syncManagerWorkOrdersFromServer();
+        }}
+      />
+      )}
       <ReminderSettingsModal
         open={reminderSettingsOpen}
         onClose={() => setReminderSettingsOpen(false)}
@@ -377,6 +516,17 @@ export function ManagerPayments() {
         onSubmitted={() => {
           setAddOpen(false);
           setHcTick((n) => n + 1);
+          void reloadSchedule();
+        }}
+      />
+      <ManagerAddOutgoingPaymentModal
+        open={addOutgoingOpen}
+        onClose={() => setAddOutgoingOpen(false)}
+        managerUserId={userId ?? null}
+        onSubmitted={() => {
+          setAddOutgoingOpen(false);
+          setOutgoingTick((n) => n + 1);
+          void syncManagerOutgoingExpensesFromServer(true);
         }}
       />
 

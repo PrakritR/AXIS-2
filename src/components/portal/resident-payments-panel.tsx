@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
-import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -20,8 +20,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -60,7 +63,6 @@ import {
 } from "@/lib/platform/resident-payments";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
-type PayTab = "pending" | "paid";
 
 type PayConfirmState = {
   chargeIds: string[];
@@ -133,7 +135,6 @@ export function ResidentPaymentsPanel() {
     () => paymentMethodOptions.filter((option) => option.id === "ach" || option.id === "card"),
     [paymentMethodOptions],
   );
-  const [tab, setTab] = useState<PayTab>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [paymentMethod, setPaymentMethod] = useState<ResidentPayMethod>("ach");
@@ -320,33 +321,22 @@ export function ResidentPaymentsPanel() {
   }, [refresh, router, searchParams, showToast]);
 
   const rows = useMemo(() => {
-    const filtered = charges.filter((c) => (tab === "pending" ? c.status === "pending" : c.status === "paid"));
-    if (tab !== "pending") return filtered;
-    // Overdue charges surface at the top of the unpaid list.
-    return [...filtered].sort((a, b) => {
-      const aOverdue = isHouseholdChargeOverdue(a);
-      const bOverdue = isHouseholdChargeOverdue(b);
-      if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+    return [...charges].sort((a, b) => {
+      if (a.status !== b.status) return a.status === "pending" ? -1 : 1;
+      if (a.status === "pending") {
+        const aOverdue = isHouseholdChargeOverdue(a);
+        const bOverdue = isHouseholdChargeOverdue(b);
+        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+      }
       return 0;
     });
-  }, [charges, tab]);
+  }, [charges]);
 
   const counts = useMemo(() => {
     return {
-      pending: charges.filter((c) => c.status === "pending").length,
-      paid: charges.filter((c) => c.status === "paid").length,
       overdue: charges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c)).length,
     };
   }, [charges]);
-
-  const tabs = useMemo(
-    () =>
-      [
-        { id: "pending" as const, label: "Pending", count: counts.pending },
-        { id: "paid" as const, label: "Paid", count: counts.paid },
-      ] as const,
-    [counts],
-  );
 
   const loadCheckout = useCallback(
     async (chargeIds: string[], method: ResidentAxisPaymentMethod) => {
@@ -708,7 +698,7 @@ export function ResidentPaymentsPanel() {
     <ManagerPortalPageShell
       title="Payments"
       titleAside={
-        tab === "pending" && unpaidPayableCharges.length > 0 ? (
+        unpaidPayableCharges.length > 0 ? (
           <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
             {unpaidAchCharges.length > 0 ? (
               <Button
@@ -734,23 +724,14 @@ export function ResidentPaymentsPanel() {
         ) : null
       }
       filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills
-            tabs={[...tabs]}
-            activeId={tab}
-            onChange={(id) => {
-              setTab(id as PayTab);
-              setExpandedId(null);
-              setCheckout(null);
-            }}
-          />
-          {counts.overdue > 0 ? (
+        counts.overdue > 0 ? (
+          <ManagerPortalFilterRow>
             <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
               <span aria-hidden className="size-1.5 rounded-full bg-current" />
               {counts.overdue} overdue
             </div>
-          ) : null}
-        </ManagerPortalFilterRow>
+          </ManagerPortalFilterRow>
+        ) : undefined
       }
     >
       {!email ? (
@@ -774,13 +755,7 @@ export function ResidentPaymentsPanel() {
           {rows.length === 0 ? (
             <PortalDataTableEmpty
               icon="payment"
-              message={
-                charges.length === 0
-                  ? "No charges yet."
-                  : tab === "pending"
-                    ? "No pending charges yet."
-                    : "No paid charges yet."
-              }
+              message="No charges yet."
             />
           ) : (
             <>
@@ -788,7 +763,7 @@ export function ResidentPaymentsPanel() {
               {rows.map((row) => {
                 const overdue = row.status === "pending" && isHouseholdChargeOverdue(row);
                 const payable = isPayableHouseholdCharge(row);
-                const showSelectCol = tab === "pending" && unpaidPayableCharges.length > 0;
+                const showSelectCol = unpaidPayableCharges.length > 0;
                 const expanded = expandedId === row.id;
                 const toggleExpand = () =>
                   setExpandedId((cur) => {
@@ -810,8 +785,8 @@ export function ResidentPaymentsPanel() {
                           aria-label={`Select ${row.title}`}
                         />
                       ) : null}
-                      <button type="button" className="min-w-0 flex-1 text-left" onClick={toggleExpand}>
-                        <div className="flex items-start justify-between gap-2.5">
+                      <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left" onClick={toggleExpand} aria-expanded={expanded}>
+                        <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
                             <p className="mt-0.5 truncate text-xs text-muted">{row.propertyLabel}</p>
@@ -823,6 +798,7 @@ export function ResidentPaymentsPanel() {
                             {row.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending"}
                           </Badge>
                         </div>
+                        <PortalTableExpandChevron expanded={expanded} />
                       </button>
                     </div>
                     {expanded ? (
@@ -839,7 +815,7 @@ export function ResidentPaymentsPanel() {
                 <table className="w-full table-fixed border-collapse text-left text-sm">
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
-                      {tab === "pending" && unpaidPayableCharges.length > 0 ? (
+                      {unpaidPayableCharges.length > 0 ? (
                         <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
                           <span className="sr-only">Select</span>
                         </th>
@@ -850,14 +826,17 @@ export function ResidentPaymentsPanel() {
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
                       <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                      <th className={PORTAL_TABLE_EXPAND_TH}>
+                        <span className="sr-only">Expand</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => {
                       const overdue = row.status === "pending" && isHouseholdChargeOverdue(row);
                       const payable = isPayableHouseholdCharge(row);
-                      const showSelectCol = tab === "pending" && unpaidPayableCharges.length > 0;
-                      const detailColSpan = showSelectCol ? 7 : 6;
+                      const showSelectCol = unpaidPayableCharges.length > 0;
+                      const detailColSpan = showSelectCol ? 8 : 7;
                       return (
                         <Fragment key={row.id}>
                           <tr
@@ -898,6 +877,7 @@ export function ResidentPaymentsPanel() {
                                 {row.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending"}
                               </Badge>
                             </td>
+                            <PortalTableExpandCell expanded={expandedId === row.id} />
                           </tr>
                           {expandedId === row.id ? (
                             <tr className={PORTAL_TABLE_DETAIL_ROW}>

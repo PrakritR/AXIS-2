@@ -6,12 +6,16 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
+  PORTAL_MOBILE_DETAIL_EXPAND,
   PortalDataTableEmpty,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
@@ -284,7 +288,7 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
                       {open ? "Less" : "Details"}
                     </Button>
                   </div>
-                  {open ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
+                  {open ? <div className={PORTAL_MOBILE_DETAIL_EXPAND}>{renderRowDetail(row)}</div> : null}
                 </div>
               );
             })}
@@ -298,6 +302,9 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
                     <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -329,10 +336,11 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
                               {row.status}
                             </span>
                           </td>
+                          <PortalTableExpandCell expanded={open} />
                         </tr>
                         {open ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowDetail(row)}
                             </td>
                           </tr>

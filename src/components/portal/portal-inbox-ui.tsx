@@ -18,6 +18,9 @@ import {
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  PORTAL_TABLE_EXPAND_TH,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   PortalResponsiveDataView,
   PortalTableDetailActions,
   createPortalRowExpandClick,
@@ -274,7 +277,7 @@ export function PortalInboxMessageTable({
   };
 
   const showSelection = Boolean(selection && selection.selectableCount > 0);
-  const baseColCount = onToggleExpand ? 4 : 5;
+  const baseColCount = onToggleExpand ? 5 : 5;
   const detailColSpan = baseColCount + (showSelection ? 1 : 0);
 
   const renderRowCheckbox = (row: PortalInboxTableRow, className = "") => {
@@ -320,6 +323,9 @@ export function PortalInboxMessageTable({
                   <p className="mt-1 line-clamp-2 text-xs text-muted">{row.preview}</p>
                 </div>
                 <p className="shrink-0 text-[11px] text-muted">{row.whenLabel}</p>
+                {rowExpandable ? (
+                  <PortalTableExpandChevron expanded={isExpanded} />
+                ) : null}
               </div>
             </button>
             </div>
@@ -363,6 +369,11 @@ export function PortalInboxMessageTable({
               <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Preview</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
+              {onToggleExpand ? (
+                <th className={PORTAL_TABLE_EXPAND_TH}>
+                  <span className="sr-only">Expand</span>
+                </th>
+              ) : null}
               {!onToggleExpand ? (
                 <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               ) : null}
@@ -400,6 +411,7 @@ export function PortalInboxMessageTable({
                       <span className="line-clamp-2">{row.preview}</span>
                     </td>
                     <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{row.whenLabel}</td>
+                    {rowExpandable ? <PortalTableExpandCell expanded={isExpanded} /> : null}
                     {!rowExpandable ? (
                       <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                         {fallbackSummaryActions ? (

@@ -11,14 +11,18 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
+  PORTAL_MOBILE_DETAIL_EXPAND,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
@@ -109,7 +113,7 @@ export function PortalBugFeedbackPanel({
   };
 
   const renderRowDetail = (row: PortalBugFeedbackRow) => (
-    <>
+    <div className="space-y-4">
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{row.description}</p>
       {row.attachmentUrls && row.attachmentUrls.length > 0 ? (
         <div className="mt-4">
@@ -141,7 +145,7 @@ export function PortalBugFeedbackPanel({
           {deletingId === row.id ? "Deleting…" : "Delete"}
         </Button>
       </PortalTableDetailActions>
-    </>
+    </div>
   );
 
   const body =
@@ -156,11 +160,11 @@ export function PortalBugFeedbackPanel({
               <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
                 <button
                   type="button"
-                  className="w-full text-left"
+                  className="flex w-full items-center justify-between gap-2 text-left"
                   onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                   aria-expanded={open}
                 >
-                  <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
                       <p className="mt-0.5 truncate text-xs text-muted">Submitted {formatWhen(row.createdAt)}</p>
@@ -171,8 +175,9 @@ export function PortalBugFeedbackPanel({
                       {row.status}
                     </span>
                   </div>
+                  <PortalTableExpandChevron expanded={open} />
                 </button>
-                {open ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
+                {open ? <div className={PORTAL_MOBILE_DETAIL_EXPAND}>{renderRowDetail(row)}</div> : null}
               </div>
             );
           })}
@@ -185,6 +190,9 @@ export function PortalBugFeedbackPanel({
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Submitted</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  <th className={PORTAL_TABLE_EXPAND_TH}>
+                    <span className="sr-only">Expand</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -210,10 +218,11 @@ export function PortalBugFeedbackPanel({
                             {row.status}
                           </span>
                         </td>
+                        <PortalTableExpandCell expanded={open} />
                       </tr>
                       {open ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderRowDetail(row)}
                           </td>
                         </tr>

@@ -173,7 +173,6 @@ export function ManagerCreateWorkOrderModal({
   const [residentEmail, setResidentEmail] = useState("");
   const [cost, setCost] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<"none" | "pending" | "paid">("paid");
-  const [bucket, setBucket] = useState<ManagerWorkOrderBucket>("completed");
 
   useEffect(() => {
     if (!open) return;
@@ -210,7 +209,6 @@ export function ManagerCreateWorkOrderModal({
       }
       setCost("");
       setPaymentStatus("paid");
-      setBucket("completed");
       if (photoInputRef.current) photoInputRef.current.value = "";
     });
   }, [open, defaultPropertyId, defaultResident]);
@@ -391,8 +389,6 @@ export function ManagerCreateWorkOrderModal({
       const now = new Date();
       const id = `MGR-WO-${now.getTime()}`;
       const costLabel = amt > 0 ? `$${amt.toFixed(2)}` : "—";
-      const statusLabel =
-        bucket === "completed" ? "Completed" : bucket === "scheduled" ? "Scheduled" : "Logged";
       const row: DemoManagerWorkOrderRow = {
         id,
         propertyName: selectedProperty.propertyLabel,
@@ -403,23 +399,19 @@ export function ManagerCreateWorkOrderModal({
         unit: selectedResident.roomLabel || "—",
         title: title.trim(),
         priority,
-        status: statusLabel,
-        bucket,
+        status: "Completed",
+        bucket: "completed",
         description:
           description.trim() ||
           `${LOG_CATEGORY_LABELS[logCategory]} — logged by manager.${amt > 0 ? ` Cost: ${costLabel}.` : ""}`,
-        scheduled:
-          bucket === "scheduled"
-            ? now.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-            : "—",
-        scheduledAtIso: bucket === "scheduled" ? now.toISOString() : undefined,
+        scheduled: "—",
         cost: costLabel,
         residentName: selectedResident.residentName,
         residentEmail: selectedResident.residentEmail,
         category: logCategory,
         managerInitiated: true,
-        completedAt: bucket === "completed" ? now.toISOString() : undefined,
-        workDoneSummary: bucket === "completed" ? title.trim() : undefined,
+        completedAt: now.toISOString(),
+        workDoneSummary: title.trim(),
       };
 
       if (amt > 0 && paymentStatus !== "none") {
@@ -451,7 +443,7 @@ export function ManagerCreateWorkOrderModal({
             ? "Work order logged with a pending payment line."
             : "Work order logged.",
       );
-      onSubmitted(bucket);
+      onSubmitted("completed");
       onClose();
     } finally {
       setBusy(false);
@@ -683,27 +675,25 @@ export function ManagerCreateWorkOrderModal({
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-                Payment status
-                <Select
-                  value={paymentStatus}
-                  onChange={(e) => setPaymentStatus(e.target.value as "none" | "pending" | "paid")}
-                  disabled={busy || !cost.trim()}
-                >
-                  <option value="none">No charge</option>
-                  <option value="paid">Paid</option>
-                  <option value="pending">Pending</option>
-                </Select>
+                Status
+                {cost.trim() ? (
+                  <Select
+                    value={paymentStatus === "pending" ? "completed_pending" : "completed_paid"}
+                    onChange={(e) =>
+                      setPaymentStatus(e.target.value === "completed_pending" ? "pending" : "paid")
+                    }
+                    disabled={busy}
+                  >
+                    <option value="completed_paid">Completed work — paid</option>
+                    <option value="completed_pending">Completed work — payment pending</option>
+                  </Select>
+                ) : (
+                  <div className="flex h-10 items-center rounded-xl border border-border bg-accent/20 px-3 text-sm text-foreground">
+                    Completed work
+                  </div>
+                )}
               </label>
             </div>
-
-            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-              Status
-              <Select value={bucket} onChange={(e) => setBucket(e.target.value as ManagerWorkOrderBucket)} disabled={busy}>
-                <option value="completed">Completed — work already done</option>
-                <option value="open">Open — needs scheduling</option>
-                <option value="scheduled">Scheduled — visit planned</option>
-              </Select>
-            </label>
           </>
         )}
 

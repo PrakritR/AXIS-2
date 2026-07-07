@@ -234,6 +234,7 @@ export function PortalCalendarPanels({
   externalMeetings,
   readOnly = false,
   eventSummaryLabel,
+  vendorDayFlexibility,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -255,6 +256,12 @@ export function PortalCalendarPanels({
    * component can display a schedule for a caller that manages availability elsewhere. */
   readOnly?: boolean;
   eventSummaryLabel?: "meeting" | "tour" | "visit";
+  /** Vendor calendar: per-weekday flexible toggles + link to timing preferences. */
+  vendorDayFlexibility?: {
+    flexibleWeekdays: Set<number>;
+    onToggleFlexibleDay: (weekday: number) => void;
+    onOpenFlexibleSettings: () => void;
+  };
 }) {
   const { showToast } = useAppUi();
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
@@ -1116,6 +1123,7 @@ export function PortalCalendarPanels({
   }
 
   if (compactAvailability) {
+    const vendorMode = Boolean(vendorDayFlexibility);
     return (
       <>
         <Card className="p-4 sm:p-5">
@@ -1124,11 +1132,18 @@ export function PortalCalendarPanels({
               <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous days">
                 ←
               </Button>
-              <div className="min-w-0 flex-1 rounded-xl border border-border bg-accent/30 px-2.5 py-1.5 [html[data-theme=dark]_&]:portal-calendar-week-banner">
-                <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{availabilityHeading}</p>
-                <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
-                {tourScopeLabel ? <p className="truncate text-[10px] font-medium text-primary sm:text-xs">{tourScopeLabel}</p> : null}
-              </div>
+              {vendorMode ? (
+                <div className="min-w-0 flex-1 px-1">
+                  <p className="text-xs font-semibold text-foreground sm:text-sm">{availabilityHeading}</p>
+                  <p className="truncate text-[11px] text-muted">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
+                </div>
+              ) : (
+                <div className="min-w-0 flex-1 rounded-xl border border-border bg-accent/30 px-2.5 py-1.5 [html[data-theme=dark]_&]:portal-calendar-week-banner">
+                  <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{availabilityHeading}</p>
+                  <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
+                  {tourScopeLabel ? <p className="truncate text-[10px] font-medium text-primary sm:text-xs">{tourScopeLabel}</p> : null}
+                </div>
+              )}
               <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next days">
                 →
               </Button>
@@ -1140,11 +1155,22 @@ export function PortalCalendarPanels({
               {!readOnly ? (
                 <div className={`px-2.5 py-1 text-xs font-semibold sm:text-sm ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open</div>
               ) : null}
+              {vendorMode ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 rounded-full px-3 text-xs"
+                  data-attr="vendor-flexible-settings-open"
+                  onClick={vendorDayFlexibility!.onOpenFlexibleSettings}
+                >
+                  Flexible settings
+                </Button>
+              ) : null}
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {!readOnly ? (
+            {!readOnly && !vendorMode ? (
               <>
                 <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
                   Copy previous week
@@ -1157,7 +1183,7 @@ export function PortalCalendarPanels({
                 </Button>
               </>
             ) : null}
-            {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+            {!vendorMode && otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
               <Button
                 type="button"
                 variant="outline"
@@ -1264,6 +1290,22 @@ export function PortalCalendarPanels({
 
             const mobileDs = activeBlockDateStrs[mobileDayIndex] ?? activeBlockDateStrs[0]!;
             const mobileDate = activeBlockDates[mobileDayIndex] ?? activeBlockDates[0]!;
+            const renderFlexibleToggle = (weekday: number) => {
+              if (!vendorDayFlexibility) return null;
+              const checked = vendorDayFlexibility.flexibleWeekdays.has(weekday);
+              return (
+                <label className="mt-1.5 flex cursor-pointer items-center justify-center gap-1.5 text-[10px] font-medium text-muted">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-border"
+                    checked={checked}
+                    data-attr={`vendor-flexible-day-${weekday}`}
+                    onChange={() => vendorDayFlexibility.onToggleFlexibleDay(weekday)}
+                  />
+                  <span>Mark day as flexible</span>
+                </label>
+              );
+            };
 
             return (
               <>
@@ -1297,6 +1339,9 @@ export function PortalCalendarPanels({
                       );
                     })}
                   </div>
+                  {vendorDayFlexibility ? (
+                    <div className="mt-2 flex justify-center">{renderFlexibleToggle(mobileDate.getDay())}</div>
+                  ) : null}
                   <div className="mt-2 overflow-hidden rounded-2xl border border-border bg-card">
                     <div className={`grid grid-cols-[64px_1fr] text-xs ${CALENDAR_GRID_GAP}`}>
                       <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
@@ -1333,6 +1378,7 @@ export function PortalCalendarPanels({
                             <p className="font-bold uppercase tracking-[0.12em]">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
                             <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
                             <p className={`mt-0.5 text-[11px] font-medium ${CALENDAR_OPEN_COUNT}`}>{readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}</p>
+                            {renderFlexibleToggle(d.getDay())}
                           </div>
                         );
                       })}

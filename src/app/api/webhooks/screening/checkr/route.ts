@@ -12,7 +12,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { applyBackgroundCheckReport } from "@/lib/checkr/background-check";
 import { fetchBackgroundCheckReport } from "@/lib/checkr/client";
-import { checkrWebhookSecret } from "@/lib/checkr/config";
+import { checkrWebhookSecrets } from "@/lib/checkr/config";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -20,10 +20,10 @@ export const runtime = "nodejs";
 const REPLAY_TOLERANCE_SECONDS = 5 * 60;
 
 /** `Tenant-Signature: t=<unix_ts>,v1=<hex hmac of "<t>.<raw body>">` */
-function verifySignature(rawBody: string, header: string | null, secret: string | null): boolean {
+function verifySignature(rawBody: string, header: string | null, secrets: readonly string[]): boolean {
   // Only local dev may run without a configured secret — any deployed
   // environment (Vercel, including preview/staging) must fail closed.
-  if (!secret) return !process.env.VERCEL;
+  if (secrets.length === 0) return !process.env.VERCEL;
   if (!header?.trim()) return false;
   const parts = Object.fromEntries(
     header.split(",").map((piece) => piece.trim().split("=") as [string, string]),
@@ -34,19 +34,32 @@ function verifySignature(rawBody: string, header: string | null, secret: string 
   const timestampSeconds = Number(timestamp);
   if (!Number.isFinite(timestampSeconds)) return false;
   if (Math.abs(Date.now() / 1000 - timestampSeconds) > REPLAY_TOLERANCE_SECONDS) return false;
-  const expected = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`, "utf8").digest("hex");
-  try {
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
-  } catch {
-    return false;
+  for (const secret of secrets) {
+    const expected = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`, "utf8").digest("hex");
+    try {
+      if (timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return true;
+    } catch {
+      // length mismatch — try next secret
+    }
   }
+  return false;
+}
+
+/** Checkr dashboard "Test webhook" sends a bare POST with no body or signature. */
+function isConnectivityProbe(rawBody: string, signature: string | null): boolean {
+  return !rawBody.trim() && !signature?.trim();
 }
 
 export async function POST(req: Request) {
   try {
     const rawBody = await req.text();
     const signature = req.headers.get("tenant-signature") ?? req.headers.get("Tenant-Signature");
-    if (!verifySignature(rawBody, signature, checkrWebhookSecret())) {
+
+    if (isConnectivityProbe(rawBody, signature)) {
+      return NextResponse.json({ ok: true, probe: true });
+    }
+
+    if (!verifySignature(rawBody, signature, checkrWebhookSecrets())) {
       return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
     }
 
@@ -69,7 +82,12 @@ export async function POST(req: Request) {
     if (!report) return NextResponse.json({ ok: true, ignored: true });
 
     const db = createSupabaseServiceRoleClient();
-    const row = await applyBackgroundCheckReport(db, orderId, { status: report.status, result: report.result });
+    const row = await applyBackgroundCheckReport(db, orderId, {
+      status: report.status,
+      result: report.result,
+      reportSnapshot: report.reportSnapshot,
+      reportResourceId: report.reportResourceId,
+    });
     if (!row) {
       console.error("checkr webhook: report.completed resolved orderId but no matching application", { orderId });
       return NextResponse.json({ ok: true, ignored: true });

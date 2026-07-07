@@ -294,14 +294,7 @@ export async function buildApplicationPdf(
   const bandTop = PAGE_HEIGHT - 30;
   drawAxisMark(page, MARGIN, bandTop, 40);
   const wordmarkX = MARGIN + 40 + 14;
-  page.drawText("AXIS", { x: wordmarkX, y: bandTop - 17, size: 19, font: bold, color: WHITE });
-  page.drawText("PROPERTY MANAGEMENT", {
-    x: wordmarkX,
-    y: bandTop - 32,
-    size: 7.5,
-    font: bold,
-    color: STEEL,
-  });
+  page.drawText("AXIS", { x: wordmarkX, y: bandTop - 24, size: 19, font: bold, color: WHITE });
 
   const docTitle = "RENTAL APPLICATION";
   page.drawText(docTitle, {
@@ -580,7 +573,7 @@ export async function buildApplicationPdf(
 
   // ---- Footer on every page ----------------------------------------------
   const pages = pdf.getPages();
-  const footerLabel = `Axis Property Management  ·  Confidential`;
+  const footerLabel = `Axis  ·  Confidential`;
   pages.forEach((p, index) => {
     p.drawLine({
       start: { x: MARGIN, y: FOOTER_Y + 12 },

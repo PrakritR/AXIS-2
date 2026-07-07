@@ -9,12 +9,15 @@ import {
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_TD,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
@@ -488,18 +491,21 @@ export function ManagerPromotion() {
                 <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="w-full text-left"
+                    className="flex w-full items-center justify-between gap-2 text-left"
                     onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                     aria-expanded={isOpen}
                     data-attr="promotion-row"
                   >
-                    <p className="truncate font-semibold text-foreground">{row.propertyLabel || "—"}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {row.copy?.headline || row.title || "—"}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] text-muted/90">
-                      Created {formatDate(row.createdAt)}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{row.propertyLabel || "—"}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {row.copy?.headline || row.title || "—"}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">
+                        Created {formatDate(row.createdAt)}
+                      </p>
+                    </div>
+                    <PortalTableExpandChevron expanded={isOpen} />
                   </button>
                   {isOpen ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
@@ -514,6 +520,9 @@ export function ManagerPromotion() {
                     <th className={MANAGER_TABLE_TH}>Property / Listing</th>
                     <th className={MANAGER_TABLE_TH}>Title / Headline</th>
                     <th className={MANAGER_TABLE_TH}>Created</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -532,10 +541,11 @@ export function ManagerPromotion() {
                           <td className={PORTAL_TABLE_TD}>{row.propertyLabel || "—"}</td>
                           <td className={PORTAL_TABLE_TD}>{row.copy?.headline || row.title || "—"}</td>
                           <td className={PORTAL_TABLE_TD}>{formatDate(row.createdAt)}</td>
+                          <PortalTableExpandCell expanded={isOpen} />
                         </tr>
                         {isOpen ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowDetail(row)}
                             </td>
                           </tr>

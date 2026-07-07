@@ -23,9 +23,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalMobileSummaryCard,
   PortalTableDetailActions,
+  PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PillTabs, TabNav } from "@/components/ui/tabs";
@@ -87,11 +89,12 @@ export function workOrderFilterBucket(row: DemoManagerWorkOrderRow): WorkOrderFi
   return "pending";
 }
 
-export type RequestStatusBucket = "pending" | "completed";
+export type RequestStatusBucket = "pending" | "completed" | "denied";
 
 export const REQUEST_STATUS_TABS: { id: RequestStatusBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
   { id: "completed", label: "Completed" },
+  { id: "denied", label: "Denied" },
 ];
 
 /** Bucket a pill label with its count, e.g. "Open · 3" — omits the count when zero. */
@@ -103,9 +106,10 @@ export type UnifiedItem =
   | { kind: "request"; req: ServiceRequest; sortKey: number }
   | { kind: "work-order"; row: DemoManagerWorkOrderRow; sortKey: number };
 
-// Service requests: pending while awaiting manager action; approved/denied/returned → completed.
+// Service requests: pending while awaiting manager action; approved/returned → completed; denied → denied.
 export function serviceRequestStatusBucket(req: ServiceRequest): RequestStatusBucket {
   if (req.status === "pending") return "pending";
+  if (req.status === "denied") return "denied";
   return "completed";
 }
 
@@ -246,15 +250,9 @@ export function ServiceRequestCard({
         className="sr-only"
         onChange={(e) => { void handleReturnPhoto(e.target.files); }}
       />
-      {req.status !== "pending" ? (
-        <>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">Status</p>
-          <ServiceStatusBadge status={req.status} />
-        </>
-      ) : null}
       {req.offerDescription ? (
         <>
-          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Description</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Description</p>
           <p className="mt-1.5 text-sm whitespace-pre-wrap leading-relaxed">{req.offerDescription}</p>
         </>
       ) : null}
@@ -343,7 +341,7 @@ export function ServiceRequestCard({
       ) : null}
 
       <PortalTableDetailActions>
-        {req.status === "pending" || req.status === "approved" ? (
+        {req.status === "pending" ? (
           <Button
             type="button"
             variant="outline"
@@ -625,7 +623,7 @@ export function ResidentServicesPanel({
   );
 
   const requestsCounts = useMemo(() => {
-    const c: Record<RequestStatusBucket, number> = { pending: 0, completed: 0 };
+    const c: Record<RequestStatusBucket, number> = { pending: 0, completed: 0, denied: 0 };
     for (const req of sortedRequests) c[serviceRequestStatusBucket(req)] += 1;
     return c;
   }, [sortedRequests]);
@@ -1034,7 +1032,6 @@ export function ResidentServicesPanel({
               <PortalMobileSummaryCard
                 key={rowId}
                 title={req.offerName}
-                badge={req.status === "pending" ? undefined : <ServiceStatusBadge status={req.status} />}
                 expanded={expanded}
                 onClick={() => setExpandedId((c) => (c === rowId ? null : rowId))}
               >
@@ -1056,9 +1053,9 @@ export function ResidentServicesPanel({
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                    {requestsFilter === "completed" ? (
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                    ) : null}
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1074,15 +1071,11 @@ export function ResidentServicesPanel({
                           aria-expanded={expandedId === rowId}
                         >
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
-                          {requestsFilter === "completed" ? (
-                            <td className={PORTAL_TABLE_TD}>
-                              <ServiceStatusBadge status={req.status} />
-                            </td>
-                          ) : null}
+                          <PortalTableExpandCell expanded={expandedId === rowId} />
                         </tr>
                         {expandedId === rowId ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={requestsFilter === "completed" ? 2 : 1} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
                               <ServiceRequestCard
                                 req={req}
                                 onReturnPhotoUploaded={reloadServiceRequests}
@@ -1151,6 +1144,9 @@ export function ResidentServicesPanel({
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                      <th className={PORTAL_TABLE_EXPAND_TH}>
+                        <span className="sr-only">Expand</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1164,10 +1160,11 @@ export function ResidentServicesPanel({
                           aria-expanded={expandedId === row.id}
                         >
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                          <PortalTableExpandCell expanded={expandedId === row.id} />
                         </tr>
                         {expandedId === row.id ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={1} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                            <td colSpan={2} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
                               <WorkOrderDetail
                                 row={row}
                                 onEdit={() => openWorkOrderEdit(row)}

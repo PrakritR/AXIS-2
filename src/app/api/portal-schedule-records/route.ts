@@ -14,6 +14,11 @@ const route = createJsonRecordRoute({
       or: (filters: string) => unknown;
     };
     if (user.role === "admin") return query;
+    if (user.role === "vendor") {
+      return q.or(
+        `manager_user_id.eq.${user.id},id.eq.axis_vendor_avail_slots_v2_${user.id},id.eq.axis_vendor_flex_prefs_${user.id}`,
+      );
+    }
     return q.or(
       `manager_user_id.eq.${user.id},id.like.axis_mgr_avail_slots_v2_${user.id}%,id.like.axis_calendar_share_avail_${user.id}_prop_%,id.eq.axis_admin_partner_inquiries_v1,id.eq.axis_admin_planned_events_v1`,
     );

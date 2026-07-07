@@ -4,20 +4,40 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalCalendarPanels, MEETING_CONFIRMED_COLOR, type DemoMeeting } from "@/components/portal/portal-calendar-panels";
-import { VENDOR_AVAILABILITY_CHANGED_EVENT, VendorAvailabilityEditor } from "@/components/portal/vendor-settings-panel";
+import { VendorFlexibleSettingsModal } from "@/components/portal/vendor-flexible-settings-modal";
+import { VENDOR_AVAILABILITY_CHANGED_EVENT } from "@/components/portal/vendor-settings-panel";
 import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
-import { dateSlotKey, SLOT_DURATION_MINUTES, toLocalDateStr } from "@/lib/demo-admin-scheduling";
-import { DEMO_VENDOR_AVAILABILITY_RULES, fetchVendorAvailability, type VendorAvailabilityRule } from "@/lib/vendor-availability";
+import {
+  SLOT_DURATION_MINUTES,
+  syncScheduleRecordsFromServer,
+  toLocalDateStr,
+  vendorAvailabilityStorageKey,
+} from "@/lib/demo-admin-scheduling";
+import {
+  DEMO_VENDOR_AVAILABILITY_RULES,
+  DEFAULT_FLEXIBLE_TIMING_RANK,
+  fetchVendorAvailability,
+  fetchVendorFlexiblePreferences,
+  flexibleWeekdaysFromRules,
+  isFlexibleWeeklyRule,
+  saveVendorFlexiblePreferences,
+  saveVendorWeeklyRule,
+  deleteVendorAvailabilityRule,
+  writeVendorFlexiblePreferencesToStorage,
+  type VendorAvailabilityRule,
+  type VendorFlexiblePreferences,
+} from "@/lib/vendor-availability";
+import { usePortalSession } from "@/hooks/use-portal-session";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import type { CoManagerAvailabilityOverlay } from "@/lib/co-manager-calendar";
 
 function propertyLabel(row: DemoManagerWorkOrderRow): string {
   const unit = row.unit?.trim();
   return unit && unit !== "—" ? `${row.propertyName} · ${unit}` : row.propertyName;
 }
 
-/** Work orders don't carry an explicit visit duration — assume an hour on-site. */
 const VENDOR_VISIT_DEFAULT_DURATION_MINUTES = 60;
+let demoAvailabilityRuleCounter = DEMO_VENDOR_AVAILABILITY_RULES.length;
 
 function vendorMeetingFromRow(row: DemoManagerWorkOrderRow): DemoMeeting | null {
   if (!row.scheduledAtIso) return null;
@@ -43,71 +63,36 @@ function vendorMeetingFromRow(row: DemoManagerWorkOrderRow): DemoMeeting | null 
   };
 }
 
-/** How far back/forward of today to expand recurring availability rules into concrete calendar slots. */
-const AVAILABILITY_OVERLAY_PAST_DAYS = 7;
-const AVAILABILITY_OVERLAY_FUTURE_DAYS = 90;
-const SLOTS_PER_DAY = Math.round(1440 / SLOT_DURATION_MINUTES);
-
-/** Expands weekly/open/block availability rules into a set of concrete `dateSlotKey`s so they can
- * shade the calendar grid the same way a co-manager's shared availability overlay does. */
-function vendorAvailabilitySlotKeys(rules: VendorAvailabilityRule[]): Set<string> {
-  const weeklyByWeekday = new Map<number, Array<{ start: number; end: number }>>();
-  const opensByDate = new Map<string, Array<{ start: number; end: number }>>();
-  const blocksByDate = new Map<string, Array<{ start: number; end: number }>>();
-  for (const rule of rules) {
-    if (rule.kind === "weekly") {
-      const list = weeklyByWeekday.get(rule.weekday) ?? [];
-      list.push({ start: rule.startMinute, end: rule.endMinute });
-      weeklyByWeekday.set(rule.weekday, list);
-    } else if (rule.kind === "open") {
-      const list = opensByDate.get(rule.specificDate) ?? [];
-      list.push({ start: rule.startMinute, end: rule.endMinute });
-      opensByDate.set(rule.specificDate, list);
-    } else {
-      const list = blocksByDate.get(rule.specificDate) ?? [];
-      list.push({ start: rule.startMinute, end: rule.endMinute });
-      blocksByDate.set(rule.specificDate, list);
-    }
-  }
-
-  const keys = new Set<string>();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  for (let offset = -AVAILABILITY_OVERLAY_PAST_DAYS; offset <= AVAILABILITY_OVERLAY_FUTURE_DAYS; offset += 1) {
-    const day = new Date(today.getTime() + offset * 86_400_000);
-    const ds = toLocalDateStr(day);
-    const windows = [...(weeklyByWeekday.get(day.getDay()) ?? []), ...(opensByDate.get(ds) ?? [])];
-    if (windows.length === 0) continue;
-    const blocks = blocksByDate.get(ds) ?? [];
-    for (let slot = 0; slot < SLOTS_PER_DAY; slot += 1) {
-      const slotStart = slot * SLOT_DURATION_MINUTES;
-      const slotEnd = slotStart + SLOT_DURATION_MINUTES;
-      const inWindow = windows.some((w) => slotStart < w.end && slotEnd > w.start);
-      if (!inWindow) continue;
-      const inBlock = blocks.some((b) => slotStart < b.end && slotEnd > b.start);
-      if (inBlock) continue;
-      keys.add(dateSlotKey(ds, slot));
-    }
-  }
-  return keys;
+function notifyAvailabilityChanged(rules: VendorAvailabilityRule[]) {
+  window.dispatchEvent(new CustomEvent(VENDOR_AVAILABILITY_CHANGED_EVENT, { detail: { rules } }));
 }
 
-/** Scheduled visits + vendor availability editing (same flow as manager calendar). */
+/** Drag-painted availability blocks + per-day flexible scheduling for vendor visits. */
 export function VendorCalendarPanel() {
-  const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
+  const { showToast } = useAppUi();
+  const { userId, ready } = usePortalSession();
   const demo = isDemoModeActive();
+  const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
   const [availabilityRules, setAvailabilityRules] = useState<VendorAvailabilityRule[]>(() =>
     demo ? DEMO_VENDOR_AVAILABILITY_RULES : [],
   );
-  const [availabilityTick, setAvailabilityTick] = useState(0);
+  const [preferences, setPreferences] = useState<VendorFlexiblePreferences>({
+    timingRank: [...DEFAULT_FLEXIBLE_TIMING_RANK],
+  });
+  const [flexModalOpen, setFlexModalOpen] = useState(false);
+  const [prefsSaving, setPrefsSaving] = useState(false);
+  const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
+
+  const storageKey = useMemo(() => (userId ? vendorAvailabilityStorageKey(userId) : null), [userId]);
+  const flexibleWeekdays = useMemo(() => flexibleWeekdaysFromRules(availabilityRules), [availabilityRules]);
 
   const reloadAvailability = useCallback(async () => {
-    if (demo) {
-      setAvailabilityTick((n) => n + 1);
-      return;
-    }
-    setAvailabilityRules(await fetchVendorAvailability());
-  }, [demo]);
+    if (demo) return;
+    const [rules, prefs] = await Promise.all([fetchVendorAvailability(), fetchVendorFlexiblePreferences()]);
+    setAvailabilityRules(rules);
+    setPreferences(prefs);
+    if (userId) writeVendorFlexiblePreferencesToStorage(userId, prefs);
+  }, [demo, userId]);
 
   useEffect(() => {
     const sync = () => setRows(readVendorWorkOrderRows());
@@ -118,13 +103,17 @@ export function VendorCalendarPanel() {
 
   useEffect(() => {
     void reloadAvailability();
-  }, [reloadAvailability, availabilityTick]);
+  }, [reloadAvailability]);
+
+  useEffect(() => {
+    if (!storageKey || demo) return;
+    void syncScheduleRecordsFromServer({ force: true }).then(() => setCalendarRefreshSignal((n) => n + 1));
+  }, [storageKey, demo]);
 
   useEffect(() => {
     const bump = (event: Event) => {
       const detail = (event as CustomEvent<{ rules?: VendorAvailabilityRule[] }>).detail;
       if (detail?.rules) setAvailabilityRules(detail.rules);
-      setAvailabilityTick((n) => n + 1);
     };
     window.addEventListener(VENDOR_AVAILABILITY_CHANGED_EVENT, bump);
     return () => window.removeEventListener(VENDOR_AVAILABILITY_CHANGED_EVENT, bump);
@@ -139,32 +128,133 @@ export function VendorCalendarPanel() {
     [rows],
   );
 
-  const availabilityOverlays = useMemo<CoManagerAvailabilityOverlay[]>(() => {
-    void availabilityTick;
-    const slots = vendorAvailabilitySlotKeys(availabilityRules);
-    return slots.size > 0 ? [{ userId: "self", label: "Available", slots }] : [];
-  }, [availabilityRules, availabilityTick]);
+  const toggleFlexibleDay = useCallback(
+    async (weekday: number) => {
+      const existing = availabilityRules.find(
+        (r) => r.kind === "weekly" && r.weekday === weekday && isFlexibleWeeklyRule(r),
+      );
+      if (existing) {
+        if (demo) {
+          const next = availabilityRules.filter((r) => r.id !== existing.id);
+          setAvailabilityRules(next);
+          notifyAvailabilityChanged(next);
+          showToast("Flexible schedule removed.");
+          return;
+        }
+        const result = await deleteVendorAvailabilityRule(existing.id);
+        if (!result.ok) {
+          showToast(result.error ?? "Could not update flexible day.");
+          return;
+        }
+        showToast("Flexible schedule removed.");
+        await reloadAvailability();
+        return;
+      }
+
+      if (demo) {
+        const next = [
+          ...availabilityRules.filter((r) => !(r.kind === "weekly" && r.weekday === weekday && isFlexibleWeeklyRule(r))),
+          {
+            id: `demo-avail-flex-${++demoAvailabilityRuleCounter}`,
+            kind: "weekly" as const,
+            weekday,
+            startMinute: 0,
+            endMinute: 1440,
+            note: "Flexible",
+          },
+        ];
+        setAvailabilityRules(next);
+        notifyAvailabilityChanged(next);
+        showToast("Marked flexible — visits can auto-schedule by your timing preferences.");
+        return;
+      }
+
+      const result = await saveVendorWeeklyRule({
+        weekday,
+        startMinute: 0,
+        endMinute: 1440,
+        note: "Flexible",
+      });
+      if (!result.ok) {
+        showToast(result.error ?? "Could not mark day as flexible.");
+        return;
+      }
+      showToast("Marked flexible — visits can auto-schedule by your timing preferences.");
+      await reloadAvailability();
+    },
+    [availabilityRules, demo, reloadAvailability, showToast],
+  );
+
+  const savePreferences = useCallback(
+    async (next: VendorFlexiblePreferences) => {
+      setPrefsSaving(true);
+      if (demo) {
+        setPreferences(next);
+        if (userId) writeVendorFlexiblePreferencesToStorage(userId, next);
+        setPrefsSaving(false);
+        setFlexModalOpen(false);
+        showToast("Flexible timing preferences saved.");
+        return;
+      }
+      const result = await saveVendorFlexiblePreferences(next);
+      setPrefsSaving(false);
+      if (!result.ok) {
+        showToast(result.error ?? "Could not save preferences.");
+        return;
+      }
+      setPreferences(next);
+      if (userId) writeVendorFlexiblePreferencesToStorage(userId, next);
+      setFlexModalOpen(false);
+      showToast("Flexible timing preferences saved.");
+    },
+    [demo, showToast, userId],
+  );
+
+  if (!demo && !ready) {
+    return (
+      <ManagerPortalPageShell title="Calendar">
+        <p className="text-sm text-muted">Loading calendar…</p>
+      </ManagerPortalPageShell>
+    );
+  }
+
+  if (!demo && !userId) {
+    return (
+      <ManagerPortalPageShell title="Calendar">
+        <p className="text-sm text-muted">Sign in to manage your availability.</p>
+      </ManagerPortalPageShell>
+    );
+  }
 
   return (
     <ManagerPortalPageShell title="Calendar">
-      <div className="space-y-6">
-        <div>
-          <p className="mb-3 text-sm text-muted">
-            Set weekly hours, mark days as flexible, and block dates you&apos;re unavailable — managers schedule work order visits into your open slots.
-          </p>
-          <VendorAvailabilityEditor />
-        </div>
+      <div className="space-y-4">
+        <p className="text-sm text-muted">
+          Drag on the grid to open visit times. Mark a day flexible when managers can auto-schedule around tenant requests using your preferred timing.
+        </p>
         <PortalCalendarPanels
-          storageKey={null}
-          readOnly
+          storageKey={storageKey}
+          readOnly={false}
           compactAvailability
           defaultViewMode="week"
           availabilityHeading="Availability"
           eventSummaryLabel="visit"
+          calendarRefreshSignal={calendarRefreshSignal}
           externalMeetings={vendorMeetings}
-          coManagerAvailabilityOverlays={availabilityOverlays}
+          vendorDayFlexibility={{
+            flexibleWeekdays,
+            onToggleFlexibleDay: (weekday) => void toggleFlexibleDay(weekday),
+            onOpenFlexibleSettings: () => setFlexModalOpen(true),
+          }}
         />
       </div>
+      <VendorFlexibleSettingsModal
+        open={flexModalOpen}
+        preferences={preferences}
+        saving={prefsSaving}
+        onClose={() => setFlexModalOpen(false)}
+        onSave={(next) => void savePreferences(next)}
+      />
     </ManagerPortalPageShell>
   );
 }

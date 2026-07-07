@@ -99,6 +99,8 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
 
 export type ScheduledMessageOverride = {
   cancelled?: boolean;
+  /** Set when a reminder was auto-cancelled because the charge was marked paid. */
+  cancelledBecausePaid?: boolean;
   customSubject?: string;
   customBody?: string;
   customDaysBeforeDue?: number;

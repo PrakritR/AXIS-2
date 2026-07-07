@@ -144,9 +144,8 @@ export async function GET(req: Request) {
 type WorkOrderAccess = { managerUserId: string; rowData: DemoManagerWorkOrderRow };
 
 /** A vendor may act on a work order if they're the currently assigned vendor, or if the
- * manager sent them a consultation/quote offer for it (several vendors can be offered the
- * same not-yet-assigned work order at once — see work_order_vendor_offers) — and only
- * while bidding is open. Shared by submitBid and scheduleConsultation. */
+ * manager sent them a consultation/quote offer for it — while bidding is open, or while a
+ * post-consultation price is still pending on their placeholder bid. */
 async function resolveVendorWorkOrderAccess(
   db: Db,
   actor: NonNullable<Awaited<ReturnType<typeof sessionActor>>>,
@@ -187,7 +186,20 @@ async function resolveVendorWorkOrderAccess(
   }
   const rowData = (workOrder.row_data ?? {}) as DemoManagerWorkOrderRow;
   if (!rowData.biddingOpen) {
-    return { ok: false, response: NextResponse.json({ error: "Bidding is not open for this work order." }, { status: 400 }) };
+    const { data: pendingBid } = await db
+      .from("work_order_bids")
+      .select("quote_mode, amount_cents, consultation_visit_at, status")
+      .eq("work_order_id", workOrderId)
+      .eq("vendor_user_id", actor.userId)
+      .maybeSingle();
+    const pricingPending =
+      pendingBid?.status === "submitted" &&
+      pendingBid.quote_mode === "after_consultation" &&
+      pendingBid.consultation_visit_at &&
+      pendingBid.amount_cents == null;
+    if (!pricingPending) {
+      return { ok: false, response: NextResponse.json({ error: "Bidding is not open for this work order." }, { status: 400 }) };
+    }
   }
   return { ok: true, access: { managerUserId: workOrder.manager_user_id as string, rowData } };
 }

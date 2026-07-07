@@ -19,6 +19,14 @@ import {
   readManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
 import {
+  MANAGER_WORK_ORDERS_EVENT,
+  readManagerWorkOrderRows,
+} from "@/lib/manager-work-orders-storage";
+import {
+  readServiceRequestsForManager,
+  SERVICE_REQUESTS_EVENT,
+} from "@/lib/service-requests-storage";
+import {
   countUnopenedPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
   RESIDENT_INBOX_STORAGE_KEY,
@@ -48,11 +56,15 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, bump);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, bump);
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+      window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
   }, [kind, bump, userId]);
@@ -80,10 +92,15 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const pendingApps = readManagerApplicationRows().filter(
         (a) => applicationVisibleToPortalUser(a, userId) && a.bucket === "pending",
       ).length;
+      const pendingServiceRequests = readServiceRequestsForManager(userId).filter((r) => r.status === "pending").length;
+      const pendingWorkOrders = readManagerWorkOrderRows().filter(
+        (w) => (!w.managerUserId || w.managerUserId === userId) && w.bucket === "open",
+      ).length;
       const inbox = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
       return {
         properties: pendingProps,
         applications: pendingApps,
+        services: pendingServiceRequests + pendingWorkOrders,
         inbox,
       };
     }

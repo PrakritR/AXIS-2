@@ -50,7 +50,7 @@ export function TabNav({
   return (
     <div
       ref={wrapRef}
-      className="relative inline-flex max-w-full flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1"
+      className="relative flex min-w-0 max-w-full flex-nowrap gap-1 overflow-x-auto rounded-full border border-border bg-accent/30 p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
     >
       {pill.w > 0 ? (
         <span

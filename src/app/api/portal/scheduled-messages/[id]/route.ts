@@ -40,6 +40,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     const body = (await req.json()) as {
       cancelled?: boolean;
+      cancelledBecausePaid?: boolean;
       customSubject?: string;
       customBody?: string;
       customDaysBeforeDue?: number;
@@ -48,6 +49,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     const patch: {
       cancelled?: boolean;
+      cancelledBecausePaid?: boolean;
       customSubject?: string;
       customBody?: string;
       customDaysBeforeDue?: number;
@@ -55,6 +57,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     } = {};
 
     if (typeof body.cancelled === "boolean") patch.cancelled = body.cancelled;
+    if (typeof body.cancelledBecausePaid === "boolean") patch.cancelledBecausePaid = body.cancelledBecausePaid;
     if (typeof body.customSubject === "string") patch.customSubject = body.customSubject.trim();
     if (typeof body.customBody === "string") patch.customBody = body.customBody.trim();
     if (typeof body.customDaysBeforeDue === "number" && Number.isFinite(body.customDaysBeforeDue)) {

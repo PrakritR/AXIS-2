@@ -43,6 +43,7 @@ export async function GET() {
         expenseDate: e.expense_date,
         memo: e.memo,
         vendorId: e.vendor_id,
+        sourceWorkOrderId: e.source_work_order_id ? String(e.source_work_order_id) : undefined,
         taxDeductible: resolveExpenseTaxDeductible(e.category_code, e.tax_deductible),
       })),
     });

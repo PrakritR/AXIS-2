@@ -6,7 +6,6 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   ManagerPortalStatusPills,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -50,7 +49,10 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 
@@ -158,8 +160,7 @@ export function ManagerAllServicesPanel({
     [filteredRequests, reqBucket],
   );
 
-  const pendingCount = filteredRequests.filter((r) => r.status === "pending").length;
-  const openCount = filteredWorkOrders.filter((w) => w.bucket === "open").length;
+
   const woCounts = useMemo(() => {
     const c: Record<ManagerWorkOrderBucket, number> = { open: 0, scheduled: 0, completed: 0 };
     for (const r of filteredWorkOrders) c[r.bucket] += 1;
@@ -175,15 +176,15 @@ export function ManagerAllServicesPanel({
     [woCounts],
   );
   const reqCounts = useMemo(() => {
-    const c: Record<RequestBucket, number> = { pending: 0, approved: 0, completed: 0 };
+    const c: Record<RequestBucket, number> = { pending: 0, approved: 0, denied: 0 };
     for (const r of filteredRequests) c[managerServiceRequestBucket(r.status)] += 1;
     return c;
   }, [filteredRequests]);
   const reqTabs = useMemo(
     () =>
-      (["pending", "approved", "completed"] as const).map((id) => ({
+      (["pending", "approved", "denied"] as const).map((id) => ({
         id,
-        label: id === "pending" ? "Pending" : id === "approved" ? "Approved" : "Completed",
+        label: id === "pending" ? "Pending" : id === "approved" ? "Approved" : "Denied",
         count: reqCounts[id],
       })),
     [reqCounts],
@@ -200,6 +201,7 @@ export function ManagerAllServicesPanel({
         propertyLabel={propertyLabel}
         onUpdated={() => setDataTick((t) => t + 1)}
         onApproved={() => setReqBucket("approved")}
+        onDenied={() => setReqBucket("denied")}
         onCollapsed={() => setExpandedId(null)}
       />
     );
@@ -210,18 +212,6 @@ export function ManagerAllServicesPanel({
       title={typeFilter === "vendors" ? "Vendors" : "Services"}
       titleAside={
         <>
-          <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap items-center justify-end gap-2`}>
-            {pendingCount > 0 && (
-              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-300/60">
-                {pendingCount} awaiting approval
-              </span>
-            )}
-            {openCount > 0 && (
-              <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 ring-1 ring-sky-300/60">
-                {openCount} pending work orders
-              </span>
-            )}
-          </div>
           {typeFilter === "vendors" ? (
             <Button
               type="button"
@@ -321,14 +311,18 @@ export function ManagerAllServicesPanel({
                 <div key={`req-mobile-${req.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="w-full text-left"
+                    className="flex w-full items-center justify-between gap-2 text-left"
                     onClick={() => setExpandedId(isExpanded ? null : id)}
+                    aria-expanded={isExpanded}
                   >
-                    <p className="truncate font-semibold text-foreground">{req.offerName}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {[req.residentName || req.residentEmail, propertyLabel].filter(Boolean).join(" · ")}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] text-muted/90">{summary}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{req.offerName}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {[req.residentName || req.residentEmail, propertyLabel].filter(Boolean).join(" · ")}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">{summary}</p>
+                    </div>
+                    <PortalTableExpandChevron expanded={isExpanded} />
                   </button>
                   {isExpanded ? (
                     <div className="mt-3 border-t border-border pt-3">{renderRequestDetail(req)}</div>
@@ -347,6 +341,9 @@ export function ManagerAllServicesPanel({
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -369,10 +366,11 @@ export function ManagerAllServicesPanel({
                           : "—"}
                       </td>
                       <td className={PORTAL_TABLE_TD}>{managerServiceRequestPricingSummary(req)}</td>
+                      <PortalTableExpandCell expanded={isExpanded} />
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                           {renderRequestDetail(req)}
                         </td>
                       </tr>

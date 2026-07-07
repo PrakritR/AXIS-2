@@ -116,6 +116,8 @@ export const demoManagerHouseRows: DemoManagerHouseRow[] = [];
 
 export type ManagerPaymentBucket = "pending" | "overdue" | "paid";
 
+export type ManagerPaymentDirection = "incoming" | "outgoing";
+
 export type DemoManagerPaymentLedgerRow = {
   id: string;
   propertyName: string;
@@ -132,6 +134,24 @@ export type DemoManagerPaymentLedgerRow = {
   notes: string;
   householdChargeId?: string;
   cancelledReminders?: Array<"7d" | "5d" | "3d" | "12h" | "overdue_daily">;
+};
+
+export type DemoManagerOutgoingPaymentRow = {
+  id: string;
+  propertyName: string;
+  categoryLabel: string;
+  payeeLabel: string;
+  chargeTitle: string;
+  amountLabel: string;
+  dueDate: string;
+  bucket: ManagerPaymentBucket;
+  statusLabel: string;
+  expenseEntryId?: string;
+  workOrderId?: string;
+  /** When true the row came from a logged expense (not a pending vendor payout). */
+  fromExpense?: boolean;
+  /** When true the row is an estimated Axis platform / processing fee on a resident payment. */
+  fromAxisFee?: boolean;
 };
 
 export const demoManagerPaymentLedgerRows: DemoManagerPaymentLedgerRow[] = [];

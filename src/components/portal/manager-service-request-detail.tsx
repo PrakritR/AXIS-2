@@ -17,12 +17,12 @@ import {
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
 
-export type ManagerServiceRequestBucket = "pending" | "approved" | "completed";
+export type ManagerServiceRequestBucket = "pending" | "approved" | "denied";
 
 export function managerServiceRequestBucket(status: ServiceRequest["status"]): ManagerServiceRequestBucket {
   if (status === "pending") return "pending";
-  if (status === "approved") return "approved";
-  return "completed";
+  if (status === "denied") return "denied";
+  return "approved";
 }
 
 export function serviceRequestHasDeposit(dep: string): boolean {
@@ -47,6 +47,7 @@ export function ManagerServiceRequestDetail({
   propertyLabel,
   onUpdated,
   onApproved,
+  onDenied,
   onCollapsed,
   allowDelete = true,
 }: {
@@ -54,6 +55,7 @@ export function ManagerServiceRequestDetail({
   propertyLabel?: string;
   onUpdated: () => void;
   onApproved?: () => void;
+  onDenied?: () => void;
   onCollapsed?: () => void;
   allowDelete?: boolean;
 }) {
@@ -188,6 +190,7 @@ export function ManagerServiceRequestDetail({
               onClick={() => {
                 denyServiceRequest(req.id);
                 onUpdated();
+                onDenied?.();
                 showToast("Request denied.");
               }}
             >

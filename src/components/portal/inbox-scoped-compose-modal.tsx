@@ -36,7 +36,8 @@ export type ScopedInboxSendPayload = {
 
 type Chip =
   | { key: string; kind: "broadcast"; category: InboxRecipientCategory }
-  | { key: string; kind: "contact"; contact: InboxScopedContact };
+  | { key: string; kind: "contact"; contact: InboxScopedContact }
+  | { key: string; kind: "manual"; email: string };
 
 function categoryHint(portal: "resident" | "manager" | "vendor", category: InboxRecipientCategory): string {
   if (category === "admin") return "Messages to Axis operations.";
@@ -63,8 +64,13 @@ const CATEGORY_ORDER: InboxRecipientCategory[] = ["admin", "management", "reside
  */
 function visibleCategoriesForPortal(portal: "resident" | "manager" | "vendor"): InboxRecipientCategory[] {
   if (portal === "resident") return ["management"];
-  if (portal === "vendor") return ["management"];
+  if (portal === "vendor") return ["admin", "management"];
   return CATEGORY_ORDER;
+}
+
+function isLikelyEmail(value: string): boolean {
+  const email = value.trim();
+  return email.includes("@") && email.indexOf("@") > 0 && email.indexOf("@") < email.length - 1;
 }
 
 function defaultScheduleSendAt(): string {
@@ -100,6 +106,8 @@ export function ScopedInboxComposeModal({
   const contacts = useMemo(() => contactsForPortal(portal, liveContacts), [portal, liveContacts]);
   const [broadcastCats, setBroadcastCats] = useState<Set<InboxRecipientCategory>>(new Set());
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
+  const [manualEmails, setManualEmails] = useState<Set<string>>(new Set());
+  const [manualEmailDraft, setManualEmailDraft] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [deliverViaEmail, setDeliverViaEmail] = useState(true);
@@ -113,6 +121,8 @@ export function ScopedInboxComposeModal({
     queueMicrotask(() => {
       setBroadcastCats(new Set());
       setContactIds(new Set());
+      setManualEmails(new Set());
+      setManualEmailDraft("");
       setSubject("");
       setBody("");
       setDeliverViaEmail(true);
@@ -188,6 +198,16 @@ export function ScopedInboxComposeModal({
     });
   };
 
+  const addManualEmail = (raw: string) => {
+    const email = raw.trim().toLowerCase();
+    if (!isLikelyEmail(email)) {
+      showToast("Enter a valid email address.");
+      return;
+    }
+    setManualEmails((prev) => new Set([...prev, email]));
+    setManualEmailDraft("");
+  };
+
   const chips = useMemo((): Chip[] => {
     const out: Chip[] = [];
     for (const category of CATEGORY_ORDER) {
@@ -199,14 +219,23 @@ export function ScopedInboxComposeModal({
       const c = contacts.find((x) => x.id === id);
       if (c) out.push({ key: `c:${id}`, kind: "contact", contact: c });
     }
+    for (const email of [...manualEmails].sort()) {
+      out.push({ key: `m:${email}`, kind: "manual", email });
+    }
     return out;
-  }, [broadcastCats, contactIds, contacts]);
+  }, [broadcastCats, contactIds, contacts, manualEmails]);
 
   const removeChip = (chip: Chip) => {
     if (chip.kind === "broadcast") {
       setBroadcastCats((prev) => {
         const next = new Set(prev);
         next.delete(chip.category);
+        return next;
+      });
+    } else if (chip.kind === "manual") {
+      setManualEmails((prev) => {
+        const next = new Set(prev);
+        next.delete(chip.email);
         return next;
       });
     } else {
@@ -251,6 +280,12 @@ export function ScopedInboxComposeModal({
           seen.add(key);
           parts.push(stub);
         }
+      } else if (chip.kind === "manual") {
+        const key = chip.email.trim().toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          parts.push({ label: chip.email, email: chip.email });
+        }
       } else {
         const key = chip.contact.email.trim().toLowerCase();
         if (!seen.has(key)) {
@@ -270,11 +305,13 @@ export function ScopedInboxComposeModal({
       .map((p) => p.email)
       .join("; ");
 
+    const adminEmail = broadcastStubForCategory("admin").email.toLowerCase();
     const includesAxisAdmin =
       broadcastCats.has("admin") ||
+      [...manualEmails].some((email) => email === adminEmail) ||
       [...contactIds].some((id) => {
         const c = contacts.find((x) => x.id === id);
-        return c?.email.trim().toLowerCase() === broadcastStubForCategory("admin").email.toLowerCase();
+        return c?.email.trim().toLowerCase() === adminEmail;
       });
 
     const includesDirectoryRecipients =
@@ -326,7 +363,9 @@ export function ScopedInboxComposeModal({
                 const label =
                   chip.kind === "broadcast"
                     ? broadcastStubForCategory(chip.category).label
-                    : `${chip.contact.name} · ${chip.contact.email}`;
+                    : chip.kind === "manual"
+                      ? chip.email
+                      : `${chip.contact.name} · ${chip.contact.email}`;
                 return (
                   <button
                     key={chip.key}
@@ -344,7 +383,30 @@ export function ScopedInboxComposeModal({
               })
             )}
           </div>
-          <p className="mt-1.5 text-[11px] text-muted">Click a chip to remove it. You can mix groups and individuals like email.</p>
+          <div className="mt-2 flex gap-2">
+            <Input
+              type="email"
+              className="min-w-0 flex-1"
+              value={manualEmailDraft}
+              onChange={(e) => setManualEmailDraft(e.target.value)}
+              placeholder="Add email address"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addManualEmail(manualEmailDraft);
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full"
+              onClick={() => addManualEmail(manualEmailDraft)}
+            >
+              Add
+            </Button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted">Click a chip to remove it. You can mix groups, contacts, and typed emails.</p>
         </div>
         ) : null}
 

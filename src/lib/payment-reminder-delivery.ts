@@ -42,7 +42,7 @@ export async function deliverPaymentReminder(input: {
   }
 
   const ts = Date.now();
-  const rand = Math.random().toString(36).slice(2, 6);
+  const rand = crypto.randomUUID().slice(0, 8);
   const when = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const preview = text.slice(0, 100).replace(/\n/g, " ");
 
@@ -106,25 +106,31 @@ export async function deliverPaymentReminder(input: {
     /* non-critical */
   }
 
-  await db.from("portal_outbound_mail_records").upsert(
-    {
-      id: dedupId,
-      recipient_email: residentLower,
-      subject,
-      channel: "email",
-      row_data: {
+  try {
+    await db.from("portal_outbound_mail_records").upsert(
+      {
         id: dedupId,
-        to: residentLower,
+        recipient_email: residentLower,
         subject,
-        body: text,
-        sentAt: new Date().toISOString(),
-        emailSent,
-        chargeId: charge.id,
-        slot: slotLabel,
+        channel: "email",
+        row_data: {
+          id: dedupId,
+          to: residentLower,
+          subject,
+          body: text,
+          sentAt: new Date().toISOString(),
+          emailSent,
+          chargeId: charge.id,
+          slot: slotLabel,
+        },
       },
-    },
-    { onConflict: "id" },
-  );
+      { onConflict: "id" },
+    );
+  } catch {
+    if (!emailSent && !apiKey) {
+      return { sent: false, error: "Could not record the reminder send." };
+    }
+  }
 
   if (managerSmsFromNumber) {
     try {

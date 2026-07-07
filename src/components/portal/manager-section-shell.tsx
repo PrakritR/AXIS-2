@@ -5,7 +5,7 @@ import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
+import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip, PortalToolbarSelectWrap } from "@/components/portal/portal-metrics";
 
 export type ShellAction = {
   label: string;
@@ -15,7 +15,7 @@ export type ShellAction = {
 };
 
 const selectClass =
-  "col-start-1 row-start-1 h-10 w-full min-w-0 max-w-full appearance-none truncate rounded-full border border-border bg-card px-3.5 pr-8 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
+  "col-start-1 row-start-1 h-10 w-full min-w-0 max-w-full appearance-none truncate rounded-full border border-border bg-card px-3.5 pr-9 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
 
 function PortalFilterSelect({
   "aria-label": ariaLabel,
@@ -35,27 +35,29 @@ function PortalFilterSelect({
 
   return (
     <div className="w-full min-w-0 max-w-full sm:w-fit">
-      <div className="grid w-full min-w-0 max-w-full sm:w-fit [&>select]:col-start-1 [&>select]:row-start-1">
-        <span
-          aria-hidden
-          className="invisible col-start-1 row-start-1 max-w-full truncate whitespace-nowrap px-3.5 pr-8 text-sm"
-        >
-          {selectedLabel}
-        </span>
-        <select className={selectClass} aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
-          <option value="">{placeholder}</option>
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <PortalToolbarSelectWrap className="w-full min-w-0 max-w-full sm:w-fit">
+        <div className="grid w-full min-w-0 max-w-full sm:w-fit [&>select]:col-start-1 [&>select]:row-start-1">
+          <span
+            aria-hidden
+            className="invisible col-start-1 row-start-1 max-w-full truncate whitespace-nowrap px-3.5 pr-9 text-sm"
+          >
+            {selectedLabel}
+          </span>
+          <select className={selectClass} aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
+            <option value="">{placeholder}</option>
+            {options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </PortalToolbarSelectWrap>
     </div>
   );
 }
 
-/** Property dropdown wrapped like admin filter chips (rounded shell). */
+/** Property / resident / application filter selects — each control is its own pill (matches Finances/Documents). */
 export function PortalPropertyFilterPill({
   applications,
   residents,
@@ -91,21 +93,19 @@ export function PortalPropertyFilterPill({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!mounted || (!hasPropertyPick && !hasResidentPick && !hasApplicationPick)) return null;
   return (
-    <div className="w-full min-w-0 max-w-full rounded-2xl border border-border bg-accent/30 p-1.5 sm:w-auto sm:rounded-full sm:p-1">
-      <PortalPropertyFilter
-        applications={applications}
-        residents={residents}
-        propertyOptions={propertyOptions}
-        propertyValue={propertyValue}
-        onPropertyChange={onPropertyChange}
-        residentOptions={residentOptions}
-        residentValue={residentValue}
-        onResidentChange={onResidentChange}
-        applicationOptions={applicationOptions}
-        applicationValue={applicationValue}
-        onApplicationChange={onApplicationChange}
-      />
-    </div>
+    <PortalPropertyFilter
+      applications={applications}
+      residents={residents}
+      propertyOptions={propertyOptions}
+      propertyValue={propertyValue}
+      onPropertyChange={onPropertyChange}
+      residentOptions={residentOptions}
+      residentValue={residentValue}
+      onResidentChange={onResidentChange}
+      applicationOptions={applicationOptions}
+      applicationValue={applicationValue}
+      onApplicationChange={onApplicationChange}
+    />
   );
 }
 
@@ -140,7 +140,7 @@ export function PortalPropertyFilter({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+    <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
       {hasPropertyPick ? (
         <PortalFilterSelect
           aria-label="Properties"

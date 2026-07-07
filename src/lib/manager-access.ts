@@ -224,6 +224,11 @@ export function isManagerFreePlan(tier: ManagerSubscriptionTier): boolean {
   return tier === "free";
 }
 
+/** Applicant background checks (Checkr) require Pro or Business — not included on Free. */
+export function managerScreeningAllowedForTier(tier: ManagerSubscriptionTier): boolean {
+  return !isManagerFreePlan(tier);
+}
+
 export function managerSectionAllowedForTier(section: string, tier: "free" | "paid" | null): boolean {
   if (tier !== "free") return true;
   // Legacy route id kept for redirects and API checks.

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/portal/portal-data-table";
 import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
@@ -436,7 +437,7 @@ export function ManagerPortalPageShell({
   hideTitleOnNative?: boolean;
 }) {
   return (
-    <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
+    <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0`}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0 shrink-0">
           <h1
@@ -491,7 +492,28 @@ export const PORTAL_TOOLBAR_LABEL = "text-xs font-semibold text-muted";
 
 /** Shared dropdown style for toolbar selects. */
 export const PORTAL_TOOLBAR_SELECT =
-  "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring";
+  "h-10 appearance-none rounded-full border border-border bg-card px-3.5 pr-9 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring";
+
+/** Wraps a native `<select>` with a trailing chevron (toolbar / filter pills). */
+export function PortalToolbarSelectWrap({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`relative inline-grid min-w-0 [&>*:first-child]:col-start-1 [&>*:first-child]:row-start-1 ${className ?? ""}`.trim()}
+    >
+      {children}
+      <ChevronDown
+        className="pointer-events-none col-start-1 row-start-1 mr-3 self-center justify-self-end h-4 w-4 text-muted"
+        aria-hidden
+      />
+    </div>
+  );
+}
 
 /** Shared action button sizing for page header controls. */
 export const PORTAL_HEADER_ACTION_BTN =
@@ -520,18 +542,20 @@ export function PortalToolbarSortSelect<T extends string>({
   return (
     <label className="inline-flex items-center gap-2 rounded-full border border-border bg-accent/30 p-1 pr-1.5">
       <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as T)}
-        aria-label={ariaLabel ?? label}
-        className={PORTAL_TOOLBAR_SELECT}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <PortalToolbarSelectWrap>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value as T)}
+          aria-label={ariaLabel ?? label}
+          className={PORTAL_TOOLBAR_SELECT}
+        >
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </PortalToolbarSelectWrap>
     </label>
   );
 }
@@ -539,7 +563,7 @@ export function PortalToolbarSortSelect<T extends string>({
 /** Standard filter row wrapper (status pills + optional sort). */
 export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-3">{children}</div>
+    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-3">{children}</div>
   );
 }
 

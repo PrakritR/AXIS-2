@@ -17,7 +17,10 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import {
@@ -313,7 +316,6 @@ function AdminPropertyInlineDetails({
 
   return (
     <div className="space-y-4">
-      {row.tagline.trim() ? <p className="text-sm text-muted">{row.tagline}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Public listing preview</p>
         {publicHref ? (
@@ -410,10 +412,11 @@ export function AdminPropertiesClient() {
                 <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="w-full text-left"
+                    className="flex w-full items-center justify-between gap-2 text-left"
                     onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                    aria-expanded={expanded}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="break-words font-semibold text-foreground">
                         {row.buildingName} · {row.unitLabel}
                       </p>
@@ -426,6 +429,7 @@ export function AdminPropertiesClient() {
                         {row.zip ? `, ${row.zip}` : ""}
                       </p>
                     </div>
+                    <PortalTableExpandChevron expanded={expanded} />
                   </button>
                   {expanded ? (
                     <div className="mt-3 border-t border-border pt-3">
@@ -450,6 +454,9 @@ export function AdminPropertiesClient() {
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} w-[45%] text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -480,10 +487,11 @@ export function AdminPropertiesClient() {
                               {row.neighborhood}
                             </p>
                           </td>
+                          <PortalTableExpandCell expanded={expanded} />
                         </tr>
                         {expanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                               <AdminPropertyInlineDetails
                                 key={rowKey}
                                 bucket={activeKpi}

@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
@@ -21,6 +22,28 @@ export const PORTAL_TABLE_TR =
 
 /** Summary row that expands on click (entire row toggles detail). */
 export const PORTAL_TABLE_TR_EXPANDABLE = `${PORTAL_TABLE_TR} cursor-pointer`;
+
+/** Trailing chevron column header for expandable portal tables. */
+export const PORTAL_TABLE_EXPAND_TH =
+  "portal-table-th w-10 px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-2";
+
+export function PortalTableExpandChevron({ expanded = false }: { expanded?: boolean }) {
+  return (
+    <ChevronDown
+      className={`ml-auto block h-4 w-4 text-muted transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+      aria-hidden
+    />
+  );
+}
+
+/** Trailing expand indicator cell — pair with {@link PORTAL_TABLE_EXPAND_TH}. */
+export function PortalTableExpandCell({ expanded = false }: { expanded?: boolean }) {
+  return (
+    <td className={`${PORTAL_TABLE_TD} w-10 align-middle`}>
+      <PortalTableExpandChevron expanded={expanded} />
+    </td>
+  );
+}
 
 const PORTAL_ROW_CLICK_IGNORE_SELECTOR =
   "button, a, input, select, textarea, label, [data-portal-row-ignore]";
@@ -48,6 +71,10 @@ export const PORTAL_TABLE_TD = "max-w-0 break-words px-4 py-4 align-middle text-
 /** Compact card shell for mobile portal lists (pair with {@link PortalResponsiveDataView}). */
 export const PORTAL_MOBILE_CARD_CLASS =
   "rounded-2xl border border-border bg-card p-3.5 [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-3";
+
+/** Expanded detail block below a mobile summary card row. */
+export const PORTAL_MOBILE_DETAIL_EXPAND =
+  "mt-4 border-t border-border pt-4 [html[data-native]_&]:mt-3 [html[data-native]_&]:pt-3";
 
 /** Tighter data cells on native — keeps tabbed lists on one screen longer. */
 export const PORTAL_TABLE_TD_COMPACT =
@@ -97,6 +124,7 @@ export function PortalMobileSummaryCard({
       <div className="flex shrink-0 flex-col items-end gap-1">
         {trailing}
         {badge}
+        {onClick ? <PortalTableExpandChevron expanded={expanded} /> : null}
       </div>
     </div>
   );
@@ -126,11 +154,7 @@ export function PortalMobileSummaryCard({
       ) : (
         body
       )}
-      {children ? (
-        <div className={`${onClick ? "mt-2.5" : ""} border-t border-border pt-2.5 [html[data-native]_&]:mt-2 [html[data-native]_&]:pt-2`}>
-          {children}
-        </div>
-      ) : null}
+      {children ? <div className={onClick ? PORTAL_MOBILE_DETAIL_EXPAND : "border-t border-border pt-4"}>{children}</div> : null}
     </div>
   );
 }
@@ -169,8 +193,9 @@ export function PortalResponsiveDataView({
   );
 }
 
-/** Detail row cell padding. */
-export const PORTAL_TABLE_DETAIL_CELL = "px-4 py-5 align-top sm:px-6 sm:py-8";
+/** Detail row cell padding — top padding omitted only when {@link PortalTableDetailActions} is the first child with `placement="top"`. */
+export const PORTAL_TABLE_DETAIL_CELL =
+  "px-4 pb-6 pt-6 align-top sm:px-6 sm:pb-8 sm:pt-8 [&:has(>[data-portal-detail-actions-placement=top])]:pt-0 sm:[&:has(>[data-portal-detail-actions-placement=top])]:pt-0";
 
 /**
  * Action strip in an expanded detail row — subtle divider + compact buttons.
@@ -187,9 +212,17 @@ export function PortalTableDetailActions({
   if (children == null) return null;
   const edge =
     placement === "top"
-      ? "mb-6 border-b border-border pb-6"
-      : "mt-6 border-t border-border pt-6";
-  return <div className={`flex flex-wrap items-center gap-2 sm:gap-2.5 ${edge}`}>{children}</div>;
+      ? "border-b border-border py-6 mb-6"
+      : "border-t border-border py-6 mt-6";
+  return (
+    <div
+      data-portal-detail-actions=""
+      data-portal-detail-actions-placement={placement}
+      className={`flex flex-wrap items-center gap-3 sm:gap-4 ${edge}`}
+    >
+      {children}
+    </div>
+  );
 }
 
 /** Compact action button on a summary row (Schedule, Mark paid, etc.). */

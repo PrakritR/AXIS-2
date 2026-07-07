@@ -17,8 +17,10 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
+  PortalTableExpandCell,
 } from "@/components/portal/portal-data-table";
 import {
   DocumentInlineViewer,
@@ -213,6 +215,9 @@ function ApplicationDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+            <th className={PORTAL_TABLE_EXPAND_TH}>
+              <span className="sr-only">Expand</span>
+            </th>
           </>
         }
         mobile={rows.map((row) => (
@@ -240,6 +245,7 @@ function ApplicationDocumentsTable() {
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
               <p className="min-w-0 max-w-[280px] truncate">{row.property || "—"}</p>
             </td>
+            <PortalTableExpandCell expanded={preview?.id === row.id} />
           </tr>
         ))}
       </DocumentsTableShell>
@@ -403,8 +409,11 @@ function RentReceiptsTab() {
               <>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
-              </>
+            <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
+            <th className={PORTAL_TABLE_EXPAND_TH}>
+              <span className="sr-only">Expand</span>
+            </th>
+          </>
             }
             mobile={receipts.map((row, i) => {
               const key = `${row.date}-${i}`;
@@ -436,6 +445,7 @@ function RentReceiptsTab() {
                 </td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
+                <PortalTableExpandCell expanded={isOpen} />
               </tr>
               );
             })}
@@ -545,6 +555,9 @@ function SignedLeaseDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Date signed</th>
+            <th className={PORTAL_TABLE_EXPAND_TH}>
+              <span className="sr-only">Expand</span>
+            </th>
           </>
         }
         mobile={
@@ -567,6 +580,7 @@ function SignedLeaseDocumentsTable() {
           </td>
           <td className={`${PORTAL_TABLE_TD} align-middle`}>Fully signed</td>
           <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(signedAt)}</td>
+          <PortalTableExpandCell expanded={previewOpen} />
         </tr>
       </DocumentsTableShell>
       {previewOpen ? (

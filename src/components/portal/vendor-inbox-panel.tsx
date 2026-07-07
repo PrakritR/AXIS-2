@@ -5,6 +5,7 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
+import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
 import {
   PortalInboxSelectionToolbar,
@@ -303,6 +304,15 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
+      if (p.includesAxisAdmin) {
+        appendPortalMessageToAdminInbox({
+          role: "vendor",
+          name: p.senderName,
+          email: p.senderEmail,
+          topic: p.subject.trim(),
+          body: p.body.trim(),
+        });
+      }
       setComposeOpen(false);
       void (async () => {
         try {
@@ -330,7 +340,11 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
           invalidatePersistedInboxCache(VENDOR_INBOX_STORAGE_KEY);
           const rows = await syncPersistedInboxFromServer(VENDOR_INBOX_STORAGE_KEY, { force: true });
           setLocal(rows as InboxThread[]);
-          showToast("Message sent via inbox and email.");
+          showToast(
+            p.includesAxisAdmin && !p.includesDirectoryRecipients
+              ? "Message sent to Axis admin."
+              : "Message sent via inbox and email.",
+          );
           navigate("/vendor/inbox/sent");
         } catch {
           showToast("Message could not be sent.");

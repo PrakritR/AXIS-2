@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { VendorAvailabilityRule } from "@/lib/vendor-availability";
+import { normalizeFlexibleTimingRank } from "@/lib/vendor-availability";
+import {
+  readVendorFlexiblePreferencesForServer,
+  writeVendorFlexiblePreferencesForServer,
+} from "@/lib/vendor-availability-server";
 
 export const runtime = "nodejs";
 
@@ -55,6 +60,7 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const vendorId = url.searchParams.get("vendorId")?.trim();
+    const wantsPreferences = url.searchParams.get("preferences") === "1";
 
     let vendorUserId: string | null;
     if (vendorId) {
@@ -63,10 +69,15 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
       vendorUserId = await resolveManagerOwnedVendorUserId(db, actor.userId, vendorId);
-      if (!vendorUserId) return NextResponse.json({ rules: [] });
+      if (!vendorUserId) return NextResponse.json(wantsPreferences ? { preferences: { timingRank: normalizeFlexibleTimingRank(null) } } : { rules: [] });
     } else {
       if (actor.role !== "vendor") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       vendorUserId = actor.userId;
+    }
+
+    if (wantsPreferences) {
+      const preferences = await readVendorFlexiblePreferencesForServer(db, vendorUserId);
+      return NextResponse.json({ preferences });
     }
 
     const { data, error } = await db
@@ -101,14 +112,22 @@ export async function POST(req: Request) {
     if (actor.role !== "vendor") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as {
-      action?: "upsert-weekly" | "upsert-block" | "upsert-open" | "delete";
+      action?: "upsert-weekly" | "upsert-block" | "upsert-open" | "delete" | "save-preferences";
       id?: string;
       weekday?: number;
       specificDate?: string;
       startMinute?: number;
       endMinute?: number;
       note?: string;
+      timingRank?: unknown;
     };
+
+    if (body.action === "save-preferences") {
+      await writeVendorFlexiblePreferencesForServer(db, actor.userId, {
+        timingRank: normalizeFlexibleTimingRank(body.timingRank),
+      });
+      return NextResponse.json({ ok: true });
+    }
 
     if (body.action === "delete") {
       const id = body.id?.trim();

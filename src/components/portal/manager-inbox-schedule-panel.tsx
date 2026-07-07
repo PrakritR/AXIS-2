@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
+import { ManagerPortalFilterRow, MANAGER_TABLE_TH, PORTAL_TOOLBAR_SELECT, PortalToolbarSelectWrap } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -13,6 +13,9 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  PORTAL_TABLE_EXPAND_TH,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
@@ -189,13 +192,18 @@ export function ManagerInboxSchedulePanel({
     setBulkBusy(true);
     try {
       let ok = 0;
+      let lastError: string | null = null;
       for (const row of targets) {
         try {
           await sendRowNow(row);
           ok += 1;
-        } catch {
-          /* continue */
+        } catch (e) {
+          lastError = e instanceof Error ? e.message : "Could not send message.";
         }
+      }
+      if (ok === 0) {
+        showToast(lastError ?? "Could not send messages.");
+        return;
       }
       showToast(ok === 1 ? "Message sent." : `Sent ${ok} of ${targets.length} messages.`);
       clearSelection();
@@ -213,13 +221,22 @@ export function ManagerInboxSchedulePanel({
     setBulkBusy(true);
     try {
       let ok = 0;
+      let lastError: string | null = null;
       for (const row of targets) {
-        if (row.kind === "manual") {
-          await toggleManualCancelled(row.message, true);
-        } else {
-          await patchScheduledMessage(row.message.id, { cancelled: true });
+        try {
+          if (row.kind === "manual") {
+            await toggleManualCancelled(row.message, true);
+          } else {
+            await patchScheduledMessage(row.message.id, { cancelled: true });
+          }
+          ok += 1;
+        } catch (e) {
+          lastError = e instanceof Error ? e.message : "Could not cancel send.";
         }
-        ok += 1;
+      }
+      if (ok === 0) {
+        showToast(lastError ?? "Could not cancel sends.");
+        return;
       }
       showToast(ok === 1 ? "Send cancelled." : `Cancelled ${ok} sends.`);
       clearSelection();
@@ -282,17 +299,19 @@ export function ManagerInboxSchedulePanel({
       <div className="flex flex-wrap items-center justify-end gap-2">
         <label className="inline-flex items-center gap-2 text-xs font-medium text-muted">
             <span className="sr-only">Show messages scheduled within</span>
-            <select
-              className="h-9 rounded-full border border-border bg-card px-3 text-xs font-semibold text-foreground outline-none focus:border-primary"
-              value={horizonId}
-              onChange={(e) => setHorizonId(e.target.value as InboxScheduleHorizonId)}
-            >
-              {INBOX_SCHEDULE_HORIZON_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <PortalToolbarSelectWrap>
+              <select
+                className={`${PORTAL_TOOLBAR_SELECT} h-9 text-xs font-semibold`}
+                value={horizonId}
+                onChange={(e) => setHorizonId(e.target.value as InboxScheduleHorizonId)}
+              >
+                {INBOX_SCHEDULE_HORIZON_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </PortalToolbarSelectWrap>
           </label>
       </div>
 
@@ -335,9 +354,12 @@ export function ManagerInboxSchedulePanel({
                     <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleRowExpand(row)}>
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate font-semibold text-foreground">{subject}</p>
-                      <span className="shrink-0 rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
-                        {isManual ? "Manual" : "Automated"}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
+                          {isManual ? "Manual" : "Automated"}
+                        </span>
+                        <PortalTableExpandChevron expanded={isRowExpanded} />
+                      </div>
                     </div>
                     <p className="mt-1 truncate text-xs text-muted">
                       {recipientName} · {recipientEmail}
@@ -381,6 +403,9 @@ export function ManagerInboxSchedulePanel({
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Subject</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Message</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                  <th className={PORTAL_TABLE_EXPAND_TH}>
+                    <span className="sr-only">Expand</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -442,10 +467,11 @@ export function ManagerInboxSchedulePanel({
                           <p className="line-clamp-2 text-xs leading-relaxed text-muted">{messagePreview(body)}</p>
                         </td>
                         <td className={`${PORTAL_TABLE_TD} capitalize ${statusClass(status)}`}>{status}</td>
+                        <PortalTableExpandCell expanded={isRowExpanded} />
                       </tr>
                       {isRowExpanded ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={8} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderRowEditPanel(row)}
                           </td>
                         </tr>

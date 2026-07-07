@@ -13,17 +13,28 @@ import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PORTAL_DETAIL_BTN,
+  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
+  PORTAL_MOBILE_DETAIL_EXPAND,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
+  PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
+import { VendorPaymentMethodsModal } from "@/components/portal/vendor-payment-methods-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   readVendorWorkOrderRows,
@@ -31,6 +42,7 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payouts";
+import { vendorPaymentMethodSummaryLabel } from "@/lib/vendor-payment-methods";
 
 type VendorPaymentBucket = "pending" | "paid";
 
@@ -129,6 +141,105 @@ function toLedgerRow(row: DemoManagerWorkOrderRow, payout: VendorPayout | undefi
   };
 }
 
+type VendorPaymentNotifyAction = "send_reminder" | "report_paid";
+
+function VendorPaymentPendingActions({
+  workOrderId,
+  onDone,
+}: {
+  workOrderId: string;
+  onDone?: () => void;
+}) {
+  const { showToast } = useAppUi();
+  const demo = isDemoModeActive();
+  const [busy, setBusy] = useState<VendorPaymentNotifyAction | null>(null);
+
+  const notify = async (action: VendorPaymentNotifyAction) => {
+    if (demo) {
+      showToast(
+        action === "send_reminder"
+          ? "Reminder sent to your property manager."
+          : "Payment confirmation sent to your property manager.",
+      );
+      onDone?.();
+      return;
+    }
+
+    setBusy(action);
+    try {
+      const res = await fetch("/api/vendor/work-orders/payment-notify", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workOrderId, action }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(data.error ?? "Could not send notification.");
+        return;
+      }
+      showToast(action === "send_reminder" ? "Reminder sent." : "Manager notified — payment marked as received.");
+      onDone?.();
+    } catch {
+      showToast("Could not send notification.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <PortalTableDetailActions>
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_DETAIL_BTN}
+        data-portal-row-ignore
+        disabled={busy === "send_reminder"}
+        data-attr="vendor-payments-send-reminder"
+        onClick={() => void notify("send_reminder")}
+      >
+        {busy === "send_reminder" ? "Sending reminder…" : "Send reminder"}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_DETAIL_BTN_PRIMARY}
+        data-portal-row-ignore
+        disabled={busy === "report_paid"}
+        data-attr="vendor-payments-mark-paid"
+        onClick={() => void notify("report_paid")}
+      >
+        {busy === "report_paid" ? "Notifying…" : "Mark as paid"}
+      </Button>
+    </PortalTableDetailActions>
+  );
+}
+
+function VendorPaymentExpandedDetail({
+  row,
+  bucket,
+}: {
+  row: VendorPaymentLedgerRow;
+  bucket: VendorPaymentBucket;
+}) {
+  const showActions = bucket === "pending";
+
+  if (!row.payoutFailureReason && !showActions) return null;
+
+  return (
+    <div className={PORTAL_MOBILE_DETAIL_EXPAND}>
+      {row.payoutFailureReason ? (
+        <p className="text-xs text-muted">{row.payoutFailureReason}</p>
+      ) : null}
+      {showActions ? (
+        <div className={row.payoutFailureReason ? "mt-3" : undefined}>
+          <VendorPaymentPendingActions workOrderId={row.id} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Vendor Payments — payout history from completed work orders + Stripe Connect bank linking. */
 export function VendorPaymentsPanel() {
   const { showToast } = useAppUi();
@@ -139,6 +250,27 @@ export function VendorPaymentsPanel() {
   const [payoutsByWorkOrderId, setPayoutsByWorkOrderId] = useState<Record<string, VendorPayout>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [unlinked, setUnlinked] = useState(false);
+  const [vendorProfile, setVendorProfile] = useState<ManagerVendorRow | null>(null);
+  const [paymentMethodsOpen, setPaymentMethodsOpen] = useState(false);
+
+  const loadVendorProfile = useCallback(async () => {
+    if (isDemoModeActive()) {
+      setVendorProfile({
+        id: "demo-vendor",
+        managerUserId: null,
+        name: "Demo Vendor",
+        trade: "HVAC",
+        phone: "",
+        email: "",
+        notes: "",
+        active: true,
+      });
+      return;
+    }
+    const res = await fetch("/api/vendor/profile", { credentials: "include" });
+    const data = (await res.json().catch(() => ({}))) as { profile?: ManagerVendorRow | null };
+    setVendorProfile(data.profile ?? null);
+  }, []);
 
   const loadPayouts = useCallback(async () => {
     const result = await fetchVendorPayoutsResult();
@@ -158,9 +290,17 @@ export function VendorPaymentsPanel() {
     if (demo) return;
     void fetch("/api/vendor/profile", { credentials: "include" })
       .then((r) => r.json())
-      .then((data: { linked?: boolean }) => setUnlinked(data.linked === false))
+      .then((data: { linked?: boolean; profile?: ManagerVendorRow | null }) => {
+        setUnlinked(data.linked === false);
+        setVendorProfile(data.profile ?? null);
+      })
       .catch(() => undefined);
   }, [demo]);
+
+  useEffect(() => {
+    if (!paymentMethodsOpen) return;
+    void loadVendorProfile();
+  }, [paymentMethodsOpen, loadVendorProfile]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -228,12 +368,10 @@ export function VendorPaymentsPanel() {
               type="button"
               variant="primary"
               className={PORTAL_HEADER_ACTION_BTN}
-              onClick={() =>
-                showToast("Payments are created when a manager approves completed work orders.")
-              }
+              onClick={() => setPaymentMethodsOpen(true)}
               data-attr="vendor-payments-add"
             >
-              Add
+              Payment methods
             </Button>
           </div>
         </div>
@@ -246,6 +384,19 @@ export function VendorPaymentsPanel() {
           data-attr="vendor-payments-unlinked-banner"
         >
           Waiting on a property manager to connect with you — completed work will appear here once you&apos;re linked.
+        </p>
+      ) : vendorProfile ? (
+        <p className="mb-4 rounded-xl border border-border bg-accent/20 px-4 py-3 text-sm text-muted">
+          <span className="font-medium text-foreground">You accept: </span>
+          {vendorPaymentMethodSummaryLabel(vendorProfile)}
+          <button
+            type="button"
+            className="ml-2 font-medium text-foreground underline underline-offset-2"
+            onClick={() => setPaymentMethodsOpen(true)}
+            data-attr="vendor-payments-edit-methods"
+          >
+            Edit
+          </button>
         </p>
       ) : null}
 
@@ -260,26 +411,26 @@ export function VendorPaymentsPanel() {
                 <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-start justify-between gap-3 text-left"
+                    className="flex w-full items-center justify-between gap-3 text-left"
                     onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                    aria-expanded={expanded}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-foreground">{row.workOrderTitle}</p>
                       <p className="mt-0.5 truncate text-xs text-muted">{row.propertyName}</p>
                       <p className="mt-0.5 text-xs text-muted">{row.dateLabel}</p>
                     </div>
-                    <div className="shrink-0 text-right">
+                    <div className="flex shrink-0 flex-col items-end gap-1">
                       <p className="text-base font-bold tabular-nums text-foreground">{row.amountLabel}</p>
                       <span
-                        className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}
+                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}
                       >
                         {row.statusLabel}
                       </span>
+                      <PortalTableExpandChevron expanded={expanded} />
                     </div>
                   </button>
-                  {expanded && row.payoutFailureReason ? (
-                    <p className="mt-3 border-t border-border pt-3 text-xs text-muted">{row.payoutFailureReason}</p>
-                  ) : null}
+                  {expanded ? <VendorPaymentExpandedDetail row={row} bucket={bucket} /> : null}
                 </div>
               );
             })}
@@ -296,6 +447,9 @@ export function VendorPaymentsPanel() {
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>
                       {bucket === "paid" ? "Paid" : "Updated"}
+                    </th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
                     </th>
                   </tr>
                 </thead>
@@ -320,11 +474,19 @@ export function VendorPaymentsPanel() {
                           </span>
                         </td>
                         <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.dateLabel}</td>
+                        <PortalTableExpandCell expanded={expandedId === row.id} />
                       </tr>
-                      {expandedId === row.id && row.payoutFailureReason ? (
-                        <tr>
-                          <td colSpan={5} className="border-b border-border px-4 py-3 text-xs text-muted">
-                            {row.payoutFailureReason}
+                      {expandedId === row.id ? (
+                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                          <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                            {row.payoutFailureReason ? (
+                              <p className="text-xs text-muted">{row.payoutFailureReason}</p>
+                            ) : null}
+                            {bucket === "pending" ? (
+                              <div className={row.payoutFailureReason ? "mt-4" : undefined}>
+                                <VendorPaymentPendingActions workOrderId={row.id} />
+                              </div>
+                            ) : null}
                           </td>
                         </tr>
                       ) : null}
@@ -336,6 +498,12 @@ export function VendorPaymentsPanel() {
           </div>
         </>
       )}
+      <VendorPaymentMethodsModal
+        open={paymentMethodsOpen}
+        onClose={() => setPaymentMethodsOpen(false)}
+        profile={vendorProfile}
+        onSaved={setVendorProfile}
+      />
     </ManagerPortalPageShell>
   );
 }

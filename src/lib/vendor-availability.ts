@@ -29,6 +29,115 @@ export const DEFAULT_VISIT_DURATION_MINUTES = 60;
 export const SLOT_STEP_MINUTES = 30;
 export const MINUTES_PER_DAY = 1440;
 
+export type VendorFlexibleTiming = "morning" | "afternoon" | "evening";
+
+export const VENDOR_FLEXIBLE_TIMING_LABELS: Record<VendorFlexibleTiming, string> = {
+  morning: "Morning",
+  afternoon: "Afternoon",
+  evening: "Evening",
+};
+
+/** Default preference order when a vendor has not customized ranking. */
+export const DEFAULT_FLEXIBLE_TIMING_RANK: VendorFlexibleTiming[] = ["morning", "afternoon", "evening"];
+
+/** Pacific wall-clock ranges for flexible-day auto-scheduling. */
+export const FLEXIBLE_TIMING_RANGES: Record<VendorFlexibleTiming, { start: number; end: number }> = {
+  morning: { start: 8 * 60, end: 12 * 60 },
+  afternoon: { start: 12 * 60, end: 17 * 60 },
+  evening: { start: 17 * 60, end: 21 * 60 },
+};
+
+export type VendorFlexiblePreferences = {
+  timingRank: VendorFlexibleTiming[];
+};
+
+export function normalizeFlexibleTimingRank(raw: unknown): VendorFlexibleTiming[] {
+  if (!Array.isArray(raw)) return [...DEFAULT_FLEXIBLE_TIMING_RANK];
+  const allowed = new Set<VendorFlexibleTiming>(["morning", "afternoon", "evening"]);
+  const seen = new Set<VendorFlexibleTiming>();
+  const rank: VendorFlexibleTiming[] = [];
+  for (const item of raw) {
+    const key = String(item).toLowerCase() as VendorFlexibleTiming;
+    if (!allowed.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    rank.push(key);
+  }
+  for (const fallback of DEFAULT_FLEXIBLE_TIMING_RANK) {
+    if (!seen.has(fallback)) rank.push(fallback);
+  }
+  return rank;
+}
+
+/** Merge 30-minute slot keys (`YYYY-MM-DD:slotIndex`) into contiguous minute windows per date. */
+export function mergeSlotKeysToDateWindows(keys: Iterable<string>): Map<string, Array<{ start: number; end: number }>> {
+  const byDate = new Map<string, number[]>();
+  for (const key of keys) {
+    const [dateStr, slotStr] = key.split(":");
+    if (!dateStr || slotStr === undefined) continue;
+    const slot = Number(slotStr);
+    if (!Number.isFinite(slot) || slot < 0) continue;
+    const list = byDate.get(dateStr) ?? [];
+    list.push(slot);
+    byDate.set(dateStr, list);
+  }
+
+  const result = new Map<string, Array<{ start: number; end: number }>>();
+  for (const [dateStr, slots] of byDate) {
+    slots.sort((a, b) => a - b);
+    const windows: Array<{ start: number; end: number }> = [];
+    let runStart = slots[0]! * SLOT_STEP_MINUTES;
+    let runEnd = runStart + SLOT_STEP_MINUTES;
+    for (let i = 1; i < slots.length; i += 1) {
+      const start = slots[i]! * SLOT_STEP_MINUTES;
+      if (start === runEnd) {
+        runEnd += SLOT_STEP_MINUTES;
+      } else {
+        windows.push({ start: runStart, end: runEnd });
+        runStart = start;
+        runEnd = start + SLOT_STEP_MINUTES;
+      }
+    }
+    windows.push({ start: runStart, end: runEnd });
+    result.set(dateStr, windows);
+  }
+  return result;
+}
+
+export function flexibleWeekdaysFromRules(rules: VendorAvailabilityRule[]): Set<number> {
+  const out = new Set<number>();
+  for (const rule of rules) {
+    if (rule.kind === "weekly" && isFlexibleWeeklyRule(rule)) out.add(rule.weekday);
+  }
+  return out;
+}
+
+function windowsForFlexibleDay(timingRank: VendorFlexibleTiming[]): Array<{ start: number; end: number }> {
+  return timingRank.map((period) => FLEXIBLE_TIMING_RANGES[period]);
+}
+
+function slotFits(
+  y: number,
+  m: number,
+  d: number,
+  cursor: number,
+  durationMinutes: number,
+  exclusions: Array<{ start: number; end: number }>,
+): string | null {
+  const blocking = exclusions.find((ex) => cursor < ex.end && cursor + durationMinutes > ex.start);
+  if (!blocking) return pacificWallClockToUtc(y, m, d, cursor).toISOString();
+  return null;
+}
+
+function overlapsBusy(busy: BusyWindow[], startIso: string, durationMinutes: number): boolean {
+  const start = new Date(startIso).getTime();
+  const end = start + durationMinutes * 60_000;
+  return busy.some((window) => {
+    const bStart = new Date(window.startIso).getTime();
+    const bEnd = new Date(window.endIso).getTime();
+    return start < bEnd && end > bStart;
+  });
+}
+
 const TIME_ZONE = "America/Los_Angeles";
 const WEEKDAY_FROM_SHORT: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
@@ -126,14 +235,72 @@ export function resolveNextAvailableSlot(options: {
   durationMinutes?: number;
   from?: Date;
   daysToSearch?: number;
+  /** Drag-painted open slots from the vendor calendar grid. */
+  slotKeys?: Iterable<string>;
+  /** Weekdays (0=Sun) marked flexible — uses timingRank windows when no explicit slots exist. */
+  flexibleWeekdays?: Set<number>;
+  timingRank?: VendorFlexibleTiming[];
+  /** Tenant-requested time takes priority when it fits availability and is not busy. */
+  tenantPreferredIso?: string | null;
 }): string | null {
-  const { rules, busy, durationMinutes = DEFAULT_VISIT_DURATION_MINUTES, from = new Date(), daysToSearch = 60 } = options;
+  const {
+    rules,
+    busy,
+    durationMinutes = DEFAULT_VISIT_DURATION_MINUTES,
+    from = new Date(),
+    daysToSearch = 60,
+    slotKeys,
+    flexibleWeekdays,
+    timingRank = DEFAULT_FLEXIBLE_TIMING_RANK,
+    tenantPreferredIso,
+  } = options;
+
+  if (tenantPreferredIso) {
+    const preferred = new Date(tenantPreferredIso);
+    if (!Number.isNaN(preferred.getTime()) && !overlapsBusy(busy, preferred.toISOString(), durationMinutes)) {
+      const parts = pacificPartsAt(preferred);
+      const minute = parts.hour * 60 + parts.minute;
+      const key = dateKey(parts.year, parts.month, parts.day);
+      const weekday = preferred.getUTCDay();
+      const slotWindows = mergeSlotKeysToDateWindows(slotKeys ?? []);
+      const explicit = slotWindows.get(key) ?? [];
+      const flex = flexibleWeekdays?.has(weekday) ? windowsForFlexibleDay(timingRank) : [];
+      const weeklyByWeekday = new Map<number, Array<{ start: number; end: number }>>();
+      const opensByDate = new Map<string, Array<{ start: number; end: number }>>();
+      for (const rule of rules) {
+        if (rule.kind === "weekly" && !isFlexibleWeeklyRule(rule)) {
+          const list = weeklyByWeekday.get(rule.weekday) ?? [];
+          list.push({ start: rule.startMinute, end: rule.endMinute });
+          weeklyByWeekday.set(rule.weekday, list);
+        } else if (rule.kind === "open") {
+          const list = opensByDate.get(rule.specificDate) ?? [];
+          list.push({ start: rule.startMinute, end: rule.endMinute });
+          opensByDate.set(rule.specificDate, list);
+        }
+      }
+      const windows = [...explicit, ...flex, ...(weeklyByWeekday.get(weekday) ?? []), ...(opensByDate.get(key) ?? [])];
+      const blocksByDate = new Map<string, Array<{ start: number; end: number }>>();
+      for (const rule of rules) {
+        if (rule.kind === "block") {
+          const list = blocksByDate.get(rule.specificDate) ?? [];
+          list.push({ start: rule.startMinute, end: rule.endMinute });
+          blocksByDate.set(rule.specificDate, list);
+        }
+      }
+      const blocks = blocksByDate.get(key) ?? [];
+      const inWindow = windows.some((w) => minute >= w.start && minute + durationMinutes <= w.end);
+      const inBlock = blocks.some((b) => minute < b.end && minute + durationMinutes > b.start);
+      if (inWindow && !inBlock) return preferred.toISOString();
+    }
+  }
+
+  const slotWindows = mergeSlotKeysToDateWindows(slotKeys ?? []);
 
   const weeklyByWeekday = new Map<number, Array<{ start: number; end: number }>>();
   const blocksByDate = new Map<string, Array<{ start: number; end: number }>>();
   const opensByDate = new Map<string, Array<{ start: number; end: number }>>();
   for (const rule of rules) {
-    if (rule.kind === "weekly") {
+    if (rule.kind === "weekly" && !isFlexibleWeeklyRule(rule)) {
       const list = weeklyByWeekday.get(rule.weekday) ?? [];
       list.push({ start: rule.startMinute, end: rule.endMinute });
       weeklyByWeekday.set(rule.weekday, list);
@@ -173,18 +340,36 @@ export function resolveNextAvailableSlot(options: {
     const weekday = candidate.getUTCDay();
     const key = dateKey(y, m, d);
 
-    const windows = [...(weeklyByWeekday.get(weekday) ?? []), ...(opensByDate.get(key) ?? [])];
+    const explicitSlots = slotWindows.get(key) ?? [];
+    const flexWindows = flexibleWeekdays?.has(weekday) ? windowsForFlexibleDay(timingRank) : [];
+    const windows = [
+      ...explicitSlots,
+      ...flexWindows,
+      ...(weeklyByWeekday.get(weekday) ?? []),
+      ...(opensByDate.get(key) ?? []),
+    ];
     if (windows.length === 0) continue;
 
     const exclusions = [...(blocksByDate.get(key) ?? []), ...(busyByDate.get(key) ?? [])].sort((a, b) => a.start - b.start);
     const dayFloor = dayOffset === 0 ? fromMinuteFloor : 0;
 
-    for (const window of [...windows].sort((a, b) => a.start - b.start)) {
+    const orderedWindows =
+      flexWindows.length > 0 && explicitSlots.length === 0
+        ? timingRank.flatMap((period) => {
+            const range = FLEXIBLE_TIMING_RANGES[period];
+            return [{ start: range.start, end: range.end }];
+          })
+        : [...windows].sort((a, b) => a.start - b.start);
+
+    for (const window of orderedWindows) {
       let cursor = Math.ceil(Math.max(window.start, dayFloor) / SLOT_STEP_MINUTES) * SLOT_STEP_MINUTES;
       while (cursor + durationMinutes <= window.end) {
+        const fit = slotFits(y, m, d, cursor, durationMinutes, exclusions);
+        if (fit && !overlapsBusy(busy, fit, durationMinutes)) return fit;
         const blocking = exclusions.find((ex) => cursor < ex.end && cursor + durationMinutes > ex.start);
-        if (!blocking) return pacificWallClockToUtc(y, m, d, cursor).toISOString();
-        cursor = Math.ceil(blocking.end / SLOT_STEP_MINUTES) * SLOT_STEP_MINUTES;
+        cursor = blocking
+          ? Math.ceil(blocking.end / SLOT_STEP_MINUTES) * SLOT_STEP_MINUTES
+          : cursor + SLOT_STEP_MINUTES;
       }
     }
   }
@@ -243,4 +428,48 @@ export function saveVendorDateRule(input: { id?: string; specificDate: string; s
 
 export function deleteVendorAvailabilityRule(id: string) {
   return postAvailability({ action: "delete", id });
+}
+
+export async function fetchVendorFlexiblePreferences(): Promise<VendorFlexiblePreferences> {
+  try {
+    const res = await fetch("/api/vendor/availability?preferences=1", { credentials: "include" });
+    if (!res.ok) return { timingRank: [...DEFAULT_FLEXIBLE_TIMING_RANK] };
+    const data = await res.json();
+    return { timingRank: normalizeFlexibleTimingRank(data.preferences?.timingRank) };
+  } catch {
+    return { timingRank: [...DEFAULT_FLEXIBLE_TIMING_RANK] };
+  }
+}
+
+export function saveVendorFlexiblePreferences(preferences: VendorFlexiblePreferences) {
+  return postAvailability({
+    action: "save-preferences",
+    timingRank: normalizeFlexibleTimingRank(preferences.timingRank),
+  });
+}
+
+export function readVendorFlexiblePreferencesFromStorage(userId: string): VendorFlexiblePreferences {
+  if (typeof window === "undefined" || !userId.trim()) {
+    return { timingRank: [...DEFAULT_FLEXIBLE_TIMING_RANK] };
+  }
+  try {
+    const raw = window.sessionStorage.getItem(`axis_vendor_flex_prefs_${userId}`);
+    if (!raw) return { timingRank: [...DEFAULT_FLEXIBLE_TIMING_RANK] };
+    const parsed = JSON.parse(raw) as { timingRank?: unknown };
+    return { timingRank: normalizeFlexibleTimingRank(parsed.timingRank) };
+  } catch {
+    return { timingRank: [...DEFAULT_FLEXIBLE_TIMING_RANK] };
+  }
+}
+
+export function writeVendorFlexiblePreferencesToStorage(userId: string, preferences: VendorFlexiblePreferences): void {
+  if (typeof window === "undefined" || !userId.trim()) return;
+  try {
+    window.sessionStorage.setItem(
+      `axis_vendor_flex_prefs_${userId}`,
+      JSON.stringify({ timingRank: normalizeFlexibleTimingRank(preferences.timingRank) }),
+    );
+  } catch {
+    /* ignore */
+  }
 }

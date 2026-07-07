@@ -1,26 +1,52 @@
 /**
- * Client-side simulated Checkr screening for the `/demo` sandbox — no network
- * call to Checkr, no Stripe charge. Uses the same deterministic rule as the
- * server-side simulate fallback (`checkr/simulate.ts`) so the result is stable
- * across reloads for a given applicant and consistent with what the real
- * simulate path would produce for the same SSN.
+ * Client-side simulated Checkr screening for the `/demo` sandbox.
  */
-import { simulatedResult, stableHash } from "@/lib/checkr/simulate";
+import { buildSimulatedReportSnapshot } from "@/lib/checkr/report-snapshot";
+import { aggregateResultFromSnapshot } from "@/lib/checkr/report-snapshot";
+import { stableHash } from "@/lib/checkr/simulate";
+import type { CheckrPackage } from "@/lib/checkr/config";
+import type { CheckrAddOnSlug } from "@/lib/checkr/packages";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 
+function applicantParts(row: DemoApplicantRow): { firstName: string; lastName: string; dob: string | null; ssn: string } {
+  const full = row.application?.fullLegalName?.trim() || row.name.trim();
+  const parts = full.split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] ?? "Applicant",
+    lastName: parts.length > 1 ? parts[parts.length - 1]! : "Unknown",
+    dob: row.application?.dateOfBirth ?? null,
+    ssn: row.application?.ssn || row.id,
+  };
+}
+
 /** Build a completed, simulated background check for a demo applicant. */
-export function buildDemoBackgroundCheck(row: DemoApplicantRow): ApplicationBackgroundCheck {
-  const ssn = row.application?.ssn || row.id;
+export function buildDemoBackgroundCheck(
+  row: DemoApplicantRow,
+  opts?: { packageSlug?: CheckrPackage; addOnProducts?: CheckrAddOnSlug[] },
+): ApplicationBackgroundCheck {
+  const packageSlug = opts?.packageSlug ?? "essential";
+  const addOnProducts = opts?.addOnProducts ?? [];
+  const { firstName, lastName, dob, ssn } = applicantParts(row);
   const seed = stableHash(`${row.email ?? row.id}:${ssn}`);
+  const reportSnapshot = buildSimulatedReportSnapshot({
+    firstName,
+    lastName,
+    dob,
+    ssn,
+    packageSlug,
+    addOnProducts,
+  });
   const now = new Date().toISOString();
   return {
     provider: "checkr",
     candidateId: `demo_applicant_${seed}`,
     reportId: `demo_order_${seed}`,
-    packageSlug: "essential",
+    packageSlug,
+    addOnProducts: addOnProducts.length > 0 ? addOnProducts : undefined,
     status: "complete",
-    result: simulatedResult(ssn),
+    result: aggregateResultFromSnapshot(reportSnapshot),
+    reportSnapshot,
     orderedAt: now,
     completedAt: now,
     simulated: true,

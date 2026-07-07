@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { readPortalApiError } from "@/lib/portal-api-error";
 import { encodeScheduledMessagePathId } from "@/lib/scheduled-message-path-id";
 import { PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";

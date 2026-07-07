@@ -26,11 +26,15 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
@@ -50,10 +54,9 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
-import { buildApplicationHtml } from "@/lib/manager-application-html";
+import { transitionApplicationBucket } from "@/lib/application-review";
 import {
   fetchCosignerSubmissionsForSignerAppId,
-  type CosignerSubmission,
 } from "@/lib/cosigner-submissions-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
@@ -75,8 +78,7 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
-import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
-import { transitionApplicationBucket } from "@/lib/application-review";
+import { resolveManagerScopeUserId, isDemoModeActive } from "@/lib/demo/demo-session";
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
   for (const r of rows) {
@@ -92,10 +94,11 @@ function applicationRoomLabel(row: DemoApplicantRow): string {
 }
 
 /** Server PDF endpoint for an application, with the client-resolved room label as a display hint. */
-function applicationPdfHref(row: DemoApplicantRow): string {
+export function applicationPdfHref(row: DemoApplicantRow, opts?: { inline?: boolean }): string {
   const params = new URLSearchParams();
   const roomLabel = applicationRoomLabel(row);
   if (roomLabel) params.set("roomLabel", roomLabel);
+  if (opts?.inline) params.set("disposition", "inline");
   const query = params.toString();
   return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query ? `?${query}` : ""}`;
 }
@@ -111,45 +114,73 @@ export function downloadApplicationPdf(row: DemoApplicantRow): void {
 }
 
 /**
- * Inline rendered-document view of the application, matching the lease-document presentation:
- * clean styled HTML in an srcDoc iframe (no browser PDF-viewer chrome). The document page is
- * always white like the lease, so it reads clearly on the themed card frame in both light and
- * dark mode; the Download PDF action in the detail toolbar produces the official PDF file.
- * Rendered for every bucket (pending/approved/rejected) and also for rows without a stored
- * application payload (e.g. manually added applicants), mirroring buildApplicationPdf which
- * falls back to row-level fields.
+ * Inline PDF preview of the application — same file as Download PDF (server-built via pdf-lib).
+ * Avoids HTML preview drift from local cache and matches the downloaded document exactly.
  */
 export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
-  const [cosignerSubmissions, setCosignerSubmissions] = useState<CosignerSubmission[]>([]);
+  const demoMode = isDemoModeActive();
+  const [demoPdfSrc, setDemoPdfSrc] = useState<string | null>(null);
+  const previewSrc = useMemo(() => applicationPdfHref(row, { inline: true }), [row]);
+
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset co-signer data when the row changes
-    setCosignerSubmissions([]);
-    if (row.application?.hasCosigner !== "yes") return;
+    if (!demoMode) {
+      setDemoPdfSrc(null);
+      return;
+    }
     let cancelled = false;
-    void fetchCosignerSubmissionsForSignerAppId(row.id).then((rows) => {
-      if (!cancelled) setCosignerSubmissions(rows);
-    });
+    void (async () => {
+      const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
+      const cosignerSubmissions =
+        row.application?.hasCosigner === "yes" ? await fetchCosignerSubmissionsForSignerAppId(row.id) : [];
+      const url = await buildDemoApplicationPdfDataUrl(
+        row,
+        applicationRoomLabel(row) || undefined,
+        cosignerSubmissions,
+      );
+      if (!cancelled) setDemoPdfSrc(url);
+    })();
     return () => {
       cancelled = true;
     };
-  }, [row.id, row.application?.hasCosigner]);
+  }, [demoMode, row]);
 
-  const documentHtml = useMemo(
-    () => buildApplicationHtml(row, { roomLabel: applicationRoomLabel(row) || undefined, cosignerSubmissions }),
-    [row, cosignerSubmissions],
-  );
+  const iframeSrc = demoMode ? demoPdfSrc : previewSrc;
+
+  if (!iframeSrc) {
+    return (
+      <PortalCollapsibleSection
+        title="Application"
+        defaultExpanded={false}
+        surfaceMuted={false}
+        className="mt-4"
+        contentClassName="p-4 pt-0"
+        toggleDataAttr="application-document-toggle"
+      >
+        <div className="flex h-[min(24vh,200px)] items-center justify-center rounded-xl border border-border bg-accent/30 px-4 text-center text-sm text-muted">
+          Loading application preview…
+        </div>
+      </PortalCollapsibleSection>
+    );
+  }
+
   return (
-    <section>
-      <div className="overflow-hidden rounded-2xl border border-border shadow-sm">
+    <PortalCollapsibleSection
+      title="Application"
+      defaultExpanded={false}
+      surfaceMuted={false}
+      className="mt-4"
+      contentClassName="p-4 pt-0"
+      toggleDataAttr="application-document-toggle"
+    >
+      <div className="overflow-hidden rounded-xl border border-border bg-accent/30">
         <iframe
-          srcDoc={documentHtml}
-          title="Application document preview"
-          sandbox="allow-same-origin"
-          loading="lazy"
-          className="h-[720px] w-full border-0 bg-white"
+          key={row.id}
+          src={iframeSrc}
+          title="Application document"
+          className="h-[min(52vh,420px)] w-full border-0 bg-card"
         />
       </div>
-    </section>
+    </PortalCollapsibleSection>
   );
 }
 
@@ -400,21 +431,12 @@ export function ManagerApplications() {
   };
 
   const renderApplicationDetail = (row: DemoApplicantRow) => (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <>
       <PortalTableDetailActions placement="top">
         {row.bucket === "pending" ? (
           <>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
               Approve
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              data-attr="open-run-screening"
-              onClick={() => setCheckrScreeningRowId(row.id)}
-            >
-              Run screening
             </Button>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
               Reject
@@ -451,7 +473,7 @@ export function ManagerApplications() {
         onUpdated={handleScreeningUpdated}
         onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
       />
-    </div>
+    </>
   );
 
   return (
@@ -527,14 +549,18 @@ export function ManagerApplications() {
             <div key={row.id} id={`portal-application-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
               <button
                 type="button"
-                className="w-full text-left"
+                className="flex w-full items-center justify-between gap-2 text-left"
                 onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                aria-expanded={expanded}
               >
-                <p className="truncate font-semibold text-foreground">{row.name}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">
-                  {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
-                </p>
-                {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-foreground">{row.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
+                  </p>
+                  {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
+                </div>
+                <PortalTableExpandChevron expanded={expanded} />
               </button>
               {expanded ? (
                 <div className="mt-3 border-t border-border pt-3">{renderApplicationDetail(row)}</div>
@@ -551,6 +577,9 @@ export function ManagerApplications() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
+                <th className={PORTAL_TABLE_EXPAND_TH}>
+                  <span className="sr-only">Expand</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -570,10 +599,11 @@ export function ManagerApplications() {
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
+                      <PortalTableExpandCell expanded={expandedId === row.id} />
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                           {renderApplicationDetail(row)}
                         </td>
                       </tr>

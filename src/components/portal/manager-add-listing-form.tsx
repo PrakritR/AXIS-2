@@ -234,14 +234,6 @@ function locationSelectValue(location: string, options: readonly string[]): stri
   return options.includes(t) ? t : LOCATION_LEVEL_CUSTOM;
 }
 
-function ChevronDownTiny({ className = "" }: { className?: string }) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
 const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   houseWide: [...HOUSE_WIDE_AMENITY_PRESETS],
   sharedSpace: [...SHARED_SPACE_AMENITY_PRESETS],
@@ -2275,7 +2267,7 @@ export function ManagerAddListingForm({
                   <div className="relative">
                     <Select
                       aria-label="Number of floors"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingStoriesId), selectInputCls)} appearance-none pr-10`}
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingStoriesId), selectInputCls)}`}
                       value={sub.listingStoriesId ?? ""}
                       onChange={(e) => {
                         clearListingFieldError("listingStoriesId");
@@ -2289,9 +2281,6 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                    <ChevronDownTiny />
-                  </span>
                 </div>
                   <StepFieldError msg={stepFieldErrors.listingStoriesId} />
                 </div>
@@ -2304,7 +2293,7 @@ export function ManagerAddListingForm({
                   <div className="relative">
                     <Select
                       aria-label="Total bathrooms"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingTotalBathroomsId), selectInputCls)} appearance-none pr-10`}
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingTotalBathroomsId), selectInputCls)}`}
                       value={sub.listingTotalBathroomsId ?? ""}
                       onChange={(e) => {
                         clearListingFieldError("listingTotalBathroomsId");
@@ -2318,9 +2307,6 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                    <ChevronDownTiny />
-                  </span>
                 </div>
                   <StepFieldError msg={stepFieldErrors.listingTotalBathroomsId} />
                 </div>
@@ -2335,7 +2321,7 @@ export function ManagerAddListingForm({
                   <div className="relative max-w-md">
                     <Select
                       aria-label="Bedrooms for rent"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingBedroomSlots), selectInputCls)} appearance-none pr-10`}
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingBedroomSlots), selectInputCls)}`}
                       value={String(sub.listingBedroomSlots ?? sub.rooms.length)}
                       onChange={(e) => {
                         clearListingFieldError("listingBedroomSlots");
@@ -2348,9 +2334,6 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                    <ChevronDownTiny />
-                  </span>
                 </div>
                   <StepFieldError msg={stepFieldErrors.listingBedroomSlots} />
                 </div>
@@ -3048,7 +3031,7 @@ export function ManagerAddListingForm({
                           <div className="relative">
                             <Select
                               aria-label={`Additional fee ${i + 1} type`}
-                              className={`${selectInputCls} appearance-none pr-10`}
+                              className={`${selectInputCls}`}
                               value={fee.frequency ?? "monthly"}
                               onChange={(e) =>
                                 setCustomFee(i, { frequency: e.target.value === "one-time" ? "one-time" : "monthly" })
@@ -3057,9 +3040,6 @@ export function ManagerAddListingForm({
                               <option value="monthly">Monthly</option>
                               <option value="one-time">One-time</option>
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                              <ChevronDownTiny />
-                            </span>
                           </div>
                         </div>
                         </div>
@@ -3410,7 +3390,7 @@ export function ManagerAddListingForm({
                           <div className="relative">
                             <Select
                               aria-label={`Floor for ${room.name || `room ${i + 1}`}`}
-                              className={`${selectInputCls} appearance-none pr-10`}
+                              className={`${selectInputCls}`}
                               value={roomFloorSelectValueFromOptions(room.floor, roomFloorOptions)}
                               onChange={(e) => {
                                 const v = e.target.value;
@@ -3432,9 +3412,6 @@ export function ManagerAddListingForm({
                               ))}
                               <option value={ROOM_FLOOR_LEVEL_CUSTOM}>Custom…</option>
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                              <ChevronDownTiny />
-                            </span>
                           </div>
                           {roomFloorSelectValueFromOptions(room.floor, roomFloorOptions) === ROOM_FLOOR_LEVEL_CUSTOM ? (
                             <Input
@@ -3677,7 +3654,7 @@ export function ManagerAddListingForm({
                           <div className="relative">
                             <Select
                               aria-label={`Bathroom ${i + 1} location`}
-                              className={`${selectInputCls} appearance-none pr-10`}
+                              className={`${selectInputCls}`}
                               value={locationSelectValue(b.location ?? "", locationLevelOptions)}
                               onChange={(e) => {
                                 const v = e.target.value;
@@ -3700,9 +3677,6 @@ export function ManagerAddListingForm({
                               ))}
                               <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                              <ChevronDownTiny />
-                            </span>
                           </div>
                           {locationSelectValue(b.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
                             <Input
@@ -4014,7 +3988,7 @@ export function ManagerAddListingForm({
                           <div className="relative">
                             <Select
                               aria-label={`Shared space ${i + 1} type`}
-                              className={`${selectInputCls} appearance-none pr-10`}
+                              className={`${selectInputCls}`}
                               value={sp.spaceKind ?? "other"}
                               onChange={(e) => {
                                 const kind = e.target.value as SharedSpaceKind;
@@ -4030,9 +4004,6 @@ export function ManagerAddListingForm({
                                 </option>
                               ))}
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                              <ChevronDownTiny />
-                            </span>
                           </div>
                         </div>
                         <div className="sm:col-span-2">
@@ -4041,7 +4012,7 @@ export function ManagerAddListingForm({
                             <div className="relative">
                               <Select
                                 aria-label={`Shared space ${i + 1} location`}
-                                className={`${selectInputCls} appearance-none pr-10`}
+                                className={`${selectInputCls}`}
                                 value={locationSelectValue(sp.location ?? "", locationLevelOptions)}
                                 onChange={(e) => {
                                   const v = e.target.value;
@@ -4064,9 +4035,6 @@ export function ManagerAddListingForm({
                                 ))}
                                 <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
                               </Select>
-                              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                                <ChevronDownTiny />
-                              </span>
                             </div>
                             {locationSelectValue(sp.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
                               <Input

@@ -116,11 +116,14 @@ describe("pro portal documents section", () => {
     expect(sections).toContain("financials");
   });
 
-  it("documents tabs are income/expense docs, 1099, and tax summary", () => {
+  it("documents tabs include applications, leases, income/expense docs, occupancy, 1099, and tax summary", () => {
     const documents = proPortal.sections.find((s) => s.section === "documents");
     expect(documents?.tabs.map((t) => t.id)).toEqual([
+      "applications",
+      "leases",
       "income-documents",
       "expense-documents",
+      "occupancy",
       "1099",
       "tax-summary",
     ]);

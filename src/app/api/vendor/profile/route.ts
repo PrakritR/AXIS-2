@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
+import { buildVendorAcceptedPaymentMethods } from "@/lib/vendor-payment-methods";
 import { resolveOwnVendorRecord } from "@/lib/vendor-own-record";
 
 export const runtime = "nodejs";
@@ -56,7 +57,32 @@ export async function PATCH(req: Request) {
       insuranceProvider?: string;
       insurancePolicyNumber?: string;
       insuranceExpiresAt?: string;
+      zellePaymentsEnabled?: boolean;
+      zelleContact?: string;
+      venmoPaymentsEnabled?: boolean;
+      venmoContact?: string;
+      achPaymentsEnabled?: boolean;
+      acceptedPaymentMethods?: ("zelle" | "venmo" | "ach")[];
     };
+
+    const zellePaymentsEnabled =
+      body.zellePaymentsEnabled !== undefined ? body.zellePaymentsEnabled : own.row.zellePaymentsEnabled;
+    const zelleContact = body.zelleContact !== undefined ? body.zelleContact.trim() : own.row.zelleContact;
+    const venmoPaymentsEnabled =
+      body.venmoPaymentsEnabled !== undefined ? body.venmoPaymentsEnabled : own.row.venmoPaymentsEnabled;
+    const venmoContact = body.venmoContact !== undefined ? body.venmoContact.trim() : own.row.venmoContact;
+    const achPaymentsEnabled =
+      body.achPaymentsEnabled !== undefined ? body.achPaymentsEnabled : own.row.achPaymentsEnabled;
+    const acceptedPaymentMethods =
+      body.acceptedPaymentMethods !== undefined
+        ? body.acceptedPaymentMethods
+        : buildVendorAcceptedPaymentMethods({
+            zellePaymentsEnabled: Boolean(zellePaymentsEnabled),
+            zelleContact: zelleContact ?? "",
+            venmoPaymentsEnabled: Boolean(venmoPaymentsEnabled),
+            venmoContact: venmoContact ?? "",
+            achPaymentsEnabled: Boolean(achPaymentsEnabled),
+          });
 
     const nextRow: ManagerVendorRow = {
       ...own.row,
@@ -73,6 +99,12 @@ export async function PATCH(req: Request) {
         body.insurancePolicyNumber !== undefined ? body.insurancePolicyNumber.trim() : own.row.insurancePolicyNumber,
       insuranceExpiresAt:
         body.insuranceExpiresAt !== undefined ? body.insuranceExpiresAt.trim() : own.row.insuranceExpiresAt,
+      zellePaymentsEnabled,
+      zelleContact,
+      venmoPaymentsEnabled,
+      venmoContact,
+      achPaymentsEnabled,
+      acceptedPaymentMethods,
       updatedAt: new Date().toISOString(),
     };
 

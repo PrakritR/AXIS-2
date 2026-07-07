@@ -4,7 +4,7 @@ import { deleteInboxThreadIds } from "@/lib/portal-inbox-storage";
 
 let inboxMessages: InboxMessage[] = [];
 
-export type InboxSenderRole = "partner" | "manager" | "resident" | "admin";
+export type InboxSenderRole = "partner" | "manager" | "resident" | "vendor" | "admin";
 
 export type InboxThreadReply = {
   id: string;
@@ -182,9 +182,9 @@ export function appendPartnerInboxMessage(payload: { name: string; email: string
   });
 }
 
-/** Property or resident portal → admin inbox */
+/** Property, resident, or vendor portal → admin inbox */
 export function appendPortalMessageToAdminInbox(payload: {
-  role: "manager" | "resident";
+  role: "manager" | "resident" | "vendor";
   name: string;
   email: string;
   topic: string;

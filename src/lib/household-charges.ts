@@ -9,6 +9,7 @@ import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
+import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
 import {
   rentDueDayModeFromSubmission,
   resolveRentDueDayForMonth,
@@ -1206,6 +1207,7 @@ export function recordWorkOrderResidentCharge(input: {
   residentName: string;
   /** Actual property id for finances filtering; falls back to work-order pseudo id. */
   propertyId?: string;
+  dueDateLabel?: string;
   initialStatus?: "pending" | "paid";
   zelleContactSnapshot?: string | null;
 }): HouseholdCharge | null {
@@ -1221,7 +1223,7 @@ export function recordWorkOrderResidentCharge(input: {
   const isPaid = input.initialStatus === "paid";
   const balance = `$${amt.toFixed(2)}`;
   const now = new Date().toISOString();
-  const charge: HouseholdCharge = {
+  const charge = ensureChargeDueDateForReminders({
     id: `hc_wo_${input.workOrderId}_${Date.now()}`,
     createdAt: now,
     residentEmail: input.residentEmail.trim(),
@@ -1236,11 +1238,19 @@ export function recordWorkOrderResidentCharge(input: {
     balanceLabel: isPaid ? "$0.00" : balance,
     status: isPaid ? "paid" : "pending",
     paidAt: isPaid ? now : undefined,
+    dueDateLabel: input.dueDateLabel?.trim() || undefined,
     zelleContactSnapshot: input.zelleContactSnapshot ?? undefined,
     blocksLeaseUntilPaid: false,
     workOrderId: input.workOrderId,
-  };
-  writeAll([...readAll(), charge]);
+  });
+  writeAll([...readAll(), charge], true);
+  void postHouseholdPayloadAwait({
+    action: "replace",
+    charges: [charge],
+    rentProfiles: readRentProfiles(),
+  }).then((ok) => {
+    if (ok) emit();
+  });
   return charge;
 }
 
@@ -1698,6 +1708,7 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
     paidAt: undefined,
     balanceLabel: next[i]!.amountLabel,
     dueDateLabel: undefined,
+    cancelledReminders: undefined,
   };
   next[i] = updated;
   writeAll(next);
@@ -2232,7 +2243,7 @@ export function recordLegacyApplicationSigningCharges(
 }
 
 /**
- * Manager-editable override of a charge's amount and title.
+ * Manager-editable override of a charge's amount, title, and due date.
  * Only updates if the charge belongs to this manager and is still pending.
  */
 export function updateHouseholdChargeAmount(
@@ -2240,6 +2251,7 @@ export function updateHouseholdChargeAmount(
   newAmount: number,
   managerUserId: string | null,
   newTitle?: string,
+  newDueDateLabel?: string,
 ): boolean {
   if (!isBrowser() || !Number.isFinite(newAmount) || newAmount < 0) return false;
   const rows = readAll();
@@ -2247,13 +2259,22 @@ export function updateHouseholdChargeAmount(
   if (i === -1) return false;
   const label = `$${newAmount.toFixed(2)}`;
   const next = [...rows];
-  next[i] = {
+  const updated: HouseholdCharge = {
     ...next[i]!,
     amountLabel: label,
     balanceLabel: next[i]!.status === "paid" ? "$0.00" : label,
     ...(newTitle?.trim() ? { title: newTitle.trim() } : {}),
+    ...(newDueDateLabel?.trim() ? { dueDateLabel: newDueDateLabel.trim() } : {}),
   };
+  next[i] = updated;
   writeAll(next);
+  void postHouseholdPayloadAwait({
+    action: "replace",
+    charges: [updated],
+    rentProfiles: readRentProfiles(),
+  }).then((ok) => {
+    if (ok) emit();
+  });
   return true;
 }
 
@@ -2417,8 +2438,8 @@ export function createManagerCharge(input: {
   const sub =
     prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   const paymentSnapshots = paymentSnapshotsFromListing(sub);
-  const charge: HouseholdCharge = {
-    id: `hc_mgr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  const charge = ensureChargeDueDateForReminders({
+    id: `hc_mgr_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     createdAt: new Date().toISOString(),
     applicationId: input.applicationId?.trim() || undefined,
     residentEmail: email,
@@ -2436,8 +2457,15 @@ export function createManagerCharge(input: {
     dueDateLabel: input.dueDateLabel?.trim() || undefined,
     blocksLeaseUntilPaid: input.blocksLeaseUntilPaid ?? false,
     ...paymentSnapshots,
-  };
-  writeAll([...readAll(), charge]);
+  });
+  writeAll([...readAll(), charge], true);
+  void postHouseholdPayloadAwait({
+    action: "replace",
+    charges: [charge],
+    rentProfiles: readRentProfiles(),
+  }).then((ok) => {
+    if (ok) emit();
+  });
   return charge;
 }
 

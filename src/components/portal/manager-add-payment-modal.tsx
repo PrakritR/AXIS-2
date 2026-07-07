@@ -8,6 +8,7 @@ import { Input, Select } from "@/components/ui/input";
 import type { ManagerPaymentBucket } from "@/data/demo-portal";
 import { createManagerCharge } from "@/lib/household-charges";
 import { MANAGER_PAYMENT_PRESETS, type ManagerPaymentPresetId } from "@/lib/payment-policy";
+import { defaultDueIsoForReminderSettings } from "@/lib/payment-reminder-bootstrap";
 import { buildNewChargeNoticeBody, deliverPortalInboxMessage } from "@/lib/portal-message-delivery";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
@@ -160,7 +161,7 @@ export function ManagerAddPaymentModal({
   const [preset, setPreset] = useState<ManagerPaymentPresetId>("rent");
   const [chargeTitle, setChargeTitle] = useState("Monthly rent");
   const [amount, setAmount] = useState("");
-  const [dueIso, setDueIso] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dueIso, setDueIso] = useState(() => defaultDueIsoForReminderSettings());
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [noticePreview, setNoticePreview] = useState<PaymentPreview | null>(null);
   const [noticeBusy, setNoticeBusy] = useState(false);
@@ -230,7 +231,7 @@ export function ManagerAddPaymentModal({
     setPreset("rent");
     setChargeTitle("Monthly rent");
     setAmount("");
-    setDueIso(new Date().toISOString().slice(0, 10));
+    setDueIso(defaultDueIsoForReminderSettings());
     setBucket("pending");
     setNoticePreview(null);
     setNoticeBusy(false);

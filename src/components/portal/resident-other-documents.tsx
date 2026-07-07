@@ -12,8 +12,10 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
+  PortalTableExpandCell,
 } from "@/components/portal/portal-data-table";
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
 import { safeFormatDateTime } from "@/lib/pacific-time";
@@ -75,7 +77,10 @@ export function DocumentInlineViewer({
 
   return (
     <section ref={sectionRef} className="mt-6">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div
+        data-portal-detail-actions=""
+        className="mb-6 flex flex-wrap items-center gap-3 border-b border-border py-6 sm:gap-4"
+      >
         <Button type="button" className="rounded-full" data-attr={downloadAttr} onClick={onDownload}>
           {downloadLabel}
         </Button>
@@ -370,6 +375,9 @@ export function ResidentOtherDocumentsTable({
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Date added</th>
+                <th className={PORTAL_TABLE_EXPAND_TH}>
+                  <span className="sr-only">Expand</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -387,6 +395,7 @@ export function ResidentOtherDocumentsTable({
                   </td>
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>{uploadedDocumentKind(row)}</td>
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(row.uploadedAt)}</td>
+                  <PortalTableExpandCell expanded={selectedId === row.id} />
                 </tr>
               ))}
             </tbody>

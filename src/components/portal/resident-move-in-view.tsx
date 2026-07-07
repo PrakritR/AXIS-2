@@ -10,10 +10,10 @@ export function ResidentMoveInResolvedView({ resolved }: { resolved: ResidentMov
       <PortalCollapsibleSection
         title="Your placement"
         surfaceMuted={false}
-        contentClassName="px-4 pb-4"
+        contentClassName="px-4 pb-4 text-muted"
         toggleDataAttr="resident-move-in-placement-toggle"
       >
-        <div className="grid gap-3 rounded-2xl border border-border bg-accent/30 p-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Assigned room</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{resolved.roomLabel}</p>
@@ -21,7 +21,7 @@ export function ResidentMoveInResolvedView({ resolved }: { resolved: ResidentMov
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Property</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{resolved.propertyLabel}</p>
-            {resolved.addressLine ? <p className="mt-0.5 text-xs text-muted">{resolved.addressLine}</p> : null}
+            {resolved.addressLine ? <p className="mt-0.5 text-xs">{resolved.addressLine}</p> : null}
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Move-in date</p>

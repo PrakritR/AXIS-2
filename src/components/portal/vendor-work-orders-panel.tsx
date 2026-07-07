@@ -18,12 +18,15 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   PortalDataTableEmpty,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -76,11 +79,22 @@ function formatVisitLabel(iso: string): string {
 
 type VendorWorkOrderTab = "to_bid" | "scheduled" | "completed";
 
-/** Bidding takes priority over the underlying bucket — a row stays in "To bid" until the
- * manager accepts a bid (which clears biddingOpen), even if its bucket is still "open". */
-function vendorWorkOrderTab(row: DemoManagerWorkOrderRow): VendorWorkOrderTab {
-  if (row.biddingOpen) return "to_bid";
+function isPricingPendingBid(bid: WorkOrderBid | undefined): boolean {
+  return Boolean(
+    bid &&
+      bid.quoteMode === "after_consultation" &&
+      bid.consultationVisitAt &&
+      bid.amountCents == null &&
+      bid.status === "submitted",
+  );
+}
+
+/** Consultation-priced jobs with a visit booked but no labor quote yet live in Scheduled so
+ * the vendor can finish pricing there; everything else still open for bids stays in Pending. */
+function vendorWorkOrderTab(row: DemoManagerWorkOrderRow, bid?: WorkOrderBid): VendorWorkOrderTab {
   if (row.bucket === "completed") return "completed";
+  if (isPricingPendingBid(bid)) return "scheduled";
+  if (row.biddingOpen) return "to_bid";
   return "scheduled";
 }
 
@@ -159,13 +173,13 @@ export function VendorWorkOrdersPanel() {
 
   const tabCounts = useMemo(() => {
     const c: Record<VendorWorkOrderTab, number> = { to_bid: 0, scheduled: 0, completed: 0 };
-    for (const row of sorted) c[vendorWorkOrderTab(row)] += 1;
+    for (const row of sorted) c[vendorWorkOrderTab(row, bidsByWorkOrderId[row.id])] += 1;
     return c;
-  }, [sorted]);
+  }, [sorted, bidsByWorkOrderId]);
 
   const tabs = useMemo(
     () => [
-      { id: "to_bid", label: "To bid", count: tabCounts.to_bid, dataAttr: "vendor-wo-tab-to-bid" },
+      { id: "to_bid", label: "Pending", count: tabCounts.to_bid, dataAttr: "vendor-wo-tab-pending" },
       { id: "scheduled", label: "Scheduled", count: tabCounts.scheduled, dataAttr: "vendor-wo-tab-scheduled" },
       { id: "completed", label: "Completed", count: tabCounts.completed, dataAttr: "vendor-wo-tab-completed" },
     ],
@@ -181,7 +195,10 @@ export function VendorWorkOrdersPanel() {
     tabPickRef.current = true;
   }, [sorted.length, tabCounts]);
 
-  const visible = useMemo(() => sorted.filter((row) => vendorWorkOrderTab(row) === tab), [sorted, tab]);
+  const visible = useMemo(
+    () => sorted.filter((row) => vendorWorkOrderTab(row, bidsByWorkOrderId[row.id]) === tab),
+    [sorted, tab, bidsByWorkOrderId],
+  );
 
   const openExpand = (row: DemoManagerWorkOrderRow) => {
     setExpandedId(row.id);
@@ -375,14 +392,14 @@ export function VendorWorkOrdersPanel() {
   const renderRowDetail = (row: DemoManagerWorkOrderRow) => {
     const bid = bidsByWorkOrderId[row.id];
     const draft = draftById[row.id] ?? defaultBidDraft(bid);
-    const canEditBid = row.biddingOpen && (!bid || bid.status === "submitted");
+    const pricingPending = isPricingPendingBid(bid);
+    const canEditBid = (row.biddingOpen || pricingPending) && (!bid || bid.status === "submitted");
     const canMarkDone = row.bucket === "scheduled" && !row.automationStatus;
     const mode = bid?.quoteMode ?? modeById[row.id] ?? "upfront";
     const consultationScheduled = Boolean(bid?.consultationVisitAt);
-    const pricingPending = Boolean(bid) && bid?.quoteMode === "after_consultation" && bid?.amountCents == null;
-    const showModeToggle = canEditBid && !bid;
-    const showScheduleConsultation = canEditBid && !bid && mode === "after_consultation";
-    const showPricingFields = canEditBid && (mode === "upfront" || consultationScheduled);
+    const showModeToggle = canEditBid && !bid && row.biddingOpen;
+    const showScheduleConsultation = canEditBid && !bid && mode === "after_consultation" && row.biddingOpen;
+    const showPricingFields = canEditBid && (mode === "upfront" || consultationScheduled || pricingPending);
 
     return (
       <>
@@ -608,7 +625,7 @@ export function VendorWorkOrdersPanel() {
     sorted.length === 0
       ? "No work orders offered to you yet."
       : tab === "to_bid"
-        ? "No work orders awaiting your price."
+        ? "No pending work orders."
         : tab === "scheduled"
           ? "No scheduled work orders."
           : "No completed work orders yet.";
@@ -634,33 +651,42 @@ export function VendorWorkOrdersPanel() {
           <div className="space-y-2 lg:hidden">
             {visible.map((row) => {
               const bid = bidsByWorkOrderId[row.id];
+              const pricingPending = isPricingPendingBid(bid);
               const isExpanded = expandedId === row.id;
               return (
                 <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <button type="button" className="w-full text-left" onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}>
-                    <p className="truncate font-semibold text-foreground">{row.title}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted">{propertyLabel(row)}</p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <WorkOrderStatusBadge bucket={row.bucket} />
-                      {row.biddingOpen ? (
-                        <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                          {bid && bid.amountCents == null
-                            ? "Pricing pending"
-                            : bid
-                              ? "Bid submitted"
-                              : "Open for bids"}
-                        </span>
-                      ) : null}
-                      {row.automationStatus === "vendor_marked_done" ? (
-                        <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                          Awaiting approval
-                        </span>
-                      ) : row.automationStatus === "paid" ? (
-                        <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                          Paid
-                        </span>
-                      ) : null}
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
+                    aria-expanded={isExpanded}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{row.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">{propertyLabel(row)}</p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <WorkOrderStatusBadge bucket={row.bucket} />
+                        {row.biddingOpen || pricingPending ? (
+                          <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                            {pricingPending
+                              ? "Pricing pending"
+                              : bid
+                                ? "Bid submitted"
+                                : "Open for bids"}
+                          </span>
+                        ) : null}
+                        {row.automationStatus === "vendor_marked_done" ? (
+                          <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                            Awaiting approval
+                          </span>
+                        ) : row.automationStatus === "paid" ? (
+                          <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                            Paid
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
+                    <PortalTableExpandChevron expanded={isExpanded} />
                   </button>
                   {isExpanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
@@ -677,11 +703,15 @@ export function VendorWorkOrdersPanel() {
                     <th className={MANAGER_TABLE_TH}>Scheduled visit</th>
                     <th className={MANAGER_TABLE_TH}>Status</th>
                     <th className={MANAGER_TABLE_TH}>Bid</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((row) => {
                     const bid = bidsByWorkOrderId[row.id];
+                    const pricingPending = isPricingPendingBid(bid);
                     const isExpanded = expandedId === row.id;
                     return (
                       <Fragment key={row.id}>
@@ -699,6 +729,11 @@ export function VendorWorkOrdersPanel() {
                           <td className={PORTAL_TABLE_TD}>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <WorkOrderStatusBadge bucket={row.bucket} />
+                              {pricingPending ? (
+                                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                                  Pricing pending
+                                </span>
+                              ) : null}
                               {row.automationStatus === "vendor_marked_done" ? (
                                 <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
                                   Awaiting approval
@@ -711,9 +746,9 @@ export function VendorWorkOrdersPanel() {
                             </div>
                           </td>
                           <td className={PORTAL_TABLE_TD}>
-                            {row.biddingOpen ? (
+                            {row.biddingOpen || pricingPending ? (
                               <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                                {bid && bid.amountCents == null ? "Pricing pending" : bid ? "Submitted" : "Open"}
+                                {pricingPending ? "Pricing pending" : bid ? "Submitted" : "Open"}
                               </span>
                             ) : bid?.status === "accepted" ? (
                               <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
@@ -723,10 +758,11 @@ export function VendorWorkOrdersPanel() {
                               <span className="text-muted">—</span>
                             )}
                           </td>
+                          <PortalTableExpandCell expanded={isExpanded} />
                         </tr>
                         {isExpanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowDetail(row)}
                             </td>
                           </tr>

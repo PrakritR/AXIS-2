@@ -15,8 +15,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
@@ -575,14 +578,18 @@ export function ManagerLeasesPipelinePanel({
           <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
             <button
               type="button"
-              className="w-full text-left"
+              className="flex w-full items-center justify-between gap-2 text-left"
               onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+              aria-expanded={expandedId === row.id}
             >
-              <p className="truncate font-semibold text-foreground">{row.residentName}</p>
-              <p className="mt-0.5 truncate text-xs text-muted">
-                {row.unit} · {row.status ?? row.stageLabel}
-              </p>
-              <p className="mt-0.5 truncate text-[11px] text-muted/90">Updated {row.updated}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-foreground">{row.residentName}</p>
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {row.unit} · {row.status ?? row.stageLabel}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-muted/90">Updated {row.updated}</p>
+              </div>
+              <PortalTableExpandChevron expanded={expandedId === row.id} />
             </button>
             {expandedId === row.id ? (
               <div className="mt-3 border-t border-border pt-3">{renderLeaseRowDetail(row)}</div>
@@ -600,6 +607,9 @@ export function ManagerLeasesPipelinePanel({
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Unit / home</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Stage</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
+                <th className={PORTAL_TABLE_EXPAND_TH}>
+                  <span className="sr-only">Expand</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -617,10 +627,11 @@ export function ManagerLeasesPipelinePanel({
                     <td className={PORTAL_TABLE_TD}>{row.unit}</td>
                     <td className={PORTAL_TABLE_TD}>{row.status ?? row.stageLabel}</td>
                     <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
+                    <PortalTableExpandCell expanded={expandedId === row.id} />
                   </tr>
                   {expandedId === row.id ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                      <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                         {renderLeaseRowDetail(row)}
                       </td>
                     </tr>

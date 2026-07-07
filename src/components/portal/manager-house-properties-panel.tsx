@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
@@ -19,8 +18,11 @@ import {
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PORTAL_MOBILE_CARD_CLASS,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -31,7 +33,6 @@ import {
   deleteUnlistedManagerProperty,
   listAdminRow,
   managerPropertyRowsForStage,
-  publicListingHrefForPropertyRow,
   readAdminPropertyRows,
   resolveAdminPropertyRowPreview,
   removeRejectedProperty,
@@ -59,7 +60,6 @@ import {
 } from "@/lib/manager-listing-submission";
 import {
   buildManagerApplyUrl,
-  buildManagerListingUrl,
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
@@ -218,9 +218,9 @@ function ManagerPropertyInlineDetails({
   };
 
   if (!row || !mock || !managerSubmission) return null;
-  const publicHref = publicListingHrefForPropertyRow(row);
 
   const actionBtnClass = "w-full rounded-full";
+  const canEditListing = Boolean(displaySub && portalSub);
 
   const footer = (
     <div className="flex flex-col gap-3">
@@ -328,11 +328,6 @@ function ManagerPropertyInlineDetails({
           >
             Unlist
           </Button>
-          {displaySub && portalSub ? (
-            <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
-              Edit listing
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -409,20 +404,13 @@ function ManagerPropertyInlineDetails({
           </Button>
         </div>
       ) : null}
-
-      {displaySub && portalSub && !(bucket === 2 && listingId) ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
-            Edit listing
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 
   return (
     <div className="space-y-4">
-      {row.tagline.trim() ? <p className="text-sm text-muted">{row.tagline}</p> : null}
+      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">{footer}</div>
+
       <PortalCollapsibleSection
         title="Preview"
         titleVariant="label"
@@ -432,19 +420,20 @@ function ManagerPropertyInlineDetails({
         surfaceMuted={false}
         toggleDataAttr="listing-preview-toggle"
         headerActions={
-          publicHref ? (
-            <Link
-              href={publicHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-attr="listing-open-public-page"
-              className="text-xs font-semibold text-muted underline-offset-2 hover:underline"
+          canEditListing ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              data-attr="listing-edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditorOpen(true);
+              }}
             >
-              Open public page
-            </Link>
-          ) : (
-            <span className="text-xs text-muted">Exact layout renters see once approved</span>
-          )
+              Edit
+            </Button>
+          ) : null
         }
         contentClassName="p-0"
       >
@@ -486,8 +475,6 @@ function ManagerPropertyInlineDetails({
       {bucket === 2 && listingId ? (
         <ManagerPropertyPromotionPanel listingId={listingId} showToast={showToast} onUpdated={onUpdated} />
       ) : null}
-
-      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">{footer}</div>
 
       {editorOpen && portalSub ? (
         <ManagerAddListingForm
@@ -616,18 +603,22 @@ export function ManagerHousePropertiesPanel({
                 <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="w-full text-left"
+                    className="flex w-full items-center justify-between gap-2 text-left"
                     onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                    aria-expanded={expanded}
                   >
-                    <p className="font-medium text-foreground">{row.buildingName}</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                      {row.address}
-                      {row.zip ? `, ${row.zip}` : ""}
-                    </p>
-                    <p className="mt-1.5 text-xs text-muted">
-                      <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
-                      ba · {row.neighborhood}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground">{row.buildingName}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                        {row.address}
+                        {row.zip ? `, ${row.zip}` : ""}
+                      </p>
+                      <p className="mt-1.5 text-xs text-muted">
+                        <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
+                        ba · {row.neighborhood}
+                      </p>
+                    </div>
+                    <PortalTableExpandChevron expanded={expanded} />
                   </button>
                   {expanded ? (
                     <div className="mt-3 border-t border-border pt-3">
@@ -645,6 +636,9 @@ export function ManagerHousePropertiesPanel({
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -676,10 +670,11 @@ export function ManagerHousePropertiesPanel({
                               ba · {row.neighborhood}
                             </p>
                           </td>
+                          <PortalTableExpandCell expanded={expanded} />
                         </tr>
                         {expanded ? (
                           <tr key={`${rowKey}-details`} className="border-b border-border">
-                            <td colSpan={2} className="bg-accent/30/40 px-4 py-4">
+                            <td colSpan={3} className="bg-accent/30/40 px-4 py-4">
                               {renderRowDetail(sourceBucket, row, rowKey)}
                             </td>
                           </tr>
