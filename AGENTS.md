@@ -389,3 +389,14 @@ was added; `vendor-work-orders-panel.tsx`'s Completed tab renders an "Invoice" b
 fields `approve-pay` already logs as expenses) plus the matching `vendor_payouts` row's status,
 fetched via `GET /api/vendor/payouts` (vendor's own rows only, no join — the client already has
 full work-order context from `readVendorWorkOrderRows()`).
+
+**An accepted bid's `amount_cents` is the immutable payout anchor — nothing may overwrite it
+after acceptance.** `approve-pay`/`payoutVendorForWorkOrder` trust `work_order_bids.amount_cents`
+of the `accepted` bid as ground truth for the real Stripe transfer, precisely so a forged
+request body can't inflate a payout. `/api/portal/work-orders/set-vendor-price` (the vendor's
+own pre-"mark done" price-entry route) must check the bid's status *before* writing anything and
+return 409 if it's already `"accepted"` — do not let it fall through to updating
+`work_order_bids` or `portal_work_order_records.row_data.vendorCostCents` in that case. It may
+still set a price when there's no bid, or the bid is merely `"submitted"` (not yet accepted). A
+regression here shipped after the fix commits (`e07b70c`, `eac1439`) added this exact anchoring
+invariant — see `tests/integration/portal/set-vendor-price.test.ts` for the guarding tests.
