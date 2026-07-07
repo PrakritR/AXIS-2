@@ -172,7 +172,7 @@ export function buildSimulatedReportSnapshot(input: {
     snapshot.est_monthly_income_cents = 420000;
     snapshot.est_monthly_payments_cents = 7500;
   } else {
-    const clear = digits(input.ssn).slice(-1) % 2 === 0;
+    const clear = Number(digits(input.ssn).slice(-1)) % 2 === 0;
     const status = clear ? "clear" : "consider";
     assign("criminal_history", status);
     assign("credit_report", status);
