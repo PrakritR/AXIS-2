@@ -453,7 +453,15 @@ export function ResidentHousingBrowse() {
             ) : null}
           </div>
         </div>
-        <div className="mt-4 border-t border-border/40 pt-4 lg:hidden">
+        <div className="mt-4 space-y-4 border-t border-border/40 pt-4 lg:hidden">
+          <ResidentHousingChat
+            onApplyFilters={applyChatFilters}
+            title="What would you like in your next home?"
+            subtitle="Describe the type of home you want — room setup, budget, neighborhood, or move-in dates."
+            placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
+            showMatchListings={false}
+          />
+          <div className="h-px w-full bg-border/50" />
           <BrowseManualFilters
             moveIn={moveIn}
             setMoveIn={setMoveIn}

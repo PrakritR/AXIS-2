@@ -1408,12 +1408,31 @@ html[data-native] .auth-layout-main:has(.native-auth-hub) {
   scroll-padding-bottom: max(1.25rem, var(--native-safe-bottom));
 }
 
-html[data-native] .auth-layout-main:has(.native-auth-hub-stack) {
+html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="sign-in"]) {
   justify-content: center;
+  align-items: center;
+}
+
+html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="create"]) {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="sign-in"]) {
+  margin: auto;
+  align-self: center;
+}
+
+html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="create"]) {
+  margin: 0 auto;
+  align-self: center;
+  max-width: min(100%, 52rem);
+  width: 100%;
 }
 
 html[data-native] .native-auth-hub-stack {
   flex: 0 0 auto;
+  width: 100%;
 }
 
 html[data-native] .native-auth-hub-footer {
@@ -1867,6 +1886,25 @@ html[data-native] h1.text-\[1\.35rem\] {
 
 html[data-native] #axis-public-navbar {
   display: none;
+}
+
+html[data-native] [data-listing-subnav] {
+  top: var(--native-safe-top, env(safe-area-inset-top, 0px)) !important;
+  z-index: 50;
+}
+
+html[data-native] [data-listing-sections-root] {
+  --listing-sticky-stack: calc(var(--native-safe-top, env(safe-area-inset-top, 0px)) + 4.25rem);
+}
+
+@media (max-width: 1023px) {
+  [data-listing-sections-root] {
+    --listing-sticky-stack: calc(env(safe-area-inset-top, 0px) + 4.25rem);
+  }
+
+  [data-listing-subnav] {
+    top: env(safe-area-inset-top, 0px);
+  }
 }
 
 @media (max-width: 1023px) {

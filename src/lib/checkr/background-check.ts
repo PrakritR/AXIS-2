@@ -185,7 +185,8 @@ export async function runBackgroundCheck(opts: {
     };
   }
 
-  const packageSlug: CheckrPackage = isCheckrPackage(opts.packageSlug ?? "") ? opts.packageSlug! : "essential";
+  const rawPackageSlug = opts.packageSlug ?? "";
+  const packageSlug: CheckrPackage = isCheckrPackage(rawPackageSlug) ? rawPackageSlug : "essential";
   const addOnProducts = (opts.addOnProducts ?? []).filter(isCheckrAddOn) as CheckrAddOnSlug[];
   const costCents = checkrOrderCostCents(packageSlug, addOnProducts);
 

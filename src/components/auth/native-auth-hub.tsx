@@ -26,8 +26,8 @@ import { isNativeOAuthInProgress } from "@/lib/native/open-url";
 import { getNativeInfo } from "@/lib/native/push-client";
 import { loadManagerPlanTiers } from "@/lib/site-content";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 
 type AuthMode = "sign-in" | "create";
 type AccountRole = "resident" | "manager" | "vendor";
@@ -88,7 +88,14 @@ function RoleToggle({
   );
 }
 
+function scrollAuthMainToTop() {
+  const main = document.querySelector<HTMLElement>(".auth-layout-main");
+  main?.scrollTo({ top: 0, left: 0, behavior: "instant" });
+}
+
 function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { showToast } = useAppUi();
   useAuthWelcomeChrome(true);
@@ -127,6 +134,20 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from stored login on mount
     if (remembered) setEmail(remembered);
   }, []);
+
+  useEffect(() => {
+    const routeMode: AuthMode =
+      pathname === "/auth/create-account" || searchParams.get("mode") === "create"
+        ? "create"
+        : "sign-in";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync hub mode when auth route changes
+    setMode(routeMode);
+    scrollAuthMainToTop();
+  }, [pathname, searchParams]);
+
+  useEffect(() => {
+    scrollAuthMainToTop();
+  }, [mode]);
 
   useEffect(() => {
     // If we arrived without an explicit ?tier= (e.g. a pricing redirect only persisted the
@@ -261,9 +282,25 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
     return qs ? `/auth/sign-in?${qs}` : "/auth/sign-in";
   })();
 
+  const openCreateAccount = useCallback(() => {
+    setMode("create");
+    router.push(createAccountHref);
+    requestAnimationFrame(scrollAuthMainToTop);
+  }, [createAccountHref, router]);
+
+  const openSignIn = useCallback(() => {
+    setMode("sign-in");
+    router.push(signInHref);
+    requestAnimationFrame(scrollAuthMainToTop);
+  }, [router, signInHref]);
+
   if (checkingSession) {
+    const loadingMode = defaultMode === "create" ? "create" : "sign-in";
     return (
-      <div className="native-auth-hub-stack mx-auto w-full max-w-[460px]">
+      <div
+        className={`native-auth-hub-stack mx-auto w-full ${loadingMode === "create" ? "max-w-[52rem]" : "max-w-[460px]"}`}
+        data-auth-mode={loadingMode}
+      >
         <AuthCard>
           <AuthLoadingCard />
         </AuthCard>
@@ -271,10 +308,10 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
     );
   }
 
-  const stackClassName = `native-auth-hub-stack mx-auto w-full ${isCreate ? "max-w-[52rem]" : "max-w-[460px]"}`;
+  const stackClassName = `native-auth-hub-stack mx-auto w-full self-center ${isCreate ? "max-w-[52rem]" : "max-w-[460px]"}`;
 
   return (
-    <div className={stackClassName}>
+    <div className={stackClassName} data-auth-mode={isCreate ? "create" : "sign-in"}>
       <AuthCard wide={isCreate}>
         <div className="native-auth-hub">
           <AuthBrandHeader />
@@ -372,23 +409,45 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
       <div className="native-auth-hub-footer mt-5 space-y-2 text-center text-[12px]">
         {mode === "sign-in" ? (
           <p>
-            <Link
-              className="font-semibold text-primary hover:opacity-90"
-              href={createAccountHref}
-              data-attr="auth-hub-create-account"
-            >
-              Create your account
-            </Link>
+            {isNative ? (
+              <button
+                type="button"
+                onClick={openCreateAccount}
+                data-attr="auth-hub-create-account"
+                className="font-semibold text-primary hover:opacity-90"
+              >
+                Create your account
+              </button>
+            ) : (
+              <Link
+                className="font-semibold text-primary hover:opacity-90"
+                href={createAccountHref}
+                data-attr="auth-hub-create-account"
+              >
+                Create your account
+              </Link>
+            )}
           </p>
         ) : (
           <p>
-            <Link
-              className="font-semibold text-primary hover:opacity-90"
-              href={signInHref}
-              data-attr="auth-hub-sign-in"
-            >
-              Sign in
-            </Link>
+            {isNative ? (
+              <button
+                type="button"
+                onClick={openSignIn}
+                data-attr="auth-hub-sign-in"
+                className="font-semibold text-primary hover:opacity-90"
+              >
+                Sign in
+              </button>
+            ) : (
+              <Link
+                className="font-semibold text-primary hover:opacity-90"
+                href={signInHref}
+                data-attr="auth-hub-sign-in"
+              >
+                Sign in
+              </Link>
+            )}
           </p>
         )}
         {!isNative ? (
@@ -408,10 +467,14 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
 }
 
 export function NativeAuthHub({ defaultMode = "sign-in" }: { defaultMode?: AuthMode } = {}) {
+  const fallbackMode = defaultMode === "create" ? "create" : "sign-in";
   return (
     <Suspense
       fallback={
-        <div className="native-auth-hub-stack mx-auto w-full max-w-[460px]">
+        <div
+          className={`native-auth-hub-stack mx-auto w-full ${fallbackMode === "create" ? "max-w-[52rem]" : "max-w-[460px]"}`}
+          data-auth-mode={fallbackMode}
+        >
           <AuthCard>
             <AuthLoadingCard />
           </AuthCard>

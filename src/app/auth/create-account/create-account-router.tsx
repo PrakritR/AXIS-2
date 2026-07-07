@@ -5,6 +5,15 @@ import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CreateAccountClient from "./create-account-client";
+import { AuthCard } from "@/components/auth/auth-card";
+
+function CreateAccountLoading() {
+  return (
+    <AuthCard>
+      <p className="text-center text-sm text-muted">Loading…</p>
+    </AuthCard>
+  );
+}
 
 /**
  * On the WEB, manager signup lives on the pricing page (plan cards + integrated
@@ -42,8 +51,14 @@ export default function CreateAccountRouter() {
   if (hasLegacyContext) {
     return <CreateAccountClient />;
   }
-  if (isResident || isVendor || modeCreate || isNative === true) {
+  if (isResident || isVendor || modeCreate) {
     return <NativeAuthHub defaultMode="create" />;
+  }
+  if (isNative === true) {
+    return <NativeAuthHub defaultMode="create" />;
+  }
+  if (isNative === null) {
+    return <CreateAccountLoading />;
   }
   return null;
 }

@@ -242,21 +242,30 @@ export function ListingDetailSections({
   return (
     <ListingPreviewNewTabContext.Provider value={previewModal}>
     <div className="bg-background text-foreground" data-listing-sections-root>
-      <div className={`mx-auto max-w-6xl px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.75rem,env(safe-area-inset-top))]"}`}>
+      <div className={`mx-auto flex max-w-6xl flex-col px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.5rem,env(safe-area-inset-top))]"}`}>
         {previewModal ? (
           <ListingStickySubnav mode="modal" />
         ) : (
           <Link
             href="/rent/browse"
             data-attr="listing-detail-back"
-            className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:opacity-90"
+            className="order-1 mb-3 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:opacity-90 lg:mb-5"
           >
             ← Back to homes
           </Link>
         )}
-        <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
 
-        <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        {!previewModal ? (
+          <div className="order-2 -mx-4 mb-4 lg:order-4 lg:mx-0 lg:mb-0 lg:mt-6">
+            <ListingStickySubnav />
+          </div>
+        ) : null}
+
+        <div className="order-3 lg:order-2">
+          <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
+        </div>
+
+        <div className="order-4 mt-8 flex flex-col gap-4 lg:order-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <Badge tone="info">{property.neighborhood}</Badge>
             <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
@@ -278,10 +287,8 @@ export function ListingDetailSections({
           </div>
         </div>
 
-        <div className={previewModal ? "mt-4" : "mt-6"}>
-          {previewModal ? null : <ListingStickySubnav />}
-
-          <div className={`relative z-0 grid gap-10 lg:grid-cols-[1fr_minmax(280px,320px)] ${previewModal ? "mt-6" : "mt-10"}`}>
+        <div className={`order-5 relative z-0 ${previewModal ? "mt-6" : "mt-6 lg:mt-10"}`}>
+          <div className="grid gap-10 lg:grid-cols-[1fr_minmax(280px,320px)]">
             <div className="order-2 space-y-14 lg:order-1">
               <section id="floor-plans" className={sectionScroll}>
                 <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
