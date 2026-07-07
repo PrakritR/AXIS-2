@@ -563,7 +563,7 @@ export function PortalToolbarSortSelect<T extends string>({
 /** Standard filter row wrapper (status pills + optional sort). */
 export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
   return (
-    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-3">{children}</div>
+    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-4">{children}</div>
   );
 }
 
