@@ -30,11 +30,16 @@ import {
   LISTING_ROOM_CHOICE_SEP,
 } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
+import { clearRentalWizardDraft, loadRentalWizardDraft, loadRentalWizardDraftAxisId, saveRentalWizardDraft, saveRentalWizardDraftAxisId } from "@/lib/rental-application/drafts";
 import {
+  applicationsForResidentEmail,
   residentApplicationFeeGate,
   residentApplicationSubmitBlocked,
 } from "@/lib/rental-application/application-policy";
-import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
+import {
+  isInProgressApplicationRow,
+  syncInProgressApplicationRow,
+} from "@/lib/rental-application/in-progress-application";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
 import {
@@ -50,7 +55,8 @@ import {
   scrollToFirstWizardFieldError,
 } from "@/lib/wizard-field-errors";
 import {
-  appendManagerApplicationRow,
+  replaceManagerApplicationRowInCache,
+  syncManagerApplicationsFromServer,
   syncPublicApprovedApplicationsFromServer,
   upsertApplicationRowToServerAwait,
 } from "@/lib/manager-applications-storage";
@@ -75,6 +81,14 @@ function makeNewApplicationId(): string {
     return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   }
   return `AXIS-${Date.now().toString(36).toUpperCase()}`;
+}
+
+function ensureRentalWizardAxisId(): string {
+  const existing = loadRentalWizardDraftAxisId()?.trim();
+  if (existing) return existing;
+  const id = makeNewApplicationId();
+  saveRentalWizardDraftAxisId(id);
+  return id;
 }
 
 const STEP_META = [
@@ -287,6 +301,42 @@ function RentalApplicationWizardInner({
   }, [draftReady, form]);
 
   useEffect(() => {
+    if (!draftReady || mode !== "portal") return;
+    const email = form.email.trim();
+    const pid = form.propertyId.trim();
+    if (!email.includes("@") || !pid) return;
+    const axisId = ensureRentalWizardAxisId();
+    syncInProgressApplicationRow({ axisId, form, residentEmail: email });
+  }, [draftReady, mode, form]);
+
+  useEffect(() => {
+    if (!draftReady || mode !== "portal") return;
+    const email = (sessionEmail ?? form.email).trim().toLowerCase();
+    if (!email.includes("@")) return;
+    if (loadRentalWizardDraft()) return;
+
+    let cancelled = false;
+    void syncManagerApplicationsFromServer({ force: true }).then(() => {
+      if (cancelled || loadRentalWizardDraft()) return;
+      const inProgress = applicationsForResidentEmail(email).filter(isInProgressApplicationRow);
+      if (inProgress.length === 0) return;
+      const linkedPid = searchParams.get("propertyId")?.trim();
+      const hit =
+        (linkedPid ? inProgress.find((row) => (row.propertyId?.trim() || row.application?.propertyId?.trim()) === linkedPid) : undefined) ??
+        inProgress[0];
+      if (!hit?.application) return;
+      saveRentalWizardDraftAxisId(hit.id);
+      saveRentalWizardDraft({ ...createInitialRentalWizardState(), ...hit.application, email });
+      queueMicrotask(() => {
+        setForm({ ...createInitialRentalWizardState(), ...hit.application, email });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftReady, form.email, mode, searchParams, sessionEmail]);
+
+  useEffect(() => {
     if (!draftReady) return;
     const pid = searchParams.get("propertyId")?.trim();
     if (!pid) return;
@@ -447,7 +497,7 @@ function RentalApplicationWizardInner({
       }
       setSubmitting(true);
       const prop = pid ? getPropertyById(pid) : undefined;
-      const axisId = makeNewApplicationId();
+      const axisId = loadRentalWizardDraftAxisId()?.trim() || makeNewApplicationId();
       const listing = prop;
       const applicantName = form.fullLegalName.trim() || "Applicant";
 
@@ -475,7 +525,7 @@ function RentalApplicationWizardInner({
         application: structuredClone(form),
       };
 
-      appendManagerApplicationRow(applicationRow);
+      replaceManagerApplicationRowInCache(applicationRow);
       const sync = await upsertApplicationRowToServerAwait(applicationRow);
 
       let emailSent = false;

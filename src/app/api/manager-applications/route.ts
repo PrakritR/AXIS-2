@@ -71,6 +71,32 @@ async function persistNormalizedRow(db: ReturnType<typeof createSupabaseServiceR
   }
 }
 
+async function resolvePortalRole(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  user: NonNullable<Awaited<ReturnType<typeof sessionUser>>>,
+) {
+  const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
+  const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+  const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+  return { role, email };
+}
+
+function isManagerPortalRole(role: string): boolean {
+  return role === "manager" || role === "owner" || role === "pro";
+}
+
+async function assertManagerOrAdminWriteAccess(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  user: NonNullable<Awaited<ReturnType<typeof sessionUser>>>,
+): Promise<NextResponse | null> {
+  if (await isAdminUser(user.id)) return null;
+  const { role } = await resolvePortalRole(db, user);
+  if (!isManagerPortalRole(role)) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
+  }
+  return null;
+}
+
 async function fetchApplicationsForManagerUser(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
   userId: string,
@@ -122,6 +148,62 @@ async function fetchApplicationsForManagerUser(
   });
 }
 
+type ApplicationRecordForDelete = {
+  id: string;
+  row_data: unknown;
+  manager_user_id?: string | null;
+  resident_email?: string | null;
+  property_id?: string | null;
+  assigned_property_id?: string | null;
+};
+
+async function assertCanDeleteApplicationRecords(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  user: NonNullable<Awaited<ReturnType<typeof sessionUser>>>,
+  records: ApplicationRecordForDelete[],
+): Promise<string | null> {
+  if (records.length === 0) return null;
+
+  const admin = await isAdminUser(user.id);
+  if (admin) return null;
+
+  const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
+  const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+  const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+
+  if (role === "resident") {
+    for (const record of records) {
+      const row = normalizeRow(record.row_data as DemoApplicantRow);
+      const rowEmail = (row.email ?? record.resident_email ?? "").trim().toLowerCase();
+      if (!email || rowEmail !== email) {
+        return "You can only withdraw your own application.";
+      }
+      if (row.bucket !== "pending") {
+        return "This application can no longer be withdrawn.";
+      }
+    }
+    return null;
+  }
+
+  if (role === "manager" || role === "owner" || role === "pro") {
+    const linkedPropertyIds = await collectLinkedPropertyIdsForUser(db, user.id);
+    for (const record of records) {
+      const row = normalizeRow(record.row_data as DemoApplicantRow);
+      const managerUserId = record.manager_user_id ?? row.managerUserId ?? null;
+      if (managerUserId === user.id) continue;
+      const propertyId = (record.property_id ?? row.propertyId ?? row.application?.propertyId ?? "").trim();
+      const assignedPropertyId = (record.assigned_property_id ?? row.assignedPropertyId ?? "").trim();
+      if ((propertyId && linkedPropertyIds.has(propertyId)) || (assignedPropertyId && linkedPropertyIds.has(assignedPropertyId))) {
+        continue;
+      }
+      return "You do not have permission to delete this application.";
+    }
+    return null;
+  }
+
+  return "Unauthorized.";
+}
+
 export async function GET() {
   try {
     const user = await sessionUser();
@@ -129,9 +211,7 @@ export async function GET() {
 
     const db = createSupabaseServiceRoleClient();
     const admin = await isAdminUser(user.id);
-    const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
-    const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
-    const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+    const { role, email } = await resolvePortalRole(db, user);
 
     let data: { id: string; row_data: unknown }[] | null = null;
     let error: { message: string } | null = null;
@@ -152,7 +232,7 @@ export async function GET() {
       } catch (e) {
         error = { message: e instanceof Error ? e.message : "Failed to load applications." };
       }
-    } else {
+    } else if (admin) {
       const result = await db
         .from("manager_application_records")
         .select("id, row_data, updated_at")
@@ -160,6 +240,8 @@ export async function GET() {
         .limit(500);
       data = result.data;
       error = result.error;
+    } else {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
     }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -215,6 +297,10 @@ export async function POST(req: Request) {
       if (!user && rows.some((row) => row.bucket === "approved")) {
         return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
       }
+      if (user) {
+        const writeGate = await assertManagerOrAdminWriteAccess(db, user);
+        if (writeGate) return writeGate;
+      }
       for (const row of rows) {
         await persistNormalizedRow(db, row.id, row);
         if (row.bucket === "pending" && row.application?.consentCredit) {
@@ -225,12 +311,13 @@ export async function POST(req: Request) {
     }
 
     if (body.action === "delete") {
+      if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
       const id = body.id?.trim();
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
       const ids = idVariants(id);
       const { data: records, error: loadError } = await db
         .from("manager_application_records")
-        .select("id, row_data")
+        .select("id, row_data, manager_user_id, resident_email, property_id, assigned_property_id")
         .or(ids.map((value) => `id.eq.${value}`).join(","));
       if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
 
@@ -241,7 +328,7 @@ export async function POST(req: Request) {
 
       const { data: allRecords, error: allLoadError } = await db
         .from("manager_application_records")
-        .select("id, row_data");
+        .select("id, row_data, manager_user_id, resident_email, property_id, assigned_property_id");
       if (allLoadError) return NextResponse.json({ error: allLoadError.message }, { status: 500 });
 
       for (const record of allRecords ?? []) {
@@ -252,6 +339,14 @@ export async function POST(req: Request) {
       }
 
       if (idsToDelete.size > 0) {
+        const { data: recordsToDelete, error: fetchError } = await db
+          .from("manager_application_records")
+          .select("id, row_data, manager_user_id, resident_email, property_id, assigned_property_id")
+          .in("id", [...idsToDelete]);
+        if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+        const authError = await assertCanDeleteApplicationRecords(db, user, recordsToDelete ?? []);
+        if (authError) return NextResponse.json({ error: authError }, { status: 403 });
+
         const { error } = await db.from("manager_application_records").delete().in("id", [...idsToDelete]);
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       }
@@ -263,10 +358,8 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json({ error: "Sign in to submit an application." }, { status: 401 });
     }
-    const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
-    const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+    const { role, email } = await resolvePortalRole(db, user);
     if (role === "resident") {
-      const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
       const rowEmail = (row.email ?? "").trim().toLowerCase();
       if (!email || rowEmail !== email) {
         return NextResponse.json({ error: "You can only update your own application." }, { status: 403 });
@@ -314,6 +407,9 @@ export async function POST(req: Request) {
         row,
         isNewSubmit: !existing,
       });
+    } else {
+      const writeGate = await assertManagerOrAdminWriteAccess(db, user);
+      if (writeGate) return writeGate;
     }
     await persistNormalizedRow(db, row.id, row);
     if (row.bucket === "pending" && row.application?.consentCredit) {

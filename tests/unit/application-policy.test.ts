@@ -2,8 +2,10 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   residentApplicationFeeGate,
   residentApplicationSubmitBlocked,
+  residentCanWithdrawApplication,
   shouldWaiveApplicationFeeForResident,
 } from "@/lib/rental-application/application-policy";
+import { IN_PROGRESS_APPLICATION_STAGE } from "@/lib/rental-application/in-progress-application";
 
 vi.mock("@/lib/manager-applications-storage", () => ({
   readManagerApplicationRows: vi.fn(() => []),
@@ -78,6 +80,39 @@ describe("application-policy", () => {
     expect(block.blocked).toBe(true);
   });
 
+  it("allows withdraw only for pending applications", () => {
+    expect(
+      residentCanWithdrawApplication({
+        id: "AXIS-1",
+        email: "a@test.com",
+        bucket: "pending",
+        name: "A",
+        property: "P",
+        stage: "Submitted",
+      }),
+    ).toBe(true);
+    expect(
+      residentCanWithdrawApplication({
+        id: "AXIS-2",
+        email: "a@test.com",
+        bucket: "approved",
+        name: "A",
+        property: "P",
+        stage: "Approved",
+      }),
+    ).toBe(false);
+    expect(
+      residentCanWithdrawApplication({
+        id: "AXIS-3",
+        email: "a@test.com",
+        bucket: "rejected",
+        name: "A",
+        property: "P",
+        stage: "Rejected",
+      }),
+    ).toBe(false);
+  });
+
   it("allows another property when multiple applications are enabled", () => {
     vi.mocked(readManagerApplicationRows).mockReturnValue([
       {
@@ -96,5 +131,65 @@ describe("application-policy", () => {
       roomChoice1: "room-b",
     });
     expect(block.blocked).toBe(false);
+  });
+
+  it("allows finishing an in-progress application on the same property", () => {
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: "AXIS-1",
+        email: "a@test.com",
+        bucket: "pending",
+        name: "A",
+        property: "P",
+        propertyId: "prop-multi",
+        stage: IN_PROGRESS_APPLICATION_STAGE,
+      },
+    ]);
+    const block = residentApplicationSubmitBlocked({
+      propertyId: "prop-multi",
+      residentEmail: "a@test.com",
+      roomChoice1: "room-a",
+    });
+    expect(block.blocked).toBe(false);
+  });
+
+  it("blocks duplicate submitted pending applications for the same property and room", () => {
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: "AXIS-1",
+        email: "a@test.com",
+        bucket: "pending",
+        name: "A",
+        property: "P",
+        propertyId: "prop-multi",
+        stage: "Submitted",
+        application: { roomChoice1: "room-a" },
+      },
+    ]);
+    const block = residentApplicationSubmitBlocked({
+      propertyId: "prop-multi",
+      residentEmail: "a@test.com",
+      roomChoice1: "room-a",
+    });
+    expect(block.blocked).toBe(true);
+  });
+
+  it("does not waive fee for in-progress-only prior application", () => {
+    vi.mocked(readManagerApplicationRows).mockReturnValue([
+      {
+        id: "AXIS-1",
+        email: "a@test.com",
+        bucket: "pending",
+        name: "A",
+        property: "P",
+        stage: IN_PROGRESS_APPLICATION_STAGE,
+      },
+    ]);
+    expect(
+      shouldWaiveApplicationFeeForResident({
+        propertyId: "prop-fee-first",
+        residentEmail: "a@test.com",
+      }),
+    ).toBe(false);
   });
 });

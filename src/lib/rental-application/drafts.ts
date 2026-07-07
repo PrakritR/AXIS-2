@@ -1,6 +1,7 @@
 import type { RentalWizardFormState } from "./types";
 
 const RENTAL_WIZARD_DRAFT_KEY = "axis:rental-application:draft:v1";
+export const DRAFT_AXIS_ID_KEY = "axis:rental-application:draft-axis-id:v1";
 const COSIGNER_DRAFT_KEY = "axis:rental-cosigner:draft:v1";
 const memoryDrafts = new Map<string, unknown>();
 
@@ -31,8 +32,17 @@ export function saveRentalWizardDraft(value: RentalWizardFormState) {
   writeJson(RENTAL_WIZARD_DRAFT_KEY, value);
 }
 
+export function loadRentalWizardDraftAxisId(): string | null {
+  return readJson<string>(DRAFT_AXIS_ID_KEY);
+}
+
+export function saveRentalWizardDraftAxisId(id: string) {
+  writeJson(DRAFT_AXIS_ID_KEY, id.trim());
+}
+
 export function clearRentalWizardDraft() {
   removeItem(RENTAL_WIZARD_DRAFT_KEY);
+  removeItem(DRAFT_AXIS_ID_KEY);
 }
 
 export function loadCosignerDraft<T>(): T | null {

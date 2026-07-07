@@ -273,7 +273,7 @@ export function ResidentDashboard({
       <div className={PORTAL_DASHBOARD_STACK}>
         {appStatus === "approved" ? (
           <>
-            <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Applications"
@@ -310,7 +310,9 @@ export function ResidentDashboard({
                   )}
                 </div>
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader title="Move-in" href={`${BASE}/move-in`} linkLabel="Move-in →" />
                 {appProperty || appRoom || moveInDateLabel ? (
@@ -339,46 +341,6 @@ export function ResidentDashboard({
                 )}
               </div>
 
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader
-                  title="Services"
-                  href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
-                  linkLabel="Services →"
-                />
-                {canUseFullPortal ? (
-                  pendingRequests + pendingWorkOrders === 0 ? (
-                    <p className="mt-4 text-sm text-muted">No pending service requests or work orders.</p>
-                  ) : (
-                    <ul className="mt-3 space-y-2">
-                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                        <span className="text-sm text-muted">Requests</span>
-                        {pendingRequests > 0 ? (
-                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                            {pendingRequests}
-                          </span>
-                        ) : (
-                          <span className="text-sm font-semibold text-muted">0</span>
-                        )}
-                      </li>
-                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                        <span className="text-sm text-muted">Work orders</span>
-                        {pendingWorkOrders > 0 ? (
-                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
-                            {pendingWorkOrders}
-                          </span>
-                        ) : (
-                          <span className="text-sm font-semibold text-muted">0</span>
-                        )}
-                      </li>
-                    </ul>
-                  )
-                ) : (
-                  <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Payments"
@@ -424,8 +386,48 @@ export function ResidentDashboard({
                   }}
                 />
               </div>
+            </div>
 
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader
+                  title="Services"
+                  href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
+                  linkLabel="Services →"
+                />
+                {canUseFullPortal ? (
+                  pendingRequests + pendingWorkOrders === 0 ? (
+                    <p className="mt-4 text-sm text-muted">No pending service requests or work orders.</p>
+                  ) : (
+                    <ul className="mt-3 space-y-2">
+                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                        <span className="text-sm text-muted">Requests</span>
+                        {pendingRequests > 0 ? (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            {pendingRequests}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted">0</span>
+                        )}
+                      </li>
+                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                        <span className="text-sm text-muted">Work orders</span>
+                        {pendingWorkOrders > 0 ? (
+                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
+                            {pendingWorkOrders}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted">0</span>
+                        )}
+                      </li>
+                    </ul>
+                  )
+                ) : (
+                  <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
+                )}
+              </div>
+
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
                 <PortalDashboardPreviewList
                   items={inboxThreads}

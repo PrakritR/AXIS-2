@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ResidentHousingBrowse } from "@/components/marketing/resident-housing-browse";
+import { PublicPageAuthFooter } from "@/components/marketing/public-page-auth-footer";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
+import { residentCreateAccountHref, residentSignInHref } from "@/lib/resident-public-nav";
 
 function authCreateResidentPath() {
   return "/auth/create-account";
@@ -36,6 +38,15 @@ export function RentBrowsePageClient() {
         <div className="mt-6 sm:mt-8">
           <ResidentHousingBrowse />
         </div>
+
+        {isNative !== true ? (
+          <PublicPageAuthFooter
+            getStartedHref={residentCreateAccountHref()}
+            signInHref={residentSignInHref()}
+            getStartedDataAttr="resident-browse-get-started"
+            signInDataAttr="resident-browse-sign-in"
+          />
+        ) : null}
       </div>
     </div>
   );

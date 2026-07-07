@@ -74,7 +74,7 @@ export const PORTAL_MOBILE_CARD_CLASS =
 
 /** Expanded detail block below a mobile summary card row. */
 export const PORTAL_MOBILE_DETAIL_EXPAND =
-  "mt-4 border-t border-border pt-4 [html[data-native]_&]:mt-3 [html[data-native]_&]:pt-3";
+  "mt-3 border-t border-border pt-3 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pt-2.5 [&_[data-portal-detail-actions]:last-child]:mb-0";
 
 /** Tighter data cells on native — keeps tabbed lists on one screen longer. */
 export const PORTAL_TABLE_TD_COMPACT =
@@ -193,9 +193,9 @@ export function PortalResponsiveDataView({
   );
 }
 
-/** Detail row cell padding — top padding omitted only when {@link PortalTableDetailActions} is the first child with `placement="top"`. */
+/** Detail row cell padding — top padding omitted when {@link PortalTableDetailActions} leads with `placement="top"`. */
 export const PORTAL_TABLE_DETAIL_CELL =
-  "px-4 pb-6 pt-6 align-top sm:px-6 sm:pb-8 sm:pt-8 [&:has(>[data-portal-detail-actions-placement=top])]:pt-0 sm:[&:has(>[data-portal-detail-actions-placement=top])]:pt-0";
+  "px-4 py-4 align-top sm:px-6 sm:py-5 [&:has(>[data-portal-detail-actions-placement=top]:first-child)]:pt-0 sm:[&:has(>[data-portal-detail-actions-placement=top]:first-child)]:pt-0";
 
 /**
  * Action strip in an expanded detail row — subtle divider + compact buttons.
@@ -212,13 +212,13 @@ export function PortalTableDetailActions({
   if (children == null) return null;
   const edge =
     placement === "top"
-      ? "border-b border-border py-6 mb-6"
-      : "border-t border-border py-6 mt-6";
+      ? "border-b border-border pb-3 mb-4 last:mb-0 last:border-b-0 last:pb-0"
+      : "border-t border-border pt-3 mt-4 first:mt-0 first:border-t-0 first:pt-0 last:mb-0";
   return (
     <div
       data-portal-detail-actions=""
       data-portal-detail-actions-placement={placement}
-      className={`flex flex-wrap items-center gap-3 sm:gap-4 ${edge}`}
+      className={`flex flex-wrap items-center gap-2 sm:gap-3 ${edge}`}
     >
       {children}
     </div>

@@ -119,7 +119,20 @@ export function downloadApplicationPdf(row: DemoApplicantRow): void {
  * Inline application preview — the same PDF bytes as Download PDF, embedded without
  * opening a new tab (demo builds the PDF locally; production uses the API route).
  */
-export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
+export function ApplicationDocumentPreview({
+  row,
+  defaultExpanded = false,
+  headerExtraActions,
+  collapsible = true,
+  showDownload = true,
+}: {
+  row: DemoApplicantRow;
+  defaultExpanded?: boolean;
+  headerExtraActions?: React.ReactNode;
+  /** When false, renders the PDF iframe directly without a collapsible header. */
+  collapsible?: boolean;
+  showDownload?: boolean;
+}) {
   const demo = isDemoModeActive();
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
 
@@ -147,41 +160,54 @@ export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
     };
   }, [row, demo]);
 
+  const pdfFrame = (
+    <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+      {pdfSrc ? (
+        <iframe
+          key={pdfSrc}
+          src={pdfSrc}
+          title="Application document"
+          loading="lazy"
+          className="h-[min(52vh,420px)] w-full border-0 bg-white"
+        />
+      ) : (
+        <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
+          Loading application PDF…
+        </div>
+      )}
+    </div>
+  );
+
+  if (!collapsible) {
+    return <div className="mt-4">{pdfFrame}</div>;
+  }
+
   return (
     <PortalCollapsibleSection
       title="Application"
-      defaultExpanded={false}
+      defaultExpanded={defaultExpanded}
       surfaceMuted={false}
       className="mt-4"
       contentClassName="p-4 pt-0"
       toggleDataAttr="application-document-toggle"
       headerActions={
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 rounded-full px-4 text-xs"
-          data-attr="application-pdf-download"
-          onClick={() => downloadApplicationPdf(row)}
-        >
-          Download PDF
-        </Button>
+        <>
+          {headerExtraActions}
+          {showDownload ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-4 text-xs"
+              data-attr="application-pdf-download"
+              onClick={() => downloadApplicationPdf(row)}
+            >
+              Download PDF
+            </Button>
+          ) : null}
+        </>
       }
     >
-      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-        {pdfSrc ? (
-          <iframe
-            key={pdfSrc}
-            src={pdfSrc}
-            title="Application document"
-            loading="lazy"
-            className="h-[min(52vh,420px)] w-full border-0 bg-white"
-          />
-        ) : (
-          <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
-            Loading application PDF…
-          </div>
-        )}
-      </div>
+      {pdfFrame}
     </PortalCollapsibleSection>
   );
 }
