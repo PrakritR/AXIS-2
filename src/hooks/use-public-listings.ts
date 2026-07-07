@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { MockProperty } from "@/data/types";
 import {
   isPropertyActiveForLeads,
@@ -14,12 +14,12 @@ function readActivePublicListings(): MockProperty[] {
 }
 
 export function usePublicListings() {
-  const [listings, setListings] = useState<MockProperty[]>(() =>
-    typeof window === "undefined" ? [] : readActivePublicListings(),
-  );
-  const [loading, setLoading] = useState(() =>
-    typeof window === "undefined" ? true : readActivePublicListings().length === 0,
-  );
+  // Always start empty/loading on both server and the client's first paint — reading localStorage
+  // synchronously in the initializer would make the client's very first render diverge from the
+  // (always-empty) SSR markup and trigger a hydration mismatch. The cache read below happens in an
+  // effect, i.e. after hydration, so it can never disagree with what the server sent.
+  const [listings, setListings] = useState<MockProperty[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const refreshFromCache = useCallback(() => {
     setListings(readActivePublicListings());
@@ -27,6 +27,12 @@ export function usePublicListings() {
 
   useEffect(() => {
     let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      refreshFromCache();
+      setLoading(readActivePublicListings().length === 0);
+    });
 
     void loadPublicExtraListingsFromServer()
       .then((loaded) => {

@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ManagerPortalPageShell,
+  portalDashboardWelcomeSubtitle,
   PortalDashboardCompactRow,
   PortalDashboardPreviewList,
   PortalDashboardSectionHeader,
-  PortalDashboardTile,
   PORTAL_DASHBOARD_SECTION_CARD,
   PORTAL_DASHBOARD_STACK,
   formatCompactChargeLine,
@@ -33,11 +33,17 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { applicationsForResidentEmail } from "@/lib/rental-application/application-policy";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   readManagerWorkOrderRows,
   syncManagerWorkOrdersFromServer,
 } from "@/lib/manager-work-orders-storage";
+import {
+  readServiceRequestsForResident,
+  SERVICE_REQUESTS_EVENT,
+  syncServiceRequestsFromServer,
+} from "@/lib/service-requests-storage";
 import {
   countUnopenedPersistedInbox,
   loadPersistedInbox,
@@ -49,10 +55,6 @@ import {
 const BASE = "/resident";
 
 type AppStatus = "pending" | "approved" | "rejected";
-
-function dollars(cents: number) {
-  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function leaseBadge(row: LeasePipelineRow | null, approved: boolean): {
   label: string;
@@ -91,7 +93,6 @@ function StatusBadge({ label, tone }: { label: string; tone: string }) {
 export function ResidentDashboard({
   applicationApproved = false,
   initialApplicationId = null,
-  showTestAccessNote = false,
   displayName = "Resident",
   residentEmail = "",
   residentUserId = null,
@@ -99,7 +100,6 @@ export function ResidentDashboard({
 }: {
   applicationApproved?: boolean;
   initialApplicationId?: string | null;
-  showTestAccessNote?: boolean;
   displayName?: string;
   residentEmail?: string;
   residentUserId?: string | null;
@@ -130,11 +130,13 @@ export function ResidentDashboard({
       syncManagerApplicationsFromServer({ force: true }),
       syncLeasePipelineFromServer(),
       syncManagerWorkOrdersFromServer(),
+      syncServiceRequestsFromServer({ force: true }),
       syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY),
       syncHouseholdChargesFromServer(false, { skipReconcile: true }),
     ]).then(bump);
     window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, bump);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, bump);
     window.addEventListener("storage", bump);
     const onInbox = (e: Event) => {
@@ -145,6 +147,7 @@ export function ResidentDashboard({
     return () => {
       window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+      window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
       window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, bump);
       window.removeEventListener("storage", bump);
       window.removeEventListener(PORTAL_INBOX_CHANGED_EVENT, onInbox as EventListener);
@@ -211,13 +214,12 @@ export function ResidentDashboard({
       return {
         leaseRow: null,
         lease: leaseBadge(null, appStatus === "approved"),
-        openWO: 0,
-        scheduledWO: 0,
-        completedWO: 0,
+        pendingRequests: 0,
+        pendingWorkOrders: 0,
         inbox: 0,
         inboxThreads: [] as ReturnType<typeof loadPersistedInbox>,
         pendingCharges: [] as ReturnType<typeof readChargesForResident>,
-        pendingTotal: 0,
+        applicationRows: [] as ReturnType<typeof applicationsForResidentEmail>,
       };
     }
 
@@ -225,11 +227,16 @@ export function ResidentDashboard({
     const lease = leaseBadge(leaseRow, appStatus === "approved");
 
     const workOrders = email
-      ? readManagerWorkOrderRows().filter((r) => r.residentEmail?.trim().toLowerCase() === email)
+      ? readManagerWorkOrderRows().filter(
+          (r) =>
+            r.residentEmail?.trim().toLowerCase() === email &&
+            (r as { requestType?: string }).requestType !== "service",
+        )
       : [];
-    const openWO = workOrders.filter((r) => r.bucket === "open").length;
-    const scheduledWO = workOrders.filter((r) => r.bucket === "scheduled").length;
-    const completedWO = workOrders.filter((r) => r.bucket === "completed").length;
+    const pendingWorkOrders = workOrders.filter((r) => r.bucket === "open").length;
+
+    const serviceRequests = email ? readServiceRequestsForResident(email) : [];
+    const pendingRequests = serviceRequests.filter((r) => r.status === "pending").length;
 
     const inboxThreads = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK)
       .filter((t) => t.folder === "inbox" && t.unread)
@@ -245,67 +252,134 @@ export function ResidentDashboard({
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         return 0;
       });
-    const pendingTotal = pendingCharges.reduce((s, c) => {
-      const n = Number(c.balanceLabel.replace(/[^\d.]/g, ""));
-      return s + (Number.isFinite(n) ? Math.round(n * 100) : 0);
-    }, 0);
-
-    return { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges, pendingTotal };
+    return { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges, applicationRows: email ? applicationsForResidentEmail(email) : [] };
   }, [tick, email, appStatus, residentUserId, clientReady]);
 
-  const { leaseRow, lease, openWO, scheduledWO, completedWO, inbox, inboxThreads, pendingCharges, pendingTotal } = data;
+  const { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges, applicationRows } = data;
+  const pendingApplicationCount = applicationRows.filter((r) => r.bucket === "pending").length;
 
-  const welcomeTitle = `Welcome${displayName && displayName !== "Resident" ? `, ${displayName.split(" ")[0]}` : ""}`;
-  const propertySubtitle =
-    appProperty && appRoom ? `${appProperty} · ${appRoom}` : appProperty ?? undefined;
-
-  let statusTone = "portal-banner-pending";
-  let statusCopy = "Application submitted and pending manager review. Your portal will unlock after approval.";
-  if (showTestAccessNote) {
-    statusTone = "portal-banner-info";
-    statusCopy = "Test access active — resident portal is fully unlocked for this email.";
-  } else if (appStatus === "approved") {
-    statusTone = "portal-banner-success";
-    statusCopy = appProperty && appRoom
-      ? `Approved for ${appProperty} - ${appRoom}.`
-      : appProperty
-      ? `Approved for ${appProperty}.`
-      : "Approved and active.";
-  } else if (appStatus === "rejected") {
-    statusTone = "portal-banner-danger";
-    statusCopy = "Your most recent application is marked rejected. Contact your manager if you need help or want to reapply.";
-  }
+  const welcomeName =
+    displayName && displayName !== "Resident" ? displayName.split(/\s+/)[0] : null;
 
   const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
-    <ManagerPortalPageShell title={welcomeTitle} subtitle={propertySubtitle} hideTitleOnNative>
+    <ManagerPortalPageShell
+      title="Dashboard"
+      subtitle={portalDashboardWelcomeSubtitle(welcomeName)}
+      hideTitleOnNative
+    >
       <div className={PORTAL_DASHBOARD_STACK}>
-
-        <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>{statusCopy}</div>
-
         {appStatus === "approved" ? (
           <>
-            <div className="grid grid-cols-2 gap-3">
-              <PortalDashboardTile
-                label="Outstanding balance"
-                value={pendingCharges.length === 0 ? "$0.00" : dollars(pendingTotal)}
-                sub={pendingCharges.length > 0 ? `${pendingCharges.length} pending charge${pendingCharges.length === 1 ? "" : "s"}` : "All caught up"}
-                href={`${BASE}/payments`}
-                urgent={pendingTotal > 0}
-              />
-              <PortalDashboardTile
-                label="Open maintenance"
-                value={canUseFullPortal ? openWO : "—"}
-                sub={canUseFullPortal && scheduledWO > 0 ? `${scheduledWO} scheduled` : canUseFullPortal ? "No open requests" : "Available on upgraded plans"}
-                href={`${BASE}/services/work-orders`}
-                urgent={canUseFullPortal && openWO > 0}
-              />
+            <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader
+                  title="Applications"
+                  href={`${BASE}/applications`}
+                  linkLabel="Applications →"
+                />
+                {applicationRows.length === 0 ? (
+                  <p className="mt-4 text-sm text-muted">No applications yet.</p>
+                ) : (
+                  <div className="mt-4 flex flex-col items-start gap-2">
+                    <p className="text-sm font-semibold text-foreground">
+                      {applicationRows.length} application{applicationRows.length === 1 ? "" : "s"}
+                    </p>
+                    {pendingApplicationCount > 0 ? (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                        {pendingApplicationCount} pending
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
+                <div className="mt-4 flex flex-col items-start gap-2 [html[data-native]_&]:mt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                  <StatusBadge label={lease.label} tone={lease.tone} />
+                  {leaseRow?.application?.leaseStart ? (
+                    <span className="text-xs leading-snug text-muted [html[data-native]_&]:text-[11px]">
+                      {leaseRow.application.leaseStart}
+                      {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted">No lease dates on file yet.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader title="Move-in" href={`${BASE}/move-in`} linkLabel="Move-in →" />
+                {appProperty || appRoom || moveInDateLabel ? (
+                  <ul className="mt-3 space-y-2">
+                    {appProperty ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Property</p>
+                        <p className="mt-0.5 break-words text-sm font-semibold text-foreground">{appProperty}</p>
+                      </li>
+                    ) : null}
+                    {appRoom ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Room</p>
+                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appRoom}</p>
+                      </li>
+                    ) : null}
+                    {moveInDateLabel ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Lease start</p>
+                        <p className="mt-0.5 text-sm font-semibold text-foreground">{moveInDateLabel}</p>
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : (
+                  <p className="mt-4 text-sm text-muted">Move-in details will appear once your placement is assigned.</p>
+                )}
+              </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader
+                  title="Services"
+                  href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
+                  linkLabel="Services →"
+                />
+                {canUseFullPortal ? (
+                  pendingRequests + pendingWorkOrders === 0 ? (
+                    <p className="mt-4 text-sm text-muted">No pending service requests or work orders.</p>
+                  ) : (
+                    <ul className="mt-3 space-y-2">
+                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                        <span className="text-sm text-muted">Requests</span>
+                        {pendingRequests > 0 ? (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            {pendingRequests}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted">0</span>
+                        )}
+                      </li>
+                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                        <span className="text-sm text-muted">Work orders</span>
+                        {pendingWorkOrders > 0 ? (
+                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
+                            {pendingWorkOrders}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted">0</span>
+                        )}
+                      </li>
+                    </ul>
+                  )
+                ) : (
+                  <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
+                )}
+              </div>
+
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Payments"
                   href={`${BASE}/payments`}
@@ -329,102 +403,26 @@ export function ResidentDashboard({
                     return (
                       <PortalDashboardCompactRow
                         title={charge.title || "Charge"}
-                        subtitle={formatCompactChargeLine(charge.title || "Charge", charge.balanceLabel, chargeDueLabel(charge))}
+                        subtitle={formatCompactChargeLine(
+                          charge.title || "Charge",
+                          charge.balanceLabel,
+                          chargeDueLabel(charge),
+                          { omitBalance: true },
+                        )}
                         badge={
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
                               overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
                             }`}
                           >
                             {overdue ? `${charge.balanceLabel} · Overdue` : charge.balanceLabel}
                           </span>
                         }
+                        stackBadge
                       />
                     );
                   }}
                 />
-              </div>
-
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-                <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <StatusBadge label={lease.label} tone={lease.tone} />
-                  {leaseRow?.application?.leaseStart ? (
-                    <span className="text-xs text-muted">
-                      {leaseRow.application.leaseStart}
-                      {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted">No lease dates on file yet.</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-                <PortalDashboardSectionHeader title="Move-in" href={`${BASE}/move-in`} linkLabel="Move-in →" />
-                {appProperty || appRoom || moveInDateLabel ? (
-                  <ul className="mt-3 space-y-2">
-                    {appProperty ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Property</p>
-                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appProperty}</p>
-                        {appId ? <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p> : null}
-                      </li>
-                    ) : null}
-                    {appRoom ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Room</p>
-                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appRoom}</p>
-                      </li>
-                    ) : null}
-                    {moveInDateLabel ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Lease start</p>
-                        <p className="mt-0.5 text-sm font-semibold text-foreground">{moveInDateLabel}</p>
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <p className="mt-4 text-sm text-muted">Move-in details will appear once your placement is assigned.</p>
-                )}
-              </div>
-
-              <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-                <PortalDashboardSectionHeader
-                  title="Services"
-                  href={canUseFullPortal ? `${BASE}/services/work-orders` : `${BASE}/services`}
-                  linkLabel="Services →"
-                />
-                {canUseFullPortal ? (
-                  openWO + scheduledWO + completedWO === 0 ? (
-                    <p className="mt-4 text-sm text-muted">No active maintenance requests.</p>
-                  ) : (
-                    <ul className="mt-3 space-y-2">
-                      {openWO > 0 ? (
-                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                          <span className="text-sm text-muted">Open</span>
-                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">{openWO}</span>
-                        </li>
-                      ) : null}
-                      {scheduledWO > 0 ? (
-                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                          <span className="text-sm text-muted">Scheduled</span>
-                          <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-800">{scheduledWO}</span>
-                        </li>
-                      ) : null}
-                      {completedWO > 0 ? (
-                        <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                          <span className="text-sm text-muted">Completed</span>
-                          <span className="text-sm font-semibold text-muted">{completedWO}</span>
-                        </li>
-                      ) : null}
-                    </ul>
-                  )
-                ) : (
-                  <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
-                )}
               </div>
             </div>
 
@@ -451,13 +449,13 @@ export function ResidentDashboard({
           </>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
               <PortalDashboardSectionHeader title="Application" />
               <p className="mt-4 text-sm font-semibold text-foreground">{appStage}</p>
-              {appId ? <p className="mt-0.5 text-xs font-mono text-muted">{appId}</p> : null}
-              {appProperty ? <p className="mt-1 text-xs text-muted">{appProperty}</p> : null}
+              {appId ? <p className="mt-0.5 break-all text-xs font-mono text-muted">{appId}</p> : null}
+              {appProperty ? <p className="mt-1 break-words text-xs text-muted">{appProperty}</p> : null}
             </div>
-            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
               <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
               {inbox > 0 ? (
                 <p className="mt-4 text-sm font-semibold text-foreground">{inbox} unread message{inbox === 1 ? "" : "s"}</p>

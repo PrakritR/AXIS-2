@@ -1,10 +1,12 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE,
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
@@ -14,8 +16,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
@@ -24,7 +29,12 @@ import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markMana
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
 import { Input } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
-import { ChargeRemindersModal, addChargeSetDateReminder, patchScheduledMessage } from "@/components/portal/payment-schedule-ui";
+import {
+  ChargeRemindersModal,
+  cancelFutureRemindersForPaidCharge,
+  patchScheduledMessage,
+  restoreFutureRemindersForPendingCharge,
+} from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
 
@@ -36,12 +46,35 @@ function statusTone(label: string) {
   return "bg-accent/30 text-foreground ring-1 ring-border";
 }
 
+function isMarkableAsPaid(row: DemoManagerPaymentLedgerRow): boolean {
+  return row.statusLabel !== "Paid" && row.balanceDue !== "$0.00";
+}
+
+function isPaidRow(row: DemoManagerPaymentLedgerRow): boolean {
+  return row.statusLabel === "Paid" || row.balanceDue === "$0.00";
+}
+
+function dueDateDisplayToInputValue(display: string): string {
+  const stripped = display.replace(/^(by|before)\s+/i, "").trim();
+  const parsed = new Date(stripped);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+}
+
+function dueDateInputToLabel(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  if (!year || !month || !day) return "";
+  const d = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
 export function ManagerPaymentsLedgerPanel({
   rows,
   managerUserId,
   activeBucket,
   scheduledMessages = [],
-  onScheduleEdit,
   onOpenReminderSettings,
   onRowsChanged,
   onScheduleChanged,
@@ -50,18 +83,210 @@ export function ManagerPaymentsLedgerPanel({
   managerUserId: string | null;
   activeBucket: ManagerPaymentBucket;
   scheduledMessages?: ScheduledPaymentMessage[];
-  onScheduleEdit?: (message: ScheduledPaymentMessage) => void;
   onOpenReminderSettings?: () => void;
   onRowsChanged?: () => void;
   onScheduleChanged?: () => void;
 }) {
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editAmountDraft, setEditAmountDraft] = useState("");
+  const [editDueDateDraft, setEditDueDateDraft] = useState("");
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [reminderPreview, setReminderPreview] = useState<{ row: DemoManagerPaymentLedgerRow; subject: string; body: string } | null>(null);
   const [chargeRemindersRow, setChargeRemindersRow] = useState<DemoManagerPaymentLedgerRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedIds.has(row.id)),
+    [rows, selectedIds],
+  );
+  const singleSelectedRow = selectedRows.length === 1 ? selectedRows[0]! : null;
+  const showSelection = rows.length > 0;
+  const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
+  const rowIdsKey = useMemo(() => rows.map((row) => row.id).join(","), [rows]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setEditingRowId(null);
+    setEditAmountDraft("");
+    setEditDueDateDraft("");
+  }, [activeBucket, rowIdsKey]);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(rows.map((row) => row.id)));
+  };
+
+  const markSelectedAsPaid = async () => {
+    const targets = rows.filter((row) => selectedIds.has(row.id) && isMarkableAsPaid(row));
+    if (targets.length === 0) return;
+    let ok = 0;
+    for (const row of targets) {
+      if (row.householdChargeId) {
+        if (markHouseholdChargePaid(row.householdChargeId, managerUserId)) {
+          await cancelFutureRemindersForPaidCharge(row.householdChargeId, scheduledMessages).catch(() => undefined);
+          ok += 1;
+        }
+      } else {
+        markManagerPaymentLedgerPaid(row.id);
+        ok += 1;
+      }
+    }
+    setSelectedIds(new Set());
+    setExpandedId(null);
+    onRowsChanged?.();
+    onScheduleChanged?.();
+    showToast(ok === 1 ? "Marked as paid." : `Marked ${ok} payments as paid.`);
+  };
+
+  const moveSelectedToPending = async () => {
+    const targets = selectedRows;
+    if (targets.length === 0) return;
+    let ok = 0;
+    for (const row of targets) {
+      if (row.householdChargeId) {
+        if (markHouseholdChargePending(row.householdChargeId, managerUserId)) ok += 1;
+      } else {
+        markManagerPaymentLedgerPending(row.id);
+        ok += 1;
+      }
+    }
+    onRowsChanged?.();
+    onScheduleChanged?.();
+    for (const row of targets) {
+      if (!row.householdChargeId) continue;
+      await restoreFutureRemindersForPendingCharge(row.householdChargeId).catch(() => undefined);
+    }
+    onScheduleChanged?.();
+    setSelectedIds(new Set());
+    setExpandedId(null);
+    showToast(ok === 1 ? "Moved to pending." : `Moved ${ok} payments to pending.`);
+  };
+
+  const deleteSelected = () => {
+    const targets = selectedRows;
+    if (targets.length === 0) return;
+    if (!window.confirm(`Delete ${targets.length} payment${targets.length === 1 ? "" : "s"}?`)) return;
+    let ok = 0;
+    for (const row of targets) {
+      if (row.householdChargeId) {
+        if (deleteHouseholdCharge(row.householdChargeId, managerUserId)) ok += 1;
+      } else if (deleteManagerPaymentLedgerEntry(row.id)) {
+        ok += 1;
+      }
+    }
+    setSelectedIds(new Set());
+    setExpandedId(null);
+    onRowsChanged?.();
+    showToast(ok === 1 ? "Payment removed." : `Removed ${ok} payments.`);
+  };
+
+  const startEdit = (row: DemoManagerPaymentLedgerRow) => {
+    setEditingRowId(row.id);
+    setEditAmountDraft(row.balanceDue.replace(/[^\d.]/g, ""));
+    setEditDueDateDraft(dueDateDisplayToInputValue(row.dueDate));
+    setExpandedId(row.id);
+  };
+
+  const cancelEdit = () => {
+    setEditingRowId(null);
+    setEditAmountDraft("");
+    setEditDueDateDraft("");
+  };
+
+  const saveEdit = (row: DemoManagerPaymentLedgerRow) => {
+    if (!row.householdChargeId) return;
+    const amt = parseFloat(editAmountDraft.replace(/[^\d.]/g, ""));
+    if (!Number.isFinite(amt) || amt < 0) {
+      showToast("Enter a valid amount.");
+      return;
+    }
+    const dueLabel = editDueDateDraft.trim() ? dueDateInputToLabel(editDueDateDraft) : undefined;
+    if (!dueLabel && editDueDateDraft.trim()) {
+      showToast("Enter a valid due date.");
+      return;
+    }
+    if (updateHouseholdChargeAmount(row.householdChargeId, amt, managerUserId, undefined, dueLabel)) {
+      showToast("Payment updated.");
+      onRowsChanged?.();
+      onScheduleChanged?.();
+    }
+    cancelEdit();
+  };
+
+  const saveBulkEditAmount = () => {
+    const row = singleSelectedRow;
+    if (!row) return;
+    saveEdit(row);
+  };
+
+  const renderAmountOwedCell = (row: DemoManagerPaymentLedgerRow) => {
+    if (editingRowId === row.id && row.householdChargeId) {
+      return (
+        <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <span className="text-xs text-muted">$</span>
+          <Input
+            className="h-8 w-24 rounded-lg px-2 py-1 text-xs tabular-nums"
+            inputMode="decimal"
+            value={editAmountDraft}
+            onChange={(e) => setEditAmountDraft(e.target.value)}
+            aria-label="Amount owed"
+          />
+        </span>
+      );
+    }
+    return <span className="tabular-nums font-semibold text-foreground">{row.balanceDue}</span>;
+  };
+
+  const renderDueDateCell = (row: DemoManagerPaymentLedgerRow) => {
+    if (editingRowId === row.id && row.householdChargeId) {
+      return (
+        <Input
+          type="date"
+          className="h-8 w-36 rounded-lg px-2 py-1 text-xs"
+          value={editDueDateDraft}
+          onChange={(e) => setEditDueDateDraft(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Due date"
+        />
+      );
+    }
+    return (
+      <>
+        <div>{row.dueDate}</div>
+        {row.householdChargeId && !isPaidRow(row) ? (() => {
+          const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
+          const activeReminders = reminders.filter((m) => m.status !== "cancelled");
+          if (!reminders.length) return null;
+          return (
+            <button
+              type="button"
+              className="mt-1 text-[11px] font-semibold text-primary hover:underline"
+              onClick={(e) => {
+                e.stopPropagation();
+                setChargeRemindersRow(row);
+              }}
+            >
+              Auto · {activeReminders.length > 0 ? activeReminders.length : "skipped"}
+            </button>
+          );
+        })() : null}
+      </>
+    );
+  };
 
   const openReminderPreview = (row: DemoManagerPaymentLedgerRow) => {
     const email = row.residentEmail?.trim();
@@ -156,9 +381,10 @@ export function ManagerPaymentsLedgerPanel({
     showToast("Could not remove this line.");
   };
 
-  const recordPaid = (row: DemoManagerPaymentLedgerRow, toastMessage: string) => {
+  const recordPaid = async (row: DemoManagerPaymentLedgerRow, toastMessage: string) => {
     if (row.householdChargeId) {
       if (markHouseholdChargePaid(row.householdChargeId, managerUserId)) {
+        await cancelFutureRemindersForPaidCharge(row.householdChargeId, scheduledMessages).catch(() => undefined);
         showToast(toastMessage);
         setExpandedId(null);
         onRowsChanged?.();
@@ -174,12 +400,15 @@ export function ManagerPaymentsLedgerPanel({
     onRowsChanged?.();
   };
 
-  const moveToPending = (row: DemoManagerPaymentLedgerRow) => {
+  const moveToPending = async (row: DemoManagerPaymentLedgerRow) => {
     if (row.householdChargeId) {
       if (markHouseholdChargePending(row.householdChargeId, managerUserId)) {
+        onRowsChanged?.();
+        onScheduleChanged?.();
+        await restoreFutureRemindersForPendingCharge(row.householdChargeId).catch(() => undefined);
+        onScheduleChanged?.();
         showToast("Moved to pending.");
         setExpandedId(null);
-        onRowsChanged?.();
         return;
       }
       showToast("Could not update this line.");
@@ -198,78 +427,44 @@ export function ManagerPaymentsLedgerPanel({
           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => recordPaid(row, "Marked as paid.")}>
             Mark as paid
           </Button>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Zelle.")}>
-            Paid with Zelle
-          </Button>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Recorded as paid with Venmo.")}>
-            Paid with Venmo
-          </Button>
         </>
       ) : null}
-      <Button
-        type="button"
-        variant="outline"
-        className={PORTAL_DETAIL_BTN}
-        disabled={sendingReminderId === row.id}
-        onClick={() => openReminderPreview(row)}
-      >
-        {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
-      </Button>
-      {row.householdChargeId ? (
-        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
-          Auto reminders
-        </Button>
-      ) : null}
-      {activeBucket !== "pending" ? (
-        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
-          Move to pending
-        </Button>
-      ) : null}
-      {row.householdChargeId && row.statusLabel !== "Paid" ? (
-        editingAmountId === row.id ? (
-          <span className="flex items-center gap-1.5">
-            <span className="text-xs text-muted">$</span>
-            <Input
-              className="h-7 w-24 rounded-lg px-2 py-1 text-xs"
-              inputMode="decimal"
-              value={editAmountDraft}
-              onChange={(e) => setEditAmountDraft(e.target.value)}
-              autoFocus
-            />
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN_PRIMARY}
-              onClick={() => {
-                const amt = parseFloat(editAmountDraft.replace(/[^\d.]/g, ""));
-                if (!Number.isFinite(amt) || amt < 0) {
-                  showToast("Enter a valid amount.");
-                  return;
-                }
-                if (updateHouseholdChargeAmount(row.householdChargeId!, amt, managerUserId)) {
-                  showToast("Amount updated.");
-                  onRowsChanged?.();
-                }
-                setEditingAmountId(null);
-              }}
-            >
-              Save
-            </Button>
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setEditingAmountId(null)}>
-              Cancel
-            </Button>
-          </span>
-        ) : (
+      {!isPaidRow(row) ? (
+        <>
           <Button
             type="button"
             variant="outline"
             className={PORTAL_DETAIL_BTN}
-            onClick={() => {
-              setEditAmountDraft(row.balanceDue.replace(/[^\d.]/g, ""));
-              setEditingAmountId(row.id);
-            }}
+            disabled={sendingReminderId === row.id}
+            onClick={() => openReminderPreview(row)}
           >
-            Edit amount
+            {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
+          </Button>
+          {row.householdChargeId ? (
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onOpenReminderSettings?.()}>
+              Auto reminders
+            </Button>
+          ) : null}
+        </>
+      ) : null}
+      {activeBucket === "paid" ? (
+        <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => moveToPending(row)}>
+          Move to pending
+        </Button>
+      ) : null}
+      {row.householdChargeId && !isPaidRow(row) ? (
+        editingRowId === row.id ? (
+          <>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => saveEdit(row)}>
+              Save
+            </Button>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => startEdit(row)}>
+            Edit
           </Button>
         )
       ) : null}
@@ -296,53 +491,180 @@ export function ManagerPaymentsLedgerPanel({
         onConfirm={(skipMessage) => void doSendReminder(skipMessage)}
       />
     )}
+    {chargeRemindersRow?.householdChargeId ? (
+      <ChargeRemindersModal
+        open
+        onClose={() => setChargeRemindersRow(null)}
+        residentName={chargeRemindersRow.residentName}
+        chargeTitle={chargeRemindersRow.chargeTitle}
+        dueDate={chargeRemindersRow.dueDate}
+        messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersRow.householdChargeId)}
+        onMessageSaved={() => onScheduleChanged?.()}
+        onToggleCancel={async (message, cancelled) => {
+          try {
+            await patchScheduledMessage(message.id, { cancelled });
+            onScheduleChanged?.();
+          } catch {
+            showToast("Could not update reminder.");
+          }
+        }}
+        onOpenSettings={onOpenReminderSettings}
+      />
+    ) : null}
+    {selectedIds.size > 0 ? (
+      <div className="mb-3">
+        <PortalTableDetailActions>
+          {selectedRows.some(isMarkableAsPaid) ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN_PRIMARY}
+              data-attr="payments-mark-selected-paid"
+              onClick={markSelectedAsPaid}
+            >
+              Mark as paid
+            </Button>
+          ) : null}
+          {selectedRows.some((row) => !isPaidRow(row)) ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              disabled={
+                Boolean(sendingReminderId) ||
+                selectedRows.length !== 1 ||
+                (singleSelectedRow ? isPaidRow(singleSelectedRow) : false)
+              }
+              title={selectedRows.length !== 1 ? "Select one payment to send a reminder." : undefined}
+              onClick={() => {
+                const row = singleSelectedRow;
+                if (!row) {
+                  showToast("Select one payment to send a reminder.");
+                  return;
+                }
+                openReminderPreview(row);
+              }}
+            >
+              {sendingReminderId ? "Sending…" : "Send reminder"}
+            </Button>
+          ) : null}
+          {activeBucket === "paid" && selectedRows.length > 0 ? (
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={moveSelectedToPending}>
+              Move to pending
+            </Button>
+          ) : null}
+          {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
+            editingRowId === singleSelectedRow.id ? (
+              <>
+                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={saveBulkEditAmount}>
+                  Save
+                </Button>
+                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => startEdit(singleSelectedRow)}
+              >
+                Edit
+              </Button>
+            )
+          ) : null}
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={deleteSelected}>
+            Delete
+          </Button>
+          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setSelectedIds(new Set())}>
+            Clear selection
+          </Button>
+        </PortalTableDetailActions>
+      </div>
+    ) : null}
     <div className="space-y-2 lg:hidden">
       {rows.map((row) => {
         const reminders = row.householdChargeId
           ? manageableRemindersForCharge(scheduledMessages, row.householdChargeId)
           : [];
+        const activeReminders = reminders.filter((m) => m.status !== "cancelled");
         const expanded = expandedId === row.id;
         const propertyShort = stripPropertyRoomCountSuffix(row.propertyName || "");
         return (
           <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
             <div className="flex items-start justify-between gap-3">
+              {showSelection ? (
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 shrink-0 rounded border-border"
+                  checked={selectedIds.has(row.id)}
+                  onChange={() => toggleSelected(row.id)}
+                  aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
+                />
+              ) : null}
               <div className="min-w-0 flex-1">
                 <button
                   type="button"
-                  className="w-full text-left"
+                  className="flex w-full items-center justify-between gap-2 text-left"
                   onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                  aria-expanded={expanded}
                 >
-                  <p className="truncate font-semibold text-foreground">{row.residentName}</p>
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    {row.chargeTitle}
-                    {row.roomNumber ? ` · Room ${row.roomNumber}` : ""}
-                  </p>
-                  {propertyShort ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{propertyShort}</p> : null}
-                  <p className="mt-0.5 text-xs text-muted">Due {row.dueDate}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-foreground">{row.residentName}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {row.chargeTitle}
+                      {row.roomNumber ? ` · Room ${row.roomNumber}` : ""}
+                    </p>
+                    {propertyShort ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{propertyShort}</p> : null}
+                    <p className="mt-0.5 text-xs text-muted">
+                      {editingRowId === row.id ? (
+                        <span className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <span className="flex items-center gap-1">
+                            <span className="text-muted">$</span>
+                            <Input
+                              className="h-7 w-20 rounded-lg px-2 py-0.5 text-xs tabular-nums"
+                              inputMode="decimal"
+                              value={editAmountDraft}
+                              onChange={(e) => setEditAmountDraft(e.target.value)}
+                              aria-label="Amount owed"
+                            />
+                          </span>
+                          <Input
+                            type="date"
+                            className="h-7 w-32 rounded-lg px-2 py-0.5 text-xs"
+                            value={editDueDateDraft}
+                            onChange={(e) => setEditDueDateDraft(e.target.value)}
+                            aria-label="Due date"
+                          />
+                        </span>
+                      ) : (
+                        <>Due {row.dueDate}</>
+                      )}
+                    </p>
+                  </div>
+                  <PortalTableExpandChevron expanded={expanded} />
                 </button>
-                {reminders.length ? (
+                {!isPaidRow(row) && reminders.length ? (
                   <button
                     type="button"
                     className="mt-1 text-[11px] font-semibold text-primary"
                     onClick={() => setChargeRemindersRow(row)}
                   >
-                    Auto · {reminders.length}
+                    Auto · {activeReminders.length > 0 ? activeReminders.length : "skipped"}
                   </button>
                 ) : null}
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-base font-bold tabular-nums text-foreground">{row.balanceDue}</p>
+                {editingRowId === row.id ? null : (
+                  <p className="text-base font-bold tabular-nums text-foreground">{row.balanceDue}</p>
+                )}
                 <span
                   className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}
                 >
                   {row.statusLabel}
                 </span>
               </div>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}>
-                {expanded ? "Less" : "More"}
-              </Button>
             </div>
             {expanded ? (
               <div className="mt-3 border-t border-border pt-3">
@@ -354,10 +676,21 @@ export function ManagerPaymentsLedgerPanel({
       })}
     </div>
     <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-      <div className="relative z-0 max-w-full overflow-x-auto">
-        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+      <div className={PORTAL_DATA_TABLE_SCROLL}>
+        <table className={PORTAL_DATA_TABLE}>
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
+              {showSelection ? (
+                <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-border"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all payments"
+                  />
+                </th>
+              ) : null}
               <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
@@ -365,6 +698,9 @@ export function ManagerPaymentsLedgerPanel({
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount paid</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount owed</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Due date</th>
+              <th className={PORTAL_TABLE_EXPAND_TH}>
+                <span className="sr-only">Expand</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -377,35 +713,29 @@ export function ManagerPaymentsLedgerPanel({
                   )}
                   aria-expanded={expandedId === row.id}
                 >
+                  {showSelection ? (
+                    <td className={PORTAL_TABLE_TD} onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded border-border"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => toggleSelected(row.id)}
+                        aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
+                      />
+                    </td>
+                  ) : null}
                   <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.propertyName}</td>
                   <td className={PORTAL_TABLE_TD}>Room {row.roomNumber}</td>
                   <td className={PORTAL_TABLE_TD}>{row.residentName}</td>
                   <td className={PORTAL_TABLE_TD}>{row.chargeTitle}</td>
                   <td className={`${PORTAL_TABLE_TD} tabular-nums text-muted`}>{row.amountPaid}</td>
-                  <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground`}>{row.balanceDue}</td>
-                  <td className={`${PORTAL_TABLE_TD} text-muted`}>
-                    <div>{row.dueDate}</div>
-                    {row.householdChargeId ? (() => {
-                      const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
-                      if (!reminders.length) return null;
-                      return (
-                        <button
-                          type="button"
-                          className="mt-1 text-[11px] font-semibold text-primary hover:underline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setChargeRemindersRow(row);
-                          }}
-                        >
-                          Auto · {reminders.length}
-                        </button>
-                      );
-                    })() : null}
-                  </td>
+                  <td className={PORTAL_TABLE_TD}>{renderAmountOwedCell(row)}</td>
+                  <td className={`${PORTAL_TABLE_TD} text-muted`}>{renderDueDateCell(row)}</td>
+                  <PortalTableExpandCell expanded={expandedId === row.id} />
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                    <td colSpan={showSelection ? 9 : 8} className={PORTAL_TABLE_DETAIL_CELL}>
                       {renderDetailActions(row)}
                     </td>
                   </tr>
@@ -416,46 +746,6 @@ export function ManagerPaymentsLedgerPanel({
         </table>
       </div>
     </div>
-    {chargeRemindersRow?.householdChargeId ? (
-      <ChargeRemindersModal
-        open
-        onClose={() => setChargeRemindersRow(null)}
-        residentName={chargeRemindersRow.residentName}
-        chargeTitle={chargeRemindersRow.chargeTitle}
-        dueDate={chargeRemindersRow.dueDate}
-        messages={manageableRemindersForCharge(scheduledMessages, chargeRemindersRow.householdChargeId)}
-        onEdit={(message) => {
-          setChargeRemindersRow(null);
-          onScheduleEdit?.(message);
-        }}
-        onToggleCancel={async (msg, cancelled) => {
-          try {
-            await patchScheduledMessage(msg.id, { cancelled });
-            showToast(cancelled ? "Reminder skipped." : "Reminder restored.");
-            onScheduleChanged?.();
-          } catch (e) {
-            showToast(e instanceof Error ? e.message : "Could not update reminder.");
-          }
-        }}
-        onAddSetDate={async (iso) => {
-          try {
-            await addChargeSetDateReminder(chargeRemindersRow.householdChargeId!, iso);
-            showToast("Reminder scheduled.");
-            onScheduleChanged?.();
-          } catch (e) {
-            showToast(e instanceof Error ? e.message : "Could not add reminder.");
-          }
-        }}
-        onOpenSettings={
-          onOpenReminderSettings
-            ? () => {
-                setChargeRemindersRow(null);
-                onOpenReminderSettings();
-              }
-            : undefined
-        }
-      />
-    ) : null}
     </>
   );
 }

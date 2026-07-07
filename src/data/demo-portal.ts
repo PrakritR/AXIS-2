@@ -49,7 +49,7 @@ export type DemoApplicantRow = {
   signedMonthlyRent?: number | null;
   /** Listing owner scope — who should receive this application in the portal. */
   managerUserId?: string | null;
-  /** True for residents added directly by the manager (no rental application). */
+  /** True when the manager (not the applicant) created or completed this application, e.g. via the Residents-tab Add flow — exempts it from the applicant-facing application fee. */
   manuallyAdded?: boolean;
   /** Move-in instructions set by the manager from the Residents tab. */
   moveInInstructions?: string;
@@ -116,6 +116,8 @@ export const demoManagerHouseRows: DemoManagerHouseRow[] = [];
 
 export type ManagerPaymentBucket = "pending" | "overdue" | "paid";
 
+export type ManagerPaymentDirection = "incoming" | "outgoing";
+
 export type DemoManagerPaymentLedgerRow = {
   id: string;
   propertyName: string;
@@ -132,6 +134,32 @@ export type DemoManagerPaymentLedgerRow = {
   notes: string;
   householdChargeId?: string;
   cancelledReminders?: Array<"7d" | "5d" | "3d" | "12h" | "overdue_daily">;
+};
+
+export type DemoManagerOutgoingPaymentRow = {
+  id: string;
+  propertyName: string;
+  categoryLabel: string;
+  payeeLabel: string;
+  chargeTitle: string;
+  amountLabel: string;
+  dueDate: string;
+  bucket: ManagerPaymentBucket;
+  statusLabel: string;
+  expenseEntryId?: string;
+  workOrderId?: string;
+  /** When true the row came from a logged expense (not a pending vendor payout). */
+  fromExpense?: boolean;
+  /** When true the row is an estimated Axis platform / processing fee on a resident payment. */
+  fromAxisFee?: boolean;
+  vendorId?: string;
+  amountCents?: number;
+  vendorPaymentMethods?: ("zelle" | "venmo" | "ach")[];
+  zelleContactSnapshot?: string;
+  venmoContactSnapshot?: string;
+  achAvailable?: boolean;
+  paidViaChannel?: "zelle" | "venmo" | "ach";
+  paidAtLabel?: string;
 };
 
 export const demoManagerPaymentLedgerRows: DemoManagerPaymentLedgerRow[] = [];
@@ -164,7 +192,7 @@ export type DemoManagerWorkOrderRow = {
   vendorAssignedAt?: string;
   /** Manager handles the work themselves — no vendor assigned, no vendor email sent. */
   selfAssigned?: boolean;
-  category?: "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
+  category?: "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general" | "appliance" | "access";
   vendorCostCents?: number;
   materialsCostCents?: number;
   materialsMemo?: string;
@@ -173,11 +201,26 @@ export type DemoManagerWorkOrderRow = {
   expenseEntryIds?: string[];
   /** Logged by manager (not submitted by resident). */
   managerInitiated?: boolean;
+  /** Manager has invited the assigned vendor to submit a cost/time bid (see work_order_bids). */
+  biddingOpen?: boolean;
+  biddingOpenedAt?: string;
+  biddingResolvedAt?: string;
+  /** Vendor tapped "Mark done" (work-orders/mark-done route) and is awaiting manager
+   * approve + pay, or the manager has since approved + paid (bookkeeping status only —
+   * no real money movement; see work-orders/approve-pay route). */
+  automationStatus?: "vendor_marked_done" | "paid";
+  vendorMarkedDoneAt?: string;
+  vendorMarkedDoneNote?: string;
+  paidAt?: string;
+  /** How the manager paid the vendor (bookkeeping + payout routing). */
+  vendorPaymentChannel?: "zelle" | "venmo" | "ach";
+  vendorZelleContactSnapshot?: string;
+  vendorVenmoContactSnapshot?: string;
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];
 
-export type ManagerLeaseBucket = "manager" | "admin" | "resident" | "signed";
+export type ManagerLeaseBucket = "manager" | "resident" | "signed";
 
 /** UI tabs on the manager Leases page (includes fully signed leases separate from countersign). */
 export type ManagerLeaseTab = ManagerLeaseBucket | "completed";

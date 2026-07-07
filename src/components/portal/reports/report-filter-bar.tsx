@@ -25,7 +25,9 @@ export function ReportFilterBar({
   loading,
   runLabel = "Generate report",
   showRunButton = true,
+  stacked = false,
   leading,
+  trailing,
 }: {
   showProperty?: boolean;
   showDateRange?: boolean;
@@ -38,14 +40,42 @@ export function ReportFilterBar({
   loading?: boolean;
   runLabel?: string;
   showRunButton?: boolean;
+  /** Vertical stack for modal forms. */
+  stacked?: boolean;
   /** Extra controls rendered at the start of the row (e.g. a document scope selector). */
   leading?: ReactNode;
+  /** Extra controls rendered at the end of the row, before the run button (e.g. row-level filters). */
+  trailing?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className={stacked ? "flex flex-col gap-4" : "flex flex-wrap items-end gap-3"}>
       {leading}
+
+      {showDateRange ? (
+        <div className={stacked ? "grid grid-cols-1 gap-4 sm:grid-cols-2" : "grid w-full min-w-0 grid-cols-2 gap-3 sm:flex sm:w-auto"}>
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted">
+            From
+            <Input
+              type="date"
+              className="h-10 w-full min-w-0 sm:w-[10.5rem]"
+              value={filters.from}
+              onChange={(e) => onChange({ from: e.target.value })}
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted">
+            To
+            <Input
+              type="date"
+              className="h-10 w-full min-w-0 sm:w-[10.5rem]"
+              value={filters.to}
+              onChange={(e) => onChange({ to: e.target.value })}
+            />
+          </label>
+        </div>
+      ) : null}
+
       {showProperty && propertyOptions && propertyOptions.length > 0 ? (
-        <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
+        <label className={`flex flex-col gap-1.5 text-xs font-medium text-muted ${stacked ? "w-full" : "min-w-[10rem]"}`}>
           Property
           <select
             className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
@@ -60,29 +90,6 @@ export function ReportFilterBar({
             ))}
           </select>
         </label>
-      ) : null}
-
-      {showDateRange ? (
-        <>
-          <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
-            From
-            <Input
-              type="date"
-              className="h-10 w-[10.5rem]"
-              value={filters.from}
-              onChange={(e) => onChange({ from: e.target.value })}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
-            To
-            <Input
-              type="date"
-              className="h-10 w-[10.5rem]"
-              value={filters.to}
-              onChange={(e) => onChange({ to: e.target.value })}
-            />
-          </label>
-        </>
       ) : null}
 
       {showDaysAhead ? (
@@ -110,13 +117,15 @@ export function ReportFilterBar({
         </label>
       ) : null}
 
-      <div className={PORTAL_TOOLBAR_GROUP}>
-        {showRunButton ? (
+      {trailing}
+
+      {showRunButton ? (
+        <div className={PORTAL_TOOLBAR_GROUP}>
           <Button variant="primary" onClick={onRun} disabled={loading}>
             {loading ? "Loading…" : runLabel}
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

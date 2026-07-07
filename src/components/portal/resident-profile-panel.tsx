@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
+import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import {
   normalizeApplicationAxisId,
   readManagerApplicationRows,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/manager-applications-storage";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { Button } from "@/components/ui/button";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
@@ -169,7 +171,13 @@ export function ResidentProfilePanel() {
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-5 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2">
+        <PortalCollapsibleSection
+          title="Profile"
+          surfaceMuted={false}
+          contentClassName="px-4 pb-4"
+          toggleDataAttr="resident-profile-toggle"
+        >
+          <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-semibold text-foreground">Full name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -193,11 +201,14 @@ export function ResidentProfilePanel() {
               <Input value={emPhone} onChange={(e) => setEmPhone(e.target.value)} placeholder="Phone" />
             </div>
           </div>
-        </div>
+          </div>
+        </PortalCollapsibleSection>
 
         <NotificationsToggle />
 
         <PortalChangePasswordPanel accountEmail={email} />
+
+        <PortalBugFeedbackPanel reporterRole="resident" embedded />
 
         <PortalSettingsExtras currentKind="resident" />
       </div>

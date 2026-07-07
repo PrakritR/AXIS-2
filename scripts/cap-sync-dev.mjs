@@ -5,8 +5,11 @@
  */
 import { networkInterfaces } from "node:os";
 import { spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const NATIVE_ENTRY_PATH = "/auth/sign-in";
+const CAP_DEV_SERVER_MARKER = join(process.cwd(), ".cap-dev-server");
 
 function firstLanIPv4() {
   try {
@@ -51,6 +54,8 @@ if (host.includes("127.0.0.1") || host.includes("localhost")) {
 } else {
   console.log("Phone and Mac must be on the same Wi‑Fi.\n");
 }
+
+writeFileSync(CAP_DEV_SERVER_MARKER, host, "utf8");
 
 const result = spawnSync("npx", ["cap", "sync"], {
   stdio: "inherit",

@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -8,11 +9,15 @@ import {
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_TD,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
@@ -34,6 +39,7 @@ import {
   PROMOTION_THEME_OPTIONS,
   PROMOTION_TONE_OPTIONS,
   PROMOTION_SIZE_OPTIONS,
+  sanitizeFlyerImages,
   type FlyerSize,
   type ManagerPromotionRow,
   type PromotionInputs,
@@ -54,9 +60,10 @@ import {
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 
-type PromotionDraft = {
+export type PromotionDraft = {
   propertyKey: string;
   propertyLabel: string;
+  address: string;
   title: string;
   headline: string;
   sellingPoints: string;
@@ -73,11 +80,12 @@ type PromotionDraft = {
   images: string[];
 };
 
-const CUSTOM_PROPERTY_KEY = "__custom__";
+export const CUSTOM_PROPERTY_KEY = "__custom__";
 
-const EMPTY_DRAFT: PromotionDraft = {
+export const EMPTY_DRAFT: PromotionDraft = {
   propertyKey: CUSTOM_PROPERTY_KEY,
   propertyLabel: "",
+  address: "",
   title: "",
   headline: "",
   sellingPoints: "",
@@ -93,7 +101,7 @@ const EMPTY_DRAFT: PromotionDraft = {
   images: [],
 };
 
-function draftInputs(draft: PromotionDraft): PromotionInputs {
+export function draftInputs(draft: PromotionDraft): PromotionInputs {
   return {
     headline: draft.headline.trim(),
     sellingPoints: draft.sellingPoints.trim(),
@@ -102,6 +110,7 @@ function draftInputs(draft: PromotionDraft): PromotionInputs {
     cta: draft.cta.trim(),
     contact: draft.contact.trim(),
     tone: draft.tone.trim(),
+    address: draft.address.trim(),
     customDetails: draft.customDetails.trim(),
     images: draft.images.slice(0, FLYER_IMAGE_LIMIT),
   };
@@ -153,9 +162,50 @@ function formatDate(iso: string): string {
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+export function draftWithPropertyKey(
+  base: PromotionDraft,
+  key: string,
+  listings: ManagerPromotionPropertyOption[],
+): PromotionDraft {
+  if (key === CUSTOM_PROPERTY_KEY) return { ...base, propertyKey: key };
+  const listing = listings.find((l) => l.id === key)?.property;
+  const submission = listing?.listingSubmission;
+  const amenityLines = submission?.amenitiesText
+    ? submission.amenitiesText
+        .split(/\r?\n|,/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const autoImages = sanitizeFlyerImages(submission?.housePhotoDataUrls ?? []);
+  return {
+    ...base,
+    propertyKey: key,
+    propertyLabel: listing ? `${listing.title} — ${listing.neighborhood || listing.address}` : base.propertyLabel,
+    address: base.address.trim() || listing?.address || base.address,
+    price: base.price.trim() ? base.price : (listing?.rentLabel ?? base.price),
+    sellingPoints:
+      base.sellingPoints.trim() || !listing
+        ? base.sellingPoints
+        : [
+            `${listing.beds} bed · ${listing.baths} bath`,
+            listing.petFriendly ? "Pet friendly" : "",
+            listing.tagline,
+            ...amenityLines,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+    customDetails: base.customDetails.trim() || submission?.houseOverview?.trim() || base.customDetails,
+    images: base.images.length ? base.images : autoImages.length ? autoImages : base.images,
+  };
+}
+
 export function ManagerPromotion() {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const handledFlyerDeepLink = useRef(false);
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
   const [showForm, setShowForm] = useState(false);
@@ -200,6 +250,35 @@ export function ManagerPromotion() {
     setShowForm(true);
   }, []);
 
+  const openNewWithProperty = useCallback(
+    (propertyId?: string) => {
+      setEditingId(null);
+      if (propertyId && listings.some((l) => l.id === propertyId)) {
+        setDraft(draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings));
+      } else {
+        setDraft(EMPTY_DRAFT);
+      }
+      setShowForm(true);
+    },
+    [listings],
+  );
+
+  useEffect(() => {
+    if (handledFlyerDeepLink.current || searchParams.get("new") !== "1") return;
+    if (!authReady) return;
+    const propertyId = searchParams.get("propertyId")?.trim() || "";
+    if (propertyId && listings.length === 0 && userId) return;
+
+    handledFlyerDeepLink.current = true;
+    openNewWithProperty(propertyId || undefined);
+
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("new");
+    next.delete("propertyId");
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [authReady, listings, userId, searchParams, pathname, router, openNewWithProperty]);
+
   const closeForm = useCallback(() => {
     setShowForm(false);
     setEditingId(null);
@@ -214,6 +293,7 @@ export function ManagerPromotion() {
             ? row.propertyId
             : CUSTOM_PROPERTY_KEY,
         propertyLabel: row.propertyLabel,
+        address: row.inputs.address ?? "",
         title: row.title,
         headline: row.inputs.headline,
         sellingPoints: row.inputs.sellingPoints,
@@ -235,23 +315,7 @@ export function ManagerPromotion() {
   );
 
   function onSelectProperty(key: string) {
-    if (key === CUSTOM_PROPERTY_KEY) {
-      setDraft((d) => ({ ...d, propertyKey: key }));
-      return;
-    }
-    const listing = listings.find((l) => l.id === key)?.property;
-    setDraft((d) => ({
-      ...d,
-      propertyKey: key,
-      propertyLabel: listing ? `${listing.title} — ${listing.neighborhood || listing.address}` : d.propertyLabel,
-      price: d.price.trim() ? d.price : listing?.rentLabel ?? d.price,
-      sellingPoints:
-        d.sellingPoints.trim() || !listing
-          ? d.sellingPoints
-          : [`${listing.beds} bed · ${listing.baths} bath`, listing.petFriendly ? "Pet friendly" : "", listing.tagline]
-              .filter(Boolean)
-              .join("\n"),
-    }));
+    setDraft((d) => draftWithPropertyKey(d, key, listings));
   }
 
   async function generate() {
@@ -337,6 +401,53 @@ export function ManagerPromotion() {
     showToast("Promotion deleted.");
   }
 
+  const renderRowDetail = (row: ManagerPromotionRow) => (
+    <>
+      <div>
+        <PromotionFlyerPreview promotion={row} embedded />
+      </div>
+      <PortalTableDetailActions>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => downloadPromotionFlyer(row)}
+          data-attr="promotion-flyer-download"
+        >
+          Download
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => openEdit(row)}
+          data-attr="promotion-edit"
+        >
+          Edit
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => regenerate(row)}
+          disabled={regeneratingId === row.id}
+          data-attr="promotion-regenerate"
+        >
+          {regeneratingId === row.id ? "Regenerating…" : "Regenerate"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => removePromotion(row.id)}
+          data-attr="promotion-delete"
+        >
+          Delete
+        </Button>
+      </PortalTableDetailActions>
+    </>
+  );
+
   return (
     <ManagerPortalPageShell
       title="Promotion"
@@ -372,88 +483,81 @@ export function ManagerPromotion() {
       {promotions.length === 0 ? (
         <PortalDataTableEmpty message="No promotions yet." icon="data" />
       ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[560px] border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={MANAGER_TABLE_TH}>Property / Listing</th>
-                  <th className={MANAGER_TABLE_TH}>Title / Headline</th>
-                  <th className={MANAGER_TABLE_TH}>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {promotions.map((row) => {
-                  const isOpen = expandedId === row.id;
-                  return (
-                    <Fragment key={row.id}>
-                      <tr
-                        className={`${PORTAL_TABLE_TR_EXPANDABLE} ${isOpen ? "bg-accent/30" : ""}`}
-                        onClick={createPortalRowExpandClick(() =>
-                          setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                        )}
-                        aria-expanded={isOpen}
-                        data-attr="promotion-row"
-                      >
-                        <td className={PORTAL_TABLE_TD}>{row.propertyLabel || "—"}</td>
-                        <td className={PORTAL_TABLE_TD}>{row.copy?.headline || row.title || "—"}</td>
-                        <td className={PORTAL_TABLE_TD}>{formatDate(row.createdAt)}</td>
-                      </tr>
-                      {isOpen ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
-                            <div>
-                              <PromotionFlyerPreview promotion={row} embedded />
-                            </div>
-                            <PortalTableDetailActions>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => downloadPromotionFlyer(row)}
-                                data-attr="promotion-flyer-download"
-                              >
-                                Download
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => openEdit(row)}
-                                data-attr="promotion-edit"
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => regenerate(row)}
-                                disabled={regeneratingId === row.id}
-                                data-attr="promotion-regenerate"
-                              >
-                                {regeneratingId === row.id ? "Regenerating…" : "Regenerate"}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => removePromotion(row.id)}
-                                data-attr="promotion-delete"
-                              >
-                                Delete
-                              </Button>
-                            </PortalTableDetailActions>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+        <>
+          <div className="space-y-2 lg:hidden">
+            {promotions.map((row) => {
+              const isOpen = expandedId === row.id;
+              return (
+                <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                    aria-expanded={isOpen}
+                    data-attr="promotion-row"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{row.propertyLabel || "—"}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {row.copy?.headline || row.title || "—"}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">
+                        Created {formatDate(row.createdAt)}
+                      </p>
+                    </div>
+                    <PortalTableExpandChevron expanded={isOpen} />
+                  </button>
+                  {isOpen ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
+                </div>
+              );
+            })}
           </div>
-        </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full table-fixed border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={MANAGER_TABLE_TH}>Property / Listing</th>
+                    <th className={MANAGER_TABLE_TH}>Title / Headline</th>
+                    <th className={MANAGER_TABLE_TH}>Created</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {promotions.map((row) => {
+                    const isOpen = expandedId === row.id;
+                    return (
+                      <Fragment key={row.id}>
+                        <tr
+                          className={`${PORTAL_TABLE_TR_EXPANDABLE} ${isOpen ? "bg-accent/30" : ""}`}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                          )}
+                          aria-expanded={isOpen}
+                          data-attr="promotion-row"
+                        >
+                          <td className={PORTAL_TABLE_TD}>{row.propertyLabel || "—"}</td>
+                          <td className={PORTAL_TABLE_TD}>{row.copy?.headline || row.title || "—"}</td>
+                          <td className={PORTAL_TABLE_TD}>{formatDate(row.createdAt)}</td>
+                          <PortalTableExpandCell expanded={isOpen} />
+                        </tr>
+                        {isOpen ? (
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                              {renderRowDetail(row)}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </ManagerPortalPageShell>
   );
@@ -468,6 +572,34 @@ function TemplateThumb({ id }: { id: PromotionTemplate }) {
   const bar = "rounded-[2px] bg-foreground/60";
   const line = "rounded-[2px] bg-foreground/25";
   const frame = "flex h-16 w-full flex-col gap-1 rounded-md border border-border bg-card p-1.5";
+  const circle = "rounded-full bg-primary/50";
+  if (id === "showcase") {
+    return (
+      <div className={`${frame} flex-row items-start justify-between`} aria-hidden="true">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className={`${line} h-1 w-1/2`} />
+          <div className={`${bar} h-1.5 w-full`} />
+          <div className={`${line} h-1 w-2/3`} />
+        </div>
+        <div className={`${circle} h-8 w-8 shrink-0`} />
+      </div>
+    );
+  }
+  if (id === "listing_sheet") {
+    return (
+      <div className={frame} aria-hidden="true">
+        <div className={`${bar} mx-auto h-1.5 w-2/3`} />
+        <div className="flex flex-1 gap-1">
+          <div className={`${photo} h-full w-3/5`} />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className={`${line} h-1.5 w-full`} />
+            <div className={`${line} h-1 w-full`} />
+            <div className={`${line} h-1 w-2/3`} />
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (id === "photo_hero") {
     return (
       <div className={frame} aria-hidden="true">
@@ -525,16 +657,18 @@ function TemplateThumb({ id }: { id: PromotionTemplate }) {
   );
 }
 
-function PromotionForm({
+export function PromotionForm({
   draft,
   setDraft,
   listings,
   onSelectProperty,
+  hidePropertyPicker = false,
 }: {
   draft: PromotionDraft;
   setDraft: React.Dispatch<React.SetStateAction<PromotionDraft>>;
   listings: ManagerPromotionPropertyOption[];
   onSelectProperty: (key: string) => void;
+  hidePropertyPicker?: boolean;
 }) {
   const { showToast } = useAppUi();
   const [readingPhotos, setReadingPhotos] = useState(false);
@@ -567,17 +701,19 @@ function PromotionForm({
 
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      <div>
-        <label className="text-xs font-semibold text-muted">Property / listing</label>
-        <Select className="mt-1" value={draft.propertyKey} onChange={(e) => onSelectProperty(e.target.value)}>
-          <option value={CUSTOM_PROPERTY_KEY}>Custom (type below)</option>
-          {listings.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.label}
-            </option>
-          ))}
-        </Select>
-      </div>
+      {hidePropertyPicker ? null : (
+        <div>
+          <label className="text-xs font-semibold text-muted">Property / listing</label>
+          <Select className="mt-1" value={draft.propertyKey} onChange={(e) => onSelectProperty(e.target.value)}>
+            <option value={CUSTOM_PROPERTY_KEY}>Custom (type below)</option>
+            {listings.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
       <div>
         <label className="text-xs font-semibold text-muted">Property label (shown on flyer)</label>
         <Input
@@ -587,7 +723,16 @@ function PromotionForm({
           placeholder="The Pioneer — Pioneer Square"
         />
       </div>
-      {isCustom ? (
+      <div className="sm:col-span-2">
+        <label className="text-xs font-semibold text-muted">Address (shown on flyer)</label>
+        <Input
+          className="mt-1"
+          value={draft.address}
+          onChange={(e) => setDraft((d) => ({ ...d, address: e.target.value }))}
+          placeholder="1420 Broadway, Seattle, WA 98122"
+        />
+      </div>
+      {isCustom && !hidePropertyPicker ? (
         <div className="sm:col-span-2">
           <label className="text-xs font-semibold text-muted">Custom property details</label>
           <Textarea

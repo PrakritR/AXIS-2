@@ -1,9 +1,14 @@
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import type { VendorDocumentRecord } from "@/lib/vendor-documents";
+
 export type ManagerVendorRow = {
   id: string;
   managerUserId: string | null;
   name: string;
+  /** Legacy single-trade field, still set by the manager's Add/Edit vendor form. */
   trade: string;
+  /** Vendor self-selected work capabilities (multi-select); falls back to [trade] when unset. */
+  trades?: string[];
   phone: string;
   email: string;
   notes: string;
@@ -11,12 +16,50 @@ export type ManagerVendorRow = {
   propertyIds?: string[];
   /** When true, other managers on Axis can use this vendor for work orders. */
   sharedWithManagers?: boolean;
+  insuranceProvider?: string;
+  insurancePolicyNumber?: string;
+  /** ISO date (yyyy-mm-dd) the vendor's insurance coverage expires. */
+  insuranceExpiresAt?: string;
+  /** Uploaded compliance files (insurance cert, W-9 PDF, license). */
+  vendorDocuments?: VendorDocumentRecord[];
+  /** When true, managers can pay this vendor via Zelle using `zelleContact`. */
+  zellePaymentsEnabled?: boolean;
+  zelleContact?: string;
+  /** When true, managers can pay this vendor via Venmo using `venmoContact`. */
+  venmoPaymentsEnabled?: boolean;
+  venmoContact?: string;
+  /** When true, vendor accepts bank transfer via Stripe Connect (link bank in Payments). */
+  achPaymentsEnabled?: boolean;
+  /** Derived snapshot of enabled payout methods (zelle / venmo / ach). */
+  acceptedPaymentMethods?: ("zelle" | "venmo" | "ach")[];
+  /** Synthetic settings row only — default vendor id per trade category. */
+  categoryDefaults?: Record<string, string>;
   createdAt?: string;
   updatedAt?: string;
 };
 
 export const MANAGER_VENDORS_EVENT = "axis:manager-vendors";
+const MANAGER_VENDOR_CATEGORY_SETTINGS_ID_PREFIX = "axis:vendor-category-settings";
+
+export function managerVendorCategorySettingsRowId(managerUserId: string): string {
+  return `${MANAGER_VENDOR_CATEGORY_SETTINGS_ID_PREFIX}_${managerUserId}`;
+}
+
+/** @deprecated Use managerVendorCategorySettingsRowId(managerUserId) — global id was cross-tenant unsafe. */
+export const MANAGER_VENDOR_CATEGORY_SETTINGS_ROW_ID = "axis:vendor-category-settings";
 const MANAGER_VENDORS_SESSION_KEY = "axis:manager-vendors:v1";
+
+export type ManagerVendorCategorySettings = {
+  defaultVendorIdByTrade: Record<string, string>;
+};
+
+export function isVendorCategorySettingsRow(row: Pick<ManagerVendorRow, "id" | "name">): boolean {
+  return (
+    row.name === "__vendor_category_settings__" ||
+    row.id === MANAGER_VENDOR_CATEGORY_SETTINGS_ROW_ID ||
+    row.id.startsWith(`${MANAGER_VENDOR_CATEGORY_SETTINGS_ID_PREFIX}_`)
+  );
+}
 
 const EMPTY_FALLBACK: ManagerVendorRow[] = [];
 let memoryRows: ManagerVendorRow[] = [];
@@ -134,8 +177,68 @@ export function readManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY_FALLB
   return memoryRows;
 }
 
+/** Vendors owned by this manager account (excludes shared directory rows and settings row). */
+export function readOwnManagerVendorRows(
+  managerUserId: string | null | undefined,
+  fallback: ManagerVendorRow[] = EMPTY_FALLBACK,
+): ManagerVendorRow[] {
+  if (!managerUserId) return [];
+  return ownVendorRows(readManagerVendorRows(fallback), managerUserId).filter(
+    (row) => !isVendorCategorySettingsRow(row),
+  );
+}
+
 export function readActiveManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY_FALLBACK): ManagerVendorRow[] {
-  return readManagerVendorRows(fallback).filter((v) => v.active !== false);
+  return readManagerVendorRows(fallback).filter((v) => v.active !== false && !isVendorCategorySettingsRow(v));
+}
+
+export function readOwnActiveManagerVendorRows(
+  managerUserId: string | null | undefined,
+  fallback: ManagerVendorRow[] = EMPTY_FALLBACK,
+): ManagerVendorRow[] {
+  return readOwnManagerVendorRows(managerUserId, fallback).filter((v) => v.active !== false);
+}
+
+export function readManagerVendorCategorySettings(managerUserId?: string | null): ManagerVendorCategorySettings {
+  const rows = readManagerVendorRows().filter((r) => isVendorCategorySettingsRow(r));
+  const row = managerUserId
+    ? rows.find((r) => r.managerUserId === managerUserId) ??
+      rows.find((r) => r.id === managerVendorCategorySettingsRowId(managerUserId))
+    : rows[0];
+  return { defaultVendorIdByTrade: { ...(row?.categoryDefaults ?? {}) } };
+}
+
+export function saveManagerVendorCategorySettings(
+  settings: ManagerVendorCategorySettings,
+  managerUserId: string | null,
+): void {
+  if (!managerUserId) return;
+  const now = new Date().toISOString();
+  upsertManagerVendor(
+    {
+      id: managerVendorCategorySettingsRowId(managerUserId),
+      managerUserId,
+      name: "__vendor_category_settings__",
+      trade: "",
+      phone: "",
+      email: "",
+      notes: "",
+      active: false,
+      categoryDefaults: settings.defaultVendorIdByTrade,
+      createdAt: now,
+      updatedAt: now,
+    },
+    managerUserId,
+  );
+}
+
+export function vendorsMatchingTrade(vendors: ManagerVendorRow[], trade: string): ManagerVendorRow[] {
+  const needle = trade.trim().toLowerCase();
+  if (!needle) return vendors;
+  return vendors.filter((vendor) => {
+    const trades = vendor.trades?.length ? vendor.trades : vendor.trade ? [vendor.trade] : [];
+    return trades.some((t) => t.trim().toLowerCase() === needle) || vendor.trade.trim().toLowerCase() === needle;
+  });
 }
 
 /** Demo seed: load vendor rows into the local store without server mirror. */

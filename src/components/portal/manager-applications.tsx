@@ -12,9 +12,7 @@ import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import {
@@ -28,12 +26,17 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
+import { ManagerEditApplicationModal } from "@/components/portal/manager-edit-application-modal";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import { ManagerScreeningSettingsButton, ManagerScreeningSettingsModal } from "@/components/portal/manager-screening-settings";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
@@ -43,7 +46,6 @@ import {
   normalizeApplicationAxisId,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
-  writeManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
 import {
   MANAGER_PORTFOLIO_REFRESH_EVENTS,
@@ -52,13 +54,15 @@ import {
 } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
-import { buildApplicationHtml } from "@/lib/manager-application-html";
+import { transitionApplicationBucket } from "@/lib/application-review";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import {
+  fetchCosignerSubmissionsForSignerAppId,
+  readCosignerSubmissionsForSignerAppId,
+} from "@/lib/cosigner-submissions-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
-  recordApprovedApplicationCharges,
-  recordSubmittedApplicationFeeCharge,
   removeAllApplicationCharges,
-  removeApprovedApplicationCharges,
   removeResidentHouseholdPaymentData,
   syncHouseholdChargesFromServer,
 } from "@/lib/household-charges";
@@ -69,57 +73,20 @@ import {
   deleteManagerWorkOrdersForResident,
 } from "@/lib/manager-work-orders-storage";
 import { deleteServiceRequestsForResident } from "@/lib/service-requests-storage";
+import { clearUploadedOwnLease } from "@/lib/resident-lease-upload";
 import { loadPersistedInbox, MANAGER_INBOX_STORAGE_KEY, persistInbox } from "@/lib/portal-inbox-storage";
 import {
   RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
+import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
   for (const r of rows) {
     c[r.bucket] += 1;
   }
   return c;
-}
-
-async function syncResidentApproval(row: DemoApplicantRow, nextBucket: ManagerApplicationBucket) {
-  const email = row.email?.trim().toLowerCase();
-  if (!email) return;
-  await fetch("/api/portal/resident-approval", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      email,
-      approved: nextBucket === "approved",
-    }),
-  });
-}
-
-/** POST welcome email; does not open mailto (used for auto-send on approve). */
-async function requestResidentWelcomeEmail(row: DemoApplicantRow): Promise<{
-  status: "sent" | "failed" | "no_email";
-  mailtoHref?: string;
-  error?: string;
-}> {
-  const email = row.email?.trim();
-  if (!email) return { status: "no_email" };
-  const res = await fetch("/api/portal/send-resident-welcome", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ to: email, residentName: row.name, axisId: row.id }),
-  });
-  const data = (await res.json()) as { ok?: boolean; error?: string; mailtoHref?: string };
-  if (res.ok && data.ok) return { status: "sent" };
-  return { status: "failed", mailtoHref: typeof data.mailtoHref === "string" ? data.mailtoHref : undefined, error: data.error };
-}
-
-function stageLabelForRow(row: DemoApplicantRow, bucket: ManagerApplicationBucket) {
-  if (bucket === "approved") return "Approved";
-  if (bucket === "rejected") return "Rejected";
-  return "Submitted";
 }
 
 /** Client-resolved room label used by both the PDF download and the inline document view. */
@@ -129,10 +96,11 @@ function applicationRoomLabel(row: DemoApplicantRow): string {
 }
 
 /** Server PDF endpoint for an application, with the client-resolved room label as a display hint. */
-function applicationPdfHref(row: DemoApplicantRow): string {
+export function applicationPdfHref(row: DemoApplicantRow, opts?: { inline?: boolean }): string {
   const params = new URLSearchParams();
   const roomLabel = applicationRoomLabel(row);
   if (roomLabel) params.set("roomLabel", roomLabel);
+  if (opts?.inline) params.set("disposition", "inline");
   const query = params.toString();
   return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query ? `?${query}` : ""}`;
 }
@@ -148,32 +116,73 @@ export function downloadApplicationPdf(row: DemoApplicantRow): void {
 }
 
 /**
- * Inline rendered-document view of the application, matching the lease-document presentation:
- * clean styled HTML in an srcDoc iframe (no browser PDF-viewer chrome). The document page is
- * always white like the lease, so it reads clearly on the themed card frame in both light and
- * dark mode; the Download PDF action in the detail toolbar produces the official PDF file.
- * Rendered for every bucket (pending/approved/rejected) and also for rows without a stored
- * application payload (e.g. manually added applicants), mirroring buildApplicationPdf which
- * falls back to row-level fields.
+ * Inline application preview — the same PDF bytes as Download PDF, embedded without
+ * opening a new tab (demo builds the PDF locally; production uses the API route).
  */
 export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
-  const documentHtml = useMemo(
-    () => buildApplicationHtml(row, { roomLabel: applicationRoomLabel(row) || undefined }),
-    [row],
-  );
+  const demo = isDemoModeActive();
+  const [pdfSrc, setPdfSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (demo) {
+      void (async () => {
+        const cosignerSubmissions =
+          row.application?.hasCosigner === "yes"
+            ? await fetchCosignerSubmissionsForSignerAppId(row.id).catch(() =>
+                readCosignerSubmissionsForSignerAppId(row.id),
+              )
+            : [];
+        const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
+        const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
+        if (!cancelled) setPdfSrc(url);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    setPdfSrc(`${applicationPdfHref(row, { inline: true })}#toolbar=0&navpanes=0`);
+    return () => {
+      cancelled = true;
+    };
+  }, [row, demo]);
+
   return (
-    <section>
-      <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted">Application</p>
-      <div className="mt-3 overflow-hidden rounded-2xl border border-border shadow-sm">
-        <iframe
-          srcDoc={documentHtml}
-          title="Application document preview"
-          sandbox="allow-same-origin"
-          loading="lazy"
-          className="h-[720px] w-full border-0 bg-white"
-        />
+    <PortalCollapsibleSection
+      title="Application"
+      defaultExpanded={false}
+      surfaceMuted={false}
+      className="mt-4"
+      contentClassName="p-4 pt-0"
+      toggleDataAttr="application-document-toggle"
+      headerActions={
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-full px-4 text-xs"
+          data-attr="application-pdf-download"
+          onClick={() => downloadApplicationPdf(row)}
+        >
+          Download PDF
+        </Button>
+      }
+    >
+      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+        {pdfSrc ? (
+          <iframe
+            key={pdfSrc}
+            src={pdfSrc}
+            title="Application document"
+            loading="lazy"
+            className="h-[min(52vh,420px)] w-full border-0 bg-white"
+          />
+        ) : (
+          <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
+            Loading application PDF…
+          </div>
+        )}
       </div>
-    </section>
+    </PortalCollapsibleSection>
   );
 }
 
@@ -226,6 +235,7 @@ export function ManagerApplications() {
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [editApplicationOpen, setEditApplicationOpen] = useState(false);
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
   const [checkrScreeningRowId, setCheckrScreeningRowId] = useState<string | null>(null);
   useEffect(() => {
@@ -265,22 +275,19 @@ export function ManagerApplications() {
     };
   }, []);
 
-  const persist = useCallback((next: DemoApplicantRow[]) => {
-    setRows(next);
-    writeManagerApplicationRows(next);
-  }, []);
-
   const handleScreeningUpdated = useCallback(() => {
     void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
   }, [userId]);
 
-  const propertyOptions = buildManagerPropertyFilterOptions(userId);
-  const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(userId), [userId, portfolioTick]);
+  const scopeUserId = resolveManagerScopeUserId(userId);
+
+  const propertyOptions = buildManagerPropertyFilterOptions(scopeUserId);
+  const shareableProperties = useMemo(() => buildManagerShareablePropertyOptions(scopeUserId), [scopeUserId, portfolioTick]);
 
   const scopedRows = useMemo(() => {
-    if (!userId) return [];
-    return rows.filter((r) => applicationVisibleToPortalUser(r, userId));
-  }, [rows, userId]);
+    if (!scopeUserId) return [];
+    return rows.filter((r) => applicationVisibleToPortalUser(r, scopeUserId));
+  }, [rows, scopeUserId]);
 
   const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);
   const tabs = useMemo(
@@ -324,45 +331,12 @@ export function ManagerApplications() {
   }, [scopedRows, pathname, router]);
 
   const setRowBucket = async (id: string, nextBucket: ManagerApplicationBucket, opts?: { skipWelcomeEmail?: boolean }) => {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    const next = rows.map((r) =>
-      r.id === id
-        ? {
-            ...r,
-            bucket: nextBucket,
-            stage: stageLabelForRow(r, nextBucket),
-            managerUserId: r.managerUserId ?? (nextBucket === "approved" ? (userId ?? undefined) : r.managerUserId),
-          }
-        : r,
-    );
-    persist(next);
-    const updatedRow = next.find((r) => r.id === id) ?? row;
-    try {
-      if (nextBucket === "approved") {
-        recordApprovedApplicationCharges(updatedRow, userId ?? null);
-      } else if (nextBucket === "pending") {
-        removeApprovedApplicationCharges(id, userId ?? null);
-        recordSubmittedApplicationFeeCharge(updatedRow, userId ?? null);
-      } else {
-        removeAllApplicationCharges(id, userId ?? null);
-      }
-    } catch {
-      /* Keep approval flow moving even if charge reconciliation fails. */
-    }
-    if (row) {
-      try {
-        await syncResidentApproval(row, nextBucket);
-      } catch {
-        /* keep local workflow moving even if profile sync fails */
-      }
-    }
-
-    let welcomeSent = false;
-    if (nextBucket === "approved" && updatedRow.email?.trim() && !opts?.skipWelcomeEmail) {
-      const welcome = await requestResidentWelcomeEmail(updatedRow);
-      welcomeSent = welcome.status === "sent";
-    }
+    const result = await transitionApplicationBucket(id, nextBucket, {
+      userId: userId ?? null,
+      skipWelcomeEmail: opts?.skipWelcomeEmail,
+    });
+    if (!result) return;
+    setRows(readManagerApplicationRows());
 
     setExpandedId(null);
     setBucket(nextBucket);
@@ -370,7 +344,7 @@ export function ManagerApplications() {
       nextBucket === "approved"
         ? opts?.skipWelcomeEmail
           ? "Application approved (no setup email sent)."
-          : welcomeSent
+          : result.welcomeSent
             ? "Application approved. A welcome email with portal setup was sent to the applicant."
             : "Application approved."
         : nextBucket === "rejected"
@@ -379,27 +353,42 @@ export function ManagerApplications() {
     showToast(msg);
   };
 
+  const purgeResidentLocalData = (residentEmail: string, applicationId: string) => {
+    const email = residentEmail.trim().toLowerCase();
+    if (!email) return;
+
+    removeResidentHouseholdPaymentData(residentEmail);
+    removeAllApplicationCharges(applicationId, userId ?? null);
+    deleteLeasePipelineRowsForResident(residentEmail, applicationId, userId);
+    deleteManagerWorkOrdersForResident(residentEmail);
+    deleteServiceRequestsForResident(residentEmail);
+    clearUploadedOwnLease(residentEmail);
+
+    const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
+    const deletedThreads = allInbox.filter((thread) => thread.email.trim().toLowerCase() === email);
+    persistInbox(
+      MANAGER_INBOX_STORAGE_KEY,
+      allInbox.filter((thread) => thread.email.trim().toLowerCase() !== email),
+    );
+    for (const thread of deletedThreads) {
+      void fetch("/api/portal-inbox-threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "delete", id: thread.id }),
+      }).catch(() => undefined);
+    }
+  };
+
   const deleteApplication = async (id: string) => {
     const row = rows.find((candidate) => candidate.id === id);
     const email = row?.email?.trim().toLowerCase();
 
-    // Optimistic removal — update the UI immediately before any network calls.
     setRows((prev) => prev.filter((r) => r.id !== id));
     setExpandedId(null);
 
-    const result = await deleteManagerApplicationFromServer(id);
-    if (!result.ok) {
-      // Roll back on failure.
-      setRows(await syncManagerApplicationsFromServer({ managerUserId: userId }));
-      showToast(result.error ?? "Could not delete application.");
-      return;
-    }
-
-    await syncHouseholdChargesFromServer();
-    removeAllApplicationCharges(id, userId ?? null);
-
-    let removedResidentAccess = true;
-    if (email) {
+    let serverError: string | null = null;
+    if (email || id) {
       try {
         const res = await fetch("/api/portal/delete-resident-access", {
           method: "POST",
@@ -407,58 +396,49 @@ export function ManagerApplications() {
           credentials: "include",
           body: JSON.stringify({ email, purgeData: true, applicationId: id }),
         });
-        if (!res.ok) removedResidentAccess = false;
-      } catch {
-        removedResidentAccess = false;
-      }
-      if (removedResidentAccess) {
-        removeResidentHouseholdPaymentData(email);
-        deleteLeasePipelineRowsForResident(email, id, userId);
-        deleteManagerWorkOrdersForResident(email);
-        deleteServiceRequestsForResident(email);
-        const allInbox = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
-        const deletedThreads = allInbox.filter((thread) => thread.email.trim().toLowerCase() === email);
-        persistInbox(
-          MANAGER_INBOX_STORAGE_KEY,
-          allInbox.filter((thread) => thread.email.trim().toLowerCase() !== email),
-        );
-        for (const thread of deletedThreads) {
-          void fetch("/api/portal-inbox-threads", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ action: "delete", id: thread.id }),
-          }).catch(() => undefined);
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        if (!res.ok) {
+          serverError = body?.error ?? "Could not delete application and resident data.";
         }
+      } catch {
+        serverError = "Could not delete application and resident data.";
       }
+    } else {
+      const result = await deleteManagerApplicationFromServer(id);
+      if (!result.ok) serverError = result.error ?? "Could not delete application.";
     }
 
-    void syncManagerApplicationsFromServer({ managerUserId: userId }).then(setRows);
+    if (serverError) {
+      setRows(await syncManagerApplicationsFromServer({ managerUserId: userId }));
+      showToast(serverError);
+      return;
+    }
+
+    if (email) {
+      purgeResidentLocalData(email, id);
+    } else {
+      removeAllApplicationCharges(id, userId ?? null);
+    }
+
+    await Promise.all([
+      syncManagerApplicationsFromServer({ force: true, managerUserId: userId }),
+      syncHouseholdChargesFromServer(),
+    ]);
+
     showToast(
-      email && !removedResidentAccess
-        ? "Application deleted, but resident access could not be removed."
-        : email
-          ? "Application and resident access deleted."
-          : "Application deleted.",
+      email
+        ? "Application deleted. Resident account, payments, documents, inbox, and services were removed."
+        : "Application deleted.",
     );
   };
 
   const renderApplicationDetail = (row: DemoApplicantRow) => (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <>
       <PortalTableDetailActions placement="top">
         {row.bucket === "pending" ? (
           <>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
               Approve
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              data-attr="open-run-screening"
-              onClick={() => setCheckrScreeningRowId(row.id)}
-            >
-              Run screening
             </Button>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
               Reject
@@ -472,19 +452,10 @@ export function ManagerApplications() {
         <Button
           type="button"
           variant="outline"
-          className={PORTAL_DETAIL_BTN}
-          data-attr="application-pdf-download"
-          onClick={() => downloadApplicationPdf(row)}
-        >
-          Download PDF
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
           className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
           onClick={() => void deleteApplication(row.id)}
         >
-          Delete application
+          Delete
         </Button>
       </PortalTableDetailActions>
 
@@ -495,7 +466,7 @@ export function ManagerApplications() {
         onUpdated={handleScreeningUpdated}
         onOpenScreeningModal={() => setCheckrScreeningRowId(row.id)}
       />
-    </div>
+    </>
   );
 
   return (
@@ -503,15 +474,19 @@ export function ManagerApplications() {
     <ManagerPortalPageShell
       title="Applications"
       titleAside={
-        <>
-          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(id) => setPropertyFilter(id)}
-            />
-            <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
-          </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            data-attr="edit-application-open"
+            onClick={() => setEditApplicationOpen(true)}
+            disabled={propertyOptions.length === 0}
+            title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
+          >
+            Edit application
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -520,21 +495,18 @@ export function ManagerApplications() {
             disabled={shareableProperties.length === 0}
             title={shareableProperties.length === 0 ? "List a property as active before inviting prospects" : undefined}
           >
-            Invite to apply
+            Invite
           </Button>
-        </>
+        </div>
       }
       filterRow={
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(id) => setPropertyFilter(id)}
-            />
-            <ManagerScreeningSettingsButton onClick={() => setScreeningModalOpen(true)} />
-          </div>
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={(id) => setPropertyFilter(id)}
+          />
         </ManagerPortalFilterRow>
       }
     >
@@ -570,45 +542,19 @@ export function ManagerApplications() {
             <div key={row.id} id={`portal-application-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
               <button
                 type="button"
-                className="w-full text-left"
+                className="flex w-full items-center justify-between gap-2 text-left"
                 onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                aria-expanded={expanded}
               >
-                <p className="truncate font-semibold text-foreground">{row.name}</p>
-                <p className="mt-0.5 truncate text-xs text-muted">
-                  {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
-                </p>
-                {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-foreground">{row.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
+                  </p>
+                  {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
+                </div>
+                <PortalTableExpandChevron expanded={expanded} />
               </button>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                {row.bucket === "pending" ? (
-                  <>
-                    <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
-                      Approve
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_DETAIL_BTN}
-                      data-attr="open-run-screening"
-                      onClick={() => setCheckrScreeningRowId(row.id)}
-                    >
-                      Run screening
-                    </Button>
-                  </>
-                ) : null}
-                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}>
-                  {expanded ? "Less" : "Review"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  data-attr="application-pdf-download"
-                  onClick={() => downloadApplicationPdf(row)}
-                >
-                  PDF
-                </Button>
-              </div>
               {expanded ? (
                 <div className="mt-3 border-t border-border pt-3">{renderApplicationDetail(row)}</div>
               ) : null}
@@ -618,12 +564,15 @@ export function ManagerApplications() {
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
+                <th className={PORTAL_TABLE_EXPAND_TH}>
+                  <span className="sr-only">Expand</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -643,10 +592,11 @@ export function ManagerApplications() {
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
+                      <PortalTableExpandCell expanded={expandedId === row.id} />
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                           {renderApplicationDetail(row)}
                         </td>
                       </tr>
@@ -697,6 +647,14 @@ export function ManagerApplications() {
         onClose={() => setInviteModalOpen(false)}
         kind="apply"
         properties={shareableProperties}
+      />
+      <ManagerEditApplicationModal
+        open={editApplicationOpen}
+        onClose={() => setEditApplicationOpen(false)}
+        propertyOptions={propertyOptions}
+        managerUserId={userId}
+        onSaved={() => setPortfolioTick((n) => n + 1)}
+        showToast={showToast}
       />
     </>
   );

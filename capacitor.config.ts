@@ -1,11 +1,31 @@
 import type { CapacitorConfig } from "@capacitor/cli";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { nativeShellEntryPath } from "./src/lib/auth/native-shell-entry";
+
+const CAP_DEV_SERVER_MARKER = join(process.cwd(), ".cap-dev-server");
+
+function readServerBase(): string {
+  const fromEnv = process.env.CAP_SERVER_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  try {
+    if (existsSync(CAP_DEV_SERVER_MARKER)) {
+      const persisted = readFileSync(CAP_DEV_SERVER_MARKER, "utf8").trim();
+      if (persisted) return persisted.replace(/\/$/, "");
+    }
+  } catch {
+    /* ignore */
+  }
+  return "https://www.axis-seattle-housing.com";
+}
 
 /**
  * Capacitor native shell — opens /auth/sign-in (welcome role picker on device).
  * Local dev: npm run cap:dev (LAN IP for physical iPhone).
+ * `cap run ios` re-syncs from this file — dev URL persists via `.cap-dev-server`
+ * written by cap:dev until `npm run cap:prod`.
  */
-const serverBase = (process.env.CAP_SERVER_URL ?? "https://www.axis-seattle-housing.com").replace(/\/$/, "");
+const serverBase = readServerBase();
 const nativeEntryPath = nativeShellEntryPath();
 const nativeAppUrl = `${serverBase}${nativeEntryPath}`;
 

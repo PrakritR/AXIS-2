@@ -41,11 +41,19 @@ export function formatCompactPlacementLine(
   return rent ? `${base} · ${rent}` : base;
 }
 
-/** Compact charge line: "Rent — July 2026 · $825.00 · Jul 1" → "Rent · $825.00 · Jul 1" on native. */
-export function formatCompactChargeLine(title: string, balanceLabel: string, dueLabel: string): string {
+/** Compact charge line for dashboard previews. Omits balance when the row badge already shows it. */
+export function formatCompactChargeLine(
+  title: string,
+  balanceLabel: string,
+  dueLabel: string,
+  options?: { omitBalance?: boolean },
+): string {
   const charge = title.trim() || "Charge";
   const shortTitle = charge.replace(/\s*—\s*/g, " · ").replace(/\s+/g, " ").trim();
-  return [shortTitle, balanceLabel.trim(), dueLabel.trim()].filter(Boolean).join(" · ");
+  const parts = options?.omitBalance
+    ? [shortTitle, dueLabel.trim()]
+    : [shortTitle, balanceLabel.trim(), dueLabel.trim()];
+  return parts.filter(Boolean).join(" · ");
 }
 
 export function sliceForPortalPreview<T>(items: T[], isNative: boolean | null | undefined): {

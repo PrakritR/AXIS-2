@@ -159,7 +159,7 @@ export function CosignerApplyFlow({
     const id = f.signerAppId.trim();
     const name = f.signerFullName.trim();
     if (!id && !name) {
-      const msg = "Enter an Axis ID or the signer’s full name.";
+      const msg = "Enter an application ID or the signer’s full name.";
       errs.signerAppId = msg;
       errs.signerFullName = msg;
     } else {
@@ -167,7 +167,7 @@ export function CosignerApplyFlow({
         const r = validateFullName(name);
         if (!r.ok) errs.signerFullName = r.message;
       }
-      if (id && id.length < 4) errs.signerAppId = "Axis ID looks too short.";
+      if (id && id.length < 4) errs.signerAppId = "Application ID looks too short.";
     }
     setFieldErrors(errs);
     return errs;
@@ -345,7 +345,7 @@ export function CosignerApplyFlow({
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">Linked primary application</p>
           {displayAxis ? (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted/70">Application ID (Axis ID)</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted/70">Application ID</p>
               <p className="mt-1 font-mono text-lg font-bold tracking-tight text-foreground sm:text-xl">{displayAxis}</p>
             </div>
           ) : postSubmit.linkedSignerName ? (
@@ -353,7 +353,7 @@ export function CosignerApplyFlow({
               Signer name: <span className="text-foreground">{postSubmit.linkedSignerName}</span>
             </p>
           ) : (
-            <p className="text-sm text-muted">Linked using the primary applicant&apos;s Axis ID or signer name from step 1.</p>
+            <p className="text-sm text-muted">Linked using the primary applicant&apos;s application ID or signer name from step 1.</p>
           )}
           {postSubmit.cosignerName ? (
             <p className="border-t border-border pt-3 text-sm text-foreground">
@@ -439,7 +439,7 @@ export function CosignerApplyFlow({
         {step === 1 ? (
           <>
             <div className="divide-y divide-slate-100">
-              <Field fieldKey="signerAppId" label="Signer Axis ID" optional hint="Recommended if you have their Axis ID." error={fieldErrors.signerAppId}>
+              <Field fieldKey="signerAppId" label="Signer Application ID" optional hint="Recommended if you have their application ID." error={fieldErrors.signerAppId}>
                 <Input
                   value={f.signerAppId}
                   onChange={(e) => {
@@ -450,7 +450,7 @@ export function CosignerApplyFlow({
                   className={err("signerAppId")}
                 />
               </Field>
-              <Field fieldKey="signerFullName" label="Signer Full Name" optional hint="Use this when you do not have the Axis ID." error={fieldErrors.signerFullName}>
+              <Field fieldKey="signerFullName" label="Signer Full Name" optional hint="Use this when you do not have the application ID." error={fieldErrors.signerFullName}>
                 <Input
                   value={f.signerFullName}
                   onChange={(e) => {

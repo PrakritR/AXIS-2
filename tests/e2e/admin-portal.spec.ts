@@ -7,10 +7,9 @@ const portalTestsEnabled = process.env.E2E_TESTS_ENABLED === "1";
 const ADMIN_SECTIONS = [
   { label: "Dashboard", path: "/admin/dashboard" },
   { label: "Properties", path: "/admin/properties" },
-  { label: "Leases", path: "/admin/leases" },
   { label: "Events", path: "/admin/events" },
-  { label: "Feedback", path: "/admin/bugs-feedback" },
   { label: "Inbox", path: "/admin/inbox/unopened" },
+  { label: "Settings", path: "/admin/profile" },
 ] as const;
 
 test.describe("Admin portal", () => {
@@ -50,9 +49,15 @@ test.describe("Admin portal", () => {
     }
   });
 
-  test("bugs-feedback section loads", async ({ page }) => {
+  test("settings page loads with embedded feedback", async ({ page }) => {
+    await page.goto("/admin/profile");
+    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Feedback", { exact: true }).first()).toBeVisible();
+  });
+
+  test("legacy bugs-feedback URL redirects to settings", async ({ page }) => {
     await page.goto("/admin/bugs-feedback");
-    await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/admin\/profile/);
   });
 
   test("properties section loads", async ({ page }) => {
@@ -60,9 +65,9 @@ test.describe("Admin portal", () => {
     await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
   });
 
-  test("leases section loads", async ({ page }) => {
+  test("legacy leases URL redirects to dashboard", async ({ page }) => {
     await page.goto("/admin/leases");
-    await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/admin\/dashboard/);
   });
 
   test("events section loads", async ({ page }) => {

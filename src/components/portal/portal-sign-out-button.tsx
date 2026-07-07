@@ -8,9 +8,10 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 type PortalSignOutButtonProps = {
   className?: string;
   onSignedOut?: () => void;
+  dataAttr?: string;
 };
 
-export function PortalSignOutButton({ className, onSignedOut }: PortalSignOutButtonProps) {
+export function PortalSignOutButton({ className, onSignedOut, dataAttr }: PortalSignOutButtonProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -43,6 +44,7 @@ export function PortalSignOutButton({ className, onSignedOut }: PortalSignOutBut
       type="button"
       disabled={busy}
       className={className}
+      data-attr={dataAttr}
       onClick={() => void signOut()}
     >
       {busy ? "Signing out…" : "Sign out"}

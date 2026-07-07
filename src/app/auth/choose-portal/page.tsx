@@ -31,6 +31,12 @@ const ROLE_META: Record<
     icon: "resident",
     tone: "blue",
   },
+  vendor: {
+    label: "Vendor",
+    hint: "Work orders & scheduling",
+    icon: "vendor",
+    tone: "blue",
+  },
 };
 
 function ChoosePortalForm() {

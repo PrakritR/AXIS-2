@@ -26,7 +26,8 @@ export type ReminderTemplateParams = {
 };
 
 export function applyReminderTemplate(template: string, params: ReminderTemplateParams): string {
-  const propertyLine = params.propertyLabel.trim() ? `Property: ${params.propertyLabel.trim()}` : "";
+  const propertyLabel = (params.propertyLabel ?? "").trim();
+  const propertyLine = propertyLabel ? `Property: ${propertyLabel}` : "";
   const daysLabel =
     params.daysUntilDue === 0
       ? "today"
@@ -60,7 +61,7 @@ export function buildReminderContent(input: {
 }): { subject: string; body: string } {
   const settings = input.settings ?? DEFAULT_MANAGER_AUTOMATION_SETTINGS;
   const template =
-    input.kind === "overdue_daily"
+    input.kind === "overdue_daily" || input.kind === "post_due"
       ? settings.templates.overdue
       : input.kind === "late_fee"
         ? settings.templates.lateFee

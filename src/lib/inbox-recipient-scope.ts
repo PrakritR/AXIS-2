@@ -57,6 +57,48 @@ async function coManagerEmailsForManagers(
   return emails;
 }
 
+/** Co-manager auth user ids linked to any of the given manager ids (account links). */
+async function accountLinkCoManagerIdsForManagers(
+  db: SupabaseClient,
+  managerIds: string[],
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  if (managerIds.length === 0) return ids;
+  try {
+    const { data } = await db
+      .from("account_link_invites")
+      .select("invitee_user_id")
+      .eq("status", "accepted")
+      .in("inviter_user_id", managerIds);
+    for (const row of data ?? []) {
+      const id = String(row.invitee_user_id ?? "").trim();
+      if (id) ids.add(id);
+    }
+  } catch {
+    /* table may not exist */
+  }
+  return ids;
+}
+
+/** Emails of vendors in the given managers' own vendor directory. */
+async function vendorEmailsForManagers(
+  db: SupabaseClient,
+  managerIds: string[],
+): Promise<Set<string>> {
+  const emails = new Set<string>();
+  if (managerIds.length === 0) return emails;
+  const { data } = await db
+    .from("manager_vendor_records")
+    .select("row_data")
+    .in("manager_user_id", managerIds);
+  for (const row of data ?? []) {
+    const rowData = (row.row_data ?? {}) as Record<string, unknown>;
+    const email = String(rowData.email ?? "").trim().toLowerCase();
+    if (email) emails.add(email);
+  }
+  return emails;
+}
+
 /** Manager user ids that own the given resident (applications / charges / leases). */
 async function managerIdsOwningResident(db: SupabaseClient, residentEmail: string): Promise<string[]> {
   const email = residentEmail.trim().toLowerCase();
@@ -85,6 +127,31 @@ async function managerIdsOwningResident(db: SupabaseClient, residentEmail: strin
   return [...ids];
 }
 
+/** Manager user ids that invited/own the given vendor (by linked auth user or directory email). */
+async function managerIdsOwningVendor(
+  db: SupabaseClient,
+  vendor: { userId: string; email: string },
+): Promise<string[]> {
+  const email = vendor.email.trim().toLowerCase();
+  const ids = new Set<string>();
+  const filter = email
+    ? `vendor_user_id.eq.${vendor.userId},row_data->>email.eq.${email}`
+    : `vendor_user_id.eq.${vendor.userId}`;
+  const { data } = await db
+    .from("manager_vendor_records")
+    .select("manager_user_id, vendor_user_id, row_data")
+    .or(filter);
+  for (const row of data ?? []) {
+    const id = String(row.manager_user_id ?? "").trim();
+    if (id) ids.add(id);
+  }
+  return [...ids];
+}
+
+function isVendorRole(role: string | null): boolean {
+  return String(role ?? "").trim().toLowerCase() === "vendor";
+}
+
 function partition<T>(items: T[], keep: boolean[]): { allowed: T[]; blocked: T[] } {
   const allowed: T[] = [];
   const blocked: T[] = [];
@@ -111,18 +178,47 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
 
   if (isManagerRole(sender.role)) {
     const coManagers = await coManagerEmailsForManagers(db, [sender.id]);
+    const vendors = await vendorEmailsForManagers(db, [sender.id]);
     const keep = await Promise.all(
       recipients.map(async (recipient) => {
         const email = recipient.email.trim().toLowerCase();
         if (!email) return false;
         if (email === ADMIN_EMAIL) return true;
         if (coManagers.has(email)) return true;
+        if (vendors.has(email)) return true;
         return managerOwnsResident(db, sender.id, {
           email,
           residentUserId: recipient.userId ?? undefined,
         });
       }),
     );
+    return partition(recipients, keep);
+  }
+
+  // Vendor sender → may message the manager(s) who invited/own them plus their co-managers.
+  if (isVendorRole(sender.role)) {
+    const managerIds = await managerIdsOwningVendor(db, { userId: sender.id, email: senderEmail });
+    const managerIdSet = new Set(managerIds);
+    const coManagerEmails = await coManagerEmailsForManagers(db, managerIds);
+    const coManagerIds = await accountLinkCoManagerIdsForManagers(db, managerIds);
+    const { data } = managerIds.length > 0 ? await db.from("profiles").select("id, email").in("id", managerIds) : { data: [] };
+    const allowedEmails = new Set((data ?? []).map((row) => String(row.email ?? "").trim().toLowerCase()).filter(Boolean));
+    if (coManagerIds.size > 0) {
+      const { data: coProfiles } = await db.from("profiles").select("id, email").in("id", [...coManagerIds]);
+      for (const row of coProfiles ?? []) {
+        const email = String(row.email ?? "").trim().toLowerCase();
+        if (email) allowedEmails.add(email);
+      }
+    }
+    const keep = recipients.map((recipient) => {
+      const email = recipient.email.trim().toLowerCase();
+      if (email === ADMIN_EMAIL) return true;
+      if (email && allowedEmails.has(email)) return true;
+      if (email && coManagerEmails.has(email)) return true;
+      if (recipient.userId && managerIdSet.has(recipient.userId)) return true;
+      if (recipient.userId && coManagerIds.has(recipient.userId)) return true;
+      return false;
+    });
     return partition(recipients, keep);
   }
 
@@ -190,6 +286,28 @@ export async function listEligibleInboxContacts(
     }
     // Own linked co-managers.
     await pushCoManagers(db, [sender.id], push);
+    return out;
+  }
+
+  // Vendor sender → the manager(s) who invited/own them.
+  if (isVendorRole(sender.role)) {
+    const vendorManagerIds = await managerIdsOwningVendor(db, { userId: sender.id, email: senderEmail });
+    if (vendorManagerIds.length > 0) {
+      const { data: managers } = await db
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", vendorManagerIds);
+      for (const row of managers ?? []) {
+        const email = String(row.email ?? "").trim();
+        if (!email) continue;
+        push({
+          id: `mgr-${row.id}`,
+          name: String(row.full_name ?? "").trim() || email,
+          email,
+          role: "manager",
+        });
+      }
+    }
     return out;
   }
 

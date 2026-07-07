@@ -1,4 +1,26 @@
 import type { CheckrPackage } from "@/lib/checkr/config";
+import type { CheckrAddOnSlug } from "@/lib/checkr/packages";
+
+/** Per-product status from GET /orders/{id}/report (Checkr Tenant API). */
+export type CheckrProductStatus = "clear" | "consider" | string;
+
+export type CheckrReportProductSnapshot = {
+  status?: CheckrProductStatus;
+  consider_reasons?: string[];
+};
+
+export type CheckrReportSnapshot = {
+  criminal_history?: CheckrReportProductSnapshot | null;
+  credit_report?: CheckrReportProductSnapshot | null;
+  eviction_history?: CheckrReportProductSnapshot | null;
+  identity_verification?: CheckrReportProductSnapshot | null;
+  income_verification?: CheckrReportProductSnapshot | null;
+  sex_offender_registry?: CheckrReportProductSnapshot | null;
+  global_watchlist?: CheckrReportProductSnapshot | null;
+  credit_score?: number | null;
+  est_monthly_income_cents?: number | null;
+  est_monthly_payments_cents?: number | null;
+};
 
 /** Checkr Tenant API order lifecycle. `complete` carries an aggregate `result`. */
 export type CheckrReportStatus = "pending" | "complete" | "canceled";
@@ -17,11 +39,17 @@ export type ApplicationBackgroundCheck = {
   candidateId: string;
   /** Checkr Tenant API order id (`ord_test_…` / `ord_…`) — used for polling and webhook lookup. */
   reportId: string;
+  /** Checkr report resource id (`rp_test_…` / `rp_…`) — used for official PDF download. */
+  reportResourceId?: string;
   packageSlug: CheckrPackage;
+  /** Optional add-ons (e.g. identity_verification). */
+  addOnProducts?: CheckrAddOnSlug[];
   status: CheckrReportStatus;
   result: CheckrResult;
   orderedAt: string;
   completedAt?: string;
+  /** Cached report products for inline preview (no PII). */
+  reportSnapshot?: CheckrReportSnapshot;
   /** True when produced by the deterministic simulate fallback (no live call). */
   simulated?: boolean;
   /** Flat fee charged to the manager for this run, and the resulting Stripe PaymentIntent. */
@@ -29,21 +57,32 @@ export type ApplicationBackgroundCheck = {
   stripePaymentIntentId?: string;
 };
 
+/** Options when placing a Checkr Tenant order. */
+export type CheckrOrderOptions = {
+  packageSlug: CheckrPackage;
+  addOnProducts?: CheckrAddOnSlug[];
+};
+
 /** Result of creating an applicant + property + order with Checkr. */
 export type CheckrCreateResult = {
   applicantId: string;
   orderId: string;
   packageSlug: CheckrPackage;
+  addOnProducts: CheckrAddOnSlug[];
   status: CheckrReportStatus;
   result: CheckrResult;
+  reportSnapshot?: CheckrReportSnapshot;
+  reportResourceId?: string;
   simulated: boolean;
 };
 
 /** Normalized view of a fetched Checkr order + report. */
 export type CheckrReport = {
   orderId: string;
+  reportResourceId?: string;
   status: CheckrReportStatus;
   result: CheckrResult;
+  reportSnapshot?: CheckrReportSnapshot;
   simulated?: boolean;
 };
 

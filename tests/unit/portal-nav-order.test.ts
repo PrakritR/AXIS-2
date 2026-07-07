@@ -58,7 +58,7 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
 describe("pro portal nav grouping (free → resident block → paid workspace → account → settings)", () => {
   const sections = sectionIds(proPortal.sections);
   const residentBlock = ["residents", "leases", "payments"];
-  const paidBlock = ["services", "inbox", "documents", "financials", "relationships", "promotion"];
+  const paidBlock = ["documents", "inbox", "services", "financials", "relationships", "promotion"];
 
   it("places residents and leases before payments", () => {
     expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("leases"));
@@ -66,7 +66,7 @@ describe("pro portal nav grouping (free → resident block → paid workspace �
   });
 
   it("groups resident block contiguously after applications", () => {
-    expectContiguousBlock(sections, residentBlock, "applications", "services");
+    expectContiguousBlock(sections, residentBlock, "applications", "documents");
   });
 
   it("groups paid sections contiguously between payments and feedback", () => {
@@ -104,7 +104,7 @@ describe("resident portal nav grouping", () => {
 
   it("approved: mirrors pro free block then paid workspace pattern", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expect(sections.slice(0, 4)).toEqual(["dashboard", "lease", "payments", "move-in"]);
+    expect(sections.slice(0, 5)).toEqual(["dashboard", "applications", "lease", "payments", "move-in"]);
     expect(sections.slice(-2)).toEqual(["bugs-feedback", "profile"]);
   });
 });
@@ -116,11 +116,14 @@ describe("pro portal documents section", () => {
     expect(sections).toContain("financials");
   });
 
-  it("documents tabs are income/expense docs, 1099, and tax summary", () => {
+  it("documents tabs include applications, leases, income/expense docs, occupancy, 1099, and tax summary", () => {
     const documents = proPortal.sections.find((s) => s.section === "documents");
     expect(documents?.tabs.map((t) => t.id)).toEqual([
+      "applications",
+      "leases",
       "income-documents",
       "expense-documents",
+      "occupancy",
       "1099",
       "tax-summary",
     ]);

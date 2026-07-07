@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { applicationPdfFilename, buildApplicationPdf } from "@/lib/manager-application-pdf";
@@ -70,7 +71,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     // Inline disposition lets the manager UI embed the PDF in a preview frame instead of downloading it.
     const inline = url.searchParams.get("disposition") === "inline";
 
-    const pdf = await buildApplicationPdf(row, { roomLabel });
+    const signerIds = [...new Set([...ids, ...ids.map((v) => v.toUpperCase())])];
+    const { data: cosignerRows } = await db
+      .from("cosigner_submission_records")
+      .select("row_data, created_at")
+      .in("signer_app_id", signerIds)
+      .order("created_at", { ascending: true });
+    const cosignerSubmissions = (cosignerRows ?? [])
+      .map((r) => r.row_data)
+      .filter(Boolean) as CosignerSubmission[];
+
+    const pdf = await buildApplicationPdf(row, { roomLabel, cosignerSubmissions });
     const filename = applicationPdfFilename(row);
 
     return new NextResponse(Buffer.from(pdf), {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isProductionRuntime } from "@/lib/server-env";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
-import { loadDueScheduledInboxMessages, updateScheduledInboxMessage } from "@/lib/scheduled-inbox-messages";
+import { loadDueScheduledInboxMessages, isResidentOriginatedScheduledMessage, updateScheduledInboxMessage } from "@/lib/scheduled-inbox-messages";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -25,6 +25,34 @@ export async function GET(req: Request) {
 
   for (const message of due) {
     try {
+      if (isResidentOriginatedScheduledMessage(message) && message.senderUserId && message.senderEmail) {
+        const result = await deliverPortalInboxMessage(db, {
+          senderUserId: message.senderUserId,
+          senderEmail: message.senderEmail,
+          fromName: message.senderName?.trim() || "Resident",
+          subject: message.subject,
+          text: message.body,
+          toEmails: [message.recipientEmail],
+          toUserIds: message.recipientUserId ? [message.recipientUserId] : [],
+          deliverViaEmail: message.deliverViaEmail,
+          deliverViaSms: message.deliverViaSms,
+          senderRole: "resident",
+        });
+
+        if (!result.ok) {
+          failed++;
+          errors.push(`${message.id}: ${result.error}`);
+          continue;
+        }
+
+        await updateScheduledInboxMessage(db, message.managerUserId, message.id, {
+          status: "sent",
+          sentAt: new Date().toISOString(),
+        });
+        sent++;
+        continue;
+      }
+
       const { data: profile } = await db
         .from("profiles")
         .select("email, full_name")

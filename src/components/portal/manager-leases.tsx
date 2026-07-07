@@ -24,7 +24,6 @@ import { getPropertyById } from "@/lib/rental-application/data";
 
 const LEASE_LABELS: { id: ManagerLeaseTab; label: string }[] = [
   { id: "manager", label: "Manager review" },
-  { id: "admin", label: "Admin review" },
   { id: "resident", label: "Resident signature pending" },
   { id: "signed", label: "Manager signature pending" },
   { id: "completed", label: "Signed" },
@@ -149,16 +148,19 @@ export function ManagerLeases() {
   return (
     <ManagerPortalPageShell
       title="Leases"
-      titleAside={
-        <PortalPropertyFilterPill
-          propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={setPropertyFilter}
-        />
-      }
       filterRow={
         <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills tabs={tabs} activeId={tab} onChange={(id) => setTab(id as ManagerLeaseTab)} />
+          <ManagerPortalStatusPills
+            compact
+            tabs={tabs}
+            activeId={tab}
+            onChange={(id) => setTab(id as ManagerLeaseTab)}
+          />
+          <PortalPropertyFilterPill
+            propertyOptions={propertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
         </ManagerPortalFilterRow>
       }
     >

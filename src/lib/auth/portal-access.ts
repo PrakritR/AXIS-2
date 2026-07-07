@@ -2,10 +2,13 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import type { AuthRole } from "@/components/auth/portal-switcher";
+import { normalizePortalRoles } from "@/lib/auth/portal-roles";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getServerSessionProfile, type ServerProfile } from "@/lib/auth/server-profile";
 
 export const ACTIVE_PORTAL_COOKIE = "axis_active_portal";
+
+export { normalizePortalRoles } from "@/lib/auth/portal-roles";
 
 export type PortalAccessContext = {
   user: { id: string; email?: string | null } | null;
@@ -15,7 +18,7 @@ export type PortalAccessContext = {
 };
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "admin";
+  return value === "resident" || value === "manager" || value === "admin" || value === "vendor";
 }
 
 function mapLegacyPortalRole(role: string | null | undefined): AuthRole | null {
@@ -24,15 +27,11 @@ function mapLegacyPortalRole(role: string | null | undefined): AuthRole | null {
   return isAuthRole(value) ? value : null;
 }
 
-function normalizeRoles(rows: { role: string }[] | null | undefined, fallbackRole: string | null | undefined): AuthRole[] {
-  const fromTable = (rows ?? [])
-    .map((r) => (r.role === "owner" ? "manager" : r.role))
-    .filter((r): r is AuthRole => isAuthRole(r));
-  const unique = [...new Set(fromTable)];
-  if (unique.length > 0) return unique;
-  const mappedFallback = mapLegacyPortalRole(fallbackRole);
-  if (mappedFallback) return [mappedFallback];
-  return [];
+function normalizeRoles(
+  rows: { role: string }[] | null | undefined,
+  fallbackRole: string | null | undefined,
+): AuthRole[] {
+  return normalizePortalRoles(rows, fallbackRole);
 }
 
 /**

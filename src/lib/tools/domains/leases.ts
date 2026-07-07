@@ -16,7 +16,7 @@ async function loadManagerLeases(ctx: AgentContext): Promise<LeasePipelineRow[]>
 export const listLeasesTool = defineTool({
   name: "list_leases",
   description:
-    "List the current landlord's leases with their status (Draft, Manager Review, Admin Review, Resident Signature Pending, Manager Signature Pending, Fully Signed, Voided), resident, and property. Use to answer questions about lease status or how many leases are awaiting signature.",
+    "List the current landlord's leases with their status (Draft, Manager Review, Resident Signature Pending, Manager Signature Pending, Fully Signed, Voided), resident, and property. Use to answer questions about lease status or how many leases are awaiting signature.",
   kind: "read",
   inputSchema: z
     .object({

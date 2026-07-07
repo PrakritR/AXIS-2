@@ -33,7 +33,7 @@ export function connectAccountReadyForAchPayouts(account: Stripe.Account): boole
 
 export async function createAxisConnectAccount(
   stripe: Stripe,
-  opts: { email?: string; axisUserId: string },
+  opts: { email?: string; axisUserId: string; axisPortal?: "portal" | "vendor" },
 ): Promise<Stripe.Account> {
   return stripe.accounts.create({
     country: "US",
@@ -45,7 +45,7 @@ export async function createAxisConnectAccount(
     controller: AXIS_CONNECT_CONTROLLER,
     metadata: {
       axis_user_id: opts.axisUserId,
-      axis_portal: "portal",
+      axis_portal: opts.axisPortal ?? "portal",
     },
   });
 }

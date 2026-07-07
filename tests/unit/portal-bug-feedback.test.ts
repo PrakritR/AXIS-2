@@ -160,4 +160,12 @@ describe("portal bug feedback utils", () => {
     expect(roleGroupLabelForFeedback("resident")).toBe("Resident");
     expect(roleGroupLabelForFeedback("pro")).toBe("Manager");
   });
+
+  it("recognizes vendor as a manager-side reporter role with its own label", () => {
+    expect(isManagerSideReporterRole("vendor")).toBe(true);
+    expect(roleGroupLabelForFeedback("vendor")).toBe("Vendor");
+    expect(normalizeBugFeedbackRow({ id: "bf-5", reporterRole: "vendor", title: "t", description: "d" })?.reporterRole).toBe(
+      "vendor",
+    );
+  });
 });

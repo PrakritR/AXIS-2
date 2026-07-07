@@ -1,6 +1,7 @@
 import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
-import { PortalMobileBackBar } from "@/components/portal/portal-mobile-back-bar";
+import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
+import { ResidentPreApplicationGuard } from "@/components/portal/resident-pre-application-guard";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
@@ -15,6 +16,7 @@ import {
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { assertPortalLayoutRole } from "@/lib/auth/portal-layout-guard";
 import { getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
+import { loadResidentPortalAccessState } from "@/lib/resident-portal-access";
 import { getResidentPortalDefinition } from "@/lib/portals/resident";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 
@@ -22,10 +24,16 @@ export default async function ResidentLayout({ children }: { children: React.Rea
   await assertPortalLayoutRole("resident", "resident");
 
   const residentPortal = await getResidentPortalDefinition();
-  const { profile } = await getEffectiveSessionForPortal("resident");
+  const { profile, user } = await getEffectiveSessionForPortal("resident");
   const managerSubscriptionTier = profile?.manager_id?.trim()
     ? await getManagerSubscriptionTierByManagerId(profile.manager_id.trim())
     : null;
+  const access = await loadResidentPortalAccessState({
+    userId: user?.id ?? null,
+    role: profile?.role,
+    email: profile?.email ?? user?.email ?? null,
+    managerSubscriptionTier,
+  });
   const sidebarCollapsed = await getSidebarCollapsed();
 
   return (
@@ -51,8 +59,14 @@ export default async function ResidentLayout({ children }: { children: React.Rea
           />
           <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
             <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
-              <PortalMobileBackBar definition={residentPortal} />
-              {children}
+              <PortalMobileNavBar
+                definition={residentPortal}
+                name={profile?.full_name ?? null}
+                email={profile?.email ?? null}
+              />
+              <ResidentPreApplicationGuard leaseAccessUnlocked={access.leaseAccessUnlocked}>
+                {children}
+              </ResidentPreApplicationGuard>
             </div>
           </main>
         </div>

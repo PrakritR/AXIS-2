@@ -17,17 +17,23 @@
 import {
   checkrApiBaseUrl,
   checkrApiKey,
-  checkrPackage,
   checkrSimulate,
 } from "@/lib/checkr/config";
-import { simulatedResult, stableHash } from "@/lib/checkr/simulate";
+import type { CheckrAddOnSlug } from "@/lib/checkr/packages";
+import {
+  aggregateResultFromSnapshot,
+  buildSimulatedReportSnapshot,
+  parseCheckrReportSnapshot,
+} from "@/lib/checkr/report-snapshot";
+import { parseCheckrReportResourceId } from "@/lib/checkr/report-document";
+import { stableHash } from "@/lib/checkr/simulate";
 import type {
   CheckrApplicantInput,
   CheckrCreateResult,
+  CheckrOrderOptions,
   CheckrPropertyInput,
   CheckrReport,
   CheckrReportStatus,
-  CheckrResult,
 } from "@/lib/checkr/types";
 
 function authHeader(): string {
@@ -65,27 +71,8 @@ function normalizeOrderStatus(value: unknown): CheckrReportStatus {
   return "pending";
 }
 
-const REPORT_PRODUCT_KEYS = [
-  "criminal_history",
-  "credit_report",
-  "eviction_history",
-  "identity_verification",
-  "income_verification",
-  "sex_offender_registry",
-  "global_watchlist",
-] as const;
-
-/** A completed report carries one status per product; any "consider" means the whole order needs review. */
-function aggregateReportResult(report: Record<string, unknown> | null): CheckrResult {
-  if (!report) return null;
-  let sawClear = false;
-  for (const key of REPORT_PRODUCT_KEYS) {
-    const product = report[key] as { status?: string } | null | undefined;
-    if (!product?.status) continue;
-    if (product.status === "consider") return "consider";
-    if (product.status === "clear") sawClear = true;
-  }
-  return sawClear ? "clear" : null;
+function aggregateReportResult(report: Record<string, unknown> | null) {
+  return aggregateResultFromSnapshot(parseCheckrReportSnapshot(report));
 }
 
 async function fetchReportRaw(orderId: string): Promise<Record<string, unknown> | null> {
@@ -94,21 +81,43 @@ async function fetchReportRaw(orderId: string): Promise<Record<string, unknown> 
   return (await res.json()) as Record<string, unknown>;
 }
 
+function reportMetaFromRaw(raw: Record<string, unknown> | null) {
+  return {
+    reportSnapshot: parseCheckrReportSnapshot(raw),
+    reportResourceId: parseCheckrReportResourceId(raw),
+  };
+}
+
+export { checkrFetch as checkrApiFetch };
+
 /** Create an applicant + property + order and return identifiers + initial status. */
 export async function createBackgroundCheck(
   applicant: CheckrApplicantInput,
   property: CheckrPropertyInput,
+  options: CheckrOrderOptions,
 ): Promise<CheckrCreateResult> {
-  const packageSlug = checkrPackage();
+  const packageSlug = options.packageSlug;
+  const addOnProducts = options.addOnProducts ?? [];
 
   if (checkrSimulate() && !checkrApiKey()) {
     const seed = stableHash(`${applicant.email}:${applicant.ssn}`);
+    const reportSnapshot = buildSimulatedReportSnapshot({
+      firstName: applicant.firstName,
+      lastName: applicant.lastName,
+      dob: applicant.dob,
+      ssn: applicant.ssn,
+      packageSlug,
+      addOnProducts,
+    });
+    const result = aggregateResultFromSnapshot(reportSnapshot);
     return {
       applicantId: `test_applicant_${seed}`,
       orderId: `test_order_${seed}`,
       packageSlug,
+      addOnProducts,
       status: "pending",
       result: null,
+      reportSnapshot,
       simulated: true,
     };
   }
@@ -153,25 +162,35 @@ export async function createBackgroundCheck(
   if (!propertyId) throw new Error("Checkr did not return a property id.");
 
   // 3) Order (self-hosted: manager already collected applicant consent).
+  const orderBody: Record<string, unknown> = {
+    applicant_id: applicantId,
+    property_id: propertyId,
+    package: packageSlug,
+  };
+  if (addOnProducts.length > 0) orderBody.add_on_products = addOnProducts;
+
   const orderRes = await checkrFetch("/orders", {
     method: "POST",
-    body: JSON.stringify({
-      order: { applicant_id: applicantId, property_id: propertyId, package: packageSlug },
-    }),
+    body: JSON.stringify({ order: orderBody }),
   });
   if (!orderRes.ok) throw new Error(await readError(orderRes, "Failed to create order"));
   const order = (await orderRes.json()) as { id?: string; status?: string };
   if (!order.id) throw new Error("Checkr did not return an order id.");
 
   const status = normalizeOrderStatus(order.status);
-  const result = status === "complete" ? aggregateReportResult(await fetchReportRaw(order.id)) : null;
+  const reportRaw = status === "complete" ? await fetchReportRaw(order.id) : null;
+  const { reportSnapshot, reportResourceId } = reportMetaFromRaw(reportRaw);
+  const result = status === "complete" ? aggregateReportResult(reportRaw) : null;
 
   return {
     applicantId,
     orderId: order.id,
     packageSlug,
+    addOnProducts,
     status,
     result,
+    reportSnapshot,
+    reportResourceId: reportResourceId ?? undefined,
     simulated: false,
   };
 }
@@ -179,11 +198,24 @@ export async function createBackgroundCheck(
 /** Fetch the current state of an order + its report. */
 export async function fetchBackgroundCheckReport(
   orderId: string,
-  opts?: { ssn?: string },
+  opts?: { ssn?: string; firstName?: string; lastName?: string; dob?: string | null; packageSlug?: string; addOnProducts?: CheckrAddOnSlug[] },
 ): Promise<CheckrReport | null> {
   if (checkrSimulate() && !checkrApiKey()) {
-    // Simulate completes on first poll so the status transition is observable.
-    return { orderId, status: "complete", result: simulatedResult(opts?.ssn ?? orderId), simulated: true };
+    const reportSnapshot = buildSimulatedReportSnapshot({
+      firstName: opts?.firstName ?? "Applicant",
+      lastName: opts?.lastName ?? "Unknown",
+      dob: opts?.dob ?? null,
+      ssn: opts?.ssn ?? orderId,
+      packageSlug: opts?.packageSlug ?? "essential",
+      addOnProducts: opts?.addOnProducts,
+    });
+    return {
+      orderId,
+      status: "complete",
+      result: aggregateResultFromSnapshot(reportSnapshot),
+      reportSnapshot,
+      simulated: true,
+    };
   }
 
   const orderRes = await checkrFetch(`/orders/${encodeURIComponent(orderId)}`);
@@ -195,5 +227,12 @@ export async function fetchBackgroundCheckReport(
   if (status !== "complete") return { orderId, status, result: null };
 
   const report = await fetchReportRaw(orderId);
-  return { orderId, status, result: aggregateReportResult(report) };
+  const { reportSnapshot, reportResourceId } = reportMetaFromRaw(report);
+  return {
+    orderId,
+    status,
+    result: aggregateReportResult(report),
+    reportSnapshot,
+    reportResourceId: reportResourceId ?? undefined,
+  };
 }

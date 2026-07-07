@@ -6,13 +6,19 @@ import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
+import {
+  PortalInboxSelectionToolbar,
+  sendManualScheduledMessageNow,
+  useInboxRowSelection,
+} from "@/components/portal/portal-inbox-selection";
 import { ManagerPortalPageShell, ManagerPortalStatusPills, ManagerPortalFilterRow, PORTAL_FILTER_ACTIONS_MOBILE, PORTAL_HEADER_ACTION_BTN, PORTAL_PAGE_ACTIONS_DESKTOP } from "@/components/portal/portal-metrics";
 import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { demoResidentInboxThreads } from "@/data/demo-portal";
-import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
+import { usePortalSession } from "@/hooks/use-portal-session";
+import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
 import {
   appendPersistedInboxThread,
   PORTAL_INBOX_CHANGED_EVENT,
@@ -75,8 +81,22 @@ function countThreads(threads: InboxThread[]) {
   };
 }
 
+function scheduledToRows(list: ScheduledInboxMessageRecord[]): PortalInboxTableRow[] {
+  return list.map((message) => ({
+    id: message.id,
+    name: message.recipientName || message.recipientEmail,
+    email: message.recipientEmail,
+    topic: message.subject,
+    preview: previewLine(message.body),
+    whenLabel: formatPacificDateTime(message.sendAt),
+    read: message.status !== "scheduled",
+    selectable: message.status === "scheduled" || message.status === "cancelled",
+  }));
+}
+
 export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const { showToast } = useAppUi();
+  const session = usePortalSession();
   const navigate = usePortalNavigate();
   const [local, setLocal] = useState<InboxThread[]>(
     () => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[],
@@ -88,6 +108,25 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   // Individually-selectable recipients (this resident's own manager[s] + co-managers),
   // scoped server-side by /api/portal/inbox-eligible-contacts.
   const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledInboxMessageRecord[]>([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const reloadScheduledMessages = useCallback(async () => {
+    if (isDemoModeActive()) return;
+    setScheduledLoading(true);
+    try {
+      const res = await fetch("/api/portal/scheduled-inbox-messages?as=resident", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { messages?: ScheduledInboxMessageRecord[] };
+      setScheduledMessages(Array.isArray(data.messages) ? data.messages : []);
+    } finally {
+      setScheduledLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isDemoModeActive()) return;
@@ -104,6 +143,10 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    void reloadScheduledMessages();
+  }, [reloadScheduledMessages]);
 
   useEffect(() => {
     persistInboxRef.current = false;
@@ -137,19 +180,38 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     persistInbox(RESIDENT_INBOX_STORAGE_KEY, local);
   }, [local, persistReady]);
 
+  const scheduledRows = useMemo(
+    () =>
+      scheduledMessages
+        .filter((message) => isUpcomingScheduledInboxMessage(message.sendAt, message.status))
+        .sort((a, b) => a.sendAt.localeCompare(b.sendAt)),
+    [scheduledMessages],
+  );
+
+  const scheduleSelectableIds = useMemo(
+    () =>
+      scheduledRows
+        .filter((m) => m.status === "scheduled" || m.status === "cancelled")
+        .map((m) => m.id),
+    [scheduledRows],
+  );
+  const scheduleSelection = useInboxRowSelection(scheduleSelectableIds);
+
+  const selectedScheduledRows = useMemo(
+    () => scheduledRows.filter((m) => scheduleSelection.selectedIds.has(m.id)),
+    [scheduledRows, scheduleSelection.selectedIds],
+  );
+
   const counts = useMemo(() => countThreads(local), [local]);
 
-  // Residents have no scheduled-messages feature (that's manager-only), and the
-  // resident inbox route rejects the "schedule" tab with a 404. Drop that pill so
-  // residents can't navigate to a route that doesn't exist for them.
   const tabs = useMemo(
     () =>
-      INBOX_TAB_DEFS.filter(({ id }) => id !== "schedule").map(({ id, label }) => ({
+      INBOX_TAB_DEFS.map(({ id, label }) => ({
         id,
         label,
-        count: counts[id as keyof typeof counts],
+        count: id === "schedule" ? scheduledRows.length : counts[id as keyof typeof counts],
       })),
-    [counts],
+    [counts, scheduledRows.length],
   );
 
   const rowsForTab = useMemo(() => {
@@ -160,11 +222,39 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     return [];
   }, [local, tabId]);
 
+  const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
+  const threadSelection = useInboxRowSelection(threadRowIds);
+
   const bodyById = useMemo(() => {
     const m: Record<string, string> = {};
     for (const t of local) m[t.id] = t.body;
     return m;
   }, [local]);
+
+  const scheduledBodyById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const message of scheduledRows) m[message.id] = message.body;
+    return m;
+  }, [scheduledRows]);
+
+  const toggleScheduledCancelled = useCallback(
+    async (id: string, cancelled: boolean) => {
+      try {
+        const res = await fetch(`/api/portal/scheduled-inbox-messages/${encodeURIComponent(id)}?as=resident`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ cancelled, senderPortal: "resident" }),
+        });
+        if (!res.ok) throw new Error("Could not update scheduled message.");
+        showToast(cancelled ? "Scheduled message cancelled." : "Scheduled message restored.");
+        void reloadScheduledMessages();
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Could not update scheduled message.");
+      }
+    },
+    [reloadScheduledMessages, showToast],
+  );
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
@@ -308,27 +398,53 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
-      if (p.includesAxisAdmin) {
-        appendPortalMessageToAdminInbox({
-          role: "resident",
-          name: p.senderName,
-          email: p.senderEmail,
-          topic: p.subject.trim(),
-          body: p.body.trim(),
-        });
-      }
       setComposeOpen(false);
+      const senderName = p.senderName.trim() || "Resident";
+      const senderEmail = session.email?.trim().toLowerCase() || p.senderEmail;
 
       void (async () => {
         try {
+          if (p.scheduleLater && p.sendAt) {
+            const recipientEmail = p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean)[0];
+            if (!recipientEmail) {
+              showToast("Choose your property manager.");
+              return;
+            }
+            const contact = eligibleContacts.find((c) => c.email.trim().toLowerCase() === recipientEmail);
+            const res = await fetch("/api/portal/scheduled-inbox-messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                subject: p.subject.trim(),
+                body: p.body.trim(),
+                sendAt: p.sendAt,
+                recipientEmail,
+                recipientName: contact?.name?.trim() || recipientEmail,
+                deliverViaEmail: p.deliverViaEmail !== false,
+                deliverViaSms: p.deliverViaSms,
+                senderPortal: "resident",
+              }),
+            });
+            const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+            if (!res.ok || !data.ok) {
+              showToast(data.error ?? "Could not schedule message.");
+              return;
+            }
+            showToast("Message scheduled.");
+            void reloadScheduledMessages();
+            navigate("/resident/inbox/schedule");
+            return;
+          }
+
           if (p.includesDirectoryRecipients) {
             const res = await fetch("/api/portal/send-inbox-message", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
               body: JSON.stringify({
-                fromName: p.senderName,
-                fromEmail: p.senderEmail,
+                fromName: senderName,
+                fromEmail: senderEmail,
                 toEmails: p.directRecipientEmailLine.split(";").map((e) => e.trim()).filter(Boolean),
                 toBroadcast: p.broadcastCategories,
                 subject: p.subject.trim(),
@@ -347,18 +463,14 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
           invalidatePersistedInboxCache(RESIDENT_INBOX_STORAGE_KEY);
           const rows = await syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true });
           setLocal(rows as InboxThread[]);
-          showToast(
-            p.includesAxisAdmin && !p.includesDirectoryRecipients
-              ? "Message sent to Axis admin."
-              : "Message sent via inbox and email.",
-          );
+          showToast("Message sent via inbox and email.");
           navigate("/resident/inbox/sent");
         } catch {
           showToast("Message could not be sent.");
         }
       })();
     },
-    [navigate, showToast],
+    [eligibleContacts, navigate, reloadScheduledMessages, session.email, showToast],
   );
 
   const handleReply = useCallback(
@@ -401,6 +513,42 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const renderExtraActions = useCallback(
     (row: PortalInboxTableRow) => {
+      if (tabId === "schedule") {
+        const message = scheduledRows.find((item) => item.id === row.id);
+        const cancelled = message?.status === "cancelled";
+        return (
+          <>
+            {message?.status === "scheduled" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      await sendManualScheduledMessageNow(row.id, { asResident: true });
+                      showToast("Message sent.");
+                      void reloadScheduledMessages();
+                    } catch (e) {
+                      showToast(e instanceof Error ? e.message : "Could not send message.");
+                    }
+                  })();
+                }}
+              >
+                Send now
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant={cancelled ? "outline" : "danger"}
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => void toggleScheduledCancelled(row.id, !cancelled)}
+            >
+              {cancelled ? "Restore" : "Cancel send"}
+            </Button>
+          </>
+        );
+      }
       if (tabId === "trash") {
         return (
           <>
@@ -446,12 +594,80 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         </Button>
       );
     },
-    [tabId, moveToTrash, restoreFromTrash, deleteForever, markUnread],
+    [tabId, scheduledRows, toggleScheduledCancelled, moveToTrash, restoreFromTrash, deleteForever, markUnread, reloadScheduledMessages, showToast],
   );
+
+  const bulkScheduleSendNow = async () => {
+    const targets = selectedScheduledRows.filter((m) => m.status === "scheduled");
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      let ok = 0;
+      for (const message of targets) {
+        try {
+          await sendManualScheduledMessageNow(message.id, { asResident: true });
+          ok += 1;
+        } catch {
+          /* continue */
+        }
+      }
+      showToast(ok === 1 ? "Message sent." : `Sent ${ok} messages.`);
+      scheduleSelection.clearSelection();
+      void reloadScheduledMessages();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkScheduleCancel = async () => {
+    const targets = selectedScheduledRows.filter((m) => m.status === "scheduled");
+    for (const message of targets) {
+      await toggleScheduledCancelled(message.id, true);
+    }
+    scheduleSelection.clearSelection();
+  };
+
+  const bulkScheduleRestore = async () => {
+    const targets = selectedScheduledRows.filter((m) => m.status === "cancelled");
+    for (const message of targets) {
+      await toggleScheduledCancelled(message.id, false);
+    }
+    scheduleSelection.clearSelection();
+  };
+
+  const bulkMarkRead = () => {
+    for (const id of threadSelection.selectedIds) markRead(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkMoveToTrash = () => {
+    for (const id of threadSelection.selectedIds) moveToTrash(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkRestoreFromTrash = () => {
+    for (const id of threadSelection.selectedIds) restoreFromTrash(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkDeleteForever = () => {
+    if (!window.confirm(`Delete ${threadSelection.selectedIds.size} message(s) permanently?`)) return;
+    for (const id of threadSelection.selectedIds) deleteForever(id);
+    threadSelection.clearSelection();
+  };
+
+  const bulkMarkUnread = () => {
+    for (const id of threadSelection.selectedIds) markUnread(id);
+    threadSelection.clearSelection();
+  };
 
   const emptyCopy =
     tabId === "trash"
       ? "No trash messages yet."
+      : tabId === "schedule"
+        ? scheduledLoading
+          ? "Loading scheduled messages…"
+          : "No scheduled messages yet."
       : tabId === "sent"
         ? "No sent messages yet."
         : tabId === "opened"
@@ -462,21 +678,23 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
     <ManagerPortalPageShell
       title="Inbox"
       titleAside={
-        <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+        <>
           <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setComposeOpen(true)}>
             New message
           </Button>
           {tabId === "trash" && counts.trash > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} text-[var(--status-overdue-fg)]`}
-              onClick={emptyTrash}
-            >
-              Empty trash
-            </Button>
+            <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
+              <Button
+                type="button"
+                variant="outline"
+                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} text-[var(--status-overdue-fg)]`}
+                onClick={emptyTrash}
+              >
+                Empty trash
+              </Button>
+            </div>
           ) : null}
-        </div>
+        </>
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -486,16 +704,13 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
             activeId={tabId}
             onChange={(id) => navigate(`/resident/inbox/${id}`)}
           />
-          <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
-            <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setComposeOpen(true)}>
-              New
-            </Button>
-            {tabId === "trash" && counts.trash > 0 ? (
+          {tabId === "trash" && counts.trash > 0 ? (
+            <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
               <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={emptyTrash}>
                 Empty
               </Button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </ManagerPortalFilterRow>
       }
     >
@@ -505,27 +720,107 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         onSend={handleComposeSend}
         portal="resident"
         senderName="Resident"
-        senderEmail="resident@example.com"
+        senderEmail={session.email?.trim().toLowerCase() || "resident@example.com"}
         liveContacts={eligibleContacts}
       />
 
-      {rowsForTab.length === 0 ? (
+      {tabId === "schedule" ? (
+        scheduledRows.length === 0 ? (
+          <PortalInboxEmptyState title={emptyCopy} />
+        ) : (
+          <div className="space-y-3">
+            <PortalInboxSelectionToolbar count={scheduleSelection.selectedIds.size} onClear={scheduleSelection.clearSelection}>
+              <Button type="button" variant="primary" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleSendNow()}>
+                Send now
+              </Button>
+              <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleCancel()}>
+                Cancel send
+              </Button>
+              <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkScheduleRestore()}>
+                Restore send
+              </Button>
+            </PortalInboxSelectionToolbar>
+            <PortalInboxMessageTable
+              rows={scheduledToRows(scheduledRows)}
+              primaryPartyHeader="To"
+              getDetailBody={(row) => scheduledBodyById[row.id]}
+              onReply={undefined}
+              expandedId={expandedId}
+              onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+              renderExtraActions={renderExtraActions}
+              selection={{
+                selectedIds: scheduleSelection.selectedIds,
+                onToggleSelected: scheduleSelection.toggleSelected,
+                onToggleSelectAll: scheduleSelection.toggleSelectAll,
+                allSelected: scheduleSelection.allSelected,
+                selectableCount: scheduleSelectableIds.length,
+              }}
+            />
+          </div>
+        )
+      ) : rowsForTab.length === 0 ? (
         <PortalInboxEmptyState title={emptyCopy} />
       ) : (
-        <PortalInboxMessageTable
-          rows={toRows(rowsForTab, tabId)}
-          primaryPartyHeader={tabId === "sent" ? "To" : "From"}
-          onMarkRead={tabId === "unopened" ? markRead : undefined}
-          getDetailBody={(row) => bodyById[row.id]}
-          getThreadMessages={(row) => {
-            const thread = local.find((t) => t.id === row.id);
-            return thread ? inboxThreadMessages(thread) : [];
-          }}
-          onReply={tabId === "trash" ? undefined : handleReply}
-          expandedId={expandedId}
-          onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
-          renderExtraActions={renderExtraActions}
-        />
+        <div className="space-y-3">
+          <PortalInboxSelectionToolbar count={threadSelection.selectedIds.size} onClear={threadSelection.clearSelection}>
+            {tabId === "unopened" ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkRead}>
+                  Mark read
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
+                  Trash
+                </Button>
+              </>
+            ) : null}
+            {tabId === "opened" ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkUnread}>
+                  Mark unread
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
+                  Trash
+                </Button>
+              </>
+            ) : null}
+            {tabId === "sent" ? (
+              <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveToTrash}>
+                Trash
+              </Button>
+            ) : null}
+            {tabId === "trash" ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreFromTrash}>
+                  Restore
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={bulkDeleteForever}>
+                  Delete forever
+                </Button>
+              </>
+            ) : null}
+          </PortalInboxSelectionToolbar>
+          <PortalInboxMessageTable
+            rows={toRows(rowsForTab, tabId)}
+            primaryPartyHeader={tabId === "sent" ? "To" : "From"}
+            onMarkRead={tabId === "unopened" ? markRead : undefined}
+            getDetailBody={(row) => bodyById[row.id]}
+            getThreadMessages={(row) => {
+              const thread = local.find((t) => t.id === row.id);
+              return thread ? inboxThreadMessages(thread) : [];
+            }}
+            onReply={tabId === "trash" ? undefined : handleReply}
+            expandedId={expandedId}
+            onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+            renderExtraActions={renderExtraActions}
+            selection={{
+              selectedIds: threadSelection.selectedIds,
+              onToggleSelected: threadSelection.toggleSelected,
+              onToggleSelectAll: threadSelection.toggleSelectAll,
+              allSelected: threadSelection.allSelected,
+              selectableCount: threadRowIds.length,
+            }}
+          />
+        </div>
       )}
     </ManagerPortalPageShell>
   );

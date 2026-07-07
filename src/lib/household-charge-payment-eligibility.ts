@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { axisPaymentsEnabledOnListing } from "@/lib/payment-policy";
+import { acceptedPaymentMethodsForListing, axisPaymentsEnabledOnListing } from "@/lib/payment-policy";
 import { getPropertyById } from "@/lib/rental-application/data";
 
 export function displayPropertyLabel(raw: string): string {
@@ -26,7 +26,10 @@ function listingBuildingName(propertyData: unknown): string {
 
 export function paymentSnapshotsFromListing(
   listing: ManagerListingSubmissionV1 | null,
-): Pick<HouseholdCharge, "axisPaymentsEnabledSnapshot" | "zelleContactSnapshot" | "venmoContactSnapshot"> {
+): Pick<
+  HouseholdCharge,
+  "axisPaymentsEnabledSnapshot" | "zelleContactSnapshot" | "venmoContactSnapshot" | "acceptedPaymentMethodsSnapshot"
+> {
   if (!listing) {
     return {};
   }
@@ -37,6 +40,7 @@ export function paymentSnapshotsFromListing(
       sub.zellePaymentsEnabled && sub.zelleContact?.trim() ? sub.zelleContact.trim() : undefined,
     venmoContactSnapshot:
       sub.venmoPaymentsEnabled && sub.venmoContact?.trim() ? sub.venmoContact.trim() : undefined,
+    acceptedPaymentMethodsSnapshot: acceptedPaymentMethodsForListing(sub),
   };
 }
 
@@ -51,6 +55,7 @@ export function enrichHouseholdChargePaymentFlags(
       charge.axisPaymentsEnabledSnapshot ?? snapshots.axisPaymentsEnabledSnapshot,
     zelleContactSnapshot: charge.zelleContactSnapshot ?? snapshots.zelleContactSnapshot,
     venmoContactSnapshot: charge.venmoContactSnapshot ?? snapshots.venmoContactSnapshot,
+    acceptedPaymentMethodsSnapshot: snapshots.acceptedPaymentMethodsSnapshot ?? charge.acceptedPaymentMethodsSnapshot,
   };
 }
 

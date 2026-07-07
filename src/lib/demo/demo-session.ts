@@ -14,20 +14,41 @@
  * effects, and it can never leak into a real signed-in portal session.
  */
 
-export type DemoPortalRole = "manager" | "resident";
+export type DemoPortalRole = "manager" | "resident" | "vendor";
 
 export const DEMO_MANAGER_USER_ID = "demo-manager";
 export const DEMO_RESIDENT_USER_ID = "demo-resident";
+export const DEMO_VENDOR_USER_ID = "demo-vendor";
 export const DEMO_MANAGER_EMAIL = "alex.morgan@axis.local";
 export const DEMO_RESIDENT_EMAIL = "jordan.lee@axis.local";
+export const DEMO_VENDOR_EMAIL = "cascade.mechanical@axis.local";
 export const DEMO_MANAGER_NAME = "Alex Morgan";
 export const DEMO_RESIDENT_NAME = "Jordan Lee";
+export const DEMO_VENDOR_NAME = "Cascade Mechanical";
 
 export type DemoSessionSnapshot = { userId: string | null; email: string | null; ready: boolean };
 
 /** True when the browser is on the public demo sandbox. */
 export function isDemoModeActive(): boolean {
   return typeof window !== "undefined" && Boolean(window.location?.pathname?.startsWith("/demo"));
+}
+
+/** Re-render portal hooks when demo navigation changes the pathname or in-frame section. */
+export function subscribeDemoPath(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("popstate", listener);
+  window.addEventListener(DEMO_NAVIGATE_EVENT, listener);
+  return () => {
+    window.removeEventListener("popstate", listener);
+    window.removeEventListener(DEMO_NAVIGATE_EVENT, listener);
+  };
+}
+
+/** Manager/resident scope id for portal reads — includes the demo sandbox when signed out. */
+export function resolveManagerScopeUserId(userId: string | null): string | null {
+  if (userId?.trim()) return userId.trim();
+  if (isDemoModeActive()) return getDemoSessionSnapshot().userId;
+  return null;
 }
 
 /**
@@ -64,6 +85,9 @@ export function subscribeDemoRole(listener: () => void): () => void {
 export function demoSessionForRole(r: DemoPortalRole): DemoSessionSnapshot {
   if (r === "resident") {
     return { userId: DEMO_RESIDENT_USER_ID, email: DEMO_RESIDENT_EMAIL, ready: true };
+  }
+  if (r === "vendor") {
+    return { userId: DEMO_VENDOR_USER_ID, email: DEMO_VENDOR_EMAIL, ready: true };
   }
   // The manager view uses the manager-scoped demo account so seeded manager
   // data (charges, applications, leases…) is visible.

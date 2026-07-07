@@ -15,9 +15,14 @@ describe("portal mobile shell conventions", () => {
     expect(PORTAL_METRICS_SOURCE).toContain("hideTitleOnNative = false");
   });
 
-  it("uses horizontal scroll for status pills on mobile", () => {
+  it("wraps status pills on mobile instead of scrolling horizontally by default", () => {
+    expect(PORTAL_METRICS_SOURCE).toContain("inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl");
+    expect(PORTAL_METRICS_SOURCE).toContain('compact = false');
+  });
+
+  it("allows horizontal scroll only for compact status pill strips", () => {
+    expect(PORTAL_METRICS_SOURCE).toContain("flex-nowrap");
     expect(PORTAL_METRICS_SOURCE).toContain("overflow-x-auto");
-    expect(PORTAL_METRICS_SOURCE).toContain("sm:flex-wrap");
   });
 
   it("scopes nested scroll panels to desktop only", () => {
@@ -38,22 +43,40 @@ describe("portal mobile shell conventions", () => {
 
   it("uses native safe-area top padding on portal main content", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] #portal-main-content");
-    expect(GLOBALS_CSS).toContain("padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem))");
-    expect(GLOBALS_CSS).toContain("scroll-padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem))");
+    expect(GLOBALS_CSS).toContain("padding-top: max(0.25rem, var(--native-safe-top))");
+    expect(GLOBALS_CSS).toContain("scroll-padding-top: max(0.25rem, var(--native-safe-top))");
+    expect(GLOBALS_CSS).toContain("html[data-native] #portal-main-content:has(.portal-mobile-nav-bar)");
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-mobile-nav-bar");
+    expect(GLOBALS_CSS).toContain("min-height: calc(var(--native-safe-top) + 1.5rem)");
   });
 
   it("pins native bottom nav flush to screen bottom", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav");
-    expect(GLOBALS_CSS).toContain("align-items: flex-end");
     expect(GLOBALS_CSS).toContain("bottom: 0");
     expect(GLOBALS_CSS).toContain("padding-right: max(0.5rem, var(--native-safe-right))");
   });
 
-  it("sizes native bottom tab icons and assistant trigger consistently", () => {
+  it("evenly distributes Instagram-style bottom tabs instead of scrolling", () => {
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll");
+    expect(GLOBALS_CSS).toContain("justify-content: space-evenly");
+    expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll > a");
+    expect(GLOBALS_CSS).toContain("flex: 1 1 0;");
+  });
+
+  it("sizes native bottom tab icons consistently", () => {
     expect(GLOBALS_CSS).toContain("html[data-native] .portal-native-bottom-nav-scroll a svg");
-    expect(GLOBALS_CSS).toContain("height: 1.375rem");
-    expect(GLOBALS_CSS).toContain("html[data-native] .axis-assistant-nav-btn");
-    expect(GLOBALS_CSS).toMatch(/html\[data-native\] \.axis-assistant-nav-btn[\s\S]*height: 1\.375rem/);
+    expect(GLOBALS_CSS).toContain("height: 1.4375rem");
+  });
+
+  it("floats the assistant FAB above the native bottom bar instead of a bar slot", () => {
+    const AXIS_ASSISTANT_SOURCE = readFileSync(
+      join(process.cwd(), "src/components/portal/axis-assistant.tsx"),
+      "utf8",
+    );
+    expect(AXIS_ASSISTANT_SOURCE).not.toContain("AxisAssistantNavButton");
+    expect(AXIS_ASSISTANT_SOURCE).toContain("[html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)]");
+    expect(GLOBALS_CSS).not.toContain(".axis-assistant-nav-btn");
+    expect(GLOBALS_CSS).not.toContain(".portal-native-bottom-nav-assistant");
   });
 
   it("hides Next.js dev issue badge on native", () => {

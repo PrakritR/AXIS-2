@@ -161,7 +161,7 @@ export async function finalizePendingManagerFreeTier(
     userId: string;
     email: string;
     tier: "free" | "pro" | "business";
-    billing: "monthly" | "annual";
+    billing: "monthly" | "annual" | "free" | "trial";
     fullName?: string | null;
     promo?: string | null;
   },

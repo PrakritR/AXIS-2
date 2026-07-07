@@ -75,6 +75,11 @@ export function sanitizePaymentContactInput(value: string): string {
   return value.replace(/[^\w@.\-+]/g, "");
 }
 
+/** Bank/ACH payment link — permissive for URLs; strips whitespace and characters unsafe in an href/attribute. */
+export function sanitizePaymentLinkInput(value: string): string {
+  return value.replace(/[\s<>"'`]/g, "");
+}
+
 /** Floor / level custom text — alphanumeric and common separators. */
 export function sanitizeFloorLabelInput(value: string): string {
   return value.replace(/[^\w\s#\-./]/gi, "");

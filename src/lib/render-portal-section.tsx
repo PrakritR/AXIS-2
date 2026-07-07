@@ -8,12 +8,10 @@ import { ManagerProfile } from "@/components/portal/manager-profile";
 import { AdminCreateManagerClient } from "@/components/portal/admin-create-manager-client";
 import { AdminCreateResidentClient } from "@/components/portal/admin-create-resident-client";
 import { AdminAxisUsersClient } from "@/components/portal/admin-axis-users-client";
-import { AdminLeasesClient } from "@/components/portal/admin-leases-client";
 import { AdminPropertiesClient } from "@/components/portal/admin-properties-client";
 import { AdminEventsClient } from "@/components/portal/admin-events-client";
 import { AdminProfileSection } from "@/components/portal/admin-profile-section";
 import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
-import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
@@ -24,6 +22,13 @@ import { ResidentApplicationsPanel } from "@/components/portal/resident-applicat
 import { ResidentLeasePanel } from "@/components/portal/resident-lease-panel";
 import { ResidentProfilePanel } from "@/components/portal/resident-profile-panel";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
+import { VendorDashboard } from "@/components/portal/vendor-dashboard";
+import { VendorWorkOrdersPanel } from "@/components/portal/vendor-work-orders-panel";
+import { VendorCalendarPanel } from "@/components/portal/vendor-calendar-panel";
+import { VendorInboxPanel } from "@/components/portal/vendor-inbox-panel";
+import { VendorPaymentsPanel } from "@/components/portal/vendor-payments-panel";
+import { VendorDocumentsPanel } from "@/components/portal/vendor-documents-panel";
+import { VendorSettingsPanel } from "@/components/portal/vendor-settings-panel";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
@@ -44,9 +49,10 @@ import type { Crumb } from "@/components/layout/breadcrumbs";
 import type { TabItem } from "@/components/ui/tabs";
 import type { ReactNode } from "react";
 import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
+import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { managerSectionAllowedForTier, residentSectionAllowedForManagerTier } from "@/lib/manager-access";
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
-import { loadResidentPortalAccessState, loadResidentLeaseSignedStatus, residentHasFullPortalAccess } from "@/lib/resident-portal-access";
+import { loadResidentLeaseSignedStatus, loadResidentPortalAccessState, residentHasFullPortalAccess, residentPortalHomePath } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
@@ -63,7 +69,7 @@ const LEGACY_FINANCIALS_TAB_MAP: Record<string, string> = {
   "profit-loss": "expenses",
 };
 
-const DOCUMENTS_TABS = ["income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
+const DOCUMENTS_TABS = ["applications", "leases", "income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
 
 const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
   summary: "tax-summary",
@@ -119,7 +125,7 @@ async function renderManagerDocumentsSection(
 ) {
   if (section !== "documents") return null;
   if (!tabParts?.length) {
-    redirect(`${basePath}/documents/income-documents`);
+    redirect(`${basePath}/documents/applications`);
   }
   if (tabParts.length > 1) notFound();
   const docTab = tabParts[0]!;
@@ -247,12 +253,23 @@ export async function renderPortalSection(
     if (tabParts?.length) notFound();
     return <ResidentApplicationsPanel />;
   }
+  if (kind === "resident" && residentAccess && !residentAccess.leaseAccessUnlocked) {
+    if (section !== "applications" && section !== "profile") {
+      redirect(residentPortalHomePath(residentAccess));
+    }
+  }
   // Legacy path support: work-orders moved under Services tabs.
   if (
     (kind === "manager" || kind === "pro") &&
     section === "work-orders"
   ) {
     redirect(`${def.basePath}/services/work-orders`);
+  }
+
+  // Legacy path support: Vendors was briefly its own top-level nav section;
+  // it's back to being the Services "vendors" tab (redundant otherwise).
+  if ((kind === "manager" || kind === "pro") && section === "vendors") {
+    redirect(`${def.basePath}/services/vendors`);
   }
 
   const meta = findSection(def, section);
@@ -280,7 +297,9 @@ export async function renderPortalSection(
 
   if (kind === "admin" && section === "dashboard") {
     if (tabParts?.length) notFound();
-    return <AdminDashboard />;
+    const { profile } = await getServerSessionProfile();
+    const displayName = profile?.full_name?.trim() || profile?.email?.split("@")[0] || "there";
+    return <AdminDashboard displayName={displayName} />;
   }
 
   if (kind === "admin" && section === "create-manager") {
@@ -304,8 +323,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "admin" && section === "leases") {
-    if (tabParts?.length) notFound();
-    return <AdminLeasesClient />;
+    redirect(`${def.basePath}/dashboard`);
   }
 
   if (kind === "admin" && section === "profile") {
@@ -326,10 +344,7 @@ export async function renderPortalSection(
   }
 
   if (kind === "admin" && section === "bugs-feedback") {
-    if (tabParts?.length) {
-      redirect(`${def.basePath}/${section}`);
-    }
-    return <AdminBugFeedbackClient />;
+    redirect(`${def.basePath}/profile`);
   }
 
   if (kind === "admin" && section === "events") {
@@ -456,7 +471,14 @@ export async function renderPortalSection(
     if (tabParts?.length) notFound();
 
     if (section === "dashboard") {
-      return subscriptionGated(<ManagerDashboard />, kind, "dashboard", managerOwnerSubscriptionTier);
+      const { profile } = await getEffectiveSessionForPortal("manager");
+      const displayName = profile?.full_name?.trim() || profile?.email?.split("@")[0] || "there";
+      return subscriptionGated(
+        <ManagerDashboard displayName={displayName} />,
+        kind,
+        "dashboard",
+        managerOwnerSubscriptionTier,
+      );
     }
     if (section === "properties") {
       const ManagerProperties = await loadManagerProperties();
@@ -585,7 +607,7 @@ export async function renderPortalSection(
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
     }
     const inboxTab = tabParts[0]!;
-    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+    if (!["unopened", "opened", "schedule", "sent", "trash"].includes(inboxTab)) notFound();
     return <ResidentInboxPanel tabId={inboxTab} />;
   }
 
@@ -609,6 +631,52 @@ export async function renderPortalSection(
         return <ResidentServicesPanel tabId="work-orders" basePath={def.basePath} />;
       }
     }
+  }
+
+  if (kind === "vendor" && section === "dashboard") {
+    if (tabParts?.length) notFound();
+    const { profile } = await getEffectiveSessionForPortal("vendor");
+    return <VendorDashboard displayName={profile?.full_name?.trim() || "there"} />;
+  }
+
+  if (kind === "vendor" && section === "work-orders") {
+    if (tabParts?.length) notFound();
+    return <VendorWorkOrdersPanel />;
+  }
+
+  if (kind === "vendor" && section === "calendar") {
+    if (tabParts?.length) notFound();
+    return <VendorCalendarPanel />;
+  }
+
+  if (kind === "vendor" && section === "inbox") {
+    if (!meta.tabs.length) notFound();
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    }
+    const inboxTab = tabParts[0]!;
+    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
+    return <VendorInboxPanel tabId={inboxTab} />;
+  }
+
+  if (kind === "vendor" && section === "payments") {
+    if (tabParts?.length) notFound();
+    return <VendorPaymentsPanel />;
+  }
+
+  if (kind === "vendor" && section === "documents") {
+    if (!meta.tabs.length) notFound();
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
+    }
+    const documentsTab = tabParts[0]!;
+    if (!meta.tabs.some((tab) => tab.id === documentsTab)) notFound();
+    return <VendorDocumentsPanel tabId={documentsTab} basePath={def.basePath} />;
+  }
+
+  if (kind === "vendor" && section === "profile") {
+    if (tabParts?.length) notFound();
+    return <VendorSettingsPanel />;
   }
 
   if (!meta.tabs.length) {

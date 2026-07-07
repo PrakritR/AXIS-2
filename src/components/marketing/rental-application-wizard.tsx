@@ -7,14 +7,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 import {
+  loadPublicExtraListingsFromServer,
   loadPublicPropertyLeadFromServer,
   PROPERTY_PIPELINE_EVENT,
+  isPropertyActiveForLeads,
+  readExtraListingsPublic,
 } from "@/lib/demo-property-pipeline";
 import {
   ensurePendingApplicationFeeCharge,
   findApplicationFeeCharge,
   HOUSEHOLD_CHARGES_EVENT,
-  listingApplicationFeeAmount,
   markApplicationFeePaidAfterStripe,
   recordApplicationCharges,
 } from "@/lib/household-charges";
@@ -28,6 +30,10 @@ import {
   LISTING_ROOM_CHOICE_SEP,
 } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
+import {
+  residentApplicationFeeGate,
+  residentApplicationSubmitBlocked,
+} from "@/lib/rental-application/application-policy";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
@@ -55,6 +61,15 @@ import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step
 
 const processedApplicationFeeSessions = new Set<string>();
 
+export type RentalApplicationWizardMode = "public" | "portal";
+
+export type RentalApplicationWizardProps = {
+  showToast: (msg: string) => void;
+  mode?: RentalApplicationWizardMode;
+  exitPath?: string;
+  sessionEmail?: string;
+};
+
 function makeNewApplicationId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `AXIS-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -77,8 +92,13 @@ const STEP_META = [
   { n: 12, title: "Application fee" },
 ] as const;
 
-function rentalApplicationExitPath(): string {
-  return "/auth/sign-in";
+function rentalApplicationExitPath(mode: RentalApplicationWizardMode, exitPath?: string): string {
+  if (exitPath?.startsWith("/")) return exitPath;
+  return mode === "portal" ? "/resident/applications" : "/auth/sign-in";
+}
+
+function rentalApplicationApplyPath(mode: RentalApplicationWizardMode): string {
+  return mode === "portal" ? "/resident/applications/apply" : "/rent/apply";
 }
 
 function RentalWizardExitButton({ onClick }: { onClick: () => void }) {
@@ -102,19 +122,34 @@ function RentalWizardExitButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function RentalApplicationWizard({ showToast }: { showToast: (msg: string) => void }) {
+export function RentalApplicationWizard({
+  showToast,
+  mode = "public",
+  exitPath,
+  sessionEmail,
+}: RentalApplicationWizardProps) {
   return (
     <Suspense
       fallback={
         <div className="mx-auto max-w-3xl px-4 py-16 text-center text-muted">Loading application…</div>
       }
     >
-      <RentalApplicationWizardInner showToast={showToast} />
+      <RentalApplicationWizardInner
+        showToast={showToast}
+        mode={mode}
+        exitPath={exitPath}
+        sessionEmail={sessionEmail}
+      />
     </Suspense>
   );
 }
 
-function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) => void }) {
+function RentalApplicationWizardInner({
+  showToast,
+  mode = "public",
+  exitPath,
+  sessionEmail,
+}: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
   const [step, setStep] = useState(1);
@@ -142,10 +177,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const router = useRouter();
+  const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
+  const wizardApplyPath = rentalApplicationApplyPath(mode);
 
   const exitApplication = useCallback(() => {
-    router.push(rentalApplicationExitPath());
-  }, [router]);
+    router.push(wizardExitPath);
+  }, [router, wizardExitPath]);
 
   const listingPrefillKey = useMemo(() => {
     return [
@@ -162,6 +199,11 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
   useEffect(() => {
     void syncPublicApprovedApplicationsFromServer().then(() => setOccupancySyncEpoch((n) => n + 1));
   }, []);
+
+  useEffect(() => {
+    if (mode !== "portal" || linkedPropertyId) return;
+    void loadPublicExtraListingsFromServer().then(() => setExtrasTick((n) => n + 1));
+  }, [mode, linkedPropertyId]);
 
   useEffect(() => {
     const on = () => setExtrasTick((n) => n + 1);
@@ -199,17 +241,45 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
 
   const propertyOptions = useMemo(() => {
     void extrasTick;
+    if (mode === "portal" && !linkedPropertyId) {
+      return readExtraListingsPublic()
+        .filter(isPropertyActiveForLeads)
+        .map((property) => ({ value: property.id, label: property.title }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
     if (!linkedPropertyId) return [];
     const prop = getPropertyForPublicLink(linkedPropertyId);
     if (!prop) return [];
     return [{ value: prop.id, label: prop.title }];
-  }, [extrasTick, linkedPropertyId]);
+  }, [extrasTick, linkedPropertyId, mode]);
 
   const linkedProperty = useMemo(() => {
     void extrasTick;
-    if (!linkedPropertyId) return undefined;
-    return getPropertyForPublicLink(linkedPropertyId);
-  }, [extrasTick, linkedPropertyId]);
+    if (linkedPropertyId) return getPropertyForPublicLink(linkedPropertyId);
+    if (mode === "portal") {
+      const pid = form.propertyId.trim();
+      if (!pid) return undefined;
+      return getPropertyForPublicLink(pid) ?? getPropertyById(pid);
+    }
+    return undefined;
+  }, [extrasTick, form.propertyId, linkedPropertyId, mode]);
+
+  const canRenderWizard = useMemo(() => {
+    if (mode === "portal") {
+      if (linkedPropertyId) return Boolean(linkedProperty);
+      return true;
+    }
+    return Boolean(linkedPropertyId && linkedProperty);
+  }, [linkedProperty, linkedPropertyId, mode]);
+
+  useEffect(() => {
+    if (mode !== "portal") return;
+    const email = sessionEmail?.trim();
+    if (!email?.includes("@")) return;
+    queueMicrotask(() => {
+      setForm((prev) => (prev.email.trim() ? prev : { ...prev, email }));
+    });
+  }, [mode, sessionEmail]);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -347,19 +417,35 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     void chargeTick;
     const pid = form.propertyId.trim();
     const email = form.email.trim();
-    const { amount, displayLabel } = listingApplicationFeeAmount(pid);
-    const needsFee = Boolean(pid && email.includes("@") && amount > 0);
-    const charge = pid && email ? findApplicationFeeCharge(email, pid, feeStepUserId) : undefined;
-    const paid = charge?.status === "paid";
-    return { needsFee, paid, displayLabel, amount };
+    const gate = residentApplicationFeeGate({
+      propertyId: pid,
+      residentEmail: email,
+      residentUserId: feeStepUserId,
+    });
+    return {
+      needsFee: gate.needsFee,
+      paid: gate.paid,
+      displayLabel: gate.displayLabel,
+      amount: gate.amount,
+      waived: gate.waived,
+    };
   }, [form.propertyId, form.email, feeStepUserId, chargeTick]);
 
   const finalizeApplicationSubmit = useCallback(
     async (residentUserId: string | null) => {
       if (submitting) return;
-      setSubmitting(true);
       const pid = form.propertyId.trim();
       const emailTrim = form.email.trim();
+      const block = residentApplicationSubmitBlocked({
+        propertyId: pid,
+        residentEmail: emailTrim,
+        roomChoice1: form.roomChoice1,
+      });
+      if (block.blocked) {
+        showToast(block.reason ?? "You cannot submit another application for this listing.");
+        return;
+      }
+      setSubmitting(true);
       const prop = pid ? getPropertyById(pid) : undefined;
       const axisId = makeNewApplicationId();
       const listing = prop;
@@ -422,6 +508,13 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       setForm(createInitialRentalWizardState());
       setStep(1);
       setErrors({});
+      setChargeTick((n) => n + 1);
+      setSubmitting(false);
+      if (mode === "portal" && sync.ok) {
+        showToast("Application submitted.");
+        router.replace("/resident/applications");
+        return;
+      }
       setPostSubmit({
         axisId,
         email: emailTrim,
@@ -429,25 +522,23 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         emailSent,
         syncError: sync.ok ? undefined : sync.error,
       });
-      setChargeTick((n) => n + 1);
-      setSubmitting(false);
       if (sync.ok) {
         showToast("Application submitted.");
       } else {
         showToast(sync.error ?? "Application saved locally but could not sync to server. Try again from create account.");
       }
     },
-    [form, showToast, submitting],
+    [form, mode, router, showToast, submitting],
   );
 
   const primaryButtonLabel = useMemo(() => {
+    if (step === 3) {
+      const stepErrors = validateRentalWizardStep(3, form);
+      if (countValidationErrors(stepErrors) > 0) return "Search house";
+    }
     if (step !== 12) return "Continue";
-    const pid = form.propertyId.trim();
-    const email = form.email.trim();
-    const { amount } = listingApplicationFeeAmount(pid);
-    const needsFee = Boolean(pid && email.includes("@") && amount > 0);
-    if (!needsFee) return submitting ? "Submitting…" : "Submit application";
-    const prop = pid ? getPropertyById(pid) : undefined;
+    if (!applicationFeeGate.needsFee) return submitting ? "Submitting…" : "Submit application";
+    const prop = form.propertyId.trim() ? getPropertyById(form.propertyId.trim()) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     if (isAchApplicationFeeChannel(payChannel)) {
@@ -459,6 +550,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     return "Submit application";
   }, [
     step,
+    form,
     form.propertyId,
     form.email,
     form.applicationFeePayChannel,
@@ -472,7 +564,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     const feeCheckout = searchParams.get("fee_checkout");
     if (feeCheckout === "cancel") {
       showToast("Checkout cancelled. You can try again when you are ready.");
-      router.replace("/rent/apply");
+      router.replace(wizardApplyPath);
       return;
     }
     if (feeCheckout !== "success") return;
@@ -484,7 +576,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
     if (!pid || !em.includes("@")) return;
 
     if (processedApplicationFeeSessions.has(sessionId)) {
-      router.replace("/rent/apply");
+      router.replace(wizardApplyPath);
       return;
     }
 
@@ -499,7 +591,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       };
       if (!res.ok) {
         showToast(typeof data.error === "string" ? data.error : "Could not verify payment.");
-        router.replace("/rent/apply");
+        router.replace(wizardApplyPath);
         return;
       }
       if (!data.paid) {
@@ -513,11 +605,11 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           processedApplicationFeeSessions.add(sessionId);
           showToast("Bank transfer submitted. Your application fee will be marked paid when the transfer clears.");
           finalizeApplicationSubmit(feeStepUserId);
-          router.replace("/rent/apply");
+          router.replace(wizardApplyPath);
           return;
         }
         showToast(typeof data.error === "string" ? data.error : "Payment not completed yet.");
-        router.replace("/rent/apply");
+        router.replace(wizardApplyPath);
         return;
       }
       if (
@@ -529,7 +621,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           .toLowerCase() !== em.toLowerCase()
       ) {
         showToast("Payment confirmation does not match this application. Use the same email and listing as before checkout.");
-        router.replace("/rent/apply");
+        router.replace(wizardApplyPath);
         return;
       }
       ensurePendingApplicationFeeCharge({
@@ -541,15 +633,15 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       const marked = markApplicationFeePaidAfterStripe(form.email, pid, feeStepUserId);
       if (!marked) {
         showToast("Payment succeeded, but the application fee line could not be updated.");
-        router.replace("/rent/apply");
+        router.replace(wizardApplyPath);
         return;
       }
       setChargeTick((n) => n + 1);
       processedApplicationFeeSessions.add(sessionId);
       finalizeApplicationSubmit(feeStepUserId);
-      router.replace("/rent/apply");
+      router.replace(wizardApplyPath);
     })();
-  }, [draftReady, searchParams, form.propertyId, form.email, form.fullLegalName, feeStepUserId, router, showToast, finalizeApplicationSubmit]);
+  }, [draftReady, searchParams, form.propertyId, form.email, form.fullLegalName, feeStepUserId, router, showToast, finalizeApplicationSubmit, wizardApplyPath]);
 
   const handleContinue = () => {
     if (step === 12) {
@@ -570,8 +662,12 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         const prop = pid ? getPropertyById(pid) : undefined;
         const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
         const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
-        const { amount } = listingApplicationFeeAmount(pid);
-        const needsFee = Boolean(pid && emailTrim.includes("@") && amount > 0);
+        const feeGate = residentApplicationFeeGate({
+          propertyId: pid,
+          residentEmail: emailTrim,
+          residentUserId,
+        });
+        const needsFee = feeGate.needsFee;
 
         if (needsFee && isAchApplicationFeeChannel(payChannel)) {
           const charge = findApplicationFeeCharge(form.email, pid, residentUserId);
@@ -587,7 +683,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
             return;
           }
 
-          const amountCents = Math.round(amount * 100);
+          const amountCents = Math.round(feeGate.amount * 100);
           setCheckoutBusy(true);
           track("application_fee_payment_started", { property_id: pid || undefined });
           try {
@@ -600,6 +696,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 residentName: form.fullLegalName.trim(),
                 amountCents,
                 managerUserId,
+                returnPath: wizardApplyPath,
               }),
             });
             const payload = (await res.json().catch(() => ({}))) as {
@@ -733,7 +830,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
         <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Rental application</h1>
       </div>
 
-      {!linkedPropertyId ? (
+      {!linkedPropertyId && mode !== "portal" ? (
       <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:mt-6 sm:rounded-3xl sm:p-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted/70">Choose your form</p>
         <div className="mt-3 sm:mt-4">
@@ -763,7 +860,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
       ) : null}
 
       {applicationPath === "signer" ? (
-        !linkedPropertyId || !linkedProperty ? (
+        !canRenderWizard ? (
           <div className="mt-8">
             <ManagerLinkGate
               title="Open your manager’s apply link"
@@ -784,8 +881,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
           />
         ) : (
           <div
-            className="rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11"
-            style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
+            className="rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11 [html[data-theme=dark]_&]:shadow-[0_24px_80px_-32px_rgba(0,0,0,0.55)] [html[data-theme=dark]_&]:ring-1 [html[data-theme=dark]_&]:ring-white/8"
           >
             <div className="rental-wizard-step-header border-b border-border pb-4 sm:pb-6">
               <p className="rental-wizard-step-eyebrow text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70 sm:text-[11px]">
@@ -810,10 +906,10 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                           s.n === step
                             ? "bg-primary text-white"
                             : completed
-                              ? "bg-primary/15 text-primary"
+                              ? "bg-primary/15 text-primary [html[data-theme=dark]_&]:bg-primary/28 [html[data-theme=dark]_&]:text-white"
                               : reachable
-                                ? "bg-accent/30 text-muted hover:bg-accent/40"
-                                : "cursor-not-allowed bg-accent/30 text-foreground/30"
+                                ? "bg-accent/30 text-muted hover:bg-accent/40 [html[data-theme=dark]_&]:bg-white/10 [html[data-theme=dark]_&]:text-white/70 [html[data-theme=dark]_&]:hover:bg-white/14"
+                                : "cursor-not-allowed bg-accent/25 text-muted/80 [html[data-theme=dark]_&]:bg-white/8 [html[data-theme=dark]_&]:text-white/42"
                         }`}
                       >
                         {completed ? "✓" : s.n}
@@ -822,7 +918,7 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                   })}
                 </div>
               </div>
-              <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2">
+              <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2 [html[data-theme=dark]_&]:bg-white/10">
                 <div
                   className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                   style={{ width: `${progressPct}%` }}
@@ -836,7 +932,8 @@ function RentalApplicationWizardInner({ showToast }: { showToast: (msg: string) 
                 form={form}
                 errors={errors}
                 propertyOptions={propertyOptions}
-                propertyLocked={Boolean(linkedProperty)}
+                propertyLocked={Boolean(linkedPropertyId && linkedProperty)}
+                emailLocked={mode === "portal" && Boolean(sessionEmail?.includes("@"))}
                 patch={patchForm}
                 applicationFeeGate={applicationFeeGate}
                 occupancySyncEpoch={occupancySyncEpoch}

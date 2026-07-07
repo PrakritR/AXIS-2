@@ -26,7 +26,11 @@ import {
   DEMO_RESIDENT_EMAIL,
   DEMO_RESIDENT_NAME,
   DEMO_RESIDENT_USER_ID,
+  DEMO_VENDOR_NAME,
+  DEMO_VENDOR_USER_ID,
 } from "@/lib/demo/demo-session";
+import type { WorkOrderBid } from "@/lib/work-order-bids";
+import type { VendorPayout } from "@/lib/vendor-payouts";
 
 // --- date helpers (relative to "now" so the demo never goes stale) -----------
 export function monthKey(offset: number): string {
@@ -673,7 +677,7 @@ export function demoLeases(): LeasePipelineRow[] {
       sentToResidentAt: isoDaysFromNow(-2),
       signedRentLabel: "$1,700/mo",
     }),
-    mk("demo-lease-2", "Marcus Chen", "marcus.chen@example.com", PROP.emerald, "admin", "Admin Review", {
+    mk("demo-lease-2", "Marcus Chen", "marcus.chen@example.com", PROP.emerald, "manager", "Manager Review", {
       generatedHtml: leaseHtml("Marcus Chen", PROP.emerald, "$3,200.00 per month", 21, 386),
       generatedAtIso: isoDaysFromNow(-1),
     }),
@@ -774,8 +778,65 @@ export function demoWorkOrders(): DemoManagerWorkOrderRow[] {
         residentName: "Omar Haddad",
         category: "hvac",
         scheduled: dateLabel(3),
-        scheduledAtIso: isoDaysFromNow(3),
-        vendorName: "Cascade Mechanical",
+        scheduledAtIso: isoAtTime(3, 10, 0),
+        vendorName: DEMO_VENDOR_NAME,
+        vendorId: "demo-vendor-1",
+      }),
+    // Second scheduled visit for the same vendor — gives the vendor persona's
+    // Work Orders + Calendar more than one entry to show.
+    mk("demo-wo-5", PROP.lakeview, "Furnace filter replacement", "Low", "Scheduled", "scheduled",
+      "Quarterly furnace filter swap ahead of the new resident's move-in.", {
+        residentName: "Grace Kim",
+        residentEmail: "grace.kim@example.com",
+        category: "hvac",
+        scheduled: dateLabel(6),
+        scheduledAtIso: isoAtTime(6, 13, 30),
+        vendorName: DEMO_VENDOR_NAME,
+        vendorId: "demo-vendor-1",
+      }),
+    mk("demo-wo-8", PROP.emerald, "AC not cooling", "High", "Open", "open",
+      "Resident reports warm air from vents — unit may need refrigerant check.", {
+        residentName: "Dana Whitfield",
+        residentEmail: "dana@example.com",
+        category: "hvac",
+        vendorName: DEMO_VENDOR_NAME,
+        vendorId: "demo-vendor-1",
+        biddingOpen: true,
+        biddingOpenedAt: isoDaysFromNow(-1),
+      }),
+    mk("demo-wo-9", PROP.pioneer, "Smart thermostat upgrade", "Medium", "Open", "open",
+      "Resident requested a Wi-Fi thermostat install with C-wire check.", {
+        residentName: DEMO_RESIDENT_NAME,
+        residentEmail: DEMO_RESIDENT_EMAIL,
+        category: "hvac",
+        vendorName: DEMO_VENDOR_NAME,
+        vendorId: "demo-vendor-1",
+        biddingOpen: true,
+        biddingOpenedAt: isoDaysFromNow(-3),
+      }),
+    mk("demo-wo-6", PROP.cascade, "Water heater flush", "Medium", "Completed", "completed",
+      "Annual tank flush and anode check.", {
+        category: "hvac",
+        vendorName: DEMO_VENDOR_NAME,
+        vendorId: "demo-vendor-1",
+        vendorCostCents: 28500,
+        materialsCostCents: 4500,
+        automationStatus: "paid",
+        paidAt: isoDaysFromNow(-12),
+        completedAt: isoDaysFromNow(-14),
+        cost: "$330.00",
+        workDoneSummary: "Flushed tank, replaced anode rod.",
+      }),
+    mk("demo-wo-7", PROP.lakeview, "Mini-split head cleaning", "Low", "Completed", "completed",
+      "Deep clean of wall-mounted head.", {
+        category: "hvac",
+        vendorName: DEMO_VENDOR_NAME,
+        vendorId: "demo-vendor-1",
+        vendorCostCents: 17500,
+        automationStatus: "vendor_marked_done",
+        vendorMarkedDoneAt: isoDaysFromNow(-20),
+        completedAt: isoDaysFromNow(-20),
+        cost: "$175.00",
       }),
     mk("demo-wo-3", PROP.emerald, "Repaint living room", "Low", "Completed", "completed",
       "Turn-over repaint before renewal.", {
@@ -793,6 +854,75 @@ export function demoWorkOrders(): DemoManagerWorkOrderRow[] {
         category: "electrical",
         managerInitiated: true,
       }),
+  ];
+}
+
+/** Demo work-order bids — backs vendor/manager bid UI in `/demo` without Supabase. */
+export function demoWorkOrderBids(): WorkOrderBid[] {
+  return [
+    {
+      id: "demo-bid-9",
+      workOrderId: "demo-wo-9",
+      vendorUserId: DEMO_VENDOR_USER_ID,
+      vendorDirectoryId: "demo-vendor-1",
+      vendorName: DEMO_VENDOR_NAME,
+      quoteMode: "upfront",
+      consultationVisitAt: null,
+      amountCents: 31_500,
+      materialsCents: 12_000,
+      proposedTime: isoAtTime(5, 11, 0),
+      note: "Includes Wi-Fi thermostat and wiring adapter.",
+      status: "submitted",
+      createdAt: isoDaysFromNow(-2),
+      updatedAt: isoDaysFromNow(-1),
+    },
+    {
+      id: "demo-bid-8",
+      workOrderId: "demo-wo-8",
+      vendorUserId: DEMO_VENDOR_USER_ID,
+      vendorDirectoryId: "demo-vendor-1",
+      vendorName: DEMO_VENDOR_NAME,
+      quoteMode: "after_consultation",
+      consultationVisitAt: isoAtTime(2, 15, 0),
+      amountCents: null,
+      materialsCents: 0,
+      proposedTime: null,
+      note: "Will price after the site visit.",
+      status: "submitted",
+      createdAt: isoDaysFromNow(-1),
+      updatedAt: isoDaysFromNow(-1),
+    },
+    {
+      id: "demo-bid-6",
+      workOrderId: "demo-wo-6",
+      vendorUserId: DEMO_VENDOR_USER_ID,
+      vendorDirectoryId: "demo-vendor-1",
+      vendorName: DEMO_VENDOR_NAME,
+      quoteMode: "upfront",
+      consultationVisitAt: null,
+      amountCents: 28_500,
+      materialsCents: 4_500,
+      proposedTime: isoAtTime(-14, 9, 0),
+      note: "Standard tank flush and anode replacement.",
+      status: "accepted",
+      createdAt: isoDaysFromNow(-16),
+      updatedAt: isoDaysFromNow(-14),
+    },
+  ];
+}
+
+/** Demo vendor payout rows for completed/paid work orders in `/demo`. */
+export function demoVendorPayouts(): VendorPayout[] {
+  return [
+    {
+      id: "demo-payout-6",
+      workOrderId: "demo-wo-6",
+      amountCents: 28_500,
+      stripeTransferId: "tr_demo_payout_6",
+      status: "paid",
+      failureReason: null,
+      createdAt: isoDaysFromNow(-10),
+    },
   ];
 }
 
@@ -835,6 +965,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Book a tour today",
         contact: "leasing@axis.com · (206) 555-0142",
         tone: "Warm & welcoming",
+        address: "12 Pike St, Seattle, WA",
         customDetails: "",
       },
       copy: {
@@ -866,6 +997,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Schedule a viewing",
         contact: "leasing@axis.com",
         tone: "Modern & upscale",
+        address: "88 Bell St, Seattle, WA",
         customDetails: "",
       },
       copy: {
@@ -897,6 +1029,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Apply online",
         contact: "leasing@axis.com",
         tone: "Calm & professional",
+        address: "455 Boren Ave, Seattle, WA",
         customDetails: "",
       },
       copy: null,
@@ -921,6 +1054,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
         cta: "Apply today",
         contact: "leasing@axis.com",
         tone: "Clean & minimal",
+        address: "210 Fairview Ave N, Seattle, WA",
         customDetails: "",
       },
       copy: {
@@ -1083,6 +1217,33 @@ export function demoResidentInbox(): PersistedInboxThread[] {
       preview: "The leak under the sink is getting worse…",
       body: "Hi,\n\nThe leak under the kitchen sink is getting worse. Could someone take a look this week?\n\nThanks,\nJordan",
       time: dateLabel(-1),
+      unread: false,
+    },
+  ];
+}
+
+export function demoVendorInbox(): PersistedInboxThread[] {
+  return [
+    {
+      id: "demo-vi-1",
+      folder: "inbox",
+      from: DEMO_MANAGER_NAME,
+      email: DEMO_MANAGER_EMAIL,
+      subject: "Service visit scheduled — HVAC seasonal tune-up",
+      preview: `${PROP_LABEL[PROP.cascade]} · ${dateLabel(3)} at 10:00 AM…`,
+      body: `Hi ${DEMO_VENDOR_NAME},\n\nYou're scheduled for the annual HVAC tune-up at ${PROP_LABEL[PROP.cascade]} on ${dateLabel(3)} at 10:00 AM. Resident Omar Haddad will be expecting you.\n\nThanks,\nAlex`,
+      time: dateLabel(-1),
+      unread: true,
+    },
+    {
+      id: "demo-vi-2",
+      folder: "inbox",
+      from: DEMO_MANAGER_NAME,
+      email: DEMO_MANAGER_EMAIL,
+      subject: "Service visit scheduled — Furnace filter replacement",
+      preview: `${PROP_LABEL[PROP.lakeview]} · ${dateLabel(6)} at 1:30 PM…`,
+      body: `Hi ${DEMO_VENDOR_NAME},\n\nQuick one — please swap the furnace filter at ${PROP_LABEL[PROP.lakeview]} on ${dateLabel(6)} at 1:30 PM ahead of the new resident's move-in.\n\nThanks,\nAlex`,
+      time: dateLabel(-2),
       unread: false,
     },
   ];

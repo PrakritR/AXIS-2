@@ -440,4 +440,24 @@ describe("scheduled-payment-messages", () => {
     expect(new Date(added!.sendAt).getTime()).toBe(new Date(2026, 5, 18).getTime());
     expect(cancelled?.status).toBe("cancelled");
   });
+
+  it("projects default schedule: 3/2/1 before, due date, and 1 day after", () => {
+    const now = new Date(2026, 5, 1);
+    const messages = projectScheduledPaymentMessages({
+      managerUserId: "mgr-1",
+      charges: [makeCharge()],
+      settings: DEFAULT_MANAGER_AUTOMATION_SETTINGS,
+      now,
+      includeHidden: true,
+    });
+    const manageable = manageableRemindersForCharge(
+      messages,
+      "hc_rent_test@test.com_prop1_2026-06",
+      12,
+      now,
+    );
+    expect(manageable.filter((m) => m.kind === "pre_due").map((m) => m.daysBeforeDue).sort((a, b) => (b ?? 0) - (a ?? 0))).toEqual([3, 2, 1]);
+    expect(manageable.some((m) => m.kind === "same_day")).toBe(true);
+    expect(manageable.some((m) => m.kind === "post_due" && m.daysBeforeDue === 1)).toBe(true);
+  });
 });

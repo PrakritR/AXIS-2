@@ -16,7 +16,12 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-type Body = { applicationId?: string; action?: "run" | "refresh" };
+type Body = {
+  applicationId?: string;
+  action?: "run" | "refresh";
+  packageSlug?: string;
+  addOnProducts?: string[];
+};
 
 export async function POST(req: Request) {
   try {
@@ -57,7 +62,13 @@ export async function POST(req: Request) {
     const result =
       action === "refresh"
         ? await refreshBackgroundCheck({ db, applicationId, managerUserId })
-        : await runBackgroundCheck({ db, applicationId, managerUserId });
+        : await runBackgroundCheck({
+            db,
+            applicationId,
+            managerUserId,
+            packageSlug: body.packageSlug,
+            addOnProducts: body.addOnProducts,
+          });
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
     }

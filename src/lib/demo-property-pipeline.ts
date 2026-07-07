@@ -1,7 +1,13 @@
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import {
+  DEMO_MANAGER_USER_ID,
+  isDemoModeActive,
+  resolveManagerScopeUserId,
+} from "@/lib/demo/demo-session";
+import { demoProperties } from "@/lib/demo/demo-data";
 import type { MockProperty } from "@/data/types";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
+import { scopePropertyPipelineSnapshotForViewer } from "@/lib/persisted-property-records";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { parseRecordOfArrays } from "@/lib/safe-local-storage";
 
@@ -154,6 +160,9 @@ export function seedDemoManagerProperties(userId: string, extras: MockProperty[]
   const map = readExtrasMap();
   map[userId] = extras;
   writeExtrasMap(map);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+  }
 }
 
 function mirrorPropertyRecord(input: {
@@ -242,7 +251,30 @@ export function hasCachedPropertyPipeline(): boolean {
   return readPropertyPipelineSyncedAt() > 0;
 }
 
-export async function syncPropertyPipelineFromServer(opts?: { force?: boolean }): Promise<boolean> {
+/** Drop cached pipeline data when the signed-in portal user changes. */
+export function resetPropertyPipelineClientCache(): void {
+  if (!isBrowser()) return;
+  memoryStore.delete(PENDING_BY_USER_KEY);
+  memoryStore.delete(EXTRAS_BY_USER_KEY);
+  memoryStore.delete("axis_admin_property_buckets_v1");
+  lastPipelineSnapshotSig = null;
+  writePropertyPipelineSyncedAt(0);
+  try {
+    for (const key of Object.keys(window.sessionStorage)) {
+      if (key.startsWith(SESSION_CACHE_PREFIX)) {
+        window.sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function syncPropertyPipelineFromServer(opts?: {
+  force?: boolean;
+  userId?: string | null;
+  linkedPropertyIds?: Iterable<string>;
+}): Promise<boolean> {
   if (!isBrowser()) return false;
   if (isDemoModeActive()) return true;
   const force = opts?.force === true;
@@ -256,16 +288,25 @@ export async function syncPropertyPipelineFromServer(opts?: { force?: boolean })
       const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
       const body = (await res.json()) as { snapshot?: PropertyPipelineSnapshot };
       if (!res.ok || !body.snapshot) return false;
-      const sig = JSON.stringify(body.snapshot);
+      const viewerUserId = opts?.userId?.trim() ?? "";
+      const snapshot =
+        viewerUserId
+          ? scopePropertyPipelineSnapshotForViewer(
+              body.snapshot,
+              viewerUserId,
+              opts?.linkedPropertyIds ?? [],
+            )
+          : body.snapshot;
+      const sig = JSON.stringify(snapshot);
       const changed = sig !== lastPipelineSnapshotSig;
       lastPipelineSnapshotSig = sig;
-      memoryStore.set(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
-      writeSessionJson(PENDING_BY_USER_KEY, body.snapshot.pendingByUser);
-      memoryStore.set(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
-      writeSessionJson(EXTRAS_BY_USER_KEY, body.snapshot.extrasByUser);
-      memoryStore.set("axis_admin_property_buckets_v1", body.snapshot.sideGlobal);
-      writeSessionJson("axis_admin_property_buckets_v1", body.snapshot.sideGlobal);
-      for (const [userId, side] of Object.entries(body.snapshot.sideByUser)) {
+      memoryStore.set(PENDING_BY_USER_KEY, snapshot.pendingByUser);
+      writeSessionJson(PENDING_BY_USER_KEY, snapshot.pendingByUser);
+      memoryStore.set(EXTRAS_BY_USER_KEY, snapshot.extrasByUser);
+      writeSessionJson(EXTRAS_BY_USER_KEY, snapshot.extrasByUser);
+      memoryStore.set("axis_admin_property_buckets_v1", snapshot.sideGlobal);
+      writeSessionJson("axis_admin_property_buckets_v1", snapshot.sideGlobal);
+      for (const [userId, side] of Object.entries(snapshot.sideByUser)) {
         const key = `axis_mgr_property_side_v1_${userId}`;
         memoryStore.set(key, side);
         writeSessionJson(key, side);
@@ -284,23 +325,26 @@ export async function syncPropertyPipelineFromServer(opts?: { force?: boolean })
   }
 }
 
-export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
+export async function mirrorLocalPropertyPipelineToServer(managerUserId?: string | null): Promise<void> {
   if (!isBrowser() || isDemoModeActive()) return;
+  const scopeUserId = managerUserId?.trim() ?? "";
   const pendingMap = readPendingMap();
   const extrasMap = readExtrasMap();
   const jobs: Promise<unknown>[] = [];
-  for (const [managerUserId, rows] of Object.entries(pendingMap)) {
+  for (const [ownerId, rows] of Object.entries(pendingMap)) {
+    if (scopeUserId && ownerId !== scopeUserId) continue;
     for (const row of rows) {
       jobs.push(
         fetch("/api/property-records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "upsert", id: row.id, managerUserId, status: "pending", rowData: row }),
+          body: JSON.stringify({ action: "upsert", id: row.id, managerUserId: ownerId, status: "pending", rowData: row }),
         }).catch(() => {}),
       );
     }
   }
-  for (const [managerUserId, rows] of Object.entries(extrasMap)) {
+  for (const [ownerId, rows] of Object.entries(extrasMap)) {
+    if (scopeUserId && ownerId !== scopeUserId) continue;
     for (const row of rows) {
       jobs.push(
         fetch("/api/property-records", {
@@ -309,7 +353,7 @@ export async function mirrorLocalPropertyPipelineToServer(): Promise<void> {
           body: JSON.stringify({
             action: "upsert",
             id: row.id,
-            managerUserId,
+            managerUserId: ownerId,
             status: row.adminPublishLive === true ? "live" : "review",
             propertyData: row,
           }),
@@ -385,6 +429,36 @@ async function fetchPublicPropertyLead(id: string): Promise<MockProperty | null>
   }
 }
 
+let residentPropertyInFlight: Promise<MockProperty | null> | null = null;
+
+/**
+ * Hydrates the signed-in resident's own property (any publish status) so
+ * resident-portal views (e.g. offered service request types) see it even
+ * though the resident never calls the manager/admin-scoped `/api/property-records`
+ * sync or the live-only public catalog.
+ */
+export async function loadResidentPropertyFromServer(): Promise<MockProperty | null> {
+  if (!isBrowser()) return null;
+  if (residentPropertyInFlight) return residentPropertyInFlight;
+  residentPropertyInFlight = (async () => {
+    try {
+      const res = await fetch("/api/portal/resident-property", { credentials: "include", cache: "no-store" });
+      const body = (await res.json()) as { property?: MockProperty };
+      if (!res.ok || !body.property) return null;
+      cachePublicExtraListings([body.property], { silent: true });
+      window.dispatchEvent(new Event(PROPERTY_PIPELINE_EVENT));
+      return body.property;
+    } catch {
+      return null;
+    }
+  })();
+  try {
+    return await residentPropertyInFlight;
+  } finally {
+    residentPropertyInFlight = null;
+  }
+}
+
 /**
  * One-time: moves flat legacy arrays into the signed-in user's bucket so other accounts stay isolated.
  */
@@ -439,6 +513,16 @@ export function readExtraListingsPublic(): MockProperty[] {
   return [...byPropertyKey.values()];
 }
 
+/** Listed properties for one manager (portal). Falls back to demo seed data in `/demo`. */
+export function readScopedExtraListings(userId: string | null): MockProperty[] {
+  const scopeUserId = resolveManagerScopeUserId(userId);
+  if (!scopeUserId) return [];
+  const stored = readExtraListingsForUser(scopeUserId);
+  if (stored.length > 0) return stored;
+  if (isDemoModeActive() && scopeUserId === DEMO_MANAGER_USER_ID) return demoProperties();
+  return stored;
+}
+
 /** Listed properties for one manager (portal). */
 export function readExtraListingsForUser(userId: string | null): MockProperty[] {
   if (!userId) return [];
@@ -456,8 +540,9 @@ export function readExtraListings(): MockProperty[] {
 
 /** Pending + live listings for one manager (property cap). */
 export function countManagerManagedPropertiesForUser(userId: string | null): number {
-  if (!userId) return 0;
-  return readPendingManagerPropertiesForUser(userId).length + readExtraListingsForUser(userId).length;
+  const scopeUserId = resolveManagerScopeUserId(userId);
+  if (!scopeUserId) return 0;
+  return readPendingManagerPropertiesForUser(scopeUserId).length + readScopedExtraListings(scopeUserId).length;
 }
 
 /** @deprecated Use countManagerManagedPropertiesForUser */

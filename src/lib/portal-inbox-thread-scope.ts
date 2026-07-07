@@ -5,6 +5,7 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 export const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
+export const VENDOR_INBOX_SCOPE = "axis_portal_inbox_vendor_v1";
 export const ADMIN_INBOX_SCOPE = "admin";
 
 export type InboxScopeUser = { id: string; email: string | null; role: string };
@@ -22,9 +23,10 @@ export function applyPortalInboxThreadScope<T>(query: T, user: InboxScopeUser): 
   return q.or(portalInboxThreadScopeFilter(user)) as T;
 }
 
-function portalForScope(scope: string): "manager" | "resident" | null {
+function portalForScope(scope: string): "manager" | "resident" | "vendor" | null {
   if (scope === MANAGER_INBOX_SCOPE) return "manager";
   if (scope === RESIDENT_INBOX_SCOPE) return "resident";
+  if (scope === VENDOR_INBOX_SCOPE) return "vendor";
   return null;
 }
 

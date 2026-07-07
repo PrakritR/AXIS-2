@@ -7,12 +7,64 @@ import { residentBelongsToManager } from "@/lib/resident-manager-scope";
 
 export const runtime = "nodejs";
 
+type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
+
 async function sessionUser() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
+}
+
+/** A vendor sees work orders they're currently assigned to (vendor_user_id) plus any
+ * they were sent a consultation/quote offer for (work_order_vendor_offers) — several
+ * vendors can be offered the same not-yet-assigned work order at once, so this can't
+ * rely on the single vendor_user_id column alone. */
+async function vendorScopedWorkOrderRows(db: Db, vendorUserId: string): Promise<DemoManagerWorkOrderRow[]> {
+  const { data: vendorDirectoryRows } = await db.from("manager_vendor_records").select("id").eq("vendor_user_id", vendorUserId);
+  const vendorDirectoryIds = (vendorDirectoryRows ?? []).map((row) => String(row.id ?? "")).filter(Boolean);
+
+  const offeredIds = new Set<string>();
+  const { data: offersByUser } = await db
+    .from("work_order_vendor_offers")
+    .select("work_order_id")
+    .eq("vendor_user_id", vendorUserId)
+    .eq("status", "sent");
+  for (const offer of offersByUser ?? []) offeredIds.add(offer.work_order_id as string);
+
+  if (vendorDirectoryIds.length > 0) {
+    const { data: offersByDirectory } = await db
+      .from("work_order_vendor_offers")
+      .select("work_order_id")
+      .in("vendor_directory_id", vendorDirectoryIds)
+      .eq("status", "sent");
+    for (const offer of offersByDirectory ?? []) offeredIds.add(offer.work_order_id as string);
+  }
+
+  const { data: assigned } = await db
+    .from("portal_work_order_records")
+    .select("id, row_data, updated_at")
+    .eq("vendor_user_id", vendorUserId)
+    .order("updated_at", { ascending: false })
+    .limit(500);
+
+  const byId = new Map<string, DemoManagerWorkOrderRow>();
+  for (const record of assigned ?? []) {
+    const row = record.row_data as DemoManagerWorkOrderRow | null;
+    if (row) byId.set(record.id as string, row);
+  }
+
+  const missingIds = [...offeredIds].filter((id) => !byId.has(id));
+  if (missingIds.length > 0) {
+    const { data: offeredRows } = await db.from("portal_work_order_records").select("id, row_data").in("id", missingIds);
+    for (const record of offeredRows ?? []) {
+      const row = record.row_data as DemoManagerWorkOrderRow | null;
+      if (row) byId.set(record.id as string, row);
+    }
+  }
+
+  return [...byId.values()];
 }
 
 function normalizeRow(row: DemoManagerWorkOrderRow): DemoManagerWorkOrderRow {
@@ -32,6 +84,11 @@ export async function GET() {
     const { data: profile } = await db.from("profiles").select("email, role").eq("id", user.id).maybeSingle();
     const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+
+    if (!admin && role === "vendor") {
+      const rows = await vendorScopedWorkOrderRows(db, user.id);
+      return NextResponse.json({ rows });
+    }
 
     let query = db
       .from("portal_work_order_records")
@@ -77,9 +134,57 @@ function actorOwnsRecord(actor: Actor, rec: OwnerCols | null): boolean {
   return false;
 }
 
+/** Resolve a vendor directory row's linked auth user, so the record can be scoped
+ * for the vendor's own GET query and inbox notifications without a join at read time.
+ * Rejects (returns `rejected: true`) a vendorId that doesn't belong to `ownerManagerUserId`
+ * and isn't marked shared — the same ownership gate the sibling work-order-vendor-offers
+ * route applies — so a client can't attach an uninvited/other-manager's vendor to a work
+ * order via a crafted vendorId. */
+async function resolveVendorUserId(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  vendorId: string | null | undefined,
+  ownerManagerUserId: string | null,
+): Promise<{ vendorUserId: string | null; rejected: boolean }> {
+  const id = vendorId?.trim();
+  if (!id) return { vendorUserId: null, rejected: false };
+  const { data } = await db
+    .from("manager_vendor_records")
+    .select("manager_user_id, vendor_user_id, row_data")
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return { vendorUserId: null, rejected: true };
+  const rowData = (data.row_data ?? {}) as Record<string, unknown>;
+  const shared = rowData.sharedWithManagers === true;
+  const owned = Boolean(ownerManagerUserId) && (data.manager_user_id === ownerManagerUserId || shared);
+  if (!owned) return { vendorUserId: null, rejected: true };
+  return { vendorUserId: (data.vendor_user_id as string | null) ?? null, rejected: false };
+}
+
+/** Which manager's vendor directory a vendorId must belong to (or be shared with) for
+ * this write. A manager actor always uses their own id, never client input. A resident's
+ * `row.managerUserId` has already been verified as legitimate by residentMayTargetRowManager.
+ * An admin trusts the row's managerUserId, falling back to a DB lookup when editing an
+ * existing row whose body omitted it. */
+async function resolveVendorOwnerManagerUserId(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  actor: Actor,
+  row: DemoManagerWorkOrderRow,
+): Promise<string | null> {
+  if (actor.role === "resident") return row.managerUserId?.trim() || null;
+  if (!actor.admin) return actor.userId;
+  const fromRow = row.managerUserId?.trim();
+  if (fromRow) return fromRow;
+  const { data } = await db
+    .from("portal_work_order_records")
+    .select("manager_user_id")
+    .eq("id", row.id)
+    .maybeSingle();
+  return (data?.manager_user_id as string | null) ?? null;
+}
+
 /** Build the persisted record, binding scope columns to the authenticated caller
  * so a client cannot spoof ownership. */
-function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow) {
+function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow, vendorUserId: string | null) {
   const normalized = normalizeRow(row);
   const base = {
     id: normalized.id,
@@ -87,6 +192,7 @@ function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow) {
     resident_email: normalized.residentEmail?.trim().toLowerCase() || null,
     property_id: normalized.propertyId || null,
     assigned_property_id: normalized.assignedPropertyId || null,
+    vendor_user_id: normalized.selfAssigned ? null : vendorUserId,
     row_data: normalized,
     updated_at: new Date().toISOString(),
   };
@@ -113,6 +219,12 @@ export async function POST(req: Request) {
       admin,
       role: String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase(),
     };
+
+    // Vendors see their offered/assigned work through GET; the record itself is
+    // manager-authored (assignment, scheduling, billing), so vendor writes are rejected.
+    if (!admin && actor.role === "vendor") {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
 
     const body = (await req.json()) as {
       action?: "upsert" | "delete" | "replace";
@@ -147,7 +259,13 @@ export async function POST(req: Request) {
         if (!row?.id) continue;
         if (!(await ownsExisting(row.id))) continue;
         if (!(await residentMayTargetRowManager(row))) continue;
-        await db.from("portal_work_order_records").upsert(recordForActor(actor, row), { onConflict: "id" });
+        const { vendorUserId, rejected } = await resolveVendorUserId(
+          db,
+          row.vendorId,
+          await resolveVendorOwnerManagerUserId(db, actor, row),
+        );
+        if (rejected) continue;
+        await db.from("portal_work_order_records").upsert(recordForActor(actor, row, vendorUserId), { onConflict: "id" });
       }
       return NextResponse.json({ ok: true });
     }
@@ -176,9 +294,15 @@ export async function POST(req: Request) {
     if (!(await residentMayTargetRowManager(body.row))) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
+    const { vendorUserId, rejected } = await resolveVendorUserId(
+      db,
+      body.row.vendorId,
+      await resolveVendorOwnerManagerUserId(db, actor, body.row),
+    );
+    if (rejected) return NextResponse.json({ error: "Forbidden: vendor not available to this manager." }, { status: 403 });
     const { error } = await db
       .from("portal_work_order_records")
-      .upsert(recordForActor(actor, body.row), { onConflict: "id" });
+      .upsert(recordForActor(actor, body.row, vendorUserId), { onConflict: "id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   } catch (e) {

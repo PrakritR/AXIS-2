@@ -9,7 +9,7 @@ function feedbackType(row: Record<string, unknown>): "bug" | "feedback" {
 
 function reporterRole(row: Record<string, unknown>, fallback: string): string {
   const raw = String(row.reporterRole ?? row.reporter_role ?? fallback).toLowerCase();
-  if (raw === "resident" || raw === "manager" || raw === "admin" || raw === "pro") return raw;
+  if (raw === "resident" || raw === "manager" || raw === "admin" || raw === "pro" || raw === "vendor") return raw;
   return fallback;
 }
 

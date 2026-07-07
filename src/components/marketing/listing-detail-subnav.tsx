@@ -37,6 +37,8 @@ function getSectionElement(id: string, mode: "page" | "modal", subnavEl: HTMLEle
 
 function syncListingScrollStack(mode: "page" | "modal", subnavEl: HTMLElement | null): number {
   if (!subnavEl) return 128;
+  const isNative =
+    typeof document !== "undefined" && document.documentElement.hasAttribute("data-native");
   if (mode === "modal") {
     const scrollRoot = getScrollRootFromSubnav(subnavEl);
     const stack = subnavEl.offsetHeight + 12;
@@ -44,8 +46,15 @@ function syncListingScrollStack(mode: "page" | "modal", subnavEl: HTMLElement | 
     return stack;
   }
   const navEl = document.getElementById(NAVBAR_ID);
-  const navH = navEl?.getBoundingClientRect().height ?? 0;
-  const stack = navH + subnavEl.offsetHeight + 12;
+  const navH = isNative ? 0 : (navEl?.getBoundingClientRect().height ?? 0);
+  const safeTop =
+    typeof window !== "undefined"
+      ? Number.parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--native-safe-top"),
+        ) || 0
+      : 0;
+  const insetTop = isNative ? safeTop : 0;
+  const stack = navH + insetTop + subnavEl.offsetHeight + 12;
   document.documentElement.style.setProperty("--listing-sticky-stack", `${stack}px`);
   const listingRoot = getListingSectionsRoot(subnavEl);
   listingRoot?.style.setProperty("--listing-sticky-stack", `${stack}px`);
@@ -98,8 +107,9 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
       setStickyTopPx(0);
       setPageScrolled(scrollRoot ? scrollRoot.scrollTop > 8 : false);
     } else {
+      const isNative = document.documentElement.hasAttribute("data-native");
       const navEl = document.getElementById(NAVBAR_ID);
-      const navH = navEl?.getBoundingClientRect().height ?? 0;
+      const navH = isNative ? 0 : (navEl?.getBoundingClientRect().height ?? 0);
       setStickyTopPx(navH);
       syncListingScrollStack(mode, subEl);
       setPageScrolled(window.scrollY > 20);
@@ -233,7 +243,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
     <nav
       ref={rootRef}
       data-listing-subnav
-      className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 [html[data-native]_&]:-mx-0 [html[data-native]_&]:px-3 [html[data-native]_&]:pt-[max(0.5rem,env(safe-area-inset-top))] ${
+      className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 [html[data-native]_&]:pt-2 ${
         pageScrolled
           ? "border-border bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)] [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-background/92 [html[data-theme=dark]_&]:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.45)]"
           : "border-border bg-background/90 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-background/88"

@@ -5,7 +5,7 @@
 import { buildRegistry } from "./registry";
 import { getOverdueChargesTool, listChargesTool } from "./domains/payments";
 import { listLeasesTool } from "./domains/leases";
-import { listWorkOrdersTool } from "./domains/work-orders";
+import { listWorkOrdersTool, suggestVendorsForWorkOrderTool } from "./domains/work-orders";
 import { listVendorsTool } from "./domains/vendors";
 import { runFinancialReportTool } from "./domains/financials";
 import { listResidentsTool } from "./domains/residents";
@@ -20,6 +20,7 @@ export const agentRegistry = buildRegistry([
   listChargesTool,
   listLeasesTool,
   listWorkOrdersTool,
+  suggestVendorsForWorkOrderTool,
   listVendorsTool,
   runFinancialReportTool,
   listResidentsTool,

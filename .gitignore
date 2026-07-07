@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/
 
+# Nested fork (separate git repo)
+axis-crm-outreach/
+
 # Dependencies
 node_modules/
 .pnp
@@ -55,6 +58,7 @@ coverage/
 playwright.config.ts
 
 # Capacitor native projects (commit ios/ and android/, ignore build output)
+.cap-dev-server
 .capacitor/
 /ios/App/Pods/
 /ios/App/App/public/

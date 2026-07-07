@@ -1,27 +1,43 @@
 "use client";
 
-import { AxisAssistantNavButton, useHasAxisAssistant } from "@/components/portal/axis-assistant";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import {
+  PortalNativeMoreNavButton,
   PortalNativeMoreSheet,
   type PortalMoreNavItem,
 } from "@/components/portal/portal-native-more-sheet";
 import { useCoManagerNavSections } from "@/hooks/use-co-manager-nav-sections";
-import { useNativeChrome } from "@/hooks/use-is-native-app";
+import { useIsSmallPortalViewport, useNativeChrome } from "@/hooks/use-is-native-app";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { managerSectionLockedForTier, residentSectionLockedForManagerTier } from "@/lib/manager-access";
 import { shouldOpenNativeSectionsSheet } from "@/lib/native/open-portal-sections-sheet";
-import { orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
+import {
+  nativeBottomBarEnabledForKind,
+  nativeBottomNavShowMoreTab,
+  orderNativeBottomNavItems,
+  splitNativeBottomNavItems,
+} from "@/lib/native/portal-bottom-nav";
+import { adjacentPrimarySection, resolveSwipePageDirection } from "@/lib/native/portal-swipe-page";
+import { playSwipeEnter, playSwipeExit, resetSwipeTransform } from "@/lib/native/portal-swipe-page-transition";
 import { observeNativeBottomNavInset } from "@/lib/native/sync-portal-bottom-nav-inset";
-import { portalNavClick, prefetchPortalHref } from "@/lib/portal-nav-client";
+import {
+  isCrossPortalNavigation,
+  portalNavClick,
+  prefetchPortalHref,
+  usePortalNavigate,
+} from "@/lib/portal-nav-client";
 import { portalBackgroundPrefetchEnabled, portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
-import { PORTAL_MOBILE_CHROME_CLASS, PORTAL_NATIVE_BOTTOM_NAV_CLASS } from "@/lib/portal-layout-classes";
+import {
+  PORTAL_MAIN_CONTENT_ID,
+  PORTAL_MOBILE_CHROME_CLASS,
+  PORTAL_NATIVE_BOTTOM_NAV_CLASS,
+} from "@/lib/portal-layout-classes";
 import { prefetchPortalPanelChunks } from "@/lib/portal-panel-prefetch";
 import { SIDEBAR_COLLAPSED_COOKIE } from "@/lib/portal-sidebar-cookie";
-import { groupNavItems } from "@/lib/portals/nav-groups";
+import { groupNavItems, isHiddenFromMobileNav } from "@/lib/portals/nav-groups";
 import type { PortalDefinition, PortalKind } from "@/lib/portal-types";
 import { cn } from "@/lib/utils";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
@@ -44,6 +60,8 @@ function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: strin
       return { subtitle: "Resident", ariaLabel: "Axis Resident Portal home" };
     case "admin":
       return { subtitle: "Admin", ariaLabel: "Axis Admin Portal home" };
+    case "vendor":
+      return { subtitle: "Vendor", ariaLabel: "Axis Vendor Portal home" };
     default:
       return { subtitle: "Manager", ariaLabel: "Axis Manager Portal home" };
   }
@@ -94,7 +112,12 @@ export function PortalSidebar({
   const router = useRouter();
   const isClient = useIsClient();
   const showNativeChrome = useNativeChrome();
-  const hasAssistant = useHasAxisAssistant();
+  const isSmallViewport = useIsSmallPortalViewport();
+  // Native app OR a phone-width browser — same bottom-nav chrome in both; only
+  // the desktop (`lg:`) sidebar differs. Cross-portal full-navigation stays
+  // native-only below (a WebView-specific routing quirk, not a viewport one).
+  const showMobileNav = showNativeChrome || isSmallViewport;
+  const navigate = usePortalNavigate();
   const session = usePortalSession();
   const visibleSections = useCoManagerNavSections(definition, session.userId);
   const navCounts = usePortalNavCounts(definition.kind);
@@ -141,7 +164,8 @@ export function PortalSidebar({
     definition.kind === "admin" ||
     definition.kind === "pro" ||
     definition.kind === "resident" ||
-    definition.kind === "manager";
+    definition.kind === "manager" ||
+    definition.kind === "vendor";
 
   const showManagerTierLocks =
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";
@@ -160,32 +184,110 @@ export function PortalSidebar({
     [showResidentTierLocks, showManagerTierLocks, subscriptionTier],
   );
 
-  const nativeBottomNavAllItems = useMemo(
-    () => (showNativeChrome ? orderNativeBottomNavItems(navItems, definition.kind) : []),
-    [definition.kind, navItems, showNativeChrome],
+  const nativeBottomNavSplit = useMemo(
+    () =>
+      showMobileNav && nativeBottomBarEnabledForKind(definition.kind)
+        ? splitNativeBottomNavItems(navItems, definition.kind)
+        : { primary: [], overflow: [] },
+    [definition.kind, navItems, showMobileNav],
   );
 
   const nativeBottomNavItems = useMemo(
-    () => nativeBottomNavAllItems.filter((item) => !isSectionLocked(item.section)),
-    [nativeBottomNavAllItems, isSectionLocked],
+    () => nativeBottomNavSplit.primary.filter((item) => !isSectionLocked(item.section)),
+    [nativeBottomNavSplit, isSectionLocked],
   );
+  const showMoreTab = showMobileNav && nativeBottomNavShowMoreTab(definition.kind, navItems);
+  const moreTabActive = !nativeBottomNavItems.some((item) => item.section === activeSection);
   const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
   const [bottomNavEl, setBottomNavEl] = useState<HTMLElement | null>(null);
   const bottomNavScrollRef = useRef<HTMLDivElement>(null);
   const topNavScrollRef = useRef<HTMLDivElement>(null);
   const bottomNavTouchRef = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    return observeNativeBottomNavInset(bottomNavEl, showNativeChrome);
-  }, [bottomNavEl, showNativeChrome]);
+  // Latest values for the swipe-page gesture handlers below, which are attached
+  // imperatively (outside React's render cycle) and must always read current data.
+  const swipeOrderRef = useRef<{ section: string; href: string }[]>([]);
+  const activeSectionRef = useRef(activeSection);
+  const contentTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingSwipeEnterRef = useRef<"left" | "right" | null>(null);
 
   useEffect(() => {
-    if (!showNativeChrome) return;
+    swipeOrderRef.current = nativeBottomNavItems;
+  }, [nativeBottomNavItems]);
+
+  useEffect(() => {
+    activeSectionRef.current = activeSection;
+  }, [activeSection]);
+
+  useEffect(() => {
+    return observeNativeBottomNavInset(bottomNavEl, showMobileNav);
+  }, [bottomNavEl, showMobileNav]);
+
+  // Apple-style paged swipe between the fixed bar's main tabs — a horizontal
+  // touch gesture on the page content pages to the adjacent primary tab, kept in
+  // sync with the bar since navigation drives `activeSection` the same as a tap.
+  useEffect(() => {
+    if (!showMobileNav) return;
+    const contentEl = document.getElementById(PORTAL_MAIN_CONTENT_ID);
+    if (!contentEl) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      contentTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      const start = contentTouchStartRef.current;
+      contentTouchStartRef.current = null;
+      const touch = e.changedTouches[0];
+      if (!start || !touch) return;
+
+      const direction = resolveSwipePageDirection({
+        startX: start.x,
+        startY: start.y,
+        endX: touch.clientX,
+        endY: touch.clientY,
+      });
+      if (!direction) return;
+
+      const order = swipeOrderRef.current.map((item) => item.section);
+      const adjacent = adjacentPrimarySection(order, activeSectionRef.current, direction);
+      if (!adjacent) return;
+      const href = swipeOrderRef.current.find((item) => item.section === adjacent)?.href;
+      if (!href) return;
+
+      pendingSwipeEnterRef.current = direction;
+      void playSwipeExit(contentEl, direction).then(() => navigate(href));
+    };
+
+    contentEl.addEventListener("touchstart", onTouchStart, { passive: true });
+    contentEl.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      contentEl.removeEventListener("touchstart", onTouchStart);
+      contentEl.removeEventListener("touchend", onTouchEnd);
+      resetSwipeTransform(contentEl);
+    };
+  }, [showMobileNav, navigate]);
+
+  // Once the swiped-to tab's content has actually mounted (pathname settled),
+  // play the entrance half of the slide from the opposite edge.
+  useEffect(() => {
+    const direction = pendingSwipeEnterRef.current;
+    if (!direction) return;
+    pendingSwipeEnterRef.current = null;
+    const contentEl = document.getElementById(PORTAL_MAIN_CONTENT_ID);
+    if (!contentEl) return;
+    playSwipeEnter(contentEl, direction);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!showMobileNav) return;
     const strip = bottomNavScrollRef.current;
     if (!strip) return;
     const activeEl = strip.querySelector<HTMLElement>(`[data-native-nav-section="${activeSection}"]`);
     activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [activeSection, nativeBottomNavItems, showNativeChrome]);
+  }, [activeSection, nativeBottomNavItems, showMobileNav]);
 
   useEffect(() => {
     if (showNativeChrome) return;
@@ -195,16 +297,26 @@ export function PortalSidebar({
     activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
   }, [activeSection, navItems, showNativeChrome]);
 
-  const moreSheetItems: PortalMoreNavItem[] = useMemo(
-    () =>
-      nativeBottomNavAllItems.map((item) => ({
+  // The swipe-up "More" sheet is the full section index — every section, not just
+  // the ones outside the fixed bar. Primary-bar sections (e.g. Documents) are
+  // deliberately listed here too so there's always one comprehensive place to
+  // find anything, alongside their one-tap bar shortcut.
+  const moreSheetItems: PortalMoreNavItem[] = useMemo(() => {
+    const ordered = orderNativeBottomNavItems(navItems, definition.kind);
+    return ordered
+      .filter((item) => !isHiddenFromMobileNav(definition.kind, item.section))
+      .map((item) => ({
         section: item.section,
         label: item.label,
         href: item.href,
         locked: isSectionLocked(item.section),
         count: navCounts[item.section] ?? 0,
-      })),
-    [nativeBottomNavAllItems, navCounts, isSectionLocked],
+      }));
+  }, [navItems, definition.kind, navCounts, isSectionLocked]);
+
+  const mobileTopStripItems = useMemo(
+    () => navItems.filter((s) => !isHiddenFromMobileNav(definition.kind, s.section)),
+    [navItems, definition.kind],
   );
 
   const lockAriaLabel = (label: string, locked: boolean) =>
@@ -228,20 +340,29 @@ export function PortalSidebar({
           key={s.section}
           href={s.href}
           data-native-nav-section={s.section}
+          data-attr={`bottom-nav-${s.section}`}
           prefetch={portalMobileLinkPrefetchEnabled()}
-          onClick={
-            showNativeChrome
-              ? portalNavClick(router, s.href, { preferFullNavigation: true })
-              : portalNavClick(router, s.href)
-          }
-          className={`flex w-[2.75rem] shrink-0 snap-center flex-col items-center justify-end px-1 pt-0 pb-0 transition sm:w-[2.85rem] ${
-            active ? "text-primary" : locked ? "text-muted/70" : "text-muted"
+          onClick={portalNavClick(router, s.href, {
+            preferFullNavigation: showNativeChrome && isCrossPortalNavigation(pathname, s.href),
+          })}
+          className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 py-2 transition ${
+            active ? "text-primary" : "text-foreground"
           }`}
           aria-label={lockAriaLabel(s.label, locked)}
+          aria-current={active ? "page" : undefined}
         >
           {showNavIcons ? (
-            <span className={`relative shrink-0 ${locked ? "opacity-60" : "opacity-100"}`} aria-hidden>
-              <PortalNavIcon section={s.section} />
+            <span
+              className={`relative shrink-0 transition-opacity duration-200 ${
+                active ? "opacity-100" : locked ? "opacity-45" : "opacity-60"
+              }`}
+              aria-hidden
+            >
+              <PortalNavIcon
+                section={s.section}
+                className="h-[23px] w-[23px] shrink-0"
+                strokeWidth={active ? 2.35 : 1.75}
+              />
               {!locked && count > 0 ? (
                 <span className="absolute -top-1 -right-1.5">
                   <PortalNavCountBadge count={count} />
@@ -460,7 +581,7 @@ export function PortalSidebar({
               className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               aria-label="Portal sections"
             >
-              {navItems.map((s) => renderMobileNavLink(s, "top"))}
+              {mobileTopStripItems.map((s) => renderMobileNavLink(s, "top"))}
             </nav>
           </div>
         </div>
@@ -475,7 +596,7 @@ export function PortalSidebar({
         showNavIcons={showNavIcons}
       />
 
-      {showNativeChrome && nativeBottomNavItems.length > 0 && isClient
+      {showMobileNav && nativeBottomNavItems.length > 0 && isClient
         ? createPortal(
             <nav
               ref={setBottomNavEl}
@@ -484,7 +605,7 @@ export function PortalSidebar({
             >
               <button
                 type="button"
-                className="portal-native-bottom-nav-pull flex w-full shrink-0 items-center justify-center border-0 bg-transparent px-3 pb-0.5 pt-1"
+                className="portal-native-bottom-nav-pull flex w-full shrink-0 items-center justify-center border-0 bg-transparent px-3 pb-0 pt-1"
                 aria-label="Show all sections"
                 onClick={() => setSectionsSheetOpen(true)}
                 onTouchStart={(e) => {
@@ -511,18 +632,14 @@ export function PortalSidebar({
               >
                 <span className="portal-native-bottom-nav-pull-handle" aria-hidden />
               </button>
-              <div className="flex min-w-0 w-full items-stretch">
-                <div
-                  ref={bottomNavScrollRef}
-                  className="portal-native-bottom-nav-scroll flex min-w-0 w-0 flex-1 flex-nowrap snap-x snap-mandatory gap-0 overflow-x-auto overscroll-x-contain px-1.5 pt-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                  aria-label="Scroll portal sections"
-                >
-                  {nativeBottomNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
-                </div>
-                {hasAssistant ? (
-                  <div className="portal-native-bottom-nav-assistant shrink-0 self-stretch border-l border-border">
-                    <AxisAssistantNavButton />
-                  </div>
+              <div
+                ref={bottomNavScrollRef}
+                className="portal-native-bottom-nav-scroll flex min-w-0 w-full flex-nowrap items-stretch justify-evenly gap-0 px-1"
+                aria-label="Scroll portal sections"
+              >
+                {nativeBottomNavItems.map((s) => renderMobileNavLink(s, "bottom"))}
+                {showMoreTab ? (
+                  <PortalNativeMoreNavButton active={moreTabActive} onClick={() => setSectionsSheetOpen(true)} />
                 ) : null}
               </div>
             </nav>,

@@ -1,8 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   MANAGER_TABLE_TH,
@@ -15,12 +14,16 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
@@ -35,6 +38,7 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   return rows.reduce(
@@ -73,6 +77,7 @@ function sortApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] {
 export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const { email: sessionEmail, ready: sessionReady } = usePortalSession();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const residentEmail = (sessionEmail ?? "").trim().toLowerCase();
   const [tick, setTick] = useState(0);
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
@@ -110,6 +115,11 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
 
   useEffect(() => {
+    if (!sessionReady || rows.length > 0) return;
+    router.replace("/resident/applications/apply");
+  }, [sessionReady, rows.length, router]);
+
+  useEffect(() => {
     if (openHandled.current || rows.length === 0) return;
     const raw = (searchParams.get("open") ?? searchParams.get("axisId") ?? "").trim();
     if (!raw) return;
@@ -123,131 +133,159 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
     });
   }, [rows, searchParams]);
 
-  const body = (
-    <>
-      <ManagerPortalFilterRow>
-        <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-      </ManagerPortalFilterRow>
-
-      {!sessionReady ? (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
-        </div>
-      ) : rowsForBucket.length === 0 ? (
-        <div className="space-y-4">
-          <PortalDataTableEmpty
-            icon="application"
-            message={
-              rows.length === 0
-                ? "No applications are linked to your account yet."
-                : "No applications in this tab yet."
-            }
-          />
-          {rows.length === 0 ? (
-            <div className="flex justify-center">
-              <Link
-                href="/rent/apply"
-                className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-border bg-card px-5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent"
-              >
-                Start an application
-              </Link>
-            </div>
-          ) : null}
-        </div>
+  const renderRowDetail = (row: DemoApplicantRow) => (
+    <div className="mx-auto max-w-5xl space-y-6">
+      {editingId === row.id && row.bucket === "pending" && row.application ? (
+        <ResidentApplicationEditor
+          row={row}
+          residentEmail={residentEmail}
+          onCancel={() => setEditingId(null)}
+          onSaved={() => {
+            setEditingId(null);
+            setTick((t) => t + 1);
+          }}
+        />
       ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
-          <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Application</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rowsForBucket.map((row) => (
-                  <Fragment key={row.id}>
-                    <tr
-                      id={`resident-application-${row.id}`}
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() => {
-                        setExpandedId((cur) => (cur === row.id ? null : row.id));
-                        setEditingId(null);
-                      })}
-                      aria-expanded={expandedId === row.id}
-                    >
-                      <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                        <p className="font-medium leading-snug text-foreground">{row.name || "Applicant"}</p>
-                        <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-muted">{row.id}</p>
-                      </td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property || "—"}</td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
-                      <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{bucketStatusLabel(row.bucket)}</td>
-                    </tr>
-                    {expandedId === row.id ? (
-                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                          <div className="mx-auto max-w-5xl space-y-6">
-                            {editingId === row.id && row.bucket === "pending" && row.application ? (
-                              <ResidentApplicationEditor
-                                row={row}
-                                residentEmail={residentEmail}
-                                onCancel={() => setEditingId(null)}
-                                onSaved={() => {
-                                  setEditingId(null);
-                                  setTick((t) => t + 1);
-                                }}
-                              />
-                            ) : (
-                              <>
-                                <PortalTableDetailActions placement="top">
-                                  {row.bucket === "pending" && row.application ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={PORTAL_DETAIL_BTN}
-                                      onClick={() => setEditingId(row.id)}
-                                    >
-                                      Edit application
-                                    </Button>
-                                  ) : null}
-                                </PortalTableDetailActions>
-                                {row.application ? (
-                                  <ManagerApplicationReadonlyReview
-                                    partial={{
-                                      ...(effectiveApplicationForRow(row) ?? row.application),
-                                    }}
-                                    assignedPropertyId={row.assignedPropertyId}
-                                    assignedRoomChoice={row.assignedRoomChoice}
-                                  />
-                                ) : (
-                                  <p className="text-sm text-muted">Application details are not available for this record.</p>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <>
+          <PortalTableDetailActions placement="top">
+            {row.bucket === "pending" && row.application ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => setEditingId(row.id)}
+              >
+                Edit application
+              </Button>
+            ) : null}
+          </PortalTableDetailActions>
+          {row.application ? (
+            <ManagerApplicationReadonlyReview
+              partial={{
+                ...(effectiveApplicationForRow(row) ?? row.application),
+              }}
+              assignedPropertyId={row.assignedPropertyId}
+              assignedRoomChoice={row.assignedRoomChoice}
+            />
+          ) : (
+            <p className="text-sm text-muted">Application details are not available for this record.</p>
+          )}
+        </>
       )}
-    </>
+    </div>
   );
+
+  const body = !sessionReady ? (
+      <div className={PORTAL_DATA_TABLE_WRAP}>
+        <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
+      </div>
+    ) : (
+      <>
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+          {sessionReady ? (
+            <Button
+              type="button"
+              className="rounded-full"
+              data-attr="resident-applications-new"
+              onClick={() => router.push(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`)}
+            >
+              New application
+            </Button>
+          ) : null}
+        </ManagerPortalFilterRow>
+
+        {rows.length === 0 ? (
+          <PortalDataTableEmpty icon="application" message="No applications yet. Start your first application." />
+        ) : rowsForBucket.length === 0 ? (
+          <PortalDataTableEmpty icon="application" message="No applications in this tab yet." />
+        ) : (
+          <>
+            <div className="space-y-2 lg:hidden">
+            {rowsForBucket.map((row) => {
+              const expanded = expandedId === row.id;
+              return (
+                <div key={row.id} id={`resident-application-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    onClick={() => {
+                      setExpandedId((cur) => (cur === row.id ? null : row.id));
+                      setEditingId(null);
+                    }}
+                    aria-expanded={expanded}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{row.name || "Applicant"}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {[row.property || "—", `Room ${displayRoomForRow(row)}`].join(" · ")}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">{bucketStatusLabel(row.bucket)}</p>
+                    </div>
+                    <PortalTableExpandChevron expanded={expanded} />
+                  </button>
+                  {expanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full table-fixed border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Application</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rowsForBucket.map((row) => (
+                    <Fragment key={row.id}>
+                      <tr
+                        id={`resident-application-${row.id}`}
+                        className={PORTAL_TABLE_TR_EXPANDABLE}
+                        onClick={createPortalRowExpandClick(() => {
+                          setExpandedId((cur) => (cur === row.id ? null : row.id));
+                          setEditingId(null);
+                        })}
+                        aria-expanded={expandedId === row.id}
+                      >
+                        <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                          <p className="font-medium leading-snug text-foreground">{row.name || "Applicant"}</p>
+                          <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-muted">{row.id}</p>
+                        </td>
+                        <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property || "—"}</td>
+                        <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
+                        <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{bucketStatusLabel(row.bucket)}</td>
+                        <PortalTableExpandCell expanded={expandedId === row.id} />
+                      </tr>
+                      {expandedId === row.id ? (
+                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                          <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                            {renderRowDetail(row)}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+        )}
+      </>
+    );
 
   if (embedded) return body;
 
   return (
-    <ManagerPortalPageShell
-      title="Applications"
-      subtitle="View and update rental applications tied to your account email."
-    >
+    <ManagerPortalPageShell title="Applications">
       {body}
     </ManagerPortalPageShell>
   );

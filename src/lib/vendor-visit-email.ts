@@ -33,3 +33,68 @@ export function buildVendorVisitEmail(input: VendorVisitEmailInput): { subject: 
   lines.push("", "If this time doesn't work, reply to this email to coordinate a new time.", "", "Axis Portal");
   return { subject, body: lines.join("\n") };
 }
+
+export type VendorBidOfferEmailInput = {
+  vendorName: string;
+  workOrderTitle: string;
+  propertyLabel: string;
+  unit?: string;
+  /** Human-readable scheduled tour time, if one was set before the bid offer. */
+  visitLabel?: string;
+  description?: string;
+};
+
+export function buildVendorBidOfferEmail(input: VendorBidOfferEmailInput): { subject: string; body: string } {
+  const unit = input.unit?.trim();
+  const where = unit && unit !== "—" ? `${input.propertyLabel} · ${unit}` : input.propertyLabel;
+  const subject = `Bid requested: ${input.workOrderTitle} — ${where}`;
+  const lines = [
+    `Hi ${input.vendorName.trim() || "there"},`,
+    "",
+    "You're invited to submit a bid for a work order through Axis.",
+    "",
+    `Work order: ${input.workOrderTitle}`,
+    `Property: ${where}`,
+  ];
+  if (input.visitLabel?.trim()) lines.push(`Scheduled tour: ${input.visitLabel.trim()}`);
+  if (input.description?.trim()) lines.push("", "Notes:", input.description.trim());
+  lines.push("", "Sign in to Axis and open Work Orders to submit your cost and availability.", "", "Axis Portal");
+  return { subject, body: lines.join("\n") };
+}
+
+export type VendorBidResultEmailInput = {
+  vendorName: string;
+  workOrderTitle: string;
+  propertyLabel: string;
+  unit?: string;
+};
+
+export function buildVendorBidAcceptedEmail(input: VendorBidResultEmailInput): { subject: string; body: string } {
+  const unit = input.unit?.trim();
+  const where = unit && unit !== "—" ? `${input.propertyLabel} · ${unit}` : input.propertyLabel;
+  const subject = `Bid accepted: ${input.workOrderTitle} — ${where}`;
+  const lines = [
+    `Hi ${input.vendorName.trim() || "there"},`,
+    "",
+    `Your bid for "${input.workOrderTitle}" at ${where} was accepted. You're assigned at the agreed cost.`,
+    "",
+    "Sign in to Axis for the work order details.",
+    "",
+    "Axis Portal",
+  ];
+  return { subject, body: lines.join("\n") };
+}
+
+export function buildVendorBidDeclinedEmail(input: VendorBidResultEmailInput): { subject: string; body: string } {
+  const unit = input.unit?.trim();
+  const where = unit && unit !== "—" ? `${input.propertyLabel} · ${unit}` : input.propertyLabel;
+  const subject = `Bid update: ${input.workOrderTitle} — ${where}`;
+  const lines = [
+    `Hi ${input.vendorName.trim() || "there"},`,
+    "",
+    `The manager selected another bid for "${input.workOrderTitle}" at ${where}. Thanks for submitting your bid.`,
+    "",
+    "Axis Portal",
+  ];
+  return { subject, body: lines.join("\n") };
+}

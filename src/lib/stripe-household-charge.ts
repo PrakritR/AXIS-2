@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { residentConnectApplicationFeeCents, type ResidentAxisPaymentMethod } from "@/lib/payment-policy";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import { cancelFuturePaymentRemindersForCharge } from "@/lib/payment-reminder-lifecycle.server";
+import { sendPushToUser } from "@/lib/push-notifications.server";
 import { syncLedgerPaymentEntry } from "@/lib/reports/ledger-sync";
 
 export const HOUSEHOLD_CHARGE_CHECKOUT_PURPOSE = "household_charge";
@@ -127,6 +129,22 @@ export async function markHouseholdChargePaidFromStripeSession(
     if (!upsertErr) {
       marked += 1;
       await syncLedgerPaymentEntry(db, nextCharge, now, session.id);
+      const managerUserId = charge.managerUserId?.trim() || expectedManagerUserId;
+      if (managerUserId) {
+        await cancelFuturePaymentRemindersForCharge(db, managerUserId, chargeId).catch(() => undefined);
+      }
+      if (charge.residentUserId) {
+        try {
+          await sendPushToUser(charge.residentUserId, {
+            title: "Payment received",
+            body: `Your payment for ${charge.title || "your charge"} has been confirmed.`,
+            url: "/resident/payments",
+            data: { chargeId },
+          });
+        } catch {
+          /* non-critical — no-ops when FCM is not configured */
+        }
+      }
     }
   }
 

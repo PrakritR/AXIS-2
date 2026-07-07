@@ -2,8 +2,12 @@
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner";
-import { portalDashboardPath } from "@/components/auth/portal-switcher";
-import { clearResidentSignupAxisId, readResidentSignupAxisId } from "@/lib/auth/resident-oauth-storage";
+import {
+  clearResidentSignupAxisId,
+  clearResidentSignupNext,
+  readResidentSignupAxisId,
+  readResidentSignupNext,
+} from "@/lib/auth/resident-oauth-storage";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
@@ -52,7 +56,9 @@ function ResidentOauthFinishContent() {
         }
 
         clearResidentSignupAxisId();
-        window.location.replace(portalDashboardPath("resident"));
+        const next = readResidentSignupNext();
+        clearResidentSignupNext();
+        window.location.replace(next ?? "/resident/applications/apply");
       } catch (e) {
         const message = e instanceof Error ? e.message : "Could not finish resident signup.";
         setErrorText(message);

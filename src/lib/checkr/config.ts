@@ -30,6 +30,11 @@ export function backgroundCheckConfigured(): boolean {
   return Boolean(checkrApiKey()) || checkrSimulate();
 }
 
+/** Pure simulate mode (no API key) — skip Stripe; live/test API keys charge the manager card. */
+export function checkrSkipsManagerCardCharge(): boolean {
+  return checkrSimulate() && !checkrApiKey();
+}
+
 /** Checkr Tenant API base URL — one host for test and live keys. */
 export function checkrApiBaseUrl(): string {
   const override = process.env.CHECKR_API_BASE_URL?.trim();
@@ -49,6 +54,12 @@ export function checkrPackage(): CheckrPackage {
 
 export function checkrWebhookSecret(): string | null {
   return process.env.CHECKR_WEBHOOK_SECRET?.trim() || null;
+}
+
+/** All configured signing secrets (live + optional test endpoint). */
+export function checkrWebhookSecrets(): string[] {
+  const keys = ["CHECKR_WEBHOOK_SECRET", "CHECKR_WEBHOOK_SECRET_TEST"] as const;
+  return keys.map((k) => process.env[k]?.trim()).filter((v): v is string => Boolean(v));
 }
 
 /** Flat fee (USD cents) charged to the manager's saved payment method per screening run. */

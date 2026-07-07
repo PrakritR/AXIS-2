@@ -20,7 +20,7 @@ export function normalizeBugFeedbackRow(row: unknown): PortalBugFeedbackRow | nu
     reporterUserId: String(r.reporterUserId ?? r.reporter_user_id ?? "").trim(),
     reporterName: String(r.reporterName ?? r.reporter_name ?? "").trim(),
     reporterEmail: String(r.reporterEmail ?? r.reporter_email ?? "").trim().toLowerCase(),
-    reporterRole: (["manager", "resident", "admin", "pro"].includes(roleRaw)
+    reporterRole: (["manager", "resident", "admin", "pro", "vendor"].includes(roleRaw)
       ? roleRaw
       : "manager") as BugFeedbackReporterRole,
     pageUrl: String(r.pageUrl ?? "").trim(),
@@ -45,12 +45,13 @@ export function normalizeBugFeedbackRow(row: unknown): PortalBugFeedbackRow | nu
 }
 
 export function isManagerSideReporterRole(role: BugFeedbackReporterRole): boolean {
-  return role === "manager" || role === "pro" || role === "admin";
+  return role === "manager" || role === "pro" || role === "admin" || role === "vendor";
 }
 
 export function roleGroupLabelForFeedback(role: BugFeedbackReporterRole): string {
   if (role === "resident") return "Resident";
   if (role === "admin") return "Admin";
+  if (role === "vendor") return "Vendor";
   if (role === "pro") return "Manager";
   return "Manager";
 }

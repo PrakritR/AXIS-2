@@ -35,6 +35,7 @@ export type RoomListingRow = {
   fullAddress: string;
   propertyBeds: number;
   propertyBaths: number;
+  petFriendly: boolean;
   descriptionBlurb: string;
   listingTags: readonly string[];
   /** Shown on image overlay, e.g. "$775" or "$750–$875" */
@@ -190,6 +191,15 @@ function roomMatchesBathroomFilterHeuristic(room: ListingRoomRow, bathroomId: st
   return true;
 }
 
+/** "any" | "studio" | "1" | "2" | "3" (3 means 3+). */
+export function roomMatchesBedroomFilter(propertyBeds: number, bedroomId: string | undefined): boolean {
+  if (!bedroomId || bedroomId === "any") return true;
+  if (bedroomId === "studio") return propertyBeds === 0;
+  if (bedroomId === "3") return propertyBeds >= 3;
+  const n = Number.parseInt(bedroomId, 10);
+  return Number.isFinite(n) ? propertyBeds === n : true;
+}
+
 export function roomMatchesBathroomFilter(room: ListingRoomRow, bathroomId: string): boolean {
   if (bathroomId === "any") return true;
 
@@ -234,6 +244,9 @@ export function filterRoomListings(
     radiusMiles: number;
     maxBudgetNum: number | null;
     bathroom: string;
+    bedroom?: string;
+    petFriendly?: boolean;
+    neighborhood?: string;
     moveIn?: string;
     moveOut?: string;
   },
@@ -256,6 +269,15 @@ export function filterRoomListings(
     const mediaSlides = collectPropertyMediaSlides(rich);
     const geoOk = centerZip === null ? true : propertyMatchesZipRadius(p.zip, opts.zipRaw, opts.radiusMiles);
     if (!geoOk) continue;
+    if (!roomMatchesBedroomFilter(p.beds, opts.bedroom)) continue;
+    if (opts.petFriendly && !p.petFriendly) continue;
+    if (
+      opts.neighborhood &&
+      opts.neighborhood !== "any" &&
+      p.neighborhood.trim().toLowerCase() !== opts.neighborhood.trim().toLowerCase()
+    ) {
+      continue;
+    }
 
     for (const floor of rich.floorPlans) {
       for (const room of floor.rooms) {
@@ -293,6 +315,7 @@ export function filterRoomListings(
           fullAddress: p.address,
           propertyBeds: p.beds,
           propertyBaths: p.baths,
+          petFriendly: p.petFriendly,
           descriptionBlurb: descriptionBlurb(p, room),
           listingTags: listingTags(p),
           priceOverlayLabel: priceOverlayLabelForProperty(p),
@@ -303,4 +326,124 @@ export function filterRoomListings(
     }
   }
   return rows;
+}
+
+/** Curated Seattle-area house photos when a listing has no uploads yet. */
+const BROWSE_PLACEHOLDER_PHOTOS = [
+  "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80",
+] as const;
+
+export function browseCardPlaceholderImage(propertyId: string): string {
+  let hash = 0;
+  for (let i = 0; i < propertyId.length; i++) hash = (hash + propertyId.charCodeAt(i) * (i + 1)) % 9973;
+  return BROWSE_PLACEHOLDER_PHOTOS[hash % BROWSE_PLACEHOLDER_PHOTOS.length]!;
+}
+
+export type PropertyBrowseCard = {
+  propertyId: string;
+  headlineAddress: string;
+  neighborhood: string;
+  imageUrl: string;
+  rentNumeric: number | null;
+  priceLabel: string;
+  roomCount: number;
+  petFriendly: boolean;
+};
+
+export type PropertyBrowseFilters = {
+  maxBudgetNum?: number | null;
+  bathroom?: string;
+  bedroom?: string;
+  moveIn?: string;
+  moveOut?: string;
+  petFriendly?: boolean;
+  neighborhood?: string;
+};
+
+export type BrowseSortId = "price-asc" | "price-desc" | "neighborhood";
+
+function aggregateRoomRowsToPropertyCards(roomRows: RoomListingRow[]): PropertyBrowseCard[] {
+  const byProperty = new Map<string, PropertyBrowseCard>();
+
+  for (const row of roomRows) {
+    const photo = row.mediaSlides.find((s) => s.kind === "photo")?.src?.trim();
+    const imageUrl = photo || browseCardPlaceholderImage(row.propertyId);
+    const existing = byProperty.get(row.propertyId);
+
+    if (!existing) {
+      byProperty.set(row.propertyId, {
+        propertyId: row.propertyId,
+        headlineAddress: row.headlineAddress,
+        neighborhood: row.neighborhood,
+        imageUrl,
+        rentNumeric: row.rentNumeric,
+        priceLabel: row.priceLabel,
+        roomCount: 1,
+        petFriendly: row.petFriendly,
+      });
+      continue;
+    }
+
+    existing.roomCount += 1;
+    if (
+      row.rentNumeric !== null &&
+      (existing.rentNumeric === null || row.rentNumeric < existing.rentNumeric)
+    ) {
+      existing.rentNumeric = row.rentNumeric;
+      existing.priceLabel = row.priceLabel;
+    }
+    if (!existing.imageUrl && imageUrl) existing.imageUrl = imageUrl;
+  }
+
+  return [...byProperty.values()];
+}
+
+export function sortPropertyBrowseCards(cards: PropertyBrowseCard[], sort: BrowseSortId): PropertyBrowseCard[] {
+  const sorted = [...cards];
+  sorted.sort((a, b) => {
+    if (sort === "neighborhood") {
+      const hood = a.neighborhood.localeCompare(b.neighborhood);
+      if (hood !== 0) return hood;
+      return compareBrowseCardsByPrice(a, b);
+    }
+    if (sort === "price-desc") return compareBrowseCardsByPrice(b, a);
+    return compareBrowseCardsByPrice(a, b);
+  });
+  return sorted;
+}
+
+function compareBrowseCardsByPrice(a: PropertyBrowseCard, b: PropertyBrowseCard): number {
+  if (a.rentNumeric === null && b.rentNumeric === null) {
+    return a.headlineAddress.localeCompare(b.headlineAddress);
+  }
+  if (a.rentNumeric === null) return 1;
+  if (b.rentNumeric === null) return -1;
+  if (a.rentNumeric !== b.rentNumeric) return a.rentNumeric - b.rentNumeric;
+  return a.headlineAddress.localeCompare(b.headlineAddress);
+}
+
+/** One shopping-style card per property — cheapest available room rent, hero image. */
+export function buildPropertyBrowseCards(
+  properties: MockProperty[],
+  opts?: { filters?: PropertyBrowseFilters; sort?: BrowseSortId },
+): PropertyBrowseCard[] {
+  const filters = opts?.filters ?? {};
+  const roomRows = filterRoomListings(properties, {
+    zipRaw: "",
+    radiusMiles: 50,
+    maxBudgetNum: filters.maxBudgetNum ?? null,
+    bathroom: filters.bathroom ?? "any",
+    bedroom: filters.bedroom ?? "any",
+    moveIn: filters.moveIn,
+    moveOut: filters.moveOut,
+    petFriendly: filters.petFriendly,
+    neighborhood: filters.neighborhood,
+  });
+
+  return sortPropertyBrowseCards(aggregateRoomRowsToPropertyCards(roomRows), opts?.sort ?? "price-asc");
 }

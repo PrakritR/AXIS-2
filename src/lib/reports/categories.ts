@@ -36,7 +36,7 @@ export const SYSTEM_CHART_ACCOUNTS: ChartAccount[] = [
   { code: "capital_improvement", name: "Capital Improvement", accountType: "expense", scheduleERef: "Capitalize (Form 4562)", scheduleELabel: "Capital Improvements", deductible: false },
 ];
 
-export type WorkOrderCategory = "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general";
+export type WorkOrderCategory = "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general" | "appliance" | "access";
 
 export const WORK_ORDER_CATEGORY_TO_EXPENSE: Record<WorkOrderCategory, string> = {
   cleaning: "cleaning",
@@ -45,6 +45,8 @@ export const WORK_ORDER_CATEGORY_TO_EXPENSE: Record<WorkOrderCategory, string> =
   electrical: "maintenance",
   hvac: "heating",
   general: "maintenance",
+  appliance: "maintenance",
+  access: "maintenance",
 };
 
 const KIND_TO_CATEGORY: Record<HouseholdChargeKind, string> = {

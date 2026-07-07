@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-export type TabItem = { href: string; label: string; id: string };
+export type TabItem = { href: string; label: string; id: string; dataAttr?: string };
 
 export function TabNav({
   items,
@@ -12,7 +12,6 @@ export function TabNav({
   items: TabItem[];
   activeId: string;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const linkRefs = useRef(new Map<string, HTMLAnchorElement>());
   const [pill, setPill] = useState({ left: 0, top: 0, w: 0, h: 0 });
@@ -48,28 +47,11 @@ export function TabNav({
     };
   }, [sync]);
 
-  useLayoutEffect(() => {
-    const el = linkRefs.current.get(activeId);
-    const scroller = scrollRef.current;
-    if (!el || !scroller) return;
-    const elLeft = el.offsetLeft;
-    const elRight = elLeft + el.offsetWidth;
-    const viewLeft = scroller.scrollLeft;
-    const viewRight = viewLeft + scroller.clientWidth;
-    if (elLeft < viewLeft || elRight > viewRight) {
-      el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-    }
-  }, [activeId, items]);
-
   return (
     <div
-      ref={scrollRef}
-      className="max-w-full overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      ref={wrapRef}
+      className="relative flex min-w-0 max-w-full flex-nowrap gap-1 overflow-x-auto rounded-full border border-border bg-accent/30 p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
     >
-      <div
-        ref={wrapRef}
-        className="relative inline-flex min-w-max flex-nowrap gap-1 rounded-full border border-border bg-accent/30 p-1"
-      >
       {pill.w > 0 ? (
         <span
           aria-hidden
@@ -83,6 +65,7 @@ export function TabNav({
           <Link
             key={t.href}
             href={t.href}
+            data-attr={t.dataAttr}
             ref={(el) => {
               if (el) linkRefs.current.set(t.id, el);
               else linkRefs.current.delete(t.id);
@@ -95,7 +78,6 @@ export function TabNav({
           </Link>
         );
       })}
-    </div>
     </div>
   );
 }
@@ -147,7 +129,7 @@ export function PillTabs({
   return (
     <div
       ref={wrapRef}
-      className="relative flex flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1"
+      className="relative inline-flex w-fit max-w-full flex-wrap gap-1 rounded-full border border-border bg-accent/30 p-1"
     >
       {pill.w > 0 ? (
         <span
@@ -167,7 +149,7 @@ export function PillTabs({
               else btnRefs.current.delete(t.id);
             }}
             onClick={() => onChange(t.id)}
-            className={`relative z-10 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
+            className={`relative z-10 shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-300 ${
               active ? "text-foreground" : "text-muted hover:text-foreground"
             }`}
           >

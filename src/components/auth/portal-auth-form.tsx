@@ -2,8 +2,8 @@
 
 import posthog from "posthog-js";
 import { AuthCard } from "@/components/auth/auth-card";
-import { AuthDivider, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
-import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { AuthDivider, AuthLegalConsent, AuthPageHeader } from "@/components/auth/auth-mobile-primitives";
+import { OAuthSocialStack } from "@/components/auth/oauth-social-stack";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,7 +96,7 @@ export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
     const oauthMessage = searchParams.get("message");
     if (authError === "oauth" && oauthMessage) return oauthMessage;
     if (authError === "auth" || authError === "oauth") {
-      return "Google sign-in could not be completed. Try again or use email and password.";
+      return "Sign-in could not be completed. Try again or use email and password.";
     }
     return null;
   });
@@ -163,6 +163,8 @@ export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
       } catch {
         /* ignore */
       }
+      await supabase.auth.refreshSession().catch(() => undefined);
+      await supabase.auth.getSession();
       didRedirect = true;
       window.location.replace(continueHref(nextPath));
     } catch (e) {
@@ -232,7 +234,7 @@ export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
       />
 
       <div className="mt-5 sm:mt-6">
-        <GoogleSignInButton nextPath={nextPath} disabled={busy} />
+        <OAuthSocialStack nextPath={nextPath} disabled={busy} />
       </div>
 
       <div className="my-4 sm:my-5">
@@ -326,11 +328,7 @@ export function PortalAuthForm({ mode }: { mode: "sign-in" | "create" }) {
         )}
       </p>
 
-      <p className="mt-3 text-center text-[13px] text-muted sm:mt-4 sm:text-sm">
-        <Link className="font-semibold text-primary hover:opacity-90" href="/">
-          ← Back to home
-        </Link>
-      </p>
+      <AuthLegalConsent action={isCreate ? "create" : "continue"} className="mt-4 sm:mt-5" />
     </AuthCard>
   );
 }

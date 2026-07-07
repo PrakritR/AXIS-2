@@ -7,6 +7,7 @@ import {
   demoSessionForRole,
   getDemoRole,
   isDemoModeActive,
+  subscribeDemoPath,
   subscribeDemoRole,
 } from "@/lib/demo/demo-session";
 
@@ -93,8 +94,10 @@ export function usePortalSession(initial?: {
   // never touches Supabase and is scoped to `/demo` by pathname.
   const demoRole = useSyncExternalStore(subscribeDemoRole, getDemoRole, () => "manager" as const);
 
+  const demoActive = useSyncExternalStore(subscribeDemoPath, isDemoModeActive, () => false);
+
   useEffect(() => {
-    if (isDemoModeActive()) return;
+    if (demoActive) return;
     ensurePortalSessionStore();
     const sync = () => {
       setState({
@@ -113,9 +116,9 @@ export function usePortalSession(initial?: {
         initialized = false;
       }
     };
-  }, [initial?.email, initial?.userId]);
+  }, [initial?.email, initial?.userId, demoActive]);
 
-  if (isDemoModeActive()) return demoSessionForRole(demoRole);
+  if (demoActive) return demoSessionForRole(demoRole);
 
   return state;
 }

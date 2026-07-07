@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { PortalPreviewOverflowLink, usePortalPreviewSlice } from "@/components/portal/portal-data-table";
 import { formatCompactChargeLine, formatCompactPlacementLine } from "@/lib/portal-mobile-preview";
@@ -11,6 +12,12 @@ export const PORTAL_DASHBOARD_TILE_LINK =
 /** Outer card wrapping most portal sections (matches Properties / Managers shell). */
 export const PORTAL_SECTION_SURFACE =
   "rounded-2xl border border-border bg-card p-4 text-foreground shadow-[var(--shadow-card)] backdrop-blur-[1px] sm:rounded-[28px] sm:p-6 [html[data-native]_&]:px-3.5 [html[data-native]_&]:py-3.5";
+
+/** Subtitle under the Dashboard heading — shared across all portal dashboards. */
+export function portalDashboardWelcomeSubtitle(displayName?: string | null): string {
+  const trimmed = displayName?.trim();
+  return trimmed ? `Welcome, ${trimmed}` : "Welcome";
+}
 
 /** Calendar week grid outer frame (matches manager calendar chrome). */
 export const PORTAL_CALENDAR_FRAME =
@@ -206,23 +213,35 @@ export function ManagerPortalStatusPills({
   onChange,
   /** `primary` = blue active pill (inbox-style); default = white active chip (leases/applications). */
   activeTone = "default",
+  /** Single-row horizontal scroll with tighter chips (long lease labels on mobile). */
+  compact = false,
 }: {
-  tabs: { id: string; label: string; count: number; alert?: boolean }[];
+  tabs: { id: string; label: string; count: number; alert?: boolean; dataAttr?: string }[];
   activeId: string;
   onChange: (id: string) => void;
   activeTone?: "default" | "primary";
+  compact?: boolean;
 }) {
   const isPrimary = activeTone === "primary";
   return (
-    <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-accent/30 p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:rounded-full [&::-webkit-scrollbar]:hidden">
+    <div
+      className={
+        compact
+          ? "flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto rounded-full border border-border bg-accent/30 p-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          : "inline-flex max-w-full flex-wrap items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:rounded-full"
+      }
+    >
       {tabs.map((tab) => {
         const active = activeId === tab.id;
         return (
           <button
             key={tab.id}
             type="button"
+            data-attr={tab.dataAttr}
             onClick={() => onChange(tab.id)}
-            className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 ${
+            className={`flex shrink-0 items-center rounded-full font-semibold transition-all duration-150 ${
+              compact ? "min-h-8 gap-1 px-2.5 py-1 text-xs" : "min-h-9 gap-1.5 px-4 py-1.5 text-sm"
+            } ${
               active
                 ? isPrimary
                   ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
@@ -259,16 +278,19 @@ export function PortalDashboardTile({
   sub,
   href,
   urgent,
+  dataAttr,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   href: string;
   urgent?: boolean;
+  dataAttr?: string;
 }) {
   return (
     <Link
       href={href}
+      data-attr={dataAttr}
       className={`surface-panel group flex min-h-[88px] flex-col justify-center gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] [html[data-native]_&]:min-h-[4.25rem] [html[data-native]_&]:gap-0.5 [html[data-native]_&]:rounded-xl [html[data-native]_&]:p-3.5 ${
         urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
       }`}
@@ -286,22 +308,34 @@ export function PortalDashboardSectionHeader({
   href,
   linkLabel,
   badge,
+  dataAttr,
 }: {
   title: string;
   href?: string;
   linkLabel?: string;
   /** Stable notification indicator rendered on the right, next to the section link (e.g. overdue count). */
   badge?: ReactNode;
+  dataAttr?: string;
 }) {
+  const { isNative } = useIsNativeApp();
+  const compactLink = isNative && linkLabel ? "→" : linkLabel;
+
   return (
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="truncate text-xs font-bold uppercase tracking-[0.12em] text-muted">{title}</h2>
-      {badge || (href && linkLabel) ? (
-        <div className="flex shrink-0 items-center gap-2.5">
+    <div className="flex items-start justify-between gap-2 [html[data-native]_&]:gap-1.5 sm:items-center sm:gap-3">
+      <h2 className="min-w-0 text-xs font-bold uppercase tracking-[0.12em] text-muted [html[data-native]_&]:leading-snug">
+        {title}
+      </h2>
+      {badge || (href && compactLink) ? (
+        <div className="flex shrink-0 items-center gap-2 [html[data-native]_&]:gap-1.5">
           {badge ?? null}
-          {href && linkLabel ? (
-            <Link href={href} className="text-xs font-semibold text-primary hover:underline underline-offset-2">
-              {linkLabel}
+          {href && compactLink ? (
+            <Link
+              href={href}
+              data-attr={dataAttr}
+              aria-label={isNative && linkLabel ? linkLabel : undefined}
+              className="whitespace-nowrap text-xs font-semibold text-primary hover:underline underline-offset-2 [html[data-native]_&]:px-0.5 [html[data-native]_&]:text-sm"
+            >
+              {compactLink}
             </Link>
           ) : null}
         </div>
@@ -322,20 +356,30 @@ export function PortalDashboardCompactRow({
   title,
   subtitle,
   badge,
+  stackBadge,
 }: {
   title: string;
   subtitle?: string;
   badge?: ReactNode;
+  /** Stack badge below title on narrow/native screens instead of squeezing beside it. */
+  stackBadge?: boolean;
 }) {
+  const { isNative } = useIsNativeApp();
+  const stacked = stackBadge ?? isNative;
+
   return (
-    <li className="flex items-start justify-between gap-2.5 rounded-xl bg-accent/30 px-3 py-2 [html[data-native]_&]:gap-2 [html[data-native]_&]:px-2.5 [html[data-native]_&]:py-1.5">
+    <li
+      className={`rounded-xl bg-accent/30 px-3 py-2 [html[data-native]_&]:px-2.5 [html[data-native]_&]:py-1.5 ${
+        stacked ? "flex flex-col items-stretch gap-1.5 [html[data-native]_&]:gap-1" : "flex items-start justify-between gap-2.5 [html[data-native]_&]:gap-2"
+      }`}
+    >
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px]">{title}</p>
+        <p className="text-sm font-semibold text-foreground [html[data-native]_&]:text-[13px] [html[data-native]_&]:leading-snug">{title}</p>
         {subtitle ? (
-          <p className="truncate text-xs text-muted [html[data-native]_&]:text-[11px]">{subtitle}</p>
+          <p className="mt-0.5 text-xs text-muted [html[data-native]_&]:text-[11px] [html[data-native]_&]:leading-snug">{subtitle}</p>
         ) : null}
       </div>
-      {badge ? <div className="shrink-0">{badge}</div> : null}
+      {badge ? <div className={stacked ? "self-start" : "shrink-0"}>{badge}</div> : null}
     </li>
   );
 }
@@ -393,7 +437,7 @@ export function ManagerPortalPageShell({
   hideTitleOnNative?: boolean;
 }) {
   return (
-    <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0 overflow-hidden`}>
+    <div className={`${PORTAL_SECTION_SURFACE} relative z-0 min-w-0 w-full shrink-0`}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0 shrink-0">
           <h1
@@ -410,13 +454,19 @@ export function ManagerPortalPageShell({
           ) : null}
         </div>
         {titleAside ? (
-          <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">{titleAside}</div>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">{titleAside}</div>
         ) : null}
       </div>
-      <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5">
-        {filterRow ?? null}
-      </div>
-      <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5">{children}</div>
+      {filterRow ? (
+        <>
+          <div className="mt-4 border-b border-border pb-4 sm:mt-6 sm:pb-6 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pb-2.5">
+            {filterRow}
+          </div>
+          <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-2.5">{children}</div>
+        </>
+      ) : (
+        <div className="mt-4 sm:mt-6 [html[data-native]_&]:mt-0">{children}</div>
+      )}
     </div>
   );
 }
@@ -442,7 +492,28 @@ export const PORTAL_TOOLBAR_LABEL = "text-xs font-semibold text-muted";
 
 /** Shared dropdown style for toolbar selects. */
 export const PORTAL_TOOLBAR_SELECT =
-  "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring";
+  "h-10 appearance-none rounded-full border border-border bg-card px-3.5 pr-9 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring";
+
+/** Wraps a native `<select>` with a trailing chevron (toolbar / filter pills). */
+export function PortalToolbarSelectWrap({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`relative inline-grid min-w-0 [&>*:first-child]:col-start-1 [&>*:first-child]:row-start-1 ${className ?? ""}`.trim()}
+    >
+      {children}
+      <ChevronDown
+        className="pointer-events-none col-start-1 row-start-1 mr-3 self-center justify-self-end h-4 w-4 text-muted"
+        aria-hidden
+      />
+    </div>
+  );
+}
 
 /** Shared action button sizing for page header controls. */
 export const PORTAL_HEADER_ACTION_BTN =
@@ -452,7 +523,7 @@ export const PORTAL_HEADER_ACTION_BTN =
 export const PORTAL_PAGE_ACTIONS_DESKTOP = "hidden shrink-0 flex-wrap items-center justify-end gap-2 lg:flex";
 
 /** Mobile page actions — place inside {@link ManagerPortalFilterRow}. */
-export const PORTAL_FILTER_ACTIONS_MOBILE = "flex shrink-0 items-center gap-2 lg:hidden";
+export const PORTAL_FILTER_ACTIONS_MOBILE = "flex max-w-full flex-wrap items-center gap-2 lg:hidden";
 
 /** Shared sort dropdown shell for portal section toolbars. */
 export function PortalToolbarSortSelect<T extends string>({
@@ -471,18 +542,20 @@ export function PortalToolbarSortSelect<T extends string>({
   return (
     <label className="inline-flex items-center gap-2 rounded-full border border-border bg-accent/30 p-1 pr-1.5">
       <span className={`${PORTAL_TOOLBAR_LABEL} pl-2`}>{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as T)}
-        aria-label={ariaLabel ?? label}
-        className={PORTAL_TOOLBAR_SELECT}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <PortalToolbarSelectWrap>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value as T)}
+          aria-label={ariaLabel ?? label}
+          className={PORTAL_TOOLBAR_SELECT}
+        >
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </PortalToolbarSelectWrap>
     </label>
   );
 }
@@ -490,9 +563,7 @@ export function PortalToolbarSortSelect<T extends string>({
 /** Standard filter row wrapper (status pills + optional sort). */
 export function ManagerPortalFilterRow({ children }: { children: ReactNode }) {
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-3 max-lg:overflow-x-auto max-lg:flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {children}
-    </div>
+    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-3">{children}</div>
   );
 }
 

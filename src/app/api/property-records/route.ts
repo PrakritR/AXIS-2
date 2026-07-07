@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { asStringArray } from "@/app/api/pro/account-links/route";
+import { isCrossSandboxPortalPair } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { propertyRowsToSnapshot, type ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
@@ -31,21 +33,43 @@ export async function GET() {
       return NextResponse.json({ snapshot: propertyRowsToSnapshot(data ?? []) });
     }
 
+    const { data: viewerProfile } = await db.from("profiles").select("email").eq("id", user.id).maybeSingle();
+    const viewerEmail = String(viewerProfile?.email ?? user.email ?? "").trim();
+
     const { data: linkRows, error: linkError } = await db
       .from("account_link_invites")
-      .select("assigned_property_ids")
+      .select("inviter_user_id, assigned_property_ids")
       .eq("status", "accepted")
-      .or(`inviter_user_id.eq.${user.id},invitee_user_id.eq.${user.id}`);
+      .eq("invitee_user_id", user.id);
 
     if (linkError && !String(linkError.message ?? "").toLowerCase().includes("account_link_invites")) {
       return NextResponse.json({ error: linkError.message }, { status: 500 });
     }
 
+    const inviterIds = [
+      ...new Set(
+        (linkRows ?? [])
+          .map((row) => String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    const inviterEmailById = new Map<string, string>();
+    if (inviterIds.length > 0) {
+      const { data: inviterProfiles } = await db.from("profiles").select("id, email").in("id", inviterIds);
+      for (const profile of inviterProfiles ?? []) {
+        const id = String(profile.id ?? "").trim();
+        const email = String(profile.email ?? "").trim();
+        if (id && email) inviterEmailById.set(id, email);
+      }
+    }
+
     const linkedPropertyIds = new Set<string>();
-    for (const row of (linkRows ?? []) as { assigned_property_ids?: unknown }[]) {
-      if (!Array.isArray(row.assigned_property_ids)) continue;
-      for (const id of row.assigned_property_ids) {
-        if (typeof id === "string" && id.trim()) linkedPropertyIds.add(id.trim());
+    for (const row of linkRows ?? []) {
+      const inviterId = String((row as { inviter_user_id?: string }).inviter_user_id ?? "").trim();
+      const inviterEmail = inviterEmailById.get(inviterId) ?? "";
+      if (isCrossSandboxPortalPair(viewerEmail, inviterEmail)) continue;
+      for (const id of asStringArray((row as { assigned_property_ids?: unknown }).assigned_property_ids)) {
+        if (id.trim()) linkedPropertyIds.add(id.trim());
       }
     }
 

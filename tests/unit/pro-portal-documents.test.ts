@@ -9,11 +9,14 @@ describe("pro portal documents section", () => {
     expect(sections).toContain("financials");
   });
 
-  it("documents tabs are income/expense docs, 1099, and tax summary", () => {
+  it("documents tabs include applications, leases, income/expense docs, occupancy, 1099, and tax summary", () => {
     const documents = proPortal.sections.find((s) => s.section === "documents");
     expect(documents?.tabs.map((t) => t.id)).toEqual([
+      "applications",
+      "leases",
       "income-documents",
       "expense-documents",
+      "occupancy",
       "1099",
       "tax-summary",
     ]);
@@ -29,8 +32,10 @@ describe("pro portal documents section", () => {
     const sections = proPortal.sections.map((s) => s.section);
     expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("leases"));
     expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("payments"));
-    expect(sections.indexOf("documents")).toBeGreaterThan(sections.indexOf("inbox"));
-    expect(sections.indexOf("financials")).toBe(sections.indexOf("documents") + 1);
+    expect(sections.indexOf("documents")).toBeGreaterThan(sections.indexOf("payments"));
+    expect(sections.indexOf("inbox")).toBe(sections.indexOf("documents") + 1);
+    expect(sections.indexOf("services")).toBe(sections.indexOf("inbox") + 1);
+    expect(sections.indexOf("financials")).toBe(sections.indexOf("services") + 1);
     expect(sections.indexOf("relationships")).toBe(sections.indexOf("financials") + 1);
     expect(sections.indexOf("bugs-feedback")).toBeGreaterThan(sections.indexOf("relationships"));
     expect(sections.indexOf("profile")).toBe(sections.indexOf("bugs-feedback") + 1);

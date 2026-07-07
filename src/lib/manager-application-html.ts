@@ -1,10 +1,12 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import {
   displayableCustomFieldAnswers,
   formatCustomFieldAnswerDisplay,
 } from "@/lib/rental-application/custom-fields";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
+import { digitsOnly } from "@/lib/rental-application/masks";
 import { leaseCss } from "@/lib/lease-templates/types";
 
 export type Field = { label: string; value: string };
@@ -43,6 +45,97 @@ function statusLabel(row: DemoApplicantRow): string {
   return "Pending review";
 }
 
+/** Never render full digits — last 4 only, matching the review-screen SSN mask. */
+function maskSsn(ssn: string | null | undefined): string {
+  const d = digitsOnly(clean(ssn));
+  if (d.length !== 9) return "";
+  return `•••-••-${d.slice(5)}`;
+}
+
+/** Co-signer SSNs are already masked at submission-storage time; re-mask defensively if a raw value ever reaches here. */
+function maskCosignerSsn(ssn: string | null | undefined): string {
+  const raw = clean(ssn);
+  if (!raw) return "";
+  if (raw.includes("*")) return raw;
+  return maskSsn(raw);
+}
+
+function cosignerBankruptcyLabel(value: string | undefined): string {
+  if (value === "never") return "Never filed";
+  if (value === "past_discharged") return "Past (discharged)";
+  if (value === "current") return "Current / active";
+  return "";
+}
+
+function cosignerCriminalLabel(value: string | undefined): string {
+  return yesNo(value);
+}
+
+/** One "Co-signer" section per submitted co-signer form, numbered when there is more than one. */
+function cosignerSections(submissions: CosignerSubmission[] | undefined): string {
+  const list = Array.isArray(submissions) ? submissions : [];
+  return list
+    .map((sub, i) => {
+      const title = list.length > 1 ? `Co-signer ${i + 1}` : "Co-signer";
+      const address = [
+        clean(sub.address),
+        [clean(sub.city), clean(sub.state)].filter(Boolean).join(", "),
+        clean(sub.zip),
+      ]
+        .filter(Boolean)
+        .join("  ");
+      return section(title, [
+        { label: "Legal name", value: clean(sub.fullName) },
+        { label: "Email", value: clean(sub.email) },
+        { label: "Phone", value: clean(sub.phone) },
+        { label: "Date of birth", value: clean(sub.dob) },
+        { label: "ID number", value: clean(sub.dlNumber) },
+        { label: "SSN", value: maskCosignerSsn(sub.ssn) },
+        { label: "Address", value: address },
+        { label: "Employment", value: sub.notEmployed ? "Not currently employed" : "" },
+        { label: "Employer", value: clean(sub.employerName) },
+        { label: "Employer address", value: clean(sub.employerAddress) },
+        { label: "Job title", value: clean(sub.jobTitle) },
+        { label: "Supervisor", value: clean(sub.supervisorName) },
+        { label: "Supervisor phone", value: clean(sub.supervisorPhone) },
+        { label: "Employment start", value: clean(sub.employmentStart) },
+        { label: "Monthly income", value: money(sub.monthlyIncome) },
+        { label: "Annual income", value: money(sub.annualIncome) },
+        { label: "Other income", value: clean(sub.otherIncome) },
+        { label: "Bankruptcy", value: cosignerBankruptcyLabel(sub.bankruptcy) },
+        { label: "Criminal history", value: cosignerCriminalLabel(sub.criminal) },
+        { label: "Credit/background consent", value: sub.consentCredit ? "Authorized" : "" },
+        { label: "Signature", value: clean(sub.signature) },
+        { label: "Date signed", value: clean(sub.dateSigned) },
+        { label: "Submitted", value: sub.submittedAt ? new Date(sub.submittedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" }) : "" },
+      ]);
+    })
+    .join("\n");
+}
+
+function groupRoleLabel(role: RentalWizardFormState["groupRole"] | undefined): string {
+  if (role === "first") return "First applicant";
+  if (role === "joining") return "Joining group";
+  return "";
+}
+
+function feeChannelLabel(channel: RentalWizardFormState["applicationFeePayChannel"] | undefined): string {
+  switch (channel) {
+    case "ach":
+      return "ACH";
+    case "zelle":
+      return "Zelle";
+    case "venmo":
+      return "Venmo";
+    case "stripe":
+      return "Card (Stripe)";
+    case "other":
+      return "Other";
+    default:
+      return "";
+  }
+}
+
 /** `<h2>` + label/value table for the populated fields; empty string when nothing is populated. */
 export function section(title: string, fields: Field[]): string {
   const populated = fields.filter((f) => f.value.trim());
@@ -70,6 +163,8 @@ export type ApplicationHtmlOptions = {
   roomLabel?: string;
   /** ISO generation timestamp; defaults to now. */
   generatedAt?: string;
+  /** Co-signer application(s) submitted against this applicant's Axis ID, if any. */
+  cosignerSubmissions?: CosignerSubmission[];
 };
 
 /**
@@ -108,7 +203,7 @@ export function buildApplicationHtml(row: DemoApplicantRow, options: Application
 
   const body = `
 <h1>AXIS RENTAL APPLICATION</h1>
-<p class="sub">Axis Property Management · Official application record</p>
+<p class="sub">Axis · Official application record</p>
 <p class="generated">Axis ID ${escapeHtml(axisId)} · ${escapeHtml(statusLabel(row))} · Generated ${escapeHtml(generatedLabel)}</p>
 
 ${section("Application summary", [
@@ -124,6 +219,7 @@ ${section("Applicant details", [
   { label: "Email", value: clean(app.email) || clean(row.email) },
   { label: "Phone", value: clean(app.phone) },
   { label: "Date of birth", value: clean(app.dateOfBirth) },
+  { label: "SSN", value: maskSsn(app.ssn) },
   { label: "Driver's license", value: clean(app.driversLicense) },
   { label: "Application status", value: statusLabel(row) },
   { label: "Stage", value: clean(row.stage) },
@@ -141,6 +237,8 @@ ${section("Property & room", [
   { label: "Stay type / term", value: clean(app.leaseTerm) },
   { label: "Move-in date", value: formatLeaseDateLabel(app.leaseStart) || clean(app.leaseStart) },
   { label: "Lease end / move-out", value: formatLeaseDateLabel(app.leaseEnd) || clean(app.leaseEnd) },
+  { label: "Check-in time", value: app.rentalType === "short_term" ? clean(app.shortTermCheckInTime) : "" },
+  { label: "Check-out time", value: app.rentalType === "short_term" ? clean(app.shortTermCheckOutTime) : "" },
   { label: "Signed monthly rent", value: signedRent },
   { label: "Utilities", value: money(app.managerUtilitiesOverride) },
   { label: "Security deposit", value: money(app.managerSecurityDepositOverride) },
@@ -150,11 +248,15 @@ ${section("Property & room", [
 
 ${section("Household", [
   { label: "Applying as a group", value: yesNo(app.applyingAsGroup) },
-  { label: "Group size", value: clean(app.groupSize) },
+  { label: "Group role", value: groupRoleLabel(app.groupRole) },
+  { label: "Group size", value: app.groupRole === "joining" ? "" : clean(app.groupSize) },
+  { label: "Group ID", value: app.groupRole === "joining" ? clean(app.groupId) : "" },
   { label: "Has co-signer", value: yesNo(app.hasCosigner) },
   { label: "Occupants", value: clean(app.occupancyCount) },
   { label: "Pets", value: clean(app.pets) },
 ])}
+
+${cosignerSections(options.cosignerSubmissions)}
 
 ${section("Current residence", [
   { label: "Address", value: currentAddress },
@@ -223,13 +325,21 @@ ${section("Consent & signature", [
   { label: "Credit/background consent", value: app.consentCredit ? "Authorized" : "" },
   { label: "Attestation of truth", value: app.consentTruth ? "Acknowledged" : "" },
   { label: "Application fee acknowledged", value: app.applicationFeeAcknowledged ? "Yes" : "" },
+  { label: "Application fee payment method", value: feeChannelLabel(app.applicationFeePayChannel) },
+  {
+    label: "Manual fee payment confirmed",
+    value:
+      app.applicationFeePayChannel === "zelle" || app.applicationFeePayChannel === "venmo"
+        ? yesNo(app.applicationFeeZelleSentConfirmed ? "yes" : "no")
+        : "",
+  },
   { label: "Digital signature", value: clean(app.digitalSignature) },
   { label: "Date signed", value: clean(app.dateSigned) },
 ])}
 
 ${freeTextSection("Manager notes", clean(row.detail))}
 
-<p class="footnote">Generated from Axis application records. Amounts and placement can change later in the lease or payment portal. Axis Property Management · Confidential</p>
+<p class="footnote">Generated from Axis application records. Amounts and placement can change later in the lease or payment portal. Axis · Confidential</p>
 `;
 
   return `<!DOCTYPE html>

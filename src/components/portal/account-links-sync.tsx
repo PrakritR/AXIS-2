@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
   fetchAccountLinksCached,
 } from "@/lib/portal-data-store";
@@ -19,7 +18,7 @@ export function AccountLinksSync() {
   useEffect(() => {
     let cancelled = false;
 
-    const sync = async (forcePortfolio = false) => {
+    const sync = async () => {
       try {
         if (!session.userId || cancelled) return;
 
@@ -51,13 +50,10 @@ export function AccountLinksSync() {
 
         if (changed) {
           writeProRelationships(session.userId, next);
-          await syncManagerPortfolioFromServer(session.userId, { force: true });
-          return;
         }
 
-        if (forcePortfolio) {
-          await syncManagerPortfolioFromServer(session.userId, { force: true });
-        }
+        await syncManagerPortfolioFromServer(session.userId, { force: true });
+        return;
       } catch {
         /* ignore */
       }

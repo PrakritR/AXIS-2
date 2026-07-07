@@ -40,6 +40,8 @@ describe("payment-automation-settings", () => {
 
   it("defaults visibility mode to days_before_send", () => {
     expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.scheduleVisibilityMode).toBe("days_before_send");
-    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.scheduleVisibilityDays).toBe(2);
+    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.scheduleVisibilityDays).toBe(3);
+    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.preDueReminderDays).toEqual([3, 2, 1]);
+    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.postDueReminderDays).toEqual([1]);
   });
 });

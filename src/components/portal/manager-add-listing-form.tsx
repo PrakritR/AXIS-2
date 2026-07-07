@@ -30,15 +30,19 @@ import {
   CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS,
   customApplicationFieldKeyFromLabel,
   LISTING_SERVICE_QUICK_ADDS,
+  resolveServiceOfferPricing,
+  type ListingServiceQuickAdd,
   emptyCustomApplicationField,
   entireHomeMonthlyRentAmount,
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
+  normalizeCustomApplicationFields,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
   duplicateRoomEntry,
   emptyBathroom,
   emptyBundleRow,
+  emptyCustomFeeRow,
   emptyQuickFactRow,
   emptyRoom,
   emptySharedSpace,
@@ -48,6 +52,7 @@ import {
   type ManagerBundleRow,
   type ManagerCustomApplicationField,
   type ManagerCustomApplicationFieldType,
+  type ManagerCustomFeeRow,
   type ManagerListingSubmissionV1,
   type ManagerListingServiceOption,
   type ManagerQuickFactRow,
@@ -56,6 +61,14 @@ import {
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
+import {
+  addListingApplicationField,
+  patchListingApplicationField,
+  removeListingApplicationField,
+  resolveListingApplicationFields,
+  restoreDefaultApplicationConfig,
+  type ResolvedApplicationField,
+} from "@/lib/rental-application/application-field-catalog";
 import {
   BATHROOM_EXTRA_AMENITY_PRESETS,
   HOUSE_WIDE_AMENITY_PRESETS,
@@ -91,6 +104,7 @@ import {
   sanitizeMoneyInput,
   sanitizeNeighborhoodInput,
   sanitizePaymentContactInput,
+  sanitizePaymentLinkInput,
   sanitizePlaceNameInput,
   sanitizeStreetAddressInput,
   sanitizeZipInput,
@@ -220,14 +234,6 @@ function locationSelectValue(location: string, options: readonly string[]): stri
   return options.includes(t) ? t : LOCATION_LEVEL_CUSTOM;
 }
 
-function ChevronDownTiny({ className = "" }: { className?: string }) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
 const DEFAULT_LISTING_PRESETS: ListingPresetConfig = {
   houseWide: [...HOUSE_WIDE_AMENITY_PRESETS],
   sharedSpace: [...SHARED_SPACE_AMENITY_PRESETS],
@@ -247,6 +253,80 @@ function FormSection({ id, title, description, children }: { id?: string; title:
       </header>
       <div className="space-y-5">{children}</div>
     </section>
+  );
+}
+
+function ListingWizardChevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`mt-0.5 h-4 w-4 shrink-0 text-muted transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const LISTING_WIZARD_ACTION_BTN = "h-8 rounded-full px-3 text-xs";
+const LISTING_WIZARD_REMOVE_BTN = `${LISTING_WIZARD_ACTION_BTN} shrink-0 border-rose-200 text-rose-800 portal-danger-outline`;
+
+function listingItemKey(kind: string, id: string) {
+  return `${kind}:${id}`;
+}
+
+function ListingWizardCollapsibleCard({
+  expanded,
+  onToggle,
+  title,
+  subtitle,
+  headerActions,
+  hasError,
+  bodyClassName = "p-4 sm:p-5",
+  toggleDataAttr,
+  children,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  title: string;
+  subtitle?: string;
+  headerActions?: ReactNode;
+  hasError?: boolean;
+  bodyClassName?: string;
+  toggleDataAttr?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`overflow-hidden rounded-2xl border bg-card shadow-sm ${hasError ? "border-red-300 ring-2 ring-red-100" : "border-border"}`}
+    >
+      <div
+        className={`flex flex-col gap-3 bg-accent/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${expanded ? "border-b border-border" : ""}`}
+      >
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-start gap-2 text-left sm:items-center"
+          aria-expanded={expanded}
+          data-attr={toggleDataAttr}
+          onClick={onToggle}
+        >
+          <ListingWizardChevron open={expanded} />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-foreground">{title}</p>
+            {subtitle ? <p className="mt-0.5 line-clamp-2 text-xs text-muted">{subtitle}</p> : null}
+          </div>
+        </button>
+        {headerActions ? (
+          <div className="flex flex-wrap gap-2 pl-6 sm:pl-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            {headerActions}
+          </div>
+        ) : null}
+      </div>
+      {expanded ? <div className={bodyClassName}>{children}</div> : null}
+    </div>
   );
 }
 
@@ -889,6 +969,23 @@ export function ManagerAddListingForm({
   const [serviceForm, setServiceForm] = useState({ name: "", description: "", price: "", deposit: "" });
   // Application step — free-text drafts for dropdown options so typing commas feels natural.
   const [questionOptionsDrafts, setQuestionOptionsDrafts] = useState<Record<string, string>>({});
+  const [expandedListingItems, setExpandedListingItems] = useState<Set<string>>(() => new Set());
+
+  const toggleListingItem = (key: string) => {
+    setExpandedListingItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const expandListingItem = (key: string) => {
+    setExpandedListingItems((prev) => new Set(prev).add(key));
+  };
+
+  const isListingItemExpanded = (key: string) => expandedListingItems.has(key);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
   // Keyed by a stable id like "room-<id>", "bath-<id>", "space-<id>", "house".
@@ -945,17 +1042,18 @@ export function ManagerAddListingForm({
     setServiceForm({ name: "", description: "", price: "", deposit: "" });
   };
 
-  const addQuickService = (preset: { name: string; description: string }) => {
+  const addQuickService = (preset: ListingServiceQuickAdd) => {
     setServiceOffers((prev) => {
       if (prev.some((o) => o.name.trim().toLowerCase() === preset.name.toLowerCase())) return prev;
+      const pricing = resolveServiceOfferPricing({ name: preset.name, price: preset.price, deposit: preset.deposit });
       return [
         ...prev,
         {
           id: `offer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: preset.name,
           description: preset.description,
-          price: "",
-          deposit: "",
+          price: pricing.price,
+          deposit: pricing.deposit,
           available: true,
           createdAt: new Date().toISOString(),
         },
@@ -1081,41 +1179,77 @@ export function ManagerAddListingForm({
     });
   };
 
-  // ── Application step (custom questions per application section) ──────────
-  const applicationMode: "standard" | "custom" =
-    sub.applicationConfigMode ?? ((sub.customApplicationFields?.length ?? 0) > 0 ? "custom" : "standard");
+  // ── Application step (all questions — built-in + custom) ─────────────────
+  const applicationFields = resolveListingApplicationFields(sub, normalizeCustomApplicationFields);
 
-  const patchCustomQuestion = (id: string, patch: Partial<ManagerCustomApplicationField>) => {
-    clearListingFieldError(listingCustomQuestionErrorKey(id));
+  const patchApplicationQuestion = (field: ResolvedApplicationField, patch: Partial<ManagerCustomApplicationField>) => {
+    clearListingFieldError(listingCustomQuestionErrorKey(field.id));
     clearListingFieldError("customApplicationFields");
-    setSub((s) => ({
-      ...s,
-      customApplicationFields: (s.customApplicationFields ?? []).map((f) => (f.id === id ? { ...f, ...patch } : f)),
-    }));
+    setSub((s) => ({ ...s, ...patchListingApplicationField(s, field, patch) }));
   };
 
   const addCustomQuestion = (section: string) => {
+    expandListingItem(listingItemKey("app-section", section));
     setSub((s) => ({
       ...s,
-      customApplicationFields: [...(s.customApplicationFields ?? []), emptyCustomApplicationField(section)],
+      ...addListingApplicationField(s, emptyCustomApplicationField(section)),
     }));
   };
 
-  const removeCustomQuestion = (id: string) => {
-    clearListingFieldError(listingCustomQuestionErrorKey(id));
-    setSub((s) => ({
-      ...s,
-      customApplicationFields: (s.customApplicationFields ?? []).filter((f) => f.id !== id),
-    }));
+  const removeApplicationQuestion = (field: ResolvedApplicationField) => {
+    clearListingFieldError(listingCustomQuestionErrorKey(field.id));
+    setSub((s) => ({ ...s, ...removeListingApplicationField(s, field) }));
+  };
+
+  const restoreApplicationDefaults = () => {
+    setStepFieldErrors({});
+    setSub((s) => ({ ...s, ...restoreDefaultApplicationConfig() }));
   };
 
   const questionOptionsText = (field: ManagerCustomApplicationField): string =>
     questionOptionsDrafts[field.id] ?? field.options.join(", ");
 
-  const setQuestionOptionsText = (id: string, text: string) => {
-    setQuestionOptionsDrafts((d) => ({ ...d, [id]: text }));
-    patchCustomQuestion(id, { options: parseQuestionOptionsText(text) });
+  const setQuestionOptionsText = (field: ResolvedApplicationField, text: string) => {
+    setQuestionOptionsDrafts((d) => ({ ...d, [field.id]: text }));
+    patchApplicationQuestion(field, { options: parseQuestionOptionsText(text) });
   };
+
+  useEffect(() => {
+    const toExpand = new Set<string>();
+    if (stepIndex === 1) {
+      for (const room of sub.rooms) {
+        if (stepFieldErrors[listingRoomNameKey(room.id)] || stepFieldErrors[listingRoomRentKey(room.id)]) {
+          toExpand.add(listingItemKey("room", room.id));
+        }
+      }
+      if (stepFieldErrors.rooms) sub.rooms.forEach((r) => toExpand.add(listingItemKey("room", r.id)));
+    }
+    if (stepIndex === 2) {
+      for (const bath of sub.bathrooms) {
+        if (stepFieldErrors[listingBathroomNameKey(bath.id)]) {
+          toExpand.add(listingItemKey("bathroom", bath.id));
+        }
+      }
+      if (stepFieldErrors.bathrooms) sub.bathrooms.forEach((b) => toExpand.add(listingItemKey("bathroom", b.id)));
+    }
+    if (stepIndex === 3) {
+      for (const sp of sub.sharedSpaces) {
+        if (stepFieldErrors[listingSharedSpaceNameKey(sp.id)]) {
+          toExpand.add(listingItemKey("shared", sp.id));
+        }
+      }
+      if (stepFieldErrors.sharedSpaces) sub.sharedSpaces.forEach((s) => toExpand.add(listingItemKey("shared", s.id)));
+    }
+    if (stepIndex === 7) {
+      for (const field of applicationFields) {
+        if (stepFieldErrors[listingCustomQuestionErrorKey(field.id)]) {
+          toExpand.add(listingItemKey("app-section", field.section ?? "additional"));
+        }
+      }
+    }
+    if (toExpand.size === 0) return;
+    setExpandedListingItems((prev) => new Set([...prev, ...toExpand]));
+  }, [stepFieldErrors, stepIndex, sub.rooms, sub.bathrooms, sub.sharedSpaces, applicationFields]);
 
   // ── Lease step (custom lease terms / uploaded template) ───────────────────
   const leaseMode: "standard" | "custom" = sub.leaseConfigMode ?? "standard";
@@ -1148,7 +1282,9 @@ export function ManagerAddListingForm({
 
   const addRoom = () => {
     if (sub.rooms.length >= 20) return;
-    setSub((s) => ({ ...s, rooms: [...s.rooms, emptyRoom(s.rooms.length)] }));
+    const next = emptyRoom(sub.rooms.length);
+    expandListingItem(listingItemKey("room", next.id));
+    setSub((s) => ({ ...s, rooms: [...s.rooms, next] }));
   };
 
   const removeRoom = (i: number) => {
@@ -1232,6 +1368,7 @@ export function ManagerAddListingForm({
       return;
     }
     const copy = duplicateRoomEntry(sub.rooms[i]!);
+    expandListingItem(listingItemKey("room", copy.id));
     setSub((s) => ({
       ...s,
       rooms: [...s.rooms.slice(0, i + 1), copy, ...s.rooms.slice(i + 1)],
@@ -1241,10 +1378,10 @@ export function ManagerAddListingForm({
 
   const addBathroom = () => {
     if (sub.bathrooms.length >= 12) return;
+    const next = emptyBathroom(sub.bathrooms.length);
+    expandListingItem(listingItemKey("bathroom", next.id));
     setSub((s) => {
-      const next = emptyBathroom(s.bathrooms.length);
       if (s.bathrooms.length === 0) return { ...s, bathrooms: [next] };
-      // New bathrooms stack directly under the first row, above the add button.
       return { ...s, bathrooms: [s.bathrooms[0]!, next, ...s.bathrooms.slice(1)] };
     });
   };
@@ -1257,22 +1394,23 @@ export function ManagerAddListingForm({
 
   const addSharedSpace = () => {
     if (sub.sharedSpaces.length >= 24) return;
-    setSub((s) => ({ ...s, sharedSpaces: [...s.sharedSpaces, emptySharedSpace(s.sharedSpaces.length)] }));
+    const next = emptySharedSpace(sub.sharedSpaces.length);
+    expandListingItem(listingItemKey("shared", next.id));
+    setSub((s) => ({ ...s, sharedSpaces: [...s.sharedSpaces, next] }));
   };
 
   const addSharedSpaceFromTemplate = (template: (typeof SHARED_SPACE_TEMPLATES)[number]) => {
     if (sub.sharedSpaces.length >= 24) return;
-    setSub((s) => {
-      const row = {
-        ...emptySharedSpace(s.sharedSpaces.length),
-        name: template.label,
-        spaceKind: template.kind,
-        detail: template.detail,
-        amenitiesText: template.amenities.join("\n"),
-        roomAccessIds: s.rooms.map((room) => room.id),
-      };
-      return { ...s, sharedSpaces: [...s.sharedSpaces, row] };
-    });
+    const row = {
+      ...emptySharedSpace(sub.sharedSpaces.length),
+      name: template.label,
+      spaceKind: template.kind,
+      detail: template.detail,
+      amenitiesText: template.amenities.join("\n"),
+      roomAccessIds: sub.rooms.map((room) => room.id),
+    };
+    expandListingItem(listingItemKey("shared", row.id));
+    setSub((s) => ({ ...s, sharedSpaces: [...s.sharedSpaces, row] }));
   };
 
   const removeSharedSpace = (i: number) => {
@@ -1331,7 +1469,9 @@ export function ManagerAddListingForm({
   };
 
   const addBundle = () => {
-    setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), emptyBundleRow()] }));
+    const next = emptyBundleRow();
+    expandListingItem(listingItemKey("bundle", next.id));
+    setSub((s) => ({ ...s, bundles: [...(s.bundles ?? []), next] }));
   };
 
   const addGeneratedBundle = (kind: "whole_house" | "multi_room") => {
@@ -1355,6 +1495,7 @@ export function ManagerAddListingForm({
         roomsLine: bundleRoomsLine(includedRoomIds, s.rooms),
         includedRoomIds,
       };
+      expandListingItem(listingItemKey("bundle", row.id));
       return { ...s, bundles: [...(s.bundles ?? []), row] };
     });
   };
@@ -1392,13 +1533,36 @@ export function ManagerAddListingForm({
   };
 
   const addQuickFact = () => {
-    setSub((s) => ({ ...s, quickFacts: [...(s.quickFacts ?? []), emptyQuickFactRow()] }));
+    const next = emptyQuickFactRow();
+    expandListingItem(listingItemKey("quickfact", next.id));
+    setSub((s) => ({ ...s, quickFacts: [...(s.quickFacts ?? []), next] }));
   };
 
   const removeQuickFact = (i: number) => {
     setSub((s) => ({
       ...s,
       quickFacts: (s.quickFacts ?? []).filter((_, j) => j !== i),
+    }));
+  };
+
+  const setCustomFee = (i: number, patch: Partial<ManagerCustomFeeRow>) => {
+    setSub((s) => {
+      const customFees = [...(s.customFees ?? [])];
+      customFees[i] = { ...customFees[i]!, ...patch };
+      return { ...s, customFees };
+    });
+  };
+
+  const addCustomFee = () => {
+    const next = emptyCustomFeeRow();
+    expandListingItem(listingItemKey("fee", next.id));
+    setSub((s) => ({ ...s, customFees: [...(s.customFees ?? []), next] }));
+  };
+
+  const removeCustomFee = (i: number) => {
+    setSub((s) => ({
+      ...s,
+      customFees: (s.customFees ?? []).filter((_, j) => j !== i),
     }));
   };
 
@@ -1809,6 +1973,12 @@ export function ManagerAddListingForm({
       ...sub,
       serviceRequestOptions: serviceOffers,
       customApplicationFields: finalizeCustomApplicationFields(sub.customApplicationFields),
+      disabledStandardApplicationKeys: sub.disabledStandardApplicationKeys ?? [],
+      applicationConfigMode:
+        (sub.disabledStandardApplicationKeys?.length ?? 0) > 0 ||
+        (sub.customApplicationFields?.length ?? 0) > 0
+          ? "custom"
+          : "standard",
       rooms: sub.rooms.map((room) => ({
         ...room,
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
@@ -2097,7 +2267,7 @@ export function ManagerAddListingForm({
                   <div className="relative">
                     <Select
                       aria-label="Number of floors"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingStoriesId), selectInputCls)} appearance-none pr-10`}
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingStoriesId), selectInputCls)}`}
                       value={sub.listingStoriesId ?? ""}
                       onChange={(e) => {
                         clearListingFieldError("listingStoriesId");
@@ -2111,9 +2281,6 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                    <ChevronDownTiny />
-                  </span>
                 </div>
                   <StepFieldError msg={stepFieldErrors.listingStoriesId} />
                 </div>
@@ -2126,7 +2293,7 @@ export function ManagerAddListingForm({
                   <div className="relative">
                     <Select
                       aria-label="Total bathrooms"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingTotalBathroomsId), selectInputCls)} appearance-none pr-10`}
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingTotalBathroomsId), selectInputCls)}`}
                       value={sub.listingTotalBathroomsId ?? ""}
                       onChange={(e) => {
                         clearListingFieldError("listingTotalBathroomsId");
@@ -2140,9 +2307,6 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                    <ChevronDownTiny />
-                  </span>
                 </div>
                   <StepFieldError msg={stepFieldErrors.listingTotalBathroomsId} />
                 </div>
@@ -2157,7 +2321,7 @@ export function ManagerAddListingForm({
                   <div className="relative max-w-md">
                     <Select
                       aria-label="Bedrooms for rent"
-                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingBedroomSlots), selectInputCls)} appearance-none pr-10`}
+                      className={`${wizardFieldErrorClass(Boolean(stepFieldErrors.listingBedroomSlots), selectInputCls)}`}
                       value={String(sub.listingBedroomSlots ?? sub.rooms.length)}
                       onChange={(e) => {
                         clearListingFieldError("listingBedroomSlots");
@@ -2170,9 +2334,6 @@ export function ManagerAddListingForm({
                       </option>
                     ))}
                   </Select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                    <ChevronDownTiny />
-                  </span>
                 </div>
                   <StepFieldError msg={stepFieldErrors.listingBedroomSlots} />
                 </div>
@@ -2679,31 +2840,26 @@ export function ManagerAddListingForm({
                       const priceNum = bundle.price.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim();
                       const hasManualPrice = priceNum.length > 0 && Number(priceNum) !== rentSum;
                       return (
-                        <div
+                        <ListingWizardCollapsibleCard
                           key={bundle.id}
-                          className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)]"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-accent/30 px-4 py-3 sm:px-5">
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">Package {i + 1}</p>
-                              <p className="mt-1 text-xs text-muted">
-                                {selectedRooms.length} room{selectedRooms.length === 1 ? "" : "s"} selected
-                                {rentSum > 0 ? (
-                                  <>
-                                    {" "}
-                                    · Base rent sum <span className="font-semibold text-foreground">${rentSum}/mo</span>
-                                  </>
-                                ) : null}
-                                {hasManualPrice ? (
-                                  <span className="ml-1 font-medium text-primary">· Custom bundle price</span>
-                                ) : null}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
+                          expanded={isListingItemExpanded(listingItemKey("bundle", bundle.id))}
+                          onToggle={() => toggleListingItem(listingItemKey("bundle", bundle.id))}
+                          title={bundle.label.trim() || `Package ${i + 1}`}
+                          subtitle={[
+                            `${selectedRooms.length} room${selectedRooms.length === 1 ? "" : "s"}`,
+                            rentSum > 0 ? `$${rentSum}/mo base` : null,
+                            hasManualPrice ? "Custom price" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          bodyClassName="grid gap-3 sm:grid-cols-2"
+                          toggleDataAttr={`listing-bundle-toggle-${bundle.id}`}
+                          headerActions={
+                            <>
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="h-8 rounded-full px-3 text-[11px]"
+                                className={LISTING_WIZARD_ACTION_BTN}
                                 onClick={() => applyBundleRoomScope(i, "all_named")}
                                 disabled={namedRooms.length === 0}
                                 aria-label="Select all named rooms"
@@ -2713,21 +2869,17 @@ export function ManagerAddListingForm({
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="h-8 rounded-full px-3 text-[11px]"
+                                className={LISTING_WIZARD_ACTION_BTN}
                                 onClick={() => applyBundleRoomScope(i, "none")}
                               >
                                 Clear
                               </Button>
-                              <button
-                                type="button"
-                                className="rounded-full px-2 text-xs font-semibold text-rose-600 hover:bg-[var(--status-overdue-bg)]"
-                                onClick={() => removeBundle(i)}
-                              >
+                              <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeBundle(i)}>
                                 Remove
-                              </button>
-                            </div>
-                          </div>
-                          <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                              </Button>
+                            </>
+                          }
+                        >
                             <GridField>
                               <FieldLabel>Bundle name</FieldLabel>
                               <Input
@@ -2791,8 +2943,7 @@ export function ManagerAddListingForm({
                                 ))}
                               </div>
                             </div>
-                          </div>
-                        </div>
+                        </ListingWizardCollapsibleCard>
                       );
                     })}
                   </div>
@@ -2835,10 +2986,111 @@ export function ManagerAddListingForm({
                     </GridField>
                   ))}
                 </div>
-                <div className="mt-3">
-                  <FieldLabel hint="Explain all recurring and one-time housing costs (shown on your listing).">Cost summary</FieldLabel>
-                  <Textarea className="" value={sub.houseCostsDetail} onChange={(e) => setSub((s) => ({ ...s, houseCostsDetail: e.target.value }))} />
+                <div className="mt-4 space-y-3 rounded-xl border border-border bg-card p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application options</p>
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-border"
+                      checked={Boolean(sub.allowMultiplePropertyApplications)}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          allowMultiplePropertyApplications: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-foreground">
+                      <span className="font-medium">Allow multiple applications</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Residents can apply to more than one property or room on this listing.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-border"
+                      checked={Boolean(sub.applicationFeeOnlyFirstApplication)}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          applicationFeeOnlyFirstApplication: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-foreground">
+                      <span className="font-medium">Application fee only for first application</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Charge the application fee once per resident; skip payment on later applications.
+                      </span>
+                    </span>
+                  </label>
                 </div>
+                {(sub.customFees ?? []).length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Additional fees</p>
+                    {(sub.customFees ?? []).map((fee, i) => (
+                      <ListingWizardCollapsibleCard
+                        key={fee.id}
+                        expanded={isListingItemExpanded(listingItemKey("fee", fee.id))}
+                        onToggle={() => toggleListingItem(listingItemKey("fee", fee.id))}
+                        title={fee.label.trim() || `Fee ${i + 1}`}
+                        subtitle={`$${fee.amount.replace(/^\$/, "").trim() || "0"} · ${fee.frequency === "one-time" ? "One-time" : "Monthly"}`}
+                        bodyClassName="grid gap-3 sm:grid-cols-2"
+                        toggleDataAttr={`listing-fee-toggle-${fee.id}`}
+                        headerActions={
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeCustomFee(i)}>
+                            Remove
+                          </Button>
+                        }
+                      >
+                        <div className="sm:col-span-2 sm:grid sm:grid-cols-2 sm:gap-3">
+                        <div>
+                          <FieldLabel>Fee name</FieldLabel>
+                          <Input
+                            value={fee.label}
+                            onChange={(e) => setCustomFee(i, { label: sanitizePlaceNameInput(e.target.value) })}
+                            placeholder="e.g. Pet fee, Cleaning fee"
+                          />
+                        </div>
+                        <div>
+                          <FieldLabel>Amount</FieldLabel>
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
+                            <Input
+                              className="pl-8"
+                              inputMode="decimal"
+                              value={fee.amount.replace(/^\$/, "").trim()}
+                              onChange={(e) => setCustomFee(i, { amount: sanitizeMoneyInput(e.target.value) })}
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <FieldLabel>Type</FieldLabel>
+                          <div className="relative">
+                            <Select
+                              aria-label={`Additional fee ${i + 1} type`}
+                              className={`${selectInputCls}`}
+                              value={fee.frequency ?? "monthly"}
+                              onChange={(e) =>
+                                setCustomFee(i, { frequency: e.target.value === "one-time" ? "one-time" : "monthly" })
+                              }
+                            >
+                              <option value="monthly">Monthly</option>
+                              <option value="one-time">One-time</option>
+                            </Select>
+                          </div>
+                        </div>
+                        </div>
+                      </ListingWizardCollapsibleCard>
+                    ))}
+                  </div>
+                ) : null}
+                <Button type="button" variant="outline" className={`mt-4 ${LISTING_WIZARD_ACTION_BTN}`} onClick={addCustomFee}>
+                  + Add fee
+                </Button>
               </ListingSubsection>
 
               <ListingSubsection
@@ -2868,9 +3120,13 @@ export function ManagerAddListingForm({
               <ListingSubsection
                 id="edit-zelle"
                 title="Resident payment methods"
-                description="How residents pay rent, utilities, and ongoing charges."
+                description="How residents and applicants pay rent, utilities, application fees, and other charges."
               >
-                <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+                <div
+                  data-wizard-field="residentPaymentMethods"
+                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.residentPaymentMethods), "border-border")}`}
+                >
+                  <StepFieldError msg={stepFieldErrors.residentPaymentMethods} />
                   <label className="flex cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
@@ -2880,12 +3136,11 @@ export function ManagerAddListingForm({
                         setSub((s) => ({
                           ...s,
                           axisPaymentsEnabled: e.target.checked,
-                          applicationFeeStripeEnabled: e.target.checked ? true : s.applicationFeeStripeEnabled,
                         }))
                       }
                     />
                     <span className="text-sm font-medium text-foreground">
-                      Axis payments (ACH) — low {0.8}% processing fee
+                      Bank (ACH) with Stripe — low {0.8}% processing fee
                     </span>
                   </label>
                   <div className="border-t border-border pt-3">
@@ -2899,7 +3154,6 @@ export function ManagerAddListingForm({
                           setSub((s) => ({
                             ...s,
                             zellePaymentsEnabled: on,
-                            applicationFeeZelleEnabled: on,
                           }));
                         }}
                       />
@@ -2932,7 +3186,6 @@ export function ManagerAddListingForm({
                           setSub((s) => ({
                             ...s,
                             venmoPaymentsEnabled: on,
-                            applicationFeeVenmoEnabled: on,
                           }));
                         }}
                       />
@@ -3019,86 +3272,6 @@ export function ManagerAddListingForm({
                   </GridField>
                 </div>
               </ListingSubsection>
-
-              <ListingSubsection
-                title="Application fee payment methods"
-                description="Choose which resident payment methods applicants can use for the application fee."
-              >
-                <div
-                  data-wizard-field="applicationFeeMethods"
-                  className={`space-y-4 rounded-xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(stepFieldErrors.applicationFeeMethods), "border-border")}`}
-                >
-                  <StepFieldError msg={stepFieldErrors.applicationFeeMethods} />
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-border"
-                      checked={sub.applicationFeeStripeEnabled !== false}
-                      disabled={sub.axisPaymentsEnabled === false}
-                      onChange={(e) =>
-                        setSub((s) => ({
-                          ...s,
-                          applicationFeeStripeEnabled: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="text-sm font-medium text-foreground">Axis payments (ACH)</span>
-                  </label>
-                  {sub.zellePaymentsEnabled ? (
-                    <div className="border-t border-border pt-3">
-                      <label className="flex cursor-pointer items-center gap-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={sub.applicationFeeZelleEnabled !== false}
-                          onChange={(e) => setSub((s) => ({ ...s, applicationFeeZelleEnabled: e.target.checked }))}
-                        />
-                        <span className="text-sm font-medium text-foreground">Zelle</span>
-                      </label>
-                    </div>
-                  ) : null}
-                  {sub.venmoPaymentsEnabled ? (
-                    <div className="border-t border-border pt-3">
-                      <label className="flex cursor-pointer items-center gap-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border"
-                          checked={sub.applicationFeeVenmoEnabled !== false}
-                          onChange={(e) => setSub((s) => ({ ...s, applicationFeeVenmoEnabled: e.target.checked }))}
-                        />
-                        <span className="text-sm font-medium text-foreground">Venmo</span>
-                      </label>
-                    </div>
-                  ) : null}
-                  <div className="border-t border-border pt-3">
-                    <label className="flex cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border"
-                        checked={Boolean(sub.applicationFeeOtherEnabled)}
-                        onChange={(e) => setSub((s) => ({ ...s, applicationFeeOtherEnabled: e.target.checked }))}
-                      />
-                      <span className="text-sm font-medium text-foreground">Other</span>
-                    </label>
-                    {sub.applicationFeeOtherEnabled ? (
-                      <div className="mt-2 pl-7" data-wizard-field="applicationFeeOtherInstructions">
-                        <FieldLabel hint="Instructions shown to applicants (e.g. check, cash, wire).">Payment instructions</FieldLabel>
-                        <Textarea
-                          rows={2}
-                          value={sub.applicationFeeOtherInstructions ?? ""}
-                          onChange={(e) => {
-                            clearListingFieldError("applicationFeeOtherInstructions");
-                            setSub((s) => ({ ...s, applicationFeeOtherInstructions: e.target.value }));
-                          }}
-                          className={wizardFieldErrorClass(Boolean(stepFieldErrors.applicationFeeOtherInstructions))}
-                          placeholder="e.g. Mail a check to… or pay in person at…"
-                        />
-                        <StepFieldError msg={stepFieldErrors.applicationFeeOtherInstructions} />
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </ListingSubsection>
             </div>
           </FormSection>
           ) : null}
@@ -3128,21 +3301,29 @@ export function ManagerAddListingForm({
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                {sub.rooms.map((room, i) => (
-                  <div key={room.id} className="rounded-2xl border border-border bg-accent/30 p-4 sm:p-5">
-                    <p className="text-sm font-bold text-foreground">{room.name.trim() || `Room ${i + 1}`}</p>
-                    <div className="mt-3">
-                      <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
-                      <Textarea
-                        rows={3}
-                        value={room.moveInInstructions}
-                        onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
-                        placeholder="Room-specific access, parking, and move-in details…"
-                      />
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {sub.rooms.map((room, i) => {
+                  const moveKey = listingItemKey("move", room.id);
+                  const movePreview = room.moveInInstructions.trim();
+                  return (
+                  <ListingWizardCollapsibleCard
+                    key={room.id}
+                    expanded={isListingItemExpanded(moveKey)}
+                    onToggle={() => toggleListingItem(moveKey)}
+                    title={room.name.trim() || `Room ${i + 1}`}
+                    subtitle={movePreview ? movePreview.slice(0, 80) + (movePreview.length > 80 ? "…" : "") : "No move-in instructions yet"}
+                    toggleDataAttr={`listing-move-toggle-${room.id}`}
+                  >
+                    <FieldLabel hint="Keys, parking, access, what to bring.">Move-in instructions</FieldLabel>
+                    <Textarea
+                      rows={3}
+                      value={room.moveInInstructions}
+                      onChange={(e) => setRoom(i, { moveInInstructions: e.target.value })}
+                      placeholder="Room-specific access, parking, and move-in details…"
+                    />
+                  </ListingWizardCollapsibleCard>
+                  );
+                })}
               </div>
             )}
           </FormSection>
@@ -3163,12 +3344,12 @@ export function ManagerAddListingForm({
               <p className="text-sm text-muted">
                 Layout details only — add optional photos per room if helpful.
               </p>
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addRoom}>
+              <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={addRoom}>
                 + Add room
               </Button>
             </div>
             <div
-              className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.rooms))}`}
+              className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.rooms))}`}
               data-wizard-field="rooms"
             >
               {stepFieldErrors.rooms ? (
@@ -3182,25 +3363,52 @@ export function ManagerAddListingForm({
                 const roomNameErr = stepFieldErrors[roomNameKey];
                 const roomRentErr = stepFieldErrors[roomRentKey];
                 const roomHasErr = Boolean(roomNameErr || roomRentErr);
+                const roomPresetLabels = new Set(dedupedPresets.room.map((p) => p.label));
+                const customRoomAmenitiesText = splitLineList(room.roomAmenitiesText)
+                  .filter((line) => !roomPresetLabels.has(line))
+                  .join("\n");
+                const roomSubtitle = [
+                  room.floor.trim() || null,
+                  room.furnishing.trim() || null,
+                  room.photoDataUrls.length > 0 ? `${room.photoDataUrls.length} photo${room.photoDataUrls.length === 1 ? "" : "s"}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Tap to add name, floor, and amenities";
+                const roomKey = listingItemKey("room", room.id);
                 return (
-                  <div
+                  <ListingWizardCollapsibleCard
                     key={room.id}
-                    className={`rounded-2xl border p-4 sm:p-5 ${wizardSectionErrorClass(roomHasErr, "border-border bg-accent/30")}`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-bold text-foreground">Room {i + 1}</p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => duplicateRoom(i)} disabled={sub.rooms.length >= 20}>
+                    expanded={isListingItemExpanded(roomKey)}
+                    onToggle={() => toggleListingItem(roomKey)}
+                    title={room.name.trim() || `Room ${i + 1}`}
+                    subtitle={roomSubtitle}
+                    hasError={roomHasErr}
+                    bodyClassName="grid gap-3 sm:grid-cols-2"
+                    toggleDataAttr={`listing-room-toggle-${room.id}`}
+                    headerActions={
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={LISTING_WIZARD_ACTION_BTN}
+                          onClick={() => duplicateRoom(i)}
+                          disabled={sub.rooms.length >= 20}
+                        >
                           Duplicate
                         </Button>
                         {sub.rooms.length > 1 ? (
-                          <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeRoom(i)}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={LISTING_WIZARD_REMOVE_BTN}
+                            onClick={() => removeRoom(i)}
+                          >
                             Remove
-                          </button>
+                          </Button>
                         ) : null}
-                      </div>
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      </>
+                    }
+                  >
                       <GridField>
                         <FieldLabel>Room name *</FieldLabel>
                         <div data-wizard-field={roomNameKey}>
@@ -3223,7 +3431,7 @@ export function ManagerAddListingForm({
                           <div className="relative">
                             <Select
                               aria-label={`Floor for ${room.name || `room ${i + 1}`}`}
-                              className={`${selectInputCls} appearance-none pr-10`}
+                              className={`${selectInputCls}`}
                               value={roomFloorSelectValueFromOptions(room.floor, roomFloorOptions)}
                               onChange={(e) => {
                                 const v = e.target.value;
@@ -3245,9 +3453,6 @@ export function ManagerAddListingForm({
                               ))}
                               <option value={ROOM_FLOOR_LEVEL_CUSTOM}>Custom…</option>
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                              <ChevronDownTiny />
-                            </span>
                           </div>
                           {roomFloorSelectValueFromOptions(room.floor, roomFloorOptions) === ROOM_FLOOR_LEVEL_CUSTOM ? (
                             <Input
@@ -3292,8 +3497,8 @@ export function ManagerAddListingForm({
                         </div>
                       </div>
                       <div className="sm:col-span-2">
-                        <FieldLabel>Room amenities</FieldLabel>
-                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2">
+                        <FieldLabel hint="Check common room amenities — use the field below for anything not listed.">Room amenities</FieldLabel>
+                        <div className="mt-2 grid gap-2 rounded-xl border border-border bg-card p-3 sm:grid-cols-2 lg:grid-cols-3">
                           {dedupedPresets.room.map((p) => {
                             const on = splitLineList(room.roomAmenitiesText).includes(p.label);
                             return (
@@ -3316,9 +3521,15 @@ export function ManagerAddListingForm({
                         <Textarea
                           className="mt-2"
                           rows={2}
-                          value={room.roomAmenitiesText}
-                          onChange={(e) => setRoom(i, { roomAmenitiesText: e.target.value })}
-                          placeholder="Add custom amenities not listed above (one per line)."
+                          value={customRoomAmenitiesText}
+                          onChange={(e) => {
+                            const presetLines = splitLineList(room.roomAmenitiesText).filter((line) =>
+                              roomPresetLabels.has(line),
+                            );
+                            const customLines = splitLineList(e.target.value);
+                            setRoom(i, { roomAmenitiesText: [...presetLines, ...customLines].join("\n") });
+                          }}
+                          placeholder="Other amenities not listed above (one per line)."
                         />
                       </div>
 
@@ -3408,8 +3619,7 @@ export function ManagerAddListingForm({
                       </div>
                       </>
                       ) : null}
-                    </div>
-                  </div>
+                  </ListingWizardCollapsibleCard>
                 );
               })}
             </div>
@@ -3424,7 +3634,7 @@ export function ManagerAddListingForm({
           >
               <p className="mb-4 text-sm text-muted">Shown in the Bathrooms section on the public listing.</p>
               <div
-                className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.bathrooms))}`}
+                className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.bathrooms))}`}
                 data-wizard-field="bathrooms"
               >
                 {stepFieldErrors.bathrooms ? (
@@ -3433,20 +3643,38 @@ export function ManagerAddListingForm({
                 {sub.bathrooms.map((b, i) => {
                   const bathNameKey = listingBathroomNameKey(b.id);
                   const bathNameErr = stepFieldErrors[bathNameKey];
+                  const fixtures = [b.shower && "Shower", b.toilet && "Toilet", b.bathtub && "Tub"].filter(Boolean).join(", ");
+                  const bathSubtitle = [
+                    b.location?.trim() || null,
+                    fixtures || null,
+                    b.allResidents ? "Whole-house bath" : `${(b.assignedRoomIds ?? []).length} room(s)`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  const bathKey = listingItemKey("bathroom", b.id);
                   return (
-                  <div
+                  <ListingWizardCollapsibleCard
                     key={b.id}
-                    className={`rounded-2xl border bg-card p-4 ${wizardSectionErrorClass(Boolean(bathNameErr), "border-border")}`}
-                  >
-                    <div className="flex justify-between gap-2">
-                      <p className="text-sm font-semibold text-foreground">Bathroom {i + 1}</p>
-                      {sub.bathrooms.length > 1 ? (
-                        <button type="button" className="text-xs font-semibold text-rose-600 hover:underline" onClick={() => removeBathroom(i)}>
+                    expanded={isListingItemExpanded(bathKey)}
+                    onToggle={() => toggleListingItem(bathKey)}
+                    title={b.name.trim() || `Bathroom ${i + 1}`}
+                    subtitle={bathSubtitle || "Tap to set name, location, and fixtures"}
+                    hasError={Boolean(bathNameErr)}
+                    bodyClassName="grid gap-3 sm:grid-cols-2"
+                    toggleDataAttr={`listing-bathroom-toggle-${b.id}`}
+                    headerActions={
+                      sub.bathrooms.length > 1 ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={LISTING_WIZARD_REMOVE_BTN}
+                          onClick={() => removeBathroom(i)}
+                        >
                           Remove
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        </Button>
+                      ) : null
+                    }
+                  >
                       <div className="sm:col-span-2" data-wizard-field={bathNameKey}>
                         <FieldLabel>Name *</FieldLabel>
                         <Input
@@ -3467,7 +3695,7 @@ export function ManagerAddListingForm({
                           <div className="relative">
                             <Select
                               aria-label={`Bathroom ${i + 1} location`}
-                              className={`${selectInputCls} appearance-none pr-10`}
+                              className={`${selectInputCls}`}
                               value={locationSelectValue(b.location ?? "", locationLevelOptions)}
                               onChange={(e) => {
                                 const v = e.target.value;
@@ -3490,9 +3718,6 @@ export function ManagerAddListingForm({
                               ))}
                               <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                              <ChevronDownTiny />
-                            </span>
                           </div>
                           {locationSelectValue(b.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
                             <Input
@@ -3693,15 +3918,14 @@ export function ManagerAddListingForm({
                           )}
                         </div>
                       </div>
-                    </div>
-                  </div>
+                  </ListingWizardCollapsibleCard>
                   );
                 })}
                 <div className="flex justify-center pt-1">
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-full text-xs"
+                    className={LISTING_WIZARD_ACTION_BTN}
                     onClick={addBathroom}
                     disabled={sub.bathrooms.length >= 12}
                   >
@@ -3744,7 +3968,7 @@ export function ManagerAddListingForm({
                 </div>
               ) : (
                 <div
-                  className={`space-y-6 ${wizardSectionErrorClass(Boolean(stepFieldErrors.sharedSpaces))}`}
+                  className={`space-y-3 ${wizardSectionErrorClass(Boolean(stepFieldErrors.sharedSpaces))}`}
                   data-wizard-field="sharedSpaces"
                 >
                   {stepFieldErrors.sharedSpaces ? (
@@ -3763,28 +3987,29 @@ export function ManagerAddListingForm({
                       SHARED_SPACE_KIND_OPTIONS.find((opt) => opt.id === spaceKind)?.label ?? "Shared space";
 
                     return (
-                    <div
+                    <ListingWizardCollapsibleCard
                       key={sp.id}
-                      className={`overflow-hidden rounded-3xl border bg-card shadow-sm ${wizardSectionErrorClass(Boolean(spaceNameErr), "border-border")}`}
-                    >
-                      <div className="flex flex-col gap-3 border-b border-border bg-accent/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                        <div>
-                          <p className="text-sm font-bold text-foreground">Shared space {i + 1}</p>
-                          <p className="mt-1 text-xs text-muted">{roomAccessSummary(sp, sub.rooms)}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setSharedSpaceRoomAccess(i, "all")}>
+                      expanded={isListingItemExpanded(listingItemKey("shared", sp.id))}
+                      onToggle={() => toggleListingItem(listingItemKey("shared", sp.id))}
+                      title={sp.name.trim() || `Shared space ${i + 1}`}
+                      subtitle={`${spaceKindLabel} · ${roomAccessSummary(sp, sub.rooms)}`}
+                      hasError={Boolean(spaceNameErr)}
+                      bodyClassName="grid gap-4 sm:grid-cols-2"
+                      toggleDataAttr={`listing-shared-toggle-${sp.id}`}
+                      headerActions={
+                        <>
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={() => setSharedSpaceRoomAccess(i, "all")}>
                             All rooms
                           </Button>
-                          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setSharedSpaceRoomAccess(i, "none")}>
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={() => setSharedSpaceRoomAccess(i, "none")}>
                             Clear rooms
                           </Button>
-                          <button type="button" className="rounded-full px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-[var(--status-overdue-bg)]" onClick={() => removeSharedSpace(i)}>
+                          <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeSharedSpace(i)}>
                             Remove
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+                          </Button>
+                        </>
+                      }
+                    >
                         <div data-wizard-field={spaceNameKey}>
                           <FieldLabel>Name *</FieldLabel>
                           <Input
@@ -3800,11 +4025,11 @@ export function ManagerAddListingForm({
                           <StepFieldError msg={spaceNameErr} />
                         </div>
                         <div>
-                          <FieldLabel hint="Controls which amenity checkboxes appear for this space.">Space type</FieldLabel>
+                          <FieldLabel>Space type</FieldLabel>
                           <div className="relative">
                             <Select
                               aria-label={`Shared space ${i + 1} type`}
-                              className={`${selectInputCls} appearance-none pr-10`}
+                              className={`${selectInputCls}`}
                               value={sp.spaceKind ?? "other"}
                               onChange={(e) => {
                                 const kind = e.target.value as SharedSpaceKind;
@@ -3820,9 +4045,6 @@ export function ManagerAddListingForm({
                                 </option>
                               ))}
                             </Select>
-                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                              <ChevronDownTiny />
-                            </span>
                           </div>
                         </div>
                         <div className="sm:col-span-2">
@@ -3831,7 +4053,7 @@ export function ManagerAddListingForm({
                             <div className="relative">
                               <Select
                                 aria-label={`Shared space ${i + 1} location`}
-                                className={`${selectInputCls} appearance-none pr-10`}
+                                className={`${selectInputCls}`}
                                 value={locationSelectValue(sp.location ?? "", locationLevelOptions)}
                                 onChange={(e) => {
                                   const v = e.target.value;
@@ -3854,9 +4076,6 @@ export function ManagerAddListingForm({
                                 ))}
                                 <option value={LOCATION_LEVEL_CUSTOM}>Custom…</option>
                               </Select>
-                              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted">
-                                <ChevronDownTiny />
-                              </span>
                             </div>
                             {locationSelectValue(sp.location ?? "", locationLevelOptions) === LOCATION_LEVEL_CUSTOM ? (
                               <Input
@@ -4000,8 +4219,7 @@ export function ManagerAddListingForm({
                             ))}
                           </div>
                         </div>
-                      </div>
-                    </div>
+                    </ListingWizardCollapsibleCard>
                   );
                   })}
                 </div>
@@ -4018,30 +4236,61 @@ export function ManagerAddListingForm({
           >
             <div className="space-y-4">
               {serviceOffers.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-3">
                   {serviceOffers.map((offer) => (
-                    <div
+                    <ListingWizardCollapsibleCard
                       key={offer.id}
-                      className={`flex flex-col rounded-2xl border bg-card p-4 shadow-[0_1px_4px_rgba(15,23,42,0.05)] transition ${offer.available ? "border-border" : "border-border opacity-60"}`}
+                      expanded={isListingItemExpanded(listingItemKey("service", offer.id))}
+                      onToggle={() => toggleListingItem(listingItemKey("service", offer.id))}
+                      title={offer.name}
+                      subtitle={[offer.price, offer.available ? "Active" : "Paused"].filter(Boolean).join(" · ")}
+                      toggleDataAttr={`listing-service-toggle-${offer.id}`}
+                      headerActions={
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={LISTING_WIZARD_ACTION_BTN}
+                            onClick={() => {
+                              setEditingOffer(offer);
+                              setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" });
+                              setServiceModalOpen(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={LISTING_WIZARD_ACTION_BTN}
+                            onClick={() => {
+                              setServiceOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, available: !o.available } : o)));
+                            }}
+                          >
+                            {offer.available ? "Pause" : "Resume"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={LISTING_WIZARD_REMOVE_BTN}
+                            onClick={() => {
+                              setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </>
+                      }
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-semibold text-foreground">{offer.name}</p>
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${offer.available ? "portal-badge-success ring-[var(--status-confirmed-bg)]" : "bg-accent/30 text-muted ring-border"}`}>
-                          {offer.available ? "Active" : "Paused"}
-                        </span>
-                      </div>
-                      {offer.price ? <span className="mt-1 text-xs font-medium text-muted">{offer.price}</span> : null}
-                      {offer.description ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{offer.description}</p> : null}
-                      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3">
-                        <button type="button" onClick={() => { setEditingOffer(offer); setServiceForm({ name: offer.name, description: offer.description, price: offer.price, deposit: offer.deposit ?? "" }); setServiceModalOpen(true); }} className="rounded-full border border-border bg-card px-3 py-0.5 text-[11px] font-semibold text-muted hover:bg-accent/30">Edit</button>
-                        <button type="button" onClick={() => {
-                          setServiceOffers((prev) => prev.map((o) => o.id === offer.id ? { ...o, available: !o.available } : o));
-                        }} className="rounded-full border border-border bg-card px-3 py-0.5 text-[11px] font-semibold text-muted hover:bg-accent/30">{offer.available ? "Pause" : "Resume"}</button>
-                        <button type="button" onClick={() => {
-                          setServiceOffers((prev) => prev.filter((o) => o.id !== offer.id));
-                        }} className="rounded-full border border-rose-200 bg-card px-3 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-[var(--status-overdue-bg)]">Remove</button>
-                      </div>
-                    </div>
+                      {offer.description ? (
+                        <p className="text-sm leading-relaxed text-muted">{offer.description}</p>
+                      ) : (
+                        <p className="text-sm text-muted">No description — use Edit to add details.</p>
+                      )}
+                      {offer.deposit ? (
+                        <p className="text-xs text-muted">Deposit: {offer.deposit}</p>
+                      ) : null}
+                    </ListingWizardCollapsibleCard>
                   ))}
                 </div>
               ) : (
@@ -4084,36 +4333,23 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-application"
             title="Rental application"
-            description="Review — this is the application every applicant completes for this property. Add any extra information you want applicants to provide."
+            description="Review and adjust every question applicants answer. Built-in Axis questions can be edited or removed; add your own in any section."
           >
             <div className="space-y-6">
-              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-card p-4">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-border text-primary"
-                  data-attr="listing-application-standard-toggle"
-                  checked={applicationMode === "standard"}
-                  onChange={(e) => {
-                    setStepFieldErrors({});
-                    setSub((s) => ({ ...s, applicationConfigMode: e.target.checked ? "standard" : "custom" }));
-                  }}
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-foreground">Use Axis standard system</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Applicants complete the standard Axis rental application below. Uncheck to add your own questions to
-                    any section.
-                  </span>
-                </span>
-              </label>
-
-              {applicationMode === "standard" && (sub.customApplicationFields?.length ?? 0) > 0 ? (
-                <p className="rounded-xl border border-border bg-accent/30 px-3 py-2 text-xs leading-relaxed text-muted">
-                  Your {sub.customApplicationFields!.length} saved custom question
-                  {sub.customApplicationFields!.length === 1 ? "" : "s"} are kept but won&apos;t be asked while the
-                  standard application is selected.
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted">
+                  {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on this application
                 </p>
-              ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={LISTING_WIZARD_ACTION_BTN}
+                  data-attr="listing-application-restore-defaults"
+                  onClick={restoreApplicationDefaults}
+                >
+                  Restore Axis defaults
+                </Button>
+              </div>
 
               {stepFieldErrors.customApplicationFields ? (
                 <div data-wizard-field="customApplicationFields">
@@ -4121,125 +4357,111 @@ export function ManagerAddListingForm({
                 </div>
               ) : null}
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {RENTAL_APPLICATION_SECTIONS.map((section, sectionIdx) => {
-                  const sectionQuestions =
-                    applicationMode === "custom"
-                      ? (sub.customApplicationFields ?? []).filter(
-                          (f) => (f.section ?? "additional") === section.id,
-                        )
-                      : [];
+                  const sectionQuestions = applicationFields.filter(
+                    (f) => (f.section ?? "additional") === section.id,
+                  );
+                  const sectionKey = listingItemKey("app-section", section.id);
                   return (
-                    <div key={section.id} className="overflow-hidden rounded-2xl border border-border bg-card">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
-                        <p className="text-sm font-semibold text-foreground">
-                          <span className="mr-2 text-xs font-bold text-muted">{sectionIdx + 1}.</span>
-                          {section.title}
-                        </p>
-                        {applicationMode === "custom" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 rounded-full px-3 text-xs"
-                            data-attr="listing-application-add-question"
-                            onClick={() => addCustomQuestion(section.id)}
-                          >
-                            + Add custom question
-                          </Button>
-                        ) : null}
-                      </div>
-                      <div className="space-y-3 px-4 py-3">
-                        <div>
-                          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                            Standard questions
-                          </p>
-                          <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                            {section.standardFields.map((f) => (
-                              <li
-                                key={f}
-                                className="rounded-full bg-accent/40 px-2.5 py-1 text-[11px] font-medium text-muted"
-                              >
-                                {f}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                    <ListingWizardCollapsibleCard
+                      key={section.id}
+                      expanded={isListingItemExpanded(sectionKey)}
+                      onToggle={() => toggleListingItem(sectionKey)}
+                      title={`${sectionIdx + 1}. ${section.title}`}
+                      subtitle={`${sectionQuestions.length} question${sectionQuestions.length === 1 ? "" : "s"}`}
+                      bodyClassName="space-y-3 px-4 py-3"
+                      toggleDataAttr={`listing-application-section-toggle-${section.id}`}
+                      headerActions={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={LISTING_WIZARD_ACTION_BTN}
+                          data-attr="listing-application-add-question"
+                          onClick={() => addCustomQuestion(section.id)}
+                        >
+                          + Add question
+                        </Button>
+                      }
+                    >
                         {sectionQuestions.length > 0 ? (
-                          <div className="space-y-3 border-t border-border pt-3">
-                            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                              Your custom questions
-                            </p>
-                            {sectionQuestions.map((field) => {
-                              const err = stepFieldErrors[listingCustomQuestionErrorKey(field.id)];
-                              return (
-                                <div
-                                  key={field.id}
-                                  data-wizard-field={listingCustomQuestionErrorKey(field.id)}
-                                  className={`space-y-3 rounded-xl border p-3 ${err ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
-                                >
-                                  <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                                    <div>
-                                      <FieldLabel>Question</FieldLabel>
-                                      <Input
-                                        value={field.label}
-                                        onChange={(e) => patchCustomQuestion(field.id, { label: e.target.value })}
-                                        placeholder="e.g. Do you smoke?"
-                                      />
-                                    </div>
-                                    <button
-                                      type="button"
-                                      className="pb-2 text-xs font-semibold text-rose-600 hover:underline"
-                                      onClick={() => removeCustomQuestion(field.id)}
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                  <div className="grid gap-3 sm:grid-cols-2">
-                                    <div>
-                                      <FieldLabel>Answer type</FieldLabel>
-                                      <Select
-                                        value={field.type}
-                                        onChange={(e) =>
-                                          patchCustomQuestion(field.id, {
-                                            type: e.target.value as ManagerCustomApplicationFieldType,
-                                          })
-                                        }
-                                      >
-                                        {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
-                                          <option key={o.id} value={o.id}>
-                                            {o.label}
-                                          </option>
-                                        ))}
-                                      </Select>
-                                    </div>
-                                    <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
-                                      <input
-                                        type="checkbox"
-                                        className="h-4 w-4 rounded border-border text-primary"
-                                        checked={field.required}
-                                        onChange={(e) => patchCustomQuestion(field.id, { required: e.target.checked })}
-                                      />
-                                      <span className="text-sm font-medium text-foreground">Required</span>
-                                    </label>
-                                  </div>
-                                  {field.type === "select" ? (
-                                    <div>
-                                      <FieldLabel>Dropdown options</FieldLabel>
-                                      <Input
-                                        value={questionOptionsText(field)}
-                                        onChange={(e) => setQuestionOptionsText(field.id, e.target.value)}
-                                        placeholder="Comma-separated, e.g. Yes, No, Occasionally"
-                                      />
-                                    </div>
-                                  ) : null}
-                                  <StepFieldError msg={err} />
+                          sectionQuestions.map((field) => {
+                            const err = stepFieldErrors[listingCustomQuestionErrorKey(field.id)];
+                            return (
+                              <div
+                                key={field.id}
+                                data-wizard-field={listingCustomQuestionErrorKey(field.id)}
+                                className={`space-y-3 rounded-xl border p-3 ${err ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${field.isStandard ? "bg-sky-100 text-sky-900 dark:bg-sky-950/40 dark:text-sky-100" : "bg-violet-100 text-violet-900 dark:bg-violet-950/40 dark:text-violet-100"}`}
+                                  >
+                                    {field.isStandard ? "Built-in" : "Custom"}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className={LISTING_WIZARD_REMOVE_BTN}
+                                    onClick={() => removeApplicationQuestion(field)}
+                                  >
+                                    Remove
+                                  </Button>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
+                                <div>
+                                  <FieldLabel>Question</FieldLabel>
+                                  <Input
+                                    value={field.label}
+                                    onChange={(e) => patchApplicationQuestion(field, { label: e.target.value })}
+                                    placeholder="e.g. Do you smoke?"
+                                  />
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div>
+                                    <FieldLabel>Answer type</FieldLabel>
+                                    <Select
+                                      value={field.type}
+                                      onChange={(e) =>
+                                        patchApplicationQuestion(field, {
+                                          type: e.target.value as ManagerCustomApplicationFieldType,
+                                        })
+                                      }
+                                    >
+                                      {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
+                                        <option key={o.id} value={o.id}>
+                                          {o.label}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                  </div>
+                                  <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-border text-primary"
+                                      checked={field.required}
+                                      onChange={(e) => patchApplicationQuestion(field, { required: e.target.checked })}
+                                    />
+                                    <span className="text-sm font-medium text-foreground">Required</span>
+                                  </label>
+                                </div>
+                                {field.type === "select" ? (
+                                  <div>
+                                    <FieldLabel>Dropdown options</FieldLabel>
+                                    <Input
+                                      value={questionOptionsText(field)}
+                                      onChange={(e) => setQuestionOptionsText(field, e.target.value)}
+                                      placeholder="Comma-separated, e.g. Yes, No, Occasionally"
+                                    />
+                                  </div>
+                                ) : null}
+                                <StepFieldError msg={err} />
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="text-xs text-muted">No questions in this section — add one or restore defaults.</p>
+                        )}
+                    </ListingWizardCollapsibleCard>
                   );
                 })}
               </div>
@@ -4401,9 +4623,22 @@ export function ManagerAddListingForm({
                 title="Quick facts (sidebar)"
                 description="Optional. Rows here replace the auto-generated sidebar. Leave empty to use building, room count, floors, and pet policy from earlier steps."
               >
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {(sub.quickFacts ?? []).map((qf, i) => (
-                    <div key={qf.id} className="grid gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                    <ListingWizardCollapsibleCard
+                      key={qf.id}
+                      expanded={isListingItemExpanded(listingItemKey("quickfact", qf.id))}
+                      onToggle={() => toggleListingItem(listingItemKey("quickfact", qf.id))}
+                      title={qf.label.trim() || `Quick fact ${i + 1}`}
+                      subtitle={qf.value.trim() || "No value set"}
+                      bodyClassName="grid gap-3 sm:grid-cols-2"
+                      toggleDataAttr={`listing-quickfact-toggle-${qf.id}`}
+                      headerActions={
+                        <Button type="button" variant="outline" className={LISTING_WIZARD_REMOVE_BTN} onClick={() => removeQuickFact(i)}>
+                          Remove
+                        </Button>
+                      }
+                    >
                       <div>
                         <FieldLabel>Label</FieldLabel>
                         <Input value={qf.label} onChange={(e) => setQuickFact(i, { label: sanitizePlaceNameInput(e.target.value) })} placeholder="e.g. Neighborhood" />
@@ -4412,12 +4647,9 @@ export function ManagerAddListingForm({
                         <FieldLabel>Value</FieldLabel>
                         <Input value={qf.value} onChange={(e) => setQuickFact(i, { value: e.target.value })} placeholder="—" />
                       </div>
-                      <button type="button" className="text-xs font-semibold text-rose-600 hover:underline sm:pb-2" onClick={() => removeQuickFact(i)}>
-                        Remove
-                      </button>
-                    </div>
+                    </ListingWizardCollapsibleCard>
                   ))}
-                  <Button type="button" variant="outline" className="rounded-full text-xs" onClick={addQuickFact}>
+                  <Button type="button" variant="outline" className={LISTING_WIZARD_ACTION_BTN} onClick={addQuickFact}>
                     + Add quick fact
                   </Button>
                 </div>

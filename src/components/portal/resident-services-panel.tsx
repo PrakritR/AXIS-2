@@ -12,9 +12,7 @@ import {
   MANAGER_TABLE_TH,
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
@@ -25,11 +23,16 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
+  PortalMobileSummaryCard,
   PortalTableDetailActions,
+  PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { PillTabs, TabNav } from "@/components/ui/tabs";
+import { PreferredArrivalField } from "@/components/portal/preferred-arrival-field";
+import { formatPreferredArrival, parsePreferredArrival } from "@/lib/preferred-arrival";
 import type { DemoManagerWorkOrderRow, ResidentWorkBucket } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -43,12 +46,15 @@ import {
 import { readManagerApplicationRows, syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import {
   PROPERTY_PIPELINE_EVENT,
+  loadResidentPropertyFromServer,
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import type { ManagerListingServiceOption } from "@/lib/manager-listing-submission";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { notifyManagerOfResidentSubmission } from "@/lib/resident-manager-notifications";
+import { parseMoneyAmount } from "@/lib/household-charges";
+import { workOrderCategoryForResidentLabel } from "@/lib/work-order-taxonomy";
 import {
   SERVICE_REQUESTS_EVENT,
   createServiceRequest,
@@ -58,6 +64,8 @@ import {
   submitReturnPhoto,
   updateServiceRequest,
   hasDeposit,
+  isServiceRequestFeePaid,
+  CUSTOM_SERVICE_REQUEST_OFFER_ID,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
 import {
@@ -67,18 +75,26 @@ import {
   syncLeasePipelineFromServer,
 } from "@/lib/lease-pipeline-storage";
 
-export const STATUS_TABS: { id: ResidentWorkBucket; label: string }[] = [
-  { id: "open", label: "Open" },
+export type WorkOrderFilterBucket = "pending" | "scheduled" | "completed";
+
+export const WORK_ORDER_FILTER_TABS: { id: WorkOrderFilterBucket; label: string }[] = [
+  { id: "pending", label: "Pending" },
   { id: "scheduled", label: "Scheduled" },
   { id: "completed", label: "Completed" },
 ];
 
-export type RequestStatusBucket = "pending" | "approved" | "completed";
+export function workOrderFilterBucket(row: DemoManagerWorkOrderRow): WorkOrderFilterBucket {
+  if (row.bucket === "completed") return "completed";
+  if (row.bucket === "scheduled") return "scheduled";
+  return "pending";
+}
+
+export type RequestStatusBucket = "pending" | "completed" | "denied";
 
 export const REQUEST_STATUS_TABS: { id: RequestStatusBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
-  { id: "approved", label: "Approved" },
   { id: "completed", label: "Completed" },
+  { id: "denied", label: "Denied" },
 ];
 
 /** Bucket a pill label with its count, e.g. "Open · 3" — omits the count when zero. */
@@ -90,18 +106,17 @@ export type UnifiedItem =
   | { kind: "request"; req: ServiceRequest; sortKey: number }
   | { kind: "work-order"; row: DemoManagerWorkOrderRow; sortKey: number };
 
-// Maps the resident's actual request/work-order statuses onto the shared
-// Pending / Approved / Completed filter — denied and returned requests both
-// read as closed-out, so they bucket under Completed alongside finished work orders.
-export function unifiedItemStatusBucket(item: UnifiedItem): RequestStatusBucket {
-  if (item.kind === "request") {
-    if (item.req.status === "pending") return "pending";
-    if (item.req.status === "approved") return "approved";
-    return "completed";
-  }
-  if (item.row.bucket === "open") return "pending";
-  if (item.row.bucket === "scheduled") return "approved";
+// Service requests: pending while awaiting manager action; approved/returned → completed; denied → denied.
+export function serviceRequestStatusBucket(req: ServiceRequest): RequestStatusBucket {
+  if (req.status === "pending") return "pending";
+  if (req.status === "denied") return "denied";
   return "completed";
+}
+
+export function unifiedItemStatusBucket(item: UnifiedItem): RequestStatusBucket {
+  if (item.kind === "request") return serviceRequestStatusBucket(item.req);
+  if (item.row.bucket === "completed") return "completed";
+  return "pending";
 }
 
 // Restrict photo links to http(s) or inline image data URLs before they reach an
@@ -125,12 +140,7 @@ export function formatDate(iso: string) {
 }
 
 export function ServiceStatusBadge({ status }: { status: ServiceRequest["status"] }) {
-  if (status === "pending")
-    return (
-      <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-        Awaiting approval
-      </span>
-    );
+  if (status === "pending") return null;
   if (status === "approved")
     return (
       <span className="rounded-full portal-badge-info px-2.5 py-0.5 text-[10px] font-semibold">
@@ -153,7 +163,7 @@ export function ServiceStatusBadge({ status }: { status: ServiceRequest["status"
 }
 
 const WORK_ORDER_BUCKET_LABEL: Record<ResidentWorkBucket, string> = {
-  open: "Open",
+  open: "Pending",
   scheduled: "Scheduled",
   completed: "Completed",
 };
@@ -170,17 +180,15 @@ export function WorkOrderStatusBadge({ bucket }: { bucket: ResidentWorkBucket })
   );
 }
 
-/** "Service fee $45 · Paid · Deposit $100 · Pending" style summary for a request row. */
+/** Service fee summary for a request row (payments live on the Payments tab). */
 export function requestChargesSummary(req: ServiceRequest): string {
-  const charged = req.status === "approved" || req.status === "returned";
-  const parts: string[] = [];
-  if (req.price) {
-    parts.push(charged ? `Service fee ${req.price} · ${req.servicePaid ? "Paid" : "Pending"}` : `Service fee ${req.price}`);
+  if (req.price?.trim()) {
+    const paid = isServiceRequestFeePaid(req);
+    if (req.status === "pending") return `Service fee ${req.price.trim()}`;
+    return `Service fee ${req.price.trim()} · ${paid ? "Paid" : "Pending"}`;
   }
-  if (hasDeposit(req.deposit)) {
-    parts.push(charged ? `Deposit ${req.deposit} · ${req.depositPaid ? "Refunded" : "Pending"}` : `Deposit ${req.deposit}`);
-  }
-  return parts.join(" · ") || "—";
+  if (req.priceLimit?.trim()) return `Price limit ${req.priceLimit.trim()}`;
+  return "—";
 }
 
 export function ServiceRequestCard({
@@ -199,8 +207,9 @@ export function ServiceRequestCard({
   const [uploading, setUploading] = useState(false);
 
   const needsReturn = hasDeposit(req.deposit);
-  // Show checkout procedure once service charge is paid (and item has deposit, so needs return)
-  const showCheckout = req.status === "approved" && req.servicePaid && needsReturn && !req.returnPhotoDataUrl;
+  const feePaid = isServiceRequestFeePaid(req);
+  // Show checkout once the service fee is paid (or on return) and the item needs a return photo.
+  const showCheckout = req.status === "approved" && feePaid && needsReturn && !req.returnPhotoDataUrl;
 
   async function handleReturnPhoto(files: FileList | null) {
     if (!files?.[0]) return;
@@ -233,7 +242,7 @@ export function ServiceRequestCard({
   }
 
   return (
-        <div className="glass-card rounded-2xl border border-border p-4">
+    <>
       <input
         ref={returnPhotoRef}
         type="file"
@@ -241,90 +250,69 @@ export function ServiceRequestCard({
         className="sr-only"
         onChange={(e) => { void handleReturnPhoto(e.target.files); }}
       />
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-semibold text-foreground">{req.offerName}</p>
-          {req.offerDescription ? (
-            <p className="mt-0.5 text-xs text-muted">{req.offerDescription}</p>
+      {req.offerDescription ? (
+        <>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Description</p>
+          <p className="mt-1.5 text-sm whitespace-pre-wrap leading-relaxed">{req.offerDescription}</p>
+        </>
+      ) : null}
+      {req.price ? (
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Service fee</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{req.price}</p>
+        </>
+      ) : req.priceLimit?.trim() ? (
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Price limit</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{req.priceLimit.trim()}</p>
+          {req.status === "pending" ? (
+            <p className="mt-1 text-xs text-muted">Your manager will confirm the final price before approving.</p>
           ) : null}
-        </div>
-        <ServiceStatusBadge status={req.status} />
-      </div>
-
-      {/* Price / deposit / return date */}
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {req.price ? (
-          <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-[10px] font-semibold text-muted">
-            {req.price}
-          </span>
-        ) : null}
-        {needsReturn ? (
-          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-            Deposit {req.deposit}
-          </span>
-        ) : null}
-        {req.returnByDate ? (
-          <span className="rounded-full bg-accent/30 px-2.5 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border">
-            Return by {formatDate(req.returnByDate)}
-          </span>
-        ) : null}
-      </div>
-
+        </>
+      ) : null}
+      {needsReturn ? (
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Deposit</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{req.deposit}</p>
+        </>
+      ) : null}
       {req.notes ? (
-        <p className="mt-2 text-xs text-muted italic">&ldquo;{req.notes}&rdquo;</p>
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Notes</p>
+          <p className="mt-1.5 text-sm whitespace-pre-wrap leading-relaxed">{req.notes}</p>
+        </>
       ) : null}
 
-      {/* Charges section (approved) */}
-      {req.status === "approved" || req.status === "returned" ? (
-        <div className="mt-3 rounded-xl bg-accent/30 p-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
-          <div className="space-y-1.5">
-            {req.price ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted">Request fee</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.servicePaid ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"}`}>
-                  {req.servicePaid ? `Paid · ${req.price}` : `Pending · ${req.price}`}
-                </span>
-              </div>
-            ) : null}
-            {needsReturn ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted">Deposit (refundable)</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${req.depositPaid ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"}`}>
-                  {req.depositPaid ? `Paid · ${req.deposit}` : `Pending · ${req.deposit}`}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        </div>
+      {req.status === "approved" && req.price?.trim() && !feePaid ? (
+        <p className="mt-3 text-xs text-muted">
+          Pay the service fee under <span className="font-medium text-foreground">Payments</span> before returning the item.
+        </p>
       ) : null}
 
-      {/* Checkout procedure */}
       {showCheckout ? (
-        <div className="mt-3 rounded-xl border border-border bg-accent/30 p-3">
-          <p className="text-xs font-bold text-foreground">Return checklist</p>
-          <ol className="mt-2 space-y-1 pl-4 text-xs text-muted list-decimal">
-            <li>Clean and prepare the item for return{req.returnByDate ? ` by ${formatDate(req.returnByDate)}` : ""}.</li>
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Return checklist</p>
+          <ol className="mt-1.5 space-y-1 pl-4 text-xs text-muted list-decimal">
+            <li>Clean and prepare the item for return.</li>
             <li>Take a clear photo showing the item&apos;s current condition.</li>
             <li>Upload the photo below — your manager will review it.</li>
             <li>Your deposit will be refunded once the return is confirmed.</li>
           </ol>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-3 rounded-full px-4 py-1.5 text-xs font-semibold"
-              onClick={() => returnPhotoRef.current?.click()}
-              disabled={uploading}
-            >
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3 rounded-full px-4 py-1.5 text-xs font-semibold"
+            onClick={() => returnPhotoRef.current?.click()}
+            disabled={uploading}
+          >
             {uploading ? "Uploading…" : "Upload return photo"}
           </Button>
-        </div>
+        </>
       ) : null}
 
-      {/* Return photo submitted */}
       {req.status === "returned" && req.returnPhotoDataUrl ? (
-        <div className="mt-3">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Return photo</p>
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Return photo</p>
           <a href={req.returnPhotoDataUrl} target="_blank" rel="noreferrer" className="mt-2 block w-32 overflow-hidden rounded-xl border border-border">
             <Image
               src={req.returnPhotoDataUrl}
@@ -340,42 +328,40 @@ export function ServiceRequestCard({
               ? "Deposit refunded — return complete."
               : "Awaiting manager review to refund deposit."}
           </p>
-        </div>
+        </>
       ) : null}
 
-      {/* Denied */}
       {req.status === "denied" ? (
-        <div className="mt-3 rounded-xl border p-3 text-xs portal-banner-danger">
-          {req.managerNote ? (
-            <p>Manager note: <span className="font-medium">{req.managerNote}</span></p>
-          ) : (
-            <p>This request was not approved. Contact your property manager for details.</p>
-          )}
-        </div>
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Manager note</p>
+          <p className="mt-1.5 text-sm text-muted">
+            {req.managerNote ?? "This request was not approved. Contact your property manager for details."}
+          </p>
+        </>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap justify-start gap-2 border-t border-border pt-3">
-        {req.status === "pending" || req.status === "approved" ? (
+      <PortalTableDetailActions>
+        {req.status === "pending" ? (
           <Button
             type="button"
             variant="outline"
-            className="rounded-full px-3 text-xs font-semibold"
+            className={PORTAL_DETAIL_BTN}
             data-attr="resident-service-request-edit"
             onClick={onEdit}
           >
             Edit request
           </Button>
         ) : null}
-            <Button
-              type="button"
-              variant="danger"
-              className="rounded-full px-3 text-xs font-semibold"
-              onClick={removeRequest}
-            >
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={removeRequest}
+        >
           Delete request
         </Button>
-      </div>
-    </div>
+      </PortalTableDetailActions>
+    </>
   );
 }
 
@@ -461,7 +447,7 @@ export function ResidentServicesPanel({
   const session = usePortalSession();
   const photoInputRef = useRef<HTMLInputElement>(null);
 
-  const [bucket, setBucket] = useState<ResidentWorkBucket>("open");
+  const [workOrderFilter, setWorkOrderFilter] = useState<WorkOrderFilterBucket>("pending");
   const [requestsFilter, setRequestsFilter] = useState<RequestStatusBucket>("pending");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const activeTab = tabId;
@@ -472,24 +458,28 @@ export function ResidentServicesPanel({
   // edit modals (resident edits their own items)
   const [editingRequest, setEditingRequest] = useState<ServiceRequest | null>(null);
   const [eNotes, setENotes] = useState("");
-  const [eReturnBy, setEReturnBy] = useState("");
   const [editingWorkOrder, setEditingWorkOrder] = useState<DemoManagerWorkOrderRow | null>(null);
   const [wTitle, setWTitle] = useState("");
   const [wPriority, setWPriority] = useState("Medium");
-  const [wArrival, setWArrival] = useState("");
+  const [wArrivalPreset, setWArrivalPreset] = useState("Anytime");
+  const [wArrivalCustom, setWArrivalCustom] = useState("");
   const [wDetails, setWDetails] = useState("");
 
   // maintenance form
   const [mTitle, setMTitle] = useState("");
   const [mCategory, setMCategory] = useState("Plumbing");
   const [mPriority, setMPriority] = useState("Medium");
-  const [mArrival, setMArrival] = useState("");
+  const [mArrivalPreset, setMArrivalPreset] = useState("Anytime");
+  const [mArrivalCustom, setMArrivalCustom] = useState("");
   const [mPhotos, setMPhotos] = useState<string[]>([]);
 
   // service request form
+  const [serviceMode, setServiceMode] = useState<"catalog" | "custom">("catalog");
   const [selectedOffer, setSelectedOffer] = useState<ManagerListingServiceOption | null>(null);
+  const [customTitle, setCustomTitle] = useState("");
+  const [customDescription, setCustomDescription] = useState("");
+  const [customPriceLimit, setCustomPriceLimit] = useState("");
   const [sNotes, setSNotes] = useState("");
-  const [sReturnBy, setSReturnBy] = useState("");
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
   const [serviceSubmitting, setServiceSubmitting] = useState(false);
 
@@ -562,7 +552,12 @@ export function ResidentServicesPanel({
       .then(() => setAppTick((t) => t + 1))
       .then(() => syncPropertyPipelineFromServer())
       .then(() => setPropertyTick((t) => t + 1))
-      .then(() => syncLeasePipelineFromServer());
+      .then(() => syncLeasePipelineFromServer())
+      // The resident/admin-scoped sync above never returns a resident's own
+      // property (it's scoped to properties the caller manages), so hydrate
+      // it separately — needed for e.g. manager-offered service requests.
+      .then(() => loadResidentPropertyFromServer())
+      .then(() => setPropertyTick((t) => t + 1));
     
     window.addEventListener(MANAGER_WORK_ORDERS_EVENT, sync);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, onProperty);
@@ -606,64 +601,47 @@ export function ResidentServicesPanel({
     );
   }, [allRows, residentEmail]);
 
-  const rows = useMemo(() => myRows.filter((r) => r.bucket === bucket), [myRows, bucket]);
+  const rows = useMemo(
+    () => myRows.filter((r) => workOrderFilterBucket(r) === workOrderFilter),
+    [myRows, workOrderFilter],
+  );
 
-  const counts = useMemo(() => {
-    const c: Record<ResidentWorkBucket, number> = { open: 0, scheduled: 0, completed: 0 };
-    for (const r of myRows) c[r.bucket] += 1;
+  const workOrderFilterCounts = useMemo(() => {
+    const c: Record<WorkOrderFilterBucket, number> = { pending: 0, scheduled: 0, completed: 0 };
+    for (const r of myRows) c[workOrderFilterBucket(r)] += 1;
     return c;
   }, [myRows]);
 
-  const statusTabs = useMemo(
-    () => STATUS_TABS.map(({ id, label }) => ({ id, label, count: counts[id] })),
-    [counts],
+  const sortedRequests = useMemo(
+    () =>
+      [...serviceRequests].sort((a, b) => {
+        const ta = new Date(a.requestedAt).getTime();
+        const tb = new Date(b.requestedAt).getTime();
+        return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+      }),
+    [serviceRequests],
   );
 
-  // Unified Services list: the resident's service requests AND maintenance
-  // work orders together, labeled by type, newest first.
-  const unifiedItems = useMemo<UnifiedItem[]>(() => {
-    const items: UnifiedItem[] = [];
-    for (const req of serviceRequests) {
-      const t = new Date(req.requestedAt).getTime();
-      items.push({ kind: "request", req, sortKey: Number.isFinite(t) ? t : 0 });
-    }
-    for (const row of myRows) {
-      // Resident work order ids are `REQ-<timestamp>`; fall back to the scheduled time.
-      const fromId = Number(row.id.replace(/^\D*/, ""));
-      const fromSchedule = row.scheduledAtIso ? new Date(row.scheduledAtIso).getTime() : 0;
-      const t = Number.isFinite(fromId) && fromId > 0 ? fromId : fromSchedule;
-      items.push({ kind: "work-order", row, sortKey: Number.isFinite(t) ? t : 0 });
-    }
-    items.sort((a, b) => b.sortKey - a.sortKey);
-    return items;
-  }, [serviceRequests, myRows]);
-
   const requestsCounts = useMemo(() => {
-    const c: Record<RequestStatusBucket, number> = { pending: 0, approved: 0, completed: 0 };
-    for (const item of unifiedItems) c[unifiedItemStatusBucket(item)] += 1;
+    const c: Record<RequestStatusBucket, number> = { pending: 0, completed: 0, denied: 0 };
+    for (const req of sortedRequests) c[serviceRequestStatusBucket(req)] += 1;
     return c;
-  }, [unifiedItems]);
+  }, [sortedRequests]);
 
-  const filteredUnifiedItems = useMemo(
-    () => unifiedItems.filter((item) => unifiedItemStatusBucket(item) === requestsFilter),
-    [unifiedItems, requestsFilter],
+  const filteredRequests = useMemo(
+    () => sortedRequests.filter((req) => serviceRequestStatusBucket(req) === requestsFilter),
+    [sortedRequests, requestsFilter],
   );
 
   function openRequestEdit(req: ServiceRequest) {
     setEditingRequest(req);
     setENotes(req.notes);
-    setEReturnBy(req.returnByDate);
   }
 
   function saveRequestEdit() {
     if (!editingRequest) return;
-    if (hasDeposit(editingRequest.deposit) && !eReturnBy.trim()) {
-      showToast("Please enter a return-by date.");
-      return;
-    }
     updateServiceRequest(editingRequest.id, {
       notes: eNotes.trim(),
-      returnByDate: eReturnBy.trim(),
     });
     setEditingRequest(null);
     reloadServiceRequests();
@@ -674,7 +652,9 @@ export function ResidentServicesPanel({
     setEditingWorkOrder(row);
     setWTitle(row.title);
     setWPriority(row.priority || "Medium");
-    setWArrival(row.preferredArrival && row.preferredArrival !== "Anytime" ? row.preferredArrival : "");
+    const parsed = parsePreferredArrival(row.preferredArrival);
+    setWArrivalPreset(parsed.preset);
+    setWArrivalCustom(parsed.custom);
     setWDetails(row.description);
   }
 
@@ -688,7 +668,7 @@ export function ResidentServicesPanel({
       ...r,
       title: wTitle.trim(),
       priority: wPriority,
-      preferredArrival: wArrival.trim() || "Anytime",
+      preferredArrival: formatPreferredArrival(wArrivalPreset, wArrivalCustom),
       description: wDetails.trim() || r.description,
     }));
     setAllRows(readManagerWorkOrderRows());
@@ -739,10 +719,22 @@ export function ResidentServicesPanel({
   };
 
   const resetMaintenance = () => {
-    setMTitle(""); setMCategory("Plumbing"); setMPriority("Medium"); setMArrival(""); setMPhotos([]);
+    setMTitle("");
+    setMCategory("Plumbing");
+    setMPriority("Medium");
+    setMArrivalPreset("Anytime");
+    setMArrivalCustom("");
+    setMPhotos([]);
     if (photoInputRef.current) photoInputRef.current.value = "";
   };
-  const resetService = () => { setSelectedOffer(null); setSNotes(""); setSReturnBy(""); };
+  const resetService = () => {
+    setServiceMode(availableOffers.length > 0 ? "catalog" : "custom");
+    setSelectedOffer(null);
+    setCustomTitle("");
+    setCustomDescription("");
+    setCustomPriceLimit("");
+    setSNotes("");
+  };
 
   function getApplication() {
     return residentApplication || readManagerApplicationRows().find((r) => r.email?.trim().toLowerCase() === residentEmail);
@@ -789,10 +781,11 @@ export function ResidentServicesPanel({
       priority: mPriority,
       status: "Submitted",
       bucket: "open",
+      category: workOrderCategoryForResidentLabel(mCategory),
       description: `${mCategory}: Your request is logged. Maintenance will review and update this thread.`,
       scheduled: "—",
       cost: "—",
-      preferredArrival: mArrival.trim() || "Anytime",
+      preferredArrival: formatPreferredArrival(mArrivalPreset, mArrivalCustom),
       residentName: application?.name,
       residentEmail,
       photoDataUrls: mPhotos,
@@ -834,12 +827,20 @@ export function ResidentServicesPanel({
       showToast("Services unlock after your lease is fully signed.");
       return;
     }
-    if (!selectedOffer) { showToast("Select a service first."); return; }
     if (!residentEmail) { showToast("Sign in to submit."); return; }
-    if (hasDeposit(selectedOffer.deposit) && !sReturnBy.trim()) {
-      showToast("Please enter a return-by date.");
-      return;
+
+    const isCustom = serviceMode === "custom" || availableOffers.length === 0;
+    if (isCustom) {
+      if (!customTitle.trim()) { showToast("Add a title for your request."); return; }
+      const limitAmount = parseMoneyAmount(customPriceLimit.trim());
+      if (!Number.isFinite(limitAmount) || limitAmount <= 0) {
+        showToast("Enter a valid price limit.");
+        return;
+      }
+    } else {
+      if (!selectedOffer) { showToast("Select a service first."); return; }
     }
+
     setServiceSubmitting(true);
     try {
     const application = getApplication();
@@ -852,29 +853,72 @@ export function ResidentServicesPanel({
       showToast("No property assignment found. Contact support.");
       return;
     }
-    const currentOffer = availableOffers.find((offer) => offer.id === selectedOffer.id) ?? null;
-    if (!currentOffer) {
-      showToast("That request option is no longer available. Please choose another.");
-      setSelectedOffer(null);
-      return;
-    }
-    // Resolve managerUserId — try application row, then property, then the selected offer's own field
     let managerUserId = application?.managerUserId?.trim() || "";
     if (!managerUserId && propertyId) {
       managerUserId = getPropertyById(propertyId)?.managerUserId?.trim() || "";
     }
     if (!managerUserId) { showToast("Could not find your property manager. Contact support."); return; }
+
+    let offerId: string;
+    let offerName: string;
+    let offerDescription: string;
+    let price: string;
+    let priceLimit: string | undefined;
+    let deposit: string;
+    let notifyTitle: string;
+    let notifyDetails: string[];
+
+    if (isCustom) {
+      const limitLabel = customPriceLimit.trim().startsWith("$")
+        ? customPriceLimit.trim()
+        : `$${parseMoneyAmount(customPriceLimit.trim())}`;
+      offerId = CUSTOM_SERVICE_REQUEST_OFFER_ID;
+      offerName = customTitle.trim();
+      offerDescription = customDescription.trim();
+      price = "";
+      priceLimit = limitLabel;
+      deposit = "";
+      notifyTitle = offerName;
+      notifyDetails = [
+        "Custom request",
+        `Price limit: ${limitLabel}`,
+        offerDescription ? `Details: ${offerDescription}` : "",
+        sNotes.trim() ? `Resident notes: ${sNotes.trim()}` : "",
+      ];
+    } else {
+      const currentOffer = availableOffers.find((offer) => offer.id === selectedOffer!.id) ?? null;
+      if (!currentOffer) {
+        showToast("That request option is no longer available. Please choose another.");
+        setSelectedOffer(null);
+        return;
+      }
+      offerId = currentOffer.id;
+      offerName = currentOffer.name;
+      offerDescription = currentOffer.description;
+      price = currentOffer.price;
+      deposit = currentOffer.deposit;
+      notifyTitle = currentOffer.name;
+      notifyDetails = [
+        `Offer: ${currentOffer.name}`,
+        currentOffer.description ? `Offer details: ${currentOffer.description}` : "",
+        currentOffer.price ? `Price: ${currentOffer.price}` : "",
+        hasDeposit(currentOffer.deposit) ? `Deposit: ${currentOffer.deposit}` : "",
+        sNotes.trim() ? `Resident notes: ${sNotes.trim()}` : "",
+      ];
+    }
+
     const createdRequest = createServiceRequest({
-      offerId: currentOffer.id,
-      offerName: currentOffer.name,
-      offerDescription: currentOffer.description,
-      price: currentOffer.price,
-      deposit: currentOffer.deposit,
+      offerId,
+      offerName,
+      offerDescription,
+      price,
+      priceLimit,
+      deposit,
       residentEmail,
       residentName: application?.name || residentEmail,
       managerUserId,
       propertyId,
-      returnByDate: sReturnBy.trim(),
+      returnByDate: "",
       notes: sNotes.trim(),
     });
     const propertyLabel =
@@ -887,19 +931,11 @@ export function ResidentServicesPanel({
       residentEmail,
       propertyName: propertyLabel,
       propertyId,
-      title: currentOffer.name,
+      title: notifyTitle,
       kind: "service-request",
-      details: [
-        `Request ID: ${createdRequest.id}`,
-        `Offer: ${currentOffer.name}`,
-        currentOffer.description ? `Offer details: ${currentOffer.description}` : "",
-        currentOffer.price ? `Price: ${currentOffer.price}` : "",
-        hasDeposit(currentOffer.deposit) ? `Deposit: ${currentOffer.deposit}` : "",
-        sReturnBy.trim() ? `Return by: ${sReturnBy.trim()}` : "",
-        sNotes.trim() ? `Resident notes: ${sNotes.trim()}` : "",
-      ],
+      details: [`Request ID: ${createdRequest.id}`, ...notifyDetails.filter(Boolean)],
     });
-    showToast(`${currentOffer.name} requested — awaiting manager approval.`);
+    showToast(`${notifyTitle} requested — awaiting manager approval.`);
     if (!notifyResult.ok) {
       showToast("Request submitted, but manager notification could not be sent.");
     }
@@ -915,10 +951,9 @@ export function ResidentServicesPanel({
     <ManagerPortalPageShell
       title="Services"
       titleAside={
-        <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} shrink-0 gap-2`}>
+        activeTab === "work-orders" ? (
           <Button
             type="button"
-            variant="outline"
             className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
             disabled={!servicesUnlocked}
             onClick={() => {
@@ -929,8 +964,9 @@ export function ResidentServicesPanel({
               setModalMode("maintenance");
             }}
           >
-            Report maintenance
+            Report
           </Button>
+        ) : (
           <Button
             type="button"
             className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
@@ -940,12 +976,13 @@ export function ResidentServicesPanel({
                 showToast("Services unlock after your lease is fully signed.");
                 return;
               }
+              setServiceMode(availableOffers.length > 0 ? "catalog" : "custom");
               setModalMode("service");
             }}
           >
             Submit request
           </Button>
-        </div>
+        )
       }
       filterRow={
         <ManagerPortalFilterRow>
@@ -956,38 +993,6 @@ export function ResidentServicesPanel({
               { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
             ]}
           />
-          <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_HEADER_ACTION_BTN}
-              disabled={!servicesUnlocked}
-              onClick={() => {
-                if (!servicesUnlocked) {
-                  showToast("Services unlock after your lease is fully signed.");
-                  return;
-                }
-                setModalMode("maintenance");
-              }}
-            >
-              Maintenance
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_HEADER_ACTION_BTN}
-              disabled={!servicesUnlocked}
-              onClick={() => {
-                if (!servicesUnlocked) {
-                  showToast("Services unlock after your lease is fully signed.");
-                  return;
-                }
-                setModalMode("service");
-              }}
-            >
-              Request
-            </Button>
-          </div>
         </ManagerPortalFilterRow>
       }
     >
@@ -1002,7 +1007,7 @@ export function ResidentServicesPanel({
 
       {activeTab === "requests" ? (
         <div>
-          <div className="mb-3 flex items-center gap-3">
+          <div className="mb-3 w-fit max-w-full">
             <PillTabs
               items={REQUEST_STATUS_TABS.map(({ id, label }) => ({
                 id,
@@ -1013,62 +1018,49 @@ export function ResidentServicesPanel({
             />
           </div>
 
-          {unifiedItems.length === 0 ? (
-            <PortalDataTableEmpty message="No service requests or work orders yet." icon="service" />
-          ) : filteredUnifiedItems.length === 0 ? (
+          {sortedRequests.length === 0 ? (
+            <PortalDataTableEmpty message="No service requests yet." icon="service" />
+          ) : filteredRequests.length === 0 ? (
             <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
           ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
+        <>
+        <div className="space-y-2 lg:hidden">
+          {filteredRequests.map((req) => {
+            const rowId = `request-${req.id}`;
+            const expanded = expandedId === rowId;
+            return (
+              <PortalMobileSummaryCard
+                key={rowId}
+                title={req.offerName}
+                expanded={expanded}
+                onClick={() => setExpandedId((c) => (c === rowId ? null : rowId))}
+              >
+                {expanded ? (
+                  <ServiceRequestCard
+                    req={req}
+                    onReturnPhotoUploaded={reloadServiceRequests}
+                    onDelete={reloadServiceRequests}
+                    onEdit={() => openRequestEdit(req)}
+                  />
+                ) : null}
+              </PortalMobileSummaryCard>
+            );
+          })}
+        </div>
+        <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="min-w-[860px] w-full border-collapse text-left text-sm">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Item</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Charges</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Return by</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUnifiedItems.map((item) => {
-                    if (item.kind === "request") {
-                      const req = item.req;
-                      const rowId = `request-${req.id}`;
-                      return (
-                        <Fragment key={rowId}>
-                          <tr
-                            className={PORTAL_TABLE_TR_EXPANDABLE}
-                            onClick={createPortalRowExpandClick(() =>
-                              setExpandedId((c) => (c === rowId ? null : rowId)),
-                            )}
-                            aria-expanded={expandedId === rowId}
-                          >
-                            <td className={`${PORTAL_TABLE_TD} text-muted`}>Request</td>
-                            <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
-                            <td className={PORTAL_TABLE_TD}>
-                              <ServiceStatusBadge status={req.status} />
-                            </td>
-                            <td className={PORTAL_TABLE_TD}>{requestChargesSummary(req)}</td>
-                            <td className={PORTAL_TABLE_TD}>{req.returnByDate ? formatDate(req.returnByDate) : "—"}</td>
-                          </tr>
-                          {expandedId === rowId ? (
-                            <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                              <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                                <ServiceRequestCard
-                                  req={req}
-                                  onReturnPhotoUploaded={reloadServiceRequests}
-                                  onDelete={reloadServiceRequests}
-                                  onEdit={() => openRequestEdit(req)}
-                                />
-                              </td>
-                            </tr>
-                          ) : null}
-                        </Fragment>
-                      );
-                    }
-                    const row = item.row;
-                    const rowId = `work-order-${row.id}`;
+                  {filteredRequests.map((req) => {
+                    const rowId = `request-${req.id}`;
                     return (
                       <Fragment key={rowId}>
                         <tr
@@ -1078,21 +1070,17 @@ export function ResidentServicesPanel({
                           )}
                           aria-expanded={expandedId === rowId}
                         >
-                          <td className={`${PORTAL_TABLE_TD} text-muted`}>Work order</td>
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <WorkOrderStatusBadge bucket={row.bucket} />
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>{row.cost && row.cost !== "—" ? row.cost : "—"}</td>
-                          <td className={PORTAL_TABLE_TD}>—</td>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
+                          <PortalTableExpandCell expanded={expandedId === rowId} />
                         </tr>
                         {expandedId === rowId ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={5} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
-                              <WorkOrderDetail
-                                row={row}
-                                onEdit={() => openWorkOrderEdit(row)}
-                                onCancel={() => cancelWorkOrder(row.id)}
+                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
+                              <ServiceRequestCard
+                                req={req}
+                                onReturnPhotoUploaded={reloadServiceRequests}
+                                onDelete={reloadServiceRequests}
+                                onEdit={() => openRequestEdit(req)}
                               />
                             </td>
                           </tr>
@@ -1104,16 +1092,19 @@ export function ResidentServicesPanel({
               </table>
             </div>
         </div>
+        </>
           )}
         </div>
       ) : (
         <div>
-          <div className="mb-3 flex items-center gap-3">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Work orders</p>
+          <div className="mb-3 w-fit max-w-full">
             <PillTabs
-              items={statusTabs.map(({ id, label, count }) => ({ id, label: pillLabelWithCount(label, count) }))}
-              activeId={bucket}
-              onChange={(id) => setBucket(id as ResidentWorkBucket)}
+              items={WORK_ORDER_FILTER_TABS.map(({ id, label }) => ({
+                id,
+                label: pillLabelWithCount(label, workOrderFilterCounts[id]),
+              }))}
+              activeId={workOrderFilter}
+              onChange={(id) => setWorkOrderFilter(id as WorkOrderFilterBucket)}
             />
           </div>
 
@@ -1125,14 +1116,37 @@ export function ResidentServicesPanel({
               }
             />
           ) : (
-            <div className={PORTAL_DATA_TABLE_WRAP}>
+            <>
+            <div className="space-y-2 lg:hidden">
+              {rows.map((row) => {
+                const expanded = expandedId === row.id;
+                return (
+                  <PortalMobileSummaryCard
+                    key={row.id}
+                    title={row.title}
+                    expanded={expanded}
+                    onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
+                  >
+                    {expanded ? (
+                      <WorkOrderDetail
+                        row={row}
+                        onEdit={() => openWorkOrderEdit(row)}
+                        onCancel={() => cancelWorkOrder(row.id)}
+                      />
+                    ) : null}
+                  </PortalMobileSummaryCard>
+                );
+              })}
+            </div>
+            <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
-                <table className="min-w-[700px] w-full border-collapse text-left text-sm">
+                <table className="w-full table-fixed border-collapse text-left text-sm">
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>ID</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                      <th className={PORTAL_TABLE_EXPAND_TH}>
+                        <span className="sr-only">Expand</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1145,13 +1159,12 @@ export function ResidentServicesPanel({
                           )}
                           aria-expanded={expandedId === row.id}
                         >
-                          <td className={`${PORTAL_TABLE_TD} font-mono text-xs text-muted`}>{row.id}</td>
                           <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                          <td className={PORTAL_TABLE_TD}>{row.status}</td>
+                          <PortalTableExpandCell expanded={expandedId === row.id} />
                         </tr>
                         {expandedId === row.id ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                            <td colSpan={2} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
                               <WorkOrderDetail
                                 row={row}
                                 onEdit={() => openWorkOrderEdit(row)}
@@ -1166,6 +1179,7 @@ export function ResidentServicesPanel({
                 </table>
               </div>
             </div>
+            </>
           )}
         </div>
       )}
@@ -1204,10 +1218,12 @@ export function ResidentServicesPanel({
               </Select>
             </div>
           </div>
-          <div>
-            <p className="mb-1 text-[11px] font-medium text-muted">Preferred arrival time</p>
-            <Input value={mArrival} onChange={(e) => setMArrival(e.target.value)} placeholder='e.g. Weekdays after 5pm — or "anytime"' className="bg-card" />
-          </div>
+          <PreferredArrivalField
+            preset={mArrivalPreset}
+            custom={mArrivalCustom}
+            onPresetChange={setMArrivalPreset}
+            onCustomChange={setMArrivalCustom}
+          />
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Photos (up to 6)</p>
             <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => photoInputRef.current?.click()}>
@@ -1230,7 +1246,6 @@ export function ResidentServicesPanel({
           ) : null}
         </div>
         <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => { setModalMode("none"); resetMaintenance(); }}>Cancel</Button>
           <Button type="button" className="rounded-full" onClick={() => { void submitMaintenance(); }} disabled={maintenanceSubmitting}>
             {maintenanceSubmitting ? "Submitting…" : "Submit"}
           </Button>
@@ -1244,20 +1259,31 @@ export function ResidentServicesPanel({
         onClose={() => { setModalMode("none"); resetService(); }}
         panelClassName="max-w-lg"
       >
-        {availableOffers.length === 0 ? (
-          <div className="py-8 text-center">
-            <p className="text-sm font-medium text-muted">No request options available yet</p>
-            <p className="mt-1 text-xs text-muted">Your property manager hasn&apos;t added any request options yet. Check back later.</p>
+        {availableOffers.length > 0 ? (
+          <div className="mb-4 w-fit max-w-full">
+            <PillTabs
+              items={[
+                { id: "catalog", label: "Catalog" },
+                { id: "custom", label: "Custom request" },
+              ]}
+              activeId={serviceMode}
+              onChange={(id) => {
+                setServiceMode(id as "catalog" | "custom");
+                setSelectedOffer(null);
+              }}
+            />
           </div>
-        ) : (
+        ) : null}
+
+        {serviceMode === "catalog" && availableOffers.length > 0 ? (
           <>
-            <p className="text-xs text-muted">Select a request option from your manager&apos;s catalog. If a deposit is required, you&apos;ll also need to set a return date.</p>
+            <p className="text-xs text-muted">Select a request option from your manager&apos;s catalog.</p>
             <div className="mt-4 space-y-2">
               {availableOffers.map((offer) => (
                 <button
                   key={offer.id}
                   type="button"
-                  onClick={() => { setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer)); setSReturnBy(""); }}
+                  onClick={() => { setSelectedOffer((cur) => (cur?.id === offer.id ? null : offer)); }}
                   className={`w-full rounded-xl border px-4 py-3 text-left transition ${
                     selectedOffer?.id === offer.id
                       ? "border-primary/30 bg-accent/30 ring-1 ring-primary/20"
@@ -1284,21 +1310,6 @@ export function ResidentServicesPanel({
 
             {selectedOffer ? (
               <div className="mt-4 space-y-3">
-                {hasDeposit(selectedOffer.deposit) ? (
-                  <div>
-                    <p className="mb-1 text-[11px] font-medium text-muted">
-                      Return by date <span className="text-rose-500">*</span>
-                    </p>
-                    <Input
-                      type="date"
-                      value={sReturnBy}
-                      onChange={(e) => setSReturnBy(e.target.value)}
-                      min={new Date().toISOString().slice(0, 10)}
-                      className="bg-card"
-                    />
-                    <p className="mt-1 text-[10px] text-muted">Required — your deposit is held until the item is returned.</p>
-                  </div>
-                ) : null}
                 <div>
                   <p className="mb-1 text-[11px] font-medium text-muted">Additional notes (optional)</p>
                   <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Preferred timing, special instructions…" className="bg-card" />
@@ -1306,14 +1317,67 @@ export function ResidentServicesPanel({
               </div>
             ) : null}
           </>
+        ) : (
+          <>
+            <p className="text-xs text-muted">
+              Describe what you need and your max budget. Your manager will set the final price and approve the request.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="mb-1 text-[11px] font-medium text-muted">
+                  Request title <span className="text-rose-500">*</span>
+                </p>
+                <Input
+                  value={customTitle}
+                  onChange={(e) => setCustomTitle(e.target.value)}
+                  placeholder="e.g. Extra storage bin"
+                  className="bg-card"
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-medium text-muted">Details (optional)</p>
+                <Textarea
+                  value={customDescription}
+                  onChange={(e) => setCustomDescription(e.target.value)}
+                  placeholder="Size, timing, or other details…"
+                  className="min-h-[72px] bg-card"
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-medium text-muted">
+                  Price limit <span className="text-rose-500">*</span>
+                </p>
+                <Input
+                  value={customPriceLimit}
+                  onChange={(e) => setCustomPriceLimit(e.target.value)}
+                  placeholder="$50"
+                  inputMode="decimal"
+                  className="bg-card"
+                />
+                <p className="mt-1 text-[10px] text-muted">Maximum you&apos;re willing to pay — your manager confirms the final amount.</p>
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-medium text-muted">Additional notes (optional)</p>
+                <Input value={sNotes} onChange={(e) => setSNotes(e.target.value)} placeholder="Anything else your manager should know…" className="bg-card" />
+              </div>
+            </div>
+          </>
         )}
+
         <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => { setModalMode("none"); resetService(); }}>Cancel</Button>
-          {availableOffers.length > 0 ? (
-            <Button type="button" className="rounded-full" onClick={() => { void submitService(); }} disabled={!selectedOffer || serviceSubmitting}>
-              {serviceSubmitting ? "Sending…" : "Send request"}
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            className="rounded-full"
+            onClick={() => { void submitService(); }}
+            disabled={
+              serviceSubmitting ||
+              (serviceMode === "catalog" && availableOffers.length > 0
+                ? !selectedOffer
+                : !customTitle.trim() || !customPriceLimit.trim())
+            }
+          >
+            {serviceSubmitting ? "Sending…" : "Send request"}
+          </Button>
         </div>
       </Modal>
 
@@ -1331,20 +1395,6 @@ export function ResidentServicesPanel({
               Pricing is set by your manager and can&apos;t be changed here.
             </p>
             <div className="mt-4 grid gap-3">
-              {hasDeposit(editingRequest.deposit) ? (
-                <div>
-                  <p className="mb-1 text-[11px] font-medium text-muted">
-                    Return by date <span className="text-rose-500">*</span>
-                  </p>
-                  <Input
-                    type="date"
-                    value={eReturnBy}
-                    onChange={(e) => setEReturnBy(e.target.value)}
-                    className="bg-card"
-                  />
-                  <p className="mt-1 text-[10px] text-muted">Required — your deposit is held until the item is returned.</p>
-                </div>
-              ) : null}
               <div>
                 <p className="mb-1 text-[11px] font-medium text-muted">Notes</p>
                 <Textarea
@@ -1359,7 +1409,6 @@ export function ResidentServicesPanel({
           </>
         ) : null}
         <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditingRequest(null)}>Cancel</Button>
           <Button type="button" className="rounded-full" data-attr="resident-service-request-edit-save" onClick={saveRequestEdit}>
             Save changes
           </Button>
@@ -1388,10 +1437,12 @@ export function ResidentServicesPanel({
                 <option>High</option>
               </Select>
             </div>
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted">Preferred arrival time</p>
-              <Input value={wArrival} onChange={(e) => setWArrival(e.target.value)} placeholder='e.g. Weekdays after 5pm — or "anytime"' className="bg-card" />
-            </div>
+            <PreferredArrivalField
+              preset={wArrivalPreset}
+              custom={wArrivalCustom}
+              onPresetChange={setWArrivalPreset}
+              onCustomChange={setWArrivalCustom}
+            />
           </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Details</p>
@@ -1405,7 +1456,6 @@ export function ResidentServicesPanel({
           </div>
         </div>
         <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditingWorkOrder(null)}>Cancel</Button>
           <Button type="button" className="rounded-full" data-attr="resident-work-order-edit-save" onClick={saveWorkOrderEdit}>
             Save changes
           </Button>

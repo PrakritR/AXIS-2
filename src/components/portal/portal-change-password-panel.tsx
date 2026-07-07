@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { passwordResetCallbackUrl, resolveBrowserAppOrigin } from "@/lib/auth/password-reset-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -90,21 +91,24 @@ export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: stri
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-foreground">Change password</p>
+    <PortalCollapsibleSection
+      title="Change password"
+      surfaceMuted={false}
+      contentClassName="px-4 pb-5"
+      toggleDataAttr="portal-change-password-toggle"
+      headerActions={
         <Button
           type="button"
           variant="outline"
-          className="rounded-full"
+          className="h-8 rounded-full px-3 text-xs"
           disabled={passwordBusy || resetBusy}
           onClick={() => void changePassword()}
         >
           {passwordBusy ? "Updating…" : "Update password"}
         </Button>
-      </div>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 sm:col-span-2">
           <label className="text-xs font-semibold text-muted" htmlFor="portal-old-password">
             Current password
@@ -154,6 +158,6 @@ export function PortalChangePasswordPanel({ accountEmail }: { accountEmail: stri
           {resetBusy ? "Sending…" : "Send a reset link to your email"}
         </button>
       </p>
-    </div>
+    </PortalCollapsibleSection>
   );
 }

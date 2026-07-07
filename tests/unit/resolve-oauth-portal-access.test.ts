@@ -68,7 +68,7 @@ describe("resolveOAuthPortalRedirect", () => {
     vi.clearAllMocks();
   });
 
-  it("never auto-provisions a free manager; unknown manager-intent goes to the plan picker", async () => {
+  it("never auto-provisions a free manager; unknown manager-intent goes to unified create-account", async () => {
     const { resolveOAuthPortalRedirect } = await import("@/lib/auth/resolve-oauth-portal-access");
 
     const user = { id: "user-1", email: "new@test.com" } as User;
@@ -78,7 +78,7 @@ describe("resolveOAuthPortalRedirect", () => {
     });
 
     expect(ensureFreeManagerPortalAccess).not.toHaveBeenCalled();
-    expect(path).toBe("/auth/manager/plan");
+    expect(path).toBe("/auth/create-account?mode=create&role=manager");
   });
 
   it("routes an unknown, no-intent account to the get-started role chooser", async () => {
@@ -89,6 +89,53 @@ describe("resolveOAuthPortalRedirect", () => {
 
     expect(ensureFreeManagerPortalAccess).not.toHaveBeenCalled();
     expect(path).toBe("/auth/get-started");
+  });
+
+  it("routes a legacy profiles.role manager to the manager portal", async () => {
+    const { resolveOAuthPortalRedirect } = await import("@/lib/auth/resolve-oauth-portal-access");
+
+    const user = { id: "user-1", email: "manager@test.com" } as User;
+    const supabase = {
+      from: (table: string) => {
+        if (table === "profile_roles") {
+          return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
+        }
+        if (table === "profiles") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: () => Promise.resolve({ data: { role: "manager" }, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === "manager_purchases") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: () => Promise.resolve({ data: null, error: null }),
+                is: () => ({
+                  order: () => ({
+                    limit: () => Promise.resolve({ data: [], error: null }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "manager_application_records") {
+          return {
+            select: () => ({
+              eq: () => Promise.resolve({ data: [], error: null }),
+            }),
+          };
+        }
+        throw new Error(`unexpected table ${table}`);
+      },
+    };
+
+    const path = await resolveOAuthPortalRedirect(supabase as never, user, "/auth/continue");
+    expect(path).toBe("/portal/dashboard");
   });
 
   it("routes failed approved resident signup to create-account with error", async () => {

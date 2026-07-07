@@ -12,12 +12,17 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
+  PORTAL_DETAIL_BTN_PRIMARY,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
@@ -38,6 +43,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-documents/spec";
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
+import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -48,8 +54,17 @@ function priorityClass(p: string) {
 
 type BillDraft = { cost: string; paymentStatus: "pending" | "paid" };
 
+function isSetWorkOrderCost(cost: string | undefined): boolean {
+  const trimmed = cost?.trim() ?? "";
+  return trimmed !== "" && trimmed !== "—";
+}
+
+function displayWorkOrderCost(cost: string | undefined): string {
+  return isSetWorkOrderCost(cost) ? (cost ?? "") : "—";
+}
+
 function defaultBillDraft(row: DemoManagerWorkOrderRow): BillDraft {
-  const cost = row.cost !== "—" && row.cost.trim() ? row.cost : "";
+  const cost = isSetWorkOrderCost(row.cost) ? (row.cost ?? "") : "";
   return { cost, paymentStatus: "pending" };
 }
 
@@ -82,6 +97,20 @@ function formatScheduledLabel(iso: string): string {
 // recognition sees the check (see commit 924bd45 for the same fix elsewhere).
 const SAFE_PHOTO_HREF_RE = /^(?:data:image\/|https?:\/\/)/;
 
+/** $500+ triggers a confirm-preview before Approve + Pay; below it, one tap completes
+ * and pays immediately. Bump this single constant to change the cutoff. */
+const APPROVE_PAY_CONFIRM_THRESHOLD_CENTS = 50_000;
+
+function approvePayDefaults(row: DemoManagerWorkOrderRow) {
+  return {
+    category: row.category ?? parseWorkOrderCategoryFromDescription(row.description),
+    vendorCostCents: row.vendorCostCents ?? Math.round(parseMoneyAmount(row.cost) * 100),
+    materialsCostCents: row.materialsCostCents ?? 0,
+    materialsMemo: row.materialsMemo ?? "",
+    workDoneSummary: row.workDoneSummary || row.vendorMarkedDoneNote || row.title,
+  };
+}
+
 export function ManagerWorkOrdersPanel({
   allRows,
   bucket,
@@ -108,6 +137,11 @@ export function ManagerWorkOrdersPanel({
     materialsMemo: "",
     workDoneSummary: "",
   });
+  const [bidsByWorkOrderId, setBidsByWorkOrderId] = useState<Record<string, WorkOrderBid[]>>({});
+  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
+  const [autoSchedulingId, setAutoSchedulingId] = useState<string | null>(null);
+  const [approvePayRow, setApprovePayRow] = useState<DemoManagerWorkOrderRow | null>(null);
+  const [approvePayBusy, setApprovePayBusy] = useState(false);
 
   useEffect(() => {
     void syncManagerVendorsFromServer();
@@ -129,6 +163,11 @@ export function ManagerWorkOrdersPanel({
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
   }, []);
 
+  const loadBids = useCallback(async (workOrderId: string) => {
+    const bids = await fetchWorkOrderBids(workOrderId);
+    setBidsByWorkOrderId((prev) => ({ ...prev, [workOrderId]: bids }));
+  }, []);
+
   const openExpand = useCallback(
     (row: DemoManagerWorkOrderRow) => {
       setExpandedId(row.id);
@@ -140,8 +179,9 @@ export function ManagerWorkOrdersPanel({
         ...prev,
         [row.id]: prev[row.id] ?? defaultBillDraft(row),
       }));
+      if (!row.selfAssigned && (row.vendorId || row.biddingOpen || row.biddingResolvedAt)) void loadBids(row.id);
     },
-    [],
+    [loadBids],
   );
 
   const effectiveManagerId = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
@@ -152,7 +192,7 @@ export function ManagerWorkOrdersPanel({
       if (row.bucket !== "scheduled") continue;
       if (findWorkOrderCharge(row.id)) continue;
       const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-      const amountInput = draft.cost.trim() ? draft.cost : row.cost;
+      const amountInput = draft.cost.trim() ? draft.cost : isSetWorkOrderCost(row.cost) ? (row.cost ?? "") : "";
       const amt = parseMoneyAmount(amountInput);
       const email = (row.residentEmail ?? "").trim().toLowerCase();
       if (amt <= 0 || !email.includes("@")) continue;
@@ -203,6 +243,7 @@ export function ManagerWorkOrdersPanel({
           credentials: "include",
           body: JSON.stringify({
             workOrderId: row.id,
+            vendorId: vendor.id,
             vendorEmail,
             vendorName: vendor.name,
             workOrderTitle: row.title,
@@ -221,6 +262,54 @@ export function ManagerWorkOrdersPanel({
     [activeVendors],
   );
 
+  /** Commit a resolved visit time (manual or auto-scheduled) — bucket/status transition,
+   * best-effort billing charge, and the vendor email + inbox notification, all shared so
+   * auto-schedule reuses exactly the same write + notify path as picking a time by hand. */
+  const commitScheduledVisit = useCallback(
+    async (row: DemoManagerWorkOrderRow, iso: string) => {
+      const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+      const costTrimmed = draft.cost.trim();
+      const amt = costTrimmed ? parseMoneyAmount(costTrimmed) : 0;
+      const residentEmail = (row.residentEmail ?? "").trim();
+
+      updateManagerWorkOrder(row.id, (r) => ({
+        ...r,
+        bucket: "scheduled",
+        status: "Scheduled",
+        scheduledAtIso: iso,
+        scheduled: formatScheduledLabel(iso),
+        ...(costTrimmed && Number.isFinite(amt) && amt >= 0 ? { cost: `$${amt.toFixed(2)}` } : {}),
+      }));
+
+      let created = null;
+      if (residentEmail.includes("@") && Number.isFinite(amt) && amt > 0) {
+        created = recordWorkOrderResidentCharge({
+          managerUserId: effectiveManagerId,
+          workOrderId: row.id,
+          propertyId: row.propertyId || row.assignedPropertyId,
+          propertyLabel: row.propertyName,
+          unit: row.unit,
+          workOrderTitle: row.title,
+          amountInput: draft.cost,
+          residentEmail,
+          residentName: row.residentName ?? "",
+          initialStatus: draft.paymentStatus,
+        });
+      }
+      if (created) setHcTick((n) => n + 1);
+      const vendorEmailed = await sendVendorVisitEmail(row, iso);
+      const billingPart = created
+        ? created.status === "paid"
+          ? " Payment recorded as paid."
+          : " Pending payment created."
+        : "";
+      showToast(`Work order scheduled.${billingPart}${vendorEmailed ? " Vendor emailed with the visit details." : ""}`);
+      setExpandedId(null);
+      onAfterSchedule?.();
+    },
+    [billDraftById, effectiveManagerId, onAfterSchedule, sendVendorVisitEmail, showToast],
+  );
+
   /** Schedule the visit (date required). Billing is optional — a charge is only created when a cost is set and a resident is linked. */
   const saveScheduleFromOpen = async (row: DemoManagerWorkOrderRow) => {
     const visitAt = visitAtById[row.id] ?? "";
@@ -229,45 +318,42 @@ export function ManagerWorkOrdersPanel({
       showToast("Choose a visit date and time to schedule.");
       return;
     }
-    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-    const costTrimmed = draft.cost.trim();
-    const amt = costTrimmed ? parseMoneyAmount(costTrimmed) : 0;
-    const residentEmail = (row.residentEmail ?? "").trim();
+    await commitScheduledVisit(row, iso);
+  };
 
-    updateManagerWorkOrder(row.id, (r) => ({
-      ...r,
-      bucket: "scheduled",
-      status: "Scheduled",
-      scheduledAtIso: iso,
-      scheduled: formatScheduledLabel(iso),
-      ...(costTrimmed && Number.isFinite(amt) && amt >= 0 ? { cost: `$${amt.toFixed(2)}` } : {}),
-    }));
-
-    let created = null;
-    if (residentEmail.includes("@") && Number.isFinite(amt) && amt > 0) {
-      created = recordWorkOrderResidentCharge({
-        managerUserId: effectiveManagerId,
-        workOrderId: row.id,
-        propertyId: row.propertyId || row.assignedPropertyId,
-        propertyLabel: row.propertyName,
-        unit: row.unit,
-        workOrderTitle: row.title,
-        amountInput: draft.cost,
-        residentEmail,
-        residentName: row.residentName ?? "",
-        initialStatus: draft.paymentStatus,
-      });
+  /** Resolve the assigned vendor's next open slot from their set availability (weekly
+   * windows minus blocked dates minus their other scheduled visits) and book it — same
+   * commit path as scheduling by hand, so the vendor gets the same email + inbox notice. */
+  const autoScheduleVisit = async (row: DemoManagerWorkOrderRow) => {
+    if (row.selfAssigned || !row.vendorId) {
+      showToast("Assign a vendor before auto-scheduling.");
+      return;
     }
-    if (created) setHcTick((n) => n + 1);
-    const vendorEmailed = await sendVendorVisitEmail(row, iso);
-    const billingPart = created
-      ? created.status === "paid"
-        ? " Payment recorded as paid."
-        : " Pending payment created."
-      : "";
-    showToast(`Work order scheduled.${billingPart}${vendorEmailed ? " Vendor emailed with the visit details." : ""}`);
-    setExpandedId(null);
-    onAfterSchedule?.();
+    setAutoSchedulingId(row.id);
+    try {
+      const res = await fetch("/api/portal-work-orders/auto-schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ workOrderId: row.id, vendorId: row.vendorId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not auto-schedule.");
+      if (!data.iso) {
+        showToast(
+          data.reason === "no_availability"
+            ? "This vendor hasn't set their availability yet."
+            : "No open slot found in the vendor's availability.",
+        );
+        return;
+      }
+      setVisitAtById((prev) => ({ ...prev, [row.id]: toDatetimeLocalValue(data.iso) }));
+      await commitScheduledVisit(row, data.iso);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not auto-schedule.");
+    } finally {
+      setAutoSchedulingId(null);
+    }
   };
 
   const rescheduleVisit = async (row: DemoManagerWorkOrderRow) => {
@@ -343,66 +429,81 @@ export function ManagerWorkOrdersPanel({
     openCompleteModal(row);
   };
 
-  const createBillingCharge = (row: DemoManagerWorkOrderRow) => {
-    const existing = findWorkOrderCharge(row.id);
-    if (existing) {
-      showToast("A payment line already exists for this work order.");
-      return;
+  /** Runs the same completion + expense-logging as "Mark complete", then marks the vendor
+   * paid (bookkeeping status only — see APPROVE_PAY_CONFIRM_THRESHOLD_CENTS for the
+   * one-tap vs confirm-preview gate). */
+  const submitApprovePay = async (row: DemoManagerWorkOrderRow) => {
+    setApprovePayBusy(true);
+    try {
+      const res = await fetch("/api/portal/work-orders/approve-pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ workOrder: row, ...approvePayDefaults(row) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not approve payment.");
+      updateManagerWorkOrder(row.id, () => data.workOrder as DemoManagerWorkOrderRow);
+      void syncManagerWorkOrdersFromServer();
+      showToast("Approved and paid.");
+      setApprovePayRow(null);
+      setExpandedId(null);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not approve payment.");
+    } finally {
+      setApprovePayBusy(false);
     }
-    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-    const amt = parseMoneyAmount(draft.cost);
-    const residentEmail = (row.residentEmail ?? "").trim();
-    if (!draft.cost.trim() || !Number.isFinite(amt) || amt <= 0) {
-      showToast("Enter a valid cost first.");
-      return;
-    }
-    if (!residentEmail.includes("@")) {
-      showToast("No resident is linked to this work order, so it can't be billed.");
-      return;
-    }
-    const created = recordWorkOrderResidentCharge({
-      managerUserId: effectiveManagerId,
-      workOrderId: row.id,
-      propertyId: row.propertyId || row.assignedPropertyId,
-      propertyLabel: row.propertyName,
-      unit: row.unit,
-      workOrderTitle: row.title,
-      amountInput: draft.cost,
-      residentEmail,
-      residentName: row.residentName ?? "",
-      initialStatus: draft.paymentStatus,
-    });
-    if (!created) {
-      showToast("Could not create payment line.");
-      return;
-    }
-    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
-    setHcTick((n) => n + 1);
-    showToast(created.status === "paid" ? "Payment recorded as paid." : "Pending payment line created.");
   };
 
-  /** Persist cost without changing bucket. */
-  const saveLoggedCost = (row: DemoManagerWorkOrderRow, linkedCharge: ReturnType<typeof findWorkOrderCharge>) => {
-    if (linkedCharge) {
-      showToast("Cost is locked while a payment line exists.");
-      return;
+  const approvePay = (row: DemoManagerWorkOrderRow) => {
+    const { vendorCostCents, materialsCostCents } = approvePayDefaults(row);
+    if (vendorCostCents + materialsCostCents < APPROVE_PAY_CONFIRM_THRESHOLD_CENTS) {
+      void submitApprovePay(row);
+    } else {
+      setApprovePayRow(row);
     }
-    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-    const trimmed = draft.cost.trim();
-    if (!trimmed) {
-      updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
-      showToast("Cost cleared.");
-      return;
-    }
-    const amt = parseMoneyAmount(trimmed);
-    if (!Number.isFinite(amt) || amt < 0) {
-      showToast("Enter a valid dollar amount (0 or more) or clear the field.");
-      return;
-    }
-    const costLabel = `$${amt.toFixed(2)}`;
-    updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: costLabel }));
-    showToast("Cost saved — the resident will see it on their work order.");
   };
+
+  /** Auto-save the Cost field and, once a resident is linked and the amount warrants it,
+   * auto-create the payment line — replaces the old separate "Save cost" / "Create payment
+   * line" buttons. Fires on Cost blur and on Payment-status change; a no-op once a payment
+   * line already exists (cost is locked at that point). */
+  const commitBilling = useCallback(
+    (row: DemoManagerWorkOrderRow, overrides?: Partial<BillDraft>) => {
+      if (findWorkOrderCharge(row.id)) return;
+      const draft = { ...(billDraftById[row.id] ?? defaultBillDraft(row)), ...overrides };
+      const trimmed = draft.cost.trim();
+      if (!trimmed) {
+        if (isSetWorkOrderCost(row.cost)) updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: "—" }));
+        return;
+      }
+      const amt = parseMoneyAmount(trimmed);
+      if (!Number.isFinite(amt) || amt < 0) return;
+      const residentEmail = (row.residentEmail ?? "").trim();
+      if (amt > 0 && residentEmail.includes("@")) {
+        const created = recordWorkOrderResidentCharge({
+          managerUserId: effectiveManagerId,
+          workOrderId: row.id,
+          propertyId: row.propertyId || row.assignedPropertyId,
+          propertyLabel: row.propertyName,
+          unit: row.unit,
+          workOrderTitle: row.title,
+          amountInput: draft.cost,
+          residentEmail,
+          residentName: row.residentName ?? "",
+          initialStatus: draft.paymentStatus,
+        });
+        if (created) {
+          updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
+          setHcTick((n) => n + 1);
+          showToast(created.status === "paid" ? "Payment recorded as paid." : "Pending payment line created.");
+        }
+      } else {
+        updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
+      }
+    },
+    [billDraftById, effectiveManagerId, showToast],
+  );
 
   const onDeleteWorkOrder = (row: DemoManagerWorkOrderRow) => {
     if (!window.confirm(`Delete work order ${row.id} (${row.title})? This cannot be undone.`)) return;
@@ -451,79 +552,39 @@ export function ManagerWorkOrdersPanel({
     showToast(`Assigned ${vendor.name}.`);
   };
 
-  if (rows.length === 0) {
+  const acceptBidHandler = async (bid: WorkOrderBid) => {
+    setAcceptingBidId(bid.id);
+    try {
+      const res = await fetch("/api/portal/work-order-bids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: "accept", bidId: bid.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not accept bid.");
+      await syncManagerWorkOrdersFromServer({ force: true });
+      await loadBids(bid.workOrderId);
+      showToast("Bid accepted — vendor assigned at the agreed cost.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not accept bid.");
+    } finally {
+      setAcceptingBidId(null);
+    }
+  };
+
+  const renderRowDetail = (row: DemoManagerWorkOrderRow) => {
+    const draft = billDraftById[row.id] ?? defaultBillDraft(row);
+    const linkedCharge = chargeByWoId.get(row.id);
+    const visitAt = visitAtById[row.id] ?? "";
+    const assignedVendor =
+      !row.selfAssigned && row.vendorId
+        ? activeVendors.find((v) => v.id === row.vendorId) ?? null
+        : null;
+    const assignedVendorEmail = assignedVendor?.email?.trim() ?? "";
+
     return (
-      <PortalDataTableEmpty
-        icon="work-order"
-        message={allRows.length === 0 ? "No work orders yet." : "No work orders in this bucket yet."}
-      />
-    );
-  }
-
-  return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
-      <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="min-w-[640px] w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className={PORTAL_TABLE_HEAD_ROW}>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const draft = billDraftById[row.id] ?? defaultBillDraft(row);
-              const linkedCharge = chargeByWoId.get(row.id);
-              const visitAt = visitAtById[row.id] ?? "";
-              const isExpanded = expandedId === row.id;
-              const assignedVendor =
-                !row.selfAssigned && row.vendorId
-                  ? activeVendors.find((v) => v.id === row.vendorId) ?? null
-                  : null;
-              const assignedVendorEmail = assignedVendor?.email?.trim() ?? "";
-
-              return (
-                <Fragment key={row.id}>
-                  <tr
-                    className={PORTAL_TABLE_TR_EXPANDABLE}
-                    onClick={createPortalRowExpandClick(() =>
-                      isExpanded ? setExpandedId(null) : openExpand(row),
-                    )}
-                    aria-expanded={isExpanded}
-                  >
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                      {row.title}
-                      <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <span className="text-foreground">{row.propertyName}</span>
-                      {row.unit ? <span className="text-muted"> · {row.unit}</span> : null}
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
-                        {row.priority}
-                      </span>
-                    </td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <div className="flex flex-col gap-1">
-                        <span>{row.cost !== "—" && row.cost.trim() ? row.cost : "—"}</span>
-                        {linkedCharge?.status === "paid" ? (
-                          <span className="inline-flex w-fit rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                            Paid
-                          </span>
-                        ) : linkedCharge?.status === "pending" ? (
-                          <span className="inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                            Pending
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                  {isExpanded ? (
-                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+      <>
                         <p className="text-sm leading-relaxed text-muted">{row.description}</p>
                         <p className="mt-1.5 text-xs text-muted">
                           Resident preferred arrival:{" "}
@@ -533,6 +594,13 @@ export function ManagerWorkOrdersPanel({
                           <p className="mt-1.5 text-xs text-muted">
                             Visit scheduled for <span className="font-medium text-foreground">{row.scheduled}</span>
                           </p>
+                        ) : null}
+                        {row.automationStatus === "vendor_marked_done" ? (
+                          <p className="mt-1.5 text-xs font-medium text-muted">
+                            Vendor marked this done{row.vendorMarkedDoneNote ? ` — "${row.vendorMarkedDoneNote}"` : ""}. Awaiting your approval.
+                          </p>
+                        ) : row.automationStatus === "paid" ? (
+                          <p className="mt-1.5 text-xs font-medium text-muted">Approved and paid.</p>
                         ) : null}
                         {row.photoDataUrls?.length ? (
                           <div className="mt-4">
@@ -572,12 +640,15 @@ export function ManagerWorkOrdersPanel({
                               inputMode="decimal"
                               placeholder="$0"
                               value={draft.cost}
+                              disabled={!!linkedCharge}
+                              data-attr="work-order-cost-input"
                               onChange={(e) =>
                                 setBillDraftById((prev) => ({
                                   ...prev,
                                   [row.id]: { ...(prev[row.id] ?? defaultBillDraft(row)), cost: e.target.value },
                                 }))
                               }
+                              onBlur={() => commitBilling(row)}
                               className="h-8 w-24 rounded-md text-sm"
                             />
                           </label>
@@ -587,15 +658,18 @@ export function ManagerWorkOrdersPanel({
                               <Select
                                 className="h-8 rounded-md text-xs"
                                 value={draft.paymentStatus}
-                                onChange={(e) =>
+                                data-attr="work-order-payment-status-select"
+                                onChange={(e) => {
+                                  const paymentStatus = e.target.value as "pending" | "paid";
                                   setBillDraftById((prev) => ({
                                     ...prev,
                                     [row.id]: {
                                       ...(prev[row.id] ?? defaultBillDraft(row)),
-                                      paymentStatus: e.target.value as "pending" | "paid",
+                                      paymentStatus,
                                     },
-                                  }))
-                                }
+                                  }));
+                                  commitBilling(row, { paymentStatus });
+                                }}
                               >
                                 <option value="pending">Pending</option>
                                 <option value="paid">Paid</option>
@@ -655,63 +729,276 @@ export function ManagerWorkOrdersPanel({
                           ) : null}
                         </div>
 
+                        {(bidsByWorkOrderId[row.id] ?? []).length > 0 ? (
+                          <div className="mt-3 border-t border-border pt-3">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted">Bids</p>
+                            <div className="mt-2 space-y-1.5">
+                                {(bidsByWorkOrderId[row.id] ?? []).map((bid) => {
+                                  const pricingPending = bid.amountCents == null;
+                                  const totalCents = (bid.amountCents ?? 0) + bid.materialsCents;
+                                  return (
+                                  <div
+                                    key={bid.id}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs"
+                                  >
+                                    <div>
+                                      <span className="font-medium text-foreground">{bid.vendorName || "Vendor"}</span>{" "}
+                                      <span className="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                                        {bid.quoteMode === "after_consultation" ? "After consultation" : "Upfront"}
+                                      </span>
+                                      {pricingPending ? (
+                                        <span className="ml-1 text-muted">
+                                          · Consultation{" "}
+                                          {bid.consultationVisitAt
+                                            ? `scheduled for ${new Date(bid.consultationVisitAt).toLocaleString(undefined, {
+                                                month: "short",
+                                                day: "numeric",
+                                                hour: "numeric",
+                                                minute: "2-digit",
+                                              })}`
+                                            : "pending"}{" "}
+                                          — pricing pending
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted">
+                                          {" "}
+                                          · ${(totalCents / 100).toFixed(2)} (labor ${((bid.amountCents ?? 0) / 100).toFixed(2)} + materials $
+                                          {(bid.materialsCents / 100).toFixed(2)}) ·{" "}
+                                          {bid.proposedTime
+                                            ? new Date(bid.proposedTime).toLocaleString(undefined, {
+                                                month: "short",
+                                                day: "numeric",
+                                                hour: "numeric",
+                                                minute: "2-digit",
+                                              })
+                                            : "—"}
+                                        </span>
+                                      )}
+                                      {bid.note ? <p className="mt-0.5 text-muted">{bid.note}</p> : null}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={
+                                          bid.status === "accepted"
+                                            ? "inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border"
+                                            : bid.status === "declined"
+                                              ? "inline-flex rounded-full bg-accent/30 px-2 py-0.5 text-[10px] font-semibold text-muted ring-1 ring-border"
+                                              : "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+                                        }
+                                      >
+                                        {bid.status}
+                                      </span>
+                                      {bid.status === "submitted" && !pricingPending ? (
+                                        <Button
+                                          type="button"
+                                          variant="primary"
+                                          data-attr="work-order-accept-bid"
+                                          className="h-7 rounded-full px-3 text-xs"
+                                          disabled={acceptingBidId === bid.id}
+                                          onClick={() => void acceptBidHandler(bid)}
+                                        >
+                                          Accept
+                                        </Button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        ) : null}
+
                         <PortalTableDetailActions>
                           {row.bucket === "open" ? (
-                            <Button
-                              type="button"
-                              variant="primary"
-                              className={`${PORTAL_DETAIL_BTN} rounded-full`}
-                              onClick={() => void saveScheduleFromOpen(row)}
-                            >
-                              Schedule visit
-                            </Button>
+                            <>
+                              <Button
+                                type="button"
+                                variant="primary"
+                                className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                                onClick={() => void saveScheduleFromOpen(row)}
+                              >
+                                Schedule visit
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+                                onClick={() => onDeleteWorkOrder(row)}
+                              >
+                                Delete
+                              </Button>
+                            </>
                           ) : row.bucket === "scheduled" ? (
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => void rescheduleVisit(row)}>
                               Save new time
                             </Button>
                           ) : null}
-                          {!linkedCharge ? (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => saveLoggedCost(row, linkedCharge)}
-                              >
-                                Save cost
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="primary"
-                                className={`${PORTAL_DETAIL_BTN} rounded-full`}
-                                onClick={() => createBillingCharge(row)}
-                              >
-                                Create payment line
-                              </Button>
-                            </>
+                          {!row.selfAssigned && row.vendorId && row.bucket !== "completed" ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              data-attr="work-order-auto-schedule"
+                              className={PORTAL_DETAIL_BTN}
+                              disabled={autoSchedulingId === row.id}
+                              onClick={() => void autoScheduleVisit(row)}
+                            >
+                              {autoSchedulingId === row.id ? "Finding a slot…" : "Auto-schedule"}
+                            </Button>
                           ) : null}
-                          {row.bucket === "scheduled" ? (
+                          {row.bucket === "scheduled" && row.automationStatus === "vendor_marked_done" ? (
+                            <Button
+                              type="button"
+                              variant="primary"
+                              data-attr="work-order-approve-pay"
+                              className={`${PORTAL_DETAIL_BTN_PRIMARY} rounded-full`}
+                              disabled={approvePayBusy}
+                              onClick={() => approvePay(row)}
+                            >
+                              Approve &amp; pay
+                            </Button>
+                          ) : row.bucket === "scheduled" ? (
                             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => markComplete(row)}>
                               Mark complete
                             </Button>
                           ) : null}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-                            onClick={() => onDeleteWorkOrder(row)}
-                          >
-                            Delete work order
-                          </Button>
+                          {row.bucket !== "open" ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+                              onClick={() => onDeleteWorkOrder(row)}
+                            >
+                              Delete
+                            </Button>
+                          ) : null}
                         </PortalTableDetailActions>
+      </>
+    );
+  };
+
+  if (rows.length === 0) {
+    return (
+      <PortalDataTableEmpty
+        icon="work-order"
+        message={allRows.length === 0 ? "No work orders yet." : "No work orders in this bucket yet."}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <div className="space-y-2 lg:hidden">
+        {rows.map((row) => {
+          const linkedCharge = chargeByWoId.get(row.id);
+          const isExpanded = expandedId === row.id;
+          return (
+            <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 text-left"
+                onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
+                aria-expanded={isExpanded}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-foreground">{row.title}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {[row.propertyName, row.unit].filter(Boolean).join(" · ")}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
+                      {row.priority}
+                    </span>
+                    <span className="text-xs text-muted">{displayWorkOrderCost(row.cost)}</span>
+                    {linkedCharge?.status === "paid" ? (
+                      <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                        Paid
+                      </span>
+                    ) : linkedCharge?.status === "pending" ? (
+                      <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                        Pending
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <PortalTableExpandChevron expanded={isExpanded} />
+              </button>
+              {isExpanded ? (
+                <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+          <table className="w-full table-fixed border-collapse text-left text-sm">
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
+                <th className={PORTAL_TABLE_EXPAND_TH}>
+                  <span className="sr-only">Expand</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const linkedCharge = chargeByWoId.get(row.id);
+                const isExpanded = expandedId === row.id;
+
+                return (
+                  <Fragment key={row.id}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        isExpanded ? setExpandedId(null) : openExpand(row),
+                      )}
+                      aria-expanded={isExpanded}
+                    >
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                        {row.title}
+                        <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
                       </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <span className="text-foreground">{row.propertyName}</span>
+                        {row.unit ? <span className="text-muted"> · {row.unit}</span> : null}
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
+                          {row.priority}
+                        </span>
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <div className="flex flex-col gap-1">
+                          <span>{displayWorkOrderCost(row.cost)}</span>
+                          {linkedCharge?.status === "paid" ? (
+                            <span className="inline-flex w-fit rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                              Paid
+                            </span>
+                          ) : linkedCharge?.status === "pending" ? (
+                            <span className="inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
+                              Pending
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <PortalTableExpandCell expanded={isExpanded} />
                     </tr>
-                  ) : null}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                    {isExpanded ? (
+                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                          {renderRowDetail(row)}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <Modal open={Boolean(completeRow)} onClose={() => setCompleteRow(null)} title="Complete work order">
@@ -733,6 +1020,8 @@ export function ManagerWorkOrdersPanel({
                 <option value="mold">Mold remediation</option>
                 <option value="electrical">Electrical</option>
                 <option value="hvac">HVAC</option>
+                <option value="appliance">Appliance</option>
+                <option value="access">Access / Locks</option>
                 <option value="general">General maintenance</option>
               </select>
             </label>
@@ -774,6 +1063,53 @@ export function ManagerWorkOrdersPanel({
               </Button>
               <Button type="button" variant="primary" onClick={() => void submitComplete()} disabled={completeBusy}>
                 Complete &amp; log expenses
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={Boolean(approvePayRow)} onClose={() => setApprovePayRow(null)} title="Approve & pay">
+        {approvePayRow ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              {approvePayRow.propertyName} · {approvePayRow.title}
+            </p>
+            <p className="text-sm text-foreground">
+              Pay{" "}
+              <span className="font-semibold">
+                $
+                {(
+                  (approvePayDefaults(approvePayRow).vendorCostCents + approvePayDefaults(approvePayRow).materialsCostCents) /
+                  100
+                ).toFixed(2)}
+              </span>
+              {approvePayRow.vendorName ? (
+                <>
+                  {" "}
+                  to <span className="font-semibold">{approvePayRow.vendorName}</span>
+                </>
+              ) : null}
+            </p>
+            {approvePayRow.vendorMarkedDoneNote ? (
+              <p className="text-xs text-muted">Vendor note: &ldquo;{approvePayRow.vendorMarkedDoneNote}&rdquo;</p>
+            ) : null}
+            <p className="text-xs text-muted">
+              This logs the expense, marks the work order completed, and records the vendor as paid (bookkeeping
+              only — no funds are transferred).
+            </p>
+            <div className="flex justify-start gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setApprovePayRow(null)} disabled={approvePayBusy}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                data-attr="work-order-approve-pay-confirm"
+                onClick={() => void submitApprovePay(approvePayRow)}
+                disabled={approvePayBusy}
+              >
+                {approvePayBusy ? "Approving…" : "Approve & pay"}
               </Button>
             </div>
           </div>

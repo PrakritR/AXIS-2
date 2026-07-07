@@ -6,39 +6,63 @@ import type { PortalKind } from "@/lib/portal-types";
  * platform-parity tests are untouched; this only decides how the desktop sidebar
  * buckets sections under headings.
  *
- * `label: null` renders the items with no heading (Home row, trailing Feedback).
- * `profile` is intentionally absent everywhere — it lives in the top-right
- * account menu, not the sidebar.
+ * `label: null` renders the items with no heading (Home row, trailing Settings).
+ * `profile` (Settings) is the sole member of the trailing "account" group for
+ * manager/pro and resident, so `PortalSidebar`'s `mt-auto` on the first
+ * trailing group pins it alone to the sidebar's bottom corner. Feedback
+ * (`bugs-feedback`) is left out of every portal's sidebar config on purpose —
+ * it's reachable from inside the Settings page instead (see
+ * `PortalBugFeedbackPanel` / `AdminBugFeedbackClient` `embedded` mode), not as
+ * its own sidebar entry. The route/section itself is untouched so old links can
+ * redirect to Settings.
  */
 export type NavGroupConfig = { id: string; label: string | null; sections: string[] };
 
-/** Sections never rendered in the desktop sidebar (surfaced in the account menu instead). */
-export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile"]);
+/** Sections never rendered in the desktop sidebar (surfaced in the account menu or inside Settings instead). */
+export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile", "bugs-feedback"]);
+
+/**
+ * Feedback is embedded inside the Settings page, matching the desktop sidebar
+ * exclusion above — so it shouldn't appear as a separate destination in the
+ * mobile top nav strip or the native "More" sheet either.
+ */
+export function isHiddenFromMobileNav(_kind: PortalKind, section: string): boolean {
+  return section === "bugs-feedback";
+}
 
 const PRO_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "properties", label: "Properties", sections: ["properties", "applications", "residents", "leases"] },
-  { id: "financials", label: "Financials", sections: ["payments", "financials", "documents"] },
+  { id: "portfolio", label: "Portfolio", sections: ["properties", "leases"] },
+  { id: "leasing", label: "Leasing", sections: ["applications", "residents"] },
+  { id: "finances", label: "Finances", sections: ["payments", "financials", "documents"] },
   { id: "operations", label: "Operations", sections: ["calendar", "services", "inbox"] },
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
-  { id: "account", label: null, sections: ["bugs-feedback"] },
+  { id: "account", label: null, sections: ["profile"] },
 ];
 
 const ADMIN_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "properties", label: "Properties", sections: ["properties", "leases"] },
-  { id: "operations", label: "Operations", sections: ["events", "inbox"] },
+  { id: "portfolio", label: "Portfolio", sections: ["properties"] },
   { id: "people", label: "People", sections: ["axis-users"] },
-  { id: "account", label: null, sections: ["bugs-feedback"] },
+  { id: "operations", label: "Operations", sections: ["events", "inbox"] },
+  { id: "account", label: null, sections: ["profile"] },
 ];
 
 const RESIDENT_GROUPS: NavGroupConfig[] = [
+  { id: "home", label: null, sections: ["dashboard", "applications"] },
+  { id: "my-home", label: "My home", sections: ["lease", "move-in", "services"] },
+  { id: "finances", label: "Finances", sections: ["payments", "documents"] },
+  { id: "messages", label: "Messages", sections: ["inbox"] },
+  { id: "account", label: null, sections: ["profile"] },
+];
+
+const VENDOR_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "living", label: "Living", sections: ["lease", "move-in", "services"] },
-  { id: "financials", label: "Financials", sections: ["payments", "documents"] },
+  { id: "work", label: "Work", sections: ["work-orders", "calendar"] },
   { id: "operations", label: "Operations", sections: ["inbox"] },
-  { id: "account", label: null, sections: ["bugs-feedback"] },
+  { id: "finances", label: "Finances", sections: ["payments", "documents"] },
+  { id: "account", label: null, sections: ["profile"] },
 ];
 
 export const PORTAL_NAV_GROUPS: Record<PortalKind, NavGroupConfig[]> = {
@@ -46,6 +70,7 @@ export const PORTAL_NAV_GROUPS: Record<PortalKind, NavGroupConfig[]> = {
   manager: PRO_GROUPS,
   admin: ADMIN_GROUPS,
   resident: RESIDENT_GROUPS,
+  vendor: VENDOR_GROUPS,
 };
 
 export type GroupedNav<T> = { id: string; label: string | null; items: T[] };
@@ -59,10 +84,24 @@ export function groupNavItems<T extends { section: string }>(
   kind: PortalKind,
   items: T[],
 ): GroupedNav<T>[] {
+  const byId = new Map(items.map((i) => [i.section, i] as const));
+
+  // Application phase: only Application + Settings — keep Application at the top row
+  // and pin Settings to the bottom (account group gets mt-auto in PortalSidebar).
+  if (kind === "resident" && items.length === 2) {
+    const applications = byId.get("applications");
+    const profile = byId.get("profile");
+    if (applications && profile) {
+      return [
+        { id: "home", label: null, items: [applications] },
+        { id: "account", label: null, items: [profile] },
+      ];
+    }
+  }
+
   // Unknown kind (shouldn't happen for a valid PortalKind) → empty config, so every
   // item falls through to the trailing leftover group below; nothing is dropped.
   const config = PORTAL_NAV_GROUPS[kind] ?? [];
-  const byId = new Map(items.map((i) => [i.section, i] as const));
   const assigned = new Set<string>();
 
   const groups: GroupedNav<T>[] = config.map((g) => {

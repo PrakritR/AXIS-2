@@ -31,6 +31,11 @@ const nextConfig: NextConfig = {
   // Lets the iOS/Android WebView load from your Mac's LAN IP during `npm run dev`.
   allowedDevOrigins: capacitorDevOrigins(),
   skipTrailingSlashRedirect: true,
+  experimental: {
+    // Persist Turbopack compiler output between dev restarts — faster cold starts.
+    turbopackFileSystemCacheForDev: true,
+    optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
+  },
   async rewrites() {
     return [
       {
@@ -72,14 +77,12 @@ const nextConfig: NextConfig = {
       { source: "/admin/calendar/availability", destination: "/admin/events", permanent: false },
       { source: "/admin/events/events", destination: "/admin/events", permanent: false },
       { source: "/admin/events/availability", destination: "/admin/events", permanent: false },
-      { source: "/admin/leasing", destination: "/admin/leases", permanent: false },
-      { source: "/admin/leasing/:path*", destination: "/admin/leases", permanent: false },
-      { source: "/admin/leases/manager-review", destination: "/admin/leases", permanent: false },
-      { source: "/admin/leases/admin-review", destination: "/admin/leases", permanent: false },
-      { source: "/admin/leases/with-resident", destination: "/admin/leases", permanent: false },
-      { source: "/admin/leases/signed", destination: "/admin/leases", permanent: false },
-      { source: "/admin/bugs-feedback/bugs", destination: "/admin/bugs-feedback", permanent: false },
-      { source: "/admin/bugs-feedback/feedback", destination: "/admin/bugs-feedback", permanent: false },
+      { source: "/admin/leasing", destination: "/admin/dashboard", permanent: false },
+      { source: "/admin/leasing/:path*", destination: "/admin/dashboard", permanent: false },
+      { source: "/admin/leases", destination: "/admin/dashboard", permanent: false },
+      { source: "/admin/leases/:path*", destination: "/admin/dashboard", permanent: false },
+      { source: "/admin/bugs-feedback", destination: "/admin/profile", permanent: false },
+      { source: "/admin/bugs-feedback/:path*", destination: "/admin/profile", permanent: false },
       { source: "/resident/home", destination: "/resident/properties", permanent: false },
       { source: "/resident/home/:path*", destination: "/resident/properties", permanent: false },
       // /resident/lease is the standalone interactive Lease section (resident-sections.ts,

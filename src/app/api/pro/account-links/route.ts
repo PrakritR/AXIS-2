@@ -9,6 +9,7 @@ import {
 import { normalizePropertyCoManagerPermissions, flatCoManagerPermissionsFromProperty, type CoManagerPermissions, type PropertyCoManagerPermissions } from "@/lib/co-manager-permissions";
 import { maxAccountLinksForTier } from "@/lib/manager-access";
 import { getManagerPurchaseSku } from "@/lib/manager-access-server";
+import { isCrossSandboxPortalPair, CROSS_SANDBOX_PORTAL_PAIR_ERROR } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -157,7 +158,31 @@ export async function GET(): Promise<NextResponse<AccountLinksPayload | { error:
     }
 
     const rows = ((data ?? []) as unknown) as InviteRow[];
-    const invites = rows.map((r) => serializeInvite(r, user.id));
+    const db = createSupabaseServiceRoleClient();
+    const { data: viewerProfile } = await db.from("profiles").select("email").eq("id", user.id).maybeSingle();
+    const viewerEmail = String(viewerProfile?.email ?? user.email ?? "").trim();
+    const participantIds = [
+      ...new Set(
+        rows.flatMap((row) => [row.inviter_user_id, row.invitee_user_id].map((id) => String(id ?? "").trim())).filter(Boolean),
+      ),
+    ];
+    const emailByUserId = new Map<string, string>();
+    if (participantIds.length > 0) {
+      const { data: profiles } = await db.from("profiles").select("id, email").in("id", participantIds);
+      for (const profile of profiles ?? []) {
+        const id = String(profile.id ?? "").trim();
+        const email = String(profile.email ?? "").trim();
+        if (id && email) emailByUserId.set(id, email);
+      }
+    }
+
+    const invites = rows
+      .filter((row) => {
+        const otherUserId = row.inviter_user_id === user.id ? row.invitee_user_id : row.inviter_user_id;
+        const otherEmail = emailByUserId.get(String(otherUserId ?? "").trim()) ?? "";
+        return !isCrossSandboxPortalPair(viewerEmail, otherEmail);
+      })
+      .map((r) => serializeInvite(r, user.id));
     return NextResponse.json({ invites });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
@@ -265,6 +290,12 @@ export async function POST(req: Request) {
 
     if (inviteeProfile.id === user.id) {
       return NextResponse.json({ error: "You cannot invite your own workspace." }, { status: 400 });
+    }
+
+    const inviterEmail = String(inviterProfile.email ?? user.email ?? "").trim();
+    const inviteeEmail = String(inviteeProfile.email ?? "").trim();
+    if (isCrossSandboxPortalPair(inviterEmail, inviteeEmail)) {
+      return NextResponse.json({ error: CROSS_SANDBOX_PORTAL_PAIR_ERROR }, { status: 400 });
     }
 
     const { data: existingLink, error: existingErr } = await svc

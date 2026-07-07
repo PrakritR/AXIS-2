@@ -23,8 +23,27 @@ describe("portal sidebar native hydration", () => {
     expect(PORTAL_SIDEBAR_SOURCE).not.toContain("!showNativeChrome ?");
   });
 
-  it("uses full navigation for native bottom tab taps", () => {
-    expect(PORTAL_SIDEBAR_SOURCE).toContain("preferFullNavigation: true");
+  it("only forces full navigation on native bottom tab taps that leave the portal", () => {
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("isCrossPortalNavigation(pathname, s.href)");
     expect(PORTAL_NAV_CLIENT_SOURCE).toContain("preferFullNavigation");
+    expect(PORTAL_NAV_CLIENT_SOURCE).toContain("isCrossPortalNavigation");
   });
+
+  it("the More sheet lists every section, not just overflow (e.g. Documents alongside Finances)", () => {
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("orderNativeBottomNavItems(navItems, definition.kind)");
+    expect(PORTAL_SIDEBAR_SOURCE).not.toContain("nativeBottomNavSplit.overflow].map");
+  });
+
+  it("no longer hosts the assistant as an inline bottom-bar slot", () => {
+    expect(PORTAL_SIDEBAR_SOURCE).not.toContain("AxisAssistantNavButton");
+    expect(PORTAL_SIDEBAR_SOURCE).not.toContain("useHasAxisAssistant");
+  });
+
+  it("pages between primary tabs on a native swipe gesture", () => {
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("resolveSwipePageDirection");
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("adjacentPrimarySection");
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("playSwipeExit");
+    expect(PORTAL_SIDEBAR_SOURCE).toContain("playSwipeEnter");
+  });
+
 });

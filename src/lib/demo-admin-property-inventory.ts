@@ -1,4 +1,4 @@
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import type { MockProperty } from "@/data/types";
 import {
   appendExtraListing,
@@ -10,6 +10,7 @@ import {
   readAllExtraListings,
   readAllPendingManagerProperties,
   readExtraListingsForUser,
+  readScopedExtraListings,
   readPendingManagerPropertiesForUser,
   removeExtraListing,
   submitManagerPendingProperty,
@@ -21,6 +22,8 @@ import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-st
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { collectLinkedPropertyIds, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
 import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
+import { parseMonthlyRent } from "@/lib/listings-search";
+import { monthlyRentListingLabel } from "@/lib/rental-application/listing-fees-display";
 
 /** Admin-wide queue (all managers). Manager portal passes `forManagerUserId` for isolated side-buckets. */
 const SIDE_KEY_GLOBAL = "axis_admin_property_buckets_v1";
@@ -51,6 +54,8 @@ export type AdminPropertyRow = {
   monthlyRent: number;
   petFriendly: boolean;
   tagline: string;
+  /** Formatted rent for display, e.g. "$1,100.00/mo" or "$1,100.00–$1,250.00/mo" when room rents differ. Falls back to `monthlyRent` when absent. */
+  rentRangeLabel?: string;
   listingId?: string;
   /** Owning manager (Supabase user id) for scoped demo data. */
   managerUserId?: string;
@@ -149,6 +154,7 @@ export function normalizeAdminPropertyRow(row: Partial<AdminPropertyRow> & { adm
     monthlyRent: Math.max(0, n(row.monthlyRent, 0)),
     petFriendly: Boolean(row.petFriendly),
     tagline: str(row.tagline),
+    rentRangeLabel: row.rentRangeLabel || undefined,
     listingId: row.listingId,
     managerUserId: row.managerUserId,
     editRequestNote: row.editRequestNote,
@@ -171,6 +177,7 @@ export function pendingToAdminRow(row: ManagerPendingPropertyRow): AdminProperty
       petFriendly: row.petFriendly,
       tagline: row.tagline ?? "",
       managerUserId: row.submittedByUserId,
+      rentRangeLabel: row.submission?.v ? monthlyRentListingLabel(row.submission) : undefined,
     }),
     submission: row.submission,
   };
@@ -197,7 +204,7 @@ export function publicListingHrefForPropertyRow(row: AdminPropertyRow): string |
 }
 
 export function mockToAdminRow(prop: MockProperty, listingId: string): AdminPropertyRow {
-  const rentNum = Number(String(prop.rentLabel ?? "").replace(/[^\d.]/g, "")) || 0;
+  const rentNum = parseMonthlyRent(prop.rentLabel ?? "") ?? 0;
   return normalizeAdminPropertyRow({
     adminRefId: listingId,
     buildingName: prop.buildingName,
@@ -210,10 +217,16 @@ export function mockToAdminRow(prop: MockProperty, listingId: string): AdminProp
     monthlyRent: rentNum,
     petFriendly: prop.petFriendly,
     tagline: prop.tagline ?? "",
+    rentRangeLabel: prop.listingSubmission?.v ? monthlyRentListingLabel(prop.listingSubmission) : undefined,
     listingId,
     managerUserId: prop.managerUserId,
     submission: prop.listingSubmission,
   });
+}
+
+/** Rent to show on property cards: the formatted range label when rooms have distinct rents, else a plain single price. */
+export function adminPropertyRentDisplayLabel(row: AdminPropertyRow): string {
+  return row.rentRangeLabel || `$${row.monthlyRent}/mo`;
 }
 
 function dedupeAdminPropertyRows(rows: AdminPropertyRow[]): AdminPropertyRow[] {
@@ -268,18 +281,19 @@ function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, user
 /** When `forManagerUserId` is set, counts only that manager’s pipeline + side buckets (property portal). */
 export function adminKpiCounts(forManagerUserId?: string | null): [number, number, number, number, number] {
   try {
-    if (forManagerUserId) {
-      const extras = readExtraListingsForUser(forManagerUserId);
-      const pending = readPendingManagerPropertiesForUser(forManagerUserId).length;
+    const scopeUserId = resolveManagerScopeUserId(forManagerUserId ?? null);
+    if (scopeUserId) {
+      const extras = readScopedExtraListings(scopeUserId);
+      const pending = readPendingManagerPropertiesForUser(scopeUserId).length;
       const awaitingReapproval = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive !== true).length;
-      const side = readSide(forManagerUserId);
+      const side = readSide(scopeUserId);
       const listed = extras.filter((p) => p?.id?.startsWith("mgr-") && p.adminPublishLive === true).length;
       return [
-        pending + awaitingReapproval + linkedAdminPropertyRowsForBucket(0, forManagerUserId).length,
-        side.requestChange.length + linkedAdminPropertyRowsForBucket(1, forManagerUserId).length,
-        listed + linkedAdminPropertyRowsForBucket(2, forManagerUserId).length,
-        side.unlisted.length + linkedAdminPropertyRowsForBucket(3, forManagerUserId).length,
-        side.rejected.length + linkedAdminPropertyRowsForBucket(4, forManagerUserId).length,
+        pending + awaitingReapproval + linkedAdminPropertyRowsForBucket(0, scopeUserId).length,
+        side.requestChange.length + linkedAdminPropertyRowsForBucket(1, scopeUserId).length,
+        listed + linkedAdminPropertyRowsForBucket(2, scopeUserId).length,
+        side.unlisted.length + linkedAdminPropertyRowsForBucket(3, scopeUserId).length,
+        side.rejected.length + linkedAdminPropertyRowsForBucket(4, scopeUserId).length,
       ];
     }
     const pending = readAllPendingManagerProperties().length;
@@ -305,7 +319,7 @@ export function readAdminPropertyRows(
       : readAllPendingManagerProperties();
     const pendingRows = pendingSource.map(pendingToAdminRow);
     const awaitingExtras = forManagerUserId
-      ? readExtraListingsForUser(forManagerUserId).filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true)
+      ? readScopedExtraListings(forManagerUserId).filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true)
       : readAllExtraListings().filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive !== true);
     const awaitingRows = awaitingExtras.map((p) => mockToAdminRow(p, p.id));
     const linked = forManagerUserId ? linkedAdminPropertyRowsForBucket(0, forManagerUserId) : [];
@@ -318,7 +332,7 @@ export function readAdminPropertyRows(
     ]);
   }
   if (bucket === 2) {
-    const extras = forManagerUserId ? readExtraListingsForUser(forManagerUserId) : readAllExtraListings();
+    const extras = forManagerUserId ? readScopedExtraListings(forManagerUserId) : readAllExtraListings();
     /** Must match {@link adminKpiCounts}: only catalog-live mgr listings. Edits set `adminPublishLive: false` until admin re-approves (see {@link updateExtraListingFromSubmission}). */
     const live = extras.filter((p) => p.id.startsWith("mgr-") && p.adminPublishLive === true);
     const linked = forManagerUserId ? linkedAdminPropertyRowsForBucket(2, forManagerUserId) : [];
@@ -326,6 +340,15 @@ export function readAdminPropertyRows(
   }
   if (bucket === 3) return dedupeAdminPropertyRows([...side.unlisted.map((r) => normalizeAdminPropertyRow(r)), ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(3, forManagerUserId) : [])]);
   return dedupeAdminPropertyRows([...side.rejected.map((r) => normalizeAdminPropertyRow(r)), ...(forManagerUserId ? linkedAdminPropertyRowsForBucket(4, forManagerUserId) : [])]);
+}
+
+/** Deduped property rows for a manager portal stage tab (matches visible table rows). */
+export function managerPropertyRowsForStage(
+  stageBuckets: AdminPropertyBucketIndex[],
+  forManagerUserId: string | null,
+): AdminPropertyRow[] {
+  if (!forManagerUserId) return [];
+  return dedupeAdminPropertyRows(stageBuckets.flatMap((bucket) => readAdminPropertyRows(bucket, forManagerUserId)));
 }
 
 export function movePendingToRequestChange(

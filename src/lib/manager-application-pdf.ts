@@ -1,11 +1,13 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import {
   displayableCustomFieldAnswers,
   formatCustomFieldAnswerDisplay,
 } from "@/lib/rental-application/custom-fields";
 import { formatLeaseDateLabel } from "@/lib/rental-application/lease-dates";
+import { digitsOnly } from "@/lib/rental-application/masks";
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -53,6 +55,55 @@ function statusLabel(row: DemoApplicantRow): string {
   if (row.bucket === "approved") return "Approved";
   if (row.bucket === "rejected") return "Rejected";
   return "Pending review";
+}
+
+/** Never render full digits — last 4 only, matching the review-screen SSN mask. */
+function maskSsn(ssn: string | null | undefined): string {
+  const d = digitsOnly(clean(ssn));
+  if (d.length !== 9) return "";
+  return `•••-••-${d.slice(5)}`;
+}
+
+/** Co-signer SSNs are already masked at submission-storage time; re-mask defensively if a raw value ever reaches here. */
+function maskCosignerSsn(ssn: string | null | undefined): string {
+  const raw = clean(ssn);
+  if (!raw) return "";
+  if (raw.includes("*")) return raw;
+  return maskSsn(raw);
+}
+
+function cosignerBankruptcyLabel(value: string | undefined): string {
+  if (value === "never") return "Never filed";
+  if (value === "past_discharged") return "Past (discharged)";
+  if (value === "current") return "Current / active";
+  return "";
+}
+
+function cosignerCriminalLabel(value: string | undefined): string {
+  return yesNo(value);
+}
+
+function groupRoleLabel(role: RentalWizardFormState["groupRole"] | undefined): string {
+  if (role === "first") return "First applicant";
+  if (role === "joining") return "Joining group";
+  return "";
+}
+
+function feeChannelLabel(channel: RentalWizardFormState["applicationFeePayChannel"] | undefined): string {
+  switch (channel) {
+    case "ach":
+      return "ACH";
+    case "zelle":
+      return "Zelle";
+    case "venmo":
+      return "Venmo";
+    case "stripe":
+      return "Card (Stripe)";
+    case "other":
+      return "Other";
+    default:
+      return "";
+  }
 }
 
 /** Split text so it fits maxWidth at the given font size (word wrap, char-break as fallback). */
@@ -128,6 +179,8 @@ export type ApplicationPdfOptions = {
   roomLabel?: string;
   /** ISO generation timestamp; defaults to now. */
   generatedAt?: string;
+  /** Co-signer application(s) submitted against this applicant's Axis ID, if any. */
+  cosignerSubmissions?: CosignerSubmission[];
 };
 
 export async function buildApplicationPdf(
@@ -241,14 +294,7 @@ export async function buildApplicationPdf(
   const bandTop = PAGE_HEIGHT - 30;
   drawAxisMark(page, MARGIN, bandTop, 40);
   const wordmarkX = MARGIN + 40 + 14;
-  page.drawText("AXIS", { x: wordmarkX, y: bandTop - 17, size: 19, font: bold, color: WHITE });
-  page.drawText("PROPERTY MANAGEMENT", {
-    x: wordmarkX,
-    y: bandTop - 32,
-    size: 7.5,
-    font: bold,
-    color: STEEL,
-  });
+  page.drawText("AXIS", { x: wordmarkX, y: bandTop - 24, size: 19, font: bold, color: WHITE });
 
   const docTitle = "RENTAL APPLICATION";
   page.drawText(docTitle, {
@@ -328,6 +374,7 @@ export async function buildApplicationPdf(
     { label: "Email", value: clean(app.email) || clean(row.email) },
     { label: "Phone", value: clean(app.phone) },
     { label: "Date of birth", value: clean(app.dateOfBirth) },
+    { label: "SSN", value: maskSsn(app.ssn) },
     { label: "Driver's license", value: clean(app.driversLicense) },
     { label: "Application status", value: statusLabel(row) },
     { label: "Stage", value: clean(row.stage) },
@@ -343,6 +390,8 @@ export async function buildApplicationPdf(
     { label: "Stay type / term", value: clean(app.leaseTerm) },
     { label: "Move-in date", value: formatLeaseDateLabel(app.leaseStart) || clean(app.leaseStart) },
     { label: "Lease end / move-out", value: formatLeaseDateLabel(app.leaseEnd) || clean(app.leaseEnd) },
+    { label: "Check-in time", value: app.rentalType === "short_term" ? clean(app.shortTermCheckInTime) : "" },
+    { label: "Check-out time", value: app.rentalType === "short_term" ? clean(app.shortTermCheckOutTime) : "" },
     {
       label: "Signed monthly rent",
       value:
@@ -362,11 +411,54 @@ export async function buildApplicationPdf(
   // ---- Occupancy / household ---------------------------------------------
   drawSection("Household", [
     { label: "Applying as a group", value: yesNo(app.applyingAsGroup) },
-    { label: "Group size", value: clean(app.groupSize) },
+    { label: "Group role", value: groupRoleLabel(app.groupRole) },
+    { label: "Group size", value: app.groupRole === "joining" ? "" : clean(app.groupSize) },
+    { label: "Group ID", value: app.groupRole === "joining" ? clean(app.groupId) : "" },
     { label: "Has co-signer", value: yesNo(app.hasCosigner) },
     { label: "Occupants", value: clean(app.occupancyCount) },
     { label: "Pets", value: clean(app.pets) },
   ]);
+
+  // ---- Co-signer application(s) -------------------------------------------
+  const cosigners = options.cosignerSubmissions ?? [];
+  cosigners.forEach((sub, i) => {
+    const title = cosigners.length > 1 ? `Co-signer ${i + 1}` : "Co-signer";
+    const cosignerAddress = [
+      clean(sub.address),
+      [clean(sub.city), clean(sub.state)].filter(Boolean).join(", "),
+      clean(sub.zip),
+    ]
+      .filter(Boolean)
+      .join("  ");
+    drawSection(title, [
+      { label: "Legal name", value: clean(sub.fullName) },
+      { label: "Email", value: clean(sub.email) },
+      { label: "Phone", value: clean(sub.phone) },
+      { label: "Date of birth", value: clean(sub.dob) },
+      { label: "ID number", value: clean(sub.dlNumber) },
+      { label: "SSN", value: maskCosignerSsn(sub.ssn) },
+      { label: "Address", value: cosignerAddress },
+      { label: "Employment", value: sub.notEmployed ? "Not currently employed" : "" },
+      { label: "Employer", value: clean(sub.employerName) },
+      { label: "Employer address", value: clean(sub.employerAddress) },
+      { label: "Job title", value: clean(sub.jobTitle) },
+      { label: "Supervisor", value: clean(sub.supervisorName) },
+      { label: "Supervisor phone", value: clean(sub.supervisorPhone) },
+      { label: "Employment start", value: clean(sub.employmentStart) },
+      { label: "Monthly income", value: money(sub.monthlyIncome) },
+      { label: "Annual income", value: money(sub.annualIncome) },
+      { label: "Other income", value: clean(sub.otherIncome) },
+      { label: "Bankruptcy", value: cosignerBankruptcyLabel(sub.bankruptcy) },
+      { label: "Criminal history", value: cosignerCriminalLabel(sub.criminal) },
+      { label: "Credit/background consent", value: sub.consentCredit ? "Authorized" : "" },
+      { label: "Signature", value: clean(sub.signature) },
+      { label: "Date signed", value: clean(sub.dateSigned) },
+      {
+        label: "Submitted",
+        value: sub.submittedAt ? new Date(sub.submittedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" }) : "",
+      },
+    ]);
+  });
 
   // ---- Current residence --------------------------------------------------
   const currentAddress = [
@@ -456,6 +548,14 @@ export async function buildApplicationPdf(
     { label: "Credit/background consent", value: app.consentCredit ? "Authorized" : "" },
     { label: "Attestation of truth", value: app.consentTruth ? "Acknowledged" : "" },
     { label: "Application fee acknowledged", value: app.applicationFeeAcknowledged ? "Yes" : "" },
+    { label: "Application fee payment method", value: feeChannelLabel(app.applicationFeePayChannel) },
+    {
+      label: "Manual fee payment confirmed",
+      value:
+        app.applicationFeePayChannel === "zelle" || app.applicationFeePayChannel === "venmo"
+          ? yesNo(app.applicationFeeZelleSentConfirmed ? "yes" : "no")
+          : "",
+    },
     { label: "Digital signature", value: clean(app.digitalSignature) },
     { label: "Date signed", value: clean(app.dateSigned) },
   ]);
@@ -473,7 +573,7 @@ export async function buildApplicationPdf(
 
   // ---- Footer on every page ----------------------------------------------
   const pages = pdf.getPages();
-  const footerLabel = `Axis Property Management  ·  Confidential`;
+  const footerLabel = `Axis  ·  Confidential`;
   pages.forEach((p, index) => {
     p.drawLine({
       start: { x: MARGIN, y: FOOTER_Y + 12 },

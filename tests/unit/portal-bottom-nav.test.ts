@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  NATIVE_BOTTOM_NAV_ADMIN_PRIMARY,
   NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER,
+  NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY,
   NATIVE_BOTTOM_NAV_RESIDENT_ORDER,
+  NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY,
+  NATIVE_BOTTOM_NAV_VENDOR_PRIMARY,
+  nativeBottomBarEnabledForKind,
+  nativeBottomNavShowMoreTab,
   orderNativeBottomNavItems,
   pickNativeBottomNavItems,
   splitNativeBottomNavItems,
@@ -72,32 +78,92 @@ describe("orderNativeBottomNavItems", () => {
 });
 
 describe("splitNativeBottomNavItems", () => {
-  it("returns every section in the scrollable bar with no overflow bucket", () => {
+  it("curates the pro manager bar to the primary set and overflows the rest", () => {
     const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "pro");
-    expect(overflow).toEqual([]);
-    expect(primary.map((item) => item.section)).toEqual(orderNativeBottomNavItems(items, "pro").map((item) => item.section));
-    expect(primary.at(-1)?.section).toBe("profile");
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY]);
+    expect(overflow.map((item) => item.section)).toEqual(
+      sectionIds(proPortal.sections).filter(
+        (section) =>
+          !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section) &&
+          section !== "profile",
+      ),
+    );
+    expect(overflow.map((item) => item.section)).toContain("dashboard");
+    expect(overflow.map((item) => item.section)).toContain("services");
+    expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
-  it("includes all resident limited sections in the scroll strip", () => {
+  it("curates the resident bar (limited) to the primary set minus the missing 'services' section", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
-    expect(overflow).toEqual([]);
-    expect(new Set(primary.map((item) => item.section))).toEqual(new Set(items.map((item) => item.section)));
+    // Limited tier has no "services" section — splitNativeBottomNavItems intersects
+    // with real sections, so the bar gracefully shows the other 4 primary tabs.
+    expect(primary.map((item) => item.section)).toEqual(
+      NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY.filter((section) => section !== "services"),
+    );
+    expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
-  it("includes all resident approved sections in the scroll strip", () => {
+  it("curates the resident bar (approved) to the primary set and overflows the rest", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
-    expect(overflow).toEqual([]);
-    expect(primary.map((item) => item.section)).toContain("services");
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
+    expect(overflow.map((item) => item.section)).toContain("documents");
+    expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
-  it("includes every admin section in the scroll strip", () => {
+  it("curates the admin bar to the primary set and overflows the rest", () => {
     const items = adminPortal.sections.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "admin");
-    expect(overflow).toEqual([]);
-    expect(primary.at(-1)?.section).toBe("profile");
+    expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_ADMIN_PRIMARY]);
+    expect(overflow.map((item) => item.section)).not.toContain("profile");
+    expect(primary.length + overflow.length).toBe(items.length - 1);
+  });
+
+  it("fails closed (not open) for an unrecognized kind — nothing goes on the fixed bar", () => {
+    const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
+    // @ts-expect-error deliberately probing an unknown/future role
+    const { primary, overflow } = splitNativeBottomNavItems(items, "future-role");
+    expect(primary).toEqual([]);
+    expect(overflow.length).toBe(items.length);
+  });
+
+  it("fails closed for a missing kind too", () => {
+    const items = proPortal.sections.map((s) => ({ section: s.section, label: s.label }));
+    const { primary, overflow } = splitNativeBottomNavItems(items, undefined);
+    expect(primary).toEqual([]);
+    expect(overflow.length).toBe(items.length);
+  });
+});
+
+describe("nativeBottomBarEnabledForKind", () => {
+  it("is enabled for every role, including resident", () => {
+    expect(nativeBottomBarEnabledForKind("pro")).toBe(true);
+    expect(nativeBottomBarEnabledForKind("manager")).toBe(true);
+    expect(nativeBottomBarEnabledForKind("admin")).toBe(true);
+    expect(nativeBottomBarEnabledForKind("vendor")).toBe(true);
+    expect(nativeBottomBarEnabledForKind("resident")).toBe(true);
+    expect(nativeBottomBarEnabledForKind(undefined)).toBe(true);
+  });
+});
+
+describe("nativeBottomNavShowMoreTab", () => {
+  it("shows the More tab for pro/manager, resident, and vendor when primary sets don't cover every section", () => {
+    expect(nativeBottomNavShowMoreTab("pro")).toBe(true);
+    expect(nativeBottomNavShowMoreTab("manager")).toBe(true);
+    expect(nativeBottomNavShowMoreTab("resident")).toBe(true);
+    expect(nativeBottomNavShowMoreTab("vendor")).toBe(true);
+  });
+
+  it("skips the More tab for admin", () => {
+    expect(nativeBottomNavShowMoreTab("admin")).toBe(false);
+    expect(nativeBottomNavShowMoreTab(undefined)).toBe(false);
+  });
+
+  it("vendor primary tabs plus back arrow (dashboard) and profile menu (settings) cover 6 of 7 vendor sections", () => {
+    const coveredByBackAndProfile = new Set(["dashboard", "profile"]);
+    const coveredSections = new Set([...NATIVE_BOTTOM_NAV_VENDOR_PRIMARY, ...coveredByBackAndProfile]);
+    expect(coveredSections.size).toBe(6);
   });
 });

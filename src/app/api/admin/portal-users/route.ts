@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isPortalSandboxEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -62,7 +63,7 @@ export async function GET() {
 
     const managers = mIds
       .map((id) => byId.get(id))
-      .filter(Boolean)
+      .filter((r): r is Row => Boolean(r) && !isPortalSandboxEmail(r!.email))
       .map((r) => ({
         id: r!.id,
         label: labelFor(r!),
@@ -71,7 +72,7 @@ export async function GET() {
       }));
     const residents = rIds
       .map((id) => byId.get(id))
-      .filter(Boolean)
+      .filter((r): r is Row => Boolean(r) && !isPortalSandboxEmail(r!.email))
       .map((r) => ({
         id: r!.id,
         label: labelFor(r!),
@@ -83,8 +84,8 @@ export async function GET() {
       managers,
       residents,
       counts: {
-        managers: mIds.length,
-        residents: rIds.length,
+        managers: managers.length,
+        residents: residents.length,
       },
     });
   } catch (e) {

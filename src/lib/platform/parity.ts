@@ -20,6 +20,7 @@ export const IN_APP_PATH_PREFIXES = [
   "/rent/",
   "/partner/",
   "/billing/",
+  "/vendor/",
 ] as const;
 
 /** Exact paths (no trailing segment) that are also in-app. */
@@ -33,6 +34,10 @@ export const REGISTERED_PUSH_DEEP_LINKS = [
   "/resident/payments",
   "/resident/dashboard",
   "/resident/applications",
+  "/resident/inbox/unopened",
+  "/portal/inbox/unopened",
+  "/admin/inbox/unopened",
+  "/vendor/inbox/unopened",
 ] as const;
 
 export type PlatformSurface = "web" | "native-webview";
@@ -73,7 +78,7 @@ export function assertInAppPushPath(pathname: string, context = "push notificati
 /** Checklist referenced by AGENTS.md and docs/web-and-native-parity.md */
 export const PLATFORM_CHANGE_CHECKLIST = [
   "Portal/nav change: update src/lib/portals/* section registry and render-portal-section.tsx",
-  "Nav order: registries (pro.ts, admin.ts, resident-sections.ts) are canonical — native bottom bar uses portal-bottom-nav.ts passthrough only",
+  "Nav order: registries (pro.ts, admin.ts, resident-sections.ts) are canonical — native bottom bar shows a curated NATIVE_BOTTOM_NAV_*_PRIMARY set from portal-bottom-nav.ts, everything else lives in the swipe-up More sheet",
   "Free-tier gating: update RESIDENT_FREE_TIER_SECTION_IDS or manager-access tier sets",
   "New in-app route: add prefix to IN_APP_PATH_PREFIXES if outside existing portals",
   "Push notification: use assertInAppPushPath and add path to REGISTERED_PUSH_DEEP_LINKS",

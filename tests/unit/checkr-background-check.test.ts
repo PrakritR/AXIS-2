@@ -55,9 +55,10 @@ describe("checkr background check", () => {
         lastName: "Doe",
         email: "jane@example.com",
         dob: "1990-01-01",
-        ssn: "111-22-3334", // ends in 4 → clear
+        ssn: "111-22-3334",
       },
       PROPERTY,
+      { packageSlug: "essential" },
     );
     expect(created.status).toBe("pending");
     expect(created.simulated).toBe(true);
@@ -101,6 +102,7 @@ describe("checkr background check", () => {
         ssn: "111223334",
       },
       PROPERTY,
+      { packageSlug: "essential", addOnProducts: ["identity_verification"] },
     );
 
     expect(created.applicantId).toBe("ap_1");
@@ -113,7 +115,12 @@ describe("checkr background check", () => {
     expect(auth).toBe("Bearer ckr_sk_test_abc123");
     const orderCall = calls.find((c) => c.url.endsWith("/orders"))!;
     expect(JSON.parse(orderCall.init!.body as string)).toMatchObject({
-      order: { applicant_id: "ap_1", property_id: "pr_1", package: "essential" },
+      order: {
+        applicant_id: "ap_1",
+        property_id: "pr_1",
+        package: "essential",
+        add_on_products: ["identity_verification"],
+      },
     });
   });
 
@@ -129,12 +136,14 @@ describe("checkr background check", () => {
       createBackgroundCheck(
         { firstName: "Jane", lastName: "Doe", email: "jane@example.com", dob: "1990-01-01", ssn: "bad" },
         PROPERTY,
+        { packageSlug: "essential" },
       ),
     ).rejects.toThrow(/invalid ssn/);
     await expect(
       createBackgroundCheck(
         { firstName: "Jane", lastName: "Doe", email: "jane@example.com", dob: "1990-01-01", ssn: "bad" },
         PROPERTY,
+        { packageSlug: "essential" },
       ),
     ).rejects.not.toThrow(/ckr_sk_test_secret/);
   });

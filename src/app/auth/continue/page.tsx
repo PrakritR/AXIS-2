@@ -1,10 +1,16 @@
 "use client";
 
 import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
+import { GET_STARTED_PATH } from "@/lib/auth/get-started-path";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import {
+  resolveClientPostAuthDestination,
+  resolvePostAuthDestination,
+} from "@/lib/auth/resolve-post-auth-destination";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
@@ -42,42 +48,53 @@ function ContinueContent() {
           return;
         }
 
-        // Single source of truth: the server resolves the destination once (portal, plan,
-        // signup-finish, choose-portal, or the get-started role chooser for unknown users).
-        const resolveDestination = async (): Promise<string | null> => {
-          try {
-            const res = await fetch(
-              `/api/auth/oauth-portal-access?next=${encodeURIComponent(nextPath || "/auth/continue")}`,
-              { credentials: "include", cache: "no-store" },
-            );
-            if (!res.ok) return null;
-            const body = (await res.json()) as { redirectTo?: string };
-            const candidate = body.redirectTo?.startsWith("/") ? normalizePostAuthPath(body.redirectTo) : null;
-            return candidate === "/auth/continue" ? null : candidate;
-          } catch {
-            return null;
-          }
-        };
+        // Ensure SSR auth cookies are flushed before the server resolver runs.
+        await supabase.auth.refreshSession().catch(() => undefined);
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const accessToken = session?.access_token ?? null;
 
-        let redirectTo = await resolveDestination();
-        if (!redirectTo) {
-          await new Promise((resolve) => window.setTimeout(resolve, 400));
-          redirectTo = await resolveDestination();
-        }
+        const { redirectTo, resolutionFailed } = await resolvePostAuthDestination(
+          nextPath || "/auth/continue",
+          accessToken,
+        );
 
         if (cancelled || didRedirectRef.current) return;
-        didRedirectRef.current = true;
 
         if (redirectTo) {
+          didRedirectRef.current = true;
           window.location.replace(nativeAwarePath(redirectTo));
           return;
         }
 
-        // Resolution failed (network/500) — keep the user on a safe authenticated screen.
-        window.location.replace(nativeAwarePath("/auth/get-started"));
+        if (resolutionFailed) {
+          const clientDestination = await resolveClientPostAuthDestination(supabase, nextPath);
+          if (clientDestination) {
+            didRedirectRef.current = true;
+            window.location.replace(nativeAwarePath(clientDestination));
+            return;
+          }
+
+          const fallback =
+            nextPath.startsWith("/") && nextPath !== "/auth/continue" ? normalizePostAuthPath(nextPath) : null;
+          if (fallback && fallback !== "/auth/continue") {
+            didRedirectRef.current = true;
+            window.location.replace(nativeAwarePath(fallback));
+            return;
+          }
+
+          didRedirectRef.current = true;
+          window.location.replace(nativeAwarePath(GET_STARTED_PATH));
+          return;
+        }
+
+        didRedirectRef.current = true;
+        window.location.replace(nativeAwarePath(GET_STARTED_PATH));
       } catch {
         if (cancelled) return;
         setErrorText("Still loading your portal. If this keeps happening, go back and try sign-in again.");
+        didRedirectRef.current = false;
       }
     })();
 
@@ -91,6 +108,12 @@ function ContinueContent() {
       <div className="flex flex-col items-center gap-4 py-10">
         <AuthOAuthLoading label="Loading your portal" />
         <p className="max-w-sm text-center text-sm text-rose-600">{errorText}</p>
+        <Link
+          href={nextPath ? `/auth/sign-in?next=${encodeURIComponent(nextPath)}` : "/auth/sign-in"}
+          className="text-sm font-semibold text-primary hover:opacity-90"
+        >
+          Back to sign in
+        </Link>
       </div>
     );
   }

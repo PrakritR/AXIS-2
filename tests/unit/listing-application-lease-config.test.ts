@@ -86,16 +86,20 @@ describe("custom application field sections", () => {
     });
     expect(listingCustomApplicationFields(sub)).toHaveLength(3);
     sub.applicationConfigMode = "standard";
+    expect(listingUsesStandardApplication(sub)).toBe(false);
+    expect(listingCustomApplicationFields(sub)).toHaveLength(3);
+    sub.customApplicationFields = [];
     expect(listingUsesStandardApplication(sub)).toBe(true);
     expect(listingCustomApplicationFields(sub)).toEqual([]);
     // Legacy submissions (no mode) keep applying their questions.
     sub.applicationConfigMode = undefined;
+    sub.customApplicationFields = normalizeCustomApplicationFields(fields);
     expect(listingCustomApplicationFields(sub)).toHaveLength(3);
   });
 });
 
 describe("listing wizard application/lease step validation", () => {
-  it("flags incomplete custom questions only when customization is on", () => {
+  it("flags incomplete custom questions", () => {
     const draft = subWith({
       applicationConfigMode: "custom",
       customApplicationFields: [
@@ -103,8 +107,6 @@ describe("listing wizard application/lease step validation", () => {
       ],
     });
     expect(Object.keys(validateListingWizardStep(7, draft))).toContain("appq-x");
-    draft.applicationConfigMode = "standard";
-    expect(validateListingWizardStep(7, draft)).toEqual({});
   });
 
   it("requires custom lease content when the lease is customized", () => {

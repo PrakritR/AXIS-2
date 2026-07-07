@@ -23,8 +23,10 @@ import { applicationVisibleToPortalUser, leaseVisibleToPortalUser } from "@/lib/
 
 export const LEASE_PIPELINE_EVENT = "axis:lease-pipeline";
 const LEASE_PIPELINE_SESSION_KEY_PREFIX = "axis:lease-pipeline:v2";
+const LEASE_PIPELINE_SUPPRESSED_KEY_PREFIX = "axis:lease-pipeline-suppressed:v1";
 
 let memoryRows: LeasePipelineRow[] = [];
+let suppressedLeaseKeys: Set<string> = new Set();
 let activeLeasePipelineScopeUserId: string | undefined;
 const LEASE_PIPELINE_SYNC_TTL_MS = 15_000;
 let leasePipelineLastSyncedAt = 0;
@@ -195,6 +197,8 @@ export type LeasePipelineRow = {
   fullySignedAt?: string | null;
   voidedAt?: string | null;
   versionNumber?: number;
+  /** Set when manager deletes the saved document — suppresses application draft preview until regenerate/upload. */
+  leaseDocumentRemovedAt?: string | null;
 };
 
 function workflowStatusForRow(
@@ -209,7 +213,6 @@ function workflowStatusForRow(
   const managerSigned = Boolean(input.managerSignature?.name && input.managerSignature?.signedAtIso);
   if (input.voidedAt) return "Voided";
   if (managerSigned && residentSigned) return "Fully Signed";
-  if (input.bucket === "admin") return "Admin Review";
   if (input.bucket === "resident") return "Resident Signature Pending";
   if (input.bucket === "signed") return "Manager Signature Pending";
   return input.generatedHtml || input.managerUploadedPdf ? "Manager Review" : "Draft";
@@ -222,7 +225,7 @@ function currentActorForStatus(status: LeaseWorkflowStatus): LeasePipelineRow["c
     case "Manager Signature Pending":
       return "manager";
     case "Admin Review":
-      return "admin";
+      return "manager";
     case "Resident Signature Pending":
       return "resident";
     case "Fully Signed":
@@ -264,8 +267,13 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
   );
   const residentSignature = normalizeLeaseSignature(r.residentSignature, "resident") ?? legacyResidentSignature;
   const managerSignature = normalizeLeaseSignature(r.managerSignature, "manager");
-  let bucket: ManagerLeaseBucket =
-    b === "manager" || b === "admin" || b === "resident" || b === "signed" ? b : "manager";
+  const legacyBucket = String(b ?? "");
+  let bucket: ManagerLeaseBucket = "manager";
+  if (legacyBucket === "manager" || legacyBucket === "resident" || legacyBucket === "signed") {
+    bucket = legacyBucket;
+  } else if (legacyBucket === "admin") {
+    bucket = "manager";
+  }
   const residentSigned = Boolean(residentSignature?.name && residentSignature.signedAtIso);
   if (residentSigned && !managerSignature && bucket === "resident") bucket = "signed";
   const status = workflowStatusForRow({
@@ -328,6 +336,7 @@ export function normalizeLeasePipelineRow(raw: unknown): LeasePipelineRow {
           : null,
     voidedAt: typeof r.voidedAt === "string" ? r.voidedAt : null,
     versionNumber,
+    leaseDocumentRemovedAt: typeof r.leaseDocumentRemovedAt === "string" ? r.leaseDocumentRemovedAt : null,
   };
 }
 
@@ -346,7 +355,76 @@ function ensureLeasePipelineScope(scopeUserId?: string | null) {
     activeLeasePipelineScopeUserId = nextScope;
     memoryRows = [];
     leasePipelineLastSyncedAt = 0;
+    hydrateSuppressedLeaseKeys(nextScope);
   }
+}
+
+function leaseSuppressionSessionKey(scopeUserId?: string | null): string {
+  if (isDemoModeActive()) return `${LEASE_PIPELINE_SUPPRESSED_KEY_PREFIX}:shared`;
+  if (scopeUserId) return `${LEASE_PIPELINE_SUPPRESSED_KEY_PREFIX}:${scopeUserId}`;
+  return `${LEASE_PIPELINE_SUPPRESSED_KEY_PREFIX}:shared`;
+}
+
+function leaseSuppressionKey(axisId?: string | null, email?: string | null): string {
+  const axis = axisId?.trim();
+  if (axis) return `axis:${normalizeApplicationAxisId(axis)}`;
+  const e = email?.trim().toLowerCase();
+  return e ? `email:${e}` : "";
+}
+
+function hydrateSuppressedLeaseKeys(scopeUserId?: string | null) {
+  if (!canUseStorage()) return;
+  try {
+    const raw = window.sessionStorage.getItem(leaseSuppressionSessionKey(scopeUserId));
+    if (!raw) {
+      suppressedLeaseKeys = new Set();
+      return;
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    suppressedLeaseKeys = new Set(Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : []);
+  } catch {
+    suppressedLeaseKeys = new Set();
+  }
+}
+
+function persistSuppressedLeaseKeys(scopeUserId?: string | null) {
+  if (!canUseStorage()) return;
+  try {
+    window.sessionStorage.setItem(
+      leaseSuppressionSessionKey(scopeUserId ?? activeLeasePipelineScopeUserId),
+      JSON.stringify([...suppressedLeaseKeys]),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function isLeasePipelineSuppressed(axisId?: string | null, email?: string | null, managerUserId?: string | null): boolean {
+  hydrateSuppressedLeaseKeys(managerUserId ?? activeLeasePipelineScopeUserId);
+  const key = leaseSuppressionKey(axisId, email);
+  return Boolean(key && suppressedLeaseKeys.has(key));
+}
+
+/** Allow auto-seeding / recreating a lease row after the manager explicitly removed one. */
+export function clearLeasePipelineSuppression(
+  axisId?: string | null,
+  email?: string | null,
+  managerUserId?: string | null,
+): void {
+  hydrateSuppressedLeaseKeys(managerUserId ?? activeLeasePipelineScopeUserId);
+  const key = leaseSuppressionKey(axisId, email);
+  if (!key || !suppressedLeaseKeys.has(key)) return;
+  suppressedLeaseKeys.delete(key);
+  persistSuppressedLeaseKeys(managerUserId);
+  materializeLeasePipeline(managerUserId);
+}
+
+function suppressLeasePipelineRow(row: LeasePipelineRow, managerUserId?: string | null): void {
+  hydrateSuppressedLeaseKeys(managerUserId ?? activeLeasePipelineScopeUserId);
+  const key = leaseSuppressionKey(row.axisId, row.residentEmail);
+  if (!key) return;
+  suppressedLeaseKeys.add(key);
+  persistSuppressedLeaseKeys(managerUserId);
 }
 
 function filterLeasesForManager(rows: LeasePipelineRow[], managerUserId?: string | null): LeasePipelineRow[] {
@@ -398,8 +476,6 @@ function stageLabelForBucket(b: ManagerLeaseBucket): string {
   switch (b) {
     case "manager":
       return "Manager review";
-    case "admin":
-      return "Admin review";
     case "resident":
       return "Resident Signature Pending";
     case "signed":
@@ -418,7 +494,6 @@ export function leaseRowMatchesManagerTab(row: LeasePipelineRow, tab: ManagerLea
 export function countManagerLeaseTabs(rows: LeasePipelineRow[]): Record<ManagerLeaseTab, number> {
   return {
     manager: rows.filter((r) => r.bucket === "manager").length,
-    admin: rows.filter((r) => r.bucket === "admin").length,
     resident: rows.filter((r) => r.bucket === "resident").length,
     signed: rows.filter((r) => r.bucket === "signed" && r.status !== "Fully Signed").length,
     completed: rows.filter((r) => r.status === "Fully Signed").length,
@@ -533,6 +608,16 @@ function persistLeaseRowToServer(row: LeasePipelineRow) {
   }).catch(() => undefined);
 }
 
+function persistLeaseDeleteToServer(ids: string[]) {
+  if (!canUseStorage() || isDemoModeActive() || ids.length === 0) return;
+  void fetch("/api/portal-lease-pipeline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "deleteIds", ids }),
+  }).catch(() => undefined);
+}
+
 async function persistLeaseRowToServerAwait(row: LeasePipelineRow): Promise<boolean> {
   if (!canUseStorage()) return false;
   if (isDemoModeActive()) return true;
@@ -587,6 +672,7 @@ function syncApprovedApplications(rows: LeasePipelineRow[], managerUserId?: stri
   let changed = false;
   const next = [...rows];
   for (const app of apps) {
+    if (isLeasePipelineSuppressed(app.id, app.email, managerUserId)) continue;
     const email = app.email!.trim().toLowerCase();
     const propertyId = app.assignedPropertyId?.trim() || app.propertyId?.trim() || app.application?.propertyId?.trim() || "";
     const roomChoice = app.assignedRoomChoice?.trim() || app.application?.roomChoice1?.trim() || "";
@@ -767,11 +853,10 @@ export function syncLeasePipelineFromApplications(managerUserId?: string | null)
   return next;
 }
 
-export function leasePipelineBucketCounts(): [number, number, number, number] {
+export function leasePipelineBucketCounts(): [number, number, number] {
   const rows = readLeasePipeline();
   return [
     rows.filter((r) => r.bucket === "manager").length,
-    rows.filter((r) => r.bucket === "admin").length,
     rows.filter((r) => r.bucket === "resident").length,
     rows.filter((r) => r.bucket === "signed").length,
   ];
@@ -830,7 +915,7 @@ function residentLeasePriority(row: LeasePipelineRow): number {
     case "Manager Review":
       return 2;
     case "Admin Review":
-      return 1;
+      return 2;
     default:
       return 0;
   }
@@ -915,6 +1000,9 @@ export function deleteLeasePipelineRow(id: string, managerUserId?: string | null
     voidedAt: null,
     pdfVersion: 1,
     versionNumber: 1,
+    status: "Manager Review",
+    currentActorRole: "manager",
+    leaseDocumentRemovedAt: iso,
     updatedAtIso: iso,
     updated: formatUpdatedLabel(iso),
   });
@@ -940,6 +1028,7 @@ export function deleteLeasePipelineRowsForResident(
     if (String(row.residentEmail ?? "").trim()) {
       clearUploadedOwnLease(row.residentEmail);
     }
+    suppressLeasePipelineRow(row, managerUserId);
   }
   const raw = [...(readRaw(managerUserId) ?? [])];
   const removedIds = new Set(removedRows.map((r) => r.id));
@@ -947,6 +1036,7 @@ export function deleteLeasePipelineRowsForResident(
     raw.filter((row) => !removedIds.has(row.id)),
     managerUserId,
   );
+  persistLeaseDeleteToServer([...removedIds]);
   return removedRows.length;
 }
 
@@ -1081,6 +1171,7 @@ export function generateLeaseHtmlForRow(
       versionNumber: version,
       status: "Manager Review",
       currentActorRole: "manager",
+      leaseDocumentRemovedAt: null,
     },
     managerUserId,
   );
@@ -1293,6 +1384,7 @@ export function managerUploadLeasePdf(
         sentToResidentAt: null,
         fullySignedAt: null,
         voidedAt: null,
+        leaseDocumentRemovedAt: null,
       });
       write(rows, managerUserId);
       resolve({ ok: true });
@@ -1548,32 +1640,6 @@ export async function sendLeaseToResident(rowId: string, managerUserId?: string 
     return { ok: false, error: "Lease could not be saved to the server. Check your connection and try again." };
   }
   raw[idx] = updated;
-  write(raw, managerUserId);
-  return { ok: true };
-}
-
-export function sendLeaseToAdminReview(rowId: string, managerUserId?: string | null): LeasePipelineActionResult {
-  const rows = readLeasePipeline(managerUserId);
-  const idx = rows.findIndex((r) => r.id === rowId);
-  if (idx === -1) return { ok: false, error: "Lease not found." };
-  const row = rows[idx]!;
-  if (!leaseAccessibleToManager(row, managerUserId)) return { ok: false, error: "Lease not found." };
-  if (row.status === "Fully Signed" || row.status === "Voided" || hasAnyLeaseSignature(row)) {
-    return { ok: false, error: "This lease can no longer be sent for admin review." };
-  }
-  const iso = new Date().toISOString();
-  const raw = [...materializeLeasePipeline(managerUserId)];
-  const rawIdx = findRawLeaseRowIndex(rowId, managerUserId);
-  if (rawIdx === -1) return { ok: false, error: "Lease record could not be saved locally." };
-  raw[rawIdx] = normalizeLeasePipelineRow({
-    ...row,
-    bucket: "admin",
-    status: "Admin Review",
-    currentActorRole: "admin",
-    adminReviewRequestedAt: iso,
-    updatedAtIso: iso,
-    updated: formatUpdatedLabel(iso),
-  });
   write(raw, managerUserId);
   return { ok: true };
 }

@@ -118,20 +118,17 @@ export function validateListingWizardStep(
     if (sub.venmoPaymentsEnabled && !sub.venmoContact?.trim()) {
       errs.venmoContact = "Enter a Venmo username, phone, or email for resident payments.";
     }
-    if (sub.applicationFeeOtherEnabled && !sub.applicationFeeOtherInstructions?.trim()) {
-      errs.applicationFeeOtherInstructions = "Enter payment instructions for the Other application fee option.";
-    }
     const appFeeAmount = parseMoneyAmount(sub.applicationFee);
     if (appFeeAmount > 0) {
       const channels = listingApplicationFeeChannels(sub);
       if (!channels.ach && !channels.zelle && !channels.venmo && !channels.other) {
-        errs.applicationFeeMethods = "Choose at least one application fee payment method.";
+        errs.residentPaymentMethods = "Enable at least one resident payment method — applicants use the same options for the application fee.";
       }
     }
   }
 
-  // Application step — custom questions must be complete when customization is on.
-  if (stepIndex === 7 && sub.applicationConfigMode === "custom") {
+  // Application step — saved overrides and custom questions must be complete.
+  if (stepIndex === 7) {
     for (const field of sub.customApplicationFields ?? []) {
       const key = listingCustomQuestionErrorKey(field.id);
       if (!field.label.trim()) {

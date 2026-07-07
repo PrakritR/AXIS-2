@@ -20,11 +20,14 @@ export function FormalDocumentScopeBar({
   filters,
   onChange,
   inline = false,
+  stacked = false,
 }: {
   filters: FormalDocumentFilterState;
   onChange: (next: Partial<FormalDocumentFilterState>) => void;
   /** Render bare controls (no card) that sit inline in a shared portal filter row. */
   inline?: boolean;
+  /** Vertical stack for modal forms. */
+  stacked?: boolean;
 }) {
   const [options, setOptions] = useState<ScopeOptions>({ properties: [], tenants: [], rooms: [] });
 
@@ -38,15 +41,20 @@ export function FormalDocumentScopeBar({
 
   // Match the shared portal filter-row control styling used by ReportFilterBar.
   const labelClass = inline
-    ? "flex flex-col gap-1.5 text-xs font-medium text-muted"
+    ? stacked
+      ? "flex w-full flex-col gap-1.5 text-xs font-medium text-muted"
+      : "flex flex-col gap-1.5 text-xs font-medium text-muted"
     : "flex flex-col gap-1 text-xs font-medium text-muted";
   const selectClass = inline
-    ? "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
-    : "h-9 rounded-xl border border-border bg-card px-3 text-sm";
+    ? "h-10 w-full rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)]"
+    : "h-9 w-full rounded-xl border border-border bg-card px-3 text-sm";
+
+  const fieldClass = (minWidth: string) =>
+    stacked ? labelClass : `${minWidth} ${labelClass}`;
 
   const controls = (
     <>
-      <label className={`min-w-[9rem] ${labelClass}`}>
+      <label className={fieldClass("min-w-[9rem]")}>
         Scope
         <select
           className={selectClass}
@@ -68,7 +76,7 @@ export function FormalDocumentScopeBar({
       </label>
 
       {filters.scope === "property" || filters.scope === "tenant" || filters.scope === "room" ? (
-        <label className={`min-w-[10rem] ${labelClass}`}>
+        <label className={fieldClass("min-w-[10rem]")}>
           Property
           <select
             className={selectClass}
@@ -86,7 +94,7 @@ export function FormalDocumentScopeBar({
       ) : null}
 
       {filters.scope === "tenant" ? (
-        <label className={`min-w-[10rem] ${labelClass}`}>
+        <label className={fieldClass("min-w-[10rem]")}>
           Tenant
           <select
             className={selectClass}
@@ -104,7 +112,7 @@ export function FormalDocumentScopeBar({
       ) : null}
 
       {filters.scope === "room" ? (
-        <label className={`min-w-[9rem] ${labelClass}`}>
+        <label className={fieldClass("min-w-[9rem]")}>
           Room / unit
           <select
             className={selectClass}
@@ -123,7 +131,9 @@ export function FormalDocumentScopeBar({
     </>
   );
 
-  if (inline) return controls;
+  if (inline) {
+    return stacked ? <div className="flex flex-col gap-4">{controls}</div> : controls;
+  }
 
   return (
     <div className="rounded-2xl border border-border bg-accent/15 p-4">

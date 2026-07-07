@@ -1,16 +1,18 @@
 import type { AuthRole } from "@/components/auth/portal-switcher";
+import { GET_STARTED_PATH } from "@/lib/auth/get-started-path";
 import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { normalizePostAuthPath } from "@/lib/auth/normalize-post-auth-path";
+import { normalizePortalRoles } from "@/lib/auth/portal-access";
 import { portalDashboardPath } from "@/lib/auth/portal-roles";
 import {
   applyOAuthSurfaceToPath,
   defaultOAuthNextPath,
+  isGenericOAuthContinuePath,
   resolvePostOAuthPathFromRoles,
   type OAuthSignInIntent,
   type OAuthSurface,
 } from "@/lib/auth/post-oauth-routing";
 import { completeResidentSignupFromOAuth } from "@/lib/auth/complete-resident-signup-oauth";
-import { GET_STARTED_PATH } from "@/lib/auth/get-started-path";
 import {
   findManagerPurchaseForAccount,
   isManagerOnboardingComplete,
@@ -20,16 +22,18 @@ import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { managerOauthFinishPath } from "@/lib/auth/manager-oauth-finish-path";
 import { isPrimaryAdminEmail } from "@/lib/auth/primary-admin";
+import { loadResidentPortalAccessState, residentPortalHomePath } from "@/lib/resident-portal-access";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 function isAuthRole(value: string): value is AuthRole {
-  return value === "resident" || value === "manager" || value === "admin";
+  return value === "resident" || value === "manager" || value === "admin" || value === "vendor";
 }
 
 function isBypassOAuthGatePath(path: string): boolean {
   return (
     path.startsWith("/auth/manager-") ||
     path.startsWith("/auth/resident-") ||
+    path.startsWith("/auth/vendor-") ||
     path.startsWith("/partner/pricing") ||
     path.startsWith(MANAGER_PRICING_ENTRY_PATH) ||
     path.startsWith("/auth/create-account") ||
@@ -87,8 +91,11 @@ export async function resolveOAuthPortalRedirect(
     return finish(MANAGER_PRICING_ENTRY_PATH);
   }
 
-  const { data: roleRows } = await supabase.from("profile_roles").select("role").eq("user_id", user.id);
-  const roles = [...new Set((roleRows ?? []).map((row) => row.role).filter((role): role is AuthRole => isAuthRole(role)))];
+  const [{ data: roleRows }, { data: profile }] = await Promise.all([
+    supabase.from("profile_roles").select("role").eq("user_id", user.id),
+    supabase.from("profiles").select("role, manager_id, full_name, application_approved").eq("id", user.id).maybeSingle(),
+  ]);
+  const roles = normalizePortalRoles(roleRows, profile?.role);
 
   // Multi-role users (e.g. admin+manager) always pick their portal explicitly — the chooser
   // must never be skipped by a single-role branch below.
@@ -97,7 +104,19 @@ export async function resolveOAuthPortalRedirect(
   }
 
   const soleRole = roles[0] ?? null;
-  if (soleRole === "resident" || soleRole === "admin") {
+  if (soleRole === "resident") {
+    const access = await loadResidentPortalAccessState({
+      userId: user.id,
+      role: "resident",
+      email,
+    });
+    const home = residentPortalHomePath(access);
+    if (isGenericOAuthContinuePath(safeIntended) || safeIntended === "/resident/dashboard" || safeIntended === "/resident") {
+      return finish(home);
+    }
+    return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
+  }
+  if (soleRole === "admin" || soleRole === "vendor") {
     return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
   }
   if (soleRole === "manager") {
@@ -107,22 +126,8 @@ export async function resolveOAuthPortalRedirect(
     return finish(managerPortalDestination(safeIntended));
   }
 
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role === "manager" && (await managerNeedsPricingSelection(supabase, user.id, email))) {
-    return finish(MANAGER_PRICING_ENTRY_PATH);
-  }
-  if (profile?.role === "manager") {
-    return finish(managerPortalDestination(safeIntended));
-  }
-  if (profile?.role === "resident") {
-    return finish(resolvePostOAuthPathFromRoles(["resident"], safeIntended));
-  }
-  if (profile?.role && isAuthRole(profile.role)) {
-    return finish(resolvePostOAuthPathFromRoles([profile.role], safeIntended));
-  }
-
   if (isPrimaryAdminEmail(email)) {
-    return finish(safeIntended);
+    return finish(isGenericOAuthContinuePath(safeIntended) ? portalDashboardPath("admin") : safeIntended);
   }
 
   const linkedPurchase = await findManagerPurchaseForAccount(supabase, user.id, email);
@@ -174,7 +179,12 @@ export async function resolveOAuthPortalRedirect(
   if (linkableApplication) {
     const linked = await completeResidentSignupFromOAuth(supabase, user.id, email, linkableApplication.id);
     if (linked.ok) {
-      return finish("/resident/dashboard");
+      const access = await loadResidentPortalAccessState({
+        userId: user.id,
+        role: "resident",
+        email,
+      });
+      return finish(residentPortalHomePath(access));
     }
     const params = new URLSearchParams({ role: "resident", message: "resident_signup_failed" });
     if (linked.error) params.set("error", linked.error);
@@ -184,10 +194,48 @@ export async function resolveOAuthPortalRedirect(
   // Unknown account: no role, no purchase, no application. Do NOT silently create a free
   // manager. Honor an explicit intent; otherwise send the user to the quick role chooser.
   if (intent === "manager") {
-    return finish(MANAGER_PRICING_ENTRY_PATH);
+    return finish("/auth/create-account?mode=create&role=manager");
   }
   if (intent === "resident") {
-    return finish("/auth/create-account?role=resident&message=resident_signup_failed");
+    return finish("/auth/create-account?role=resident");
+  }
+  if (intent === "vendor") {
+    return finish("/auth/create-account?role=vendor");
   }
   return finish(GET_STARTED_PATH);
+}
+
+/** Never return `/auth/continue` — callers need a concrete portal or chooser route. */
+export async function finalizeOAuthPortalRedirect(
+  supabase: SupabaseClient,
+  user: User,
+  intendedPath: string,
+  options?: {
+    intent?: OAuthSignInIntent | null;
+    surface?: OAuthSurface | null;
+  },
+): Promise<string> {
+  const resolved = normalizePostAuthPath(await resolveOAuthPortalRedirect(supabase, user, intendedPath, options));
+  if (resolved !== "/auth/continue") return resolved;
+
+  const email = user.email?.trim().toLowerCase() ?? "";
+  const [{ data: roleRows }, { data: profile }] = await Promise.all([
+    supabase.from("profile_roles").select("role").eq("user_id", user.id),
+    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+  ]);
+  const roles = normalizePortalRoles(roleRows, profile?.role);
+  if (roles.length === 1) {
+    if (roles[0] === "resident") {
+      const access = await loadResidentPortalAccessState({
+        userId: user.id,
+        role: "resident",
+        email: user.email?.trim().toLowerCase() ?? "",
+      });
+      return residentPortalHomePath(access);
+    }
+    return portalDashboardPath(roles[0]!);
+  }
+  if (roles.length > 1) return "/auth/choose-portal";
+  if (isPrimaryAdminEmail(email)) return portalDashboardPath("admin");
+  return GET_STARTED_PATH;
 }

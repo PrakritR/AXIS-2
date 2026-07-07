@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RESIDENT_INBOX_THREAD_FALLBACK } from "@/components/portal/resident-inbox-panel";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { readInboxMessages } from "@/lib/demo-admin-partner-inbox";
-import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
   readPartnerInquiries,
@@ -12,7 +11,6 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
-import { LEASE_PIPELINE_EVENT, syncLeasePipelineFromServer } from "@/lib/lease-pipeline-storage";
 import {
   applicationVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
@@ -20,6 +18,14 @@ import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
 } from "@/lib/manager-applications-storage";
+import {
+  MANAGER_WORK_ORDERS_EVENT,
+  readManagerWorkOrderRows,
+} from "@/lib/manager-work-orders-storage";
+import {
+  readServiceRequestsForManager,
+  SERVICE_REQUESTS_EVENT,
+} from "@/lib/service-requests-storage";
 import {
   countUnopenedPersistedInbox,
   MANAGER_INBOX_STORAGE_KEY,
@@ -36,10 +42,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
 
   useEffect(() => {
     if (kind === "admin") {
-      void Promise.allSettled([
-        syncScheduleRecordsFromServer(),
-        syncLeasePipelineFromServer(null),
-      ]).then(() => bump());
+      void syncScheduleRecordsFromServer().then(() => bump());
     } else if (kind === "manager" || kind === "pro") {
       void prefetchPortalData(kind, userId ?? undefined)
         .then(() => bump())
@@ -51,15 +54,17 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
     }
 
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
-    window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener(MANAGER_APPLICATIONS_EVENT, bump);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+    window.addEventListener(SERVICE_REQUESTS_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
-      window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, bump);
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, bump);
+      window.removeEventListener(SERVICE_REQUESTS_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
   }, [kind, bump, userId]);
@@ -72,13 +77,11 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
 
     if (kind === "admin") {
       const [pendingProps] = adminKpiCounts();
-      const [, adminBucket] = adminLeaseKpiCounts();
       const inboxUnread = readInboxMessages().filter((m) => m.folder === "inbox" && !m.read).length;
       const pendingMeetings = readPartnerInquiries().filter((r) => r.status === "pending" && r.kind !== "tour").length;
       const pendingTours = readPartnerInquiries().filter((r) => r.kind === "tour" && r.status === "pending").length;
       return {
         properties: pendingProps,
-        leases: adminBucket,
         events: pendingMeetings + pendingTours,
         inbox: inboxUnread,
       };
@@ -89,10 +92,15 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const pendingApps = readManagerApplicationRows().filter(
         (a) => applicationVisibleToPortalUser(a, userId) && a.bucket === "pending",
       ).length;
+      const pendingServiceRequests = readServiceRequestsForManager(userId).filter((r) => r.status === "pending").length;
+      const pendingWorkOrders = readManagerWorkOrderRows().filter(
+        (w) => (!w.managerUserId || w.managerUserId === userId) && w.bucket === "open",
+      ).length;
       const inbox = countUnopenedPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []);
       return {
         properties: pendingProps,
         applications: pendingApps,
+        services: pendingServiceRequests + pendingWorkOrders,
         inbox,
       };
     }

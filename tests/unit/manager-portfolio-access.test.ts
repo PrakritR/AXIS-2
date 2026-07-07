@@ -1,11 +1,14 @@
+import type { AccountLinkInviteDto } from "@/lib/account-links";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   collectLinkedPropertyIds,
   readLinkedListingsForUser,
+  resolvePropertyLabelForId,
   safePropertyOptionLabel,
 } from "@/lib/manager-portfolio-access";
 import * as proRelationships from "@/lib/pro-relationships";
 import * as propertyPipeline from "@/lib/demo-property-pipeline";
+import * as portalDataStore from "@/lib/portal-data-store";
 
 describe("manager portfolio access", () => {
   beforeEach(() => {
@@ -17,14 +20,87 @@ describe("manager portfolio access", () => {
       {
         id: "rel-1",
         linkedAxisId: "AXIS-PRIMARY",
+        linkDirection: "incoming",
         perspective: "manager_tab",
         payoutPercentForManager: 15,
         assignedPropertyIds: ["mgr-house-a", "pend-house-b"],
         createdAt: "2026-01-01T00:00:00.000Z",
       },
     ]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
 
     expect([...collectLinkedPropertyIds("co-user")]).toEqual(["mgr-house-a", "pend-house-b"]);
+  });
+
+  it("falls back to incoming accepted invites when relationship rows are empty", () => {
+    vi.spyOn(proRelationships, "readProRelationships").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([
+      {
+        id: "invite-1",
+        tabKind: "manager",
+        status: "accepted",
+        direction: "incoming",
+        inviterAxisId: "axis-owner",
+        inviteeAxisId: "axis-co",
+        inviterDisplayName: "Owner",
+        inviteeDisplayName: "Co",
+        linkedAxisId: "axis-owner",
+        linkedDisplayName: "Owner",
+        linkedUserId: "owner-user",
+        assignedPropertyIds: ["mgr-live-1"],
+        payoutPercentForManager: 15,
+        coManagerPermissions: { properties: true },
+        propertyCoManagerPermissions: { "mgr-live-1": { properties: true } },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        respondedAt: "2026-01-02T00:00:00.000Z",
+      } satisfies AccountLinkInviteDto,
+    ]);
+
+    expect([...collectLinkedPropertyIds("co-user")]).toEqual(["mgr-live-1"]);
+  });
+
+  it("ignores outgoing relationship assignments for linked access", () => {
+    vi.spyOn(proRelationships, "readProRelationships").mockReturnValue([
+      {
+        id: "rel-1",
+        linkedAxisId: "AXIS-CO",
+        linkDirection: "outgoing",
+        perspective: "manager_tab",
+        payoutPercentForManager: 15,
+        assignedPropertyIds: ["mgr-owned-1"],
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([
+      {
+        id: "mgr-owned-1",
+        title: "Owned",
+        tagline: "",
+        address: "1 Main",
+        zip: "98101",
+        neighborhood: "Downtown",
+        beds: 2,
+        baths: 1,
+        rentLabel: "$2000",
+        available: "Now",
+        petFriendly: true,
+        buildingId: "b1",
+        buildingName: "Owned",
+        unitLabel: "A",
+        mapLat: 0,
+        mapLng: 0,
+        managerUserId: "owner-user",
+        adminPublishLive: true,
+      },
+    ]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
+
+    expect([...collectLinkedPropertyIds("owner-user")]).toEqual([]);
   });
 
   it("resolves linked listings from owner extras and pending queues", () => {
@@ -32,6 +108,7 @@ describe("manager portfolio access", () => {
       {
         id: "rel-1",
         linkedAxisId: "AXIS-PRIMARY",
+        linkDirection: "incoming",
         perspective: "manager_tab",
         payoutPercentForManager: 15,
         assignedPropertyIds: ["mgr-live-1", "pend-1"],
@@ -39,6 +116,9 @@ describe("manager portfolio access", () => {
         createdAt: "2026-01-01T00:00:00.000Z",
       },
     ]);
+    vi.spyOn(portalDataStore, "readCachedAccountLinkInvites").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readExtraListingsForUser").mockReturnValue([]);
+    vi.spyOn(propertyPipeline, "readPendingManagerPropertiesForUser").mockReturnValue([]);
     vi.spyOn(propertyPipeline, "readAllExtraListings").mockReturnValue([
       {
         id: "mgr-live-1",
@@ -120,5 +200,52 @@ describe("safePropertyOptionLabel", () => {
 
   it("keeps ordinary names and addresses that merely contain the word seed", () => {
     expect(safePropertyOptionLabel(["123 Seed St, Austin, TX"], "p1")).toBe("123 Seed St, Austin, TX");
+  });
+});
+
+describe("resolvePropertyLabelForId", () => {
+  it("resolves live and pending pipeline rows", () => {
+    vi.spyOn(propertyPipeline, "readAllExtraListings").mockReturnValue([
+      {
+        id: "mgr-live-1",
+        title: "Live House",
+        tagline: "",
+        address: "1 Main St",
+        zip: "98101",
+        neighborhood: "Downtown",
+        beds: 2,
+        baths: 1,
+        rentLabel: "$2000",
+        available: "Now",
+        petFriendly: true,
+        buildingId: "b1",
+        buildingName: "Live House",
+        unitLabel: "A",
+        mapLat: 0,
+        mapLng: 0,
+        managerUserId: "owner-user",
+        adminPublishLive: true,
+      },
+    ]);
+    vi.spyOn(propertyPipeline, "readAllPendingManagerProperties").mockReturnValue([
+      {
+        id: "pend-1",
+        submittedAt: "2026-01-02T00:00:00.000Z",
+        buildingName: "Pending House",
+        address: "2 Main St",
+        zip: "98101",
+        neighborhood: "Downtown",
+        unitLabel: "B",
+        beds: 1,
+        baths: 1,
+        monthlyRent: 1500,
+        petFriendly: false,
+        tagline: "Pending",
+        submittedByUserId: "owner-user",
+      },
+    ]);
+
+    expect(resolvePropertyLabelForId("mgr-live-1", "mgr-live-1")).toBe("Live House");
+    expect(resolvePropertyLabelForId("pend-1", "pend-1")).toBe("Pending House · B · 2 Main St");
   });
 });

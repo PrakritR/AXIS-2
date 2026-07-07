@@ -26,7 +26,7 @@ describe("normalizePostAuthPath", () => {
   it("maps bare /dashboard to role dashboard or continue", () => {
     expect(isBareDashboardPath("/dashboard")).toBe(true);
     expect(normalizePostAuthPath("/dashboard")).toBe("/auth/continue");
-    expect(normalizePostAuthPath("/dashboard", "resident")).toBe("/resident/dashboard");
+    expect(normalizePostAuthPath("/dashboard", "resident")).toBe("/resident");
     expect(normalizePostAuthPath("/dashboard", "manager")).toBe("/portal/dashboard");
   });
 

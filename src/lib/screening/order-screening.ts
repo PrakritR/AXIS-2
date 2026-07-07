@@ -2,6 +2,8 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { screeningCostCents, screeningConfigured } from "@/lib/screening/config";
 import { chargeManagerForScreening } from "@/lib/screening/charge-manager";
 import { backgroundCheckStatusFromScreening } from "@/lib/screening/map-background-status";
+import { managerScreeningAllowedForTier } from "@/lib/manager-access";
+import { getManagerSubscriptionTier } from "@/lib/manager-access-server";
 import { getScreeningProvider } from "@/lib/screening/providers";
 import { buildScreeningRecommendation } from "@/lib/screening/recommendation";
 import { getManagerScreeningSettings } from "@/lib/screening/settings";
@@ -128,6 +130,16 @@ export async function orderScreeningForApplication(opts: {
 }): Promise<OrderScreeningResult> {
   if (!screeningConfigured()) {
     return { ok: false, status: 503, error: "Screening is not configured. Add CERTN_API_KEY.", code: "not_configured" };
+  }
+
+  const tier = await getManagerSubscriptionTier(opts.managerUserId);
+  if (!managerScreeningAllowedForTier(tier)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Applicant screening requires Pro or Business. Upgrade your plan to run screenings.",
+      code: "upgrade_required",
+    };
   }
 
   const settings = await getManagerScreeningSettings(opts.db, opts.managerUserId);

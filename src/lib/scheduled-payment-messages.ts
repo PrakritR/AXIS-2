@@ -57,6 +57,21 @@ function addDays(d: Date, days: number): Date {
   return startOfLocalDay(next);
 }
 
+function resolveSendAt(computed: Date, override?: ScheduledMessageOverride): Date {
+  if (override?.customSendAt) {
+    const parsed = new Date(override.customSendAt);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return computed;
+}
+
+/** Display label for when a scheduled message will send (date + time). */
+export function formatScheduledSendAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function daysBetween(a: Date, b: Date): number {
   return Math.floor((startOfLocalDay(b).getTime() - startOfLocalDay(a).getTime()) / (1000 * 60 * 60 * 24));
 }
@@ -90,6 +105,10 @@ function typeLabel(kind: PaymentReminderKind, daysBeforeDue: number | null): str
     return d === 1 ? "1 day before due" : `${d} days before due`;
   }
   if (kind === "same_day") return "Due day";
+  if (kind === "post_due") {
+    const d = daysBeforeDue ?? 1;
+    return d === 1 ? "1 day after due" : `${d} days after due`;
+  }
   if (kind === "overdue_daily") return "Overdue daily";
   if (kind === "set_date") {
     const formatted = formatSetDateIso(setDateReminderIsoFromKey(daysBeforeDue));
@@ -104,6 +123,10 @@ export function scheduledReminderShortLabel(kind: PaymentReminderKind, daysBefor
     return d === 1 ? "1 day before" : `${d} days before`;
   }
   if (kind === "same_day") return "Due date";
+  if (kind === "post_due") {
+    const d = daysBeforeDue ?? 1;
+    return d === 1 ? "1 day after" : `${d} days after`;
+  }
   if (kind === "overdue_daily") return "Follow-up";
   if (kind === "set_date") return "Set date";
   return "Notice";
@@ -116,6 +139,10 @@ export function inboxScheduleTypeLabel(kind: PaymentReminderKind, daysBeforeDue:
     return d === 1 ? "1 day before send" : `${d} days before send`;
   }
   if (kind === "same_day") return "Send on due date";
+  if (kind === "post_due") {
+    const d = daysBeforeDue ?? 1;
+    return d === 1 ? "1 day after due" : `${d} days after due`;
+  }
   if (kind === "overdue_daily") return "Daily follow-up";
   if (kind === "set_date") return "On set date";
   return "Notice";
@@ -227,7 +254,8 @@ export function projectScheduledPaymentMessages(input: {
 
       const override = resolveOverride(overrides, input.managerUserId, charge.id, "pre_due", daysBeforeDue);
       const effectiveDays = override?.customDaysBeforeDue ?? daysBeforeDue;
-      const effectiveSendAt = computePreDueSendAt(dueStart, effectiveDays);
+      const computedSendAt = computePreDueSendAt(dueStart, effectiveDays);
+      const effectiveSendAt = resolveSendAt(computedSendAt, override);
       if (effectiveSendAt.getTime() > dueStart.getTime()) continue;
 
       const visibleFrom = addDays(effectiveSendAt, -settings.scheduleVisibilityDays);
@@ -243,7 +271,7 @@ export function projectScheduledPaymentMessages(input: {
         daysBeforeDue: effectiveDays,
         settings,
         override,
-        params: { ...baseParams, daysUntilDue: effectiveDays },
+        params: { ...baseParams, daysUntilDue: Math.max(0, daysBetween(effectiveSendAt, dueStart)) },
       });
 
       rows.push({
@@ -269,13 +297,14 @@ export function projectScheduledPaymentMessages(input: {
     }
 
     if (settings.sameDayReminderEnabled && daysUntilDue >= 0) {
-      const sendAt = dueStart;
+      const computedSendAt = dueStart;
+      const override = resolveOverride(overrides, input.managerUserId, charge.id, "same_day", null);
+      const sendAt = resolveSendAt(computedSendAt, override);
       const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
       const showRow =
         input.includeHidden ||
         (isVisible(settings, sendAt, visibleFrom, now) && sendAt.getTime() >= startOfLocalDay(now).getTime());
       if (showRow) {
-        const override = resolveOverride(overrides, input.managerUserId, charge.id, "same_day", null);
         const cancelled =
           override?.cancelled === true || isLegacyReminderCancelled(charge.cancelledReminders, "same_day");
         const sent = isSent(sentIds, "same_day", charge.id, null, todayKey);
@@ -308,16 +337,57 @@ export function projectScheduledPaymentMessages(input: {
       }
     }
 
+    for (const daysAfterDue of settings.postDueReminderDays) {
+      if (daysAfterDue <= 0) continue;
+      const computedSendAt = addDays(dueStart, daysAfterDue);
+      const override = resolveOverride(overrides, input.managerUserId, charge.id, "post_due", daysAfterDue);
+      const sendAt = resolveSendAt(computedSendAt, override);
+      const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
+      if (!input.includeHidden && !isVisible(settings, sendAt, visibleFrom, now)) continue;
+      if (!input.includeHidden && sendAt.getTime() < startOfLocalDay(now).getTime()) continue;
+
+      const cancelled = override?.cancelled === true;
+      const sent = isSent(sentIds, "post_due", charge.id, daysAfterDue, todayKey);
+      const content = buildReminderContent({
+        kind: "post_due",
+        daysBeforeDue: daysAfterDue,
+        settings,
+        override,
+        params: { ...baseParams, daysUntilDue: -daysAfterDue },
+      });
+      rows.push({
+        id: scheduledMessageListId({ chargeId: charge.id, kind: "post_due", daysBeforeDue: daysAfterDue, sendAt }),
+        chargeId: charge.id,
+        kind: "post_due",
+        daysBeforeDue: daysAfterDue,
+        sendAt: sendAt.toISOString(),
+        visibleFrom: visibleFrom.toISOString(),
+        dueDate: dueStart.toISOString(),
+        dueDateLabel,
+        residentName: charge.residentName || "Resident",
+        residentEmail: charge.residentEmail.trim().toLowerCase(),
+        chargeTitle: charge.title,
+        propertyLabel: charge.propertyLabel,
+        balanceDue: charge.balanceLabel,
+        subject: content.subject,
+        body: content.body,
+        status: sent ? "sent" : cancelled ? "cancelled" : "scheduled",
+        managerUserId: input.managerUserId,
+        typeLabel: typeLabel("post_due", daysAfterDue),
+      });
+    }
+
     if (daysUntilDue < 0 && settings.overdueDailyEnabled) {
       const daysPastDue = Math.abs(daysUntilDue);
       if (daysPastDue >= settings.overdueDailyStartDays) {
-        const sendAt = startOfLocalDay(now);
+        const computedSendAt = startOfLocalDay(now);
+        const override = resolveOverride(overrides, input.managerUserId, charge.id, "overdue_daily", null);
+        const sendAt = resolveSendAt(computedSendAt, override);
         const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
         const showRow =
           input.includeHidden ||
           (isVisible(settings, sendAt, visibleFrom, now) && sendAt.getTime() >= startOfLocalDay(now).getTime());
         if (showRow) {
-          const override = resolveOverride(overrides, input.managerUserId, charge.id, "overdue_daily", null);
           const cancelled =
             override?.cancelled === true || isLegacyReminderCancelled(charge.cancelledReminders, "overdue_daily");
           const sent = isSent(sentIds, "overdue_daily", charge.id, null, todayKey);
@@ -358,14 +428,15 @@ export function projectScheduledPaymentMessages(input: {
     );
     if (lateEligible && settings.lateFeeNoticeEnabled && policy.enabled && daysUntilDue < 0) {
       const graceDays = policy.graceDays;
-      const sendAt = addDays(dueStart, graceDays);
+      const computedSendAt = addDays(dueStart, graceDays);
+      const override = resolveOverride(overrides, input.managerUserId, charge.id, "late_fee", null);
+      const sendAt = resolveSendAt(computedSendAt, override);
       if (sendAt.getTime() >= startOfLocalDay(now).getTime() || daysBetween(dueStart, now) >= graceDays) {
         const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
         const showRow =
           input.includeHidden ||
           (isVisible(settings, sendAt, visibleFrom, now) && sendAt.getTime() >= startOfLocalDay(now).getTime());
         if (showRow) {
-          const override = resolveOverride(overrides, input.managerUserId, charge.id, "late_fee", null);
           const cancelled = override?.cancelled === true;
           const lateFeeId = `hc_late_fee_${charge.id}`;
           const sent = sentIds.has(`late_fee_notice_${lateFeeId}`);
@@ -410,10 +481,11 @@ export function projectScheduledPaymentMessages(input: {
       const createdRaw = new Date(charge.createdAt);
       const createdStart = Number.isNaN(createdRaw.getTime()) ? startOfLocalDay(now) : startOfLocalDay(createdRaw);
       const firstSend = addDays(createdStart, Math.max(0, settings.overdueDailyStartDays));
-      const sendAt = firstSend.getTime() > startOfLocalDay(now).getTime() ? firstSend : startOfLocalDay(now);
+      const computedSendAt = firstSend.getTime() > startOfLocalDay(now).getTime() ? firstSend : startOfLocalDay(now);
+      const override = resolveOverride(overrides, input.managerUserId, charge.id, "overdue_daily", null);
+      const sendAt = resolveSendAt(computedSendAt, override);
       const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
       if (input.includeHidden || isVisible(settings, sendAt, visibleFrom, now)) {
-        const override = resolveOverride(overrides, input.managerUserId, charge.id, "overdue_daily", null);
         const cancelled =
           override?.cancelled === true || isLegacyReminderCancelled(charge.cancelledReminders, "overdue_daily");
         const sent = isSent(sentIds, "overdue_daily", charge.id, null, todayKey);
@@ -463,12 +535,13 @@ export function projectScheduledPaymentMessages(input: {
       const iso = setDateReminderIsoFromKey(dateNumKey);
       if (!iso) continue;
       const [year, month, day] = iso.split("-").map(Number);
-      const sendAt = new Date(year!, month! - 1, day!, 0, 0, 0, 0);
+      const computedSendAt = new Date(year!, month! - 1, day!, 0, 0, 0, 0);
+      const override = resolveOverride(overrides, input.managerUserId, charge.id, "set_date", dateNumKey);
+      const sendAt = resolveSendAt(computedSendAt, override);
       if (!input.includeHidden && sendAt.getTime() < startOfLocalDay(now).getTime()) continue;
       const visibleFrom = addDays(sendAt, -settings.scheduleVisibilityDays);
       if (!input.includeHidden && !isVisible(settings, sendAt, visibleFrom, now)) continue;
 
-      const override = resolveOverride(overrides, input.managerUserId, charge.id, "set_date", dateNumKey);
       const cancelled = override?.cancelled === true;
       const sent = isSent(sentIds, "set_date", charge.id, dateNumKey, todayKey);
       const content = buildReminderContent({

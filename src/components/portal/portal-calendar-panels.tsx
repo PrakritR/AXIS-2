@@ -62,6 +62,7 @@ const SLOT_ROW_START = 0;
 const SLOT_ROW_END = SLOTS_PER_DAY - 1;
 const DEFAULT_VISIBLE_START_SLOT = 16;
 const DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE = 40;
+const COMPACT_BLOCK_DAYS = 5;
 const WEEKDAY_OPTIONS = [
   { value: 0, label: "Mon" },
   { value: 1, label: "Tue" },
@@ -94,7 +95,7 @@ const CALENDAR_INACTIVE_SLOT =
   "border-border bg-accent/30 text-muted hover:border-primary/20 hover:bg-primary/[0.06] [html[data-theme=dark]_&]:portal-calendar-inactive-slot";
 const CALENDAR_CO_MANAGER_SLOT =
   "border-violet-300 bg-violet-100 text-violet-950 ring-1 ring-inset ring-violet-300/80 [html[data-theme=dark]_&]:border-violet-400/40 [html[data-theme=dark]_&]:bg-violet-500/15 [html[data-theme=dark]_&]:text-violet-100";
-const MEETING_CONFIRMED_COLOR =
+export const MEETING_CONFIRMED_COLOR =
   "border-sky-300 bg-sky-100 text-sky-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
 const MEETING_PEER_COLOR =
   "border-indigo-300 bg-indigo-100 text-indigo-950 [html[data-theme=dark]_&]:portal-calendar-meeting-confirmed";
@@ -133,6 +134,18 @@ function formatWeekRangeMonSun(monday: Date): string {
   return `${formatPacificDate(monday, opts)}–${formatPacificDate(sunday, { ...opts, year: "numeric" })}`;
 }
 
+function formatBlockRange(start: Date, dayCount: number): string {
+  const end = addDays(start, dayCount - 1);
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  return `${formatPacificDate(start, opts)}–${formatPacificDate(end, { ...opts, year: "numeric" })}`;
+}
+
+function startOfLocalDay(d: Date): Date {
+  const copy = new Date(d);
+  copy.setHours(12, 0, 0, 0);
+  return copy;
+}
+
 function isInMonthPickRange(ds: string, pick: { start: string | null; end: string | null }): boolean {
   if (!pick.start) return false;
   if (!pick.end) return ds === pick.start;
@@ -151,9 +164,9 @@ function formatNavTitle(anchor: Date, mode: CalendarMode): string {
   return formatPacificDate(anchor, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
 }
 
-type DemoMeeting = {
+export type DemoMeeting = {
   id: string;
-  source: "planned" | "inquiry";
+  source: "planned" | "inquiry" | "external";
   sourceId: string;
   startIso: string;
   endIso: string;
@@ -218,6 +231,11 @@ export function PortalCalendarPanels({
   coManagerAvailabilityOverlays,
   scheduleOwnerLabel,
   availabilityHeading = "Availability",
+  externalMeetings,
+  readOnly = false,
+  eventSummaryLabel,
+  vendorDayFlexibility,
+  vendorCalendarActions,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -232,6 +250,26 @@ export function PortalCalendarPanels({
   coManagerAvailabilityOverlays?: CoManagerAvailabilityOverlay[];
   scheduleOwnerLabel?: string | null;
   availabilityHeading?: string;
+  /** Pre-built calendar events from a caller-owned data source (e.g. vendor visits) merged
+   * alongside the planned-events/partner-inquiries meetings this component reads itself. */
+  externalMeetings?: DemoMeeting[];
+  /** Hides availability-editing affordances (create/copy/clear block, slot painting) so this
+   * component can display a schedule for a caller that manages availability elsewhere. */
+  readOnly?: boolean;
+  eventSummaryLabel?: "meeting" | "tour" | "visit";
+  /** Vendor calendar: per-weekday flexible toggles + link to timing preferences. */
+  vendorDayFlexibility?: {
+    flexibleWeekdays: Set<number>;
+    onToggleFlexibleDay: (weekday: number) => void;
+    onOpenFlexibleSettings: () => void;
+  };
+  /** Vendor calendar: click empty slots to add personal work blocks; edit vendor-owned meetings. */
+  vendorCalendarActions?: {
+    onAddFromSlot: (dateStr: string, slotIdx: number) => void;
+    canEditMeeting: (meeting: DemoMeeting) => boolean;
+    onEditMeeting: (meeting: DemoMeeting) => void;
+    onAddWork?: () => void;
+  };
 }) {
   const { showToast } = useAppUi();
   const [viewMode, setViewMode] = useState<CalendarMode>(defaultViewMode);
@@ -241,6 +279,7 @@ export function PortalCalendarPanels({
     storageKey ? new Set(readAvailabilityDateSetForStorageKey(storageKey)) : new Set(),
   );
   const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
+  const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [visibleStartSlot, setVisibleStartSlot] = useState(DEFAULT_VISIBLE_START_SLOT);
   const [visibleEndSlotExclusive, setVisibleEndSlotExclusive] = useState(DEFAULT_VISIBLE_END_SLOT_EXCLUSIVE);
   const [blockModalOpen, setBlockModalOpen] = useState(false);
@@ -302,6 +341,14 @@ export function PortalCalendarPanels({
   const weekMonday = useMemo(() => startOfWeekMonday(anchorDate), [anchorDate]);
   const fullWeekDates = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekMonday, i)), [weekMonday]);
   const fullWeekDateStrs = useMemo(() => fullWeekDates.map(toLocalDateStr), [fullWeekDates]);
+  const compactBlockStart = useMemo(() => startOfLocalDay(anchorDate), [anchorDate]);
+  const compactBlockDates = useMemo(
+    () => [0, 1, 2, 3, 4].map((i) => addDays(compactBlockStart, i)),
+    [compactBlockStart],
+  );
+  const compactBlockDateStrs = useMemo(() => compactBlockDates.map(toLocalDateStr), [compactBlockDates]);
+  const activeBlockDates = compactAvailability ? compactBlockDates : fullWeekDates;
+  const activeBlockDateStrs = compactAvailability ? compactBlockDateStrs : fullWeekDateStrs;
 
   const meetings = useMemo<DemoMeeting[]>(() => {
     void calendarRefreshSignal;
@@ -392,8 +439,8 @@ export function PortalCalendarPanels({
       )
       .filter(Boolean) as DemoMeeting[];
 
-    return [...planned, ...pending];
-  }, [storageKey, calendarRefreshSignal, meetingRefresh, scheduledTourFilter]);
+    return [...planned, ...pending, ...(externalMeetings ?? [])];
+  }, [storageKey, calendarRefreshSignal, meetingRefresh, scheduledTourFilter, externalMeetings]);
 
   const monthYear = anchorDate.getFullYear();
   const monthIndex = anchorDate.getMonth();
@@ -452,6 +499,10 @@ export function PortalCalendarPanels({
   const openSlotDetails = useCallback(
     (dateStr: string, slotIdx: number, _target: HTMLElement, meeting?: DemoMeeting) => {
       if (meeting) {
+        if (vendorCalendarActions?.canEditMeeting(meeting)) {
+          vendorCalendarActions.onEditMeeting(meeting);
+          return;
+        }
         const minutes = clampEventDurationMinutes(meeting.durationMinutes);
         setDurationChoice((EVENT_DURATION_PRESET_MINUTES as readonly number[]).includes(minutes) ? minutes : "custom");
         setCustomDurationText(String(minutes));
@@ -460,9 +511,13 @@ export function PortalCalendarPanels({
       }
       if (activeSlots.has(dateSlotKey(dateStr, slotIdx))) {
         setSelectedBlock({ kind: "availability", dateStr, slotIndex: slotIdx });
+        return;
+      }
+      if (vendorCalendarActions) {
+        vendorCalendarActions.onAddFromSlot(dateStr, slotIdx);
       }
     },
-    [activeSlots],
+    [activeSlots, vendorCalendarActions],
   );
 
   const deleteAvailabilitySlot = useCallback(() => {
@@ -587,13 +642,13 @@ export function PortalCalendarPanels({
 
   const weekSlotCount = useMemo(() => {
     let n = 0;
-    for (const ds of fullWeekDateStrs) {
+    for (const ds of activeBlockDateStrs) {
       for (const slot of slotRowIndices) {
         if (activeSlots.has(dateSlotKey(ds, slot))) n += 1;
       }
     }
     return n;
-  }, [activeSlots, fullWeekDateStrs]);
+  }, [activeBlockDateStrs, activeSlots]);
 
   const meetingBySlotKey = useMemo(() => {
     const map = new Map<string, DemoMeeting>();
@@ -622,7 +677,7 @@ export function PortalCalendarPanels({
       .filter((item) => Number.isFinite(item.startMs) && item.startMs >= now)
       .sort((a, b) => a.startMs - b.startMs);
     const pending = sorted.filter((item) => item.meeting.source === "inquiry").length;
-    const confirmed = sorted.filter((item) => item.meeting.source === "planned").length;
+    const confirmed = sorted.filter((item) => item.meeting.source === "planned" || item.meeting.source === "external").length;
     return {
       total: sorted.length,
       pending,
@@ -633,7 +688,8 @@ export function PortalCalendarPanels({
 
   const isPropertyTourCalendar = Boolean(scheduledTourFilter?.viewerUserId);
   const eventSummaryKind =
-    isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting";
+    eventSummaryLabel ??
+    (isPropertyTourCalendar || meetings.some((meeting) => meeting.kind === "tour") ? "tour" : "meeting");
 
   const timeWindowControl = (
     <div className="flex flex-wrap items-center gap-2">
@@ -691,23 +747,27 @@ export function PortalCalendarPanels({
   }, [today]);
 
   const shiftAvailabilityWeek = useCallback((dir: -1 | 1) => {
-    setAnchorDate((d) => addDays(d, dir * 7));
-  }, []);
+    const shiftDays = compactAvailability ? COMPACT_BLOCK_DAYS : 7;
+    setAnchorDate((d) => addDays(d, dir * shiftDays));
+    if (compactAvailability) setMobileDayIndex(0);
+  }, [compactAvailability]);
 
   const copyPreviousWeek = useCallback(() => {
-    const previousWeekDates = fullWeekDates.map((date) => addDays(date, -7));
+    const currentDates = activeBlockDates;
+    const shiftDays = compactAvailability ? COMPACT_BLOCK_DAYS : 7;
+    const previousBlockDates = currentDates.map((date) => addDays(date, -shiftDays));
     const next = new Set(activeSlots);
 
-    for (const targetDate of fullWeekDates) {
+    for (const targetDate of currentDates) {
       const targetDateStr = toLocalDateStr(targetDate);
       for (const slot of slotRowIndices) {
         next.delete(dateSlotKey(targetDateStr, slot));
       }
     }
 
-    previousWeekDates.forEach((sourceDate, idx) => {
+    previousBlockDates.forEach((sourceDate, idx) => {
       const sourceDateStr = toLocalDateStr(sourceDate);
-      const targetDateStr = toLocalDateStr(fullWeekDates[idx]!);
+      const targetDateStr = toLocalDateStr(currentDates[idx]!);
       for (const slot of slotRowIndices) {
         if (activeSlots.has(dateSlotKey(sourceDateStr, slot))) {
           next.add(dateSlotKey(targetDateStr, slot));
@@ -716,7 +776,7 @@ export function PortalCalendarPanels({
     });
 
     writeAvailability(next);
-  }, [activeSlots, fullWeekDates, writeAvailability]);
+  }, [activeBlockDates, activeSlots, compactAvailability, writeAvailability]);
 
   const toggleBlockWeekday = useCallback((weekday: number) => {
     setBlockWeekdays((current) =>
@@ -815,13 +875,13 @@ export function PortalCalendarPanels({
 
   const clearCurrentWeek = useCallback(() => {
     const next = new Set(activeSlots);
-    for (const ds of fullWeekDateStrs) {
+    for (const ds of activeBlockDateStrs) {
       for (const slot of slotRowIndices) {
         next.delete(dateSlotKey(ds, slot));
       }
     }
     writeAvailability(next);
-  }, [activeSlots, fullWeekDateStrs, writeAvailability]);
+  }, [activeBlockDateStrs, activeSlots, writeAvailability]);
 
   const blockSummary = useMemo(() => {
     const days = blockWeekdays.length > 0 ? weekdayLabelList(blockWeekdays) : "No days selected";
@@ -994,7 +1054,7 @@ export function PortalCalendarPanels({
             <Button type="button" variant="outline" className="rounded-full" onClick={closeSelectedBlock}>
               Close
             </Button>
-            {!selectedBlock.meeting.isPeerTour ? (
+            {!selectedBlock.meeting.isPeerTour && selectedBlock.meeting.source !== "external" ? (
               <>
             <Button
               type="button"
@@ -1070,7 +1130,7 @@ export function PortalCalendarPanels({
     />
   );
 
-  if (!storageKey) {
+  if (!storageKey && !readOnly) {
     return (
       <Card className="p-5">
         <p className="text-sm font-medium text-foreground">{unavailableMessage}</p>
@@ -1079,46 +1139,78 @@ export function PortalCalendarPanels({
   }
 
   if (compactAvailability) {
+    const vendorMode = Boolean(vendorDayFlexibility);
     return (
       <>
         <Card className="p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous week">
+            <div className="flex min-w-0 items-center gap-1">
+              <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous days">
                 ←
               </Button>
-              <div className="min-w-0 rounded-2xl border border-border bg-accent/30 px-4 py-2 [html[data-theme=dark]_&]:portal-calendar-week-banner">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">{availabilityHeading}</p>
-                <p className="truncate text-sm font-semibold text-foreground">Week of {formatWeekRangeMonSun(weekMonday)}</p>
-                {tourScopeLabel ? <p className="truncate text-xs font-medium text-primary">{tourScopeLabel}</p> : null}
-              </div>
-              <Button type="button" variant="outline" className="h-10 rounded-full px-3" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next week">
+              {vendorMode ? (
+                <div className="min-w-0 px-1">
+                  <p className="text-xs font-semibold text-foreground sm:text-sm">{availabilityHeading}</p>
+                  <p className="truncate text-[11px] text-muted">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
+                </div>
+              ) : (
+                <div className="min-w-0 flex-1 rounded-xl border border-border bg-accent/30 px-2.5 py-1.5 [html[data-theme=dark]_&]:portal-calendar-week-banner">
+                  <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{availabilityHeading}</p>
+                  <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
+                  {tourScopeLabel ? <p className="truncate text-[10px] font-medium text-primary sm:text-xs">{tourScopeLabel}</p> : null}
+                </div>
+              )}
+              <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(1)} aria-label="Next days">
                 →
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {saveStatus === "saving" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
-              {saveStatus === "saved" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
-              {saveStatus === "error" ? <span className={`px-3 py-1.5 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
-              <div className={`px-4 py-2 text-sm font-semibold ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open this week</div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {saveStatus === "saving" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_INFO}`}>Saving…</span> : null}
+              {saveStatus === "saved" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_SUCCESS}`}>Saved</span> : null}
+              {saveStatus === "error" ? <span className={`px-2 py-1 text-xs font-semibold ${CALENDAR_BADGE_ERROR}`}>Save failed</span> : null}
+              {!readOnly ? (
+                <div className={`px-2.5 py-1 text-xs font-semibold sm:text-sm ${CALENDAR_BADGE_SUCCESS}`}>{weekSlotCount} open</div>
+              ) : null}
+              {vendorMode ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 rounded-full px-3 text-xs"
+                  data-attr="vendor-flexible-settings-open"
+                  onClick={vendorDayFlexibility!.onOpenFlexibleSettings}
+                >
+                  Flexible settings
+                </Button>
+              ) : null}
+              {vendorMode && vendorCalendarActions?.onAddWork ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="h-8 rounded-full px-3 text-xs"
+                  data-attr="vendor-add-work-open"
+                  onClick={vendorCalendarActions.onAddWork}
+                >
+                  Add work
+                </Button>
+              ) : null}
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {timeWindowControl}
-            <Button type="button" variant="outline" className="rounded-full" onClick={jumpToToday}>
-              Today
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
-              Copy previous week
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
-              Create block
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
-              Clear week
-            </Button>
-            {otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
+            {!readOnly && !vendorMode ? (
+              <>
+                <Button type="button" variant="outline" className="rounded-full" onClick={copyPreviousWeek}>
+                  Copy previous week
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={openBlockModal}>
+                  Create block
+                </Button>
+                <Button type="button" variant="outline" className="rounded-full" onClick={clearCurrentWeek}>
+                  Clear week
+                </Button>
+              </>
+            ) : null}
+            {!vendorMode && otherProperties && otherProperties.length > 0 && onCopyWeekToHouses ? (
               <Button
                 type="button"
                 variant="outline"
@@ -1162,89 +1254,176 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
-            <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
-              <div className={`grid min-w-[920px] grid-cols-[76px_repeat(7,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
-                <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
-                {fullWeekDates.map((d) => {
-                  const ds = toLocalDateStr(d);
-                  const count = visibleSlotIndices.reduce((total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0), 0);
-                  return (
-                    <div key={ds} className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
-                      <p className="font-bold uppercase tracking-[0.12em]">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
-                      <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-                      <p className={`mt-0.5 text-[11px] font-medium ${CALENDAR_OPEN_COUNT}`}>{count} open</p>
-                    </div>
-                  );
-                })}
+          {(() => {
+            const renderSlotButton = (ds: string, slotIdx: number) => {
+              const key = dateSlotKey(ds, slotIdx);
+              const active = activeSlots.has(key);
+              const coManagerOverlay = coManagerOverlayBySlotKey.get(key);
+              const coManagerOpen = Boolean(coManagerOverlay && !active && !meetingBySlotKey.get(key));
+              const selected = isSlotInDragSelection(ds, slotIdx);
+              const meeting = meetingBySlotKey.get(key);
+              const isMeetingStart = meeting?.startSlot === slotIdx;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onMouseDown={() => {
+                    if (readOnly || meeting || active || coManagerOpen) return;
+                    startDragSelection(ds, activeBlockDateStrs.indexOf(ds), slotIdx);
+                  }}
+                  onMouseEnter={() => {
+                    if (readOnly || meeting || active || coManagerOpen) return;
+                    extendDragSelection(ds, slotIdx);
+                  }}
+                  onMouseUp={() => {
+                    if (readOnly || meeting || active || coManagerOpen) return;
+                    finishDragSelection();
+                  }}
+                  onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
+                  className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
+                    meeting
+                      ? `${meeting.color} ring-1 ring-inset`
+                      : selected
+                        ? "bg-primary/[0.14] text-primary ring-2 ring-inset ring-primary/35"
+                      : active
+                        ? CALENDAR_OPEN_SLOT
+                        : coManagerOpen
+                          ? CALENDAR_CO_MANAGER_SLOT
+                        : CALENDAR_EMPTY_SLOT
+                  }`}
+                  aria-label={`${meeting || active || coManagerOpen ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
+                >
+                  {meeting ? (
+                    isMeetingStart ? (
+                      <span className="block truncate">
+                        {meeting.statusLabel}: {meeting.title}
+                        {meeting.hostLabel ? ` · ${meeting.hostLabel}` : ""}
+                      </span>
+                    ) : (
+                      <span className="block truncate opacity-70">{meeting.statusLabel}</span>
+                    )
+                  ) : selected ? (
+                    "Selected"
+                  ) : active ? (
+                    "Open"
+                  ) : coManagerOpen ? (
+                    `${coManagerOverlay!.label}`
+                  ) : (
+                    readOnly ? "" : "Add"
+                  )}
+                </button>
+              );
+            };
 
-                {visibleSlotIndices.map((slotIdx) => (
-                  <Fragment key={slotIdx}>
-                    <div className={`flex min-h-9 items-center bg-card px-2 ${CALENDAR_TIME_CELL}`}>{formatAvailabilitySlotLabel(slotIdx)}</div>
-                    {fullWeekDateStrs.map((ds) => {
-                      const key = dateSlotKey(ds, slotIdx);
-                      const active = activeSlots.has(key);
-                      const coManagerOverlay = coManagerOverlayBySlotKey.get(key);
-                      const coManagerOpen = Boolean(coManagerOverlay && !active && !meetingBySlotKey.get(key));
-                      const selected = isSlotInDragSelection(ds, slotIdx);
-                      const meeting = meetingBySlotKey.get(key);
-                      const isMeetingStart = meeting?.startSlot === slotIdx;
+            const mobileDs = activeBlockDateStrs[mobileDayIndex] ?? activeBlockDateStrs[0]!;
+            const mobileDate = activeBlockDates[mobileDayIndex] ?? activeBlockDates[0]!;
+            const renderFlexibleToggle = (weekday: number) => {
+              if (!vendorDayFlexibility) return null;
+              const checked = vendorDayFlexibility.flexibleWeekdays.has(weekday);
+              return (
+                <label className="mt-1.5 flex cursor-pointer items-center justify-center gap-1.5 text-[10px] font-medium text-muted">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-border"
+                    checked={checked}
+                    data-attr={`vendor-flexible-day-${weekday}`}
+                    onChange={() => vendorDayFlexibility.onToggleFlexibleDay(weekday)}
+                  />
+                  <span>Mark day as flexible</span>
+                </label>
+              );
+            };
+
+            return (
+              <>
+                {/* Mobile: one day at a time — the multi-column grid never fits a phone width. */}
+                <div className="mt-4 lg:hidden">
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeBlockDates.map((d, idx) => {
+                      const ds = toLocalDateStr(d);
+                      const count = readOnly
+                        ? meetings.filter((meeting) => meeting.dateStr === ds).length
+                        : visibleSlotIndices.reduce(
+                            (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
+                            0,
+                          );
+                      const isActive = idx === mobileDayIndex;
                       return (
                         <button
-                          key={key}
+                          key={ds}
                           type="button"
-                          onMouseDown={() => {
-                            if (meeting || active || coManagerOpen) return;
-                            startDragSelection(ds, fullWeekDateStrs.indexOf(ds), slotIdx);
-                          }}
-                          onMouseEnter={() => {
-                            if (meeting || active || coManagerOpen) return;
-                            extendDragSelection(ds, slotIdx);
-                          }}
-                          onMouseUp={() => {
-                            if (meeting || active || coManagerOpen) return;
-                            finishDragSelection();
-                          }}
-                          onClick={(e: MouseEvent<HTMLButtonElement>) => openSlotDetails(ds, slotIdx, e.currentTarget, meeting)}
-                          className={`min-h-9 px-2 text-center text-[11px] font-semibold transition ${
-                            meeting
-                              ? `${meeting.color} ring-1 ring-inset`
-                              : selected
-                                ? "bg-primary/[0.14] text-primary ring-2 ring-inset ring-primary/35"
-                              : active
-                                ? CALENDAR_OPEN_SLOT
-                                : coManagerOpen
-                                  ? CALENDAR_CO_MANAGER_SLOT
-                                : CALENDAR_EMPTY_SLOT
+                          onClick={() => setMobileDayIndex(idx)}
+                          className={`flex shrink-0 flex-col items-center rounded-xl px-3 py-1.5 text-center transition ${
+                            isActive ? "bg-primary text-primary-foreground" : "bg-accent/40 text-muted"
                           }`}
-                          aria-label={`${meeting || active || coManagerOpen ? "Open details for" : "Select"} ${formatAvailabilitySlotLabel(slotIdx)} on ${ds}`}
                         >
-                          {meeting ? (
-                            isMeetingStart ? (
-                              <span className="block truncate">
-                                {meeting.statusLabel}: {meeting.title}
-                                {meeting.hostLabel ? ` · ${meeting.hostLabel}` : ""}
-                              </span>
-                            ) : (
-                              <span className="block truncate opacity-70">{meeting.statusLabel}</span>
-                            )
-                          ) : selected ? (
-                            "Selected"
-                          ) : active ? (
-                            "Open"
-                          ) : coManagerOpen ? (
-                            `${coManagerOverlay!.label}`
-                          ) : (
-                            "Add"
-                          )}
+                          <span className="text-[10px] font-bold uppercase tracking-[0.1em]">
+                            {d.toLocaleDateString(undefined, { weekday: "short" })}
+                          </span>
+                          <span className="text-sm font-semibold">{d.toLocaleDateString(undefined, { day: "numeric" })}</span>
+                          <span className="text-[9px] font-medium opacity-80">{readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}</span>
                         </button>
                       );
                     })}
-                  </Fragment>
-                ))}
-              </div>
-            </div>
-          </div>
+                  </div>
+                  {vendorDayFlexibility ? (
+                    <div className="mt-2 flex justify-center">{renderFlexibleToggle(mobileDate.getDay())}</div>
+                  ) : null}
+                  <div className="mt-2 overflow-hidden rounded-2xl border border-border bg-card">
+                    <div className={`grid grid-cols-[64px_1fr] text-xs ${CALENDAR_GRID_GAP}`}>
+                      <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
+                      <div className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
+                        {mobileDate.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                      </div>
+                      {visibleSlotIndices.map((slotIdx) => (
+                        <Fragment key={slotIdx}>
+                          <div className={`flex min-h-9 items-center bg-card px-2 ${CALENDAR_TIME_CELL}`}>
+                            {formatAvailabilitySlotLabel(slotIdx)}
+                          </div>
+                          {renderSlotButton(mobileDs, slotIdx)}
+                        </Fragment>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop: 5-day block grid. */}
+                <div className="mt-4 hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
+                  <div className="overflow-x-auto" onMouseLeave={cancelDragSelection} onMouseUp={finishDragSelection}>
+                    <div className={`grid min-w-[680px] grid-cols-[76px_repeat(5,minmax(108px,1fr))] text-xs ${CALENDAR_GRID_GAP}`}>
+                      <div className={`px-2 py-2 ${CALENDAR_HEADER_CELL}`}>Time</div>
+                      {activeBlockDates.map((d) => {
+                        const ds = toLocalDateStr(d);
+                        const count = readOnly
+                          ? meetings.filter((meeting) => meeting.dateStr === ds).length
+                          : visibleSlotIndices.reduce(
+                              (total, slot) => total + (activeSlots.has(dateSlotKey(ds, slot)) ? 1 : 0),
+                              0,
+                            );
+                        return (
+                          <div key={ds} className={`px-2 py-2 text-center ${CALENDAR_HEADER_CELL}`}>
+                            <p className="font-bold uppercase tracking-[0.12em]">{d.toLocaleDateString(undefined, { weekday: "short" })}</p>
+                            <p className="mt-0.5 font-semibold text-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+                            <p className={`mt-0.5 text-[11px] font-medium ${CALENDAR_OPEN_COUNT}`}>{readOnly ? `${count} visit${count === 1 ? "" : "s"}` : `${count} open`}</p>
+                            {renderFlexibleToggle(d.getDay())}
+                          </div>
+                        );
+                      })}
+
+                      {visibleSlotIndices.map((slotIdx) => (
+                        <Fragment key={slotIdx}>
+                          <div className={`flex min-h-9 items-center bg-card px-2 ${CALENDAR_TIME_CELL}`}>
+                            {formatAvailabilitySlotLabel(slotIdx)}
+                          </div>
+                          {activeBlockDateStrs.map((ds) => renderSlotButton(ds, slotIdx))}
+                        </Fragment>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </Card>
 
         <Modal open={blockModalOpen} title="Create recurring availability block" onClose={() => { setBlockModalOpen(false); setDragSelection(null); }}>
@@ -1405,7 +1584,7 @@ export function PortalCalendarPanels({
                   className="rounded-full"
                   disabled={selectedHouseIds.size === 0}
                   onClick={() => {
-                    onCopyWeekToHouses([...selectedHouseIds], fullWeekDateStrs);
+                    onCopyWeekToHouses([...selectedHouseIds], activeBlockDateStrs);
                     setUpdateToHousesOpen(false);
                   }}
                 >

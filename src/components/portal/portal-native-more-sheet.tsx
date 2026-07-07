@@ -4,12 +4,13 @@ import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
-import { portalNavClick } from "@/lib/portal-nav-client";
+import { isCrossPortalNavigation, portalNavClick } from "@/lib/portal-nav-client";
 import { portalMobileLinkPrefetchEnabled } from "@/lib/portal-nav-prefetch";
 import { groupNavItems } from "@/lib/portals/nav-groups";
 import type { PortalKind } from "@/lib/portal-types";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo } from "react";
 
 export type PortalMoreNavItem = {
@@ -22,7 +23,7 @@ export type PortalMoreNavItem = {
 
 function MoreGridIcon() {
   return (
-    <svg className="h-5 w-5 [html[data-native]_&]:h-[22px] [html[data-native]_&]:w-[22px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg className="h-[23px] w-[23px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <circle cx="5" cy="5" r="1.75" />
       <circle cx="12" cy="5" r="1.75" />
       <circle cx="19" cy="5" r="1.75" />
@@ -58,6 +59,7 @@ function MoreNavRow({
   onNavigate: () => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const nativeChrome = useNativeChrome();
 
   return (
@@ -65,7 +67,9 @@ function MoreNavRow({
       href={item.href}
       prefetch={portalMobileLinkPrefetchEnabled()}
       onClick={(e) => {
-        portalNavClick(router, item.href, { preferFullNavigation: nativeChrome })(e);
+        portalNavClick(router, item.href, {
+          preferFullNavigation: nativeChrome && isCrossPortalNavigation(pathname, item.href),
+        })(e);
         onNavigate();
       }}
       className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
@@ -84,6 +88,7 @@ function MoreNavRow({
       ) : null}
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {!item.locked && (item.count ?? 0) > 0 ? <PortalNavCountBadge count={item.count ?? 0} /> : null}
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted/60" aria-hidden />
     </Link>
   );
 }
@@ -151,6 +156,7 @@ export function PortalNativeMoreSheet({
   );
 }
 
+/** Trailing tab in the fixed native bottom bar — opens the full section sheet. */
 export function PortalNativeMoreNavButton({
   active,
   onClick,
@@ -161,13 +167,17 @@ export function PortalNativeMoreNavButton({
   return (
     <button
       type="button"
+      data-attr="bottom-nav-more"
       onClick={onClick}
-      className={`flex w-full min-w-0 items-center justify-center px-1 pt-0 pb-0 transition ${
-        active ? "text-primary" : "text-muted"
+      className={`flex min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 py-2 transition ${
+        active ? "text-primary" : "text-foreground"
       }`}
       aria-label="More portal sections"
     >
-      <span className="shrink-0" aria-hidden>
+      <span
+        className={`shrink-0 transition-opacity duration-200 ${active ? "opacity-100" : "opacity-60"}`}
+        aria-hidden
+      >
         <MoreGridIcon />
       </span>
     </button>

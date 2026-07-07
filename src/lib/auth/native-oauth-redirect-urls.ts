@@ -1,5 +1,5 @@
 import { NATIVE_OAUTH_CALLBACK_URL, nativeOAuthCallbackUrl } from "@/lib/auth/native-oauth-callback";
-import { partnerPricingOAuthCallbackUrl, residentSignupOAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
+import { partnerPricingOAuthCallbackUrl, residentSignupOAuthCallbackUrl, vendorSignupOAuthCallbackUrl } from "@/lib/auth/oauth-redirect";
 import { resolveShareableAppOrigin } from "@/lib/app-url";
 
 /** Custom-scheme callbacks Supabase Auth must allowlist for the native shell. */
@@ -8,6 +8,7 @@ export function nativeSupabaseRedirectUrls(): string[] {
     NATIVE_OAUTH_CALLBACK_URL,
     nativeOAuthCallbackUrl("/auth/callback/partner-pricing"),
     nativeOAuthCallbackUrl("/auth/callback/resident-signup"),
+    nativeOAuthCallbackUrl("/auth/callback/vendor-signup"),
     // Wildcard covers any future fixed callback paths under auth/callback/*
     "com.axisseattlehousing.app://auth/callback/**",
   ];
@@ -20,6 +21,7 @@ export function httpsOAuthCallbackUrls(origin?: string): string[] {
     `${base}/auth/callback`,
     partnerPricingOAuthCallbackUrl(base),
     residentSignupOAuthCallbackUrl(base),
+    vendorSignupOAuthCallbackUrl(base),
   ];
 }
 

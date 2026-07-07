@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -9,35 +10,30 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
   MANAGER_VENDORS_EVENT,
   makeVendorId,
-  readManagerVendorRows,
+  readOwnManagerVendorRows,
   syncManagerVendorsFromServer,
   upsertManagerVendor,
   deleteManagerVendorRow,
   type ManagerVendorRow,
 } from "@/lib/manager-vendors-storage";
+import { ManagerVendorSettingsModal } from "@/components/portal/manager-vendor-settings-modal";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
+  PortalTableExpandCell,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
+import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
 
-const TRADE_OPTIONS = [
-  "General maintenance",
-  "Plumbing",
-  "Electrical",
-  "HVAC",
-  "Appliance repair",
-  "Landscaping",
-  "Cleaning",
-  "Pest control",
-  "Other",
-];
+const TRADE_OPTIONS: readonly string[] = VENDOR_TRADE_OPTIONS;
 
 type VendorDraft = {
   name: string;
@@ -60,7 +56,7 @@ const EMPTY_DRAFT: VendorDraft = {
 };
 
 export type ManagerVendorsPanelHandle = {
-  openAdd: () => void;
+  openSettings: (trade?: string) => void;
 };
 
 export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
@@ -78,7 +74,9 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<VendorDraft>(EMPTY_DRAFT);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsTrade, setSettingsTrade] = useState<string | undefined>(undefined);
+  const [sendingInviteId, setSendingInviteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authReady) return;
@@ -93,27 +91,17 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
 
   const vendors = useMemo(() => {
     void tick;
-    return readManagerVendorRows().sort((a, b) => a.name.localeCompare(b.name));
-  }, [tick]);
+    return readOwnManagerVendorRows(userId).sort((a, b) => a.name.localeCompare(b.name));
+  }, [tick, userId]);
 
-  const isOwnVendor = useCallback(
-    (row: ManagerVendorRow) => !row.managerUserId || row.managerUserId === userId,
-    [userId],
-  );
-
-  const openAddForm = useCallback(() => {
-    setShowAdd(true);
-    setDraft(EMPTY_DRAFT);
-    setEditingId(null);
+  const openSettingsForm = useCallback((trade?: string) => {
+    setSettingsTrade(trade);
+    setShowSettings(true);
   }, []);
 
-  useImperativeHandle(ref, () => ({ openAdd: openAddForm }), [openAddForm]);
+  useImperativeHandle(ref, () => ({ openSettings: openSettingsForm }), [openSettingsForm]);
 
   function startEdit(row: ManagerVendorRow) {
-    if (!isOwnVendor(row)) {
-      showToast("This vendor was shared by another manager and can't be edited.");
-      return;
-    }
     setEditingId(row.id);
     setDraft({
       name: row.name,
@@ -153,43 +141,160 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
       userId,
     );
     setEditingId(null);
-    setShowAdd(false);
     setDraft(EMPTY_DRAFT);
     showToast(existingId ? "Vendor updated." : "Vendor added.");
   }
 
-  function removeVendor(id: string) {
-    const row = vendors.find((v) => v.id === id);
-    if (row && !isOwnVendor(row)) {
-      showToast("This vendor was shared by another manager and can't be removed.");
+  async function sendInvite(row: ManagerVendorRow) {
+    if (!row.email.trim()) {
+      showToast("Add an email for this vendor before sending an invite.");
       return;
     }
+    setSendingInviteId(row.id);
+    try {
+      const res = await fetch("/api/portal/send-vendor-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ vendorId: row.id, vendorName: row.name, vendorEmail: row.email }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
+      if (!res.ok || data.ok === false) {
+        if (data.mailtoHref) {
+          window.open(data.mailtoHref, "_blank");
+          showToast(data.error ?? "Email delivery isn't configured — opened your email client instead.");
+          return;
+        }
+        showToast(data.error ?? "Could not send invite.");
+        return;
+      }
+      showToast("Invite sent.");
+    } catch {
+      showToast("Could not send invite.");
+    } finally {
+      setSendingInviteId(null);
+    }
+  }
+
+  function removeVendor(id: string) {
     if (!deleteManagerVendorRow(id, userId)) return;
     if (expandedId === id) setExpandedId(null);
     showToast("Vendor removed.");
   }
 
+  const renderVendorDetail = (row: ManagerVendorRow) => {
+    const editing = editingId === row.id;
+    return editing ? (
+      <>
+        <VendorForm draft={draft} setDraft={setDraft} />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" onClick={() => saveVendor(row.id)}>Save changes</Button>
+          <Button type="button" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+        </div>
+      </>
+    ) : (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 lg:hidden">
+          <span className="text-sm font-medium text-foreground">{row.trade || "—"}</span>
+          {renderVendorStatusBadges(row)}
+        </div>
+        {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          {row.phone ? (
+            <a href={`tel:${row.phone}`} className="text-sm font-medium text-primary hover:underline">
+              Call {row.phone}
+            </a>
+          ) : null}
+          {row.email ? (
+            <a href={`mailto:${row.email}`} className="text-sm font-medium text-primary hover:underline">
+              Email {row.email}
+            </a>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
+            Edit
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => void sendInvite(row)}
+            disabled={sendingInviteId === row.id}
+            data-attr="vendor-send-invite"
+          >
+            {sendingInviteId === row.id ? "Sending…" : "Send invite"}
+          </Button>
+          <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
+            Remove
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderVendorStatusBadges = (row: ManagerVendorRow) => (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span
+        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
+          row.active !== false
+            ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+            : "bg-accent/30 text-muted ring-border"
+        }`}
+      >
+        {row.active !== false ? "Active" : "Inactive"}
+      </span>
+      {!row.sharedWithManagers ? null : (
+        <span className="inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
+          Shared on Axis
+        </span>
+      )}
+    </div>
+  );
+
   const body = (
     <>
-      {showAdd ? (
-        <div className="mb-6 rounded-2xl border border-border bg-card p-5">
-          <p className="text-sm font-semibold text-foreground">New vendor</p>
-          <VendorForm draft={draft} setDraft={setDraft} />
-          <div className="mt-4 flex gap-2">
-            <Button type="button" onClick={() => saveVendor()}>Save vendor</Button>
-            <Button type="button" variant="outline" onClick={() => { setShowAdd(false); setDraft(EMPTY_DRAFT); }}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <ManagerVendorSettingsModal
+        open={showSettings}
+        onClose={() => {
+          setShowSettings(false);
+          setSettingsTrade(undefined);
+        }}
+        initialTrade={settingsTrade}
+      />
 
       {vendors.length === 0 ? (
-        <PortalDataTableEmpty message="No vendors yet." icon="vendor" />
+        <PortalDataTableEmpty message="No vendors on your account yet. Open Vendor settings to add one." icon="vendor" />
       ) : (
-        <div className={PORTAL_DATA_TABLE_WRAP}>
+        <>
+        <div className="space-y-2 lg:hidden">
+          {vendors.map((row) => {
+            const open = expandedId === row.id;
+            return (
+              <div key={`vendor-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 text-left transition-opacity active:opacity-70"
+                  onClick={() => setExpandedId(open ? null : row.id)}
+                  aria-expanded={open}
+                  data-attr="vendor-card-toggle"
+                >
+                  <p className="min-w-0 flex-1 truncate font-semibold text-foreground">{row.name}</p>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+                    aria-hidden
+                  />
+                </button>
+                {open ? (
+                  <div className="mt-3 border-t border-border pt-3">{renderVendorDetail(row)}</div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+            <table className="w-full table-fixed border-collapse text-left text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={MANAGER_TABLE_TH}>Name</th>
@@ -197,14 +302,14 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
                   <th className={MANAGER_TABLE_TH}>Phone</th>
                   <th className={MANAGER_TABLE_TH}>Email</th>
                   <th className={MANAGER_TABLE_TH}>Status</th>
+                  <th className={PORTAL_TABLE_EXPAND_TH}>
+                    <span className="sr-only">Expand</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {vendors.map((row) => {
                   const open = expandedId === row.id;
-                  const editing = editingId === row.id;
-                  const own = isOwnVendor(row);
-                  const sharedByOther = !own;
                   return (
                     <Fragment key={row.id}>
                       <tr
@@ -216,74 +321,13 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
                         <td className={PORTAL_TABLE_TD}>{row.trade || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
-                                row.active !== false
-                                  ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-                                  : "bg-accent/30 text-muted ring-border"
-                              }`}
-                            >
-                              {row.active !== false ? "Active" : "Inactive"}
-                            </span>
-                            {sharedByOther ? (
-                              <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                                Shared
-                              </span>
-                            ) : row.sharedWithManagers ? (
-                              <span className="inline-flex rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
-                                Shared with managers
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
+                        <td className={PORTAL_TABLE_TD}>{renderVendorStatusBadges(row)}</td>
+                        <PortalTableExpandCell expanded={open} />
                       </tr>
                       {open ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                            {editing ? (
-                              <>
-                                <VendorForm draft={draft} setDraft={setDraft} />
-                                <div className="mt-4 flex flex-wrap gap-2">
-                                  <Button type="button" onClick={() => saveVendor(row.id)}>Save changes</Button>
-                                  <Button type="button" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
-                                </div>
-                              </>
-                            ) : (
-                              <div className="space-y-3">
-                                {sharedByOther ? (
-                                  <p className="text-sm text-muted">
-                                    Shared by another manager on Axis. You can view contact details but can&apos;t edit or remove this vendor.
-                                  </p>
-                                ) : null}
-                                {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
-                                <div className="flex flex-wrap gap-2">
-                                  {row.phone ? (
-                                    <a href={`tel:${row.phone}`} className="text-sm font-medium text-primary hover:underline">
-                                      Call {row.phone}
-                                    </a>
-                                  ) : null}
-                                  {row.email ? (
-                                    <a href={`mailto:${row.email}`} className="text-sm font-medium text-primary hover:underline">
-                                      Email {row.email}
-                                    </a>
-                                  ) : null}
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {own ? (
-                                    <>
-                                      <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
-                                        Edit
-                                      </Button>
-                                      <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
-                                        Remove
-                                      </Button>
-                                    </>
-                                  ) : null}
-                                </div>
-                              </div>
-                            )}
+                          <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                            {renderVendorDetail(row)}
                           </td>
                         </tr>
                       ) : null}
@@ -294,6 +338,7 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
             </table>
           </div>
         </div>
+        </>
       )}
     </>
   );
@@ -305,10 +350,10 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
   return (
     <ManagerPortalPageShell
       title="Vendors"
-      subtitle="Share your vendors with other managers if you want."
+      subtitle="Vendors on your account for work orders and outgoing payments."
       titleAside={
-        <Button type="button" onClick={openAddForm}>
-          Add vendor
+        <Button type="button" onClick={() => openSettingsForm()} data-attr="manager-vendor-settings-open">
+          Vendor settings
         </Button>
       }
     >

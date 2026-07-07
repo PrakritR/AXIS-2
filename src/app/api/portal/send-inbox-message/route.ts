@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
+import {
+  resolveManagerRecipientProfiles,
+  resolvePropertyScopedManagerRecipientIds,
+} from "@/lib/co-manager-notification-recipients.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
+import { sendPushToUser } from "@/lib/push-notifications.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -11,6 +16,7 @@ export const runtime = "nodejs";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
+const VENDOR_INBOX_SCOPE = "axis_portal_inbox_vendor_v1";
 
 function normalizeEmails(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
@@ -27,7 +33,17 @@ function normalizeUserIds(value: unknown): string[] {
 function scopeForRole(role: string | null | undefined): string {
   const normalized = String(role ?? "").trim().toLowerCase();
   if (normalized === "manager" || normalized === "pro" || normalized === "admin") return MANAGER_INBOX_SCOPE;
+  if (normalized === "vendor") return VENDOR_INBOX_SCOPE;
   return RESIDENT_INBOX_SCOPE;
+}
+
+/** Deep-link a push notification tap into the recipient's own inbox. */
+function inboxDeepLinkForRole(role: string | null | undefined): string {
+  const normalized = String(role ?? "").trim().toLowerCase();
+  if (normalized === "manager" || normalized === "pro") return "/portal/inbox/unopened";
+  if (normalized === "admin") return "/admin/inbox/unopened";
+  if (normalized === "vendor") return "/vendor/inbox/unopened";
+  return "/resident/inbox/unopened";
 }
 
 type BroadcastRecipient = { email: string; userId: string | null; role: "resident" | "manager" };
@@ -72,6 +88,25 @@ async function resolveBroadcastRecipients(
   if (normalizedRole === "manager" || normalizedRole === "pro" || normalizedRole === "admin") {
     if (categories.includes("resident")) await approvedResidentsForManagers([senderId]);
     if (categories.includes("management")) await linkedCoManagersForManagers([senderId]);
+    return out;
+  }
+
+  // Vendor sender — "management" resolves to the manager(s) who invited/own them.
+  if (normalizedRole === "vendor") {
+    if (categories.includes("management")) {
+      const filter = senderEmail
+        ? `vendor_user_id.eq.${senderId},row_data->>email.eq.${senderEmail}`
+        : `vendor_user_id.eq.${senderId}`;
+      const { data } = await db.from("manager_vendor_records").select("manager_user_id").or(filter);
+      const managerIds = [...new Set((data ?? []).map((r) => String(r.manager_user_id ?? "").trim()).filter(Boolean))];
+      if (managerIds.length > 0) {
+        const { data: mgrProfiles } = await db.from("profiles").select("id, email").in("id", managerIds);
+        for (const p of mgrProfiles ?? []) {
+          const email = String(p.email ?? "").trim().toLowerCase();
+          if (email) out.push({ email, userId: (p.id as string) ?? null, role: "manager" });
+        }
+      }
+    }
     return out;
   }
 
@@ -122,6 +157,9 @@ export async function POST(req: Request) {
       deliverToPortalInbox?: boolean;
       deliverViaEmail?: boolean;
       deliverViaSms?: boolean;
+      propertyId?: string;
+      /** When set with a single manager recipient, also notify linked co-managers with inbox access. */
+      fanOutPropertyInbox?: boolean;
     };
 
     const threadId = String(body.threadId ?? "").trim();
@@ -175,25 +213,50 @@ export async function POST(req: Request) {
       }
     }
 
-    const toUserIds = normalizeUserIds(body.toUserIds);
+    let toUserIds = normalizeUserIds(body.toUserIds);
     const { data: senderProfile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
     const senderRole = String(senderProfile?.role ?? "").trim().toLowerCase() || null;
+
+    const propertyId = String(body.propertyId ?? "").trim();
+    if (propertyId && body.fanOutPropertyInbox !== false && toUserIds.length === 1) {
+      toUserIds = await resolvePropertyScopedManagerRecipientIds(db, {
+        ownerManagerUserId: toUserIds[0]!,
+        propertyId,
+        channel: "inbox",
+      });
+    }
 
     const recipientsByEmail = new Map<
       string,
       { email: string; userId: string | null; role: string | null; scope: string }
     >();
 
-    for (const email of normalizeEmails(body.toEmails)
+    const toEmailsNormalized = normalizeEmails(body.toEmails)
       .filter((e) => e.includes("@"))
-      .map((e) => e.trim().toLowerCase())) {
-      if (email === senderEmail || recipientsByEmail.has(email)) continue;
-      recipientsByEmail.set(email, {
-        email,
-        userId: null,
-        role: null,
-        scope: RESIDENT_INBOX_SCOPE,
-      });
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e !== senderEmail && !recipientsByEmail.has(e));
+
+    if (toEmailsNormalized.length > 0) {
+      const { data: emailProfiles } = await db
+        .from("profiles")
+        .select("id, email, role")
+        .in("email", toEmailsNormalized);
+      const profileByEmail = new Map(
+        (emailProfiles ?? []).map((p) => [String(p.email ?? "").trim().toLowerCase(), p]),
+      );
+      for (const email of toEmailsNormalized) {
+        if (recipientsByEmail.has(email)) continue;
+        // No matching profile (e.g. not yet signed up) — best-effort resident
+        // scope so the row still shows up if/when they sign in by that email.
+        const profile = profileByEmail.get(email);
+        const role = profile ? String(profile.role ?? "").trim().toLowerCase() || null : null;
+        recipientsByEmail.set(email, {
+          email,
+          userId: profile?.id ?? null,
+          role,
+          scope: scopeForRole(role),
+        });
+      }
     }
 
     if (toUserIds.length > 0) {
@@ -295,6 +358,37 @@ export async function POST(req: Request) {
           },
           { onConflict: "id" },
         );
+      }
+
+      // Push notification, best-effort. Keep the payload generic (sender name
+      // only) since messages here can carry sensitive lease/payment details.
+      try {
+        const pushCandidates = recipients.filter((r) => r.email !== senderEmail);
+        const missingIdEmails = pushCandidates.filter((r) => !r.userId).map((r) => r.email);
+        const resolvedIds = new Map<string, string>();
+        if (missingIdEmails.length > 0) {
+          const { data: resolvedProfiles } = await db
+            .from("profiles")
+            .select("id, email")
+            .in("email", missingIdEmails);
+          for (const p of resolvedProfiles ?? []) {
+            const email = String(p.email ?? "").trim().toLowerCase();
+            if (email) resolvedIds.set(email, p.id as string);
+          }
+        }
+        await Promise.all(
+          pushCandidates.map((r) => {
+            const uid = r.userId ?? resolvedIds.get(r.email);
+            if (!uid) return Promise.resolve();
+            return sendPushToUser(uid, {
+              title: `New message from ${fromName}`,
+              body: "You have a new message in your Axis inbox.",
+              url: inboxDeepLinkForRole(r.role),
+            }).catch(() => {});
+          }),
+        );
+      } catch {
+        /* non-critical — no-ops when FCM is not configured */
       }
     }
 

@@ -66,6 +66,7 @@ function offerToRequestBody(offer: ManagerPricingOffer, extras?: { phone?: strin
     billing: offer.billing,
     promo: offer.promo,
     phone: extras?.phone,
+    trialSignup: offer.trialSignup === true ? true : undefined,
   };
 }
 
@@ -82,7 +83,7 @@ export async function continuePartnerPricingWithOffer(
   }
 
   const session = await fetchPartnerPricingSession();
-  const isPaidUpgrade = offer.tier !== "free" && session.authenticated && !session.needsPricing;
+  const isPaidUpgrade = offer.tier !== "free" && session.authenticated && !session.needsPricing && !offer.trialSignup;
 
   if (session.authenticated && !session.needsPricing && offer.tier === "free") {
     clearManagerPricingOffer();
@@ -92,8 +93,8 @@ export async function continuePartnerPricingWithOffer(
   // Only the FREE tier may be finalized up-front. For a paid signup we must NOT provision a
   // completed free manager here — that would grant portal access before the payment method is
   // added. pricing-oauth-continue provisions a PENDING account and returns the Stripe checkout;
-  // the account is completed only once payment succeeds.
-  if (session.authenticated && session.needsPricing && offer.tier === "free") {
+  // the account is completed only once payment succeeds. Trial signup skips Stripe entirely.
+  if (session.authenticated && session.needsPricing && offer.tier === "free" && !offer.trialSignup) {
     const provision = await ensurePartnerPricingFreeAccount();
     if (!provision.ok) {
       return { status: "error", message: provision.error };
@@ -147,6 +148,7 @@ export function buildPricingOffer(opts: {
   billing: "monthly" | "annual";
   promo?: string;
   returnSurface?: "mobile-plan" | "partner-pricing";
+  trialSignup?: boolean;
 }): ManagerPricingOffer {
   const stored = readManagerPricingOffer();
   return {
@@ -154,12 +156,33 @@ export function buildPricingOffer(opts: {
     billing: opts.billing,
     promo: opts.promo ?? stored?.promo,
     returnSurface: opts.returnSurface ?? stored?.returnSurface,
+    trialSignup: opts.trialSignup ?? stored?.trialSignup,
   };
 }
 
 export async function handleGoogleSignedInReturn(
   offer?: ManagerPricingOffer,
 ): Promise<{ status: "provisioned" } | { status: "error"; message: string }> {
+  if (offer?.trialSignup) {
+    if (offer.tier === "free") {
+      const provision = await ensurePartnerPricingFreeAccount();
+      if (!provision.ok) {
+        return { status: "error", message: provision.error };
+      }
+    }
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams({
+        mode: "create",
+        role: "manager",
+        google_signed_in: "1",
+        tier: offer.tier,
+        billing: offer.billing,
+      });
+      window.history.replaceState({}, "", `/auth/create-account?${params}`);
+    }
+    return { status: "provisioned" };
+  }
+
   if (!offer || offer.tier === "free") {
     const provision = await ensurePartnerPricingFreeAccount();
     if (!provision.ok) {

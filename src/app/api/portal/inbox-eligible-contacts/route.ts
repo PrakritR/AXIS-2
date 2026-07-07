@@ -21,7 +21,8 @@ export async function GET(req: Request) {
     if (!user) return NextResponse.json({ contacts: [] }, { status: 401 });
 
     const url = new URL(req.url);
-    const portal = url.searchParams.get("portal") === "manager" ? "manager" : "resident";
+    const portalParam = url.searchParams.get("portal");
+    const portal = portalParam === "manager" || portalParam === "vendor" ? portalParam : "resident";
 
     const db = createSupabaseServiceRoleClient();
     const { data: profile } = await db
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
           .eq("id", effectiveId)
           .maybeSingle();
         actorEmail = (effectiveProfile?.email ?? "").trim().toLowerCase() || null;
-        actorRole = String(effectiveProfile?.role ?? "").trim().toLowerCase() || (portal === "manager" ? "manager" : "resident");
+        actorRole = String(effectiveProfile?.role ?? "").trim().toLowerCase() || portal;
       }
     }
 

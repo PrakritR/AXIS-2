@@ -1,7 +1,8 @@
 import type { AdminPropertyRow } from "@/lib/demo-admin-property-inventory";
 import type { MockProperty } from "@/data/types";
+import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
-import { readExtraListingsForUser } from "@/lib/demo-property-pipeline";
+import { readExtraListingsForUser, readScopedExtraListings } from "@/lib/demo-property-pipeline";
 import { readLinkedListingsForUser, safePropertyOptionLabel, type ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 
 export type ManagerApplyLinkParams = {
@@ -20,10 +21,14 @@ export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkPar
   return `${base}${path}`;
 }
 
+export function buildTourContactHref(propertyId: string): string {
+  const id = propertyId.trim();
+  return `/rent/tours-contact?propertyId=${encodeURIComponent(id)}`;
+}
+
 export function buildManagerTourUrl(origin: string, propertyId: string): string {
   const base = origin.replace(/\/$/, "");
-  const id = propertyId.trim();
-  return `${base}/rent/tours-contact?propertyId=${encodeURIComponent(id)}`;
+  return `${base}${buildTourContactHref(propertyId)}`;
 }
 
 export function buildManagerListingUrl(origin: string, propertyId: string): string {
@@ -68,13 +73,14 @@ export type ManagerPromotionPropertyOption = { id: string; label: string; proper
  * instead of the raw seed key.
  */
 export function buildManagerPromotionPropertyOptions(userId: string | null): ManagerPromotionPropertyOption[] {
-  if (!userId) return [];
+  const scopeUserId = resolveManagerScopeUserId(userId);
+  if (!scopeUserId) return [];
   const byId = new Map<string, MockProperty>();
-  for (const p of readExtraListingsForUser(userId)) {
+  for (const p of readScopedExtraListings(scopeUserId)) {
     if (p.adminPublishLive !== true) continue;
     if (!byId.has(p.id)) byId.set(p.id, p);
   }
-  for (const { listing } of readLinkedListingsForUser(userId)) {
+  for (const { listing } of readLinkedListingsForUser(scopeUserId)) {
     if (listing.adminPublishLive !== true) continue;
     if (!byId.has(listing.id)) byId.set(listing.id, listing);
   }
@@ -85,13 +91,14 @@ export function buildManagerPromotionPropertyOptions(userId: string | null): Man
 
 /** Active listed properties managers can share apply/tour links for. */
 export function buildManagerShareablePropertyOptions(userId: string | null): ManagerPropertyFilterOption[] {
-  if (!userId) return [];
+  const scopeUserId = resolveManagerScopeUserId(userId);
+  if (!scopeUserId) return [];
   const labelById = new Map<string, string>();
-  for (const p of readExtraListingsForUser(userId)) {
+  for (const p of readScopedExtraListings(scopeUserId)) {
     if (p.adminPublishLive !== true) continue;
     labelById.set(p.id, safePropertyOptionLabel([p.title, p.buildingName, p.address], p.id));
   }
-  for (const { listing } of readLinkedListingsForUser(userId)) {
+  for (const { listing } of readLinkedListingsForUser(scopeUserId)) {
     if (listing.adminPublishLive !== true) continue;
     if (labelById.has(listing.id)) continue;
     labelById.set(listing.id, safePropertyOptionLabel([listing.title, listing.buildingName, listing.address], listing.id));

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  coManagerPortalSectionAllowed,
   flatCoManagerPermissionsFromProperty,
+  hasCoManagerPermission,
   mergeCoManagerPermissionsFromPropertyRows,
+  normalizeCoManagerPermissions,
   normalizePropertyCoManagerPermissions,
   permissionsForProperty,
 } from "@/lib/co-manager-permissions";
@@ -65,6 +68,31 @@ describe("flatCoManagerPermissionsFromProperty", () => {
       "prop-b": { payments: true, applications: true },
     });
     expect(flat).toEqual({ applications: true, payments: true });
+  });
+});
+
+describe("coManagerPortalSectionAllowed", () => {
+  it("allows promotion when granted", () => {
+    expect(
+      coManagerPortalSectionAllowed({
+        section: "promotion",
+        isPrimaryManager: false,
+        mergedPermissions: { promotion: true },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("hasCoManagerPermission", () => {
+  it("treats properties permission as listing edit access", () => {
+    expect(hasCoManagerPermission({ properties: true }, "editListings")).toBe(true);
+  });
+
+  it("maps legacy editListings reads to properties on normalize", () => {
+    expect(normalizeCoManagerPermissions({ editListings: true })).toEqual({
+      editListings: true,
+      properties: true,
+    });
   });
 });
 

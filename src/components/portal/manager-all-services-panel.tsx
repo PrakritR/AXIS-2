@@ -6,8 +6,6 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
   ManagerPortalStatusPills,
-  PORTAL_FILTER_ACTIONS_MOBILE,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
@@ -22,16 +20,19 @@ import {
 import {
   readServiceRequestsForManager,
   syncServiceRequestsFromServer,
-  approveServiceRequest,
-  deleteServiceRequest,
-  denyServiceRequest,
-  markServiceRequestServicePaid,
-  markServiceRequestDepositPaid,
   SERVICE_REQUESTS_EVENT,
   type ServiceRequest,
 } from "@/lib/service-requests-storage";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
+import {
+  ManagerServiceRequestDetail,
+  managerServiceRequestBucket,
+  managerServiceRequestPricingSummary,
+  type ManagerServiceRequestBucket,
+} from "@/components/portal/manager-service-request-detail";
+import { ManagerCreateServiceRequestModal } from "@/components/portal/manager-create-service-request-modal";
+import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
 import {
   ManagerVendorsPanel,
   type ManagerVendorsPanelHandle,
@@ -43,31 +44,21 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
-  PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableDetailActions,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 
 type FilterType = "requests" | "work-orders" | "vendors";
 
-/** Requests get the same Pending / Scheduled / Completed buckets as work orders. */
-type RequestBucket = "pending" | "scheduled" | "completed";
-
-function requestBucket(status: ServiceRequest["status"]): RequestBucket {
-  if (status === "pending") return "pending";
-  if (status === "approved") return "scheduled";
-  return "completed"; // denied or returned — closed either way
-}
-
-function hasDeposit(dep: string) {
-  return dep.trim() !== "" && dep.trim() !== "0" && dep.trim() !== "$0";
-}
+type RequestBucket = ManagerServiceRequestBucket;
 
 export function ManagerAllServicesPanel({
   tabId,
@@ -84,6 +75,8 @@ export function ManagerAllServicesPanel({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [woBucket, setWoBucket] = useState<ManagerWorkOrderBucket>("open");
   const [reqBucket, setReqBucket] = useState<RequestBucket>("pending");
+  const [addRequestOpen, setAddRequestOpen] = useState(false);
+  const [addWorkOrderOpen, setAddWorkOrderOpen] = useState(false);
   const vendorsPanelRef = useRef<ManagerVendorsPanelHandle>(null);
   const typeFilter: FilterType = tabId;
 
@@ -161,14 +154,13 @@ export function ManagerAllServicesPanel({
   const bucketedRequests = useMemo(
     () =>
       filteredRequests
-        .filter((r) => requestBucket(r.status) === reqBucket)
+        .filter((r) => managerServiceRequestBucket(r.status) === reqBucket)
         .slice()
         .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()),
     [filteredRequests, reqBucket],
   );
 
-  const pendingCount = filteredRequests.filter((r) => r.status === "pending").length;
-  const openCount = filteredWorkOrders.filter((w) => w.bucket === "open").length;
+
   const woCounts = useMemo(() => {
     const c: Record<ManagerWorkOrderBucket, number> = { open: 0, scheduled: 0, completed: 0 };
     for (const r of filteredWorkOrders) c[r.bucket] += 1;
@@ -178,80 +170,98 @@ export function ManagerAllServicesPanel({
     () =>
       (["open", "scheduled", "completed"] as const).map((id) => ({
         id,
-        label: id === "open" ? "Open" : id === "scheduled" ? "Scheduled" : "Completed",
+        label: id === "open" ? "Pending" : id === "scheduled" ? "Scheduled" : "Completed",
         count: woCounts[id],
       })),
     [woCounts],
   );
   const reqCounts = useMemo(() => {
-    const c: Record<RequestBucket, number> = { pending: 0, scheduled: 0, completed: 0 };
-    for (const r of filteredRequests) c[requestBucket(r.status)] += 1;
+    const c: Record<RequestBucket, number> = { pending: 0, approved: 0, denied: 0 };
+    for (const r of filteredRequests) c[managerServiceRequestBucket(r.status)] += 1;
     return c;
   }, [filteredRequests]);
   const reqTabs = useMemo(
     () =>
-      (["pending", "scheduled", "completed"] as const).map((id) => ({
+      (["pending", "approved", "denied"] as const).map((id) => ({
         id,
-        label: id === "pending" ? "Pending" : id === "scheduled" ? "Scheduled" : "Completed",
+        label: id === "pending" ? "Pending" : id === "approved" ? "Approved" : "Denied",
         count: reqCounts[id],
       })),
     [reqCounts],
   );
 
+  const renderRequestDetail = (req: ServiceRequest) => {
+    const propertyLabel =
+      req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
+        ? propertyOptions.find((p) => p.id === req.propertyId)!.label
+        : "—";
+    return (
+      <ManagerServiceRequestDetail
+        req={req}
+        propertyLabel={propertyLabel}
+        onUpdated={() => setDataTick((t) => t + 1)}
+        onApproved={() => setReqBucket("approved")}
+        onDenied={() => setReqBucket("denied")}
+        onCollapsed={() => setExpandedId(null)}
+      />
+    );
+  };
+
   return (
     <ManagerPortalPageShell
-      title="Services"
+      title={typeFilter === "vendors" ? "Vendors" : "Services"}
       titleAside={
-        <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap items-center justify-end gap-2`}>
-          {pendingCount > 0 && (
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-300/60">
-              {pendingCount} awaiting approval
-            </span>
-          )}
-          {openCount > 0 && (
-            <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-bold text-sky-800 ring-1 ring-sky-300/60">
-              {openCount} open work orders
-            </span>
-          )}
-          <PortalPropertyFilterPill
-            propertyOptions={filterPropertyOptions}
-            propertyValue={propertyFilter}
-            onPropertyChange={setPropertyFilter}
-          />
+        <>
           {typeFilter === "vendors" ? (
             <Button
               type="button"
               variant="primary"
               className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => vendorsPanelRef.current?.openAdd()}
+              onClick={() => vendorsPanelRef.current?.openSettings()}
+              data-attr="manager-vendor-settings-open"
             >
-              Add vendor
+              Vendor settings
             </Button>
           ) : null}
-        </div>
+          {typeFilter === "requests" ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              data-attr="manager-service-request-add"
+              onClick={() => setAddRequestOpen(true)}
+            >
+              Add request
+            </Button>
+          ) : null}
+          {typeFilter === "work-orders" ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              data-attr="manager-work-order-add"
+              onClick={() => setAddWorkOrderOpen(true)}
+            >
+              Add work order
+            </Button>
+          ) : null}
+        </>
       }
       filterRow={
         <ManagerPortalFilterRow>
           <TabNav
             activeId={typeFilter}
             items={[
-              { id: "requests", label: "Requests", href: `${basePath}/services/requests` },
-              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders` },
-              { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors` },
+              { id: "requests", label: "Requests", href: `${basePath}/services/requests`, dataAttr: "manager-services-tab-requests" },
+              { id: "work-orders", label: "Work orders", href: `${basePath}/services/work-orders`, dataAttr: "manager-services-tab-work-orders" },
+              { id: "vendors", label: "Vendors", href: `${basePath}/services/vendors`, dataAttr: "manager-services-tab-vendors" },
             ]}
           />
-          {typeFilter === "vendors" ? (
-            <div className={PORTAL_FILTER_ACTIONS_MOBILE}>
-              <Button
-                type="button"
-                variant="primary"
-                className={PORTAL_HEADER_ACTION_BTN}
-                onClick={() => vendorsPanelRef.current?.openAdd()}
-              >
-                Add vendor
-              </Button>
-            </div>
-          ) : null}
+          <PortalPropertyFilterPill
+            propertyOptions={filterPropertyOptions}
+            propertyValue={propertyFilter}
+            onPropertyChange={setPropertyFilter}
+          />
         </ManagerPortalFilterRow>
       }
     >
@@ -288,9 +298,43 @@ export function ManagerAllServicesPanel({
                 icon="service"
               />
             ) : (
-          <div className={PORTAL_DATA_TABLE_WRAP}>
+          <>
+          <div className="space-y-2 lg:hidden">
+            {bucketedRequests.map((req) => {
+              const id = `request-${req.id}`;
+              const isExpanded = expandedId === id;
+              const propertyLabel =
+                req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
+                  ? propertyOptions.find((p) => p.id === req.propertyId)!.label
+                  : "—";
+              const summary = managerServiceRequestPricingSummary(req);
+              return (
+                <div key={`req-mobile-${req.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    onClick={() => setExpandedId(isExpanded ? null : id)}
+                    aria-expanded={isExpanded}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{req.offerName}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {[req.residentName || req.residentEmail, propertyLabel].filter(Boolean).join(" · ")}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">{summary}</p>
+                    </div>
+                    <PortalTableExpandChevron expanded={isExpanded} />
+                  </button>
+                  {isExpanded ? (
+                    <div className="mt-3 border-t border-border pt-3">{renderRequestDetail(req)}</div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="min-w-[920px] w-full border-collapse text-left text-sm">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
@@ -298,13 +342,15 @@ export function ManagerAllServicesPanel({
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
             {bucketedRequests.map((req) => {
               const id = `request-${req.id}`;
               const isExpanded = expandedId === id;
-              const needsReturn = hasDeposit(req.deposit);
               return (
                   <Fragment key={`req-${req.id}`}>
                     <tr
@@ -320,88 +366,13 @@ export function ManagerAllServicesPanel({
                           ? propertyOptions.find((p) => p.id === req.propertyId)!.label
                           : "—"}
                       </td>
-                      <td className={PORTAL_TABLE_TD}>
-                        {[req.price, needsReturn ? `Deposit ${req.deposit}` : null].filter(Boolean).join(" · ") || "—"}
-                      </td>
+                      <td className={PORTAL_TABLE_TD}>{managerServiceRequestPricingSummary(req)}</td>
+                      <PortalTableExpandCell expanded={isExpanded} />
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
-                          <div className="space-y-3">
-                            {req.notes ? <p className="text-xs italic text-muted">&ldquo;{req.notes}&rdquo;</p> : null}
-
-                        {(req.status === "approved" || req.status === "returned") ? (
-                          <div className="rounded-xl bg-accent/40 p-3 ring-1 ring-border">
-                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">Charges</p>
-                            <div className="space-y-2">
-                              {req.price ? (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-foreground/80">Service fee · {req.price}</span>
-                                  {req.servicePaid
-                                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Paid</span>
-                                    : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestServicePaid(req.id); setDataTick((t) => t + 1); showToast("Service charge marked paid."); }}>Mark paid</Button>
-                                  }
-                                </div>
-                              ) : null}
-                              {needsReturn ? (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-foreground/80">Deposit · {req.deposit}</span>
-                                  {req.depositPaid
-                                    ? <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">Refunded</span>
-                                    : <Button type="button" className="h-6 rounded-full px-2.5 text-[10px]" onClick={() => { markServiceRequestDepositPaid(req.id); setDataTick((t) => t + 1); showToast("Deposit marked refunded."); }}>Mark refunded</Button>
-                                  }
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <PortalTableDetailActions>
-                          {req.status === "pending" ? (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN_PRIMARY}
-                                onClick={() => {
-                                  approveServiceRequest(req.id);
-                                  setDataTick((t) => t + 1);
-                                  setReqBucket("scheduled");
-                                  showToast(`Approved "${req.offerName}".`);
-                                }}
-                              >
-                                Approve
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_DETAIL_BTN}
-                                onClick={() => {
-                                  denyServiceRequest(req.id);
-                                  setDataTick((t) => t + 1);
-                                  showToast("Request denied.");
-                                }}
-                              >
-                                Deny
-                              </Button>
-                            </>
-                          ) : null}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                            onClick={() => {
-                              if (!window.confirm("Delete this request? This cannot be undone.")) return;
-                              deleteServiceRequest(req.id);
-                              setDataTick((t) => t + 1);
-                              setExpandedId(null);
-                              showToast("Request deleted.");
-                            }}
-                          >
-                            Delete request
-                          </Button>
-                        </PortalTableDetailActions>
-                          </div>
+                        <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                          {renderRequestDetail(req)}
                         </td>
                       </tr>
                     ) : null}
@@ -412,10 +383,33 @@ export function ManagerAllServicesPanel({
               </table>
             </div>
           </div>
+          </>
             )}
           </>
         )}
       </div>
+
+      <ManagerCreateServiceRequestModal
+        open={addRequestOpen}
+        onClose={() => setAddRequestOpen(false)}
+        managerUserId={userId}
+        defaultPropertyId={propertyFilter || undefined}
+        onSubmitted={() => {
+          setDataTick((t) => t + 1);
+          setReqBucket("pending");
+        }}
+      />
+
+      <ManagerCreateWorkOrderModal
+        open={addWorkOrderOpen}
+        onClose={() => setAddWorkOrderOpen(false)}
+        managerUserId={userId}
+        defaultPropertyId={propertyFilter || undefined}
+        onSubmitted={(bucket) => {
+          setDataTick((t) => t + 1);
+          setWoBucket(bucket);
+        }}
+      />
     </ManagerPortalPageShell>
   );
 }

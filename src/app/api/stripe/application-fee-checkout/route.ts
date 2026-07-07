@@ -23,6 +23,8 @@ type Body = {
   amountCents?: number;
   /** Listing owner Supabase user id (matches `profiles.id` / `MockProperty.managerUserId`). */
   managerUserId?: string;
+  /** Checkout return path (defaults to public apply). Must start with `/`. */
+  returnPath?: string;
 };
 
 function clampAmountCents(n: number): number {
@@ -94,6 +96,10 @@ export async function POST(req: Request) {
     const managerTier = normalizeManagerSkuTier(managerTierRaw) ?? "free";
 
     const appUrl = resolveAppOrigin(req);
+    const returnPath =
+      typeof body.returnPath === "string" && body.returnPath.startsWith("/")
+        ? body.returnPath.split("?")[0] ?? "/rent/apply"
+        : "/rent/apply";
 
     const metadata: Record<string, string> = {
       purpose: APPLICATION_FEE_CHECKOUT_PURPOSE,
@@ -113,8 +119,8 @@ export async function POST(req: Request) {
       destinationAccountId: connect.accountId,
       managerTier,
       paymentMethod: "ach",
-      successUrl: `${appUrl}/rent/apply?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${appUrl}/rent/apply?fee_checkout=cancel`,
+      successUrl: `${appUrl}${returnPath}?fee_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${appUrl}${returnPath}?fee_checkout=cancel`,
     });
 
     if (result.mode !== "hosted") {

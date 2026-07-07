@@ -6,11 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
+import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
+import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { ManagerPlan } from "@/components/portal/manager-plan";
 import { NotificationsToggle } from "@/components/native/notifications-toggle";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useNativeChrome } from "@/hooks/use-is-native-app";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { PortalKind } from "@/lib/portal-types";
 
 function dashToEmpty(v: string) {
@@ -80,6 +83,7 @@ export function PortalProfileClient({
   idValue: string;
 }) {
   const { showToast } = useAppUi();
+  const demo = isDemoModeActive();
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(dashToEmpty(initialFullName));
   const [phone, setPhone] = useState(dashToEmpty(initialPhone));
@@ -105,6 +109,12 @@ export function PortalProfileClient({
   }, [initialFullName, initialPhone, editing]);
 
   const save = useCallback(async () => {
+    if (demo) {
+      showToast("Profile changes are simulated in this demo.");
+      setPendingSkipServerPropsSync(true);
+      setEditing(false);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/profile", {
@@ -134,7 +144,7 @@ export function PortalProfileClient({
     } finally {
       setSaving(false);
     }
-  }, [fullName, phone, showToast]);
+  }, [demo, fullName, phone, showToast]);
 
   const cancel = useCallback(() => {
     setFullName(dashToEmpty(initialFullName));
@@ -234,11 +244,14 @@ export function PortalProfileClient({
       >
         <div className="space-y-3 [html[data-native]_&]:space-y-2.5">
           <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">{inner}</Card>
-          <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">
-            <ManagerPlan embedded showCurrentPlan={false} />
-          </Card>
+          {demo ? null : (
+            <Card className="rounded-3xl border border-border p-6 sm:p-8 [html[data-native]_&]:rounded-2xl [html[data-native]_&]:p-4">
+              <ManagerPlan embedded showCurrentPlan={false} />
+            </Card>
+          )}
           <NotificationsToggle />
           <PortalChangePasswordPanel accountEmail={dashToEmpty(initialEmail) || initialEmail} />
+          <PortalBugFeedbackPanel reporterRole={portalKind === "pro" ? "pro" : "manager"} embedded />
           <PortalSettingsExtras currentKind={portalKind} />
         </div>
       </ManagerPortalPageShell>
@@ -247,7 +260,7 @@ export function PortalProfileClient({
 
   return (
     <div className={PORTAL_SECTION_SURFACE}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center justify-between gap-4">
         <h1 className={PORTAL_PAGE_TITLE}>Settings</h1>
         <div className="flex flex-wrap gap-2">
           {headerActions.map((a) => (
@@ -273,6 +286,9 @@ export function PortalProfileClient({
       </div>
       <div className="mt-6">
         <PortalSettingsExtras currentKind={portalKind} />
+      </div>
+      <div className="mt-6">
+        <AdminBugFeedbackClient embedded />
       </div>
     </div>
   );

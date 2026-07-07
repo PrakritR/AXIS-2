@@ -1,5 +1,5 @@
 import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
-import { resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
+import { isSignupTrialManagerPurchase, resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
 import { RESIDENT_FREE_TIER_SECTION_IDS } from "@/lib/portals/resident-sections";
 
 /** Property caps by plan (houses / listings in the portal). Legacy unknown tier → no numeric cap (`null`). */
@@ -194,6 +194,7 @@ export function resolveManagerSubscriptionTierFromPurchase(input: {
   const isAdminGrant =
     billing === "admin" || isAdminManagedManagerPurchase(input.stripeCheckoutSessionId);
   const isWaiverGrant = isWaiverGrantedManagerPurchase(input.promoCode);
+  const isTrialGrant = isSignupTrialManagerPurchase(billing);
 
   if (normalized === "pro" || normalized === "business") {
     if (hasStripe) return "paid";
@@ -201,7 +202,7 @@ export function resolveManagerSubscriptionTierFromPurchase(input: {
     // plan cadence chosen at signup, not a comp period, so it must not be run
     // through the date-based expiry the way admin grants are.
     if (isWaiverGrant) return "paid";
-    if (isAdminGrant) {
+    if (isTrialGrant || isAdminGrant) {
       const effective = resolveEffectiveManagerTier(
         {
           tier: normalized,
@@ -222,6 +223,11 @@ export function resolveManagerSubscriptionTierFromPurchase(input: {
 
 export function isManagerFreePlan(tier: ManagerSubscriptionTier): boolean {
   return tier === "free";
+}
+
+/** Applicant background checks (Checkr) require Pro or Business — not included on Free. */
+export function managerScreeningAllowedForTier(tier: ManagerSubscriptionTier): boolean {
+  return !isManagerFreePlan(tier);
 }
 
 export function managerSectionAllowedForTier(section: string, tier: "free" | "paid" | null): boolean {

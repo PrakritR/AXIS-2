@@ -7,6 +7,7 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
@@ -17,6 +18,9 @@ import {
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
+  PORTAL_TABLE_EXPAND_TH,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   PortalResponsiveDataView,
   PortalTableDetailActions,
   createPortalRowExpandClick,
@@ -165,6 +169,16 @@ export type PortalInboxTableRow = {
   preview: string;
   whenLabel: string;
   read: boolean;
+  /** When false, row cannot be bulk-selected (e.g. already sent/cancelled). */
+  selectable?: boolean;
+};
+
+export type PortalInboxSelectionProps = {
+  selectedIds: Set<string>;
+  onToggleSelected: (id: string) => void;
+  onToggleSelectAll: () => void;
+  allSelected: boolean;
+  selectableCount: number;
 };
 
 export function PortalInboxMessageTable({
@@ -177,6 +191,7 @@ export function PortalInboxMessageTable({
   onToggleExpand,
   renderExtraActions,
   primaryPartyHeader = "From",
+  selection,
 }: {
   rows: PortalInboxTableRow[];
   onMarkRead?: (id: string) => void;
@@ -189,6 +204,7 @@ export function PortalInboxMessageTable({
   /** Trash / restore / delete — shown in the expanded row only (with Mark read, Reply, Hide). */
   renderExtraActions?: (row: PortalInboxTableRow) => ReactNode;
   primaryPartyHeader?: "From" | "To";
+  selection?: PortalInboxSelectionProps;
 }) {
   const { showToast } = useAppUi();
   const [replyDraftById, setReplyDraftById] = useState<Record<string, string>>({});
@@ -254,13 +270,27 @@ export function PortalInboxMessageTable({
             >
               {replyBusyId === row.id ? "Sending…" : "Send reply"}
             </Button>
-          ) : (
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => showToast("Reply sent.")}>
-              Reply
-            </Button>
-          )}
+          ) : null}
         </PortalTableDetailActions>
       </>
+    );
+  };
+
+  const showSelection = Boolean(selection && selection.selectableCount > 0);
+  const baseColCount = onToggleExpand ? 5 : 5;
+  const detailColSpan = baseColCount + (showSelection ? 1 : 0);
+
+  const renderRowCheckbox = (row: PortalInboxTableRow, className = "") => {
+    if (!selection || row.selectable === false) return null;
+    return (
+      <input
+        type="checkbox"
+        className={`h-4 w-4 shrink-0 rounded border-border accent-primary ${className}`}
+        checked={selection.selectedIds.has(row.id)}
+        onChange={() => selection.onToggleSelected(row.id)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`Select message ${row.topic}`}
+      />
     );
   };
 
@@ -275,12 +305,14 @@ export function PortalInboxMessageTable({
 
         return (
           <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-            <button
-              type="button"
-              className="w-full text-left"
-              onClick={() => (rowExpandable ? onToggleExpand?.(row.id) : undefined)}
-              disabled={!rowExpandable}
-            >
+            <div className="flex items-start gap-3">
+              {renderRowCheckbox(row, "mt-1")}
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left"
+                onClick={() => (rowExpandable ? onToggleExpand?.(row.id) : undefined)}
+                disabled={!rowExpandable}
+              >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className={`truncate font-semibold text-foreground ${!row.read ? "" : "text-foreground/90"}`}>
@@ -291,8 +323,12 @@ export function PortalInboxMessageTable({
                   <p className="mt-1 line-clamp-2 text-xs text-muted">{row.preview}</p>
                 </div>
                 <p className="shrink-0 text-[11px] text-muted">{row.whenLabel}</p>
+                {rowExpandable ? (
+                  <PortalTableExpandChevron expanded={isExpanded} />
+                ) : null}
               </div>
             </button>
+            </div>
             {!rowExpandable && (hasMarkRead || extra) ? (
               <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
                 {hasMarkRead ? (
@@ -305,17 +341,6 @@ export function PortalInboxMessageTable({
             ) : null}
             {isExpanded ? (
               <div className="mt-3 border-t border-border pt-3">{renderExpandedContent(row, detailText, extra)}</div>
-            ) : rowExpandable ? (
-              <div className="mt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={PORTAL_DETAIL_BTN}
-                  onClick={() => onToggleExpand?.(row.id)}
-                >
-                  {isExpanded ? "Less" : "Open"}
-                </Button>
-              </div>
             ) : null}
           </div>
         );
@@ -325,14 +350,30 @@ export function PortalInboxMessageTable({
 
   const desktopTable = (
     <div className={PORTAL_INBOX_TABLE_WRAP}>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <div className={PORTAL_DATA_TABLE_SCROLL}>
+        <table className="w-full table-fixed border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
+              {showSelection ? (
+                <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border accent-primary"
+                    checked={selection!.allSelected}
+                    onChange={() => selection!.onToggleSelectAll()}
+                    aria-label="Select all messages"
+                  />
+                </th>
+              ) : null}
               <th className={`${MANAGER_TABLE_TH} text-left`}>{primaryPartyHeader}</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Preview</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
+              {onToggleExpand ? (
+                <th className={PORTAL_TABLE_EXPAND_TH}>
+                  <span className="sr-only">Expand</span>
+                </th>
+              ) : null}
               {!onToggleExpand ? (
                 <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
               ) : null}
@@ -346,7 +387,6 @@ export function PortalInboxMessageTable({
               const hasMarkRead = Boolean(!row.read && onMarkRead);
               const extra = renderExtraActions?.(row);
               const fallbackSummaryActions = !rowExpandable && (hasMarkRead || extra);
-              const detailColSpan = rowExpandable ? 4 : 5;
 
               return (
                 <Fragment key={row.id}>
@@ -359,6 +399,9 @@ export function PortalInboxMessageTable({
                     }
                     aria-expanded={rowExpandable ? isExpanded : undefined}
                   >
+                    {showSelection ? (
+                      <td className={`${PORTAL_TABLE_TD} w-10 align-middle`}>{renderRowCheckbox(row)}</td>
+                    ) : null}
                     <td className={`${PORTAL_TABLE_TD} align-middle`}>
                       <p className="font-medium text-foreground">{row.name}</p>
                       <p className="mt-0.5 text-xs text-muted">{row.email}</p>
@@ -368,6 +411,7 @@ export function PortalInboxMessageTable({
                       <span className="line-clamp-2">{row.preview}</span>
                     </td>
                     <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{row.whenLabel}</td>
+                    {rowExpandable ? <PortalTableExpandCell expanded={isExpanded} /> : null}
                     {!rowExpandable ? (
                       <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
                         {fallbackSummaryActions ? (

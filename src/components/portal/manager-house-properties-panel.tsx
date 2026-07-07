@@ -1,30 +1,38 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
+import { ManagerPropertyServiceOptionsPanel } from "@/components/portal/manager-property-service-options-panel";
+import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
+  PORTAL_MOBILE_CARD_CLASS,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
-  adminKpiCounts,
+  adminPropertyRentDisplayLabel,
   deleteManagerLiveListing,
   deleteUnlistedManagerProperty,
   listAdminRow,
-  publicListingHrefForPropertyRow,
+  managerPropertyRowsForStage,
   readAdminPropertyRows,
   resolveAdminPropertyRowPreview,
   removeRejectedProperty,
@@ -34,6 +42,7 @@ import {
   type AdminPropertyBucketIndex,
   type AdminPropertyRow,
 } from "@/lib/demo-admin-property-inventory";
+import { parseMonthlyRent } from "@/lib/listings-search";
 import {
   PROPERTY_PIPELINE_EVENT,
   deletePendingSubmissionForManager,
@@ -43,6 +52,7 @@ import {
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
 import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
+import { resolvePropertySaveTarget } from "@/lib/manager-property-save-target";
 import {
   legacyAdminFieldsToSubmission,
   normalizeManagerListingSubmissionV1,
@@ -50,7 +60,6 @@ import {
 } from "@/lib/manager-listing-submission";
 import {
   buildManagerApplyUrl,
-  buildManagerListingUrl,
   buildManagerTourUrl,
   copyTextToClipboard,
 } from "@/lib/manager-property-links";
@@ -62,7 +71,7 @@ function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListin
 
 function submissionForListedEdit(p: MockProperty): ManagerListingSubmissionV1 {
   if (p.listingSubmission) return normalizeManagerListingSubmissionV1(p.listingSubmission);
-  const rentNum = Number.parseFloat(String(p.rentLabel).replace(/[^\d.]/g, "")) || 0;
+  const rentNum = parseMonthlyRent(String(p.rentLabel ?? "")) ?? 0;
   return normalizeManagerListingSubmissionV1(
     legacyAdminFieldsToSubmission({
       buildingName: p.buildingName,
@@ -143,6 +152,8 @@ function ManagerPropertyInlineDetails({
 }) {
   const mock = useMemo(() => (row ? resolveAdminPropertyRowPreview(row) : null), [row]);
   const rich = useMemo(() => (mock ? getListingRichContent(mock) : null), [mock]);
+  const hasPreview = Boolean(mock && rich);
+  const [previewExpanded, setPreviewExpanded] = useState(true);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
 
@@ -188,12 +199,13 @@ function ManagerPropertyInlineDetails({
 
   const houseSaveTarget = useMemo(() => {
     if (!row) return null;
-    if (portalSub?.saveMode === "pending") return { mode: "pending" as const, saveId: portalSub.saveId };
-    if (portalSub?.saveMode === "listing") return { mode: "listing" as const, saveId: portalSub.saveId };
-    if (portalSub?.saveMode === "requestChange") return { mode: "requestChange" as const, saveId: portalSub.saveId };
-    if (bucket === 0 && row.adminRefId) return { mode: "pending" as const, saveId: row.adminRefId };
-    if (listingId?.trim()) return { mode: "listing" as const, saveId: listingId.trim() };
-    return null;
+    return resolvePropertySaveTarget({
+      portalSaveMode: portalSub?.saveMode,
+      portalSaveId: portalSub?.saveId,
+      bucket,
+      adminRefId: row.adminRefId,
+      listingId,
+    });
   }, [portalSub, bucket, row, listingId]);
 
   const run = (label: string, ok: boolean, err = "Action could not be completed.") => {
@@ -206,9 +218,9 @@ function ManagerPropertyInlineDetails({
   };
 
   if (!row || !mock || !managerSubmission) return null;
-  const publicHref = publicListingHrefForPropertyRow(row);
 
   const actionBtnClass = "w-full rounded-full";
+  const canEditListing = Boolean(displaySub && portalSub);
 
   const footer = (
     <div className="flex flex-col gap-3">
@@ -316,11 +328,6 @@ function ManagerPropertyInlineDetails({
           >
             Unlist
           </Button>
-          {displaySub && portalSub ? (
-            <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
-              Edit listing
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -397,43 +404,48 @@ function ManagerPropertyInlineDetails({
           </Button>
         </div>
       ) : null}
-
-      {displaySub && portalSub && !(bucket === 2 && listingId) ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <Button type="button" variant="outline" className={actionBtnClass} onClick={() => setEditorOpen(true)}>
-            Edit listing
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Preview</p>
-        {publicHref ? (
-          <Link
-            href={publicHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-attr="listing-open-public-page"
-            className="text-xs font-semibold text-muted underline-offset-2 hover:underline"
+      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">{footer}</div>
+
+      <PortalCollapsibleSection
+        title="Preview"
+        titleVariant="label"
+        expanded={previewExpanded}
+        onExpandedChange={setPreviewExpanded}
+        collapsible={hasPreview}
+        surfaceMuted={false}
+        toggleDataAttr="listing-preview-toggle"
+        headerActions={
+          canEditListing ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              data-attr="listing-edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditorOpen(true);
+              }}
+            >
+              Edit
+            </Button>
+          ) : null
+        }
+        contentClassName="p-0"
+      >
+        {hasPreview ? (
+          <div
+            data-listing-preview-scroll
+            className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-b-2xl border-t border-border bg-background"
           >
-            Open public page
-          </Link>
-        ) : (
-          <span className="text-xs text-muted">Exact layout renters see once approved</span>
-        )}
-      </div>
-      {mock && rich ? (
-        <div
-          data-listing-preview-scroll
-          className="portal-desktop-scroll-panel overscroll-contain rounded-2xl border border-border bg-background"
-        >
-          <ListingDetailSections property={mock} rich={rich} previewModal />
-        </div>
-      ) : null}
+            <ListingDetailSections property={mock!} rich={rich!} previewModal />
+          </div>
+        ) : null}
+      </PortalCollapsibleSection>
 
       <ManagerPropertyHouseDetailsPanel
         noteKey={noteKey}
@@ -452,7 +464,17 @@ function ManagerPropertyInlineDetails({
         showToast={showToast}
       />
 
-      <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5 [html[data-theme=dark]_&]:portal-surface-muted">{footer}</div>
+      <ManagerPropertyServiceOptionsPanel
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+      />
+
+      {bucket === 2 && listingId ? (
+        <ManagerPropertyPromotionPanel listingId={listingId} showToast={showToast} onUpdated={onUpdated} />
+      ) : null}
 
       {editorOpen && portalSub ? (
         <ManagerAddListingForm
@@ -487,17 +509,26 @@ export function ManagerHousePropertiesPanel({
   onSendToProspect?: (listingId: string) => void;
 }) {
   const { userId: managerUserId, ready: authReady } = useManagerUserId();
+  const scopeUserId = resolveManagerScopeUserId(managerUserId);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!managerUserId) return;
-    void syncManagerPortfolioFromServer(managerUserId, { force: true }).then(() => {
+    if (!scopeUserId) return;
+    if (!isDemoModeActive()) {
+      void syncManagerPortfolioFromServer(scopeUserId, { force: true }).then(() => {
+        setTick((t) => t + 1);
+        void mirrorLocalPropertyPipelineToServer(scopeUserId);
+      });
+    } else {
       setTick((t) => t + 1);
-      void mirrorLocalPropertyPipelineToServer();
-    });
+    }
     const on = () => {
-      void syncManagerPortfolioFromServer(managerUserId, { force: true }).then(() => setTick((t) => t + 1));
+      if (isDemoModeActive()) {
+        setTick((t) => t + 1);
+        return;
+      }
+      void syncManagerPortfolioFromServer(scopeUserId, { force: true }).then(() => setTick((t) => t + 1));
     };
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
     window.addEventListener("axis-pro-relationships", on);
@@ -505,32 +536,31 @@ export function ManagerHousePropertiesPanel({
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("axis-pro-relationships", on);
     };
-  }, [managerUserId]);
+  }, [scopeUserId]);
 
-  const kpiValues = useMemo(() => {
+
+  const stageCounts = useMemo(() => {
     void tick;
-    return adminKpiCounts(managerUserId);
-  }, [tick, managerUserId]);
-
-  const stageCounts = useMemo(
-    () => ({
-      pending: kpiValues[0] + kpiValues[1],
-      listed: kpiValues[2],
-      unlisted: kpiValues[3],
-      rejected: kpiValues[4],
-    }),
-    [kpiValues],
-  );
+    if (!scopeUserId) {
+      return { pending: 0, listed: 0, unlisted: 0, rejected: 0 };
+    }
+    return {
+      pending: managerPropertyRowsForStage([0, 1], scopeUserId).length,
+      listed: managerPropertyRowsForStage([2], scopeUserId).length,
+      unlisted: managerPropertyRowsForStage([3], scopeUserId).length,
+      rejected: managerPropertyRowsForStage([4], scopeUserId).length,
+    };
+  }, [tick, scopeUserId]);
 
   const rows = useMemo(() => {
     void tick;
-    if (!managerUserId) return [] as Array<{ sourceBucket: AdminPropertyBucketIndex; row: AdminPropertyRow }>;
+    if (!scopeUserId) return [] as Array<{ sourceBucket: AdminPropertyBucketIndex; row: AdminPropertyRow }>;
     const stage = MANAGER_STAGES.find((item) => item.key === activeStage);
     if (!stage) return [];
     return stage.buckets.flatMap((bucket) =>
-      readAdminPropertyRows(bucket, managerUserId).map((row) => ({ sourceBucket: bucket, row })),
+      readAdminPropertyRows(bucket, scopeUserId).map((row) => ({ sourceBucket: bucket, row })),
     );
-  }, [tick, managerUserId, activeStage]);
+  }, [tick, scopeUserId, activeStage]);
 
   useEffect(() => {
     if (activeStage !== "pending") return;
@@ -542,77 +572,121 @@ export function ManagerHousePropertiesPanel({
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;
   }
-  if (!managerUserId) {
+  if (!scopeUserId) {
     return <p className="text-sm text-muted">Sign in to view and manage your properties.</p>;
   }
+
+  const renderRowDetail = (sourceBucket: AdminPropertyBucketIndex, row: AdminPropertyRow, rowKey: string) => (
+    <ManagerPropertyInlineDetails
+      key={rowKey}
+      bucket={sourceBucket}
+      row={row}
+      onUpdated={() => setTick((t) => t + 1)}
+      showToast={showToast}
+      managerUserId={managerUserId}
+      onSendToProspect={onSendToProspect}
+    />
+  );
 
   return (
     <>
       {rows.length === 0 ? (
         <PortalDataTableEmpty message={MANAGER_PROPERTY_EMPTY_COPY[activeStage]} icon="default" />
       ) : (
-        <div className={`${PORTAL_DATA_TABLE_WRAP}`}>
-          <div className="overflow-x-auto">
-            <table className="min-w-[640px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ sourceBucket, row }) => {
-                  const rowKey = row.adminRefId + (row.listingId ?? "");
-                  const expanded = expandedRowKey === rowKey;
+        <>
+          <div className="space-y-2 lg:hidden">
+            {rows.map(({ sourceBucket, row }) => {
+              const rowKey = row.adminRefId + (row.listingId ?? "");
+              const expanded = expandedRowKey === rowKey;
 
-                  return (
-                    <Fragment key={rowKey}>
-                      <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() =>
-                          setExpandedRowKey(expanded ? null : rowKey),
-                        )}
-                        aria-expanded={expanded}
-                      >
-                        <td className={PORTAL_TABLE_TD}>
-                          <p className="font-medium text-foreground">
-                            {row.buildingName}
-                          </p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                            {row.address}
-                            {row.zip ? `, ${row.zip}` : ""}
-                          </p>
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <p className="text-xs text-muted">
-                            <span className="font-medium text-foreground">${row.monthlyRent}</span>/mo · {row.beds} bd / {row.baths}{" "}
-                            ba · {row.neighborhood}
-                          </p>
-                          {row.tagline.trim() ? <p className="mt-1.5 line-clamp-2 text-xs text-muted">{row.tagline}</p> : null}
-                        </td>
-                      </tr>
-                      {expanded ? (
-                        <tr key={`${rowKey}-details`} className="border-b border-border">
-                          <td colSpan={2} className="bg-accent/30/40 px-4 py-4">
-                            <ManagerPropertyInlineDetails
-                              key={rowKey}
-                              bucket={sourceBucket}
-                              row={row}
-                              onUpdated={() => setTick((t) => t + 1)}
-                              showToast={showToast}
-                              managerUserId={managerUserId}
-                              onSendToProspect={onSendToProspect}
-                            />
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+              return (
+                <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 text-left"
+                    onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
+                    aria-expanded={expanded}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground">{row.buildingName}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                        {row.address}
+                        {row.zip ? `, ${row.zip}` : ""}
+                      </p>
+                      <p className="mt-1.5 text-xs text-muted">
+                        <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
+                        ba · {row.neighborhood}
+                      </p>
+                    </div>
+                    <PortalTableExpandChevron expanded={expanded} />
+                  </button>
+                  {expanded ? (
+                    <div className="mt-3 border-t border-border pt-3">
+                      {renderRowDetail(sourceBucket, row, rowKey)}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
-        </div>
+          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+            <div className={PORTAL_DATA_TABLE_SCROLL}>
+              <table className="w-full table-fixed border-collapse text-left text-sm">
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(({ sourceBucket, row }) => {
+                    const rowKey = row.adminRefId + (row.listingId ?? "");
+                    const expanded = expandedRowKey === rowKey;
+
+                    return (
+                      <Fragment key={rowKey}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() =>
+                            setExpandedRowKey(expanded ? null : rowKey),
+                          )}
+                          aria-expanded={expanded}
+                        >
+                          <td className={PORTAL_TABLE_TD}>
+                            <p className="font-medium text-foreground">
+                              {row.buildingName}
+                            </p>
+                            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                              {row.address}
+                              {row.zip ? `, ${row.zip}` : ""}
+                            </p>
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <p className="text-xs text-muted">
+                              <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
+                              ba · {row.neighborhood}
+                            </p>
+                          </td>
+                          <PortalTableExpandCell expanded={expanded} />
+                        </tr>
+                        {expanded ? (
+                          <tr key={`${rowKey}-details`} className="border-b border-border">
+                            <td colSpan={3} className="bg-accent/30/40 px-4 py-4">
+                              {renderRowDetail(sourceBucket, row, rowKey)}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </>
   );

@@ -1,14 +1,16 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { AuthBackLink, AuthPageHeader, AuthRoleStack } from "@/components/auth/auth-mobile-primitives";
+import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { MANAGER_PRICING_ENTRY_PATH } from "@/lib/auth/manager-pricing-entry-path";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
+import { isGetStartedDestination, resolvePostAuthDestination } from "@/lib/auth/resolve-post-auth-destination";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 /**
  * Quick role chooser for a signed-in user we can't yet route to a portal (an unknown
@@ -19,12 +21,34 @@ function GetStartedContent() {
   const router = useRouter();
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(true);
+  useAuthWelcomeChrome(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { redirectTo, resolutionFailed } = await resolvePostAuthDestination("/auth/continue");
+      if (cancelled) return;
+      if (redirectTo && !isGetStartedDestination(redirectTo)) {
+        window.location.replace(nativeAwarePath(redirectTo));
+        return;
+      }
+      if (resolutionFailed) {
+        showToast("Couldn't verify your account. Pick an option below or sign out and try again.");
+      }
+      setResolving(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showToast]);
 
   const choose = async (id: string) => {
     setBusy(id);
     if (id === "manager") {
-      // Plan selection is manager onboarding AFTER the account exists — not a gate.
-      window.location.replace(nativeAwarePath(MANAGER_PRICING_ENTRY_PATH));
+      window.location.replace(
+        nativeAwarePath("/auth/create-account?mode=create&role=manager"),
+      );
       return;
     }
     // Resident: the user is already signed in — link them to their application by email
@@ -42,7 +66,7 @@ function GetStartedContent() {
         setBusy(null);
         return;
       }
-      window.location.replace(nativeAwarePath("/resident/dashboard"));
+      window.location.replace(nativeAwarePath("/resident"));
     } catch {
       showToast("Network error. Try again.");
       setBusy(null);
@@ -60,6 +84,14 @@ function GetStartedContent() {
     router.push("/auth/sign-in");
     router.refresh();
   };
+
+  if (resolving) {
+    return (
+      <AuthCard>
+        <AuthOAuthLoading label="Loading your account" />
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard>

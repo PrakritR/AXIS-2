@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import {
   updateExtraListingFromSubmission,
@@ -67,7 +69,8 @@ export function ManagerPropertyHouseDetailsPanel({
   showToast: (m: string) => void;
 }) {
   const [notesTick, setNotesTick] = useState(0);
-  const [editing, setEditing] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [draft, setDraft] = useState<PortalListingNote>({});
 
   const portalNote = useMemo(
@@ -98,8 +101,10 @@ export function ManagerPropertyHouseDetailsPanel({
       wifiNetworkName: sub.wifiNetworkName ?? portalNote.wifiNetworkName ?? "",
       wifiPassword: sub.wifiPassword ?? portalNote.wifiPassword ?? "",
     });
-    setEditing(true);
+    setModalOpen(true);
   };
+
+  const closeModal = () => setModalOpen(false);
 
   const save = () => {
     if (!noteKey || !managerUserId) return;
@@ -131,92 +136,106 @@ export function ManagerPropertyHouseDetailsPanel({
       wifiPassword: draft.wifiPassword,
     });
     showToast("House details saved.");
-    setEditing(false);
+    setModalOpen(false);
     setNotesTick((t) => t + 1);
     onUpdated();
   };
 
-  return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card [html[data-theme=dark]_&]:portal-surface-muted">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/30 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-foreground">House details</p>
-          <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
+  const editForm = (
+    <div className="space-y-4">
+      <div>
+        <div className="mb-0.5 flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground">House description</p>
+          <span className="portal-badge-notice rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Manager only</span>
         </div>
-        <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={() => (editing ? setEditing(false) : startEdit())}>
-          {editing ? "Cancel" : "Edit"}
+        <Textarea
+          rows={4}
+          value={draft.houseDescription ?? ""}
+          onChange={(e) => setDraft((d) => ({ ...d, houseDescription: e.target.value }))}
+          placeholder="Internal notes about the house…"
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <div className="mb-0.5 flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground">House rules</p>
+          <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
+        </div>
+        <Textarea
+          rows={3}
+          value={draft.houseRulesText ?? ""}
+          onChange={(e) => setDraft((d) => ({ ...d, houseRulesText: e.target.value }))}
+          placeholder="Quiet hours, guests, smoking, pets…"
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <div className="mb-0.5 flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground">General house info</p>
+          <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
+        </div>
+        <Textarea
+          rows={4}
+          value={draft.generalHouseInfo ?? ""}
+          onChange={(e) => setDraft((d) => ({ ...d, generalHouseInfo: e.target.value }))}
+          placeholder="Gate/door codes, laundry tips, trash schedule…"
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <div className="mb-0.5 flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground">Wi-Fi</p>
+          <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
+        </div>
+        <div className="mt-1 grid gap-2 sm:grid-cols-2">
+          <Input
+            value={draft.wifiNetworkName ?? ""}
+            onChange={(e) => setDraft((d) => ({ ...d, wifiNetworkName: e.target.value }))}
+            placeholder="Wi-Fi network name (SSID)"
+          />
+          <Input
+            value={draft.wifiPassword ?? ""}
+            onChange={(e) => setDraft((d) => ({ ...d, wifiPassword: e.target.value }))}
+            placeholder="Wi-Fi password"
+          />
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="primary" className="rounded-full" onClick={save}>
+          Save house details
+        </Button>
+        <Button type="button" variant="outline" className="rounded-full" onClick={closeModal}>
+          Cancel
         </Button>
       </div>
+    </div>
+  );
 
-      {editing ? (
-        <div className="space-y-4 px-4 py-4">
-          <div>
-            <div className="mb-0.5 flex items-center gap-2">
-              <p className="text-sm font-medium text-foreground">House description</p>
-              <span className="portal-badge-notice rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Manager only</span>
-            </div>
-            <Textarea
-              rows={4}
-              value={draft.houseDescription ?? ""}
-              onChange={(e) => setDraft((d) => ({ ...d, houseDescription: e.target.value }))}
-              placeholder="Internal notes about the house…"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <div className="mb-0.5 flex items-center gap-2">
-              <p className="text-sm font-medium text-foreground">House rules</p>
-              <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-            </div>
-            <Textarea
-              rows={3}
-              value={draft.houseRulesText ?? ""}
-              onChange={(e) => setDraft((d) => ({ ...d, houseRulesText: e.target.value }))}
-              placeholder="Quiet hours, guests, smoking, pets…"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <div className="mb-0.5 flex items-center gap-2">
-              <p className="text-sm font-medium text-foreground">General house info</p>
-              <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-            </div>
-            <Textarea
-              rows={4}
-              value={draft.generalHouseInfo ?? ""}
-              onChange={(e) => setDraft((d) => ({ ...d, generalHouseInfo: e.target.value }))}
-              placeholder="Gate/door codes, laundry tips, trash schedule…"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <div className="mb-0.5 flex items-center gap-2">
-              <p className="text-sm font-medium text-foreground">Wi-Fi</p>
-              <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-            </div>
-            <div className="mt-1 grid gap-2 sm:grid-cols-2">
-              <Input
-                value={draft.wifiNetworkName ?? ""}
-                onChange={(e) => setDraft((d) => ({ ...d, wifiNetworkName: e.target.value }))}
-                placeholder="Wi-Fi network name (SSID)"
-              />
-              <Input
-                value={draft.wifiPassword ?? ""}
-                onChange={(e) => setDraft((d) => ({ ...d, wifiPassword: e.target.value }))}
-                placeholder="Wi-Fi password"
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="primary" className="rounded-full" onClick={save}>
-              Save house details
-            </Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditing(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
+  return (
+    <>
+      <PortalCollapsibleSection
+        title="House details"
+        titleAddon={
+          <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Portal only</span>
+        }
+        expanded={expanded}
+        onExpandedChange={setExpanded}
+        headerActions={
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs"
+            data-attr="house-details-edit"
+            onClick={(e) => {
+              e.stopPropagation();
+              startEdit();
+            }}
+          >
+            Edit
+          </Button>
+        }
+        toggleDataAttr="house-details-section-toggle"
+      >
         <div>
           <HouseDetailRow label="Description" value={houseDescription} badge="Manager only" />
           <HouseDetailRow label="House rules" value={houseRulesText} />
@@ -226,7 +245,11 @@ export function ManagerPropertyHouseDetailsPanel({
             <p className="px-4 py-3 text-sm text-muted">No house details yet — click Edit to add.</p>
           ) : null}
         </div>
-      )}
-    </div>
+      </PortalCollapsibleSection>
+
+      <Modal open={modalOpen} title="House details" onClose={closeModal} panelClassName="max-w-2xl">
+        {editForm}
+      </Modal>
+    </>
   );
 }

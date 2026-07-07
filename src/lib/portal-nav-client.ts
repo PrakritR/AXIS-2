@@ -5,6 +5,20 @@ import { DEMO_NAVIGATE_EVENT, isDemoModeActive } from "@/lib/demo/demo-session";
 import { useRouter } from "next/navigation";
 import { startTransition, useCallback, type MouseEvent } from "react";
 
+/** First path segment ("portal", "admin", "resident", ...) — identifies which portal a path belongs to. */
+function portalRootSegment(path: string): string {
+  return path.split("?")[0]?.split("/").filter(Boolean)[0] ?? "";
+}
+
+/**
+ * True only when `href` leaves the portal `fromPathname` is currently in (e.g.
+ * /admin/* -> /portal/*). Tab switches within the same portal never need a full
+ * reload — that's what caused the native app's black-screen flash between tabs.
+ */
+export function isCrossPortalNavigation(fromPathname: string, href: string): boolean {
+  return portalRootSegment(fromPathname) !== portalRootSegment(href);
+}
+
 /** Smooth client navigation — keeps modified clicks (new tab, etc.) on the native link. */
 export function portalNavClick(
   router: ReturnType<typeof useRouter>,

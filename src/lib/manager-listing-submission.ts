@@ -70,6 +70,15 @@ export type ManagerQuickFactRow = {
   value: string;
 };
 
+/** Optional extra fees beyond the standard application / deposit / parking fields. */
+export type ManagerCustomFeeRow = {
+  id: string;
+  label: string;
+  amount: string;
+  /** Default monthly when unset. */
+  frequency?: "one-time" | "monthly";
+};
+
 /** Rows for the public “Bundles & leasing” table (optional — defaults are generated from rooms). */
 export type ManagerBundleRow = {
   id: string;
@@ -190,6 +199,13 @@ export type ManagerListingSubmissionV1 = {
   /** Move-in fee charged for short-term stays (used to calculate upgrade delta when switching to long-term). */
   shortTermMoveInFee?: string;
   applicationFee: string;
+  /** When true, residents may apply to additional properties or rooms beyond their first application. */
+  allowMultiplePropertyApplications?: boolean;
+  /**
+   * When true, the application fee is only collected on the resident's first application
+   * (subsequent applications skip the fee step).
+   */
+  applicationFeeOnlyFirstApplication?: boolean;
   securityDeposit: string;
   moveInFee: string;
   /** Charges included in “payment due at signing” (multi-select). */
@@ -200,6 +216,8 @@ export type ManagerListingSubmissionV1 = {
   otherMonthlyFees: string;
   /** Extra monthly charge added automatically when tenant is on month-to-month (e.g. $25). */
   monthToMonthSurcharge?: string;
+  /** Manager-defined fees beyond the standard fields (shown on the listing). */
+  customFees?: ManagerCustomFeeRow[];
   sharedSpaces: ManagerSharedSpaceSubmission[];
   /** One amenity per line or comma-separated */
   amenitiesText: string;
@@ -211,6 +229,16 @@ export type ManagerListingSubmissionV1 = {
   venmoPaymentsEnabled?: boolean;
   /** Venmo username, phone, or email (shown to applicants; manager marks payments paid manually). */
   venmoContact?: string;
+  /** When true, applicants/residents see a direct bank/ACH payment link using `achPaymentLink`. */
+  achPaymentLinkEnabled?: boolean;
+  /** External bank/ACH payment link (e.g. a bank bill-pay URL), shown to applicants/residents. */
+  achPaymentLink?: string;
+  /**
+   * Payment methods this property accepts from residents, manager-controlled (Zelle/Venmo/ACH/Credit
+   * card). Unset/empty = every method is accepted (see `acceptedPaymentMethodsForListing`). Read by the
+   * resident's "Set payment method" selector to gate which choices are offered.
+   */
+  acceptedPaymentMethods?: ("zelle" | "venmo" | "ach" | "card")[];
   /**
    * When manual payment methods are enabled for the listing, applicants can still use the default “portal / online” path
    * for the application fee (manager marks received). Default true.
@@ -250,6 +278,8 @@ export type ManagerListingSubmissionV1 = {
   serviceRequestOptions?: ManagerListingServiceOption[];
   /** Manager-defined application questions applicants answer for this listing (array order is display order). */
   customApplicationFields?: ManagerCustomApplicationField[];
+  /** Built-in application questions the manager removed for this listing. */
+  disabledStandardApplicationKeys?: string[];
   /**
    * How the rental application is configured for this property.
    * "standard" = default Axis application only (custom questions kept but inactive);
@@ -339,6 +369,8 @@ export type ManagerCustomApplicationField = {
   options: string[];
   /** Application section this question belongs to (RentalApplicationSectionId). Absent = Additional details. */
   section?: string;
+  /** When set, this row customizes a built-in Axis application question. */
+  standardKey?: string;
 };
 
 const CUSTOM_APPLICATION_FIELD_TYPES = new Set<string>(
@@ -389,6 +421,8 @@ export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApp
     if (type === "select" && options.length === 0) continue;
     const section =
       typeof o.section === "string" && RENTAL_APPLICATION_SECTION_IDS.has(o.section) ? o.section : undefined;
+    const standardKey =
+      typeof o.standardKey === "string" && o.standardKey.trim() ? o.standardKey.trim() : undefined;
     out.push({
       id: typeof o.id === "string" && o.id.trim() ? o.id.trim() : rid("caf"),
       key,
@@ -397,6 +431,7 @@ export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApp
       required: o.required === true,
       options,
       section,
+      standardKey,
     });
   }
   return out;
@@ -407,9 +442,21 @@ export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApp
  * Legacy submissions (no mode saved) keep today's behavior: custom questions apply if present.
  */
 export function listingUsesStandardApplication(
-  sub: { applicationConfigMode?: unknown } | null | undefined,
+  sub:
+    | {
+        applicationConfigMode?: unknown;
+        disabledStandardApplicationKeys?: unknown;
+        customApplicationFields?: unknown;
+      }
+    | null
+    | undefined,
 ): boolean {
-  return sub?.applicationConfigMode === "standard";
+  if (!sub || sub.applicationConfigMode === "custom") return false;
+  const hasCustomization =
+    (Array.isArray(sub.disabledStandardApplicationKeys) && sub.disabledStandardApplicationKeys.length > 0) ||
+    (Array.isArray(sub.customApplicationFields) && sub.customApplicationFields.length > 0);
+  if (sub.applicationConfigMode === "standard") return !hasCustomization;
+  return !hasCustomization;
 }
 
 /** Custom lease clauses to merge into the generated lease; "" unless custom terms are active. */
@@ -693,6 +740,15 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     value: q.value ?? "",
   }));
 
+  let customFees = sub.customFees;
+  if (!Array.isArray(customFees)) customFees = [];
+  customFees = customFees.map((f) => ({
+    id: f.id ?? rid("fee"),
+    label: typeof f.label === "string" ? f.label.trim() : "",
+    amount: typeof f.amount === "string" ? f.amount.trim() : "",
+    frequency: f.frequency === "one-time" ? "one-time" : "monthly",
+  }));
+
   const serviceRequestOptions = Array.isArray((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions)
     ? ((sub as { serviceRequestOptions?: unknown }).serviceRequestOptions as unknown[])
         .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
@@ -861,32 +917,10 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       typeof sub.applicationFeeOtherInstructions === "string" &&
       sub.applicationFeeOtherInstructions.trim(),
   );
-  let applicationFeeStripeEnabled =
-    typeof sub.applicationFeeStripeEnabled === "boolean" ? sub.applicationFeeStripeEnabled : true;
-  let applicationFeeZelleEnabled =
-    typeof sub.applicationFeeZelleEnabled === "boolean" ? sub.applicationFeeZelleEnabled : zelleEnabled;
-  let applicationFeeVenmoEnabled =
-    typeof sub.applicationFeeVenmoEnabled === "boolean" ? sub.applicationFeeVenmoEnabled : venmoEnabled;
-  let applicationFeeOtherEnabled =
-    typeof sub.applicationFeeOtherEnabled === "boolean" ? sub.applicationFeeOtherEnabled : false;
-  if (!sub.zellePaymentsEnabled) {
-    applicationFeeZelleEnabled = false;
-  }
-  if (!sub.venmoPaymentsEnabled) {
-    applicationFeeVenmoEnabled = false;
-  }
-  if (
-    (zelleEnabled || venmoEnabled || otherChannelActive) &&
-    !applicationFeeStripeEnabled &&
-    !applicationFeeZelleEnabled &&
-    !applicationFeeVenmoEnabled &&
-    !applicationFeeOtherEnabled
-  ) {
-    applicationFeeStripeEnabled = true;
-    applicationFeeZelleEnabled = zelleEnabled;
-    applicationFeeVenmoEnabled = venmoEnabled;
-    applicationFeeOtherEnabled = otherChannelActive;
-  }
+  const applicationFeeStripeEnabled = sub.axisPaymentsEnabled !== false;
+  const applicationFeeZelleEnabled = zelleEnabled;
+  const applicationFeeVenmoEnabled = venmoEnabled;
+  const applicationFeeOtherEnabled = otherChannelActive;
 
   const allowedLeaseTerms = resolveAllowedLeaseTerms(sub);
   const leaseTermsBody =
@@ -973,10 +1007,14 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     sharedSpaces,
     bundles,
     quickFacts,
+    customFees,
     serviceRequestOptions,
     customApplicationFields: normalizeCustomApplicationFields(
       (sub as { customApplicationFields?: unknown }).customApplicationFields,
     ),
+    disabledStandardApplicationKeys: Array.isArray(sub.disabledStandardApplicationKeys)
+      ? sub.disabledStandardApplicationKeys.filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+      : [],
     applicationConfigMode:
       sub.applicationConfigMode === "standard" || sub.applicationConfigMode === "custom"
         ? sub.applicationConfigMode
@@ -993,6 +1031,8 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     applicationFeeOtherEnabled,
     applicationFeeOtherInstructions:
       typeof sub.applicationFeeOtherInstructions === "string" ? sub.applicationFeeOtherInstructions : "",
+    allowMultiplePropertyApplications: sub.allowMultiplePropertyApplications === true,
+    applicationFeeOnlyFirstApplication: sub.applicationFeeOnlyFirstApplication === true,
     rentDueDayMode: sub.rentDueDayMode === "last_of_month" ? "last_of_month" : "first_of_month",
     lateFeeEnabled: sub.lateFeeEnabled !== false,
     lateFeeGraceDays: (() => {
@@ -1001,6 +1041,12 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     })(),
     lateFeeAmount: typeof sub.lateFeeAmount === "string" ? sub.lateFeeAmount : "50",
     axisPaymentsEnabled: sub.axisPaymentsEnabled !== false,
+    acceptedPaymentMethods: Array.isArray(sub.acceptedPaymentMethods)
+      ? sub.acceptedPaymentMethods.filter(
+          (m): m is "zelle" | "venmo" | "ach" | "card" =>
+            m === "zelle" || m === "venmo" || m === "ach" || m === "card",
+        )
+      : undefined,
     housePhotoDataUrls,
     houseVideoDataUrl: typeof (sub as Record<string, unknown>).houseVideoDataUrl === "string"
       ? ((sub as Record<string, unknown>).houseVideoDataUrl as string) || null
@@ -1048,6 +1094,15 @@ export function emptyQuickFactRow(): ManagerQuickFactRow {
     id: rid("qf"),
     label: "",
     value: "",
+  };
+}
+
+export function emptyCustomFeeRow(): ManagerCustomFeeRow {
+  return {
+    id: rid("fee"),
+    label: "",
+    amount: "",
+    frequency: "monthly",
   };
 }
 
@@ -1193,12 +1248,61 @@ export function createDefaultListingServiceOptions(): ManagerListingServiceOptio
   return [];
 }
 
+export function createManagerListingServiceOption(name = "", description = ""): ManagerListingServiceOption {
+  return {
+    id: `offer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    description,
+    price: "",
+    deposit: "",
+    available: true,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 /** One-click presets for the listing services step (not added until the manager chooses). */
-export const LISTING_SERVICE_QUICK_ADDS: { name: string; description: string }[] = [
-  { name: "Weekly cleaning", description: "Regular cleaning of your room or shared areas." },
-  { name: "Linen refresh", description: "Fresh sheets and towels on request." },
-  { name: "Storage locker", description: "Personal storage space on the property." },
+export type ListingServiceQuickAdd = {
+  name: string;
+  description: string;
+  /** Suggested recurring price shown when managers add or submit this request type. */
+  price?: string;
+  /** Suggested deposit when the offering requires one (e.g. equipment rental). */
+  deposit?: string;
+};
+
+export const LISTING_SERVICE_QUICK_ADDS: ListingServiceQuickAdd[] = [
+  {
+    name: "Weekly cleaning",
+    description: "Regular cleaning of your room or shared areas.",
+    price: "$35.00",
+  },
+  {
+    name: "Linen refresh",
+    description: "Fresh sheets and towels on request.",
+    price: "$20.00",
+  },
+  {
+    name: "Storage locker",
+    description: "Personal storage space on the property.",
+    price: "$45.00",
+    deposit: "$100.00",
+  },
 ];
+
+/** Price/deposit for an offering — uses saved values, then preset defaults by name. */
+export function resolveServiceOfferPricing(offer: {
+  name: string;
+  price?: string;
+  deposit?: string;
+}): { price: string; deposit: string } {
+  const price = offer.price?.trim() ?? "";
+  const deposit = offer.deposit?.trim() ?? "";
+  if (price || deposit) return { price, deposit };
+  const preset = LISTING_SERVICE_QUICK_ADDS.find(
+    (p) => p.name.trim().toLowerCase() === offer.name.trim().toLowerCase(),
+  );
+  return { price: preset?.price?.trim() ?? "", deposit: preset?.deposit?.trim() ?? "" };
+}
 
 export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
   return {
@@ -1241,6 +1345,8 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     zelleContact: "",
     venmoPaymentsEnabled: false,
     venmoContact: "",
+    achPaymentLinkEnabled: false,
+    achPaymentLink: "",
     applicationFeeStripeEnabled: true,
     applicationFeeZelleEnabled: false,
     applicationFeeVenmoEnabled: false,
@@ -1257,8 +1363,10 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     bathrooms: [],
     bundles: [],
     quickFacts: [],
+    customFees: [],
     serviceRequestOptions: [],
     customApplicationFields: [],
+    disabledStandardApplicationKeys: [],
     applicationConfigMode: "standard",
     leaseConfigMode: "standard",
     leaseCustomKind: "terms",

@@ -8,13 +8,16 @@ import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
-  PORTAL_FILTER_ACTIONS_MOBILE,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
+  PORTAL_TOOLBAR_GROUP,
+  PORTAL_TOOLBAR_PILL_BUTTON,
+  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
-import type { ManagerPaymentBucket } from "@/data/demo-portal";
+import { ManagerOutgoingPaymentsPanel } from "@/components/portal/manager-outgoing-payments-panel";
+import { ManagerAddOutgoingPaymentModal } from "@/components/portal/manager-add-outgoing-payment-modal";
+import type { ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
 import {
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
@@ -34,15 +37,33 @@ import {
 } from "@/lib/manager-applications-storage";
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
-import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import { syncPropertyPipelineFromServer, readExtraListingsForUser } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import {
-  ChargeRemindersModal,
   ReminderSettingsModal,
-  ScheduledMessageEditModal,
   useScheduledPaymentMessages,
 } from "@/components/portal/payment-schedule-ui";
-import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
+import {
+  buildManagerOutgoingPaymentRows,
+  MANAGER_OUTGOING_PAYMENTS_EVENT,
+  readManagerOutgoingExpenses,
+  syncManagerOutgoingExpensesFromServer,
+} from "@/lib/manager-outgoing-payments";
+import {
+  MANAGER_WORK_ORDERS_EVENT,
+  readManagerWorkOrderRows,
+  syncManagerWorkOrdersFromServer,
+} from "@/lib/manager-work-orders-storage";
+import {
+  MANAGER_VENDORS_EVENT,
+  readOwnActiveManagerVendorRows,
+  syncManagerVendorsFromServer,
+} from "@/lib/manager-vendors-storage";
+
+const DIRECTION_LABELS: { id: ManagerPaymentDirection; label: string }[] = [
+  { id: "incoming", label: "Incoming" },
+  { id: "outgoing", label: "Outgoing" },
+];
 
 const PAY_LABELS: { id: ManagerPaymentBucket; label: string }[] = [
   { id: "pending", label: "Pending" },
@@ -58,8 +79,8 @@ function shouldExcludePaymentAccount(residentName: string, residentEmail?: strin
   return PAYMENT_ACCOUNT_EXCLUSIONS.some((token) => name.includes(token) || email.includes(token));
 }
 
-function normalizePropertyLabel(label: string): string {
-  const trimmed = label.trim();
+function normalizePropertyLabel(label: string | undefined): string {
+  const trimmed = (label ?? "").trim();
   if (!trimmed) return "";
   return trimmed
     .replace(/\s*·\s*[^·]*::[^·]*$/i, "")
@@ -71,19 +92,37 @@ export function ManagerPayments() {
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const portalBase = usePaidPortalBasePath();
+  const [direction, setDirection] = useState<ManagerPaymentDirection>("incoming");
   const [bucket, setBucket] = useState<ManagerPaymentBucket>("pending");
   const [hcTick, setHcTick] = useState(0);
+  const [outgoingTick, setOutgoingTick] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const [addOutgoingOpen, setAddOutgoingOpen] = useState(false);
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentFilter, setResidentFilter] = useState("");
   const [applicationTick, setApplicationTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
-  const [scheduleEdit, setScheduleEdit] = useState<ScheduledPaymentMessage | null>(null);
   const [reminderSettingsOpen, setReminderSettingsOpen] = useState(false);
+  const [bankLinkBanner, setBankLinkBanner] = useState(false);
   // Per-payment reminder lists show the full saved default schedule, so bypass
   // the Inbox schedule-visibility window (which only gates Inbox → Schedule).
   const { messages: scheduledMessages, settings: reminderSettings, reload: reloadSchedule, setSettings: setReminderSettings } = useScheduledPaymentMessages({ includeHidden: true });
-  const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}`;
+  const ledgerDataVersion = `${hcTick}:${applicationTick}:${propertyTick}:${outgoingTick}`;
+
+  useEffect(() => {
+    const onOutgoing = () => setOutgoingTick((n) => n + 1);
+    void syncManagerOutgoingExpensesFromServer().then(onOutgoing);
+    void syncManagerWorkOrdersFromServer().then(onOutgoing);
+    void syncManagerVendorsFromServer();
+    window.addEventListener(MANAGER_OUTGOING_PAYMENTS_EVENT, onOutgoing);
+    window.addEventListener(MANAGER_WORK_ORDERS_EVENT, onOutgoing);
+    window.addEventListener(MANAGER_VENDORS_EVENT, onOutgoing);
+    return () => {
+      window.removeEventListener(MANAGER_OUTGOING_PAYMENTS_EVENT, onOutgoing);
+      window.removeEventListener(MANAGER_WORK_ORDERS_EVENT, onOutgoing);
+      window.removeEventListener(MANAGER_VENDORS_EVENT, onOutgoing);
+    };
+  }, []);
 
   useEffect(() => {
     const on = () => setHcTick((n) => n + 1);
@@ -165,6 +204,9 @@ export function ManagerPayments() {
         window.close();
         return;
       }
+      if (connect === "done") {
+        setBankLinkBanner(true);
+      }
       // Same-tab return: PortalStripeConnectPanel clears ?connect= and refreshes status.
       return;
     }
@@ -178,9 +220,10 @@ export function ManagerPayments() {
       if (e.origin !== window.location.origin) return;
       if (e.data?.type !== "axis-stripe-connect") return;
       if (e.data?.connect === "done") {
-        showToast("Bank account linked.");
+        showToast("Bank account linked. You're ready to receive resident payments.");
+        setBankLinkBanner(true);
       } else if (e.data?.connect === "refresh") {
-        showToast("Setup link expired — open Payouts to try again.");
+        showToast("Setup link expired — click Finish setup to try again.");
       }
       window.dispatchEvent(new Event("axis-stripe-connect-refresh"));
     };
@@ -217,18 +260,6 @@ export function ManagerPayments() {
         return roomLabel ? { ...ledgerRow, roomNumber: roomLabel.replace(/^room\s+/i, "") } : ledgerRow;
       });
   }, [userId, ledgerDataVersion]);
-
-  const propertyOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const row of mergedRows) {
-      const key = normalizePropertyLabel(row.propertyName);
-      if (!key) continue;
-      if (!seen.has(key)) seen.set(key, key);
-    }
-    return [...seen.entries()]
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  }, [mergedRows]);
 
   const residentOptions = useMemo(() => {
     void applicationTick;
@@ -271,15 +302,88 @@ export function ManagerPayments() {
     return c;
   }, [rowsForCounts]);
 
+  const propertyLabelById = useMemo(() => {
+    void propertyTick;
+    const map = new Map<string, string>();
+    if (!userId) return map;
+    for (const property of [...readExtraListingsForUser(userId)]) {
+      const id = property.id.trim();
+      const label = normalizePropertyLabel(property.buildingName.trim() || property.title);
+      if (id && label) map.set(id, label);
+    }
+    return map;
+  }, [userId, propertyTick]);
+
+  const vendorById = useMemo(() => {
+    void ledgerDataVersion;
+    return new Map(readOwnActiveManagerVendorRows(userId).map((vendor) => [vendor.id, vendor]));
+  }, [userId, ledgerDataVersion]);
+
+  const outgoingRows = useMemo(() => {
+    void ledgerDataVersion;
+    const vendorNameById = new Map([...vendorById.entries()].map(([id, vendor]) => [id, vendor.name]));
+    return buildManagerOutgoingPaymentRows({
+      managerUserId: userId,
+      expenses: readManagerOutgoingExpenses(),
+      workOrders: readManagerWorkOrderRows(),
+      paidCharges: readChargesForManager(userId).filter((charge) => charge.status === "paid"),
+      propertyLabelById,
+      vendorNameById,
+      vendorById,
+    });
+  }, [userId, ledgerDataVersion, propertyLabelById, vendorById]);
+
+  const outgoingRowsForCounts = useMemo(() => {
+    return outgoingRows.filter((row) => {
+      if (propertyFilter && normalizePropertyLabel(row.propertyName) !== propertyFilter) return false;
+      return true;
+    });
+  }, [outgoingRows, propertyFilter]);
+
+  const outgoingCounts = useMemo(() => {
+    const c: Record<ManagerPaymentBucket, number> = { pending: 0, overdue: 0, paid: 0 };
+    for (const row of outgoingRowsForCounts) c[row.bucket] += 1;
+    return c;
+  }, [outgoingRowsForCounts]);
+
+  const outgoingRowsForBucket = useMemo(() => {
+    return outgoingRowsForCounts.filter((row) => row.bucket === bucket);
+  }, [outgoingRowsForCounts, bucket]);
+
+  const directionCounts = useMemo(
+    () => ({
+      incoming: rowsForCounts.length,
+      outgoing: outgoingRowsForCounts.length,
+    }),
+    [rowsForCounts.length, outgoingRowsForCounts.length],
+  );
+
+  const propertyOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const row of mergedRows) {
+      const key = normalizePropertyLabel(row.propertyName);
+      if (!key) continue;
+      if (!seen.has(key)) seen.set(key, key);
+    }
+    for (const row of outgoingRows) {
+      const key = normalizePropertyLabel(row.propertyName);
+      if (!key) continue;
+      if (!seen.has(key)) seen.set(key, key);
+    }
+    return [...seen.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  }, [mergedRows, outgoingRows]);
+
   const tabs = useMemo(
     () =>
       PAY_LABELS.map(({ id, label }) => ({
         id,
         label,
-        count: counts[id],
-        alert: id === "overdue" && counts.overdue > 0,
+        count: direction === "incoming" ? counts[id] : outgoingCounts[id],
+        alert: id === "overdue" && (direction === "incoming" ? counts.overdue : outgoingCounts.overdue) > 0,
       })),
-    [counts],
+    [counts, outgoingCounts, direction],
   );
   const rowsForBucket = useMemo(() => {
     const filtered = mergedRows.filter((r) => {
@@ -294,25 +398,40 @@ export function ManagerPayments() {
 
   const filterRow = (
     <ManagerPortalFilterRow>
-      <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
-      <PortalStripeConnectPanel basePath="/portal" variant="inline" />
-      <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} items-center`}>
-        <PortalPropertyFilterPill
-          propertyOptions={propertyOptions}
-          propertyValue={propertyFilter}
-          onPropertyChange={(nextProperty) => {
-            setPropertyFilter(nextProperty);
-            setResidentFilter("");
-          }}
-          residents={true}
-          residentOptions={residentOptions}
-          residentValue={activeResidentFilter}
-          onResidentChange={setResidentFilter}
-        />
-        <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={() => setReminderSettingsOpen(true)}>
-          Reminders
-        </Button>
+      <div className={PORTAL_TOOLBAR_GROUP}>
+        {DIRECTION_LABELS.map(({ id, label }) => {
+          const active = direction === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${active ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
+              onClick={() => {
+                setDirection(id);
+                setBucket("pending");
+                setResidentFilter("");
+              }}
+              data-attr={`payments-direction-${id}`}
+            >
+              {label}
+              <span className="ml-1 tabular-nums text-muted">{directionCounts[id]}</span>
+            </button>
+          );
+        })}
       </div>
+      <ManagerPortalStatusPills compact tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
+      <PortalPropertyFilterPill
+        propertyOptions={propertyOptions}
+        propertyValue={propertyFilter}
+        onPropertyChange={(nextProperty) => {
+          setPropertyFilter(nextProperty);
+          setResidentFilter("");
+        }}
+        residents={direction === "incoming"}
+        residentOptions={residentOptions}
+        residentValue={activeResidentFilter}
+        onResidentChange={setResidentFilter}
+      />
     </ManagerPortalFilterRow>
   );
 
@@ -320,41 +439,74 @@ export function ManagerPayments() {
     <ManagerPortalPageShell
       title="Payments"
       titleAside={
-        <>
-          <div className={PORTAL_PAGE_ACTIONS_DESKTOP}>
-            <PortalPropertyFilterPill
-              propertyOptions={propertyOptions}
-              propertyValue={propertyFilter}
-              onPropertyChange={(nextProperty) => {
-                setPropertyFilter(nextProperty);
-                setResidentFilter("");
-              }}
-              residents={true}
-              residentOptions={residentOptions}
-              residentValue={activeResidentFilter}
-              onResidentChange={setResidentFilter}
+        <div className="flex min-w-0 flex-col items-stretch gap-2">
+          <div className="flex items-center justify-end gap-2">
+            <PortalStripeConnectPanel
+              basePath="/portal"
+              variant="header"
+              onConnectDone={() => setBankLinkBanner(true)}
             />
-            <Button type="button" variant="outline" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setReminderSettingsOpen(true)}>
-              Auto reminders
+            <Button
+              type="button"
+              variant="primary"
+              className={PORTAL_HEADER_ACTION_BTN}
+              onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
+            >
+              Add
             </Button>
           </div>
-          <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={() => setAddOpen(true)}>
-            Add payment
-          </Button>
-        </>
+          {direction === "incoming" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => setReminderSettingsOpen(true)}
+            >
+              Reminders
+            </Button>
+          ) : null}
+        </div>
       }
       filterRow={filterRow}
     >
+      {bankLinkBanner ? (
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-success">
+          <p>
+            <span className="font-semibold text-foreground">Bank account linked.</span> Resident payments will deposit to
+            your connected account. You can update bank details anytime with Update.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 rounded-full px-3 py-1 text-xs"
+            onClick={() => setBankLinkBanner(false)}
+          >
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
+      {direction === "incoming" ? (
       <ManagerPaymentsLedgerPanel
         rows={rowsForBucket}
         managerUserId={userId ?? null}
         activeBucket={bucket}
         scheduledMessages={scheduledMessages}
-        onScheduleEdit={setScheduleEdit}
         onOpenReminderSettings={() => setReminderSettingsOpen(true)}
         onScheduleChanged={() => void reloadSchedule()}
         onRowsChanged={() => setHcTick((n) => n + 1)}
       />
+      ) : (
+      <ManagerOutgoingPaymentsPanel
+        rows={outgoingRowsForBucket}
+        activeBucket={bucket}
+        vendorById={vendorById}
+        onRowsChanged={() => {
+          setOutgoingTick((n) => n + 1);
+          void syncManagerOutgoingExpensesFromServer(true);
+          void syncManagerWorkOrdersFromServer();
+        }}
+      />
+      )}
       <ReminderSettingsModal
         open={reminderSettingsOpen}
         onClose={() => setReminderSettingsOpen(false)}
@@ -364,12 +516,6 @@ export function ManagerPayments() {
           void reloadSchedule();
         }}
       />
-      <ScheduledMessageEditModal
-        open={Boolean(scheduleEdit)}
-        message={scheduleEdit}
-        onClose={() => setScheduleEdit(null)}
-        onSaved={() => void reloadSchedule()}
-      />
       <ManagerAddPaymentModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -377,6 +523,17 @@ export function ManagerPayments() {
         onSubmitted={() => {
           setAddOpen(false);
           setHcTick((n) => n + 1);
+          void reloadSchedule();
+        }}
+      />
+      <ManagerAddOutgoingPaymentModal
+        open={addOutgoingOpen}
+        onClose={() => setAddOutgoingOpen(false)}
+        managerUserId={userId ?? null}
+        onSubmitted={() => {
+          setAddOutgoingOpen(false);
+          setOutgoingTick((n) => n + 1);
+          void syncManagerOutgoingExpensesFromServer(true);
         }}
       />
 

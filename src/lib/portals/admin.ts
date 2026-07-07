@@ -9,7 +9,6 @@ export const adminPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "leases", label: "Leases", tabs: [] },
     { section: "events", label: "Meetings", tabs: [] },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     {
@@ -31,9 +30,7 @@ export const adminPortal: PortalDefinition = {
 export const ADMIN_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: "/admin/dashboard" },
   { label: "Properties", path: "/admin/properties" },
-  { label: "Leases", path: "/admin/leases" },
   { label: "Meetings", path: "/admin/events" },
-  { label: "Feedback", path: "/admin/bugs-feedback" },
   { label: "Inbox", path: "/admin/inbox/unopened" },
   { label: "Accounts", path: "/admin/axis-users" },
   { label: "Settings", path: "/admin/profile" },

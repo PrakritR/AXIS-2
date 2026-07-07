@@ -21,7 +21,7 @@ export function listingCustomApplicationFields(
   sub: { customApplicationFields?: unknown; applicationConfigMode?: unknown } | null | undefined,
 ): ManagerCustomApplicationField[] {
   if (listingUsesStandardApplication(sub)) return [];
-  return normalizeCustomApplicationFields(sub?.customApplicationFields);
+  return normalizeCustomApplicationFields(sub?.customApplicationFields).filter((f) => !f.standardKey);
 }
 
 /** Custom questions asked on a given applicant wizard step (section-tagged; untagged → Additional details). */

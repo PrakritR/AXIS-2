@@ -38,6 +38,15 @@ import {
   DEMO_WORKFLOW_RESIDENT_EMAILS,
 } from "../tests/helpers/canonical-test-accounts.mjs";
 import {
+  assertProductionProjectUrl,
+  assertProductionSeedGate,
+  PROD_DEMO_MANAGER_EMAIL,
+  PROD_DEMO_MANAGER_NAME,
+  PROD_DEMO_RESIDENT_EMAIL,
+  PROD_DEMO_RESIDENT_NAME,
+  PROD_WORKFLOW_RESIDENT_EMAILS,
+} from "../tests/helpers/canonical-production-accounts.mjs";
+import {
   ensureManagerStripeCustomer,
   getSeedStripeClient,
 } from "../tests/helpers/ensure-stripe-test-customer.mjs";
@@ -45,25 +54,41 @@ import {
 // ---------------------------------------------------------------------------
 // Config / env
 // ---------------------------------------------------------------------------
-const TARGET_EMAIL = (process.env.SEED_MANAGER_EMAIL || "manager@test.axis.local").trim().toLowerCase();
+const SEED_TARGET = (process.env.SEED_TARGET || "test").trim().toLowerCase();
+const IS_PRODUCTION_SEED = SEED_TARGET === "production";
+const TARGET_EMAIL = (
+  process.env.SEED_MANAGER_EMAIL ||
+  (IS_PRODUCTION_SEED ? PROD_DEMO_MANAGER_EMAIL : "manager@test.axis.local")
+).trim().toLowerCase();
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // Auto-provisioned resident password (mirrors src/lib/auth/provision-approved-resident.ts).
-const AUTO_RESIDENT_PASSWORD = "123Password$";
-const PREFIX = "seedwf";
+const AUTO_RESIDENT_PASSWORD =
+  process.env.SEED_AUTO_RESIDENT_PASSWORD?.trim() ||
+  (IS_PRODUCTION_SEED ? process.env.AXIS_PROD_DEMO_PASSWORD?.trim() : "") ||
+  "123Password$";
+const PREFIX = process.env.SEED_PREFIX?.trim() || (IS_PRODUCTION_SEED ? "prodseed" : "seedwf");
+const APPLICANT_EMAIL_DOMAIN =
+  process.env.SEED_APPLICANT_EMAIL_DOMAIN?.trim() || (IS_PRODUCTION_SEED ? "axis.local" : "example.com");
+const WORKFLOW_RESIDENT_EMAILS = IS_PRODUCTION_SEED ? PROD_WORKFLOW_RESIDENT_EMAILS : DEMO_WORKFLOW_RESIDENT_EMAILS;
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
   console.error("Run with:  node --env-file=.env.test scripts/seed-demo-manager-workflow.mjs");
   process.exit(1);
 }
-// Test accounts must never be created in any other project (esp. production).
-assertTestProjectUrl(url);
+if (IS_PRODUCTION_SEED) {
+  assertProductionSeedGate();
+  assertProductionProjectUrl(url);
+} else {
+  // Test accounts must never be created in any other project (esp. production).
+  assertTestProjectUrl(url);
+}
 
 const sb = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
-const stripe = getSeedStripeClient();
+const stripe = IS_PRODUCTION_SEED ? null : getSeedStripeClient();
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -84,7 +109,8 @@ function detUuid(key) {
 
 let managerUserId = "";
 let managerShort = "";
-const key = (s) => `${PREFIX}_${managerShort}_${s}`;
+/** Production listed properties use mgr-prod-* ids so the Properties tab counts them. */
+const key = (s) => (IS_PRODUCTION_SEED ? `mgr-prod-${s}` : `${PREFIX}_${managerShort}_${s}`);
 
 async function main() {
   console.log(`\n=== Seeding end-to-end manager workflow for ${TARGET_EMAIL} ===\n`);
@@ -118,6 +144,14 @@ async function main() {
 // 1. Manager account (auth user + profile + role + Pro tier)
 // ---------------------------------------------------------------------------
 async function ensureManager() {
+  const managerPassword =
+    process.env.SEED_MANAGER_PASSWORD?.trim() ||
+    (IS_PRODUCTION_SEED ? process.env.AXIS_PROD_DEMO_PASSWORD?.trim() : "") ||
+    "Password123$";
+  if (IS_PRODUCTION_SEED && !managerPassword) {
+    throw new Error("Production seed requires AXIS_PROD_DEMO_PASSWORD (or SEED_MANAGER_PASSWORD).");
+  }
+
   const { data: list, error: listErr } = await sb.auth.admin.listUsers({ perPage: 1000 });
   if (listErr) throw new Error(`listUsers: ${listErr.message}`);
   let user = list.users.find((u) => u.email?.toLowerCase() === TARGET_EMAIL);
@@ -125,13 +159,16 @@ async function ensureManager() {
   if (!user) {
     const { data: created, error: createErr } = await sb.auth.admin.createUser({
       email: TARGET_EMAIL,
-      password: process.env.SEED_MANAGER_PASSWORD || "Password123$",
+      password: managerPassword,
       email_confirm: true,
       user_metadata: { role: "manager" },
     });
     if (createErr) throw new Error(`createUser: ${createErr.message}`);
     user = created.user;
     console.log("Created manager auth user.");
+  } else {
+    const { error: updateErr } = await sb.auth.admin.updateUserById(user.id, { password: managerPassword });
+    if (updateErr) throw new Error(`updateUserById(manager): ${updateErr.message}`);
   }
 
   const uid = user.id;
@@ -145,7 +182,7 @@ async function ensureManager() {
         email: TARGET_EMAIL,
         role: "manager",
         manager_id: managerId,
-        full_name: "Axis Demo Manager",
+        full_name: IS_PRODUCTION_SEED ? PROD_DEMO_MANAGER_NAME : "Axis Demo Manager",
         application_approved: true,
       },
       { onConflict: "id" },
@@ -155,6 +192,13 @@ async function ensureManager() {
   await must(
     sb.from("profile_roles").upsert({ user_id: uid, role: "manager" }, { onConflict: "user_id,role" }),
     "profile_roles(manager)",
+  );
+  // Defensive: the demo manager must stay manager-only (e.g. manually testing the
+  // vendor self-serve signup flow with this same email would otherwise bolt a
+  // "vendor" row onto it, landing sign-in on the "Choose a portal" screen).
+  await must(
+    sb.from("profile_roles").delete().eq("user_id", uid).neq("role", "manager"),
+    "profile_roles(strip stray manager roles)",
   );
 
   // Ensure a Pro/Business tier purchase so Residents / Leases / Finances sections
@@ -178,7 +222,7 @@ async function ensureManager() {
           manager_id: managerId,
           tier: "pro",
           billing: "portal",
-          promo_code: "SEEDWF",
+          promo_code: IS_PRODUCTION_SEED ? "PROD_DEMO" : "SEEDWF",
           stripe_checkout_session_id: `${PREFIX}_pro`,
           paid_at: iso(monthsAgo(6)),
         },
@@ -194,7 +238,9 @@ async function ensureManager() {
   // Give the manager a REAL Stripe test customer + default test card (not a
   // hand-typed cus_test_* placeholder) so manager charges — e.g. applicant
   // screening (src/lib/screening/charge-manager.ts) — succeed in test mode.
-  await ensureManagerStripeCustomer(stripe, sb, { email: TARGET_EMAIL, userId: uid });
+  if (!IS_PRODUCTION_SEED && stripe) {
+    await ensureManagerStripeCustomer(stripe, sb, { email: TARGET_EMAIL, userId: uid });
+  }
 
   return uid;
 }
@@ -371,18 +417,30 @@ function buildApplicants() {
   // Derive stable ids, emails, and the full application object.
   const derived = all.map((a, i) => {
     const name = `${a.first} ${a.last}`;
-    const email = `${a.first}.${a.last}.seed@example.com`.toLowerCase();
+    const email = `${a.first}.${a.last}.seed@${APPLICANT_EMAIL_DOMAIN}`.toLowerCase();
     const axisId = `AXIS-SEEDWF${managerShort.toUpperCase()}${String(i + 1).padStart(2, "0")}${a.last.toUpperCase().slice(0, 4)}`;
     return { ...a, index: i, name, email, axisId, application: buildApplication(a, name, email) };
   });
   // The E2E seed (tests/helpers/seed-test-db.mjs) prunes accounts not in the
   // shared canonical registry — an applicant missing there would have their
   // resident account deleted on the next E2E seed run.
-  const unknown = derived.filter((a) => !DEMO_WORKFLOW_RESIDENT_EMAILS.includes(a.email));
+  const unknown = derived.filter((a) => !WORKFLOW_RESIDENT_EMAILS.includes(a.email));
   if (unknown.length) {
+    const registry = IS_PRODUCTION_SEED
+      ? "tests/helpers/canonical-production-accounts.mjs"
+      : "tests/helpers/canonical-test-accounts.mjs";
     throw new Error(
-      `Applicants missing from tests/helpers/canonical-test-accounts.mjs: ${unknown.map((a) => a.email).join(", ")} — add them there.`,
+      `Applicants missing from ${registry}: ${unknown.map((a) => a.email).join(", ")} — add them there.`,
     );
+  }
+  if (IS_PRODUCTION_SEED) {
+    // Map the primary signed resident to the documented production demo login.
+    const primary = derived.find((a) => a.first === "Sofia" && a.last === "Diaz");
+    if (primary) {
+      primary.name = PROD_DEMO_RESIDENT_NAME;
+      primary.email = PROD_DEMO_RESIDENT_EMAIL;
+      primary.application = buildApplication(primary, primary.name, primary.email);
+    }
   }
   return derived;
 }
@@ -657,7 +715,7 @@ function buildLeaseRow(a) {
     return row; // Manager Review
   }
   if (stage === "admin") {
-    return { ...row, bucket: "admin", status: "Admin Review", stageLabel: "Admin Review", currentActorRole: "admin", adminReviewRequestedAt: sentIso };
+    return row;
   }
   if (stage === "resident_sign") {
     return { ...row, bucket: "resident", status: "Resident Signature Pending", stageLabel: "Resident Signature Pending", currentActorRole: "resident", sentToResidentAt: sentIso };

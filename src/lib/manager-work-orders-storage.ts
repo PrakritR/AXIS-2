@@ -1,4 +1,5 @@
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { DEMO_VENDOR_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
+import { demoWorkOrders } from "@/lib/demo/demo-data";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { removePendingWorkOrderChargesForWorkOrder } from "@/lib/household-charges";
 
@@ -104,7 +105,10 @@ export async function syncManagerWorkOrdersFromServer(opts?: { force?: boolean }
 export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = EMPTY_FALLBACK): DemoManagerWorkOrderRow[] {
   hydrateWorkOrdersFromSession();
   const stored = memoryRows;
-  if (stored.length === 0) return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+  if (stored.length === 0) {
+    if (isDemoModeActive()) return demoWorkOrders();
+    return fallback === EMPTY_FALLBACK ? MANAGER_WORK_ORDERS_DEFAULT_SNAPSHOT : [...fallback];
+  }
   const byId = new Map(stored.map((r) => [r.id, r]));
   const fallbackIds = new Set(fallback.map((f) => f.id));
   const merged = fallback.map((seed) => {
@@ -113,6 +117,21 @@ export function readManagerWorkOrderRows(fallback: DemoManagerWorkOrderRow[] = E
   });
   const extras = stored.filter((s) => s.id && !fallbackIds.has(s.id));
   return [...merged, ...extras];
+}
+
+/**
+ * Vendor-scoped read. The real `/vendor` route gets rows already scoped to the
+ * signed-in vendor by the server (`vendor_user_id`) before they ever reach this
+ * shared store, so this is a no-op outside the demo sandbox. The `/demo`
+ * sandbox has no per-role server scoping — every persona reads the same
+ * collapsed store — so filter by the demo vendor's name here instead.
+ */
+export function readVendorWorkOrderRows(): DemoManagerWorkOrderRow[] {
+  const rows = readManagerWorkOrderRows();
+  if (!isDemoModeActive()) return rows;
+  const scoped = rows.filter((r) => r.vendorName === DEMO_VENDOR_NAME);
+  if (scoped.length > 0) return scoped;
+  return demoWorkOrders().filter((r) => r.vendorName === DEMO_VENDOR_NAME);
 }
 
 export function writeManagerWorkOrderRows(rows: DemoManagerWorkOrderRow[]): void {

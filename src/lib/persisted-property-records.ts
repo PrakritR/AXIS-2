@@ -43,6 +43,64 @@ export function emptyPropertyPipelineSnapshot(): PropertyPipelineSnapshot {
   return { pendingByUser: {}, extrasByUser: {}, sideGlobal: { requestChange: [], unlisted: [], rejected: [] }, sideByUser: {} };
 }
 
+function filterSideRows(rows: AdminPropertyRow[], linkedPropertyIds: Set<string>, ownerUserId: string, viewerUserId: string) {
+  if (ownerUserId === viewerUserId) return rows;
+  return rows.filter((row) => {
+    const pid = String(row.listingId ?? row.adminRefId ?? "").trim();
+    return pid && linkedPropertyIds.has(pid);
+  });
+}
+
+/** Keep only the signed-in manager's rows plus explicitly linked owner buckets. */
+export function scopePropertyPipelineSnapshotForViewer(
+  snapshot: PropertyPipelineSnapshot,
+  viewerUserId: string,
+  linkedPropertyIds: Iterable<string>,
+): PropertyPipelineSnapshot {
+  const viewer = viewerUserId.trim();
+  if (!viewer) return emptyPropertyPipelineSnapshot();
+  const linked = new Set([...linkedPropertyIds].map((id) => id.trim()).filter(Boolean));
+
+  const pendingByUser: PropertyPipelineSnapshot["pendingByUser"] = {};
+  for (const [ownerId, rows] of Object.entries(snapshot.pendingByUser)) {
+    if (ownerId === viewer) {
+      pendingByUser[ownerId] = rows;
+      continue;
+    }
+    const filtered = rows.filter((row) => linked.has(row.id));
+    if (filtered.length > 0) pendingByUser[ownerId] = filtered;
+  }
+
+  const extrasByUser: PropertyPipelineSnapshot["extrasByUser"] = {};
+  for (const [ownerId, rows] of Object.entries(snapshot.extrasByUser)) {
+    if (ownerId === viewer) {
+      extrasByUser[ownerId] = rows;
+      continue;
+    }
+    const filtered = rows.filter((row) => linked.has(row.id));
+    if (filtered.length > 0) extrasByUser[ownerId] = filtered;
+  }
+
+  const sideByUser: PropertyPipelineSnapshot["sideByUser"] = {};
+  for (const [ownerId, side] of Object.entries(snapshot.sideByUser)) {
+    const next = {
+      requestChange: filterSideRows(side.requestChange, linked, ownerId, viewer),
+      unlisted: filterSideRows(side.unlisted, linked, ownerId, viewer),
+      rejected: filterSideRows(side.rejected, linked, ownerId, viewer),
+    };
+    if (ownerId === viewer || next.requestChange.length + next.unlisted.length + next.rejected.length > 0) {
+      sideByUser[ownerId] = next;
+    }
+  }
+
+  return {
+    pendingByUser,
+    extrasByUser,
+    sideGlobal: { requestChange: [], unlisted: [], rejected: [] },
+    sideByUser,
+  };
+}
+
 export function propertyRowsToSnapshot(records: ManagerPropertyRecord[]): PropertyPipelineSnapshot {
   const snapshot = emptyPropertyPipelineSnapshot();
   for (const record of records) {

@@ -1,6 +1,9 @@
 /** Target for skip-to-content links in authenticated portal layouts. */
 export const PORTAL_MAIN_CONTENT_ID = "portal-main-content";
 
+/** Scrollable main column inside the public `/demo` portal frame. */
+export const DEMO_PORTAL_SCROLL_ID = "demo-portal-scroll";
+
 /** Root shell for authenticated portals — uses dynamic viewport height in the native app. */
 export const PORTAL_SHELL_ROOT_CLASS =
   "portal-shell flex h-screen max-h-screen max-w-full flex-col overflow-hidden bg-background [html[data-native]_&]:h-[100dvh] [html[data-native]_&]:max-h-[100dvh] [html[data-native]_&]:max-w-[100vw] [html[data-native]_&]:overflow-x-clip";
@@ -9,9 +12,9 @@ export const PORTAL_SHELL_ROOT_CLASS =
 export const PORTAL_MOBILE_CHROME_CLASS =
   "portal-mobile-chrome border-b border-border bg-background lg:hidden";
 
-/** Native app bottom tab bar — replaces the mobile top hotbar. */
+/** Native app bottom tab bar — Instagram-style icon row, subtle top hairline in every mode. */
 export const PORTAL_NATIVE_BOTTOM_NAV_CLASS =
-  "portal-native-bottom-nav fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 backdrop-blur-xl lg:hidden pb-[max(0.125rem,env(safe-area-inset-bottom,0px))] ps-[max(0px,env(safe-area-inset-left,0px))] pe-[max(0px,env(safe-area-inset-right,0px))] [html[data-native]_&]:border-0 [html[data-native]_&]:pb-0 [html[data-native]_&]:ps-[max(0px,var(--native-safe-left))]";
+  "portal-native-bottom-nav fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background/95 backdrop-blur-xl lg:hidden pb-[max(0.125rem,env(safe-area-inset-bottom,0px))] ps-[max(0px,env(safe-area-inset-left,0px))] pe-[max(0px,env(safe-area-inset-right,0px))] [html[data-native]_&]:pb-0 [html[data-native]_&]:ps-[max(0px,var(--native-safe-left))]";
 
 /** Top-of-screen portal banners (upgrade strip, admin preview) — clears the notch. */
 export const PORTAL_TOP_BANNER_STRIP_CLASS =

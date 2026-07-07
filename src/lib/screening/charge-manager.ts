@@ -32,7 +32,7 @@ export async function chargeManagerForScreening(opts: {
     return {
       ok: false,
       code: "no_customer",
-      message: "Add a payment method on the Plan page before ordering applicant screening.",
+      message: "Add a payment method to your account before ordering applicant screening.",
     };
   }
 
@@ -42,7 +42,7 @@ export async function chargeManagerForScreening(opts: {
     return {
       ok: false,
       code: "no_payment_method",
-      message: "Add a card on the Plan page before ordering applicant screening.",
+      message: "Add the card on your account before ordering applicant screening.",
     };
   }
 

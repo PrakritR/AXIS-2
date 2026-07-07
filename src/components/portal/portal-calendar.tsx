@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { ManagerPortalPageShell, PORTAL_TOOLBAR_SELECT } from "./portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN, PORTAL_TOOLBAR_SELECT, PortalToolbarSelectWrap } from "./portal-metrics";
 import { PortalCalendarPanels } from "./portal-calendar-panels";
 import {
   ADMIN_AVAILABILITY_STORAGE_KEY,
@@ -52,19 +52,21 @@ function ManagerCalendarPropertyFilter({
         <label htmlFor="portal-calendar-property" className="sr-only">
           Property
         </label>
-        <select
-          id="portal-calendar-property"
-          className={selectClassName}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">Select a house</option>
-          {properties.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <PortalToolbarSelectWrap>
+          <select
+            id="portal-calendar-property"
+            className={selectClassName}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          >
+            <option value="">Select a house</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </PortalToolbarSelectWrap>
       </div>
     </div>
   );
@@ -145,7 +147,7 @@ export function PortalCalendar({
     calendarPropertyId && managerProperties.some((property) => property.id === calendarPropertyId) ? calendarPropertyId : "";
 
   const shareableProperties = useMemo(() => {
-    if (portal !== "manager" || !userId) return [];
+    if (portal !== "manager") return [];
     void propertyTick;
     return buildManagerShareablePropertyOptions(userId);
   }, [portal, userId, propertyTick]);
@@ -429,28 +431,28 @@ export function PortalCalendar({
       <ManagerPortalPageShell
         title={pageTitle}
         titleAside={
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
             {portal === "manager" && managerProperties.length > 1 ? (
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0 rounded-full"
+                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
                 onClick={openCopyModal}
                 title="Copy availability schedule from one house to another"
               >
-                Copy schedule
+                Copy
               </Button>
             ) : null}
             {portal === "manager" ? (
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0 rounded-full"
+                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
                 disabled={!activeCalendarPropertyId}
-                title={!activeCalendarPropertyId ? "Select a house first" : undefined}
+                title={!activeCalendarPropertyId ? "Select a house first" : "Share tour link"}
                 onClick={() => setShareTourModalOpen(true)}
               >
-                Share tour link
+                Share tour
               </Button>
             ) : null}
           </div>

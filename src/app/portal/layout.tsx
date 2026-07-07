@@ -1,6 +1,8 @@
 import { AccountLinksSync } from "@/components/portal/account-links-sync";
+import { PropertyPipelineAccountSync } from "@/components/portal/property-pipeline-account-sync";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalDataPrefetch } from "@/components/portal/portal-data-prefetch";
+import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
@@ -29,6 +31,7 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
         <SurfaceThemeDefault theme="light" />
         <PublicHomePrefetch />
         <PortalDataPrefetch kind="pro" />
+        <PropertyPipelineAccountSync />
         <AccountLinksSync />
         <div className="relative isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:flex-row">
           <PortalSkipLink />
@@ -46,7 +49,14 @@ export default async function PropertyPortalLayout({ children }: { children: Rea
               email={profile?.email ?? null}
             />
             <main id={PORTAL_MAIN_CONTENT_ID} tabIndex={-1} className={PORTAL_MAIN_CONTENT_CLASS}>
-              <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>{children}</div>
+              <div className={PORTAL_MAIN_CONTENT_INNER_CLASS}>
+                <PortalMobileNavBar
+                  definition={nav.definition}
+                  name={profile?.full_name ?? null}
+                  email={profile?.email ?? null}
+                />
+                {children}
+              </div>
             </main>
           </div>
         </div>

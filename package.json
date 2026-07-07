@@ -19,6 +19,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
     "test:seed": "node --env-file=.env.test tests/helpers/seed-test-db.mjs",
+    "seed:production": "node scripts/seed-production-portal.mjs",
     "test:cleanup": "node --env-file=.env.test tests/helpers/cleanup-test-db.mjs",
     "check": "npm run lint && npm run test:unit && npm run build",
     "db:link:dev": "supabase link --project-ref emstjswhotsnyksqhqyf",
@@ -38,13 +39,18 @@
     "stripe:apple-pay-domains": "node --env-file=.env.local scripts/setup-stripe-apple-pay-domains.mjs",
     "cap:sync": "cap sync",
     "cap:dev": "node scripts/cap-sync-dev.mjs",
-    "cap:prod": "CAP_SERVER_URL=https://www.axis-seattle-housing.com cap sync",
+    "cap:prod": "node scripts/cap-sync-prod.mjs",
+    "cap:ios:run": "node scripts/cap-sync-dev.mjs && npx cap run ios",
     "cap:copy": "cap copy",
     "cap:ios": "cap open ios",
-    "cap:android": "cap open android"
+    "cap:android": "cap open android",
+    "scrape:apm": "node scripts/scrape-allpropertymanagement.mjs",
+    "scrape:apm:quick": "node scripts/scrape-allpropertymanagement.mjs --quick",
+    "scrape:apm:contacts": "node scripts/scrape-apm-contacts.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
+    "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor/app": "^8.1.0",
     "@capacitor/browser": "^8.0.3",
     "@capacitor/camera": "^8.2.0",

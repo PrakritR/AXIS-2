@@ -6,11 +6,12 @@ import {
   retrieveManagerConnectAccountOrNull,
 } from "@/lib/stripe-connect";
 
-/** Returns a Connect account id for the manager, creating one or clearing stale ids when needed. */
+/** Returns a Connect account id for the given user, creating one or clearing stale ids when
+ * needed. Column is generic (keyed by userId only) — reused as-is for vendor payout accounts. */
 export async function ensureManagerConnectAccountId(
   stripe: Stripe,
   db: SupabaseClient,
-  opts: { userId: string; email?: string },
+  opts: { userId: string; email?: string; axisPortal?: "portal" | "vendor" },
 ): Promise<string> {
   const { data: profile } = await db
     .from("profiles")
@@ -32,6 +33,7 @@ export async function ensureManagerConnectAccountId(
     const account = await createAxisConnectAccount(stripe, {
       email: opts.email,
       axisUserId: opts.userId,
+      axisPortal: opts.axisPortal,
     });
     accountId = account.id;
     await db
@@ -44,4 +46,14 @@ export async function ensureManagerConnectAccountId(
   }
 
   return accountId;
+}
+
+/** Vendor payout accounts reuse the same profiles.stripe_connect_account_id column — a vendor
+ * has one Connect account regardless of how many managers they work with. */
+export async function ensureVendorConnectAccountId(
+  stripe: Stripe,
+  db: SupabaseClient,
+  opts: { userId: string; email?: string },
+): Promise<string> {
+  return ensureManagerConnectAccountId(stripe, db, { ...opts, axisPortal: "vendor" });
 }

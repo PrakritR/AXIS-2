@@ -17,7 +17,10 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
+  PortalMobileSummaryCard,
+  PortalTableExpandCell,
 } from "@/components/portal/portal-data-table";
 import {
   DocumentInlineViewer,
@@ -27,6 +30,11 @@ import {
   type AddDocumentMode,
 } from "@/components/portal/resident-other-documents";
 import { buildApplicationHtml } from "@/lib/manager-application-html";
+import {
+  fetchCosignerSubmissionsForSignerAppId,
+  readCosignerSubmissionsForSignerAppId,
+  type CosignerSubmission,
+} from "@/lib/cosigner-submissions-storage";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -66,19 +74,34 @@ function defaultReceiptRange() {
   return { from: from.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
 }
 
-/** Shared table shell so every Documents tab matches the Other documents layout. */
-function DocumentsTableShell({ head, children }: { head: ReactNode; children: ReactNode }) {
+/**
+ * Shared table shell so every Documents tab matches the Other documents layout.
+ * Renders a `space-y-2 lg:hidden` mobile card stack (via `mobile`) above the
+ * `lg:` desktop table so neither layout scrolls horizontally on small screens.
+ */
+function DocumentsTableShell({
+  head,
+  children,
+  mobile,
+}: {
+  head: ReactNode;
+  children: ReactNode;
+  mobile: ReactNode;
+}) {
   return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
-      <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-          <thead>
-            <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
-          </thead>
-          <tbody>{children}</tbody>
-        </table>
+    <>
+      <div className="space-y-2 lg:hidden">{mobile}</div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+          <table className="w-full table-fixed border-collapse text-left text-sm">
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
+            </thead>
+            <tbody>{children}</tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -109,10 +132,28 @@ function ApplicationDocumentsTable() {
   const email = session.email?.trim().toLowerCase() ?? "";
   const [tick, setTick] = useState(0);
   const [preview, setPreview] = useState<DemoApplicantRow | null>(null);
+  const [previewCosignerSubmissions, setPreviewCosignerSubmissions] = useState<CosignerSubmission[]>([]);
   // Demo sandbox: the PDF route requires auth, so build the same PDF in the
   // browser and feed it to the download as a data URL.
   const demoMode = isDemoModeActive();
   const demoPdfCache = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset co-signer data when the previewed application changes
+    setPreviewCosignerSubmissions([]);
+    if (!preview || preview.application?.hasCosigner !== "yes") return;
+    if (demoMode) {
+      setPreviewCosignerSubmissions(readCosignerSubmissionsForSignerAppId(preview.id));
+      return;
+    }
+    let cancelled = false;
+    void fetchCosignerSubmissionsForSignerAppId(preview.id).then((rows) => {
+      if (!cancelled) setPreviewCosignerSubmissions(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [preview, demoMode]);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -131,7 +172,9 @@ function ApplicationDocumentsTable() {
     const cached = demoPdfCache.current.get(row.id);
     if (cached) return cached;
     const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-    const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined);
+    const cosignerSubmissions =
+      row.application?.hasCosigner === "yes" ? readCosignerSubmissionsForSignerAppId(row.id) : [];
+    const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
     demoPdfCache.current.set(row.id, url);
     return url;
   }, []);
@@ -150,8 +193,14 @@ function ApplicationDocumentsTable() {
   // Rendered-document HTML (same as the manager Applications preview) — the
   // application data is already client-side, so this works in demo mode too.
   const previewHtml = useMemo(
-    () => (preview ? buildApplicationHtml(preview, { roomLabel: applicationRoomLabel(preview) || undefined }) : null),
-    [preview],
+    () =>
+      preview
+        ? buildApplicationHtml(preview, {
+            roomLabel: applicationRoomLabel(preview) || undefined,
+            cosignerSubmissions: previewCosignerSubmissions,
+          })
+        : null,
+    [preview, previewCosignerSubmissions],
   );
 
   if (rows.length === 0) {
@@ -166,28 +215,44 @@ function ApplicationDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
+            <th className={PORTAL_TABLE_EXPAND_TH}>
+              <span className="sr-only">Expand</span>
+            </th>
           </>
         }
+        mobile={rows.map((row) => (
+          <PortalMobileSummaryCard
+            key={row.id}
+            title="Rental application"
+            subtitle={applicationStatusLabel(row.bucket)}
+            meta={row.property || "—"}
+            expanded={preview?.id === row.id}
+            onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
+          />
+        ))}
       >
         {rows.map((row) => (
-          <tr key={row.id} className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setPreview(row)}>
+          <tr
+            key={row.id}
+            className={PORTAL_TABLE_TR_EXPANDABLE}
+            aria-expanded={preview?.id === row.id}
+            onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
+          >
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">
-                Rental application — {row.id}
-              </p>
+              <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">Rental application</p>
             </td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>{applicationStatusLabel(row.bucket)}</td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
               <p className="min-w-0 max-w-[280px] truncate">{row.property || "—"}</p>
             </td>
+            <PortalTableExpandCell expanded={preview?.id === row.id} />
           </tr>
         ))}
       </DocumentsTableShell>
       {preview ? (
         <DocumentInlineViewer
-          title={`Rental application — ${preview.id}`}
+          title={`Rental application ${preview.id}`}
           srcDoc={previewHtml}
-          onClose={() => setPreview(null)}
           onDownload={() => downloadRow(preview)}
         />
       ) : null}
@@ -248,9 +313,8 @@ function RentReceiptsTab() {
   }, [demoMode, sessionEmail, sessionUserId]);
 
   useEffect(() => {
-    const { from, to } = defaultReceiptRange();
-    queueMicrotask(() => void loadReceipts(from, to));
-  }, [loadReceipts]);
+    void loadReceipts(range.from, range.to);
+  }, [range.from, range.to, loadReceipts]);
 
   const receipts = useMemo<ReceiptRow[]>(() => {
     if (!ledgerReport) return [];
@@ -330,15 +394,6 @@ function RentReceiptsTab() {
                 onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
               />
             </label>
-            <button
-              type="button"
-              className="mt-5 h-10 rounded-full border border-border bg-foreground px-4 text-xs font-medium text-background hover:opacity-90"
-              data-attr="resident-receipts-update-range"
-              onClick={() => void loadReceipts(range.from, range.to)}
-              disabled={loading}
-            >
-              {loading ? "Loading…" : "Update"}
-            </button>
           </div>
           {generated && receipts.length > 0 && !demoMode ? (
             <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} />
@@ -354,32 +409,52 @@ function RentReceiptsTab() {
               <>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
-              </>
+            <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
+            <th className={PORTAL_TABLE_EXPAND_TH}>
+              <span className="sr-only">Expand</span>
+            </th>
+          </>
             }
+            mobile={receipts.map((row, i) => {
+              const key = `${row.date}-${i}`;
+              const isOpen = preview?.date === row.date && preview?.amount === row.amount && preview?.description === row.description;
+              return (
+                <PortalMobileSummaryCard
+                  key={key}
+                  title="Rent receipt"
+                  subtitle={row.amount}
+                  meta={row.date}
+                  expanded={isOpen}
+                  onClick={() => setPreview((cur) => (isOpen ? null : row))}
+                />
+              );
+            })}
           >
-            {receipts.map((row, i) => (
+            {receipts.map((row, i) => {
+              const key = `${row.date}-${i}`;
+              const isOpen = preview?.date === row.date && preview?.amount === row.amount && preview?.description === row.description;
+              return (
               <tr
-                key={`${row.date}-${i}`}
+                key={key}
                 className={PORTAL_TABLE_TR_EXPANDABLE}
-                onClick={() => setPreview(row)}
+                aria-expanded={isOpen}
+                onClick={() => setPreview((cur) => (isOpen ? null : row))}
               >
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">
-                    Rent receipt — {row.description}
-                  </p>
+                  <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">Rent receipt</p>
                 </td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
+                <PortalTableExpandCell expanded={isOpen} />
               </tr>
-            ))}
+              );
+            })}
           </DocumentsTableShell>
         )}
         {preview ? (
           <DocumentInlineViewer
-            title={`Rent receipt — ${preview.date}`}
+            title={`Rent receipt ${preview.date}`}
             srcDoc={previewHtml}
-            onClose={() => setPreview(null)}
             onDownload={() => downloadReceipt(preview)}
           />
         ) : null}
@@ -480,15 +555,32 @@ function SignedLeaseDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Date signed</th>
+            <th className={PORTAL_TABLE_EXPAND_TH}>
+              <span className="sr-only">Expand</span>
+            </th>
           </>
         }
+        mobile={
+          <PortalMobileSummaryCard
+            title={leaseName}
+            subtitle="Fully signed"
+            meta={safeFormatDateTime(signedAt)}
+            expanded={previewOpen}
+            onClick={() => setPreviewOpen((open) => !open)}
+          />
+        }
       >
-        <tr className={PORTAL_TABLE_TR_EXPANDABLE} onClick={() => setPreviewOpen(true)}>
+        <tr
+          className={PORTAL_TABLE_TR_EXPANDABLE}
+          aria-expanded={previewOpen}
+          onClick={() => setPreviewOpen((open) => !open)}
+        >
           <td className={`${PORTAL_TABLE_TD} align-middle`}>
             <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">{leaseName}</p>
           </td>
           <td className={`${PORTAL_TABLE_TD} align-middle`}>Fully signed</td>
           <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(signedAt)}</td>
+          <PortalTableExpandCell expanded={previewOpen} />
         </tr>
       </DocumentsTableShell>
       {previewOpen ? (
@@ -496,8 +588,9 @@ function SignedLeaseDocumentsTable() {
           title={leaseName}
           src={pdfSrc}
           srcDoc={leaseHtml}
-          onClose={() => setPreviewOpen(false)}
           onDownload={onDownload}
+          downloadLabel="Download PDF"
+          downloadAttr="resident-documents-lease-download-pdf"
         />
       ) : null}
     </>

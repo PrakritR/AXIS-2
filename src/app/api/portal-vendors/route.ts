@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
+import { isVendorCategorySettingsRow, managerVendorCategorySettingsRowId } from "@/lib/manager-vendors-storage";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -31,10 +32,14 @@ function normalizeRow(row: ManagerVendorRow, managerUserId: string): ManagerVend
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await sessionUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const url = new URL(req.url);
+    const catalogMode = url.searchParams.get("catalog") === "1";
+    const catalogQuery = url.searchParams.get("q")?.trim() ?? "";
 
     const db = createSupabaseServiceRoleClient();
     const admin = await isAdminUser(user.id);
@@ -45,9 +50,32 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
+    if (catalogMode) {
+      let query = db
+        .from("manager_vendor_records")
+        .select("row_data, manager_user_id")
+        .neq("manager_user_id", user.id)
+        .eq("row_data->>sharedWithManagers", "true")
+        .order("updated_at", { ascending: false })
+        .limit(100);
+      if (catalogQuery) {
+        query = query.ilike("row_data->>name", `%${catalogQuery}%`);
+      }
+      const { data, error } = await query;
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      const rows = (data ?? [])
+        .map((record) => {
+          const row = record.row_data as ManagerVendorRow | null;
+          if (!row?.id || row.name === "__vendor_category_settings__") return null;
+          return { ...row, managerUserId: record.manager_user_id };
+        })
+        .filter(Boolean) as ManagerVendorRow[];
+      return NextResponse.json({ rows });
+    }
+
     let query = db
       .from("manager_vendor_records")
-      .select("row_data, updated_at")
+      .select("row_data, manager_user_id, updated_at")
       .order("updated_at", { ascending: false })
       .limit(500);
 
@@ -58,7 +86,13 @@ export async function GET() {
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const ownRows = (data ?? []).map((record) => record.row_data).filter(Boolean) as ManagerVendorRow[];
+    const ownRows = (data ?? [])
+      .map((record) => {
+        const row = record.row_data as ManagerVendorRow | null;
+        if (!row?.id || isVendorCategorySettingsRow(row)) return null;
+        return normalizeRow(row, String(record.manager_user_id ?? user.id));
+      })
+      .filter((row): row is ManagerVendorRow => row !== null);
 
     let sharedRows: ManagerVendorRow[] = [];
     if (!admin) {
@@ -73,10 +107,12 @@ export async function GET() {
       sharedRows = (sharedData ?? [])
         .map((record) => {
           const row = record.row_data as ManagerVendorRow | null;
-          if (!row?.id) return null;
-          return { ...row, managerUserId: record.manager_user_id };
+          if (!row?.id || row.name === "__vendor_category_settings__") return null;
+          const ownerId = record.manager_user_id;
+          if (!ownerId) return null;
+          return normalizeRow(row, ownerId);
         })
-        .filter(Boolean) as ManagerVendorRow[];
+        .filter((row): row is ManagerVendorRow => row !== null);
     }
 
     const seen = new Set<string>();
@@ -149,7 +185,10 @@ export async function POST(req: Request) {
     if (!admin && body.row.managerUserId && body.row.managerUserId !== managerUserId) {
       return NextResponse.json({ error: "Cannot edit another manager's vendor." }, { status: 403 });
     }
-    const row = normalizeRow(body.row, managerUserId);
+    const sourceRow = isVendorCategorySettingsRow(body.row)
+      ? { ...body.row, id: managerVendorCategorySettingsRowId(managerUserId) }
+      : body.row;
+    const row = normalizeRow(sourceRow, managerUserId);
     const { error } = await db.from("manager_vendor_records").upsert(
       {
         id: row.id,

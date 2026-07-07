@@ -22,7 +22,14 @@ export type PromotionStatus = "draft" | "generated";
 export type FlyerSize = "letter" | "a4" | "ig_post" | "ig_story";
 
 /** Flyer layout template (visual format, independent of color theme). */
-export type PromotionTemplate = "photo_hero" | "split" | "feature_grid" | "bold_banner" | "minimal";
+export type PromotionTemplate =
+  | "showcase"
+  | "listing_sheet"
+  | "photo_hero"
+  | "split"
+  | "feature_grid"
+  | "bold_banner"
+  | "minimal";
 
 /** Raw inputs the manager sets in the form (untrusted free text). */
 export type PromotionInputs = {
@@ -38,6 +45,8 @@ export type PromotionInputs = {
   contact: string;
   /** Copy tone, e.g. "Warm & welcoming". */
   tone: string;
+  /** Street address, prefilled from the property record — shown as the listing-sheet headline. */
+  address?: string;
   /**
    * Free-form custom property details typed on the "Custom" path (address,
    * features, neighborhood notes). Fed to the AI as additional facts to
@@ -104,19 +113,30 @@ export const PROMOTION_SIZE_OPTIONS: { id: FlyerSize; label: string }[] = [
   { id: "ig_story", label: "Instagram story — 1080 × 1920" },
 ];
 
-export const PROMOTION_TEMPLATE_DEFAULT: PromotionTemplate = "photo_hero";
+export const PROMOTION_TEMPLATE_DEFAULT: PromotionTemplate = "showcase";
 
 /**
  * Flyer layout templates, modeled on common professional rental-flyer formats:
- * large hero photo with overlaid headline, split image+details sidebar,
- * amenity checklist grid, bold FOR-RENT/price banner, and a minimal
- * typography-led layout.
+ * a high-impact showcase with circular photo cutouts and dotted accents, a
+ * clean single-listing sheet, large hero photo with overlaid headline, split
+ * image+details sidebar, amenity checklist grid, bold FOR-RENT/price banner,
+ * and a minimal typography-led layout.
  */
 export const PROMOTION_TEMPLATE_OPTIONS: {
   id: PromotionTemplate;
   label: string;
   description: string;
 }[] = [
+  {
+    id: "showcase",
+    label: "Showcase",
+    description: "Circular hero photo, dotted accents and a bold price badge — high-impact marketing style.",
+  },
+  {
+    id: "listing_sheet",
+    label: "Listing Sheet",
+    description: "Clean professional listing sheet — bold address headline, price sidebar and photo strip.",
+  },
   {
     id: "photo_hero",
     label: "Photo Hero",
@@ -270,6 +290,7 @@ type FlyerRenderContext = {
   cta: string;
   closing: string;
   points: string[];
+  address: string;
 };
 
 type TemplateRender = { css: string; body: string };
@@ -279,8 +300,22 @@ const FONT_STACK =
 const SERIF_STACK = 'Georgia, "Times New Roman", "Iowan Old Style", serif';
 const MUTED = "#64748b";
 
-function footerHtml(): string {
-  return `<div class="footer"><span>Marketing flyer</span><span>Powered by <strong>Axis</strong></span></div>`;
+/** Inline "AX" glyph — same strokes as {@link AxisLogoMark}, redrawn as a static SVG string for standalone flyer HTML (no React/Tailwind available there). */
+function axisMarkSvg(color: string): string {
+  return `<svg viewBox="0 0 46 26" width="18" height="10" fill="none" aria-hidden="true">
+    <path d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45" stroke="${color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M27 4L43 22" stroke="${color}" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M43 4L27 22" stroke="${color}" stroke-width="2.6" stroke-linecap="round"/>
+  </svg>`;
+}
+
+/** Axis brand mark + wordmark, inlined for the flyer footer/header. */
+function axisBrandHtml(color: string): string {
+  return `<span class="brand-mark">${axisMarkSvg(color)}<span>Axis</span></span>`;
+}
+
+function footerHtml(ctx: FlyerRenderContext): string {
+  return `<div class="footer"><span>Marketing flyer</span><span>Powered by ${axisBrandHtml(ctx.p.accent)}</span></div>`;
 }
 
 function footerCss(ctx: FlyerRenderContext): string {
@@ -289,11 +324,159 @@ function footerCss(ctx: FlyerRenderContext): string {
     padding: ${ctx.fs(14)} ${ctx.s.padX}; border-top: 1px solid #e2e8f5; display: flex; justify-content: space-between;
     align-items: center; font-size: ${ctx.fs(12)}; color: ${MUTED};
   }
-  .footer strong { color: ${ctx.p.accent}; }`;
+  .brand-mark { display: inline-flex; align-items: center; gap: ${ctx.fs(5)}; font-weight: 800; color: ${ctx.p.accent}; }
+  .brand-mark svg { display: block; }`;
 }
 
 function imgTag(src: string, className: string): string {
   return `<img class="${className}" src="${escapeHtml(src)}" alt="" />`;
+}
+
+/** Small decorative dot-grid accent (nod to the corpus flyers' dotted geometric motifs). Purely visual. */
+function dotsHtml(className: string): string {
+  return `<div class="${className}" aria-hidden="true"></div>`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Template: Showcase — bold headline beside a circular hero cutout,   */
+/* small circular interior thumbnails, a colored features card, a big  */
+/* price line and dotted geometric accents. Modeled on the corpus's    */
+/* highest-impact marketing flyers (circular photo cutouts, dot grids, */
+/* colored ticklist cards).                                            */
+/* ------------------------------------------------------------------ */
+function renderShowcase(ctx: FlyerRenderContext): TemplateRender {
+  const { p, fs, images } = ctx;
+  const hero = images[0];
+  const thumbs = images.slice(1, 4);
+  const css = `
+  .sheet { position: relative; }
+  .dot-grid {
+    position: absolute; width: ${fs(88)}; height: ${fs(52)}; top: ${fs(18)}; right: ${fs(18)};
+    background-image: radial-gradient(${p.accent} 1.6px, transparent 1.6px); background-size: ${fs(11)} ${fs(11)};
+    opacity: 0.28; pointer-events: none;
+  }
+  .dot-grid.corner { top: auto; right: auto; bottom: ${fs(96)}; left: 0; }
+  .top { display: flex; align-items: flex-start; justify-content: space-between; gap: ${fs(18)}; padding: ${fs(34)} ${ctx.s.padX} 0; }
+  .headline-col { flex: 1.15; min-width: 0; }
+  .eyebrow { display: inline-block; padding: ${fs(6)} ${fs(14)}; border-radius: 999px; background: ${p.accent}1a; color: ${p.accent}; font-size: ${fs(12)}; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+  .headline { margin: ${fs(14)} 0 0; font-size: ${fs(38)}; line-height: 1.04; font-weight: 900; letter-spacing: -0.02em; color: ${p.ink}; text-transform: uppercase; }
+  .subheadline { margin: ${fs(10)} 0 0; font-family: ${SERIF_STACK}; font-style: italic; font-size: ${fs(22)}; font-weight: 600; color: ${p.accent}; }
+  .hero-wrap { position: relative; flex: 0 0 auto; width: ${fs(150)}; }
+  .hero-circle {
+    width: ${fs(150)}; height: ${fs(150)}; border-radius: 50%; object-fit: cover; border: ${fs(5)} solid #ffffff;
+    box-shadow: 0 ${fs(10)} ${fs(24)} rgba(15,23,42,0.16);
+  }
+  .hero-circle.empty { background: linear-gradient(135deg, ${p.from}, ${p.to}); }
+  .thumbs { display: flex; gap: ${fs(12)}; justify-content: center; padding: ${fs(20)} ${ctx.s.padX} 0; }
+  .thumbs img { width: ${fs(64)}; height: ${fs(64)}; border-radius: 50%; object-fit: cover; border: ${fs(3)} solid #ffffff; box-shadow: 0 ${fs(4)} ${fs(10)} rgba(15,23,42,0.14); }
+  .body { position: relative; padding: ${fs(28)} ${ctx.s.padX} ${fs(24)}; display: flex; flex-direction: column; gap: ${fs(18)}; flex: 1; }
+  .card { background: ${p.accent}; color: #ffffff; border-radius: ${fs(16)}; padding: ${fs(18)} ${fs(20)}; }
+  .card-title { font-size: ${fs(13)}; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.85; }
+  .points { list-style: none; margin: ${fs(10)} 0 0; padding: 0; display: grid; gap: ${fs(9)}; }
+  .points li { display: flex; align-items: flex-start; gap: ${fs(9)}; font-size: ${fs(15)}; font-weight: 600; line-height: 1.3; }
+  .points li::before { content: "✓"; font-weight: 900; flex: 0 0 auto; }
+  .price-row { display: flex; align-items: baseline; justify-content: space-between; gap: ${fs(12)}; flex-wrap: wrap; }
+  .price-label { font-size: ${fs(12)}; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: ${MUTED}; }
+  .price-value { font-size: ${fs(34)}; font-weight: 900; color: ${p.accent}; letter-spacing: -0.01em; }
+  .promo-chip { align-self: flex-start; padding: ${fs(7)} ${fs(14)}; border-radius: 999px; border: 1.5px solid ${p.accent}; color: ${p.accent}; font-size: ${fs(13)}; font-weight: 800; }
+  .cta {
+    margin-top: auto; padding: ${fs(20)} ${fs(24)}; border-radius: ${fs(18)}; background: ${p.ink}; color: #ffffff;
+    display: flex; flex-direction: column; gap: ${fs(6)};
+  }
+  .cta-text { font-size: ${fs(22)}; font-weight: 800; letter-spacing: -0.01em; }
+  .cta-closing { font-size: ${fs(14)}; font-weight: 500; opacity: 0.9; }
+  ${footerCss(ctx)}`;
+  const body = `
+  <div class="sheet">
+    ${dotsHtml("dot-grid")}
+    ${dotsHtml("dot-grid corner")}
+    <div class="top">
+      <div class="headline-col">
+        <span class="eyebrow">${ctx.eyebrow}</span>
+        <h1 class="headline">${ctx.headline}</h1>
+        <p class="subheadline">${ctx.sub}</p>
+      </div>
+      <div class="hero-wrap">${hero ? imgTag(hero, "hero-circle") : '<div class="hero-circle empty"></div>'}</div>
+    </div>
+    ${thumbs.length ? `<div class="thumbs">${thumbs.map((src) => imgTag(src, "")).join("")}</div>` : ""}
+    <div class="body">
+      <div class="card">
+        <div class="card-title">Features</div>
+        <ul class="points">${ctx.points.map((pt) => `<li>${pt}</li>`).join("")}</ul>
+      </div>
+      ${
+        ctx.price || ctx.promo
+          ? `<div class="price-row">${ctx.price ? `<div><div class="price-label">Price</div><div class="price-value">${ctx.price}</div></div>` : ""}${ctx.promo ? `<div class="promo-chip">${ctx.promo}</div>` : ""}</div>`
+          : ""
+      }
+      <div class="cta"><div class="cta-text">${ctx.cta}</div><div class="cta-closing">${ctx.closing}</div></div>
+    </div>
+    ${footerHtml(ctx)}
+  </div>`;
+  return { css, body };
+}
+
+/* ------------------------------------------------------------------ */
+/* Template: Listing Sheet — clean, white, professional single-listing */
+/* sheet: bold address headline, hero photo + thumbnail strip on the   */
+/* left, price/description/features sidebar on the right, and an      */
+/* agent-style contact + brand footer. Modeled on minimal real-estate  */
+/* listing-sheet flyers.                                               */
+/* ------------------------------------------------------------------ */
+function renderListingSheet(ctx: FlyerRenderContext): TemplateRender {
+  const { p, fs, images } = ctx;
+  const hero = images[0];
+  const thumbs = images.slice(1, 4);
+  const css = `
+  .head { padding: ${fs(30)} ${ctx.s.padX} ${fs(6)}; text-align: center; }
+  .headline { margin: 0; font-size: ${fs(30)}; font-weight: 800; letter-spacing: -0.01em; color: ${p.ink}; }
+  .subheadline { margin: ${fs(6)} 0 0; font-size: ${fs(15)}; font-weight: 500; color: ${MUTED}; }
+  .cols { display: flex; gap: ${fs(20)}; padding: ${fs(20)} ${ctx.s.padX} 0; flex: 1; min-height: 0; }
+  .left { flex: 1.4; min-width: 0; display: flex; flex-direction: column; gap: ${fs(8)}; }
+  .hero-photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: ${fs(6)}; }
+  .hero-photo.empty { background: linear-gradient(135deg, ${p.from}, ${p.to}); }
+  .thumb-strip { display: flex; gap: ${fs(6)}; }
+  .thumb-strip img { flex: 1; min-width: 0; aspect-ratio: 1 / 1; object-fit: cover; border-radius: ${fs(4)}; }
+  .right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: ${fs(14)}; }
+  .price-label { font-size: ${fs(11)}; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: ${MUTED}; }
+  .price-value { margin-top: ${fs(4)}; font-size: ${fs(30)}; font-weight: 800; color: ${p.ink}; letter-spacing: -0.01em; }
+  .promo-line { font-size: ${fs(14)}; font-weight: 700; color: ${p.accent}; }
+  .desc { font-size: ${fs(13)}; line-height: 1.5; color: ${MUTED}; }
+  .points { list-style: none; margin: 0; padding: 0; display: grid; gap: ${fs(8)}; }
+  .points li { position: relative; padding-left: ${fs(14)}; font-size: ${fs(13)}; line-height: 1.4; color: ${p.ink}; }
+  .points li::before { content: "•"; position: absolute; left: 0; color: ${p.accent}; font-weight: 900; }
+  .foot {
+    margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: ${fs(14)};
+    padding: ${fs(20)} ${ctx.s.padX}; border-top: 1px solid #e2e8f5; flex-wrap: wrap;
+  }
+  .foot-contact { font-size: ${fs(13)}; font-weight: 700; color: ${p.ink}; }
+  .foot-cta { margin-top: ${fs(2)}; font-size: ${fs(12)}; font-weight: 500; color: ${MUTED}; }
+  .foot-brand { display: inline-flex; align-items: center; gap: ${fs(6)}; font-weight: 800; font-size: ${fs(15)}; color: ${p.accent}; }
+  .foot-brand svg { display: block; }`;
+  const body = `
+  <div class="sheet">
+    <div class="head">
+      <h1 class="headline">${ctx.address || ctx.headline}</h1>
+      <p class="subheadline">${ctx.eyebrow}</p>
+    </div>
+    <div class="cols">
+      <div class="left">
+        ${hero ? imgTag(hero, "hero-photo") : '<div class="hero-photo empty"></div>'}
+        ${thumbs.length ? `<div class="thumb-strip">${thumbs.map((src) => imgTag(src, "")).join("")}</div>` : ""}
+      </div>
+      <div class="right">
+        ${ctx.price ? `<div><div class="price-label">Offered for</div><div class="price-value">${ctx.price}</div></div>` : ""}
+        ${ctx.promo ? `<div class="promo-line">${ctx.promo}</div>` : ""}
+        <p class="desc">${ctx.sub}</p>
+        <ul class="points">${ctx.points.map((pt) => `<li>${pt}</li>`).join("")}</ul>
+      </div>
+    </div>
+    <div class="foot">
+      <div><div class="foot-contact">${ctx.cta}</div><div class="foot-cta">${ctx.closing}</div></div>
+      <span class="foot-brand">${axisMarkSvg(p.accent)}<span>Axis</span></span>
+    </div>
+  </div>`;
+  return { css, body };
 }
 
 /* ------------------------------------------------------------------ */
@@ -353,7 +536,7 @@ function renderPhotoHero(ctx: FlyerRenderContext): TemplateRender {
         <div class="cta-closing">${ctx.closing}</div>
       </div>
     </div>
-    ${footerHtml()}
+    ${footerHtml(ctx)}
   </div>`;
   return { css, body };
 }
@@ -422,7 +605,7 @@ function renderSplit(ctx: FlyerRenderContext): TemplateRender {
         <div class="cta"><div class="cta-text">${ctx.cta}</div><div class="cta-closing">${ctx.closing}</div></div>
       </main>
     </div>
-    ${footerHtml()}
+    ${footerHtml(ctx)}
   </div>`;
   return { css, body };
 }
@@ -487,7 +670,7 @@ function renderFeatureGrid(ctx: FlyerRenderContext): TemplateRender {
       }
       <div class="cta"><div class="cta-text">${ctx.cta}</div><div class="cta-closing">${ctx.closing}</div></div>
     </div>
-    ${footerHtml()}
+    ${footerHtml(ctx)}
   </div>`;
   return { css, body };
 }
@@ -542,7 +725,7 @@ function renderBoldBanner(ctx: FlyerRenderContext): TemplateRender {
         <div class="cta-closing">${ctx.closing}</div>
       </div>
     </div>
-    ${footerHtml()}
+    ${footerHtml(ctx)}
   </div>`;
   return { css, body };
 }
@@ -591,12 +774,14 @@ function renderMinimal(ctx: FlyerRenderContext): TemplateRender {
       <div class="cta-text">${ctx.cta}</div>
       <div class="cta-closing">${ctx.closing}</div>
     </div>
-    ${footerHtml()}
+    ${footerHtml(ctx)}
   </div>`;
   return { css, body };
 }
 
 const TEMPLATE_RENDERERS: Record<PromotionTemplate, (ctx: FlyerRenderContext) => TemplateRender> = {
+  showcase: renderShowcase,
+  listing_sheet: renderListingSheet,
   photo_hero: renderPhotoHero,
   split: renderSplit,
   feature_grid: renderFeatureGrid,
@@ -630,6 +815,7 @@ export function buildFlyerHtml(row: ManagerPromotionRow): string {
     cta: escapeHtml(copy.ctaText),
     closing: escapeHtml(copy.closingLine),
     points: copy.sellingPoints.map((pt) => escapeHtml(pt)),
+    address: row.inputs.address?.trim() ? escapeHtml(row.inputs.address.trim()) : "",
   };
   const { css, body } = TEMPLATE_RENDERERS[template](ctx);
 

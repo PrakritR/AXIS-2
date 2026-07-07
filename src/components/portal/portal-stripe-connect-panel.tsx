@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { openAppUrl, shouldUseInAppConnectFlow } from "@/lib/native/open-url";
+import { openStripeConnectOnboarding } from "@/lib/stripe-connect-onboarding-client";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 
 type ConnectStatus = {
@@ -21,22 +21,35 @@ type ConnectStatus = {
   stripeError?: string;
 };
 
-type OnboardResponse = {
-  url?: string;
-  accountId?: string;
-  mode?: string;
-  demo?: boolean;
-  message?: string;
-  error?: string;
-  code?: string;
+/** Realistic "already connected" mock shown in the /demo sandbox — never hits real Stripe. */
+const DEMO_CONNECT_STATUS: ConnectStatus = {
+  connected: true,
+  accountId: "acct_demo_sandbox",
+  chargesEnabled: true,
+  payoutsEnabled: true,
+  transfersEnabled: true,
+  paymentReady: true,
+  detailsSubmitted: true,
 };
 
 export function PortalStripeConnectPanel({
   basePath,
   variant = "page",
+  apiBase = "/api/stripe/connect",
+  returnPath,
+  dataAttrPrefix = "stripe-connect",
+  onConnectDone,
 }: {
   basePath: string;
-  variant?: "page" | "embedded" | "inline";
+  variant?: "page" | "embedded" | "inline" | "header";
+  /** Base path for the status/onboard API pair — defaults to the manager Connect routes. */
+  apiBase?: string;
+  /** Path the client cleans `?connect=` params off of after returning from Stripe. Defaults to `${basePath}/payments`. */
+  returnPath?: string;
+  /** Prefix for data-attr hooks on the connect/update button. */
+  dataAttrPrefix?: string;
+  /** Called after Stripe redirects back with `?connect=done` (same-tab return). */
+  onConnectDone?: () => void;
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
@@ -44,14 +57,16 @@ export function PortalStripeConnectPanel({
   const [status, setStatus] = useState<ConnectStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const handledConnectParam = useRef(false);
+  const resolvedReturnPath = returnPath ?? `${basePath}/payments`;
 
   const loadStatus = useCallback(async () => {
     if (isDemoModeActive()) {
+      setStatus(DEMO_CONNECT_STATUS);
       setStatusLoaded(true);
       return;
     }
     try {
-      const res = await fetch("/api/stripe/connect/status", { credentials: "include" });
+      const res = await fetch(`${apiBase}/status`, { credentials: "include" });
       const body = (await res.json()) as ConnectStatus & { error?: string };
       if (!res.ok) {
         setStatus(null);
@@ -63,7 +78,7 @@ export function PortalStripeConnectPanel({
     } finally {
       setStatusLoaded(true);
     }
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     const id = window.setTimeout(() => void loadStatus(), 0);
@@ -92,84 +107,33 @@ export function PortalStripeConnectPanel({
     if (q !== "done" && q !== "refresh") return;
     handledConnectParam.current = true;
     if (q === "done") {
-      showToast("Bank account linked.");
+      showToast("Bank account linked. You're ready to receive resident payments.");
+      onConnectDone?.();
     } else {
       showToast("Setup link expired — try again.");
     }
-    window.history.replaceState({}, "", `${basePath}/payments`);
+    window.history.replaceState({}, "", resolvedReturnPath);
     queueMicrotask(() => {
       if (q === "done") setActionError(null);
       void loadStatus();
     });
-  }, [basePath, loadStatus, showToast]);
+  }, [loadStatus, onConnectDone, resolvedReturnPath, showToast]);
 
   const startConnect = useCallback(async () => {
     setBusy(true);
     setActionError(null);
-
-    const useInAppFlow = shouldUseInAppConnectFlow();
-    let popup: Window | null = null;
-
-    if (!useInAppFlow) {
-      // Open synchronously on click so popup blockers allow a new tab (async window.open is often blocked).
-      popup = window.open("about:blank", "_blank");
-      if (!popup) {
-        const message = "Could not open a new tab. Allow pop-ups for this site and try again.";
-        setActionError(message);
-        showToast(message);
-        setBusy(false);
-        return;
-      }
-
-      try {
-        popup.document.title = "Opening Stripe…";
-        popup.document.body.innerHTML =
-          '<p style="font-family:system-ui,sans-serif;padding:2rem;color:#444">Opening secure bank setup…</p>';
-      } catch {
-        /* cross-origin once navigated; harmless on about:blank */
-      }
-    }
-
-    try {
-      const res = await fetch("/api/stripe/connect/onboard", {
-        method: "POST",
-        credentials: "include",
-      });
-      const body = (await res.json()) as OnboardResponse;
-      if (!res.ok) {
-        const message = body.error ?? "Could not start bank linking.";
-        popup?.close();
-        setActionError(message);
-        showToast(message);
-        return;
-      }
-      if (body.demo && body.message) {
-        popup?.close();
-        setActionError(body.message);
-        showToast(body.message);
-        return;
-      }
-      if (body.url) {
-        if (useInAppFlow) {
-          void openAppUrl(body.url);
-          return;
+    const opened = await openStripeConnectOnboarding({
+      apiBase,
+      showToast: (message) => {
+        if (message.startsWith("Could not") || message.includes("pop-ups")) {
+          setActionError(message);
         }
-        popup!.location.href = body.url;
-        return;
-      }
-      popup?.close();
-      const message = "Stripe did not return an onboarding URL.";
-      setActionError(message);
-      showToast(message);
-    } catch {
-      popup?.close();
-      const message = "Could not start bank linking.";
-      setActionError(message);
-      showToast(message);
-    } finally {
-      setBusy(false);
-    }
-  }, [showToast]);
+        showToast(message);
+      },
+    });
+    if (opened) setActionError(null);
+    setBusy(false);
+  }, [apiBase, showToast]);
 
   const ready =
     status &&
@@ -178,6 +142,52 @@ export function PortalStripeConnectPanel({
     !status.demo;
 
   const blockingError = actionError ?? status?.stripeError ?? null;
+
+  if (variant === "header") {
+    if (status?.demo) return null;
+
+    if (!statusLoaded) {
+      return (
+        <div
+          className={`${PORTAL_HEADER_ACTION_BTN} h-9 w-[5.5rem] shrink-0 animate-pulse rounded-full bg-accent/30`}
+          aria-hidden
+        />
+      );
+    }
+
+    if (ready) {
+      return (
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
+          disabled={busy}
+          onClick={() => void startConnect()}
+          data-attr={`${dataAttrPrefix}-linked`}
+          title={blockingError ?? "Open Stripe to view or update your linked bank account"}
+        >
+          {busy ? "Opening…" : "Bank linked"}
+        </Button>
+      );
+    }
+
+    const needsFinish = Boolean(status?.connected);
+    const label = needsFinish ? "Finish setup" : "Link bank";
+
+    return (
+      <Button
+        type="button"
+        variant={needsFinish ? "primary" : "outline"}
+        className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+        disabled={busy}
+        onClick={() => void startConnect()}
+        data-attr={`${dataAttrPrefix}-link`}
+        title={blockingError ?? (needsFinish ? "Finish bank account setup" : "Link bank account for payouts")}
+      >
+        {busy ? "Opening…" : label}
+      </Button>
+    );
+  }
 
   if (variant === "inline") {
     if (status?.demo) return null;
@@ -194,9 +204,9 @@ export function PortalStripeConnectPanel({
     const statusLabel = ready ? "Bank linked" : status?.connected ? "Finish bank setup" : "Bank not linked";
 
     return (
-      <div className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-border bg-accent/30 p-1">
+      <div className="flex h-9 w-full min-w-0 max-w-full items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:w-auto sm:rounded-full">
         <span
-          className={`flex min-h-9 min-w-[7.5rem] shrink-0 items-center truncate rounded-full px-4 py-1.5 text-sm font-semibold ${
+          className={`flex min-h-9 min-w-0 flex-1 items-center truncate rounded-full px-4 py-1.5 text-sm font-semibold sm:min-w-[7.5rem] sm:flex-none ${
             ready
               ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
               : blockingError
@@ -209,6 +219,7 @@ export function PortalStripeConnectPanel({
         </span>
         <button
           type="button"
+          data-attr={`${dataAttrPrefix}-link`}
           className={`flex min-h-9 shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 disabled:opacity-60 ${
             ready
               ? "border border-border bg-card/80 text-foreground shadow-[var(--shadow-sm)] hover:border-primary/30"
@@ -234,14 +245,14 @@ export function PortalStripeConnectPanel({
 
   const body = (
     <div className={`space-y-3 text-sm text-muted ${variant === "embedded" ? "" : "max-w-2xl"}`}>
+      {status?.demo ? (
+        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
+          {status.message ?? "Add Stripe keys to enable bank linking."}
+        </p>
+      ) : null}
+
       {variant !== "embedded" ? (
         <>
-          {status?.demo ? (
-            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
-              {status.message ?? "Add Stripe keys to enable bank linking."}
-            </p>
-          ) : null}
-
           {stripeTestMode && !status?.demo ? (
             <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending [html[data-native]_&]:hidden">
               Stripe test mode is active — onboarding uses sandbox test banks (e.g. code <span className="font-mono">000000</span>).
@@ -255,11 +266,11 @@ export function PortalStripeConnectPanel({
               to your https production URL.
             </p>
           ) : null}
-
-          {blockingError ? (
-            <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">{blockingError}</p>
-          ) : null}
         </>
+      ) : null}
+
+      {blockingError ? (
+        <p className="rounded-xl border px-4 py-3 text-sm portal-banner-danger">{blockingError}</p>
       ) : null}
 
       {!status?.demo ? (
@@ -278,6 +289,7 @@ export function PortalStripeConnectPanel({
               <Button
                 type="button"
                 variant="outline"
+                data-attr={`${dataAttrPrefix}-update`}
                 className="rounded-full"
                 disabled={busy}
                 onClick={() => void startConnect()}
@@ -293,6 +305,7 @@ export function PortalStripeConnectPanel({
               <Button
                 type="button"
                 variant="primary"
+                data-attr={`${dataAttrPrefix}-link`}
                 className="rounded-full"
                 disabled={busy}
                 onClick={() => void startConnect()}

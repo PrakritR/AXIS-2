@@ -10,9 +10,6 @@ import {
   ManagerPortalFilterRow,
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
-  PORTAL_FILTER_ACTIONS_MOBILE,
-  PORTAL_HEADER_ACTION_BTN,
-  PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import {
@@ -23,6 +20,7 @@ import {
 import {
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
+  PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
@@ -154,10 +152,62 @@ function FinancesDataTable({
     return <PortalDataTableEmpty message="No finance entries yet." icon="finance" />;
   }
 
+  const renderCellValue = (col: ReportColumn, row: ReportRow) =>
+    col.key === "taxStatus" && onTaxStatusChange && row.id ? (
+      <select
+        className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+        data-attr="expense-tax-status-inline"
+        value={row.taxDeductible === false ? "non_deductible" : "deductible"}
+        onChange={(e) => onTaxStatusChange(String(row.id), e.target.value === "deductible")}
+      >
+        <option value="deductible">Deductible</option>
+        <option value="non_deductible">Non-deductible</option>
+      </select>
+    ) : (
+      formatCellValue(col, row[col.key])
+    );
+
   return (
-    <div className={PORTAL_DATA_TABLE_WRAP}>
+    <>
+      <div className="space-y-2 lg:hidden">
+        {sortedRows.map((row, idx) => (
+          <div key={`${row.id ?? idx}-${idx}`} className={PORTAL_MOBILE_CARD_CLASS}>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              {visibleCols.map((col) => (
+                <div key={col.key} className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted/70">{col.label}</p>
+                  <div
+                    className={`truncate text-sm ${
+                      col.key === "amount" || col.key === "property" || col.key === "resident"
+                        ? "font-medium text-foreground"
+                        : "text-foreground/80"
+                    }`}
+                  >
+                    {renderCellValue(col, row)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {report.totals ? (
+          <div className={`${PORTAL_MOBILE_CARD_CLASS} bg-accent/10`}>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              {visibleCols.map((col) => (
+                <div key={col.key} className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted/70">{col.label}</p>
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {formatCellValue(col, report.totals![col.key])}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+        <table className="w-full table-fixed border-collapse text-left text-sm">
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               {visibleCols.map((col) => (
@@ -186,19 +236,7 @@ function FinancesDataTable({
                       col.key === "amount" ? "font-medium text-foreground" : ""
                     } ${col.key === "property" || col.key === "resident" ? "font-medium text-foreground" : ""}`}
                   >
-                    {col.key === "taxStatus" && onTaxStatusChange && row.id ? (
-                      <select
-                        className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
-                        data-attr="expense-tax-status-inline"
-                        value={row.taxDeductible === false ? "non_deductible" : "deductible"}
-                        onChange={(e) => onTaxStatusChange(String(row.id), e.target.value === "deductible")}
-                      >
-                        <option value="deductible">Deductible</option>
-                        <option value="non_deductible">Non-deductible</option>
-                      </select>
-                    ) : (
-                      formatCellValue(col, row[col.key])
-                    )}
+                    {renderCellValue(col, row)}
                   </td>
                 ))}
               </tr>
@@ -217,7 +255,8 @@ function FinancesDataTable({
           ) : null}
         </table>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -240,78 +279,73 @@ function FinancesRowFilters({
 
   if (!report || rows.length === 0) return null;
 
-  return (
-    <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Filters</p>
-      <div className="flex flex-wrap items-end gap-3">
-        {tabId === "income" ? (
-          <>
-            <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-              Resident
-              <select
-                className={FILTER_SELECT_CLASS}
-                value={rowFilters.resident}
-                onChange={(e) => onChange({ resident: e.target.value })}
-              >
-                <option value="">All residents</option>
-                {residents.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-              Type
-              <select
-                className={FILTER_SELECT_CLASS}
-                value={rowFilters.type}
-                onChange={(e) => onChange({ type: e.target.value })}
-              >
-                <option value="">All types</option>
-                {types.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        ) : (
-          <>
-            <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-              Category
-              <select
-                className={FILTER_SELECT_CLASS}
-                value={rowFilters.category}
-                onChange={(e) => onChange({ category: e.target.value })}
-              >
-                <option value="">All categories</option>
-                {categories.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex min-w-[10rem] flex-col gap-1.5 text-xs font-medium text-muted">
-              Vendor
-              <select
-                className={FILTER_SELECT_CLASS}
-                value={rowFilters.vendor}
-                onChange={(e) => onChange({ vendor: e.target.value })}
-              >
-                <option value="">All vendors</option>
-                {vendors.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
-      </div>
+  const rowFilterGrid = "grid w-full min-w-0 grid-cols-2 gap-3 sm:flex sm:w-auto sm:flex-wrap";
+
+  return tabId === "income" ? (
+    <div className={rowFilterGrid}>
+      <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
+        Resident
+        <select
+          className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
+          value={rowFilters.resident}
+          onChange={(e) => onChange({ resident: e.target.value })}
+        >
+          <option value="">All residents</option>
+          {residents.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
+        Type
+        <select
+          className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
+          value={rowFilters.type}
+          onChange={(e) => onChange({ type: e.target.value })}
+        >
+          <option value="">All types</option>
+          {types.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  ) : (
+    <div className={rowFilterGrid}>
+      <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
+        Category
+        <select
+          className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
+          value={rowFilters.category}
+          onChange={(e) => onChange({ category: e.target.value })}
+        >
+          <option value="">All categories</option>
+          {categories.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-muted sm:min-w-[10rem]">
+        Vendor
+        <select
+          className={`${FILTER_SELECT_CLASS} w-full min-w-0`}
+          value={rowFilters.vendor}
+          onChange={(e) => onChange({ vendor: e.target.value })}
+        >
+          <option value="">All vendors</option>
+          {vendors.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }
@@ -356,6 +390,16 @@ type ExpenseDraft = {
 };
 
 const EXPENSE_CATEGORIES = SYSTEM_CHART_ACCOUNTS.filter((a) => a.accountType === "expense");
+const INCOME_CATEGORIES = SYSTEM_CHART_ACCOUNTS.filter((a) => a.accountType === "income");
+
+type IncomeDraft = {
+  categoryCode: string;
+  amount: string;
+  postedDate: string;
+  description: string;
+  residentEmail: string;
+  propertyId: string;
+};
 
 export function ManagerFinancesPanel({
   tabId,
@@ -373,6 +417,7 @@ export function ManagerFinancesPanel({
   const [loading, setLoading] = useState(false);
   const [rowFilters, setRowFilters] = useState(emptyRowFilters);
   const [expenseModal, setExpenseModal] = useState(false);
+  const [incomeModal, setIncomeModal] = useState(false);
   const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft>({
     categoryCode: "maintenance",
     amount: "",
@@ -382,6 +427,14 @@ export function ManagerFinancesPanel({
     propertyId: "",
     taxDeductible: isCategoryDeductible("maintenance"),
     taxTouched: false,
+  });
+  const [incomeDraft, setIncomeDraft] = useState<IncomeDraft>({
+    categoryCode: "other_income",
+    amount: "",
+    postedDate: new Date().toISOString().slice(0, 10),
+    description: "",
+    residentEmail: "",
+    propertyId: "",
   });
 
   const reportId = TAB_TO_REPORT[tabId] ?? "rent-receipts";
@@ -455,6 +508,39 @@ export function ManagerFinancesPanel({
     return () => window.clearTimeout(timer);
   }, [loadTable, ready, tabId]);
 
+  async function saveIncome() {
+    const amountCents = Math.round(Number.parseFloat(incomeDraft.amount.replace(/[^0-9.]/g, "")) * 100);
+    if (!(amountCents > 0)) {
+      showToast("Enter a valid amount.");
+      return;
+    }
+    if (isDemoModeActive()) {
+      showToast("Income entries are simulated in this demo.");
+      setIncomeModal(false);
+      return;
+    }
+    const res = await fetch("/api/income", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        categoryCode: incomeDraft.categoryCode,
+        amountCents,
+        postedDate: incomeDraft.postedDate,
+        description: incomeDraft.description,
+        residentEmail: incomeDraft.residentEmail || undefined,
+        propertyId: incomeDraft.propertyId || filters.propertyId || undefined,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error ?? "Failed to save income.");
+      return;
+    }
+    showToast("Income saved.");
+    setIncomeModal(false);
+    void loadTable();
+  }
+
   async function saveExpense() {
     const amountCents = Math.round(Number.parseFloat(expenseDraft.amount.replace(/[^0-9.]/g, "")) * 100);
     if (!(amountCents > 0)) {
@@ -527,6 +613,18 @@ export function ManagerFinancesPanel({
     [basePath],
   );
 
+  function openAddIncome() {
+    setIncomeDraft({
+      categoryCode: "other_income",
+      amount: "",
+      postedDate: new Date().toISOString().slice(0, 10),
+      description: "",
+      residentEmail: "",
+      propertyId: filters.propertyId,
+    });
+    setIncomeModal(true);
+  }
+
   function openAddExpense() {
     setExpenseDraft({
       categoryCode: "maintenance",
@@ -542,37 +640,29 @@ export function ManagerFinancesPanel({
   }
 
   const headerActions = (
-    <>
-      {tabId === "expenses" ? (
-        <PortalSectionPrimaryButton onClick={openAddExpense}>Add expense</PortalSectionPrimaryButton>
-      ) : null}
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
       {report && report.rows.length > 0 ? (
         <ReportExportButtons reportId={reportId} query={query} formats={["csv"]} />
       ) : null}
-    </>
+      {tabId === "income" ? (
+        <PortalSectionPrimaryButton onClick={openAddIncome} data-attr="finances-add-income">
+          Add income
+        </PortalSectionPrimaryButton>
+      ) : (
+        <PortalSectionPrimaryButton onClick={openAddExpense} data-attr="finances-add-expense">
+          Add expense
+        </PortalSectionPrimaryButton>
+      )}
+    </div>
   );
-
-  const hasHeaderActions = tabId === "expenses" || Boolean(report && report.rows.length > 0);
 
   return (
     <ManagerPortalPageShell
       title="Finances"
-      titleAside={hasHeaderActions ? <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{headerActions}</div> : undefined}
+      titleAside={headerActions}
       filterRow={
         <ManagerPortalFilterRow>
           <TabNav activeId={tabId} items={financeTabItems} />
-          {hasHeaderActions ? (
-            <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} gap-2`}>
-              {tabId === "expenses" ? (
-                <Button type="button" variant="primary" className={PORTAL_HEADER_ACTION_BTN} onClick={openAddExpense}>
-                  Add expense
-                </Button>
-              ) : null}
-              {report && report.rows.length > 0 ? (
-                <ReportExportButtons reportId={reportId} query={query} formats={["csv"]} />
-              ) : null}
-            </div>
-          ) : null}
         </ManagerPortalFilterRow>
       }
     >
@@ -588,13 +678,14 @@ export function ManagerFinancesPanel({
           onRun={() => void loadTable()}
           loading={loading}
           showRunButton={false}
-        />
-
-        <FinancesRowFilters
-          tabId={tabId}
-          report={report}
-          rowFilters={rowFilters}
-          onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
+          trailing={
+            <FinancesRowFilters
+              tabId={tabId}
+              report={report}
+              rowFilters={rowFilters}
+              onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
+            />
+          }
         />
 
         {loading && !report ? (
@@ -712,6 +803,77 @@ export function ManagerFinancesPanel({
           </Button>
           <Button variant="primary" onClick={() => void saveExpense()}>
             Save expense
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={incomeModal} onClose={() => setIncomeModal(false)} title="Add income">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
+            Property
+            <select
+              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+              value={incomeDraft.propertyId}
+              onChange={(e) => setIncomeDraft({ ...incomeDraft, propertyId: e.target.value })}
+            >
+              <option value="">All properties / unassigned</option>
+              {propertyOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+            Type
+            <select
+              className="h-10 rounded-xl border border-border bg-card px-3 text-sm"
+              value={incomeDraft.categoryCode}
+              onChange={(e) => setIncomeDraft({ ...incomeDraft, categoryCode: e.target.value })}
+            >
+              {INCOME_CATEGORIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+            Amount (USD)
+            <Input value={incomeDraft.amount} onChange={(e) => setIncomeDraft({ ...incomeDraft, amount: e.target.value })} />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+            Date received
+            <Input
+              type="date"
+              value={incomeDraft.postedDate}
+              onChange={(e) => setIncomeDraft({ ...incomeDraft, postedDate: e.target.value })}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+            Resident email (optional)
+            <Input
+              type="email"
+              value={incomeDraft.residentEmail}
+              onChange={(e) => setIncomeDraft({ ...incomeDraft, residentEmail: e.target.value })}
+              placeholder="resident@example.com"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted sm:col-span-2">
+            Description
+            <Input
+              value={incomeDraft.description}
+              onChange={(e) => setIncomeDraft({ ...incomeDraft, description: e.target.value })}
+              placeholder="e.g. Utilities reimbursement"
+            />
+          </label>
+        </div>
+        <div className="mt-6 flex justify-start gap-2">
+          <Button variant="outline" onClick={() => setIncomeModal(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => void saveIncome()}>
+            Save income
           </Button>
         </div>
       </Modal>

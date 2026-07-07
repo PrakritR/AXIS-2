@@ -46,9 +46,11 @@ type Props = {
   residentEmail: string;
   onCancel: () => void;
   onSaved: () => void;
+  /** Manager edits keep bucket/stage; resident resubmit moves back to pending. */
+  preserveReviewStatus?: boolean;
 };
 
-export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSaved }: Props) {
+export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSaved, preserveReviewStatus = false }: Props) {
   const { showToast } = useAppUi();
   const [step, setStep] = useState(1);
   const [maxStepReached, setMaxStepReached] = useState<number>(EDIT_STEP_COUNT);
@@ -190,8 +192,8 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
         property: prop?.title?.trim() || row.property,
         propertyId: pid || row.propertyId,
         email: residentEmail,
-        bucket: "pending",
-        stage: row.stage || "Submitted",
+        bucket: preserveReviewStatus ? row.bucket : "pending",
+        stage: preserveReviewStatus ? row.stage : row.stage || "Submitted",
         detail: `Updated ${new Date().toLocaleString()}`,
         application: structuredClone({ ...form, email: residentEmail }),
       };
@@ -205,7 +207,7 @@ export function ResidentApplicationEditor({ row, residentEmail, onCancel, onSave
       showToast("Application saved.");
       onSaved();
     })();
-  }, [form, onSaved, residentEmail, row, showToast, step, validateAllPrior, validateCurrentStep]);
+  }, [form, onSaved, preserveReviewStatus, residentEmail, row, showToast, step, validateAllPrior, validateCurrentStep]);
 
   const handleBack = useCallback(() => {
     if (step <= 1) {

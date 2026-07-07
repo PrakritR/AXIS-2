@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { getPushPermission, requestPushPermission, type PushPermission } from "@/lib/native/push-client";
 
 /**
@@ -41,24 +42,35 @@ export function NotificationsToggle() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-foreground">Push notifications</p>
-        <p className="mt-1 text-sm text-muted">
-          {permission === "granted"
-            ? "On — rent reminders and updates arrive on this device."
-            : permission === "denied"
-              ? "Turn on notifications for Axis in your device Settings to enable."
-              : "Get rent reminders, work-order updates, and announcements."}
-        </p>
-      </div>
-      {permission === "granted" ? (
-        <span className="shrink-0 text-sm font-semibold text-emerald-400">Enabled</span>
-      ) : permission === "denied" ? null : (
-        <Button variant="secondary" onClick={enable} disabled={busy} className="shrink-0">
-          {busy ? "Enabling…" : "Enable"}
-        </Button>
-      )}
-    </div>
+    <PortalCollapsibleSection
+      title="Push notifications"
+      subtitle={
+        permission === "granted"
+          ? "On — rent reminders and updates arrive on this device."
+          : permission === "denied"
+            ? "Turn on notifications for Axis in your device Settings to enable."
+            : "Get rent reminders, work-order updates, and announcements."
+      }
+      surfaceMuted={false}
+      contentClassName="px-4 pb-4"
+      toggleDataAttr="portal-notifications-toggle"
+      headerActions={
+        permission === "granted" ? (
+          <span className="shrink-0 text-sm font-semibold text-emerald-400">Enabled</span>
+        ) : permission === "denied" ? null : (
+          <Button variant="secondary" onClick={enable} disabled={busy} className="h-8 shrink-0 rounded-full px-3 text-xs">
+            {busy ? "Enabling…" : "Enable"}
+          </Button>
+        )
+      }
+    >
+      <p className="text-sm text-muted">
+        {permission === "granted"
+          ? "Notifications are enabled for this device."
+          : permission === "denied"
+            ? "Open your device Settings to allow notifications from Axis."
+            : "Tap Enable to allow push notifications on this device."}
+      </p>
+    </PortalCollapsibleSection>
   );
 }

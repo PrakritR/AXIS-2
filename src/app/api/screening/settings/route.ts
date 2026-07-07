@@ -3,6 +3,8 @@ import { getManagerScreeningSettings, updateManagerScreeningSettings } from "@/l
 import type { ScreeningMode } from "@/lib/screening/types";
 import { screeningConfigured, screeningCostCents } from "@/lib/screening/config";
 import { backgroundCheckConfigured, checkrScreeningCostCents } from "@/lib/checkr/config";
+import { managerScreeningAllowedForTier } from "@/lib/manager-access";
+import { getManagerSubscriptionTier } from "@/lib/manager-access-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -22,12 +24,14 @@ export async function GET() {
 
     const db = createSupabaseServiceRoleClient();
     const settings = await getManagerScreeningSettings(db, user.id);
+    const tier = await getManagerSubscriptionTier(user.id);
     return NextResponse.json({
       settings,
       configured: screeningConfigured(),
       costCents: screeningCostCents(),
       backgroundCheckConfigured: backgroundCheckConfigured(),
       checkrCostCents: checkrScreeningCostCents(),
+      screeningAllowed: managerScreeningAllowedForTier(tier),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load screening settings.";
@@ -50,12 +54,14 @@ export async function PATCH(req: Request) {
 
     const db = createSupabaseServiceRoleClient();
     const settings = await updateManagerScreeningSettings(db, user.id, { mode: body.mode });
+    const tier = await getManagerSubscriptionTier(user.id);
     return NextResponse.json({
       settings,
       configured: screeningConfigured(),
       costCents: screeningCostCents(),
       backgroundCheckConfigured: backgroundCheckConfigured(),
       checkrCostCents: checkrScreeningCostCents(),
+      screeningAllowed: managerScreeningAllowedForTier(tier),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save screening settings.";

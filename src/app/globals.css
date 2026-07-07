@@ -686,7 +686,7 @@ html {
 }
 
 /* Keep viewport-based modal sizing bounded to the frame, not the browser. */
-.demo-portal-frame .min-h-screen {
+.demo-portal-frame .min-h-full {
   min-height: 100%;
 }
 
@@ -906,6 +906,19 @@ html {
   color-scheme: light;
 }
 
+.hero-search-panel input[type="date"].hero-search-date-input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.hero-search-panel input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+
 [data-theme="dark"] .hero-search-panel input[type="date"],
 [data-theme="dark"] .hero-search-panel select {
   color-scheme: dark;
@@ -1114,6 +1127,15 @@ html {
   }
 }
 
+/* Mobile-web default for the bottom-nav inset (same var native uses below), so
+   `#portal-main-content` padding / the assistant FAB clear the fixed bottom bar
+   on a phone-width browser too, before JS measures the real bar height via
+   observeNativeBottomNavInset. `html[data-native]`'s own declaration below has
+   higher specificity and wins in the native app, so this only ever governs web. */
+:root {
+  --portal-native-bottom-nav-inset: max(2.75rem, calc(env(safe-area-inset-bottom, 0px) + 2rem));
+}
+
 /* Capacitor native shell — safe areas for notch / home indicator (see NativeBridge data-native). */
 html[data-native] {
   --native-safe-top: env(safe-area-inset-top, 0px);
@@ -1182,9 +1204,8 @@ html:has([data-auth-layout]) body {
   min-height: 0;
   width: 100%;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   justify-content: flex-start;
-  align-content: flex-start;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior-y: contain;
@@ -1197,10 +1218,9 @@ html:has([data-auth-layout]) body {
 .auth-layout-panel {
   width: 100%;
   max-width: 460px;
-  margin-inline: auto;
-  margin-block: 0;
+  margin: auto;
   flex: 0 0 auto;
-  align-self: stretch;
+  align-self: center;
 }
 
 @media (min-width: 640px) {
@@ -1222,17 +1242,31 @@ html[data-auth-welcome] .auth-layout .chrome-substrate-quiet-glow {
   display: none !important;
 }
 
+html[data-auth-native] .auth-layout .chrome-substrate-full,
+html[data-auth-native] .auth-layout .chrome-substrate-quiet-glow {
+  display: block !important;
+}
+
 html[data-auth-welcome] .auth-layout {
   background: var(--background);
 }
 
+html[data-auth-native] .auth-layout {
+  background: transparent;
+}
+
 html[data-auth-welcome] .auth-layout-main {
-  justify-content: flex-start;
-  align-content: flex-start;
+  align-items: center;
+  padding-top: 0.75rem;
+}
+
+html[data-auth-native] .auth-layout-main,
+html[data-native] .auth-layout-main:has(.native-auth-hub) {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
 }
 
 html[data-auth-welcome] .auth-layout-panel {
-  margin-block: 0;
+  margin: auto;
 }
 
 html[data-auth-welcome] .auth-native-email-sign-in {
@@ -1264,11 +1298,21 @@ html[data-native] .auth-layout .chrome-substrate-quiet-glow {
   display: none;
 }
 
+html[data-auth-native] .auth-layout .chrome-substrate-full,
+html[data-auth-native] .auth-layout .chrome-substrate-quiet-glow {
+  display: block !important;
+}
+
 html[data-native] .auth-card-shell > div:first-child {
   display: none;
 }
 
+html[data-auth-native] .auth-card-shell > div:first-child {
+  display: block;
+}
+
 html[data-native] .auth-layout-main {
+  align-items: center;
   justify-content: flex-start;
   padding-top: max(0.375rem, var(--native-safe-top));
   padding-bottom: max(0.75rem, var(--native-safe-bottom));
@@ -1278,7 +1322,8 @@ html[data-native] .auth-layout-main {
 }
 
 html[data-native] .auth-layout-panel {
-  margin-block: 0;
+  margin: auto;
+  align-self: center;
   max-width: 100%;
 }
 
@@ -1294,6 +1339,65 @@ html[data-native] .auth-card {
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
+html[data-auth-native] .auth-card {
+  border-radius: 1.25rem;
+  padding: 1rem 1rem 1.125rem;
+  box-shadow:
+    0 24px 60px -30px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Auth hub — form floats on wallpaper/background without a frosted panel */
+.auth-card-blend {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+
+html[data-auth-welcome] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+html[data-auth-native] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+html[data-auth-welcome][data-theme="light"] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+html[data-auth-native][data-theme="light"] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+html[data-auth-welcome] .native-auth-hub .auth-oauth-google,
+html[data-auth-native] .native-auth-hub .auth-oauth-google {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+html[data-auth-welcome][data-theme="light"] .native-auth-hub .auth-oauth-google,
+html[data-auth-native][data-theme="light"] .native-auth-hub .auth-oauth-google {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+html[data-auth-welcome] .native-auth-role-toggle,
+html[data-auth-native] .native-auth-role-toggle {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+html[data-auth-welcome][data-theme="light"] .native-auth-role-toggle,
+html[data-auth-native][data-theme="light"] .native-auth-role-toggle {
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
 html[data-native] .auth-brand-header .auth-brand-title {
   margin-top: 0.625rem;
 }
@@ -1307,7 +1411,11 @@ html[data-native] .native-auth-hub > .mt-4 {
 }
 
 html[data-native] .auth-card:has(.native-auth-hub) {
-  padding-top: 0.5rem;
+  padding-top: 0;
+}
+
+html[data-native] .auth-card-blend:has(.native-auth-hub) {
+  padding: 0;
 }
 
 html[data-native] .auth-card-shell {
@@ -1349,31 +1457,69 @@ html[data-native] .native-auth-role-toggle {
   width: 100%;
 }
 
-.auth-layout-main:has(.native-auth-hub) {
-  justify-content: flex-start;
-  align-content: flex-start;
-  padding-top: max(0.375rem, env(safe-area-inset-top, 0px));
-}
-
-.auth-layout-panel:has(.native-auth-hub) {
-  margin-block: 0;
-  align-self: stretch;
-  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
-}
-
 .auth-layout:has(.native-auth-hub) {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
 html[data-native] .auth-layout-main:has(.native-auth-hub) {
-  justify-content: flex-start;
+  align-items: center;
   padding-top: 0.375rem;
   padding-bottom: max(1rem, var(--native-safe-bottom));
   scroll-padding-top: 0.375rem;
   scroll-padding-bottom: max(1.25rem, var(--native-safe-bottom));
 }
 
+html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="sign-in"]) {
+  justify-content: center;
+  align-items: center;
+}
+
+html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="create-compact"]) {
+  justify-content: flex-start;
+  align-items: center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html[data-native] .native-auth-hub-stack[data-auth-mode="create-compact"] .auth-brand-header-wrap {
+  margin-bottom: 0.5rem;
+}
+
+html[data-native] .native-auth-hub-stack[data-auth-mode="create-compact"] .native-auth-hub-footer {
+  padding-bottom: max(0.5rem, var(--native-safe-bottom));
+}
+
+html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="create-tall"]) {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="sign-in"]),
+html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="create-compact"]) {
+  margin: auto;
+  align-self: center;
+}
+
+html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="create-tall"]) {
+  margin: 0 auto;
+  align-self: center;
+  max-width: min(100%, 52rem);
+  width: 100%;
+}
+
+html[data-native] .native-auth-hub-stack {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+html[data-native] .native-auth-hub-footer {
+  width: 100%;
+  padding-bottom: max(0.25rem, var(--native-safe-bottom));
+}
+
 html[data-native] .auth-layout-panel:has(.native-auth-hub) {
+  margin: auto;
+  align-self: center;
   padding-bottom: max(1.25rem, var(--native-safe-bottom));
 }
 
@@ -1386,10 +1532,15 @@ html[data-native] .auth-plan-picker-wide .auth-plan-tier-card {
 }
 
 html[data-native] .auth-layout-main:has(.auth-plan-picker-wide) {
-  justify-content: flex-start;
+  align-items: center;
   padding-top: max(0.25rem, var(--native-safe-top));
   padding-bottom: max(0.75rem, var(--native-safe-bottom));
   scroll-padding-top: max(0.25rem, var(--native-safe-top));
+}
+
+html[data-native] .auth-layout-panel:has(.auth-plan-picker-wide) {
+  margin: auto;
+  align-self: center;
 }
 
 html[data-native] .auth-plan-picker .auth-plan-tier-row {
@@ -1528,11 +1679,6 @@ html[data-native] .axis-page-frame > footer {
   display: none;
 }
 
-/* Axis Assistant — native bottom-nav slot uses .axis-assistant-nav-btn; web FAB stays fixed via Tailwind. */
-.axis-assistant-nav-btn {
-  touch-action: manipulation;
-}
-
 .axis-assistant-backdrop {
   background: rgba(15, 23, 42, 0.22);
   backdrop-filter: blur(3px);
@@ -1633,6 +1779,7 @@ html[data-native] .portal-native-bottom-nav {
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
+  border-top: 1px solid var(--border);
   padding-top: 0;
   padding-bottom: max(4px, calc(var(--native-safe-bottom) * 0.45));
   padding-right: max(0.5rem, var(--native-safe-right));
@@ -1641,69 +1788,38 @@ html[data-native] .portal-native-bottom-nav {
 
 html[data-native] .portal-native-bottom-nav-pull-handle {
   display: block;
-  height: 0.25rem;
-  width: 2.25rem;
+  height: 0.1875rem;
+  width: 2rem;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
 }
 
+/* Instagram-style: evenly-spaced icon-only tabs, no horizontal scroll — every
+   curated primary set is small enough (4-5 items) to fit at once.
+   `.portal-native-bottom-nav`'s flex-direction is `column`, so `flex: 1 1 0`
+   here sizes this row's HEIGHT (main axis) — it must NOT also carry `width: 0`
+   (that's a cross-axis override that collapsed the whole icon row to ~0px
+   wide, rendering an icon-less empty bar). Width comes from the parent's
+   `align-items: stretch` instead. */
 html[data-native] .portal-native-bottom-nav-scroll {
   display: flex;
   flex: 1 1 0;
-  width: 0;
   min-width: 0;
   flex-wrap: nowrap;
-  align-items: flex-end;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  align-items: stretch;
+  justify-content: space-evenly;
 }
 
-html[data-native] .portal-native-bottom-nav-scroll > a {
-  flex: 0 0 auto;
-  scroll-snap-align: center;
-}
-
-html[data-native] .portal-native-bottom-nav-assistant {
-  touch-action: manipulation;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  width: 2.75rem;
-  min-width: 2.75rem;
-  max-width: 2.75rem;
-  padding-left: 0.25rem;
-  padding-right: 0.25rem;
-  box-sizing: border-box;
-}
-
-html[data-native] .axis-assistant-nav-btn {
-  height: 1.375rem;
-  width: 1.375rem;
-  min-height: 1.375rem;
-  min-width: 1.375rem;
-  flex-shrink: 0;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
-
-html[data-native] .axis-assistant-nav-btn svg {
-  height: 0.6875rem;
-  width: 0.6875rem;
+html[data-native] .portal-native-bottom-nav-scroll > a,
+html[data-native] .portal-native-bottom-nav-scroll > button {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 html[data-native] .portal-native-bottom-nav-scroll a svg,
 html[data-native] .portal-native-bottom-nav-scroll button svg {
-  height: 1.375rem;
-  width: 1.375rem;
-}
-
-html[data-native] .portal-native-bottom-nav-scroll::-webkit-scrollbar {
-  display: none;
+  height: 1.4375rem;
+  width: 1.4375rem;
 }
 
 html[data-native] .portal-shell,
@@ -1714,12 +1830,94 @@ html[data-native] .portal-main-inner {
 }
 
 html[data-native] #portal-main-content {
-  padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem));
+  padding-top: max(0.25rem, var(--native-safe-top));
   padding-bottom: var(--portal-native-bottom-nav-inset);
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
-  scroll-padding-top: max(0.5rem, calc(var(--native-safe-top) + 0.25rem));
+  scroll-padding-top: max(0.25rem, var(--native-safe-top));
   scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+}
+
+/* Resident/manager/vendor: back + profile sit in the status-bar band beside the notch. */
+html[data-native] #portal-main-content:has(.portal-mobile-nav-bar) {
+  padding-top: 0;
+}
+
+html[data-native] .portal-mobile-nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  box-sizing: border-box;
+  min-height: calc(var(--native-safe-top) + 1.5rem);
+  padding-top: 0;
+  padding-left: max(0.75rem, var(--native-safe-left));
+  padding-right: max(0.75rem, var(--native-safe-right));
+  padding-bottom: 0.125rem;
+  margin-bottom: 0.5rem;
+  align-items: flex-end;
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Mobile web (<1024px, matches the shared `lg:hidden`/`max-lg:` breakpoint):
+   mirrors the native bottom-nav rules above so a phone-width browser gets the
+   same fixed bar, retired top strip, and content clearance as the native app.
+   Uses `env()` safe-area fallbacks directly instead of the native-only
+   `--native-safe-*` vars (those are undefined outside `html[data-native]`).
+   `html[data-native]` selectors above have higher specificity and still win
+   when both native and small-viewport match, so native behavior is unchanged. */
+@media (max-width: 1023px) {
+  .portal-mobile-chrome {
+    display: none !important;
+  }
+
+  .portal-native-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    border-top: 1px solid var(--border);
+    padding-top: 0;
+    padding-bottom: max(4px, calc(env(safe-area-inset-bottom, 0px) * 0.45));
+    padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+  }
+
+  .portal-native-bottom-nav-pull-handle {
+    display: block;
+    height: 0.1875rem;
+    width: 2rem;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--muted) 45%, transparent);
+  }
+
+  /* Same load-bearing height-distribution rule as the native block above —
+     do not add `width: 0` here (see comment there). */
+  .portal-native-bottom-nav-scroll {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    justify-content: space-evenly;
+  }
+
+  #portal-main-content {
+    padding-bottom: var(--portal-native-bottom-nav-inset);
+    scroll-padding-bottom: var(--portal-native-bottom-nav-inset);
+  }
+
+  .axis-assistant-panel {
+    bottom: calc(var(--portal-native-bottom-nav-inset) + 0.75rem);
+  }
 }
 
 /* Nested scroll panels: desktop only — mobile uses #portal-main-content scroll. */
@@ -1729,6 +1927,20 @@ html[data-native] #portal-main-content {
     overflow-y: auto;
     overscroll-behavior: contain;
   }
+}
+
+/* Portal selects — hide native dropdown arrows (toolbar/filter pickers). */
+.portal-shell select,
+.demo-portal-frame select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: none;
+}
+
+.portal-shell select::-ms-expand,
+.demo-portal-frame select::-ms-expand {
+  display: none;
 }
 
 /* Native portal tabs — keep rounded top corners on the first section card. */
@@ -1753,6 +1965,25 @@ html[data-native] #axis-public-navbar {
   display: none;
 }
 
+html[data-native] [data-listing-subnav] {
+  top: var(--native-safe-top, env(safe-area-inset-top, 0px)) !important;
+  z-index: 50;
+}
+
+html[data-native] [data-listing-sections-root] {
+  --listing-sticky-stack: calc(var(--native-safe-top, env(safe-area-inset-top, 0px)) + 4.25rem);
+}
+
+@media (max-width: 1023px) {
+  [data-listing-sections-root] {
+    --listing-sticky-stack: calc(env(safe-area-inset-top, 0px) + 4.25rem);
+  }
+
+  [data-listing-subnav] {
+    top: env(safe-area-inset-top, 0px);
+  }
+}
+
 @media (max-width: 1023px) {
   .portal-main-inner > * {
     flex: 0 0 auto;
@@ -1766,12 +1997,13 @@ html[data-native] #axis-public-navbar {
   }
 
   .auth-layout-main {
-    justify-content: flex-start;
+    align-items: center;
     padding-top: max(1rem, env(safe-area-inset-top, 0px));
   }
 
   .auth-layout-panel {
-    margin-block: 0;
+    margin: auto;
+    align-self: center;
   }
 
   .auth-role-stack .auth-choice-hint {

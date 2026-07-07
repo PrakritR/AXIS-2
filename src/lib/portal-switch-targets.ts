@@ -13,6 +13,7 @@ export function portalSwitchTargets(currentKind: PortalKind, roles: AuthRole[]):
   const inAdmin = currentKind === "admin";
   const inProperty = currentKind === "manager" || currentKind === "pro";
   const inResident = currentKind === "resident";
+  const inVendor = currentKind === "vendor";
 
   if (inAdmin && has("manager")) {
     targets.push({ role: "manager", label: "Switch to Property portal" });
@@ -31,6 +32,18 @@ export function portalSwitchTargets(currentKind: PortalKind, roles: AuthRole[]):
   }
   if (inResident && has("admin")) {
     targets.push({ role: "admin", label: "Switch to Admin portal" });
+  }
+  if (inAdmin && has("vendor")) {
+    targets.push({ role: "vendor", label: "Switch to Vendor portal" });
+  }
+  if (inVendor && has("admin")) {
+    targets.push({ role: "admin", label: "Switch to Admin portal" });
+  }
+  if (inProperty && has("vendor")) {
+    targets.push({ role: "vendor", label: "Switch to Vendor portal" });
+  }
+  if (inVendor && has("manager")) {
+    targets.push({ role: "manager", label: "Switch to Property portal" });
   }
 
   return targets;

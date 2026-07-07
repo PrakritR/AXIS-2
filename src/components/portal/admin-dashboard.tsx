@@ -1,19 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ManagerPortalPageShell,
+  portalDashboardWelcomeSubtitle,
   PortalDashboardCompactRow,
   PortalDashboardPreviewList,
   PORTAL_DASHBOARD_SECTION_CARD,
   PORTAL_DASHBOARD_STACK,
-  formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
 import { formatPacificDateTime } from "@/lib/pacific-time";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { readInboxMessages, syncInboxMessagesFromServer } from "@/lib/demo-admin-partner-inbox";
-import { adminLeaseKpiCounts } from "@/lib/demo-admin-leases";
 import { adminKpiCounts, readAdminPropertyRows } from "@/lib/demo-admin-property-inventory";
 import {
   getPartnerInquiryWindows,
@@ -24,46 +22,12 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import { PROPERTY_PIPELINE_EVENT, syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
-import {
-  LEASE_PIPELINE_EVENT,
-  readLeasePipeline,
-  syncLeasePipelineFromServer,
-} from "@/lib/lease-pipeline-storage";
 import { readBugFeedbackRows, syncBugFeedbackFromServer } from "@/lib/portal-bug-feedback";
-
-type PortalCounts = { managers: number; residents: number };
 
 function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
   return formatPacificDateTime(d);
-}
-
-function Tile({
-  label,
-  value,
-  sub,
-  href,
-  urgent,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  href: string;
-  urgent?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`surface-panel group flex flex-col gap-1 rounded-2xl border p-5 shadow-[var(--shadow-sm)] transition hover:shadow-[var(--shadow-card)] ${
-        urgent ? "border-[var(--status-pending-bg)] ring-1 ring-[var(--status-pending-bg)]" : "border-border hover:border-primary/25"
-      }`}
-    >
-      <p className="text-[2rem] font-bold leading-none tracking-[-0.03em] text-foreground">{value}</p>
-      <p className="text-sm font-medium text-muted">{label}</p>
-      {sub ? <p className="text-xs text-muted">{sub}</p> : null}
-    </Link>
-  );
 }
 
 function SectionHeader({ title, href, linkLabel }: { title: string; href?: string; linkLabel?: string }) {
@@ -79,34 +43,16 @@ function SectionHeader({ title, href, linkLabel }: { title: string; href?: strin
   );
 }
 
-export function AdminDashboard() {
+export function AdminDashboard({ displayName = "there" }: { displayName?: string }) {
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
-  const [counts, setCounts] = useState<PortalCounts>({ managers: 0, residents: 0 });
   const [cutoffMs, setCutoffMs] = useState(() => Date.now() - 30 * 60 * 1000);
-
-  const loadCounts = useCallback(async () => {
-    if (isDemoModeActive()) return;
-    try {
-      const res = await fetch("/api/admin/portal-users");
-      const body = (await res.json()) as { counts?: PortalCounts };
-      if (res.ok && body.counts) setCounts(body.counts);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    const id = window.setTimeout(() => void loadCounts(), 0);
-    return () => window.clearTimeout(id);
-  }, [loadCounts]);
 
   useEffect(() => {
     let cancelled = false;
 
     void Promise.allSettled([
       syncScheduleRecordsFromServer(),
-      syncLeasePipelineFromServer(null),
       syncPropertyPipelineFromServer(),
       syncInboxMessagesFromServer({ force: true }),
       syncBugFeedbackFromServer({ force: true }),
@@ -117,13 +63,11 @@ export function AdminDashboard() {
     });
 
     window.addEventListener(PROPERTY_PIPELINE_EVENT, bump);
-    window.addEventListener(LEASE_PIPELINE_EVENT, bump);
     window.addEventListener(ADMIN_UI_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
       cancelled = true;
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, bump);
-      window.removeEventListener(LEASE_PIPELINE_EVENT, bump);
       window.removeEventListener(ADMIN_UI_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
@@ -133,12 +77,6 @@ export function AdminDashboard() {
     void tick;
     const [pendingProps, , listedProps] = adminKpiCounts();
     const totalProps = pendingProps + listedProps;
-
-    const [, adminBucket] = adminLeaseKpiCounts();
-    const leasesInAdminReview = adminBucket;
-    const adminReviewLeases = readLeasePipeline()
-      .filter((row) => row.bucket === "admin")
-      .slice(0, 5);
 
     const pendingPropertyRows = readAdminPropertyRows(0).slice(0, 5);
 
@@ -183,8 +121,6 @@ export function AdminDashboard() {
     return {
       pendingProps,
       totalProps,
-      leasesInAdminReview,
-      adminReviewLeases,
       pendingPropertyRows,
       inboxUnread,
       inboxPreview,
@@ -199,49 +135,21 @@ export function AdminDashboard() {
   }, [tick, cutoffMs]);
 
   const {
-    pendingProps,
-    totalProps,
-    adminReviewLeases,
     pendingPropertyRows,
     inboxPreview,
     feedbackTotal,
     openFeedback,
     upcomingMeetings,
-    pendingMeetingCount,
-    totalMeetings,
-    confirmedMeetings,
   } = data;
 
-  const totalUsers = counts.managers + counts.residents;
-
   return (
-    <div className={`${PORTAL_SECTION_SURFACE} ${PORTAL_DASHBOARD_STACK}`}>
-      <h1 className="text-[1.75rem] font-bold tracking-[-0.02em] text-foreground [html[data-native]_&]:text-[1.2rem]">Dashboard</h1>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Tile
-          label="Properties"
-          value={totalProps}
-          sub={pendingProps > 0 ? `${pendingProps} pending approval` : undefined}
-          href="/admin/properties"
-          urgent={pendingProps > 0}
-        />
-        <Tile
-          label="Total users"
-          value={totalUsers}
-          sub={`${counts.managers} managers · ${counts.residents} residents`}
-          href="/admin/axis-users"
-        />
-        <Tile
-          label="Meetings"
-          value={totalMeetings}
-          sub={`${pendingMeetingCount} pending · ${confirmedMeetings} confirmed`}
-          href="/admin/events"
-          urgent={pendingMeetingCount > 0}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+    <ManagerPortalPageShell
+      title="Dashboard"
+      subtitle={portalDashboardWelcomeSubtitle(displayName)}
+      hideTitleOnNative
+    >
+      <div className={PORTAL_DASHBOARD_STACK}>
+        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
         <div className={PORTAL_DASHBOARD_SECTION_CARD}>
           <SectionHeader title="Properties pending review" href="/admin/properties" linkLabel="Properties →" />
           <PortalDashboardPreviewList
@@ -255,25 +163,6 @@ export function AdminDashboard() {
                 subtitle={row.address || row.neighborhood || "Pending submission"}
                 badge={
                   <span className="portal-badge-pending rounded-full px-2 py-0.5 text-[10px] font-semibold">Review</span>
-                }
-              />
-            )}
-          />
-        </div>
-
-        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Leases in admin review" href="/admin/leases" linkLabel="Leases →" />
-          <PortalDashboardPreviewList
-            items={adminReviewLeases}
-            href="/admin/leases"
-            emptyMessage="No leases waiting for admin review."
-            keyForItem={(row) => row.id}
-            renderRow={(row) => (
-              <PortalDashboardCompactRow
-                title={row.residentName || row.residentEmail}
-                subtitle={formatCompactPlacementLine(row.unit || row.stageLabel || "Unit pending", row.signedRentLabel || "Rent pending")}
-                badge={
-                  <span className="portal-badge-info rounded-full px-2 py-0.5 text-[10px] font-semibold">Admin review</span>
                 }
               />
             )}
@@ -300,10 +189,10 @@ export function AdminDashboard() {
         </div>
 
         <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Feedback" href="/admin/bugs-feedback" linkLabel="Feedback →" />
+          <SectionHeader title="Feedback" href="/admin/profile" linkLabel="Settings →" />
           <PortalDashboardPreviewList
             items={openFeedback}
-            href="/admin/bugs-feedback"
+            href="/admin/profile"
             emptyMessage={`No open feedback — ${feedbackTotal} submission${feedbackTotal === 1 ? "" : "s"} on file.`}
             keyForItem={(row) => row.id}
             renderRow={(row) => (
@@ -319,7 +208,7 @@ export function AdminDashboard() {
             )}
           />
         </div>
-      </div>
+        </div>
 
       {upcomingMeetings.length > 0 && (
         <div className={PORTAL_DASHBOARD_SECTION_CARD}>
@@ -347,6 +236,7 @@ export function AdminDashboard() {
           />
         </div>
       )}
-    </div>
+      </div>
+    </ManagerPortalPageShell>
   );
 }

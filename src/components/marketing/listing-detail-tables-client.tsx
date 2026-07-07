@@ -56,28 +56,6 @@ function formatBathroomIncludes(r: ListingBathroomRow): string {
   return parts.length ? parts.join(", ") : "—";
 }
 
-/** Removes furnishing items that are already present in amenity chips. */
-function filteredFurnishingDetail(furnish: string, amenities: readonly string[]): string | null {
-  const t = furnish.trim();
-  if (!t) return null;
-  if (amenities.length === 0) return t;
-  const pool = amenities.join(" ").toLowerCase();
-  const segments = t
-    .split(/[\n,;]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (segments.length === 0) return null;
-  const kept = segments.filter((seg) => {
-    const words = seg
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w.length > 1 && w !== "and");
-    if (words.length === 0) return false;
-    return !words.every((w) => pool.includes(w));
-  });
-  return kept.length ? kept.join(", ") : null;
-}
-
 function DetailsButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
   return (
     <button
@@ -207,18 +185,143 @@ function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWind
   );
 }
 
-function ModalVideoBlock({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
+const LISTING_MODAL_LABEL = "text-xs font-semibold uppercase tracking-wide text-muted";
+const LISTING_MODAL_CARD = "rounded-xl border border-border bg-card p-4";
+
+function ListingModalBody({ children }: { children: React.ReactNode }) {
+  return <div className="space-y-4 p-5 pb-6 sm:p-6">{children}</div>;
+}
+
+function ListingModalHeader({
+  eyebrow,
+  title,
+  subtitle,
+  icon,
+}: {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  icon?: string;
+}) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className="flex items-center gap-2 bg-primary px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-card/20 text-sm">▶</span>
-        {eyebrow}
+    <header className="border-b border-border pb-4">
+      {eyebrow ? <p className={LISTING_MODAL_LABEL}>{eyebrow}</p> : null}
+      <div className={`flex items-start gap-3 ${eyebrow ? "mt-1" : ""}`}>
+        {icon ? (
+          <span className="text-2xl leading-none" aria-hidden>
+            {icon}
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <h2 className="pr-8 text-xl font-bold tracking-tight text-foreground sm:text-2xl">{title}</h2>
+          {subtitle ? <p className="mt-1 text-sm leading-relaxed text-muted">{subtitle}</p> : null}
+        </div>
       </div>
-      <div className="flex aspect-video flex-col items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950 px-6 text-center text-white">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-white/40 text-2xl text-white/90">▶</div>
-        <p className="mt-4 text-sm font-semibold">{title}</p>
-        <p className="mt-1 max-w-sm text-xs text-white/60">{subtitle}</p>
-      </div>
+    </header>
+  );
+}
+
+function ListingModalSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <section className={LISTING_MODAL_CARD}>
+      <p className={LISTING_MODAL_LABEL}>{label}</p>
+      <div className="mt-2 text-sm leading-relaxed text-foreground">{children}</div>
+    </section>
+  );
+}
+
+function ListingModalStatGrid({ items }: { items: { label: string; value: React.ReactNode }[] }) {
+  return (
+    <div className={`grid gap-3 ${items.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+      {items.map((item) => (
+        <div key={item.label} className={LISTING_MODAL_CARD}>
+          <p className={LISTING_MODAL_LABEL}>{item.label}</p>
+          <div className="mt-2 text-sm font-medium text-foreground">{item.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ListingModalTags({ tags }: { tags: readonly string[] }) {
+  if (tags.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {tags.map((t) => (
+        <span key={t} className="rounded-full border border-border bg-accent/40 px-3 py-1 text-xs font-medium text-foreground">
+          {t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ListingModalVideo({
+  label,
+  videoSrc,
+  placeholderTitle,
+  placeholderSubtitle,
+}: {
+  label: string;
+  videoSrc?: string | null;
+  placeholderTitle: string;
+  placeholderSubtitle: string;
+}) {
+  return (
+    <ListingModalSection label={label}>
+      {videoSrc ? (
+        <video
+          src={videoSrc}
+          controls
+          playsInline
+          className="max-h-[min(50vh,380px)] w-full overflow-hidden rounded-lg bg-black"
+        />
+      ) : (
+        <div className="flex aspect-video flex-col items-center justify-center rounded-lg border border-dashed border-border bg-accent/20 px-4 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border text-lg text-muted">▶</span>
+          <p className="mt-3 text-sm font-semibold text-foreground">{placeholderTitle}</p>
+          <p className="mt-1 max-w-sm text-xs text-muted">{placeholderSubtitle}</p>
+        </div>
+      )}
+    </ListingModalSection>
+  );
+}
+
+function ListingModalCta({
+  href,
+  label,
+  variant,
+  newTabProps,
+}: {
+  href: string;
+  label: string;
+  variant: "primary" | "secondary";
+  newTabProps: ReturnType<typeof listingLinkTargetProps>;
+}) {
+  const className =
+    variant === "primary"
+      ? "flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95"
+      : "flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30";
+  return (
+    <Link href={href} className="flex-1" {...newTabProps}>
+      <span className={className}>{label}</span>
+    </Link>
+  );
+}
+
+function ListingModalActions({
+  primary,
+  secondary,
+  newTabProps,
+}: {
+  primary: { href: string; label: string };
+  secondary: { href: string; label: string };
+  newTabProps: ReturnType<typeof listingLinkTargetProps>;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row">
+      <ListingModalCta href={primary.href} label={primary.label} variant="primary" newTabProps={newTabProps} />
+      <ListingModalCta href={secondary.href} label={secondary.label} variant="secondary" newTabProps={newTabProps} />
     </div>
   );
 }
@@ -304,397 +407,253 @@ function ListingDetailModal({
         </button>
 
         {state.kind === "room" ? (
-          <div className="p-6 pb-8 sm:p-8">
+          <ListingModalBody>
             {(() => {
               const roomChoiceValue = `${listingPropertyId}${LISTING_ROOM_CHOICE_SEP}${state.room.id}`;
               const roomUnavailableWindows = getRoomUnavailabilityWindows(roomChoiceValue);
               return (
                 <>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.floorLabel.toUpperCase()}</p>
-            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-foreground">{state.room.name}</h2>
-            <div className="mt-3 space-y-2 text-sm text-muted">
-              {state.room.modal.floorLine ? (
-                <p>
-                  <span className="font-semibold text-foreground">Floor / level: </span>
-                  {state.room.modal.floorLine}
-                </p>
-              ) : null}
-              {state.room.utilitiesEstimate ? (
-                <p>
-                  <span className="font-semibold text-foreground">Utilities estimate: </span>
-                  {state.room.utilitiesEstimate}
-                </p>
-              ) : null}
-              {state.room.modal.roomNotes ? (
-                <div>
-                  <p className="font-semibold text-foreground">Room details</p>
-                  <p className="mt-1 whitespace-pre-wrap leading-relaxed text-muted">{state.room.modal.roomNotes}</p>
-                </div>
-              ) : (
-                <p className="text-muted">No extra room notes from the listing manager.</p>
-              )}
-            </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-border bg-accent/30 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly rent</p>
-                <p className="mt-2 text-lg font-bold text-foreground">{state.room.price}</p>
-              </div>
-              <div className="rounded-2xl border border-border bg-accent/30 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Bathroom setup</p>
-                <p className="mt-2 text-sm font-medium leading-snug text-foreground">{state.room.modal.setupLine}</p>
-              </div>
-              <div className="rounded-2xl border border-border bg-accent/30 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Status</p>
-                <div className="mt-2">
-                  <AvailabilityPill text={state.room.availability} variant="room" />
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 rounded-2xl border border-border bg-accent/30 p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Availability timeline</p>
-              {roomUnavailableWindows.length > 0 ? (
-                <>
-                  <div className="mt-3 space-y-2">
-                    {roomUnavailableWindows.map((w) => (
-                      <div key={w.id} className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted">
-                        <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${w.source === "resident" ? "bg-rose-500" : "bg-sky-500"}`} />
-                        <span>{rangeSummaryLabel(w)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-[11px] text-muted">Green dates are open and red dates are unavailable for this room.</p>
-                  <div className="mt-3">
-                    <MiniAvailabilityCalendar windows={roomUnavailableWindows} />
-                  </div>
-                </>
-              ) : (
-                <p className="mt-2 text-xs text-emerald-700">No blocked ranges or resident occupancy currently set for this room.</p>
-              )}
-            </div>
-            {(state.room.modal.photoUrls?.length ?? 0) > 0 ? (
-              <div className="mt-6">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Photos</p>
-                <div className="mt-3">
-                  <PhotoStrip imageUrls={state.room.modal.photoUrls} />
-                </div>
-              </div>
-            ) : null}
-            <div className="mt-6">
-              {state.room.modal.videoSrc ? (
-                <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-sm">
-                  <video
-                    src={state.room.modal.videoSrc}
-                    controls
-                    playsInline
-                    className="max-h-[min(55vh,420px)] w-full"
+                  <ListingModalHeader eyebrow={state.floorLabel} title={state.room.name} />
+                  <ListingModalSection label="Overview">
+                    <div className="space-y-2 text-muted">
+                      {state.room.modal.floorLine ? (
+                        <p>
+                          <span className="font-semibold text-foreground">Floor / level: </span>
+                          {state.room.modal.floorLine}
+                        </p>
+                      ) : null}
+                      {state.room.utilitiesEstimate ? (
+                        <p>
+                          <span className="font-semibold text-foreground">Utilities estimate: </span>
+                          {state.room.utilitiesEstimate}
+                        </p>
+                      ) : null}
+                      {state.room.modal.roomNotes ? (
+                        <div>
+                          <p className="font-semibold text-foreground">Room details</p>
+                          <p className="mt-1 whitespace-pre-wrap">{state.room.modal.roomNotes}</p>
+                        </div>
+                      ) : (
+                        <p>No extra room notes from the listing manager.</p>
+                      )}
+                    </div>
+                  </ListingModalSection>
+                  <ListingModalStatGrid
+                    items={[
+                      { label: "Monthly rent", value: state.room.price },
+                      { label: "Bathroom", value: state.room.modal.setupLine },
+                      { label: "Status", value: <AvailabilityPill text={state.room.availability} variant="room" /> },
+                    ]}
                   />
-                </div>
-              ) : (
-                <ModalVideoBlock
-                  eyebrow={state.room.modal.tourEyebrow}
-                  title={state.room.modal.tourTitle}
-                  subtitle={state.room.modal.tourSubtitle}
-                />
-              )}
-            </div>
-            {state.room.modal.includedTags.length > 0 ? (
-              <div className="mt-6 rounded-2xl border p-5 portal-banner-info">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Highlights</p>
-                <p className="mt-1 text-sm text-muted">Bathroom setup and other notes not repeated below.</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {state.room.modal.includedTags.map((t) => (
-                    <span key={t} className="rounded-full border border-sky-200/90 bg-card px-3 py-1 text-xs font-medium text-foreground">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {(() => {
-              const furnishingDetail = filteredFurnishingDetail(
-                state.room.modal.furnishingDetail ?? "",
-                state.room.modal.roomAmenityLabels ?? [],
-              );
-              return furnishingDetail ? (
-              <div className="mt-5 rounded-2xl border p-5 portal-banner-info">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-950/90">Furnishing</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{furnishingDetail}</p>
-              </div>
-              ) : null;
-            })()}
-            {state.room.modal.roomAmenityLabels?.length ? (
-              <div className="mt-5 rounded-2xl border p-5 portal-banner-info">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-950/90">Room amenities</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {state.room.modal.roomAmenityLabels.map((t) => (
-                    <span key={t} className="rounded-full border border-sky-200/90 bg-card px-3 py-1 text-xs font-medium text-foreground">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link
-                href={buildRentalApplyHref({
-                  propertyId: listingPropertyId,
-                  listingRoomId: state.room.id,
-                  listingRoomName: state.room.name,
-                  floorLabel: state.floorLabel,
-                  roomPrice: state.room.price,
-                })}
-                className="flex-1"
-                {...newTabProps}
-              >
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
-                  Apply for this room
-                </span>
-              </Link>
-              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
-                  Ask a question
-                </span>
-              </Link>
-            </div>
+                  <ListingModalSection label="Availability timeline">
+                    {roomUnavailableWindows.length > 0 ? (
+                      <>
+                        <div className="space-y-2">
+                          {roomUnavailableWindows.map((w) => (
+                            <div
+                              key={w.id}
+                              className="flex items-start gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2 text-xs text-muted"
+                            >
+                              <span
+                                className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${w.source === "resident" ? "bg-rose-500" : "bg-sky-500"}`}
+                              />
+                              <span>{rangeSummaryLabel(w)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-3 text-xs text-muted">Green dates are open and red dates are unavailable for this room.</p>
+                        <div className="mt-3">
+                          <MiniAvailabilityCalendar windows={roomUnavailableWindows} />
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-emerald-700">No blocked ranges or resident occupancy currently set for this room.</p>
+                    )}
+                  </ListingModalSection>
+                  {(state.room.modal.photoUrls?.length ?? 0) > 0 ? (
+                    <ListingModalSection label="Photos">
+                      <PhotoStrip imageUrls={state.room.modal.photoUrls} />
+                    </ListingModalSection>
+                  ) : null}
+                  <ListingModalVideo
+                    label={state.room.modal.tourEyebrow}
+                    videoSrc={state.room.modal.videoSrc}
+                    placeholderTitle={state.room.modal.tourTitle}
+                    placeholderSubtitle={state.room.modal.tourSubtitle}
+                  />
+                  {(() => {
+                    const bathTagPattern = /^(private|shared|house hall)\s+bath$/i;
+                    const highlightTags = state.room.modal.includedTags.filter((t) => !bathTagPattern.test(t));
+                    const furnishingLine = state.room.modal.furnishingDetail?.trim();
+                    const amenityLabels = state.room.modal.roomAmenityLabels ?? [];
+                    return (
+                      <>
+                        {highlightTags.length > 0 ? (
+                          <ListingModalSection label="Room highlights">
+                            <ListingModalTags tags={highlightTags} />
+                          </ListingModalSection>
+                        ) : null}
+                        {furnishingLine || amenityLabels.length > 0 ? (
+                          <ListingModalSection label="Included in this room">
+                            {furnishingLine ? <p className="text-muted">{furnishingLine}</p> : null}
+                            {amenityLabels.length > 0 ? (
+                              <div className={furnishingLine ? "mt-3" : ""}>
+                                <ListingModalTags tags={amenityLabels} />
+                              </div>
+                            ) : null}
+                          </ListingModalSection>
+                        ) : null}
+                      </>
+                    );
+                  })()}
+                  <ListingModalActions
+                    newTabProps={newTabProps}
+                    primary={{
+                      href: buildRentalApplyHref({
+                        propertyId: listingPropertyId,
+                        listingRoomId: state.room.id,
+                        listingRoomName: state.room.name,
+                        floorLabel: state.floorLabel,
+                        roomPrice: state.room.price,
+                      }),
+                      label: "Apply for this room",
+                    }}
+                    secondary={{ href: toursContactHref, label: "Ask a question" }}
+                  />
                 </>
               );
             })()}
-          </div>
+          </ListingModalBody>
         ) : null}
 
         {state.kind === "bathroom" ? (
-          <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.row.modal.eyebrow}</p>
-            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.name}</h2>
-            <p className="mt-2 text-sm text-muted">{state.row.detail}</p>
-            <div className="mt-6 rounded-2xl border border-border bg-accent/30 p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Setup</p>
-              <p className="mt-2 text-sm font-medium leading-snug text-foreground">{state.row.modal.setupCard}</p>
-            </div>
-            <div className="mt-6 rounded-2xl border p-5 portal-banner-info">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Info</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {state.row.modal.includedTags.map((t) => (
-                  <span key={t} className="rounded-full border border-sky-200/90 bg-card px-3 py-1 text-xs font-medium text-foreground">
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="mt-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Photos</p>
-              <div className="mt-3">
-                <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
-              </div>
-            </div>
-            <div className="mt-6">
-              {state.row.modal.videoSrc ? (
-                <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-sm">
-                  <video
-                    src={state.row.modal.videoSrc}
-                    controls
-                    playsInline
-                    className="max-h-[min(55vh,420px)] w-full"
-                  />
-                </div>
-              ) : (
-                <ModalVideoBlock
-                  eyebrow="Bathroom tour"
-                  title="Video tour"
-                  subtitle="Add a bathroom video in the manager form to replace this placeholder."
-                />
-              )}
-            </div>
-            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
-                  Ask about this bathroom
-                </span>
-              </Link>
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
-                  Apply
-                </span>
-              </Link>
-            </div>
-          </div>
+          <ListingModalBody>
+            <ListingModalHeader eyebrow={state.row.modal.eyebrow} title={state.row.name} subtitle={state.row.detail} />
+            <ListingModalSection label="Setup">
+              <p>{state.row.modal.setupCard}</p>
+            </ListingModalSection>
+            <ListingModalSection label="Info">
+              <ListingModalTags tags={state.row.modal.includedTags} />
+            </ListingModalSection>
+            <ListingModalSection label="Photos">
+              <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
+            </ListingModalSection>
+            <ListingModalVideo
+              label="Bathroom tour"
+              videoSrc={state.row.modal.videoSrc}
+              placeholderTitle="Video tour"
+              placeholderSubtitle="Add a bathroom video in the manager form to replace this placeholder."
+            />
+            <ListingModalActions
+              newTabProps={newTabProps}
+              primary={{ href: toursContactHref, label: "Ask about this bathroom" }}
+              secondary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
+            />
+          </ListingModalBody>
         ) : null}
 
         {state.kind === "shared" ? (
-          <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">{state.row.modal.eyebrow}</p>
-            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.name}</h2>
-            <p className="mt-2 text-sm text-muted">{state.row.detail}</p>
-            <p className="mt-1 text-sm text-muted">{state.row.useNote}</p>
-            <div className="mt-6">
-              {state.row.modal.videoSrc ? (
-                <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-sm">
-                  <video
-                    src={state.row.modal.videoSrc}
-                    controls
-                    playsInline
-                    className="max-h-[min(55vh,420px)] w-full"
-                  />
-                </div>
-              ) : (
-                <ModalVideoBlock
-                  eyebrow={state.row.modal.tourEyebrow}
-                  title={state.row.modal.tourTitle}
-                  subtitle={state.row.modal.tourSubtitle}
-                />
-              )}
-            </div>
-            <div className="mt-6 rounded-2xl border p-5 portal-banner-info">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {state.row.modal.includedTags.map((t) => (
-                  <span key={t} className="rounded-full border border-sky-200/90 bg-card px-3 py-1 text-xs font-medium text-foreground">
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="mt-6">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Photos</p>
-              <div className="mt-3">
-                <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
-              </div>
-            </div>
-            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
-                  Apply
-                </span>
-              </Link>
-              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
-                  Ask a question
-                </span>
-              </Link>
-            </div>
-          </div>
+          <ListingModalBody>
+            <ListingModalHeader eyebrow={state.row.modal.eyebrow} title={state.row.name} subtitle={state.row.detail} />
+            {state.row.useNote ? <p className="text-sm text-muted">{state.row.useNote}</p> : null}
+            <ListingModalVideo
+              label={state.row.modal.tourEyebrow}
+              videoSrc={state.row.modal.videoSrc}
+              placeholderTitle={state.row.modal.tourTitle}
+              placeholderSubtitle={state.row.modal.tourSubtitle}
+            />
+            <ListingModalSection label="What's included">
+              <ListingModalTags tags={state.row.modal.includedTags} />
+            </ListingModalSection>
+            <ListingModalSection label="Photos">
+              <PhotoStrip captions={state.row.modal.photoCaptions} imageUrls={state.row.modal.photoUrls} />
+            </ListingModalSection>
+            <ListingModalActions
+              newTabProps={newTabProps}
+              primary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
+              secondary={{ href: toursContactHref, label: "Ask a question" }}
+            />
+          </ListingModalBody>
         ) : null}
 
         {state.kind === "lease" ? (
-          <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Lease</p>
-            <div className="mt-2 flex items-start gap-3">
-              <span className="text-3xl leading-none" aria-hidden>
-                {state.row.icon}
-              </span>
-              <div className="min-w-0">
-                <h2 className="pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.title}</h2>
-                <p className="mt-1 text-sm text-muted">{state.row.detail}</p>
-              </div>
-            </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border bg-accent/30 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Amount / rate</p>
-                <p className="mt-2 text-lg font-bold text-foreground">{state.row.price}</p>
-              </div>
-              <div className="rounded-2xl border border-border bg-accent/30 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Timing</p>
-                <div className="mt-2">
-                  <AvailabilityPill text={state.row.status} />
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 rounded-2xl border border-border bg-card p-5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Details</p>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{state.row.body}</p>
-            </div>
-            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
-                  Apply
-                </span>
-              </Link>
-              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
-                  Ask about lease terms
-                </span>
-              </Link>
-            </div>
-          </div>
+          <ListingModalBody>
+            <ListingModalHeader
+              eyebrow="Lease"
+              icon={state.row.icon}
+              title={state.row.title}
+              subtitle={state.row.detail}
+            />
+            <ListingModalStatGrid
+              items={[
+                { label: "Amount / rate", value: state.row.price },
+                { label: "Timing", value: <AvailabilityPill text={state.row.status} /> },
+              ]}
+            />
+            <ListingModalSection label="Details">
+              <p className="text-muted">{state.row.body}</p>
+            </ListingModalSection>
+            <ListingModalActions
+              newTabProps={newTabProps}
+              primary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
+              secondary={{ href: toursContactHref, label: "Ask about lease terms" }}
+            />
+          </ListingModalBody>
         ) : null}
 
         {state.kind === "bundle" ? (
-          <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Bundle</p>
-            <h2 className="mt-1 pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.label}</h2>
-            <div className="mt-4 flex flex-wrap items-baseline gap-2">
-              {state.row.strikethrough ? <span className="text-sm text-muted line-through">{state.row.strikethrough}</span> : null}
-              <span className="text-2xl font-bold text-foreground">{state.row.price}</span>
-              {state.row.promo ? <AvailabilityPill text={state.row.promo} /> : null}
-            </div>
-            {state.row.summaryItems?.length ? (
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                {state.row.summaryItems.map((item) => (
-                  <div key={`${item.label}-${item.value}`} className="rounded-2xl border border-border bg-accent/30 p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted">{item.label}</p>
-                    <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{item.value}</p>
-                  </div>
-                ))}
+          <ListingModalBody>
+            <ListingModalHeader eyebrow="Bundle" title={state.row.label} />
+            <ListingModalSection label="Monthly">
+              <div className="flex flex-wrap items-baseline gap-2">
+                {state.row.strikethrough ? (
+                  <span className="text-sm text-muted line-through">{state.row.strikethrough}</span>
+                ) : null}
+                <span className="text-2xl font-bold">{state.row.price}</span>
+                {state.row.promo ? <AvailabilityPill text={state.row.promo} /> : null}
               </div>
+            </ListingModalSection>
+            {state.row.summaryItems?.length ? (
+              <ListingModalStatGrid
+                items={state.row.summaryItems.map((item) => ({ label: item.label, value: item.value }))}
+              />
             ) : null}
-            <div className="mt-6 rounded-2xl border border-border bg-card p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Included rooms</p>
+            <ListingModalSection label="Included rooms">
               {state.row.roomLines?.length ? (
-                <div className="mt-3 grid gap-2">
+                <div className="grid gap-2">
                   {state.row.roomLines.map((line) => (
-                    <div key={line} className="rounded-xl border border-border bg-accent/30 px-3 py-2 text-sm leading-relaxed text-foreground">
+                    <div key={line} className="rounded-lg border border-border bg-accent/30 px-3 py-2">
                       {line}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-sm leading-relaxed text-foreground">{state.row.roomsLine}</p>
+                <p>{state.row.roomsLine}</p>
               )}
-            </div>
-            <p className="mt-4 text-xs text-muted">Confirm availability, utilities, and final rent with leasing before applying.</p>
-            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
-                  Apply for this bundle
-                </span>
-              </Link>
-              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
-                  Ask a question
-                </span>
-              </Link>
-            </div>
-          </div>
+            </ListingModalSection>
+            <p className="text-xs text-muted">Confirm availability, utilities, and final rent with leasing before applying.</p>
+            <ListingModalActions
+              newTabProps={newTabProps}
+              primary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply for this bundle" }}
+              secondary={{ href: toursContactHref, label: "Ask a question" }}
+            />
+          </ListingModalBody>
         ) : null}
 
         {state.kind === "amenity" ? (
-          <div className="p-6 pb-8 sm:p-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Amenity</p>
-            <div className="mt-2 flex items-start gap-3">
-              <span className="text-3xl leading-none" aria-hidden>
-                {state.row.icon}
-              </span>
-              <h2 className="pr-10 text-2xl font-bold tracking-tight text-foreground">{state.row.label}</h2>
-            </div>
-            <div className="mt-6 rounded-2xl border p-5 portal-banner-info">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">About</p>
-              <p className="mt-2 text-sm leading-relaxed text-muted">
+          <ListingModalBody>
+            <ListingModalHeader eyebrow="Amenity" icon={state.row.icon} title={state.row.label} />
+            <ListingModalSection label="About">
+              <p className="text-muted">
                 This feature is included with the listing as described. Confirm specifics with the leasing team before you apply.
               </p>
-            </div>
-            <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-              <Link href={toursContactHref} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95">
-                  Ask a question
-                </span>
-              </Link>
-              <Link href={buildRentalApplyHref({ propertyId: listingPropertyId })} className="flex-1" {...newTabProps}>
-                <span className="flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30">
-                  Apply
-                </span>
-              </Link>
-            </div>
-          </div>
+            </ListingModalSection>
+            <ListingModalActions
+              newTabProps={newTabProps}
+              primary={{ href: toursContactHref, label: "Ask a question" }}
+              secondary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
+            />
+          </ListingModalBody>
         ) : null}
       </div>
     </div>
@@ -724,22 +683,16 @@ function FloorPlanSummaryBar({ floor }: { floor: ListingFloorCard }) {
   );
 }
 
-const FLOOR_PLAN_SUMMARY_STICKY_TOP =
-  "var(--listing-sticky-stack, calc(env(safe-area-inset-top, 0px) + 3.5rem))";
-
 export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: ListingFloorCard; listingPropertyId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm md:p-5">
-        <div
-          className="sticky z-30 border-b border-border bg-card/95 px-4 py-3 backdrop-blur-md md:static md:border-b md:bg-card md:px-0 md:py-0 md:pb-3 md:backdrop-blur-none [html[data-theme=dark]_&]:bg-card/90"
-          style={{ top: FLOOR_PLAN_SUMMARY_STICKY_TOP }}
-        >
+      <div className="rounded-2xl border border-border bg-card shadow-sm md:p-5">
+        <div className="border-b border-border bg-card px-4 py-3 md:px-0 md:pb-3">
           <FloorPlanSummaryBar floor={floor} />
         </div>
-        <div className="px-4 pt-3 md:mt-4 md:overflow-x-auto md:px-0 sm:pt-4">
+        <div className="relative isolate px-4 pb-4 pt-3 md:mt-4 md:overflow-x-auto md:px-0 sm:pt-4">
           <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
         </div>
       </div>
@@ -751,16 +704,18 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
 function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpen: (r: ListingRoomRow) => void }) {
   return (
     <>
-      <div className="space-y-2.5 md:hidden">
+      <div className="space-y-3 md:hidden">
         {rooms.map((r) => (
-          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
-            <p className="text-sm font-semibold text-foreground">{r.name}</p>
-            <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div key={r.id} className="flex flex-col gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:gap-2.5 sm:p-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{r.name}</p>
+              <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <p className="text-xs font-semibold text-foreground sm:text-sm">{r.price}</p>
               <AvailabilityPill text={r.availability} variant="room" />
             </div>
-            <DetailsButton className="mt-2.5 w-full" onClick={() => onOpen(r)} />
+            <DetailsButton className="w-full" onClick={() => onOpen(r)} />
           </div>
         ))}
       </div>

@@ -6,6 +6,8 @@ import { Modal } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { logDemoOutboundEmail } from "@/lib/demo-outbound-mail";
 import {
   buildLeadInviteEmailBody,
   leadInviteSubject,
@@ -140,6 +142,17 @@ export function ShareLeadLinkModal({
     const roomName = roomChoice ? roomOptions.find((o) => o.value === roomChoice)?.label : undefined;
     setSendBusy(true);
     try {
+      if (isDemoModeActive()) {
+        logDemoOutboundEmail(
+          prospectEmail.trim(),
+          leadInviteSubject(kind, propertyTitle),
+          invitePreviewBody,
+        );
+        showToast(kind === "listing" ? "Listing sent (demo)." : "Invite sent (demo).");
+        setSendPreviewOpen(false);
+        onClose();
+        return;
+      }
       const res = await fetch("/api/portal/send-lead-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -222,48 +235,47 @@ export function ShareLeadLinkModal({
                 </div>
               ) : null}
 
-              {kind === "listing" && listingSummary ? (
+              {kind === "listing" ? (
                 <div>
-                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Listing preview</p>
-                  <ul className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
-                    {listingSummary.detailLines.map((line) => (
-                      <li key={line} className="list-disc ms-4 leading-relaxed">
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-                  {linkUrl ? (
-                    <div className="mt-3">
-                      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public listing link</p>
-                      <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                        {linkUrl}
-                      </div>
-                      <Button type="button" variant="outline" className="mt-2 rounded-full" onClick={() => void handleCopy()}>
-                        Copy listing link
-                      </Button>
-                    </div>
-                  ) : null}
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Public listing link</p>
+                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
+                    {linkUrl || "Select a property to generate a link."}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-2 rounded-full"
+                    disabled={!linkUrl}
+                    onClick={() => void handleCopy()}
+                  >
+                    Copy listing link
+                  </Button>
                 </div>
               ) : null}
 
               {kind !== "listing" ? (
-              <div>
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Link preview</p>
-                <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
-                  {linkUrl || "Select a property to generate a link."}
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">Link preview</p>
+                  <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-xs leading-relaxed text-muted break-all">
+                    {linkUrl || "Select a property to generate a link."}
+                  </div>
+                  <Button type="button" variant="outline" className="mt-2 rounded-full" disabled={!linkUrl} onClick={() => void handleCopy()}>
+                    Copy link
+                  </Button>
+                  {kind === "apply" ? (
+                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                      Applicants create a resident account first, then complete the application in their portal.
+                    </p>
+                  ) : null}
                 </div>
-                <Button type="button" variant="outline" className="mt-2 rounded-full" disabled={!linkUrl} onClick={() => void handleCopy()}>
-                  Copy link
-                </Button>
-              </div>
               ) : null}
 
               <div className="border-t border-border pt-4">
                 <p className="text-sm font-semibold text-foreground">Send to prospect</p>
                 {kind !== "listing" ? (
-                <p className="mt-1 text-xs text-muted">
-                  Email an invite with the link above. You can add an optional note.
-                </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Email an invite with the link above. You can add an optional note.
+                  </p>
                 ) : null}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>
@@ -303,14 +315,15 @@ export function ShareLeadLinkModal({
                     placeholder="Add context for the prospect…"
                   />
                 </div>
-                <div className="mt-4 flex justify-start gap-2">
-                  <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-                    Close
-                  </Button>
-                  <Button type="button" variant="primary" className="rounded-full" disabled={!propertyId} onClick={openSendPreview}>
-                    Preview & send
-                  </Button>
-                </div>
+              </div>
+
+              <div className="sticky bottom-0 z-10 -mx-5 flex justify-start gap-2 border-t border-border bg-inherit px-5 py-4 sm:-mx-6 sm:px-6">
+                <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+                  Close
+                </Button>
+                <Button type="button" variant="primary" className="rounded-full" disabled={!propertyId} onClick={openSendPreview}>
+                  Preview & send
+                </Button>
               </div>
             </>
           )}

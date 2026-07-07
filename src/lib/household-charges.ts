@@ -9,10 +9,12 @@ import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
+import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
 import {
   rentDueDayModeFromSubmission,
   resolveRentDueDayForMonth,
   type RentDueDayMode,
+  type ResidentAcceptedPaymentMethod,
 } from "@/lib/payment-policy";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
@@ -77,8 +79,14 @@ export type HouseholdCharge = {
   zelleContactSnapshot?: string;
   /** Snapshot of Venmo contact from listing when charge was created */
   venmoContactSnapshot?: string;
+  /** Resident-reported manual payment channel (Zelle/Venmo); charge stays pending until manager marks paid. */
+  manualPaymentChannel?: "zelle" | "venmo";
+  /** ISO timestamp when the resident confirmed they sent a manual payment. */
+  manualPaymentReportedAt?: string;
   /** Snapshot of whether Axis ACH was enabled on the listing when the charge was created or synced. */
   axisPaymentsEnabledSnapshot?: boolean;
+  /** Payment methods the property currently accepts, refreshed from the listing on each server sync. */
+  acceptedPaymentMethodsSnapshot?: ResidentAcceptedPaymentMethod[];
   /** When true, lease signing stays disabled until this line is paid */
   blocksLeaseUntilPaid: boolean;
   /** When this charge was created from a manager work order pass-through */
@@ -511,13 +519,20 @@ function dedupeCharges(rows: HouseholdCharge[]): HouseholdCharge[] {
     // Rows hydrated from localStorage/server JSON (readAll → line ~137, server
     // merge) are cast `as HouseholdCharge` without runtime validation, so string
     // fields the type promises can actually be missing. Coerce residentEmail /
-    // residentName to "" here — the single chokepoint every read/write passes
-    // through — so keying below and every downstream consumer can safely call
-    // `.trim()` instead of crashing (e.g. the Payments tab error boundary).
+    // residentName / propertyLabel to "" here — the single chokepoint every
+    // read/write passes through — so keying below and every downstream
+    // consumer (e.g. householdChargeToLedgerRow → normalizePropertyLabel) can
+    // safely call `.trim()` instead of crashing (e.g. the Payments tab error
+    // boundary).
     const charge: HouseholdCharge =
-      typeof raw.residentEmail === "string" && typeof raw.residentName === "string"
+      typeof raw.residentEmail === "string" && typeof raw.residentName === "string" && typeof raw.propertyLabel === "string"
         ? raw
-        : { ...raw, residentEmail: raw.residentEmail ?? "", residentName: raw.residentName ?? "" };
+        : {
+            ...raw,
+            residentEmail: raw.residentEmail ?? "",
+            residentName: raw.residentName ?? "",
+            propertyLabel: raw.propertyLabel ?? "",
+          };
     const key = chargeBusinessKey(charge);
     const existing = byKey.get(key);
     if (!existing) {
@@ -1192,6 +1207,7 @@ export function recordWorkOrderResidentCharge(input: {
   residentName: string;
   /** Actual property id for finances filtering; falls back to work-order pseudo id. */
   propertyId?: string;
+  dueDateLabel?: string;
   initialStatus?: "pending" | "paid";
   zelleContactSnapshot?: string | null;
 }): HouseholdCharge | null {
@@ -1207,7 +1223,7 @@ export function recordWorkOrderResidentCharge(input: {
   const isPaid = input.initialStatus === "paid";
   const balance = `$${amt.toFixed(2)}`;
   const now = new Date().toISOString();
-  const charge: HouseholdCharge = {
+  const charge = ensureChargeDueDateForReminders({
     id: `hc_wo_${input.workOrderId}_${Date.now()}`,
     createdAt: now,
     residentEmail: input.residentEmail.trim(),
@@ -1222,11 +1238,19 @@ export function recordWorkOrderResidentCharge(input: {
     balanceLabel: isPaid ? "$0.00" : balance,
     status: isPaid ? "paid" : "pending",
     paidAt: isPaid ? now : undefined,
+    dueDateLabel: input.dueDateLabel?.trim() || undefined,
     zelleContactSnapshot: input.zelleContactSnapshot ?? undefined,
     blocksLeaseUntilPaid: false,
     workOrderId: input.workOrderId,
-  };
-  writeAll([...readAll(), charge]);
+  });
+  writeAll([...readAll(), charge], true);
+  void postHouseholdPayloadAwait({
+    action: "replace",
+    charges: [charge],
+    rentProfiles: readRentProfiles(),
+  }).then((ok) => {
+    if (ok) emit();
+  });
   return charge;
 }
 
@@ -1663,6 +1687,9 @@ export function markHouseholdChargePaid(chargeId: string, managerUserId: string 
     rentProfiles: readRentProfiles(),
   }).then((ok) => {
     if (ok) emit();
+    void import("@/lib/service-requests-storage").then(({ syncServiceRequestPaidFromCharge }) => {
+      syncServiceRequestPaidFromCharge(chargeId);
+    });
   });
   return true;
 }
@@ -1681,6 +1708,7 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
     paidAt: undefined,
     balanceLabel: next[i]!.amountLabel,
     dueDateLabel: undefined,
+    cancelledReminders: undefined,
   };
   next[i] = updated;
   writeAll(next);
@@ -1692,6 +1720,39 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
     if (ok) emit();
   });
   return true;
+}
+
+/** Resident confirms they sent Zelle/Venmo for pending charges; charge stays pending until manager marks paid. */
+export async function reportResidentManualPayment(
+  chargeIds: string[],
+  channel: "zelle" | "venmo",
+): Promise<{ ok: true; charges: HouseholdCharge[] } | { ok: false; error: string }> {
+  if (!isBrowser() || isDemoModeActive()) {
+    return { ok: false, error: "Manual payment reporting is unavailable in demo mode." };
+  }
+  const ids = [...new Set(chargeIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return { ok: false, error: "No charges selected." };
+
+  const res = await fetch("/api/portal/resident-report-manual-payment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ chargeIds: ids, channel }),
+  });
+  const payload = (await res.json().catch(() => ({}))) as { charges?: HouseholdCharge[]; error?: string };
+  if (!res.ok) {
+    return { ok: false, error: typeof payload.error === "string" ? payload.error : "Could not report payment." };
+  }
+
+  const updates = Array.isArray(payload.charges) ? payload.charges : [];
+  if (updates.length > 0 && isBrowser()) {
+    hydrateHouseholdStateFromSession();
+    const byId = new Map(updates.map((c) => [c.id, c]));
+    const next = readAll().map((c) => byId.get(c.id) ?? c);
+    writeAll(next);
+    emit();
+  }
+  return { ok: true, charges: updates };
 }
 
 /**
@@ -2182,7 +2243,7 @@ export function recordLegacyApplicationSigningCharges(
 }
 
 /**
- * Manager-editable override of a charge's amount and title.
+ * Manager-editable override of a charge's amount, title, and due date.
  * Only updates if the charge belongs to this manager and is still pending.
  */
 export function updateHouseholdChargeAmount(
@@ -2190,6 +2251,7 @@ export function updateHouseholdChargeAmount(
   newAmount: number,
   managerUserId: string | null,
   newTitle?: string,
+  newDueDateLabel?: string,
 ): boolean {
   if (!isBrowser() || !Number.isFinite(newAmount) || newAmount < 0) return false;
   const rows = readAll();
@@ -2197,13 +2259,22 @@ export function updateHouseholdChargeAmount(
   if (i === -1) return false;
   const label = `$${newAmount.toFixed(2)}`;
   const next = [...rows];
-  next[i] = {
+  const updated: HouseholdCharge = {
     ...next[i]!,
     amountLabel: label,
     balanceLabel: next[i]!.status === "paid" ? "$0.00" : label,
     ...(newTitle?.trim() ? { title: newTitle.trim() } : {}),
+    ...(newDueDateLabel?.trim() ? { dueDateLabel: newDueDateLabel.trim() } : {}),
   };
+  next[i] = updated;
   writeAll(next);
+  void postHouseholdPayloadAwait({
+    action: "replace",
+    charges: [updated],
+    rentProfiles: readRentProfiles(),
+  }).then((ok) => {
+    if (ok) emit();
+  });
   return true;
 }
 
@@ -2367,8 +2438,8 @@ export function createManagerCharge(input: {
   const sub =
     prop?.listingSubmission?.v === 1 ? normalizeManagerListingSubmissionV1(prop.listingSubmission) : null;
   const paymentSnapshots = paymentSnapshotsFromListing(sub);
-  const charge: HouseholdCharge = {
-    id: `hc_mgr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  const charge = ensureChargeDueDateForReminders({
+    id: `hc_mgr_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
     createdAt: new Date().toISOString(),
     applicationId: input.applicationId?.trim() || undefined,
     residentEmail: email,
@@ -2386,8 +2457,15 @@ export function createManagerCharge(input: {
     dueDateLabel: input.dueDateLabel?.trim() || undefined,
     blocksLeaseUntilPaid: input.blocksLeaseUntilPaid ?? false,
     ...paymentSnapshots,
-  };
-  writeAll([...readAll(), charge]);
+  });
+  writeAll([...readAll(), charge], true);
+  void postHouseholdPayloadAwait({
+    action: "replace",
+    charges: [charge],
+    rentProfiles: readRentProfiles(),
+  }).then((ok) => {
+    if (ok) emit();
+  });
   return charge;
 }
 

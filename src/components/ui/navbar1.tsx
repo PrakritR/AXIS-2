@@ -35,6 +35,7 @@ export interface NavbarMenuItem {
   items?: NavbarMenuItem[];
   active?: boolean;
   activeChildHref?: string;
+  dataAttr?: string;
 }
 
 export interface Navbar1Props {
@@ -206,6 +207,7 @@ function DesktopMenuItem({ item }: { item: NavbarMenuItem }) {
       <NavigationMenuLink asChild>
         <Link
           href={item.url}
+          data-attr={item.dataAttr}
           className={cn(
             "group inline-flex h-10 min-h-[44px] w-max items-center justify-center rounded-full px-4 py-2 text-[14px] font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
             item.active ? "bg-card text-primary" : "text-foreground/85",
@@ -255,6 +257,7 @@ function MobileMenuItem({ item }: { item: NavbarMenuItem }) {
   return (
     <Link
       href={item.url}
+      data-attr={item.dataAttr}
       className={cn(
         "flex min-h-[44px] items-center text-[14px] font-semibold",
         item.active && "text-primary",

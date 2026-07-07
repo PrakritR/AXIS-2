@@ -109,7 +109,7 @@ describe("/api/portal/automation-settings", () => {
     const res = await GET();
     const { status, data } = await parseJsonResponse<{ settings?: { preDueReminderDays: number[] } }>(res);
     expect(status).toBe(200);
-    expect(data.settings?.preDueReminderDays).toEqual([7, 3, 1]);
+    expect(data.settings?.preDueReminderDays).toEqual([3, 2, 1]);
     expect(loadManagerAutomationSettings).toHaveBeenCalledWith(expect.anything(), "mgr-a");
   });
 

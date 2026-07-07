@@ -5,7 +5,7 @@ import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PORTAL_TOOLBAR_GROUP, PortalKpiTabStrip } from "@/components/portal/portal-metrics";
+import { PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE, PortalKpiTabStrip, PortalToolbarSelectWrap } from "@/components/portal/portal-metrics";
 
 export type ShellAction = {
   label: string;
@@ -15,9 +15,49 @@ export type ShellAction = {
 };
 
 const selectClass =
-  "h-10 rounded-full border border-border bg-card px-3.5 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
+  "col-start-1 row-start-1 h-10 w-full min-w-0 max-w-full appearance-none truncate rounded-full border border-border bg-card px-3.5 pr-9 text-sm text-foreground shadow-[var(--shadow-sm)] outline-none transition focus:ring-4 focus:ring-ring";
 
-/** Property dropdown wrapped like admin filter chips (rounded shell). */
+function PortalFilterSelect({
+  "aria-label": ariaLabel,
+  value,
+  onChange,
+  placeholder,
+  options,
+}: {
+  "aria-label": string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  options: ManagerPropertyFilterOption[];
+}) {
+  const selectedLabel =
+    value === "" ? placeholder : (options.find((o) => o.id === value)?.label ?? placeholder);
+
+  return (
+    <div className="w-full min-w-0 max-w-full sm:w-fit">
+      <PortalToolbarSelectWrap className="w-full min-w-0 max-w-full sm:w-fit">
+        <div className="grid w-full min-w-0 max-w-full sm:w-fit [&>select]:col-start-1 [&>select]:row-start-1">
+          <span
+            aria-hidden
+            className="invisible col-start-1 row-start-1 max-w-full truncate whitespace-nowrap px-3.5 pr-9 text-sm"
+          >
+            {selectedLabel}
+          </span>
+          <select className={selectClass} aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
+            <option value="">{placeholder}</option>
+            {options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </PortalToolbarSelectWrap>
+    </div>
+  );
+}
+
+/** Property / resident / application filter selects — each control is its own pill (matches Finances/Documents). */
 export function PortalPropertyFilterPill({
   applications,
   residents,
@@ -53,21 +93,19 @@ export function PortalPropertyFilterPill({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!mounted || (!hasPropertyPick && !hasResidentPick && !hasApplicationPick)) return null;
   return (
-    <div className={`${PORTAL_TOOLBAR_GROUP} min-w-0 max-w-full flex-wrap`}>
-      <PortalPropertyFilter
-        applications={applications}
-        residents={residents}
-        propertyOptions={propertyOptions}
-        propertyValue={propertyValue}
-        onPropertyChange={onPropertyChange}
-        residentOptions={residentOptions}
-        residentValue={residentValue}
-        onResidentChange={onResidentChange}
-        applicationOptions={applicationOptions}
-        applicationValue={applicationValue}
-        onApplicationChange={onApplicationChange}
-      />
-    </div>
+    <PortalPropertyFilter
+      applications={applications}
+      residents={residents}
+      propertyOptions={propertyOptions}
+      propertyValue={propertyValue}
+      onPropertyChange={onPropertyChange}
+      residentOptions={residentOptions}
+      residentValue={residentValue}
+      onResidentChange={onResidentChange}
+      applicationOptions={applicationOptions}
+      applicationValue={applicationValue}
+      onApplicationChange={onApplicationChange}
+    />
   );
 }
 
@@ -102,51 +140,33 @@ export function PortalPropertyFilter({
   const hasApplicationPick = Boolean(applications && applicationOptions && applicationOptions.length > 0 && onApplicationChange);
   if (!hasPropertyPick && !hasResidentPick && !hasApplicationPick) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
       {hasPropertyPick ? (
-        <select
-          className={selectClass}
+        <PortalFilterSelect
           aria-label="Properties"
           value={propertyValue}
-          onChange={(e) => onPropertyChange?.(e.target.value)}
-        >
-          <option value="">All your properties</option>
-          {propertyOptions?.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          onChange={(next) => onPropertyChange?.(next)}
+          placeholder="All your properties"
+          options={propertyOptions ?? []}
+        />
       ) : null}
       {hasResidentPick ? (
-        <select
-          className={selectClass}
+        <PortalFilterSelect
           aria-label="Residents"
           value={residentValue}
-          onChange={(e) => onResidentChange?.(e.target.value)}
-        >
-          <option value="">All residents</option>
-          {residentOptions?.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          onChange={(next) => onResidentChange?.(next)}
+          placeholder="All residents"
+          options={residentOptions ?? []}
+        />
       ) : null}
       {hasApplicationPick ? (
-        <select
-          className={selectClass}
+        <PortalFilterSelect
           aria-label="Applications"
           value={applicationValue}
-          onChange={(e) => onApplicationChange?.(e.target.value)}
-        >
-          <option value="">All applications</option>
-          {applicationOptions?.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          onChange={(next) => onApplicationChange?.(next)}
+          placeholder="All applications"
+          options={applicationOptions ?? []}
+        />
       ) : null}
     </div>
   );

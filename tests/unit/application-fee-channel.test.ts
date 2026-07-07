@@ -58,23 +58,28 @@ describe("application-fee-channel", () => {
       ...createDefaultListingSubmission(),
       zellePaymentsEnabled: true,
       zelleContact: "pay@example.com",
-      applicationFeeZelleEnabled: true,
       venmoPaymentsEnabled: true,
       venmoContact: "@landlord",
-      applicationFeeVenmoEnabled: true,
     });
     const channels = listingApplicationFeeChannels(sub);
     expect(channels.zelle).toBe(true);
     expect(channels.venmo).toBe(true);
   });
 
-  it("enables ACH from application fee stripe toggle alone", () => {
+  it("includes ACH when axis payments are enabled", () => {
     const sub = normalizeManagerListingSubmissionV1({
       ...createDefaultListingSubmission(),
-      applicationFeeStripeEnabled: true,
-      axisPaymentsEnabled: false,
+      axisPaymentsEnabled: true,
     });
     expect(listingApplicationFeeChannels(sub).ach).toBe(true);
+  });
+
+  it("excludes ACH when axis payments are disabled", () => {
+    const sub = normalizeManagerListingSubmissionV1({
+      ...createDefaultListingSubmission(),
+      axisPaymentsEnabled: false,
+    });
+    expect(listingApplicationFeeChannels(sub).ach).toBe(false);
   });
 });
 

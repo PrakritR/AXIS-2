@@ -1,5 +1,6 @@
 import { loadManagerScheduledMessages } from "@/lib/payment-automation-server";
 import { setDateReminderKey, upsertScheduledMessageOverride } from "@/lib/payment-automation-settings";
+import { restoreFuturePaymentRemindersForCharge } from "@/lib/payment-reminder-lifecycle.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -19,7 +20,7 @@ async function requireManager() {
     db.from("profile_roles").select("role").eq("user_id", user.id),
   ]);
   const roleList = (roles ?? []).map((r) => String(r.role).toLowerCase());
-  const legacy = String(profile?.role ?? "").toLowerCase();
+  const legacy = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
   const isManager = roleList.includes("manager") || legacy === "manager" || legacy === "admin";
   if (!isManager) return null;
   return { db, userId: user.id };
@@ -47,8 +48,25 @@ export async function POST(req: Request) {
     const ctx = await requireManager();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const body = (await req.json()) as { chargeId?: string; date?: string };
+    const body = (await req.json()) as { chargeId?: string; date?: string; action?: string };
     const chargeId = typeof body.chargeId === "string" ? body.chargeId.trim() : "";
+
+    if (body.action === "restoreForPending") {
+      if (!chargeId) {
+        return NextResponse.json({ error: "chargeId is required." }, { status: 400 });
+      }
+      const { data: chargeRow } = await ctx.db
+        .from("portal_household_charge_records")
+        .select("id, manager_user_id")
+        .eq("id", chargeId)
+        .maybeSingle();
+      if (!chargeRow || chargeRow.manager_user_id !== ctx.userId) {
+        return NextResponse.json({ error: "Charge not found." }, { status: 404 });
+      }
+      const restored = await restoreFuturePaymentRemindersForCharge(ctx.db, ctx.userId, chargeId);
+      return NextResponse.json({ ok: true, restored });
+    }
+
     const dateKey = typeof body.date === "string" ? setDateReminderKey(body.date.trim()) : null;
     if (!chargeId || dateKey == null) {
       return NextResponse.json({ error: "A charge and a valid date (YYYY-MM-DD) are required." }, { status: 400 });

@@ -11,11 +11,12 @@ export function listingApplicationFeeChannels(sub: ManagerListingSubmissionV1 | 
   venmo: boolean;
   other: boolean;
 } {
-  const ach = sub?.applicationFeeStripeEnabled !== false;
-  const zelle = Boolean(sub?.zellePaymentsEnabled && sub.applicationFeeZelleEnabled !== false && sub.zelleContact?.trim());
-  const venmo = Boolean(sub?.venmoPaymentsEnabled && sub.applicationFeeVenmoEnabled !== false && sub.venmoContact?.trim());
+  const ach = sub?.axisPaymentsEnabled !== false;
+  const zelle = Boolean(sub?.zellePaymentsEnabled && sub?.zelleContact?.trim());
+  const venmo = Boolean(sub?.venmoPaymentsEnabled && sub?.venmoContact?.trim());
+  /** Legacy listings may still have a custom “other” path stored on the submission. */
   const other = Boolean(
-    sub?.applicationFeeOtherEnabled && sub.applicationFeeOtherInstructions?.trim(),
+    sub?.applicationFeeOtherEnabled && sub?.applicationFeeOtherInstructions?.trim(),
   );
   return { ach, stripe: ach, zelle, venmo, other };
 }
