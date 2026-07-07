@@ -1,7 +1,4 @@
-import {
-  APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
-  resolveAppleWebOAuthSignIn,
-} from "@/lib/auth/apple-sign-in-config";
+import { resolveAppleWebOAuthSignIn } from "@/lib/auth/apple-sign-in-config";
 import { persistOAuthSignInContext } from "@/lib/auth/oauth-next-cookie";
 import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { oauthContinuePath, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
@@ -80,9 +77,7 @@ export async function runOAuthSignIn({
     const lower = error.message.toLowerCase();
     const message =
       lower.includes("not enabled") || lower.includes("unsupported provider")
-        ? provider === "apple"
-          ? APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE
-          : `${label} sign-in is not enabled in Supabase. Ask your admin to enable the ${label} provider.`
+        ? `${label} sign-in is not enabled in Supabase. Ask your admin to enable the ${label} provider.`
         : error.message;
     return { ok: false, message };
   }
