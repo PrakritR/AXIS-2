@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Vendors · Axis",
@@ -109,13 +108,14 @@ export default function VendorsPage() {
       </div>
 
       <div className="mx-auto mt-10 max-w-md text-center">
-        <Button
-          asChild
-          className="btn-cobalt w-full rounded-full py-3 text-[15px] font-semibold sm:w-auto sm:px-10"
+        <Link
+          href={VENDOR_SIGNUP_HREF}
+          className="btn-cobalt inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full py-3 text-[15px] font-semibold outline-none ring-primary/0 transition-[transform,box-shadow,filter,background-color,border-color] duration-200 ease-out focus-visible:ring-2 focus-visible:ring-primary/25 active:scale-[0.99] sm:w-auto sm:px-10"
           data-attr="vendors-get-started"
+          style={{ background: "var(--btn-primary)" }}
         >
-          <Link href={VENDOR_SIGNUP_HREF}>Get started</Link>
-        </Button>
+          Get started
+        </Link>
         <p className="mt-5 text-sm text-muted">
           Already have an account?{" "}
           <Link

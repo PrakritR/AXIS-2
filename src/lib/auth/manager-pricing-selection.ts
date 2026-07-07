@@ -7,7 +7,7 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Tier = "free" | "pro" | "business";
-type Billing = "monthly" | "annual";
+type Billing = "monthly" | "annual" | "free" | "trial";
 
 export async function resolveManagerPurchaseForPricing(
   supabase: SupabaseClient,

@@ -54,8 +54,8 @@ export function ManagerStartPage() {
 
     if (params.get("google_signed_in") === "1" || params.get("google_checkout") === "1") {
       const stored = readManagerPricingOffer();
-      const tier =
-        stored?.tier ?? (params.get("tier") && isPlanTierId(params.get("tier")) ? params.get("tier") : "pro");
+      const tierParam = params.get("tier");
+      const tier = stored?.tier ?? (tierParam && isPlanTierId(tierParam) ? tierParam : "pro");
       const bill = stored?.billing ?? (b === "annual" ? "annual" : "monthly");
       router.replace(createAccountPath(tier, bill, { google_signed_in: "1" }));
     }

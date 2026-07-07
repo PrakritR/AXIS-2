@@ -263,7 +263,7 @@ function ListingModalVideo({
   placeholderSubtitle,
 }: {
   label: string;
-  videoSrc?: string;
+  videoSrc?: string | null;
   placeholderTitle: string;
   placeholderSubtitle: string;
 }) {
