@@ -1,4 +1,5 @@
-import { completeFreeManagerTierForUser, finalizePendingManagerFreeTier } from "@/lib/auth/manager-pricing-selection";
+import { completeFreeManagerTierForUser } from "@/lib/auth/manager-pricing-selection";
+import { finalizePendingManagerFreeTier } from "@/lib/auth/manager-onboarding";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Tier = "free" | "pro" | "business";

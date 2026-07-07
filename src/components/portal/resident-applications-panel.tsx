@@ -38,6 +38,7 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 
 function countByBucket(rows: DemoApplicantRow[]) {
   return rows.reduce(
@@ -174,8 +175,7 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
     </div>
   );
 
-  const body =
-    !sessionReady || rows.length === 0 ? (
+  const body = !sessionReady ? (
       <div className={PORTAL_DATA_TABLE_WRAP}>
         <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
       </div>
@@ -183,9 +183,21 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
       <>
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+          {sessionReady ? (
+            <Button
+              type="button"
+              className="rounded-full"
+              data-attr="resident-applications-new"
+              onClick={() => router.push(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`)}
+            >
+              New application
+            </Button>
+          ) : null}
         </ManagerPortalFilterRow>
 
-        {rowsForBucket.length === 0 ? (
+        {rows.length === 0 ? (
+          <PortalDataTableEmpty icon="application" message="No applications yet. Start your first application." />
+        ) : rowsForBucket.length === 0 ? (
           <PortalDataTableEmpty icon="application" message="No applications in this tab yet." />
         ) : (
           <>

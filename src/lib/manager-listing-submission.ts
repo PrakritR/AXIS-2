@@ -199,6 +199,13 @@ export type ManagerListingSubmissionV1 = {
   /** Move-in fee charged for short-term stays (used to calculate upgrade delta when switching to long-term). */
   shortTermMoveInFee?: string;
   applicationFee: string;
+  /** When true, residents may apply to additional properties or rooms beyond their first application. */
+  allowMultiplePropertyApplications?: boolean;
+  /**
+   * When true, the application fee is only collected on the resident's first application
+   * (subsequent applications skip the fee step).
+   */
+  applicationFeeOnlyFirstApplication?: boolean;
   securityDeposit: string;
   moveInFee: string;
   /** Charges included in “payment due at signing” (multi-select). */
@@ -1024,6 +1031,8 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     applicationFeeOtherEnabled,
     applicationFeeOtherInstructions:
       typeof sub.applicationFeeOtherInstructions === "string" ? sub.applicationFeeOtherInstructions : "",
+    allowMultiplePropertyApplications: sub.allowMultiplePropertyApplications === true,
+    applicationFeeOnlyFirstApplication: sub.applicationFeeOnlyFirstApplication === true,
     rentDueDayMode: sub.rentDueDayMode === "last_of_month" ? "last_of_month" : "first_of_month",
     lateFeeEnabled: sub.lateFeeEnabled !== false,
     lateFeeGraceDays: (() => {

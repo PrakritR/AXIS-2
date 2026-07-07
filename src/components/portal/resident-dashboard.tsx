@@ -33,6 +33,7 @@ import {
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { getPropertyById, getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { applicationsForResidentEmail } from "@/lib/rental-application/application-policy";
 import {
   MANAGER_WORK_ORDERS_EVENT,
   readManagerWorkOrderRows,
@@ -218,6 +219,7 @@ export function ResidentDashboard({
         inbox: 0,
         inboxThreads: [] as ReturnType<typeof loadPersistedInbox>,
         pendingCharges: [] as ReturnType<typeof readChargesForResident>,
+        applicationRows: [] as ReturnType<typeof applicationsForResidentEmail>,
       };
     }
 
@@ -250,10 +252,11 @@ export function ResidentDashboard({
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         return 0;
       });
-    return { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges };
+    return { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges, applicationRows: email ? applicationsForResidentEmail(email) : [] };
   }, [tick, email, appStatus, residentUserId, clientReady]);
 
-  const { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges } = data;
+  const { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges, applicationRows } = data;
+  const pendingApplicationCount = applicationRows.filter((r) => r.bucket === "pending").length;
 
   const welcomeName =
     displayName && displayName !== "Resident" ? displayName.split(/\s+/)[0] : null;
@@ -271,6 +274,28 @@ export function ResidentDashboard({
         {appStatus === "approved" ? (
           <>
             <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader
+                  title="Applications"
+                  href={`${BASE}/applications`}
+                  linkLabel="Applications →"
+                />
+                {applicationRows.length === 0 ? (
+                  <p className="mt-4 text-sm text-muted">No applications yet.</p>
+                ) : (
+                  <div className="mt-4 flex flex-col items-start gap-2">
+                    <p className="text-sm font-semibold text-foreground">
+                      {applicationRows.length} application{applicationRows.length === 1 ? "" : "s"}
+                    </p>
+                    {pendingApplicationCount > 0 ? (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                        {pendingApplicationCount} pending
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
                 <div className="mt-4 flex flex-col items-start gap-2 [html[data-native]_&]:mt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">

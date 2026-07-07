@@ -17,7 +17,6 @@ import {
   ensurePendingApplicationFeeCharge,
   findApplicationFeeCharge,
   HOUSEHOLD_CHARGES_EVENT,
-  listingApplicationFeeAmount,
   markApplicationFeePaidAfterStripe,
   recordApplicationCharges,
 } from "@/lib/household-charges";
@@ -31,6 +30,10 @@ import {
   LISTING_ROOM_CHOICE_SEP,
 } from "@/lib/rental-application/data";
 import { resolveApplicationFeePayChannel, isAchApplicationFeeChannel } from "@/lib/rental-application/application-fee-channel";
+import {
+  residentApplicationFeeGate,
+  residentApplicationSubmitBlocked,
+} from "@/lib/rental-application/application-policy";
 import { clearRentalWizardDraft, loadRentalWizardDraft, saveRentalWizardDraft } from "@/lib/rental-application/drafts";
 import { createInitialRentalWizardState } from "@/lib/rental-application/state";
 import type { RentalWizardErrors, RentalWizardFormState } from "@/lib/rental-application/types";
@@ -414,19 +417,35 @@ function RentalApplicationWizardInner({
     void chargeTick;
     const pid = form.propertyId.trim();
     const email = form.email.trim();
-    const { amount, displayLabel } = listingApplicationFeeAmount(pid);
-    const needsFee = Boolean(pid && email.includes("@") && amount > 0);
-    const charge = pid && email ? findApplicationFeeCharge(email, pid, feeStepUserId) : undefined;
-    const paid = charge?.status === "paid";
-    return { needsFee, paid, displayLabel, amount };
+    const gate = residentApplicationFeeGate({
+      propertyId: pid,
+      residentEmail: email,
+      residentUserId: feeStepUserId,
+    });
+    return {
+      needsFee: gate.needsFee,
+      paid: gate.paid,
+      displayLabel: gate.displayLabel,
+      amount: gate.amount,
+      waived: gate.waived,
+    };
   }, [form.propertyId, form.email, feeStepUserId, chargeTick]);
 
   const finalizeApplicationSubmit = useCallback(
     async (residentUserId: string | null) => {
       if (submitting) return;
-      setSubmitting(true);
       const pid = form.propertyId.trim();
       const emailTrim = form.email.trim();
+      const block = residentApplicationSubmitBlocked({
+        propertyId: pid,
+        residentEmail: emailTrim,
+        roomChoice1: form.roomChoice1,
+      });
+      if (block.blocked) {
+        showToast(block.reason ?? "You cannot submit another application for this listing.");
+        return;
+      }
+      setSubmitting(true);
       const prop = pid ? getPropertyById(pid) : undefined;
       const axisId = makeNewApplicationId();
       const listing = prop;
@@ -518,12 +537,8 @@ function RentalApplicationWizardInner({
       if (countValidationErrors(stepErrors) > 0) return "Search house";
     }
     if (step !== 12) return "Continue";
-    const pid = form.propertyId.trim();
-    const email = form.email.trim();
-    const { amount } = listingApplicationFeeAmount(pid);
-    const needsFee = Boolean(pid && email.includes("@") && amount > 0);
-    if (!needsFee) return submitting ? "Submitting…" : "Submit application";
-    const prop = pid ? getPropertyById(pid) : undefined;
+    if (!applicationFeeGate.needsFee) return submitting ? "Submitting…" : "Submit application";
+    const prop = form.propertyId.trim() ? getPropertyById(form.propertyId.trim()) : undefined;
     const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
     const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
     if (isAchApplicationFeeChannel(payChannel)) {
@@ -647,8 +662,12 @@ function RentalApplicationWizardInner({
         const prop = pid ? getPropertyById(pid) : undefined;
         const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
         const payChannel = resolveApplicationFeePayChannel(sub, form.applicationFeePayChannel);
-        const { amount } = listingApplicationFeeAmount(pid);
-        const needsFee = Boolean(pid && emailTrim.includes("@") && amount > 0);
+        const feeGate = residentApplicationFeeGate({
+          propertyId: pid,
+          residentEmail: emailTrim,
+          residentUserId,
+        });
+        const needsFee = feeGate.needsFee;
 
         if (needsFee && isAchApplicationFeeChannel(payChannel)) {
           const charge = findApplicationFeeCharge(form.email, pid, residentUserId);
@@ -664,7 +683,7 @@ function RentalApplicationWizardInner({
             return;
           }
 
-          const amountCents = Math.round(amount * 100);
+          const amountCents = Math.round(feeGate.amount * 100);
           setCheckoutBusy(true);
           track("application_fee_payment_started", { property_id: pid || undefined });
           try {

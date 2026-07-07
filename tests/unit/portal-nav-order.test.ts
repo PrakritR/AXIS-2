@@ -104,7 +104,7 @@ describe("resident portal nav grouping", () => {
 
   it("approved: mirrors pro free block then paid workspace pattern", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expect(sections.slice(0, 4)).toEqual(["dashboard", "lease", "payments", "move-in"]);
+    expect(sections.slice(0, 5)).toEqual(["dashboard", "applications", "lease", "payments", "move-in"]);
     expect(sections.slice(-2)).toEqual(["bugs-feedback", "profile"]);
   });
 });

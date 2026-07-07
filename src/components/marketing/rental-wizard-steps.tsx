@@ -114,6 +114,7 @@ export type WizardStepsProps = {
     paid: boolean;
     displayLabel: string;
     amount: number;
+    waived?: boolean;
   };
   /** Incremented when public approved-occupancy sync completes; ties room availability to server data. */
   occupancySyncEpoch: number;
@@ -1652,7 +1653,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : (
           <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm text-foreground">
-            No application fee is required for this listing.
+            {applicationFeeGate.waived
+              ? "No application fee is required — your first application fee already covers additional applications."
+              : "No application fee is required for this listing."}
           </div>
         )}
         {showChannelPick ? (

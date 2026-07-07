@@ -2986,6 +2986,47 @@ export function ManagerAddListingForm({
                     </GridField>
                   ))}
                 </div>
+                <div className="mt-4 space-y-3 rounded-xl border border-border bg-card p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Application options</p>
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-border"
+                      checked={Boolean(sub.allowMultiplePropertyApplications)}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          allowMultiplePropertyApplications: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-foreground">
+                      <span className="font-medium">Allow multiple applications</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Residents can apply to more than one property or room on this listing.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-border"
+                      checked={Boolean(sub.applicationFeeOnlyFirstApplication)}
+                      onChange={(e) =>
+                        setSub((s) => ({
+                          ...s,
+                          applicationFeeOnlyFirstApplication: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-foreground">
+                      <span className="font-medium">Application fee only for first application</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        Charge the application fee once per resident; skip payment on later applications.
+                      </span>
+                    </span>
+                  </label>
+                </div>
                 {(sub.customFees ?? []).length > 0 ? (
                   <div className="mt-4 space-y-3">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Additional fees</p>

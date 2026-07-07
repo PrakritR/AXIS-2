@@ -51,6 +51,7 @@ export const RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS = RESIDENT_APPLICATION_PHA
 /** Sections shown before lease access is fully unlocked. */
 export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
+  { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
   { section: "payments", label: "Payments", tabs: [] },
   { section: "move-in", label: "Move-in", tabs: [] },
@@ -63,6 +64,7 @@ export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
 /** Full resident workspace after lease approval. */
 export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
+  { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
   { section: "payments", label: "Payments", tabs: [] },
   { section: "move-in", label: "Move-in", tabs: [] },
@@ -106,6 +108,7 @@ export const RESIDENT_RENDERED_SECTION_IDS = [
 /** Default smoke-test paths for web + native WebView (limited resident workspace). */
 export const RESIDENT_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: `${RESIDENT_PORTAL_BASE_PATH}/dashboard` },
+  { label: "Applications", path: `${RESIDENT_PORTAL_BASE_PATH}/applications` },
   { label: "Lease", path: `${RESIDENT_PORTAL_BASE_PATH}/lease` },
   { label: "Payments", path: `${RESIDENT_PORTAL_BASE_PATH}/payments` },
   { label: "Move-in", path: `${RESIDENT_PORTAL_BASE_PATH}/move-in` },
