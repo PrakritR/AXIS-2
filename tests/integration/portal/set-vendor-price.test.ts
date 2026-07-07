@@ -18,7 +18,13 @@ type WorkOrderRow = {
 
 type BidRow = { id: string; status: string; amount_cents: number; materials_cents: number };
 
-function mockDb(workOrder: WorkOrderRow, bid: BidRow | null) {
+/**
+ * `readSnapshot` lets a test simulate a race: the SELECT can return a stale status
+ * (e.g. "submitted") while `bid`'s true current status (e.g. "accepted", set by a
+ * concurrent manager accept) is what the UPDATE's WHERE-clause filters are checked
+ * against below — matching how a real Postgres compare-and-swap UPDATE behaves.
+ */
+function mockDb(workOrder: WorkOrderRow, bid: BidRow | null, readSnapshot?: Partial<BidRow>) {
   const workOrderUpdates: Record<string, unknown>[] = [];
   const bidUpdates: Record<string, unknown>[] = [];
 
@@ -45,17 +51,28 @@ function mockDb(workOrder: WorkOrderRow, bid: BidRow | null) {
           select: () => ({
             eq: () => ({
               eq: () => ({
-                maybeSingle: async () => ({ data: bid, error: null }),
+                maybeSingle: async () => ({ data: bid ? { ...bid, ...readSnapshot } : null, error: null }),
               }),
             }),
           }),
-          update: (row: Record<string, unknown>) => ({
-            eq: async () => {
-              bidUpdates.push(row);
-              if (bid) Object.assign(bid, row);
-              return { error: null };
-            },
-          }),
+          update: (row: Record<string, unknown>) => {
+            const filters: Record<string, unknown> = {};
+            const builder = {
+              eq(col: string, val: unknown) {
+                filters[col] = val;
+                return builder;
+              },
+              then(resolve: (v: { error: null }) => void) {
+                const matches = bid != null && Object.entries(filters).every(([k, v]) => (bid as Record<string, unknown>)[k] === v);
+                if (matches) {
+                  bidUpdates.push(row);
+                  Object.assign(bid!, row);
+                }
+                resolve({ error: null });
+              },
+            };
+            return builder;
+          },
         };
       }
       throw new Error(`unexpected table ${table}`);
@@ -135,5 +152,28 @@ describe("POST /api/portal/work-orders/set-vendor-price", () => {
     expect(status).toBe(200);
     expect(bidUpdates).toHaveLength(1);
     expect(bid.amount_cents).toBe(35000);
+  });
+
+  it("does not let a stale-read request overwrite a bid the manager accepted in the race window between read and write", async () => {
+    asVendor("vendor-1");
+    const workOrder: WorkOrderRow = {
+      manager_user_id: "mgr-1",
+      vendor_user_id: "vendor-1",
+      row_data: { bucket: "scheduled" },
+    };
+    // Manager's concurrent accept has already committed status: "accepted" by the time
+    // the UPDATE runs, even though this request's earlier SELECT still observed "submitted".
+    const bid: BidRow = { id: "bid-4", status: "accepted", amount_cents: 40000, materials_cents: 0 };
+    const { client, bidUpdates } = mockDb(workOrder, bid, { status: "submitted" });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const res = await POST(
+      jsonRequest("http://t", { method: "POST", body: { workOrderId: "WO-4", amountCents: 49900 } }),
+    );
+    const { status } = await parseJsonResponse(res);
+
+    expect(status).toBe(200);
+    expect(bidUpdates).toHaveLength(0);
+    expect(bid.amount_cents).toBe(40000);
   });
 });

@@ -97,6 +97,9 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     if (bid && bid.status === "submitted") {
+      // Re-check status in the WHERE clause (not just the earlier in-memory read) so a
+      // manager's concurrent accept between the SELECT above and this UPDATE can't have
+      // its accepted amount silently overwritten by this stale-read vendor request.
       await db
         .from("work_order_bids")
         .update({
@@ -104,7 +107,8 @@ export async function POST(req: Request) {
           materials_cents: materialsCents,
           updated_at: now,
         })
-        .eq("id", bid.id);
+        .eq("id", bid.id)
+        .eq("status", "submitted");
     }
 
     track("work_order_vendor_price_set", actor.userId, { work_order_id: workOrderId });
