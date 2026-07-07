@@ -75,6 +75,7 @@ function ManagerPricingOauthContent() {
             tier,
             billing,
             promo: promo || undefined,
+            trialSignup: storedOffer?.trialSignup === true ? true : undefined,
           }),
         });
 

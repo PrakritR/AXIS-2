@@ -235,6 +235,7 @@ export function PortalCalendarPanels({
   readOnly = false,
   eventSummaryLabel,
   vendorDayFlexibility,
+  vendorCalendarActions,
 }: {
   storageKey: string | null;
   calendarRefreshSignal?: number;
@@ -261,6 +262,13 @@ export function PortalCalendarPanels({
     flexibleWeekdays: Set<number>;
     onToggleFlexibleDay: (weekday: number) => void;
     onOpenFlexibleSettings: () => void;
+  };
+  /** Vendor calendar: click empty slots to add personal work blocks; edit vendor-owned meetings. */
+  vendorCalendarActions?: {
+    onAddFromSlot: (dateStr: string, slotIdx: number) => void;
+    canEditMeeting: (meeting: DemoMeeting) => boolean;
+    onEditMeeting: (meeting: DemoMeeting) => void;
+    onAddWork?: () => void;
   };
 }) {
   const { showToast } = useAppUi();
@@ -491,6 +499,10 @@ export function PortalCalendarPanels({
   const openSlotDetails = useCallback(
     (dateStr: string, slotIdx: number, _target: HTMLElement, meeting?: DemoMeeting) => {
       if (meeting) {
+        if (vendorCalendarActions?.canEditMeeting(meeting)) {
+          vendorCalendarActions.onEditMeeting(meeting);
+          return;
+        }
         const minutes = clampEventDurationMinutes(meeting.durationMinutes);
         setDurationChoice((EVENT_DURATION_PRESET_MINUTES as readonly number[]).includes(minutes) ? minutes : "custom");
         setCustomDurationText(String(minutes));
@@ -499,9 +511,13 @@ export function PortalCalendarPanels({
       }
       if (activeSlots.has(dateSlotKey(dateStr, slotIdx))) {
         setSelectedBlock({ kind: "availability", dateStr, slotIndex: slotIdx });
+        return;
+      }
+      if (vendorCalendarActions) {
+        vendorCalendarActions.onAddFromSlot(dateStr, slotIdx);
       }
     },
-    [activeSlots],
+    [activeSlots, vendorCalendarActions],
   );
 
   const deleteAvailabilitySlot = useCallback(() => {
@@ -1128,12 +1144,12 @@ export function PortalCalendarPanels({
       <>
         <Card className="p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1">
+            <div className="flex min-w-0 items-center gap-1">
               <Button type="button" variant="outline" className="h-8 shrink-0 rounded-full px-2.5 text-sm" onClick={() => shiftAvailabilityWeek(-1)} aria-label="Previous days">
                 ←
               </Button>
               {vendorMode ? (
-                <div className="min-w-0 flex-1 px-1">
+                <div className="min-w-0 px-1">
                   <p className="text-xs font-semibold text-foreground sm:text-sm">{availabilityHeading}</p>
                   <p className="truncate text-[11px] text-muted">{formatBlockRange(compactBlockStart, COMPACT_BLOCK_DAYS)}</p>
                 </div>
@@ -1164,6 +1180,17 @@ export function PortalCalendarPanels({
                   onClick={vendorDayFlexibility!.onOpenFlexibleSettings}
                 >
                   Flexible settings
+                </Button>
+              ) : null}
+              {vendorMode && vendorCalendarActions?.onAddWork ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="h-8 rounded-full px-3 text-xs"
+                  data-attr="vendor-add-work-open"
+                  onClick={vendorCalendarActions.onAddWork}
+                >
+                  Add work
                 </Button>
               ) : null}
             </div>

@@ -272,6 +272,89 @@ export function ResidentDashboard({
           <>
             <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
               <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
+                <div className="mt-4 flex flex-col items-start gap-2 [html[data-native]_&]:mt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                  <StatusBadge label={lease.label} tone={lease.tone} />
+                  {leaseRow?.application?.leaseStart ? (
+                    <span className="text-xs leading-snug text-muted [html[data-native]_&]:text-[11px]">
+                      {leaseRow.application.leaseStart}
+                      {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted">No lease dates on file yet.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader title="Move-in" href={`${BASE}/move-in`} linkLabel="Move-in →" />
+                {appProperty || appRoom || moveInDateLabel ? (
+                  <ul className="mt-3 space-y-2">
+                    {appProperty ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Property</p>
+                        <p className="mt-0.5 break-words text-sm font-semibold text-foreground">{appProperty}</p>
+                      </li>
+                    ) : null}
+                    {appRoom ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Room</p>
+                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appRoom}</p>
+                      </li>
+                    ) : null}
+                    {moveInDateLabel ? (
+                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Lease start</p>
+                        <p className="mt-0.5 text-sm font-semibold text-foreground">{moveInDateLabel}</p>
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : (
+                  <p className="mt-4 text-sm text-muted">Move-in details will appear once your placement is assigned.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+                <PortalDashboardSectionHeader
+                  title="Services"
+                  href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
+                  linkLabel="Services →"
+                />
+                {canUseFullPortal ? (
+                  pendingRequests + pendingWorkOrders === 0 ? (
+                    <p className="mt-4 text-sm text-muted">No pending service requests or work orders.</p>
+                  ) : (
+                    <ul className="mt-3 space-y-2">
+                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                        <span className="text-sm text-muted">Requests</span>
+                        {pendingRequests > 0 ? (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            {pendingRequests}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted">0</span>
+                        )}
+                      </li>
+                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                        <span className="text-sm text-muted">Work orders</span>
+                        {pendingWorkOrders > 0 ? (
+                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
+                            {pendingWorkOrders}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-muted">0</span>
+                        )}
+                      </li>
+                    </ul>
+                  )
+                ) : (
+                  <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
+                )}
+              </div>
+
+              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
                 <PortalDashboardSectionHeader
                   title="Payments"
                   href={`${BASE}/payments`}
@@ -315,89 +398,6 @@ export function ResidentDashboard({
                     );
                   }}
                 />
-              </div>
-
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
-                <div className="mt-4 flex flex-col items-start gap-2 [html[data-native]_&]:mt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                  <StatusBadge label={lease.label} tone={lease.tone} />
-                  {leaseRow?.application?.leaseStart ? (
-                    <span className="text-xs leading-snug text-muted [html[data-native]_&]:text-[11px]">
-                      {leaseRow.application.leaseStart}
-                      {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted">No lease dates on file yet.</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader title="Move-in" href={`${BASE}/move-in`} linkLabel="Move-in →" />
-                {appProperty || appRoom || moveInDateLabel ? (
-                  <ul className="mt-3 space-y-2">
-                    {appProperty ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Property</p>
-                        <p className="mt-0.5 break-words text-sm font-semibold text-foreground">{appProperty}</p>
-                      </li>
-                    ) : null}
-                    {appRoom ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Room</p>
-                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appRoom}</p>
-                      </li>
-                    ) : null}
-                    {moveInDateLabel ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Lease start</p>
-                        <p className="mt-0.5 text-sm font-semibold text-foreground">{moveInDateLabel}</p>
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <p className="mt-4 text-sm text-muted">Move-in details will appear once your placement is assigned.</p>
-                )}
-              </div>
-
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader
-                  title="Services"
-                  href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
-                  linkLabel="Services →"
-                />
-                {canUseFullPortal ? (
-                  pendingRequests + pendingWorkOrders === 0 ? (
-                    <p className="mt-4 text-sm text-muted">No pending service requests or work orders.</p>
-                  ) : (
-                    <ul className="mt-3 space-y-2">
-                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                        <span className="text-sm text-muted">Requests</span>
-                        {pendingRequests > 0 ? (
-                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                            {pendingRequests}
-                          </span>
-                        ) : (
-                          <span className="text-sm font-semibold text-muted">0</span>
-                        )}
-                      </li>
-                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                        <span className="text-sm text-muted">Work orders</span>
-                        {pendingWorkOrders > 0 ? (
-                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
-                            {pendingWorkOrders}
-                          </span>
-                        ) : (
-                          <span className="text-sm font-semibold text-muted">0</span>
-                        )}
-                      </li>
-                    </ul>
-                  )
-                ) : (
-                  <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
-                )}
               </div>
             </div>
 

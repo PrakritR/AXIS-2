@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
@@ -308,6 +309,11 @@ export async function POST(req: Request) {
               }
             : row.application,
       };
+      row = await linkResidentOnApplicationSubmit(db, {
+        userId: user.id,
+        row,
+        isNewSubmit: !existing,
+      });
     }
     await persistNormalizedRow(db, row.id, row);
     if (row.bucket === "pending" && row.application?.consentCredit) {

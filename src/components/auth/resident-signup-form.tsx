@@ -3,7 +3,8 @@
 import posthog from "posthog-js";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AuthDivider } from "@/components/auth/auth-mobile-primitives";
+import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
+import { ResidentAppleSignUpButton } from "@/components/auth/resident-apple-sign-up-button";
 import { ResidentGoogleSignUpButton } from "@/components/auth/resident-google-sign-up-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
@@ -13,30 +14,31 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 /** Resident account creation — Google or email/password, then apply inside the portal. */
 export function ResidentSignupForm({
-  nextPath = "/resident/applications",
+  nextPath = "/resident/applications/apply",
   initialEmail = "",
   showBrowseLink = false,
   disabled = false,
+  hideLegalFooter = false,
 }: {
   nextPath?: string;
   initialEmail?: string;
   showBrowseLink?: boolean;
   disabled?: boolean;
+  hideLegalFooter?: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useAppUi();
-  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
   const locked = disabled || busy;
-  const resolvedNext = nextPath.startsWith("/") ? nextPath : "/resident/applications";
+  const resolvedNext = nextPath.startsWith("/") ? nextPath : "/resident/applications/apply";
 
   const submit = async () => {
-    if (!fullName.trim() || !email.trim() || password.length < 8) {
-      showToast("Enter your name, email, and an 8+ character password.");
+    if (!email.trim() || password.length < 8) {
+      showToast("Enter your email and an 8+ character password.");
       return;
     }
     setErrorText(null);
@@ -48,7 +50,6 @@ export function ResidentSignupForm({
         body: JSON.stringify({
           email: email.trim(),
           password,
-          fullName: fullName.trim(),
         }),
       });
       const body = (await res.json()) as {
@@ -72,7 +73,7 @@ export function ResidentSignupForm({
       if (signInData?.user) posthog.identify(signInData.user.id);
       const destination =
         resolvedNext ||
-        (body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/applications");
+        (body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/applications/apply");
       window.location.replace(destination);
     } catch {
       showToast("Network error.");
@@ -82,22 +83,18 @@ export function ResidentSignupForm({
   };
 
   return (
-    <div className="resident-signup-form space-y-3">
-      <p className="text-center text-xs text-muted">
-        Create your account, then complete your housing application in the portal.
+    <div className="resident-signup-form space-y-2.5 sm:space-y-3">
+      <p className="text-center text-[11px] leading-tight text-muted whitespace-nowrap sm:text-xs">
+        Create an account, then apply in the portal.
       </p>
 
-      <ResidentGoogleSignUpButton nextPath={resolvedNext} disabled={locked} />
+      <div className="space-y-2.5 sm:space-y-3">
+        <ResidentAppleSignUpButton nextPath={resolvedNext} disabled={locked} />
+        <ResidentGoogleSignUpButton nextPath={resolvedNext} disabled={locked} />
+      </div>
 
       <AuthDivider label="or enter your details" />
 
-      <Input
-        placeholder="Full name"
-        autoComplete="name"
-        value={fullName}
-        onChange={(e) => setFullName(e.target.value)}
-        disabled={locked}
-      />
       <Input
         type="email"
         autoComplete="email"
@@ -145,6 +142,8 @@ export function ResidentSignupForm({
           </Button>
         </>
       ) : null}
+
+      {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
     </div>
   );
 }

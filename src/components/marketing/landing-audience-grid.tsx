@@ -12,15 +12,15 @@ const AUDIENCES = [
     icon: <HomeIcon />,
   },
   {
-    href: "/partner",
+    href: "/auth/create-account?mode=create&role=manager",
     dataAttr: "home-audience-manager",
-    title: "Managing properties with AI?",
-    body: "See plans and pricing, then get started.",
-    cta: "View plans",
+    title: "Manage with AI",
+    body: "Start your 14-day free trial — no card required.",
+    cta: "Get started",
     icon: <BuildingIcon />,
   },
   {
-    href: "/vendors",
+    href: "/auth/create-account?mode=create&role=vendor",
     dataAttr: "home-audience-vendor",
     title: "Work as a vendor?",
     body: "Get matched to jobs near you and get paid.",
@@ -50,7 +50,7 @@ export function LandingAudienceGrid() {
 
         <div className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
           {AUDIENCES.map((a, i) => (
-            <RevealOnView key={a.href} delayMs={i * 60}>
+            <RevealOnView key={a.href} delayMs={i * 60} className="h-full">
               <Link
                 href={a.href}
                 data-attr={a.dataAttr}
@@ -60,7 +60,7 @@ export function LandingAudienceGrid() {
                   {a.icon}
                 </div>
                 <h3 className="mt-5 text-lg font-semibold text-foreground">{a.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{a.body}</p>
+                <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{a.body}</p>
                 <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors duration-200 group-hover:gap-2">
                   {a.cta}
                   <ArrowIcon />

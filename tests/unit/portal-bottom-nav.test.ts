@@ -84,12 +84,14 @@ describe("splitNativeBottomNavItems", () => {
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY]);
     expect(overflow.map((item) => item.section)).toEqual(
       sectionIds(proPortal.sections).filter(
-        (section) => !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section),
+        (section) =>
+          !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section) &&
+          section !== "profile",
       ),
     );
     expect(overflow.map((item) => item.section)).toContain("dashboard");
     expect(overflow.map((item) => item.section)).toContain("services");
-    expect(primary.length + overflow.length).toBe(items.length);
+    expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
   it("curates the resident bar (limited) to the primary set minus the missing 'services' section", () => {
@@ -100,7 +102,7 @@ describe("splitNativeBottomNavItems", () => {
     expect(primary.map((item) => item.section)).toEqual(
       NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY.filter((section) => section !== "services"),
     );
-    expect(primary.length + overflow.length).toBe(items.length);
+    expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
   it("curates the resident bar (approved) to the primary set and overflows the rest", () => {
@@ -108,15 +110,15 @@ describe("splitNativeBottomNavItems", () => {
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
     expect(overflow.map((item) => item.section)).toContain("documents");
-    expect(primary.length + overflow.length).toBe(items.length);
+    expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
   it("curates the admin bar to the primary set and overflows the rest", () => {
     const items = adminPortal.sections.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "admin");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_ADMIN_PRIMARY]);
-    expect(overflow.map((item) => item.section)).toContain("profile");
-    expect(primary.length + overflow.length).toBe(items.length);
+    expect(overflow.map((item) => item.section)).not.toContain("profile");
+    expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 
   it("fails closed (not open) for an unrecognized kind — nothing goes on the fixed bar", () => {

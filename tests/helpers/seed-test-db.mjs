@@ -270,7 +270,7 @@ try {
         manualUnavailableRanges: [],
         detail: "Queen bed, desk, and closet; south-facing window.",
         furnishing: "Fully furnished",
-        roomAmenitiesText: "Queen bed\nDesk\nCloset",
+        roomAmenitiesText: "South-facing window\nCloset\nHeating",
         photoDataUrls: [],
         videoDataUrl: null,
         utilitiesEstimate: "$150",
@@ -287,7 +287,7 @@ try {
         manualUnavailableRanges: [],
         detail: "Full bed and desk; faces the courtyard.",
         furnishing: "Fully furnished",
-        roomAmenitiesText: "Full bed\nDesk",
+        roomAmenitiesText: "Courtyard view\nCloset",
         photoDataUrls: [],
         videoDataUrl: null,
         utilitiesEstimate: "$150",
@@ -304,14 +304,41 @@ try {
         manualUnavailableRanges: [],
         detail: "Cozy top-floor room with skylight.",
         furnishing: "Fully furnished",
-        roomAmenitiesText: "Full bed\nSkylight",
+        roomAmenitiesText: "Skylight\nCloset",
         photoDataUrls: [],
         videoDataUrl: null,
         utilitiesEstimate: "$150",
         prorateMethod: "auto",
       },
     ],
-    bathrooms: [],
+    bathrooms: [
+      {
+        id: "bath-hall",
+        name: "Hall bath",
+        location: "2nd floor",
+        amenitiesText: "Shower\nToilet\nBathtub",
+        photoDataUrls: [],
+        videoDataUrl: null,
+        shower: true,
+        toilet: true,
+        bathtub: true,
+        assignedRoomIds: ["room-1", "room-2"],
+        accessKindByRoomId: { "room-1": "shared", "room-2": "shared" },
+      },
+      {
+        id: "bath-upper",
+        name: "Upper bath",
+        location: "3rd floor",
+        amenitiesText: "Shower\nToilet",
+        photoDataUrls: [],
+        videoDataUrl: null,
+        shower: true,
+        toilet: true,
+        bathtub: false,
+        assignedRoomIds: ["room-3"],
+        accessKindByRoomId: { "room-3": "ensuite" },
+      },
+    ],
     bundles: [],
     quickFacts: [],
   };
@@ -705,6 +732,67 @@ try {
   // ── Catalog properties (all Seattle — a supported lease jurisdiction) ─────
   const usd = (n) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
+  /** Bathrooms linked to catalog rooms so listing modals show real layout copy. */
+  function buildCatalogBathrooms(p) {
+    const roomIds = p.rooms.map((r) => r.id);
+    if (roomIds.length === 1) {
+      const roomId = roomIds[0];
+      return [
+        {
+          id: `${p.id}-bath-1`,
+          name: "Full bathroom",
+          location: p.rooms[0].floor,
+          amenitiesText: "Shower\nToilet\nVanity",
+          photoDataUrls: [],
+          videoDataUrl: null,
+          shower: true,
+          toilet: true,
+          bathtub: false,
+          assignedRoomIds: [roomId],
+          accessKindByRoomId: { [roomId]: "ensuite" },
+        },
+      ];
+    }
+
+    const upperRoomIds = p.rooms.filter((r) => /3rd|top/i.test(r.floor)).map((r) => r.id);
+    const mainRoomIds = roomIds.filter((id) => !upperRoomIds.includes(id));
+    const baths = [];
+
+    if (mainRoomIds.length > 0) {
+      baths.push({
+        id: `${p.id}-bath-main`,
+        name: "Main hall bath",
+        location: "Hallway",
+        amenitiesText: "Shower\nToilet\nBathtub",
+        photoDataUrls: [],
+        videoDataUrl: null,
+        shower: true,
+        toilet: true,
+        bathtub: true,
+        assignedRoomIds: mainRoomIds,
+        accessKindByRoomId: Object.fromEntries(mainRoomIds.map((id) => [id, "shared"])),
+      });
+    }
+
+    for (const roomId of upperRoomIds) {
+      baths.push({
+        id: `${p.id}-bath-${roomId}`,
+        name: "Upper bath",
+        location: "Upper floor",
+        amenitiesText: "Shower\nToilet",
+        photoDataUrls: [],
+        videoDataUrl: null,
+        shower: true,
+        toilet: true,
+        bathtub: false,
+        assignedRoomIds: [roomId],
+        accessKindByRoomId: { [roomId]: "ensuite" },
+      });
+    }
+
+    return baths;
+  }
+
   /** Full v1 listing submission so listings render in browse AND generated leases carry real fees/rooms/rules. */
   function buildListingSubmission(p) {
     const roomIds = p.rooms.map((r) => r.id);
@@ -765,20 +853,28 @@ try {
         moveInInstructions: "Lockbox at front door; code shared after signing.",
         manualUnavailableRanges: [],
         detail: r.detail,
-        furnishing: "Fully furnished",
-        roomAmenitiesText: "Bed\nDesk\nCloset",
+        furnishing: r.furnishing ?? "Fully furnished",
+        roomAmenitiesText: r.roomAmenitiesText ?? "Closet\nHeating\nAC",
         photoDataUrls: [],
         videoDataUrl: null,
         utilitiesEstimate: "$150",
         prorateMethod: "auto",
       })),
-      bathrooms: [],
+      bathrooms: buildCatalogBathrooms(p),
       bundles: [],
       quickFacts: [],
     };
   }
 
-  const room = (n, floor, rent, detail) => ({ id: `room-${n}`, name: `Room ${n}`, floor, rent, detail });
+  const room = (n, floor, rent, detail, extras = {}) => ({
+    id: `room-${n}`,
+    name: extras.name ?? `Room ${n}`,
+    floor,
+    rent,
+    detail,
+    furnishing: extras.furnishing ?? "Fully furnished",
+    roomAmenitiesText: extras.roomAmenitiesText ?? "Closet\nHeating\nAC",
+  });
   const catalog = [
     {
       id: "mgr-test-alder",
@@ -794,9 +890,15 @@ try {
       deposit: 1150,
       ownerUserId: managerUserId,
       rooms: [
-        room(1, "2nd floor", 1150, "Queen bed and desk; south-facing window."),
-        room(2, "2nd floor", 1100, "Full bed and closet; faces the garden."),
-        room(3, "1st floor", 1050, "Cozy room next to the living room."),
+        room(1, "2nd floor", 1150, "Queen bed and desk; south-facing window.", {
+          roomAmenitiesText: "South-facing window\nCloset\nHeating",
+        }),
+        room(2, "2nd floor", 1100, "Full bed and closet; faces the garden.", {
+          roomAmenitiesText: "Garden view\nCloset",
+        }),
+        room(3, "1st floor", 1050, "Cozy room next to the living room.", {
+          roomAmenitiesText: "Near living room\nCloset",
+        }),
       ],
     },
     {
@@ -813,10 +915,18 @@ try {
       deposit: 1250,
       ownerUserId: managerUserId,
       rooms: [
-        room(1, "2nd floor", 1250, "Corner room with two windows."),
-        room(2, "2nd floor", 1200, "Queen bed; faces the courtyard."),
-        room(3, "1st floor", 1150, "Quiet room off the back hall."),
-        room(4, "1st floor", 1100, "Compact room with garden view."),
+        room(1, "2nd floor", 1250, "Corner room with two windows.", {
+          roomAmenitiesText: "Two windows\nCorner layout\nCloset",
+        }),
+        room(2, "2nd floor", 1200, "Queen bed; faces the courtyard.", {
+          roomAmenitiesText: "Courtyard view\nCloset",
+        }),
+        room(3, "1st floor", 1150, "Quiet room off the back hall.", {
+          roomAmenitiesText: "Quiet location\nCloset",
+        }),
+        room(4, "1st floor", 1100, "Compact room with garden view.", {
+          roomAmenitiesText: "Garden view\nCloset",
+        }),
       ],
     },
     {
@@ -833,11 +943,21 @@ try {
       deposit: 1300,
       ownerUserId: managerUserId,
       rooms: [
-        room(1, "3rd floor", 1300, "Top-floor room with skyline view."),
-        room(2, "3rd floor", 1250, "Bright room with built-in shelving."),
-        room(3, "2nd floor", 1200, "Queen bed and reading nook."),
-        room(4, "2nd floor", 1150, "Faces the quiet side street."),
-        room(5, "1st floor", 1050, "Garden-level room with private entrance."),
+        room(1, "3rd floor", 1300, "Top-floor room with skyline view.", {
+          roomAmenitiesText: "Skylight\nSkyline view\nCloset",
+        }),
+        room(2, "3rd floor", 1250, "Bright room with built-in shelving.", {
+          roomAmenitiesText: "Built-in shelving\nCloset",
+        }),
+        room(3, "2nd floor", 1200, "Queen bed and reading nook.", {
+          roomAmenitiesText: "Reading nook\nCloset",
+        }),
+        room(4, "2nd floor", 1150, "Faces the quiet side street.", {
+          roomAmenitiesText: "Quiet street view\nCloset",
+        }),
+        room(5, "1st floor", 1050, "Garden-level room with private entrance.", {
+          roomAmenitiesText: "Private entrance\nGarden access",
+        }),
       ],
     },
     {
@@ -853,7 +973,17 @@ try {
       petFriendly: false,
       deposit: 2100,
       ownerUserId: managerUserId,
-      rooms: [{ id: "room-1", name: "Loft 3", floor: "3rd floor", rent: 2100, detail: "Open-plan loft with exposed brick and skyline views." }],
+      rooms: [
+        {
+          id: "room-1",
+          name: "Loft 3",
+          floor: "3rd floor",
+          rent: 2100,
+          detail: "Open-plan loft with exposed brick and skyline views.",
+          furnishing: "Fully furnished",
+          roomAmenitiesText: "Open living area\nSkylight views\nBuilt-in storage",
+        },
+      ],
     },
     {
       id: "mgr-test-cedar",
@@ -868,7 +998,17 @@ try {
       petFriendly: false,
       deposit: 2400,
       ownerUserId: manager2UserId,
-      rooms: [{ id: "room-1", name: "Unit 2B", floor: "2nd floor", rent: 2400, detail: "Whole 2-bed unit with open kitchen and canal views." }],
+      rooms: [
+        {
+          id: "room-1",
+          name: "Unit 2B",
+          floor: "2nd floor",
+          rent: 2400,
+          detail: "Whole 2-bed unit with open kitchen and canal views.",
+          furnishing: "Fully furnished",
+          roomAmenitiesText: "Open kitchen\nCanal views\nIn-unit laundry",
+        },
+      ],
     },
     {
       id: "mgr-test-spruce",
@@ -883,7 +1023,17 @@ try {
       petFriendly: false,
       deposit: 1750,
       ownerUserId: manager2UserId,
-      rooms: [{ id: "room-1", name: "Studio", floor: "3rd floor", rent: 1750, detail: "Open studio with kitchenette and big windows." }],
+      rooms: [
+        {
+          id: "room-1",
+          name: "Studio",
+          floor: "3rd floor",
+          rent: 1750,
+          detail: "Open studio with kitchenette and big windows.",
+          furnishing: "Fully furnished",
+          roomAmenitiesText: "Kitchenette\nBig windows\nCloset",
+        },
+      ],
     },
   ];
 

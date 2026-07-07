@@ -22,7 +22,7 @@ function isAuthRole(value: string): value is AuthRole {
 
 /** Default post-auth path for Google sign-in — matches website sign-in intent. */
 export function defaultOAuthNextPath(intent?: OAuthSignInIntent | null): string {
-  if (intent === "resident") return "/resident/applications";
+  if (intent === "resident") return "/resident/applications/apply";
   if (intent === "vendor") return "/vendor/dashboard";
   if (intent === "manager") return portalDashboardPath("manager");
   return GENERIC_CONTINUE;

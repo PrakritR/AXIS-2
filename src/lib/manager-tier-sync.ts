@@ -1,6 +1,6 @@
 import { isWaiverGrantedManagerPurchase, normalizeManagerSkuTier } from "@/lib/manager-access";
 import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
-import { isManagerPurchasePeriodExpired, resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
+import { isManagerPurchasePeriodExpired, isSignupTrialManagerPurchase, resolveEffectiveManagerTier } from "@/lib/manager-tier-expiry";
 import { reconcileManagerPurchaseWithStripe } from "@/lib/manager-stripe-subscription-sync";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -25,6 +25,7 @@ export async function revokeUnauthorizedManagerPaidTier(userId: string): Promise
   const billing = data.billing?.toLowerCase().trim() ?? "";
   const isAdminGrant = billing === "admin" || isAdminManagedManagerPurchase(data.stripe_checkout_session_id);
   if (isAdminGrant) return false;
+  if (isSignupTrialManagerPurchase(billing)) return false;
   // Payment-waiver / coupon grants (FREE100, onboard 100%-off) are authorized
   // paid access without a Stripe subscription — never revoke them.
   if (isWaiverGrantedManagerPurchase(data.promo_code)) return false;

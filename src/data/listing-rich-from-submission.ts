@@ -159,7 +159,7 @@ function roomSetupLine(room: ManagerRoomSubmission, sub: ManagerListingSubmissio
   if (wholeHouse.length > 0) {
     return `Whole-house / hall bath: ${wholeHouse.map((b) => b.name.trim()).join(", ")}`;
   }
-  return "Bathroom not linked — assign rooms in Bathrooms step.";
+  return "Bathroom details not listed — contact leasing for layout.";
 }
 
 /** One-line hint under the room name on listing cards — avoid repeating floor + detail. */
@@ -250,7 +250,7 @@ function buildListingFloorCard(
   const from = rents.length ? Math.min(...rents) : parseMonthlyRent(property.rentLabel) ?? 800;
   const roomRows: ListingRoomRow[] = rs.map((r) => {
     const setup = roomSetupLine(r, sub);
-    const furnish = formatFurnishing(r.furnishing);
+    const furnish = formatFurnishingForListing(r.furnishing);
     const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
     const utilRaw = formatUtilitiesEstimate(r.utilitiesEstimate);
     const baseTags = roomModalIncludedTags(r, sub, amenityLabels);
@@ -332,6 +332,19 @@ function formatUtilitiesEstimate(raw: string | undefined): string | undefined {
   const num = parseFloat(cleaned.replace(/[^0-9.]/g, ""));
   if (Number.isFinite(num) && num > 0 && /^\$?[\d.,]+$/.test(cleaned)) return `$${num}`;
   return cleaned || undefined;
+}
+
+/** Renter-facing furnishing line (preset values expanded; amenities stay separate). */
+function formatFurnishingForListing(raw: string | undefined): string | undefined {
+  const t = raw?.trim();
+  if (!t) return undefined;
+  const lower = t.toLowerCase();
+  if (lower === "fully furnished") return "Includes bed, desk, and standard bedroom furniture";
+  if (lower === "bed only") return "Includes bed";
+  if (lower === "bed and desk") return "Includes bed and desk";
+  if (lower === "bed, desk, and chair") return "Includes bed, desk, and chair";
+  if (lower === "partially furnished") return "Partially furnished — confirm items with leasing";
+  return formatFurnishing(raw);
 }
 
 /** Normalise furnishing: comma-stored items → human sentence. */

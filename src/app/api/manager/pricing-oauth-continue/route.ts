@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { findManagerPurchaseForAccount } from "@/lib/auth/manager-onboarding";
-import { completeFreeManagerTierForUser, ensureProvisionedManagerForPricing } from "@/lib/auth/manager-pricing-selection";
+import {
+  completeFreeManagerTierForUser,
+  ensureProvisionedManagerForPricing,
+} from "@/lib/auth/manager-pricing-selection";
+import { completeManagerSignupTrial, isManagerSignupTrialTier } from "@/lib/auth/manager-signup-trial";
 import { createManagerCheckoutSession } from "@/lib/stripe/manager-checkout";
 import { getStripe } from "@/lib/stripe";
 import { getPaymentWaiverCode } from "@/lib/server-env";
@@ -17,6 +21,7 @@ type Body = {
   billing?: string;
   promo?: string;
   phone?: string;
+  trialSignup?: boolean;
 };
 
 function isTier(s: string): s is Tier {
@@ -54,6 +59,7 @@ export async function POST(req: Request) {
     const billingRaw = typeof body.billing === "string" ? body.billing.toLowerCase().trim() : "";
     const promo = typeof body.promo === "string" ? body.promo.trim().toUpperCase() : "";
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+    const trialSignup = body.trialSignup === true;
 
     if (!tierRaw || !billingRaw || !isTier(tierRaw) || !isBilling(billingRaw)) {
       return NextResponse.json({ error: "tier and billing are required." }, { status: 400 });
@@ -83,6 +89,19 @@ export async function POST(req: Request) {
         tier: "free",
         billing: billingRaw,
         promo,
+      });
+      return NextResponse.json({ action: "portal", managerId: finalizedId });
+    }
+
+    if (trialSignup && isManagerSignupTrialTier(tierRaw)) {
+      if (prepared.kind === "complete") {
+        return NextResponse.json({ action: "portal" });
+      }
+      const { managerId: finalizedId } = await completeManagerSignupTrial(supabase, {
+        userId: user.id,
+        email,
+        fullName,
+        tier: tierRaw,
       });
       return NextResponse.json({ action: "portal", managerId: finalizedId });
     }

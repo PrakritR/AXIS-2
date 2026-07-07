@@ -54,7 +54,7 @@ describe("platform parity (web + native WebView)", () => {
     }
   });
 
-  it("every pre-application resident section has a render handler", () => {
+  it("every application-phase resident section has a render handler", () => {
     for (const { section } of RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS) {
       expect(RESIDENT_RENDERED_SECTION_IDS as readonly string[]).toContain(section);
       expect(RENDER_PORTAL_SECTION_SOURCE).toContain(`section === "${section}"`);
@@ -90,7 +90,7 @@ describe("platform parity (web + native WebView)", () => {
     }
   });
 
-  it("pre-application resident bottom bar uses the applications tab only", () => {
+  it("application-phase resident bottom bar uses the applications tab only", () => {
     const items = RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS.map((section) => ({ section: section.section }));
     const split = splitNativeBottomNavItems(items, "resident");
     expect(split.primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRE_APPLICATION_PRIMARY]);

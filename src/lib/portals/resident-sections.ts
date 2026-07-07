@@ -39,10 +39,14 @@ const DOCUMENTS_TABS = [
   { id: "other", label: "Other documents" },
 ] as const;
 
-/** Sections shown before the resident submits any rental application. */
-export const RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS: PortalSection[] = [
+/** Sidebar during application phase (before lease is approved): Application + Settings only. */
+export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "applications", label: "Application", tabs: [] },
+  { section: "profile", label: "Settings", tabs: [] },
 ];
+
+/** @deprecated Use RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS */
+export const RESIDENT_PRE_APPLICATION_PORTAL_SECTIONS = RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS;
 
 /** Sections shown before lease access is fully unlocked. */
 export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [

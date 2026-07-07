@@ -5,6 +5,7 @@ import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalCalendarPanels, MEETING_CONFIRMED_COLOR, type DemoMeeting } from "@/components/portal/portal-calendar-panels";
 import { VendorFlexibleSettingsModal } from "@/components/portal/vendor-flexible-settings-modal";
+import { VendorWorkEventModal, type VendorWorkEventDraft } from "@/components/portal/vendor-work-event-modal";
 import { VENDOR_AVAILABILITY_CHANGED_EVENT } from "@/components/portal/vendor-settings-panel";
 import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
 import {
@@ -23,6 +24,9 @@ import {
   saveVendorFlexiblePreferences,
   saveVendorWeeklyRule,
   deleteVendorAvailabilityRule,
+  isVendorWorkMeetingId,
+  saveVendorEventRule,
+  VENDOR_WORK_MEETING_ID_PREFIX,
   writeVendorFlexiblePreferencesToStorage,
   type VendorAvailabilityRule,
   type VendorFlexiblePreferences,
@@ -37,7 +41,42 @@ function propertyLabel(row: DemoManagerWorkOrderRow): string {
 }
 
 const VENDOR_VISIT_DEFAULT_DURATION_MINUTES = 60;
+const VENDOR_WORK_COLOR =
+  "bg-violet-500/25 text-violet-950 ring-violet-400/35 [html[data-theme=dark]_&]:bg-violet-500/20 [html[data-theme=dark]_&]:text-violet-100";
 let demoAvailabilityRuleCounter = DEMO_VENDOR_AVAILABILITY_RULES.length;
+
+function vendorWorkMeetingFromRule(rule: Extract<VendorAvailabilityRule, { kind: "event" }>): DemoMeeting {
+  const [year, month, day] = rule.specificDate.split("-").map(Number);
+  const start = new Date(year!, month! - 1, day!, 0, 0, 0, 0);
+  start.setMinutes(rule.startMinute);
+  const end = new Date(year!, month! - 1, day!, 0, 0, 0, 0);
+  end.setMinutes(rule.endMinute);
+  const durationMinutes = Math.max(SLOT_DURATION_MINUTES, rule.endMinute - rule.startMinute);
+  return {
+    id: `${VENDOR_WORK_MEETING_ID_PREFIX}${rule.id}`,
+    source: "external",
+    sourceId: rule.id,
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+    dateStr: rule.specificDate,
+    startSlot: Math.max(0, Math.floor(rule.startMinute / SLOT_DURATION_MINUTES)),
+    span: Math.max(1, Math.ceil(durationMinutes / SLOT_DURATION_MINUTES)),
+    durationMinutes,
+    title: rule.note?.trim() || "Work",
+    color: VENDOR_WORK_COLOR,
+    statusLabel: "My work",
+  };
+}
+
+function draftFromSlot(dateStr: string, slotIdx: number): VendorWorkEventDraft {
+  const startMinute = slotIdx * SLOT_DURATION_MINUTES;
+  return {
+    specificDate: dateStr,
+    startMinute,
+    endMinute: startMinute + VENDOR_VISIT_DEFAULT_DURATION_MINUTES,
+    title: "",
+  };
+}
 
 function vendorMeetingFromRow(row: DemoManagerWorkOrderRow): DemoMeeting | null {
   if (!row.scheduledAtIso) return null;
@@ -80,6 +119,9 @@ export function VendorCalendarPanel() {
     timingRank: [...DEFAULT_FLEXIBLE_TIMING_RANK],
   });
   const [flexModalOpen, setFlexModalOpen] = useState(false);
+  const [workModalOpen, setWorkModalOpen] = useState(false);
+  const [workDraft, setWorkDraft] = useState<VendorWorkEventDraft | null>(null);
+  const [workSaving, setWorkSaving] = useState(false);
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [calendarRefreshSignal, setCalendarRefreshSignal] = useState(0);
 
@@ -119,13 +161,91 @@ export function VendorCalendarPanel() {
     return () => window.removeEventListener(VENDOR_AVAILABILITY_CHANGED_EVENT, bump);
   }, []);
 
-  const vendorMeetings = useMemo<DemoMeeting[]>(
-    () =>
-      rows
-        .filter((r) => r.scheduledAtIso && r.bucket !== "completed")
-        .map(vendorMeetingFromRow)
-        .filter((meeting): meeting is DemoMeeting => meeting !== null),
-    [rows],
+  const vendorMeetings = useMemo<DemoMeeting[]>(() => {
+    const visits = rows
+      .filter((r) => r.scheduledAtIso && r.bucket !== "completed")
+      .map(vendorMeetingFromRow)
+      .filter((meeting): meeting is DemoMeeting => meeting !== null);
+    const work = availabilityRules
+      .filter((rule): rule is Extract<VendorAvailabilityRule, { kind: "event" }> => rule.kind === "event")
+      .map(vendorWorkMeetingFromRule);
+    return [...work, ...visits];
+  }, [availabilityRules, rows]);
+
+  const openWorkDraft = useCallback((draft: VendorWorkEventDraft) => {
+    setWorkDraft(draft);
+    setWorkModalOpen(true);
+  }, []);
+
+  const saveWorkDraft = useCallback(
+    async (draft: VendorWorkEventDraft) => {
+      setWorkSaving(true);
+      if (demo) {
+        const nextRule: VendorAvailabilityRule = {
+          id: draft.id ?? `demo-avail-event-${++demoAvailabilityRuleCounter}`,
+          kind: "event",
+          specificDate: draft.specificDate,
+          startMinute: draft.startMinute,
+          endMinute: draft.endMinute,
+          note: draft.title,
+        };
+        const next = [
+          ...availabilityRules.filter((rule) => rule.id !== nextRule.id),
+          nextRule,
+        ];
+        setAvailabilityRules(next);
+        notifyAvailabilityChanged(next);
+        setWorkSaving(false);
+        setWorkModalOpen(false);
+        setWorkDraft(null);
+        showToast(draft.id ? "Work block updated." : "Work added to your calendar.");
+        return;
+      }
+      const result = await saveVendorEventRule({
+        id: draft.id,
+        specificDate: draft.specificDate,
+        startMinute: draft.startMinute,
+        endMinute: draft.endMinute,
+        note: draft.title,
+      });
+      setWorkSaving(false);
+      if (!result.ok) {
+        showToast(result.error ?? "Could not save work block.");
+        return;
+      }
+      setWorkModalOpen(false);
+      setWorkDraft(null);
+      showToast(draft.id ? "Work block updated." : "Work added to your calendar.");
+      await reloadAvailability();
+    },
+    [availabilityRules, demo, reloadAvailability, showToast],
+  );
+
+  const deleteWorkDraft = useCallback(
+    async (id: string) => {
+      setWorkSaving(true);
+      if (demo) {
+        const next = availabilityRules.filter((rule) => rule.id !== id);
+        setAvailabilityRules(next);
+        notifyAvailabilityChanged(next);
+        setWorkSaving(false);
+        setWorkModalOpen(false);
+        setWorkDraft(null);
+        showToast("Work block removed.");
+        return;
+      }
+      const result = await deleteVendorAvailabilityRule(id);
+      setWorkSaving(false);
+      if (!result.ok) {
+        showToast(result.error ?? "Could not delete work block.");
+        return;
+      }
+      setWorkModalOpen(false);
+      setWorkDraft(null);
+      showToast("Work block removed.");
+      await reloadAvailability();
+    },
+    [availabilityRules, demo, reloadAvailability, showToast],
   );
 
   const toggleFlexibleDay = useCallback(
@@ -230,7 +350,7 @@ export function VendorCalendarPanel() {
     <ManagerPortalPageShell title="Calendar">
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Drag on the grid to open visit times. Mark a day flexible when managers can auto-schedule around tenant requests using your preferred timing.
+          Drag on the grid to open visit times, click an empty slot or use Add work to log personal jobs, and mark a day flexible when managers can auto-schedule around tenant requests.
         </p>
         <PortalCalendarPanels
           storageKey={storageKey}
@@ -246,6 +366,25 @@ export function VendorCalendarPanel() {
             onToggleFlexibleDay: (weekday) => void toggleFlexibleDay(weekday),
             onOpenFlexibleSettings: () => setFlexModalOpen(true),
           }}
+          vendorCalendarActions={{
+            onAddFromSlot: (dateStr, slotIdx) => openWorkDraft(draftFromSlot(dateStr, slotIdx)),
+            canEditMeeting: (meeting) => isVendorWorkMeetingId(meeting.id),
+            onEditMeeting: (meeting) => {
+              const rule = availabilityRules.find((item) => item.id === meeting.sourceId && item.kind === "event");
+              if (!rule || rule.kind !== "event") return;
+              openWorkDraft({
+                id: rule.id,
+                specificDate: rule.specificDate,
+                startMinute: rule.startMinute,
+                endMinute: rule.endMinute,
+                title: rule.note?.trim() || meeting.title,
+              });
+            },
+            onAddWork: () => {
+              const today = toLocalDateStr(new Date());
+              openWorkDraft(draftFromSlot(today, 18));
+            },
+          }}
         />
       </div>
       <VendorFlexibleSettingsModal
@@ -254,6 +393,18 @@ export function VendorCalendarPanel() {
         saving={prefsSaving}
         onClose={() => setFlexModalOpen(false)}
         onSave={(next) => void savePreferences(next)}
+      />
+      <VendorWorkEventModal
+        open={workModalOpen}
+        draft={workDraft}
+        saving={workSaving}
+        onClose={() => {
+          if (workSaving) return;
+          setWorkModalOpen(false);
+          setWorkDraft(null);
+        }}
+        onSave={(draft) => void saveWorkDraft(draft)}
+        onDelete={workDraft?.id ? (id) => void deleteWorkDraft(id) : undefined}
       />
     </ManagerPortalPageShell>
   );

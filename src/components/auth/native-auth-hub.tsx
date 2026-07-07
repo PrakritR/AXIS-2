@@ -4,11 +4,11 @@ import { AuthCard } from "@/components/auth/auth-card";
 import {
   AuthBrandHeader,
   AuthDivider,
+  AuthLegalConsent,
   AuthLoadingCard,
 } from "@/components/auth/auth-mobile-primitives";
-import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
-import { ManagerPlanBillingToggle, ManagerPlanTierCards } from "@/components/auth/manager-plan-tier-cards";
-import { ManagerSignupPanel } from "@/components/auth/manager-signup-panel";
+import { OAuthSocialStack } from "@/components/auth/oauth-social-stack";
+import { ManagerTrialSignupForm } from "@/components/auth/manager-trial-signup-form";
 import { ResidentSignupForm } from "@/components/auth/resident-signup-form";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { VendorSignupForm } from "@/components/auth/vendor-signup-form";
@@ -17,20 +17,34 @@ import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import { MANAGER_PLAN_TIERS, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
+import { type PlanTierId } from "@/data/manager-plan-tiers";
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { isNativeOAuthInProgress } from "@/lib/native/open-url";
 import { getNativeInfo } from "@/lib/native/push-client";
-import { loadManagerPlanTiers } from "@/lib/site-content";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 type AuthMode = "sign-in" | "create";
 type AccountRole = "resident" | "manager" | "vendor";
+type AuthLayoutMode = "sign-in" | "create-compact";
+
+function parseAccountRole(value: string | null): AccountRole {
+  if (value === "manager") return "manager";
+  if (value === "vendor") return "vendor";
+  return "resident";
+}
+
+function isPlanTierId(value: string | null): value is PlanTierId {
+  return value === "pro" || value === "business" || value === "free";
+}
+
+function stackMaxWidth(layoutMode: AuthLayoutMode): string {
+  return layoutMode === "sign-in" ? "max-w-[460px]" : "max-w-[52rem]";
+}
 
 async function tryResidentAutoConfirm(email: string): Promise<boolean> {
   try {
@@ -64,7 +78,7 @@ function RoleToggle({
   disabled?: boolean;
 }) {
   return (
-    <div className="native-auth-role-toggle flex rounded-full border border-border bg-card/40 p-1">
+    <div className="native-auth-role-toggle flex rounded-full border border-border/60 bg-white/[0.06] p-1 backdrop-blur-md [html[data-theme=light]_&]:bg-white/50">
       {(
         [
           { id: "resident" as const, label: "Resident" },
@@ -93,7 +107,35 @@ function scrollAuthMainToTop() {
   main?.scrollTo({ top: 0, left: 0, behavior: "instant" });
 }
 
-function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMode }) {
+function buildAuthHref(
+  pathname: string,
+  searchParams: URLSearchParams,
+  opts: { mode?: AuthMode; role: AccountRole },
+): string {
+  const params = new URLSearchParams(searchParams.toString());
+  params.set("role", opts.role);
+  if (opts.mode === "create") {
+    params.set("mode", "create");
+  } else {
+    params.delete("mode");
+  }
+  const qs = params.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+}
+
+type NativeAuthHubProps = {
+  defaultMode?: AuthMode;
+  inviteToken?: string;
+  inviteEmail?: string;
+  inviteFullName?: string;
+};
+
+function NativeAuthHubInner({
+  defaultMode = "sign-in",
+  inviteToken,
+  inviteEmail = "",
+  inviteFullName = "",
+}: NativeAuthHubProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -103,80 +145,94 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
   const modeParam = searchParams.get("mode");
   const initialMode: AuthMode =
     modeParam === "create" ? "create" : modeParam === "sign-in" ? "sign-in" : defaultMode;
-  const roleParam = searchParams.get("role");
-  const initialRole: AccountRole = roleParam === "manager" ? "manager" : roleParam === "vendor" ? "vendor" : "resident";
+  const initialRole =
+    pathname === "/auth/vendor-register"
+      ? "vendor"
+      : parseAccountRole(searchParams.get("role"));
   const tierParam = searchParams.get("tier");
-  const initialTier: PlanTierId =
-    tierParam === "pro" || tierParam === "business" || tierParam === "free" ? tierParam : "free";
+  const explicitTier = isPlanTierId(tierParam) ? tierParam : null;
   const initialBilling: "monthly" | "annual" = searchParams.get("billing") === "annual" ? "annual" : "monthly";
+  const googleSignedInReturn = searchParams.get("google_signed_in") === "1";
   const { isNative } = useIsNativeApp();
 
   const [checkingSession, setCheckingSession] = useState(true);
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [role, setRole] = useState<AccountRole>(initialRole);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(inviteEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [failedSignInAttempts, setFailedSignInAttempts] = useState(0);
 
   const nextFromUrl = searchParams.get("next")?.trim() ?? "";
-  const residentSignupNext = nextFromUrl.startsWith("/") ? nextFromUrl : "/resident/applications";
+  const residentSignupNext = nextFromUrl.startsWith("/") ? nextFromUrl : "/resident/applications/apply";
 
-  // Manager plan selection state — the plan picker + signup form render inline here
-  // on both web and native.
   const [billing, setBilling] = useState<"monthly" | "annual">(initialBilling);
-  const [selectedTierId, setSelectedTierId] = useState<PlanTierId>(initialTier);
-  const [planTiers, setPlanTiers] = useState<ManagerPlanTierDefinition[]>(MANAGER_PLAN_TIERS);
+  const [selectedTierId, setSelectedTierId] = useState<PlanTierId>(explicitTier ?? "pro");
+
+  const managerTrialSignup = selectedTierId !== "free";
+
+  const isCreate = mode === "create";
+  const skipSessionRedirect = isCreate;
 
   useEffect(() => {
     const remembered = readRememberedLoginEmail();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from stored login on mount
-    if (remembered) setEmail(remembered);
-  }, []);
+    if (remembered && !inviteEmail) setEmail(remembered);
+  }, [inviteEmail]);
 
   useEffect(() => {
-    const routeMode: AuthMode =
-      pathname === "/auth/create-account" || searchParams.get("mode") === "create"
-        ? "create"
-        : "sign-in";
+    const isCreateRoute =
+      pathname === "/auth/create-account" ||
+      pathname === "/auth/vendor-register" ||
+      searchParams.get("mode") === "create" ||
+      defaultMode === "create";
+    const routeMode: AuthMode = isCreateRoute ? "create" : "sign-in";
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sync hub mode when auth route changes
     setMode(routeMode);
     scrollAuthMainToTop();
+  }, [defaultMode, pathname, searchParams]);
+
+  useEffect(() => {
+    if (pathname === "/auth/vendor-register") {
+      setRole("vendor");
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync role tab from deep link
+    setRole(parseAccountRole(searchParams.get("role")));
   }, [pathname, searchParams]);
 
   useEffect(() => {
     scrollAuthMainToTop();
-  }, [mode]);
+  }, [mode, role]);
 
   useEffect(() => {
-    // If we arrived without an explicit ?tier= (e.g. a pricing redirect only persisted the
-    // offer), preselect the plan the user picked earlier.
-    if (tierParam) return;
+    if (explicitTier) {
+      setSelectedTierId(explicitTier);
+      const billingParam = searchParams.get("billing");
+      if (billingParam === "monthly" || billingParam === "annual") {
+        setBilling(billingParam);
+      }
+      return;
+    }
     const stored = readManagerPricingOffer();
-    if (!stored) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from stored pricing offer
-    setSelectedTierId(stored.tier);
-    setBilling(stored.billing);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount hydration
-  }, []);
+    if (stored?.tier) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from stored pricing offer
+      setSelectedTierId(stored.tier);
+      setBilling(stored.billing);
+      return;
+    }
+    // Default manager signup: Pro 14-day trial, monthly billing.
+    setSelectedTierId("pro");
+    setBilling("monthly");
+  }, [explicitTier, searchParams]);
 
   useEffect(() => {
-    if (role !== "manager") return;
-    let cancelled = false;
-    loadManagerPlanTiers()
-      .then((tiers) => {
-        if (!cancelled) setPlanTiers(tiers);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [role]);
+    if (skipSessionRedirect) {
+      setCheckingSession(false);
+      return;
+    }
 
-  useEffect(() => {
-    // Web browsers never need the native OAuth session probe — skip the Capacitor
-    // dynamic import so the auth form renders immediately instead of on "Loading…".
     if (!detectNativePlatformSync()) {
       setCheckingSession(false);
       return;
@@ -202,10 +258,10 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [skipSessionRedirect]);
 
   useEffect(() => {
-    if (checkingSession) return;
+    if (checkingSession || skipSessionRedirect) return;
 
     const redirectAfterOAuth = async () => {
       if (!isNativeOAuthInProgress()) return;
@@ -220,7 +276,7 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
 
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [checkingSession]);
+  }, [checkingSession, skipSessionRedirect]);
 
   const signIn = async () => {
     if (!email.trim() || !password) {
@@ -268,19 +324,34 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
   };
 
   const locked = busy;
-  const isCreate = mode === "create";
   const showForgotPassword = failedSignInAttempts >= 2;
-  const createAccountHref = (() => {
-    const params = new URLSearchParams({ mode: "create", role: roleParam || "resident" });
-    if (nextFromUrl.startsWith("/")) params.set("next", nextFromUrl);
-    return `/auth/create-account?${params.toString()}`;
-  })();
-  const signInHref = (() => {
-    const params = new URLSearchParams();
-    if (nextFromUrl.startsWith("/")) params.set("next", nextFromUrl);
-    const qs = params.toString();
-    return qs ? `/auth/sign-in?${qs}` : "/auth/sign-in";
-  })();
+
+  const createAccountHref = useMemo(
+    () => buildAuthHref(pathname, searchParams, { mode: "create", role }),
+    [pathname, role, searchParams],
+  );
+  const signInHref = useMemo(
+    () => buildAuthHref(pathname === "/auth/create-account" ? "/auth/sign-in" : pathname, searchParams, { role }),
+    [pathname, role, searchParams],
+  );
+
+  const handleRoleChange = useCallback(
+    (nextRole: AccountRole) => {
+      setRole(nextRole);
+      const targetPath = isCreate
+        ? pathname === "/auth/vendor-register"
+          ? "/auth/create-account"
+          : pathname
+        : pathname === "/auth/sign-in"
+          ? pathname
+          : "/auth/create-account";
+      router.replace(
+        buildAuthHref(targetPath, searchParams, { mode: isCreate ? "create" : undefined, role: nextRole }),
+      );
+      requestAnimationFrame(scrollAuthMainToTop);
+    },
+    [isCreate, pathname, router, searchParams],
+  );
 
   const openCreateAccount = useCallback(() => {
     setMode("create");
@@ -294,121 +365,126 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
     requestAnimationFrame(scrollAuthMainToTop);
   }, [router, signInHref]);
 
+  const layoutMode: AuthLayoutMode = isCreate ? "create-compact" : "sign-in";
+
   if (checkingSession) {
-    const loadingMode = defaultMode === "create" ? "create" : "sign-in";
     return (
       <div
-        className={`native-auth-hub-stack mx-auto w-full ${loadingMode === "create" ? "max-w-[52rem]" : "max-w-[460px]"}`}
-        data-auth-mode={loadingMode}
+        className={`native-auth-hub-stack mx-auto w-full ${stackMaxWidth(layoutMode)}`}
+        data-auth-mode={layoutMode}
       >
-        <AuthCard>
+        <AuthCard variant="blend">
+          {isNative ? (
+            <div className="auth-brand-header-wrap mb-4">
+              <AuthBrandHeader homeLink />
+            </div>
+          ) : null}
           <AuthLoadingCard />
         </AuthCard>
       </div>
     );
   }
 
-  const stackClassName = `native-auth-hub-stack mx-auto w-full self-center ${isCreate ? "max-w-[52rem]" : "max-w-[460px]"}`;
+  const stackClassName = `native-auth-hub-stack mx-auto w-full self-center ${stackMaxWidth(layoutMode)}`;
 
   return (
-    <div className={stackClassName} data-auth-mode={isCreate ? "create" : "sign-in"}>
-      <AuthCard wide={isCreate}>
+    <div className={stackClassName} data-auth-mode={layoutMode}>
+      <AuthCard variant="blend" wide={isCreate}>
         <div className="native-auth-hub">
-          <AuthBrandHeader />
+          {isNative ? (
+            <div className="auth-brand-header-wrap mb-4">
+              <AuthBrandHeader homeLink />
+            </div>
+          ) : null}
 
-          {mode === "sign-in" ? (
-            <>
-              <div className="mt-4">
-                <GoogleSignInButton nextPath="" intent={null} disabled={locked} />
-              </div>
-              <div className="my-4">
-                <AuthDivider label="or email" />
-              </div>
-              <div className="space-y-3">
-                <Input
-                  type="email"
-                  autoComplete="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setFailedSignInAttempts(0);
-                    setErrorText(null);
-                  }}
+          <div className={`space-y-3 ${isNative && !isCreate ? "" : isCreate ? "" : "mt-4"}`}>
+            {isCreate ? <RoleToggle role={role} onChange={handleRoleChange} disabled={locked} /> : null}
+
+            {isCreate ? (
+              role === "resident" ? (
+                <ResidentSignupForm
+                  nextPath={residentSignupNext}
+                  showBrowseLink={!isNative}
                   disabled={locked}
+                  hideLegalFooter
+                  initialEmail={email}
                 />
-                <div>
-                  <PasswordInput
-                    autoComplete="current-password"
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={locked}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void signIn();
-                    }}
-                  />
-                  {showForgotPassword ? (
-                    <p className="mt-1.5 text-right text-[12px]">
-                      <Link className="font-semibold text-primary hover:opacity-90" href="/auth/forgot-password">
-                        Forgot password?
-                      </Link>
-                    </p>
-                  ) : null}
-                </div>
-                {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
-                <Button
-                  type="button"
-                  className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+              ) : role === "vendor" ? (
+                <VendorSignupForm
+                  variant="compact"
                   disabled={locked}
-                  onClick={() => void signIn()}
-                >
-                  {busy ? "Signing in…" : "Sign in"}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mt-4 space-y-3">
-                <RoleToggle role={role} onChange={setRole} disabled={locked} />
-
-                {role === "resident" ? (
-                  <ResidentSignupForm
-                    nextPath={residentSignupNext}
-                    showBrowseLink
+                  hideLegalFooter
+                  inviteToken={inviteToken}
+                  initialEmail={inviteEmail || email}
+                  initialFullName={inviteFullName}
+                />
+              ) : (
+                <ManagerTrialSignupForm
+                  tier={selectedTierId}
+                  billing={billing}
+                  initialEmail={email}
+                  disabled={locked}
+                  hideLegalFooter
+                  googleReturn={googleSignedInReturn}
+                  trialSignup={managerTrialSignup}
+                />
+              )
+            ) : (
+              <>
+                <OAuthSocialStack nextPath="" intent={null} disabled={locked} />
+                <AuthDivider label="or enter your details" />
+                <div className="space-y-3">
+                  <Input
+                    type="email"
+                    autoComplete="email"
+                    placeholder="Email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFailedSignInAttempts(0);
+                      setErrorText(null);
+                    }}
                     disabled={locked}
                   />
-                ) : role === "vendor" ? (
-                  <VendorSignupForm variant="compact" disabled={locked} />
-                ) : (
-                  <>
-                    <ManagerPlanBillingToggle billing={billing} onChange={setBilling} disabled={locked} />
-                    <ManagerPlanTierCards
-                      tiers={planTiers}
-                      billing={billing}
-                      selectedTierId={selectedTierId}
-                      onSelectTier={setSelectedTierId}
+                  <div>
+                    <PasswordInput
+                      autoComplete="current-password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       disabled={locked}
-                      compact
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void signIn();
+                      }}
                     />
-                    <ManagerSignupPanel
-                      tier={selectedTierId}
-                      billing={billing}
-                      planTiers={planTiers}
-                      returnSurface="mobile-plan"
-                      initialEmail={email}
-                    />
-                  </>
-                )}
-              </div>
-            </>
-          )}
+                    {showForgotPassword ? (
+                      <p className="mt-1.5 text-right text-[12px]">
+                        <Link className="font-semibold text-primary hover:opacity-90" href="/auth/forgot-password">
+                          Forgot password?
+                        </Link>
+                      </p>
+                    ) : null}
+                  </div>
+                  {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
+                  <Button
+                    type="button"
+                    className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+                    disabled={locked}
+                    onClick={() => void signIn()}
+                  >
+                    {busy ? "Signing in…" : "Sign in"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </AuthCard>
 
-      <div className="native-auth-hub-footer mt-5 space-y-2 text-center text-[12px]">
+      <div className="native-auth-hub-footer mt-5 space-y-3 text-center text-[12px]">
         {mode === "sign-in" ? (
-          <p>
+          <p className="text-muted">
+            Don&apos;t have an account?{" "}
             {isNative ? (
               <button
                 type="button"
@@ -429,7 +505,8 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
             )}
           </p>
         ) : (
-          <p>
+          <p className="text-muted">
+            Already have an account?{" "}
             {isNative ? (
               <button
                 type="button"
@@ -450,38 +527,28 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
             )}
           </p>
         )}
-        {!isNative ? (
-          <p>
-            <Link
-              className="font-semibold text-muted transition hover:text-foreground"
-              href="/"
-              data-attr="auth-back-to-home"
-            >
-              ← Back to home
-            </Link>
-          </p>
-        ) : null}
+        <AuthLegalConsent action={mode === "sign-in" ? "continue" : "create"} className="px-1" />
       </div>
     </div>
   );
 }
 
-export function NativeAuthHub({ defaultMode = "sign-in" }: { defaultMode?: AuthMode } = {}) {
-  const fallbackMode = defaultMode === "create" ? "create" : "sign-in";
+export function NativeAuthHub(props: NativeAuthHubProps = {}) {
+  const fallbackLayoutMode: AuthLayoutMode = props.defaultMode === "create" ? "create-compact" : "sign-in";
   return (
     <Suspense
       fallback={
         <div
-          className={`native-auth-hub-stack mx-auto w-full ${fallbackMode === "create" ? "max-w-[52rem]" : "max-w-[460px]"}`}
-          data-auth-mode={fallbackMode}
+          className={`native-auth-hub-stack mx-auto w-full ${stackMaxWidth(fallbackLayoutMode)}`}
+          data-auth-mode={fallbackLayoutMode}
         >
-          <AuthCard>
+          <AuthCard variant="blend">
             <AuthLoadingCard />
           </AuthCard>
         </div>
       }
     >
-      <NativeAuthHubInner defaultMode={defaultMode} />
+      <NativeAuthHubInner {...props} />
     </Suspense>
   );
 }

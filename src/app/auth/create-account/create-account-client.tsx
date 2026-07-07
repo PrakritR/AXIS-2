@@ -396,7 +396,7 @@ export default function CreateAccountClient() {
       showToast("Resident account created. You are signed in.");
       const destination =
         nextFromUrl ||
-        (body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/applications");
+        (body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/applications/apply");
       router.push(nativeAwarePath(destination));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign up failed";
@@ -743,12 +743,6 @@ export default function CreateAccountClient() {
       <div className="mt-6 flex justify-center">
         <Link className="text-sm font-semibold text-primary hover:opacity-90" href="/auth/sign-in">
           ← Back to sign in
-        </Link>
-      </div>
-
-      <div className="mt-3 flex justify-center">
-        <Link className="text-sm font-semibold text-primary hover:opacity-90" href="/">
-          ← Back to home
         </Link>
       </div>
     </AuthCard>

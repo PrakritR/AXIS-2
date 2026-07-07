@@ -21,10 +21,14 @@ export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkPar
   return `${base}${path}`;
 }
 
+export function buildTourContactHref(propertyId: string): string {
+  const id = propertyId.trim();
+  return `/rent/tours-contact?propertyId=${encodeURIComponent(id)}`;
+}
+
 export function buildManagerTourUrl(origin: string, propertyId: string): string {
   const base = origin.replace(/\/$/, "");
-  const id = propertyId.trim();
-  return `${base}/rent/tours-contact?propertyId=${encodeURIComponent(id)}`;
+  return `${base}${buildTourContactHref(propertyId)}`;
 }
 
 export function buildManagerListingUrl(origin: string, propertyId: string): string {

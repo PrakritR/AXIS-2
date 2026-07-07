@@ -3,7 +3,8 @@
 import posthog from "posthog-js";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AuthDivider } from "@/components/auth/auth-mobile-primitives";
+import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
+import { VendorAppleSignUpButton } from "@/components/auth/vendor-apple-sign-up-button";
 import { VendorGoogleSignUpButton } from "@/components/auth/vendor-google-sign-up-button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function VendorSignupForm({
   nextPath = "/vendor/dashboard",
   variant = "default",
   disabled = false,
+  hideLegalFooter = false,
 }: {
   inviteToken?: string;
   initialEmail?: string;
@@ -36,11 +38,11 @@ export function VendorSignupForm({
   /** Hub-style signup matches resident create-account layout. */
   variant?: "default" | "compact";
   disabled?: boolean;
+  hideLegalFooter?: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useAppUi();
   const [email, setEmail] = useState(initialEmail);
-  const [fullName, setFullName] = useState(initialFullName);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,8 +55,8 @@ export function VendorSignupForm({
 
   const submit = async () => {
     setError(null);
-    if (compact && !inviteToken && (!fullName.trim() || !email.trim() || password.length < 8)) {
-      showToast("Enter your name, email, and an 8+ character password.");
+    if (compact && !inviteToken && (!email.trim() || password.length < 8)) {
+      showToast("Enter your email and an 8+ character password.");
       return;
     }
     if (!inviteToken && !email.trim().includes("@")) {
@@ -72,8 +74,8 @@ export function VendorSignupForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           inviteToken
-            ? { token: inviteToken, password, fullName: fullName.trim() || undefined }
-            : { email: email.trim(), password, fullName: fullName.trim() || undefined },
+            ? { token: inviteToken, password, fullName: initialFullName.trim() || undefined }
+            : { email: email.trim(), password },
         ),
       });
       const body = (await res.json()) as RegisterResponse;
@@ -119,23 +121,15 @@ export function VendorSignupForm({
     );
   }
 
-  const googleBlock = (
-    <VendorGoogleSignUpButton
-      inviteToken={inviteToken}
-      nextPath={resolvedNext}
-      disabled={locked}
-    />
+  const socialBlock = (
+    <div className="space-y-3">
+      <VendorAppleSignUpButton inviteToken={inviteToken} nextPath={resolvedNext} disabled={locked} />
+      <VendorGoogleSignUpButton inviteToken={inviteToken} nextPath={resolvedNext} disabled={locked} />
+    </div>
   );
 
   const passwordFieldsCompact = (
     <>
-      <Input
-        placeholder="Full name"
-        autoComplete="name"
-        value={fullName}
-        onChange={(e) => setFullName(e.target.value)}
-        disabled={locked}
-      />
       <Input
         type="email"
         autoComplete="email"
@@ -173,19 +167,6 @@ export function VendorSignupForm({
         />
       </div>
       <div>
-        <label className={FIELD_LABEL_CLASS} htmlFor="vendor-name">
-          Full name
-        </label>
-        <Input
-          id="vendor-name"
-          type="text"
-          className="mt-1.5"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          disabled={locked}
-        />
-      </div>
-      <div>
         <label className={FIELD_LABEL_CLASS} htmlFor="vendor-password">
           Password
         </label>
@@ -205,13 +186,12 @@ export function VendorSignupForm({
 
   if (compact) {
     return (
-      <div className="vendor-signup-form space-y-3">
-        <p className="text-center text-xs text-muted">
-          Create a vendor account to see work orders offered to you, track scheduled visits, and message your
-          property manager directly.
+      <div className="vendor-signup-form space-y-2.5 sm:space-y-3">
+        <p className="text-center text-[11px] leading-tight text-muted whitespace-nowrap sm:text-xs">
+          Free vendor account — work orders &amp; payouts through Axis.
         </p>
 
-        {googleBlock}
+        {socialBlock}
 
         <AuthDivider label="or enter your details" />
 
@@ -234,13 +214,15 @@ export function VendorSignupForm({
             Local dev only: check the server console for the confirmation link.
           </p>
         ) : null}
+
+        {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {googleBlock}
+      {socialBlock}
       <AuthDivider label="or enter your details" />
       {passwordFieldsDefault}
       {error ? <p className="text-sm text-danger">{error}</p> : null}
@@ -257,6 +239,7 @@ export function VendorSignupForm({
       >
         {busy ? "Creating account…" : "Create vendor account"}
       </Button>
+      {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
     </div>
   );
 }

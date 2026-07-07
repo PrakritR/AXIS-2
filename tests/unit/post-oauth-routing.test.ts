@@ -9,7 +9,7 @@ import {
 describe("post-oauth routing", () => {
   it("defaults manager, resident, and vendor next paths", () => {
     expect(defaultOAuthNextPath("manager")).toBe("/portal/dashboard");
-    expect(defaultOAuthNextPath("resident")).toBe("/resident/applications");
+    expect(defaultOAuthNextPath("resident")).toBe("/resident/applications/apply");
     expect(defaultOAuthNextPath("vendor")).toBe("/vendor/dashboard");
     expect(defaultOAuthNextPath(null)).toBe("/auth/continue");
   });
@@ -27,7 +27,7 @@ describe("post-oauth routing", () => {
 
   it("resolves single-role users directly to their dashboard", () => {
     expect(resolvePostOAuthPathFromRoles(["manager"], "/auth/continue")).toBe("/portal/dashboard");
-    expect(resolvePostOAuthPathFromRoles(["resident"], "/auth/continue")).toBe("/resident/dashboard");
+    expect(resolvePostOAuthPathFromRoles(["resident"], "/auth/continue")).toBe("/resident");
     expect(resolvePostOAuthPathFromRoles(["manager", "resident"], "/auth/continue")).toBe("/auth/choose-portal");
   });
 });

@@ -11,6 +11,8 @@ export type ManagerPricingOffer = {
   promo?: string;
   /** Where Google OAuth should return after partner-pricing callback. */
   returnSurface?: "mobile-plan" | "partner-pricing";
+  /** Signup trial flow — grants tier without Stripe checkout. */
+  trialSignup?: boolean;
 };
 
 /** Compact persisted shape — avoids storing plan-cycle fields as cleartext JSON. */
@@ -19,6 +21,7 @@ type StoredPricingOffer = {
   i: "m" | "a";
   p?: string;
   s?: "m" | "p";
+  ts?: boolean;
 };
 
 function toStoredOffer(offer: ManagerPricingOffer): StoredPricingOffer {
@@ -27,6 +30,7 @@ function toStoredOffer(offer: ManagerPricingOffer): StoredPricingOffer {
     i: offer.billing === "annual" ? "a" : "m",
     ...(offer.promo ? { p: offer.promo } : {}),
     ...(offer.returnSurface === "mobile-plan" ? { s: "m" } : offer.returnSurface === "partner-pricing" ? { s: "p" } : {}),
+    ...(offer.trialSignup ? { ts: true } : {}),
   };
 }
 
@@ -38,6 +42,7 @@ function fromStoredOffer(stored: StoredPricingOffer): ManagerPricingOffer | null
     billing: stored.i === "a" ? "annual" : "monthly",
     promo: stored.p,
     returnSurface: stored.s === "m" ? "mobile-plan" : stored.s === "p" ? "partner-pricing" : undefined,
+    trialSignup: stored.ts === true ? true : undefined,
   };
 }
 
@@ -68,6 +73,7 @@ function parseLegacyOffer(raw: string): ManagerPricingOffer | null {
       billing: parsed.billing,
       promo: parsed.promo,
       returnSurface: parsed.returnSurface,
+      trialSignup: parsed.trialSignup === true ? true : undefined,
     };
   } catch {
     return null;

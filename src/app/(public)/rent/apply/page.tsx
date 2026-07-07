@@ -1,4 +1,5 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
+import { residentCreateAccountHref } from "@/lib/resident-public-nav";
 import { redirect } from "next/navigation";
 
 function buildApplySearch(params: Record<string, string | string[] | undefined>): string {
@@ -19,13 +20,13 @@ export default async function ApplyPage({
   const params = await searchParams;
   const applyPath = `/resident/applications/apply${buildApplySearch(params)}`;
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getPortalAccessContext();
+  if (!ctx.user) {
+    redirect(residentCreateAccountHref(applyPath));
+  }
 
-  if (!user) {
-    redirect(`/auth/create-account?role=resident&next=${encodeURIComponent(applyPath)}`);
+  if (!hasRole(ctx, "resident")) {
+    redirect(residentCreateAccountHref(applyPath));
   }
 
   redirect(applyPath);

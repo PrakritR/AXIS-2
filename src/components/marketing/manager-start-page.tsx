@@ -1,23 +1,26 @@
 "use client";
 
-import { ManagerSignupPanel } from "@/components/auth/manager-signup-panel";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { persistManagerPricingOffer, readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { MANAGER_PLAN_TIERS, isPlanTierId, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
 import { loadManagerPlanTiers } from "@/lib/site-content";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+function createAccountPath(tier: PlanTierId, billing: "monthly" | "annual", extra?: Record<string, string>) {
+  const params = new URLSearchParams({
+    mode: "create",
+    role: "manager",
+    tier,
+    billing,
+    ...extra,
+  });
+  return `/auth/create-account?${params.toString()}`;
+}
 
 /**
- * Pricing with FULLY INTEGRATED signup: the plan cards select a plan, and the
- * "Get started" section directly below them creates the account (Google or manual
- * details) and continues straight into payment — all on this one page. This is the
- * only manager signup surface on the web; /auth/create-account redirects to
- * /partner/pricing, and the Manager top-nav tab (/partner) renders this same
- * component directly. Google OAuth for a paid plan returns to /partner/pricing
- * (?google_signed_in=1) and resumes the stored offer in the same section. Sign-in
- * is its own page, linked below.
+ * Manager pricing — plan cards only. Choosing a plan opens the unified create-account
+ * flow with the tier pre-selected (14-day trial for Pro/Business, no inline signup).
  */
 export function ManagerStartPage() {
   const router = useRouter();
@@ -25,13 +28,10 @@ export function ManagerStartPage() {
 
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [planTiers, setPlanTiers] = useState<ManagerPlanTierDefinition[]>(MANAGER_PLAN_TIERS);
-  const [selectedTier, setSelectedTier] = useState<PlanTierId>("free");
-  const [googleReturn, setGoogleReturn] = useState(false);
-  const signupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isNative !== true) return;
-    router.replace("/auth/manager/plan");
+    router.replace("/auth/create-account?mode=create&role=manager");
   }, [isNative, router]);
 
   useEffect(() => {
@@ -47,41 +47,34 @@ export function ManagerStartPage() {
   }, []);
 
   useEffect(() => {
-    // Honor ?tier= / ?billing= deep links (e.g. from an ad), and resume a Google OAuth
-    // return (?google_signed_in=1) with the stored plan selection.
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const b = params.get("billing");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from the URL after mount
     if (b === "monthly" || b === "annual") setBilling(b);
-    const t = params.get("tier");
-    if (t && isPlanTierId(t)) setSelectedTier(t);
 
     if (params.get("google_signed_in") === "1" || params.get("google_checkout") === "1") {
       const stored = readManagerPricingOffer();
-      // Free-tier Google returns go straight to the portal from the OAuth callback; landing
-      // here means a paid offer (or a lost one — fall back to Free, which is always safe).
-      setSelectedTier(stored?.tier ?? "free");
-      if (stored) setBilling(stored.billing);
-      setGoogleReturn(true);
-      window.setTimeout(() => signupRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+      const tier =
+        stored?.tier ?? (params.get("tier") && isPlanTierId(params.get("tier")) ? params.get("tier") : "pro");
+      const bill = stored?.billing ?? (b === "annual" ? "annual" : "monthly");
+      router.replace(createAccountPath(tier, bill, { google_signed_in: "1" }));
     }
-  }, []);
+  }, [router]);
 
   const choosePlan = useCallback(
     (tier: PlanTierId) => {
-      // Remember the choice (survives the Google OAuth round trip), update the integrated
-      // signup section below, and bring it into view — the user never leaves this page.
-      persistManagerPricingOffer({ tier, billing, returnSurface: "partner-pricing" });
-      setSelectedTier(tier);
-      signupRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      persistManagerPricingOffer({
+        tier,
+        billing,
+        returnSurface: "partner-pricing",
+        trialSignup: true,
+      });
+      router.push(createAccountPath(tier, billing));
     },
-    [billing],
+    [billing, router],
   );
 
   if (isNative) return null;
-
-  const selectedTierDef = planTiers.find((t) => t.id === selectedTier) ?? planTiers[0]!;
 
   return (
     <div className="min-h-screen px-4 py-14 sm:px-5 sm:py-20">
@@ -121,7 +114,6 @@ export function ManagerStartPage() {
         {planTiers.map((t) => {
           const pb = billing === "monthly" ? t.monthly : t.annual;
           const isProFeatured = t.id === "pro";
-          const isSelected = t.id === selectedTier;
           const cta = t.id === "free" ? "Get started free" : `Choose ${t.label}`;
           const cardInner = (
             <>
@@ -135,11 +127,6 @@ export function ManagerStartPage() {
                     {t.label}
                   </span>
                 )}
-                {isSelected ? (
-                  <span className="inline-flex rounded-full bg-[var(--status-confirmed-bg)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--status-confirmed-fg)]">
-                    Selected
-                  </span>
-                ) : null}
               </div>
 
               <div className="mt-3 flex flex-wrap items-baseline gap-x-1 gap-y-0">
@@ -186,39 +173,19 @@ export function ManagerStartPage() {
           }
 
           return (
-            <div
-              key={t.id}
-              className={`flex flex-col glass-card rounded-3xl p-7 ${isSelected ? "ring-2 ring-primary/50" : ""}`}
-            >
+            <div key={t.id} className="flex flex-col glass-card rounded-3xl p-7">
               {cardInner}
             </div>
           );
         })}
       </div>
 
-      <div ref={signupRef} className="mx-auto mt-12 max-w-md scroll-mt-24" id="get-started">
-        <div className="glass-card rounded-3xl p-7">
-          <h2 className="text-center text-sm font-bold uppercase tracking-[0.12em] text-primary">
-            Get started — {selectedTierDef.label}
-          </h2>
-          <div className="mt-4">
-            <ManagerSignupPanel
-              tier={selectedTier}
-              billing={billing}
-              planTiers={planTiers}
-              returnSurface="partner-pricing"
-              googleReturn={googleReturn}
-            />
-          </div>
-        </div>
-
-        <p className="mt-6 text-center text-sm text-muted">
-          Already have an account?{" "}
-          <Link href="/auth/sign-in" className="font-semibold text-primary hover:underline" data-attr="pricing-sign-in-link">
-            Sign in
-          </Link>
-        </p>
-      </div>
+      <p className="mx-auto mt-10 max-w-md text-center text-sm text-muted">
+        Already have an account?{" "}
+        <a href="/auth/sign-in" className="font-semibold text-primary hover:underline" data-attr="pricing-sign-in-link">
+          Sign in
+        </a>
+      </p>
     </div>
   );
 }

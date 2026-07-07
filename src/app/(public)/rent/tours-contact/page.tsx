@@ -60,6 +60,21 @@ type TourRoomOption = {
   property: MockProperty;
 };
 
+/** Sentinel when the prospect wants a property tour but has not picked a room yet. */
+export const TOUR_ROOM_UNDECIDED_KEY = "__tour-room-undecided__";
+export const TOUR_ROOM_UNDECIDED_LABEL = "Not sure which room yet";
+
+export function isTourRoomUndecided(roomKey: string | null | undefined): boolean {
+  return roomKey === TOUR_ROOM_UNDECIDED_KEY;
+}
+
+function tourRoomLabelForKey(property: MockProperty, roomKey: string | null): string {
+  if (!roomKey) return "";
+  if (isTourRoomUndecided(roomKey)) return TOUR_ROOM_UNDECIDED_LABEL;
+  const hit = roomOptionsForProperty(property).find((o) => o.key === roomKey);
+  return hit?.label ?? property.title;
+}
+
 function roomOptionsForProperty(p: MockProperty): TourRoomOption[] {
   if (p.listingSubmission?.v === 1) {
     const sub = normalizeManagerListingSubmissionV1(p.listingSubmission);
@@ -187,11 +202,10 @@ function TourFlow({
   const [submitted, setSubmitted] = useState(false);
   const [tick, setTick] = useState(0);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
-  const selectedRoomLabel = useMemo(() => {
-    if (!selectedRoomKey) return "";
-    const hit = roomOptionsForProperty(property).find((o) => o.key === selectedRoomKey);
-    return hit?.label ?? property.title;
-  }, [property, selectedRoomKey]);
+  const selectedRoomLabel = useMemo(
+    () => tourRoomLabelForKey(property, selectedRoomKey),
+    [property, selectedRoomKey],
+  );
 
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
@@ -532,7 +546,7 @@ function TourFlow({
             onClick={() => {
               const errs: Record<string, string> = {};
               if (step === 1) {
-                if (!selectedRoomKey) errs.room = "Choose a room to tour.";
+                if (!selectedRoomKey) errs.room = "Choose a room to tour, or select not sure yet.";
               }
               if (step === 2) {
                 if (selectedDay === null || selectedSlotIndex === null || managersAtSelectedSlot.length === 0) {
@@ -571,21 +585,49 @@ function Step1({
   selectedRoomKey: string | null;
   fieldErrors: Record<string, string>;
 }) {
-  const roomOptions: PropertySearchOption[] = roomOptionsForProperty(property).map((option) => ({
+  const listedRooms = roomOptionsForProperty(property);
+  const showUndecided = listedRooms.length > 1;
+  const roomOptions: PropertySearchOption[] = listedRooms.map((option) => ({
     id: option.key,
     title: option.label,
     subtitle: option.subtitle,
     tags: [property.address, property.neighborhood, `Available ${property.available}`],
     searchText: `${option.label} ${option.subtitle} ${property.address} ${property.neighborhood} ${property.rentLabel}`,
   }));
+  const undecidedSelected = isTourRoomUndecided(selectedRoomKey);
+  const pickerValue = undecidedSelected ? null : selectedRoomKey;
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted">Choose the room you would like to tour.</p>
+      <p className="text-sm text-muted">
+        {showUndecided
+          ? "Choose a room to tour, or let us know if you are still deciding."
+          : "Choose the room you would like to tour."}
+      </p>
+      {showUndecided ? (
+        <button
+          type="button"
+          data-attr="tour-room-undecided"
+          onClick={() => onSelectRoom(TOUR_ROOM_UNDECIDED_KEY)}
+          className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition ${
+            undecidedSelected
+              ? "border-primary bg-primary/10 text-foreground ring-2 ring-primary/25"
+              : "border-border/70 bg-card/60 text-foreground hover:border-primary/35 hover:bg-accent/30"
+          }`}
+        >
+          <span className="font-semibold">{TOUR_ROOM_UNDECIDED_LABEL}</span>
+          <span className="mt-1 block text-xs text-muted">
+            Tour the home and compare rooms with the manager on site.
+          </span>
+        </button>
+      ) : null}
       <div data-wizard-field="room" className={wizardSectionErrorClass(Boolean(fieldErrors.room))}>
+        {showUndecided ? (
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Or pick a specific room</p>
+        ) : null}
         <PropertySearchPicker
           options={roomOptions}
-          value={selectedRoomKey}
+          value={pickerValue}
           onChange={onSelectRoom}
           placeholder="Search rooms by name, floor, or rent…"
           emptyMessage="No rooms match your search."

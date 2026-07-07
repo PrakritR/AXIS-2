@@ -52,7 +52,7 @@ import { getEffectiveSessionForPortal, getEffectiveUserIdForPortal } from "@/lib
 import { getServerSessionProfile } from "@/lib/auth/server-profile";
 import { managerSectionAllowedForTier, residentSectionAllowedForManagerTier } from "@/lib/manager-access";
 import { getManagerSubscriptionTier, getManagerSubscriptionTierByManagerId } from "@/lib/manager-access-server";
-import { loadResidentPortalAccessState, loadResidentLeaseSignedStatus, residentHasFullPortalAccess } from "@/lib/resident-portal-access";
+import { loadResidentPortalAccessState, residentHasFullPortalAccess, residentPortalHomePath } from "@/lib/resident-portal-access";
 import { findSection, getPortalDefinition } from "@/lib/portals";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
@@ -252,6 +252,11 @@ export async function renderPortalSection(
   if (kind === "resident" && section === "applications") {
     if (tabParts?.length) notFound();
     return <ResidentApplicationsPanel />;
+  }
+  if (kind === "resident" && residentAccess && !residentAccess.leaseAccessUnlocked) {
+    if (section !== "applications" && section !== "profile") {
+      redirect(residentPortalHomePath(residentAccess));
+    }
   }
   // Legacy path support: work-orders moved under Services tabs.
   if (

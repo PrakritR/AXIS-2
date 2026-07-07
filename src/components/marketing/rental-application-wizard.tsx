@@ -7,9 +7,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
 import {
+  loadPublicExtraListingsFromServer,
   loadPublicPropertyLeadFromServer,
   PROPERTY_PIPELINE_EVENT,
   isPropertyActiveForLeads,
+  readExtraListingsPublic,
 } from "@/lib/demo-property-pipeline";
 import {
   ensurePendingApplicationFeeCharge,
@@ -23,7 +25,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   getPropertyById,
   getPropertyForPublicLink,
-  getPropertySelectOptions,
   getRoomOptionsForProperty,
   isRoomApprovedConflict,
   isRoomPendingConflict,
@@ -197,6 +198,11 @@ function RentalApplicationWizardInner({
   }, []);
 
   useEffect(() => {
+    if (mode !== "portal" || linkedPropertyId) return;
+    void loadPublicExtraListingsFromServer().then(() => setExtrasTick((n) => n + 1));
+  }, [mode, linkedPropertyId]);
+
+  useEffect(() => {
     const on = () => setExtrasTick((n) => n + 1);
     if (linkedPropertyId) {
       void loadPublicPropertyLeadFromServer(linkedPropertyId).then(() => on());
@@ -233,10 +239,10 @@ function RentalApplicationWizardInner({
   const propertyOptions = useMemo(() => {
     void extrasTick;
     if (mode === "portal" && !linkedPropertyId) {
-      return getPropertySelectOptions().filter((option) => {
-        const prop = getPropertyById(option.value);
-        return prop && isPropertyActiveForLeads(prop);
-      });
+      return readExtraListingsPublic()
+        .filter(isPropertyActiveForLeads)
+        .map((property) => ({ value: property.id, label: property.title }))
+        .sort((a, b) => a.label.localeCompare(b.label));
     }
     if (!linkedPropertyId) return [];
     const prop = getPropertyForPublicLink(linkedPropertyId);
@@ -258,10 +264,10 @@ function RentalApplicationWizardInner({
   const canRenderWizard = useMemo(() => {
     if (mode === "portal") {
       if (linkedPropertyId) return Boolean(linkedProperty);
-      return propertyOptions.length > 0;
+      return true;
     }
     return Boolean(linkedPropertyId && linkedProperty);
-  }, [linkedProperty, linkedPropertyId, mode, propertyOptions.length]);
+  }, [linkedProperty, linkedPropertyId, mode]);
 
   useEffect(() => {
     if (mode !== "portal") return;
@@ -487,7 +493,7 @@ function RentalApplicationWizardInner({
       setSubmitting(false);
       if (mode === "portal" && sync.ok) {
         showToast("Application submitted.");
-        router.replace("/resident/dashboard");
+        router.replace("/resident/applications");
         return;
       }
       setPostSubmit({
@@ -507,6 +513,10 @@ function RentalApplicationWizardInner({
   );
 
   const primaryButtonLabel = useMemo(() => {
+    if (step === 3) {
+      const stepErrors = validateRentalWizardStep(3, form);
+      if (countValidationErrors(stepErrors) > 0) return "Search house";
+    }
     if (step !== 12) return "Continue";
     const pid = form.propertyId.trim();
     const email = form.email.trim();
@@ -525,6 +535,7 @@ function RentalApplicationWizardInner({
     return "Submit application";
   }, [
     step,
+    form,
     form.propertyId,
     form.email,
     form.applicationFeePayChannel,
@@ -833,25 +844,13 @@ function RentalApplicationWizardInner({
         !canRenderWizard ? (
           <div className="mt-8">
             <ManagerLinkGate
-              title={mode === "portal" ? "No listings available yet" : "Open your manager’s apply link"}
+              title="Open your manager’s apply link"
               body={
-                mode === "portal"
-                  ? "Browse available housing to find a property, or ask your property manager for an apply link."
-                  : linkedPropertyId && !linkedProperty
-                    ? "This property link is invalid or no longer active. Ask your property manager for a new apply link."
-                    : "Applications start from a link your property manager shares after you find a unit on Zillow, Redfin, or elsewhere."
+                linkedPropertyId && !linkedProperty
+                  ? "This property link is invalid or no longer active. Ask your property manager for a new apply link."
+                  : "Applications start from a link your property manager shares after you find a unit on Zillow, Redfin, or elsewhere."
               }
             />
-            {mode === "portal" ? (
-              <div className="mt-4 flex justify-center">
-                <Link
-                  href="/rent/browse"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-border bg-card px-5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent"
-                >
-                  Browse available housing
-                </Link>
-              </div>
-            ) : null}
           </div>
         ) : postSubmit ? (
           <RentalApplicationFinishPanel
@@ -863,8 +862,7 @@ function RentalApplicationWizardInner({
           />
         ) : (
           <div
-            className="rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11"
-            style={{ boxShadow: "0 24px 80px -32px rgba(15,23,42,0.18), 0 1px 0 rgba(255,255,255,0.9) inset" }}
+            className="rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11 [html[data-theme=dark]_&]:shadow-[0_24px_80px_-32px_rgba(0,0,0,0.55)] [html[data-theme=dark]_&]:ring-1 [html[data-theme=dark]_&]:ring-white/8"
           >
             <div className="rental-wizard-step-header border-b border-border pb-4 sm:pb-6">
               <p className="rental-wizard-step-eyebrow text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70 sm:text-[11px]">
@@ -889,10 +887,10 @@ function RentalApplicationWizardInner({
                           s.n === step
                             ? "bg-primary text-white"
                             : completed
-                              ? "bg-primary/15 text-primary"
+                              ? "bg-primary/15 text-primary [html[data-theme=dark]_&]:bg-primary/28 [html[data-theme=dark]_&]:text-white"
                               : reachable
-                                ? "bg-accent/30 text-muted hover:bg-accent/40"
-                                : "cursor-not-allowed bg-accent/30 text-foreground/30"
+                                ? "bg-accent/30 text-muted hover:bg-accent/40 [html[data-theme=dark]_&]:bg-white/10 [html[data-theme=dark]_&]:text-white/70 [html[data-theme=dark]_&]:hover:bg-white/14"
+                                : "cursor-not-allowed bg-accent/25 text-muted/80 [html[data-theme=dark]_&]:bg-white/8 [html[data-theme=dark]_&]:text-white/42"
                         }`}
                       >
                         {completed ? "✓" : s.n}
@@ -901,7 +899,7 @@ function RentalApplicationWizardInner({
                   })}
                 </div>
               </div>
-              <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2">
+              <div className="rental-wizard-progress mt-3 h-1.5 overflow-hidden rounded-full bg-accent/30 sm:mt-4 sm:h-2 [html[data-theme=dark]_&]:bg-white/10">
                 <div
                   className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
                   style={{ width: `${progressPct}%` }}

@@ -34,15 +34,15 @@ import {
 import type { ManagerCustomApplicationField } from "@/lib/manager-listing-submission";
 import { wizardSectionErrorClass } from "@/lib/wizard-field-errors";
 
-const pillWrap = "flex flex-wrap gap-2 rounded-full border border-border bg-accent/30 p-1";
-const pillStack = "flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:rounded-full sm:border sm:border-border sm:bg-accent/30 sm:p-1";
+const pillWrap = "flex flex-wrap gap-2 rounded-full border border-border bg-accent/30 p-1 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/6";
 const pillActive = "rounded-full px-4 py-2.5 text-sm font-semibold bg-primary text-primary-foreground shadow-sm transition min-h-[44px] sm:min-h-0";
 const pillIdle =
-  "rounded-full px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-card hover:text-foreground min-h-[44px] sm:min-h-0";
+  "rounded-full px-4 py-2.5 text-sm font-semibold text-muted transition hover:bg-card hover:text-foreground min-h-[44px] sm:min-h-0 [html[data-theme=dark]_&]:text-white/72 [html[data-theme=dark]_&]:hover:bg-white/10 [html[data-theme=dark]_&]:hover:text-white";
+const groupRoleStack = "flex flex-col gap-2 sm:flex-row sm:items-stretch";
 const choiceActive =
-  "w-full rounded-xl border border-primary bg-primary/15 px-4 py-3.5 text-left text-sm font-semibold leading-snug text-foreground ring-1 ring-primary/25 transition sm:rounded-full sm:py-2.5 sm:text-center";
+  "w-full rounded-xl border border-primary bg-primary/12 px-4 py-3.5 text-left text-sm font-semibold leading-snug text-foreground transition sm:flex-1 sm:py-2.5 sm:text-center [html[data-theme=dark]_&]:border-primary/70 [html[data-theme=dark]_&]:bg-primary/22 [html[data-theme=dark]_&]:text-white";
 const choiceIdle =
-  "w-full rounded-xl border border-border bg-card/80 px-4 py-3.5 text-left text-sm font-semibold leading-snug text-foreground transition hover:border-primary/30 sm:rounded-full sm:py-2.5 sm:text-center";
+  "w-full rounded-xl border border-border bg-card/80 px-4 py-3.5 text-left text-sm font-semibold leading-snug text-foreground transition hover:border-primary/35 hover:bg-accent/25 sm:flex-1 sm:py-2.5 sm:text-center [html[data-theme=dark]_&]:border-white/14 [html[data-theme=dark]_&]:bg-white/5 [html[data-theme=dark]_&]:text-white/82 [html[data-theme=dark]_&]:hover:border-primary/45 [html[data-theme=dark]_&]:hover:bg-white/8";
 
 function Label({
   children,
@@ -304,7 +304,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </div>
 
         {form.applyingAsGroup === "yes" ? (
-          <div className="rental-wizard-subcard space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5">
+          <div className="rental-wizard-subcard space-y-5 rounded-2xl border border-border bg-accent/20 p-4 sm:p-5 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/4">
             <p className="text-sm leading-relaxed text-muted">
               Start the group and share your Group ID, or paste the ID from whoever applied first.
             </p>
@@ -312,7 +312,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <div className="space-y-2" data-wizard-field="groupRole">
               <Label required>What is your role in the group?</Label>
               <div
-                className={`${pillStack} ${errors.groupRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100" : ""}`}
+                className={`${groupRoleStack} ${errors.groupRole ? "rounded-xl border-2 border-red-300 bg-red-50/40 p-2 ring-2 ring-red-100 [html[data-theme=dark]_&]:border-red-400/60 [html[data-theme=dark]_&]:bg-red-500/10 [html[data-theme=dark]_&]:ring-red-500/20" : ""}`}
                 role="group"
                 aria-label="Group role"
               >

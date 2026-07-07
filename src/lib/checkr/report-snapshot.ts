@@ -13,6 +13,20 @@ const PRODUCT_KEYS = [
 
 export type CheckrReportProductKey = (typeof PRODUCT_KEYS)[number];
 
+function productSnapshot(
+  snapshot: CheckrReportSnapshot | undefined,
+  key: CheckrReportProductKey,
+): CheckrReportSnapshot[CheckrReportProductKey] {
+  return snapshot?.[key] ?? undefined;
+}
+
+function productStatusFromSnapshot(
+  snapshot: CheckrReportSnapshot | undefined,
+  key: CheckrReportProductKey,
+): string | undefined {
+  return productSnapshot(snapshot, key)?.status;
+}
+
 /** Parse GET /orders/{id}/report into a compact snapshot safe to store on the application row. */
 export function parseCheckrReportSnapshot(raw: Record<string, unknown> | null): CheckrReportSnapshot | undefined {
   if (!raw) return undefined;
@@ -207,7 +221,7 @@ export function aggregateResultFromSnapshot(snapshot: CheckrReportSnapshot | und
   if (!snapshot) return null;
   let sawClear = false;
   for (const key of PRODUCT_KEYS) {
-    const status = snapshot[key]?.status;
+    const status = productStatusFromSnapshot(snapshot, key);
     if (!status) continue;
     if (status === "consider") return "consider";
     if (status === "clear") sawClear = true;
@@ -219,7 +233,7 @@ export function countRecordsFromSnapshot(
   snapshot: CheckrReportSnapshot | undefined,
   key: CheckrReportProductKey,
 ): number {
-  const status = snapshot?.[key]?.status;
+  const status = productStatusFromSnapshot(snapshot, key);
   if (!status || status === "clear") return 0;
   return status === "consider" ? 1 : 0;
 }

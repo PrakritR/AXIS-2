@@ -4,6 +4,8 @@ import { AxisLogoLink } from "@/components/brand/axis-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
+import { portalDashboardPath, normalizePortalRoles, parseAuthRole, type AuthRole } from "@/lib/auth/portal-roles";
+import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { Session } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
@@ -26,32 +28,60 @@ function persistSignedIn(value: boolean) {
   } catch {}
 }
 
+function portalLinkLabel(role: AuthRole): string {
+  if (role === "resident") return "Resident portal";
+  if (role === "vendor") return "Vendor portal";
+  if (role === "admin") return "Admin";
+  return "Portal";
+}
+
 export function PublicNavbar() {
   const pathname = usePathname();
   const { isNative } = useIsNativeApp();
   const hideOnNative = isNative === true;
-  // Always false on server and first client paint so SSR markup matches hydration.
-  // Auth state is applied in useEffect after mount (localStorage + Supabase session).
   const [signedIn, setSignedIn] = useState(false);
+  const [primaryRole, setPrimaryRole] = useState<AuthRole | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => setSignedIn(readSignedInFromStorage()));
 
     const supabase = createSupabaseBrowserClient();
-    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
-      const isSignedIn = !!result.data.session;
-      setSignedIn(isSignedIn);
-      persistSignedIn(isSignedIn);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
+
+    async function syncAuth(session: Session | null) {
       const isSignedIn = !!session;
       setSignedIn(isSignedIn);
       persistSignedIn(isSignedIn);
+      if (!session) {
+        setPrimaryRole(null);
+        return;
+      }
+
+      const [{ data: profile }, { data: roleRows }] = await Promise.all([
+        supabase.from("profiles").select("role").eq("id", session.user.id).maybeSingle(),
+        supabase.from("profile_roles").select("role").eq("user_id", session.user.id),
+      ]);
+      const roles = normalizePortalRoles(roleRows, profile?.role ?? session.user.user_metadata?.role);
+      setPrimaryRole(roles[0] ?? parseAuthRole(String(profile?.role ?? session.user.user_metadata?.role ?? "")));
+    }
+
+    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
+      void syncAuth(result.data.session);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
+      void syncAuth(session);
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  const residentActive = useMemo(() => pathname.startsWith("/rent"), [pathname]);
+  const residentActive = useMemo(
+    () =>
+      pathname === RESIDENT_BROWSE_PATH ||
+      pathname.startsWith(`${RESIDENT_BROWSE_PATH}/`) ||
+      pathname.startsWith("/rent/listings") ||
+      pathname.startsWith("/resident") ||
+      pathname.startsWith("/rent/apply"),
+    [pathname],
+  );
   const managerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
   const vendorActive = useMemo(() => pathname.startsWith("/vendors"), [pathname]);
   const demoActive = useMemo(() => pathname === "/demo" || pathname.startsWith("/demo/"), [pathname]);
@@ -59,7 +89,12 @@ export function PublicNavbar() {
 
   const menu: NavbarMenuItem[] = useMemo(
     () => [
-      { title: "Resident", url: "/rent/browse", active: residentActive, dataAttr: "nav-resident" },
+      {
+        title: "Resident",
+        url: RESIDENT_BROWSE_PATH,
+        active: residentActive,
+        dataAttr: "nav-resident",
+      },
       { title: "Manager", url: "/partner", active: managerActive, dataAttr: "nav-manager" },
       { title: "Vendor", url: "/vendors", active: vendorActive, dataAttr: "nav-vendor" },
       { title: "Demo", url: "/demo", active: demoActive, dataAttr: "nav-demo" },
@@ -67,6 +102,15 @@ export function PublicNavbar() {
     ],
     [residentActive, managerActive, vendorActive, demoActive, contactActive],
   );
+
+  const portalLink = useMemo(() => {
+    if (!signedIn || !primaryRole) return undefined;
+    const url = primaryRole === "resident" ? "/resident/applications" : portalDashboardPath(primaryRole);
+    return {
+      text: portalLinkLabel(primaryRole),
+      url,
+    };
+  }, [signedIn, primaryRole]);
 
   if (hideOnNative) return null;
 
@@ -80,9 +124,9 @@ export function PublicNavbar() {
         menu={menu}
         auth={{
           login: { text: "Log in", url: "/auth/sign-in" },
-          signup: { text: "Get started", url: "/partner/pricing" },
+          signup: { text: "Get started", url: "/auth/create-account?mode=create&role=resident" },
         }}
-        portalLink={signedIn ? { text: "Portal", url: "/portal/dashboard" } : undefined}
+        portalLink={portalLink}
         actionsSlot={<ThemeToggle />}
       />
     </div>

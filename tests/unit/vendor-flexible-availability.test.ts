@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_FLEXIBLE_TIMING_RANK,
   FLEXIBLE_TIMING_RANGES,
+  isVendorWorkMeetingId,
   mergeSlotKeysToDateWindows,
   normalizeFlexibleTimingRank,
   resolveNextAvailableSlot,
+  vendorEventRulesToBusyWindows,
 } from "@/lib/vendor-availability";
 
 describe("vendor flexible availability", () => {
@@ -48,5 +50,18 @@ describe("vendor flexible availability", () => {
     const hour = new Date(iso!).getUTCHours();
     const afternoonStart = Math.floor(FLEXIBLE_TIMING_RANGES.afternoon.start / 60);
     expect(hour).toBeGreaterThanOrEqual(afternoonStart - 8);
+  });
+
+  it("maps vendor event rules to busy windows for auto-scheduling", () => {
+    const busy = vendorEventRulesToBusyWindows([
+      { id: "e1", kind: "event", specificDate: "2026-07-07", startMinute: 10 * 60, endMinute: 12 * 60, note: "Supply run" },
+    ]);
+    expect(busy).toHaveLength(1);
+    expect(new Date(busy[0]!.endIso).getTime() - new Date(busy[0]!.startIso).getTime()).toBe(2 * 60 * 60_000);
+  });
+
+  it("recognizes vendor-owned calendar meeting ids", () => {
+    expect(isVendorWorkMeetingId("vendor-work-abc")).toBe(true);
+    expect(isVendorWorkMeetingId("vendor-visit-abc")).toBe(false);
   });
 });

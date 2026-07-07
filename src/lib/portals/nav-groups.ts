@@ -50,7 +50,7 @@ const ADMIN_GROUPS: NavGroupConfig[] = [
 ];
 
 const RESIDENT_GROUPS: NavGroupConfig[] = [
-  { id: "home", label: null, sections: ["dashboard"] },
+  { id: "home", label: null, sections: ["dashboard", "applications"] },
   { id: "my-home", label: "My home", sections: ["lease", "move-in", "services"] },
   { id: "finances", label: "Finances", sections: ["payments", "documents"] },
   { id: "messages", label: "Messages", sections: ["inbox"] },
@@ -62,6 +62,7 @@ const VENDOR_GROUPS: NavGroupConfig[] = [
   { id: "work", label: "Work", sections: ["work-orders", "calendar"] },
   { id: "operations", label: "Operations", sections: ["inbox"] },
   { id: "finances", label: "Finances", sections: ["payments", "documents"] },
+  { id: "account", label: null, sections: ["profile"] },
 ];
 
 export const PORTAL_NAV_GROUPS: Record<PortalKind, NavGroupConfig[]> = {
@@ -83,10 +84,24 @@ export function groupNavItems<T extends { section: string }>(
   kind: PortalKind,
   items: T[],
 ): GroupedNav<T>[] {
+  const byId = new Map(items.map((i) => [i.section, i] as const));
+
+  // Application phase: only Application + Settings — keep Application at the top row
+  // and pin Settings to the bottom (account group gets mt-auto in PortalSidebar).
+  if (kind === "resident" && items.length === 2) {
+    const applications = byId.get("applications");
+    const profile = byId.get("profile");
+    if (applications && profile) {
+      return [
+        { id: "home", label: null, items: [applications] },
+        { id: "account", label: null, items: [profile] },
+      ];
+    }
+  }
+
   // Unknown kind (shouldn't happen for a valid PortalKind) → empty config, so every
   // item falls through to the trailing leftover group below; nothing is dropped.
   const config = PORTAL_NAV_GROUPS[kind] ?? [];
-  const byId = new Map(items.map((i) => [i.section, i] as const));
   const assigned = new Set<string>();
 
   const groups: GroupedNav<T>[] = config.map((g) => {

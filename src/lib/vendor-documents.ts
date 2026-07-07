@@ -67,7 +67,6 @@ export const VENDOR_DOCUMENT_SECTIONS: {
   {
     id: "tax",
     label: "Tax & income",
-    description: "W-9, income tax returns, and other documents used for 1099 and tax compliance.",
     kinds: ["w9", "income_tax_return", "form_1099", "ein_letter", "sales_tax_permit"],
   },
   {

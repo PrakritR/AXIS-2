@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { adminPortal } from "@/lib/portals/admin";
 import { proPortal } from "@/lib/portals/pro";
+import { vendorPortal } from "@/lib/portals/vendor";
 import {
   PORTAL_NAV_GROUPS,
   SIDEBAR_EXCLUDED_SECTIONS,
   groupNavItems,
 } from "@/lib/portals/nav-groups";
 import {
+  RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS,
   RESIDENT_APPROVED_PORTAL_SECTIONS,
   RESIDENT_LIMITED_PORTAL_SECTIONS,
 } from "@/lib/portals/resident-sections";
 
 const CASES = [
-  // pro/manager, resident, and admin pin Settings (profile) alone at the bottom of the
+  // pro/manager, resident, vendor, and admin pin Settings (profile) alone at the bottom of the
   // sidebar; Feedback (bugs-feedback) is no longer a standalone sidebar entry
   // for any portal — it's reachable from inside the Settings page instead (see
   // PortalBugFeedbackPanel / AdminBugFeedbackClient `embedded` mode).
@@ -32,10 +34,17 @@ const CASES = [
     kind: "resident" as const,
     sections: [
       ...new Set([
+        ...RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS.map((s) => s.section),
         ...RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => s.section),
         ...RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => s.section),
       ]),
     ],
+    sidebarShowsProfile: true,
+    sidebarShowsFeedback: false,
+  },
+  {
+    kind: "vendor" as const,
+    sections: vendorPortal.sections.map((s) => s.section),
     sidebarShowsProfile: true,
     sidebarShowsFeedback: false,
   },
@@ -103,5 +112,18 @@ describe("groupNavItems", () => {
     const result = groupNavItems("pro", [{ section: "dashboard" }, { section: "mystery" }]);
     const last = result.at(-1);
     expect(last?.items.some((i) => i.section === "mystery")).toBe(true);
+  });
+
+  it("pins Application at the top and Settings at the bottom during application phase", () => {
+    const items = [
+      { section: "applications", label: "Application", href: "/resident/applications" },
+      { section: "profile", label: "Settings", href: "/resident/profile" },
+    ];
+    const result = groupNavItems("resident", items);
+    expect(result.map((g) => g.id)).toEqual(["home", "account"]);
+    expect(result[0]?.items.map((i) => i.section)).toEqual(["applications"]);
+    expect(result[1]?.items.map((i) => i.section)).toEqual(["profile"]);
+    expect(result[0]?.items[0]?.href).toBe("/resident/applications");
+    expect(result[1]?.items[0]?.href).toBe("/resident/profile");
   });
 });

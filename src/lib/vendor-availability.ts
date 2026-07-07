@@ -11,7 +11,11 @@ import { isoDateOnly } from "@/lib/demo/demo-data";
 export type VendorAvailabilityRule =
   | { id: string; kind: "weekly"; weekday: number; startMinute: number; endMinute: number; note?: string | null }
   | { id: string; kind: "block"; specificDate: string; startMinute: number; endMinute: number; note?: string | null }
-  | { id: string; kind: "open"; specificDate: string; startMinute: number; endMinute: number; note?: string | null };
+  | { id: string; kind: "open"; specificDate: string; startMinute: number; endMinute: number; note?: string | null }
+  | { id: string; kind: "event"; specificDate: string; startMinute: number; endMinute: number; note?: string | null };
+
+/** Prefix for calendar meeting ids backed by a vendor `event` availability rule. */
+export const VENDOR_WORK_MEETING_ID_PREFIX = "vendor-work-";
 
 /** Realistic weekly hours + one-off dates shown in the /demo sandbox — never hits real Stripe/Supabase.
  * Shared by the vendor Settings availability editor and the vendor Calendar's availability overlay. */
@@ -308,7 +312,7 @@ export function resolveNextAvailableSlot(options: {
       const list = blocksByDate.get(rule.specificDate) ?? [];
       list.push({ start: rule.startMinute, end: rule.endMinute });
       blocksByDate.set(rule.specificDate, list);
-    } else {
+    } else if (rule.kind === "open") {
       const list = opensByDate.get(rule.specificDate) ?? [];
       list.push({ start: rule.startMinute, end: rule.endMinute });
       opensByDate.set(rule.specificDate, list);
@@ -424,6 +428,35 @@ export function saveVendorBlockRule(input: { id?: string; specificDate: string; 
 
 export function saveVendorDateRule(input: { id?: string; specificDate: string; startMinute?: number; endMinute?: number; note?: string }) {
   return postAvailability({ action: "upsert-open", ...input });
+}
+
+export function saveVendorEventRule(input: {
+  id?: string;
+  specificDate: string;
+  startMinute: number;
+  endMinute: number;
+  note?: string;
+}) {
+  return postAvailability({ action: "upsert-event", ...input });
+}
+
+export function vendorEventRulesToBusyWindows(rules: VendorAvailabilityRule[]): BusyWindow[] {
+  const out: BusyWindow[] = [];
+  for (const rule of rules) {
+    if (rule.kind !== "event") continue;
+    const [year, month, day] = rule.specificDate.split("-").map(Number);
+    if (!year || !month || !day) continue;
+    const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+    start.setMinutes(rule.startMinute);
+    const end = new Date(year, month - 1, day, 0, 0, 0, 0);
+    end.setMinutes(rule.endMinute);
+    out.push({ startIso: start.toISOString(), endIso: end.toISOString() });
+  }
+  return out;
+}
+
+export function isVendorWorkMeetingId(meetingId: string): boolean {
+  return meetingId.startsWith(VENDOR_WORK_MEETING_ID_PREFIX);
 }
 
 export function deleteVendorAvailabilityRule(id: string) {

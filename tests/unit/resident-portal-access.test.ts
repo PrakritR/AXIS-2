@@ -81,10 +81,10 @@ describe("resident portal access state", () => {
 
     expect(access.hasSubmittedApplication).toBe(false);
     expect(access.isPreApplicationResident).toBe(true);
-    expect(residentPortalHomePath(access)).toBe("/resident/applications");
+    expect(residentPortalHomePath(access)).toBe("/resident/applications/apply");
   });
 
-  it("unlocks limited portal after an application row exists", async () => {
+  it("keeps application-phase home while application is pending approval", async () => {
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
       makeDbMock({
         applicationRows: [
@@ -112,6 +112,7 @@ describe("resident portal access state", () => {
     expect(access.hasSubmittedApplication).toBe(true);
     expect(access.isPreApplicationResident).toBe(false);
     expect(access.applicationApproved).toBe(false);
-    expect(residentPortalHomePath(access)).toBe("/resident/dashboard");
+    expect(access.leaseAccessUnlocked).toBe(false);
+    expect(residentPortalHomePath(access)).toBe("/resident/applications/apply");
   });
 });

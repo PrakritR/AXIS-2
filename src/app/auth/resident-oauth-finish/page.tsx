@@ -58,7 +58,7 @@ function ResidentOauthFinishContent() {
         clearResidentSignupAxisId();
         const next = readResidentSignupNext();
         clearResidentSignupNext();
-        window.location.replace(next ?? "/resident/applications");
+        window.location.replace(next ?? "/resident/applications/apply");
       } catch (e) {
         const message = e instanceof Error ? e.message : "Could not finish resident signup.";
         setErrorText(message);

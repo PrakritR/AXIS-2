@@ -19,6 +19,16 @@ export async function GET(request: NextRequest) {
   const response = await handleOAuthCallback(request, `${MANAGER_PRICING_ENTRY_PATH}?google_signed_in=1`, {
     resolveRedirect: async (service, user, safePath) => {
       const tier = offer?.tier ?? "free";
+      if (offer?.trialSignup) {
+        const params = new URLSearchParams({
+          mode: "create",
+          role: "manager",
+          google_signed_in: "1",
+          tier: offer.tier,
+          billing: offer.billing,
+        });
+        return `/auth/create-account?${params}`;
+      }
       if (tier === "free") {
         // The user explicitly chose the Free manager plan — provision before entering the
         // portal so a brand-new Google account lands on a working dashboard.

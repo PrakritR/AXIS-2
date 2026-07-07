@@ -4,11 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthCard } from "@/components/auth/auth-card";
 import { Button } from "@/components/ui/button";
-import { HideOnNative } from "@/components/native/hide-on-native";
-import { VendorSignupForm } from "@/components/auth/vendor-signup-form";
-import Link from "next/link";
+import { NativeAuthHub } from "@/components/auth/native-auth-hub";
 
-/** Vendor account creation — from a manager's invite link (?token=…) or public self-serve signup. */
+/** Vendor account creation — invite link (?token=…) or public self-serve signup via NativeAuthHub. */
 export default function VendorRegisterClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -48,57 +46,37 @@ export default function VendorRegisterClient() {
 
   if (checkingInvite) {
     return (
-      <main className="flex min-h-[80vh] items-center justify-center px-4 py-12">
-        <AuthCard>
-          <p className="text-center text-sm text-muted">Loading your invite…</p>
-        </AuthCard>
-      </main>
+      <AuthCard>
+        <p className="text-center text-sm text-muted">Loading your invite…</p>
+      </AuthCard>
     );
   }
 
   if (inviteInvalid) {
     return (
-      <main className="flex min-h-[80vh] items-center justify-center px-4 py-12">
-        <AuthCard>
-          <h1 className="text-xl font-semibold text-foreground">Invite link invalid</h1>
-          <p className="mt-2 text-sm text-muted">
-            This vendor invite link is invalid or has expired. Ask your property manager to resend it, or
-            sign up without an invite below.
-          </p>
-          <Button
-            type="button"
-            className="mt-6 w-full rounded-full py-2.5 text-[15px] font-semibold"
-            onClick={() => router.push("/auth/vendor-register")}
-          >
-            Sign up as a vendor
-          </Button>
-        </AuthCard>
-      </main>
+      <AuthCard>
+        <h1 className="text-xl font-semibold text-foreground">Invite link invalid</h1>
+        <p className="mt-2 text-sm text-muted">
+          This vendor invite link is invalid or has expired. Ask your property manager to resend it, or sign up
+          without an invite below.
+        </p>
+        <Button
+          type="button"
+          className="mt-6 w-full rounded-full py-2.5 text-[15px] font-semibold"
+          onClick={() => router.push("/auth/create-account?mode=create&role=vendor")}
+        >
+          Sign up as a vendor
+        </Button>
+      </AuthCard>
     );
   }
 
   return (
-    <main className="flex min-h-[80vh] items-center justify-center px-4 py-12">
-      <AuthCard>
-        <h1 className="text-xl font-semibold text-foreground">Become an Axis vendor</h1>
-        <p className="mt-1 text-sm text-muted">Create your account to see work orders offered to you.</p>
-
-        <div className="mt-6">
-          <VendorSignupForm inviteToken={inviteToken || undefined} initialEmail={inviteEmail} initialFullName={inviteFullName} />
-        </div>
-
-        <HideOnNative>
-          <p className="mt-5 text-center text-[12px] text-muted">
-            <Link
-              className="font-semibold text-muted transition hover:text-foreground"
-              href="/"
-              data-attr="auth-back-to-home"
-            >
-              ← Back to home
-            </Link>
-          </p>
-        </HideOnNative>
-      </AuthCard>
-    </main>
+    <NativeAuthHub
+      defaultMode="create"
+      inviteToken={inviteToken || undefined}
+      inviteEmail={inviteEmail}
+      inviteFullName={inviteFullName}
+    />
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { AuthDivider } from "@/components/auth/auth-mobile-primitives";
+import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
 import { PricingGoogleContinueButton } from "@/components/auth/pricing-google-continue-button";
+import { PricingAppleContinueButton } from "@/components/auth/pricing-apple-continue-button";
 import { EmbeddedCheckoutMount } from "@/components/stripe/embedded-checkout";
 import { SubscriptionCheckoutHint } from "@/components/stripe/subscription-checkout-hint";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -39,6 +40,7 @@ export function ManagerSignupPanel({
   googleReturn = false,
   initialEmail = "",
   showSignInLink = false,
+  hideLegalFooter = false,
 }: {
   tier: PlanTierId;
   billing: "monthly" | "annual";
@@ -48,6 +50,7 @@ export function ManagerSignupPanel({
   googleReturn?: boolean;
   initialEmail?: string;
   showSignInLink?: boolean;
+  hideLegalFooter?: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useAppUi();
@@ -225,13 +228,22 @@ export function ManagerSignupPanel({
           {stripeBlocked && isPaid ? (
             <p className="auth-stripe-dev-notice px-3 py-2 text-xs">{stripeBlocked}</p>
           ) : null}
-          <PricingGoogleContinueButton
-            tier={tier}
-            billing={billing}
-            promo={trimmedPromo}
-            returnSurface={returnSurface}
-            disabled={locked || paidBlocked}
-          />
+          <div className="space-y-3">
+            <PricingAppleContinueButton
+              tier={tier}
+              billing={billing}
+              promo={trimmedPromo}
+              returnSurface={returnSurface}
+              disabled={locked || paidBlocked}
+            />
+            <PricingGoogleContinueButton
+              tier={tier}
+              billing={billing}
+              promo={trimmedPromo}
+              returnSurface={returnSurface}
+              disabled={locked || paidBlocked}
+            />
+          </div>
           <AuthDivider label="or enter your details" />
           <Input
             placeholder="Full name"
@@ -297,6 +309,8 @@ export function ManagerSignupPanel({
           </Link>
         </p>
       ) : null}
+
+      {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
     </div>
   );
 }

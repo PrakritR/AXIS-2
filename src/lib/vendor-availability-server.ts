@@ -9,13 +9,14 @@ import {
   flexibleWeekdaysFromRules,
   normalizeFlexibleTimingRank,
   resolveNextAvailableSlot,
+  vendorEventRulesToBusyWindows,
   type VendorAvailabilityRule,
   type VendorFlexiblePreferences,
 } from "@/lib/vendor-availability";
 
 type RuleRecord = {
   id: string;
-  kind: "weekly" | "block" | "open";
+  kind: "weekly" | "block" | "open" | "event";
   weekday: number | null;
   specific_date: string | null;
   start_minute: number;
@@ -111,7 +112,7 @@ export async function resolveVendorNextAvailableSlot(
       return { startIso: start.toISOString(), endIso: new Date(start.getTime() + durationMinutes * 60_000).toISOString() };
     });
 
-  const busy = [...scheduledBusy, ...(options.extraBusy ?? [])];
+  const busy = [...scheduledBusy, ...vendorEventRulesToBusyWindows(rules), ...(options.extraBusy ?? [])];
   const iso = resolveNextAvailableSlot({
     rules,
     busy,

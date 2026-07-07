@@ -5,6 +5,7 @@ import {
   isManagerOnboardingComplete,
   provisionPendingManagerAccount,
 } from "@/lib/auth/manager-onboarding";
+import { completeManagerSignupTrial, isManagerSignupTrialTier } from "@/lib/auth/manager-signup-trial";
 import { primaryRoleWhenAddingManager } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
@@ -17,6 +18,7 @@ type Body = {
   email?: string;
   password?: string;
   fullName?: string;
+  tier?: string;
 };
 
 /**
@@ -29,6 +31,7 @@ export async function POST(req: Request) {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body.password === "string" ? body.password : "";
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+    const tierRaw = typeof body.tier === "string" ? body.tier.toLowerCase().trim() : "";
 
     if (!email.includes("@")) {
       return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
@@ -111,6 +114,11 @@ export async function POST(req: Request) {
       email,
       fullName,
     });
+
+    if (isManagerSignupTrialTier(tierRaw)) {
+      await completeManagerSignupTrial(supabase, { userId, email, fullName, tier: tierRaw });
+      return NextResponse.json({ ok: true, managerId, redirectTo: "/portal/dashboard" });
+    }
 
     return NextResponse.json({ ok: true, managerId, redirectTo: MANAGER_PRICING_ENTRY_PATH });
   } catch (e) {

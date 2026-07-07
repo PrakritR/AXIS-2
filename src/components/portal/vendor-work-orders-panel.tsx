@@ -37,6 +37,14 @@ import { parseMoneyAmount } from "@/lib/household-charges";
 import { fetchWorkOrderBidsResult, type WorkOrderBid } from "@/lib/work-order-bids";
 import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payouts";
 import { upsertWorkOrderBid, WORK_ORDER_BIDS_EVENT } from "@/lib/work-order-bids-storage";
+import {
+  isPricingPendingBid,
+  vendorWorkOrderPhaseLabel,
+  vendorWorkOrderTab,
+  VENDOR_WORK_ORDER_TAB_LABELS,
+  VENDOR_WORK_ORDER_TAB_ORDER,
+  type VendorWorkOrderTab,
+} from "@/lib/vendor-work-order-tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 
 function propertyLabel(row: DemoManagerWorkOrderRow): string {
@@ -79,27 +87,6 @@ function formatVisitLabel(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-type VendorWorkOrderTab = "to_bid" | "scheduled" | "completed";
-
-function isPricingPendingBid(bid: WorkOrderBid | undefined): boolean {
-  return Boolean(
-    bid &&
-      bid.quoteMode === "after_consultation" &&
-      bid.consultationVisitAt &&
-      bid.amountCents == null &&
-      bid.status === "submitted",
-  );
-}
-
-/** Consultation-priced jobs with a visit booked but no labor quote yet live in Scheduled so
- * the vendor can finish pricing there; everything else still open for bids stays in Pending. */
-function vendorWorkOrderTab(row: DemoManagerWorkOrderRow, bid?: WorkOrderBid): VendorWorkOrderTab {
-  if (row.bucket === "completed") return "completed";
-  if (isPricingPendingBid(bid)) return "scheduled";
-  if (row.biddingOpen) return "to_bid";
-  return "scheduled";
-}
-
 /** Work orders offered/assigned to the signed-in vendor. Read-only except for submitting a
  * cost/time bid once the manager has opened a work order for bids. */
 export function VendorWorkOrdersPanel() {
@@ -118,7 +105,7 @@ export function VendorWorkOrdersPanel() {
   const [modeById, setModeById] = useState<Record<string, "upfront" | "after_consultation">>({});
   const [consultationDraftById, setConsultationDraftById] = useState<Record<string, string>>({});
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
-  const [tab, setTab] = useState<VendorWorkOrderTab>("to_bid");
+  const [tab, setTab] = useState<VendorWorkOrderTab>("quote");
   const [bidsSyncFailed, setBidsSyncFailed] = useState(false);
   const [payoutsSyncFailed, setPayoutsSyncFailed] = useState(false);
 
@@ -175,25 +162,26 @@ export function VendorWorkOrdersPanel() {
   );
 
   const tabCounts = useMemo(() => {
-    const c: Record<VendorWorkOrderTab, number> = { to_bid: 0, scheduled: 0, completed: 0 };
+    const c: Record<VendorWorkOrderTab, number> = { quote: 0, tour: 0, scheduled: 0, completed: 0 };
     for (const row of sorted) c[vendorWorkOrderTab(row, bidsByWorkOrderId[row.id])] += 1;
     return c;
   }, [sorted, bidsByWorkOrderId]);
 
   const tabs = useMemo(
-    () => [
-      { id: "to_bid", label: "Pending", count: tabCounts.to_bid, dataAttr: "vendor-wo-tab-pending" },
-      { id: "scheduled", label: "Scheduled", count: tabCounts.scheduled, dataAttr: "vendor-wo-tab-scheduled" },
-      { id: "completed", label: "Completed", count: tabCounts.completed, dataAttr: "vendor-wo-tab-completed" },
-    ],
+    () =>
+      VENDOR_WORK_ORDER_TAB_ORDER.map((id) => ({
+        id,
+        label: VENDOR_WORK_ORDER_TAB_LABELS[id],
+        count: tabCounts[id],
+        dataAttr: `vendor-wo-tab-${id}`,
+      })),
     [tabCounts],
   );
 
   const tabPickRef = useRef(false);
   useEffect(() => {
     if (tabPickRef.current || sorted.length === 0) return;
-    const order: VendorWorkOrderTab[] = ["to_bid", "scheduled", "completed"];
-    const first = order.find((id) => tabCounts[id] > 0);
+    const first = VENDOR_WORK_ORDER_TAB_ORDER.find((id) => tabCounts[id] > 0);
     if (first) setTab(first);
     tabPickRef.current = true;
   }, [sorted.length, tabCounts]);
@@ -735,11 +723,13 @@ export function VendorWorkOrdersPanel() {
   const emptyMessage =
     sorted.length === 0
       ? "No work orders offered to you yet."
-      : tab === "to_bid"
-        ? "No pending work orders."
-        : tab === "scheduled"
-          ? "No scheduled work orders."
-          : "No completed work orders yet.";
+      : tab === "quote"
+        ? "Nothing needs a quote — new offers from your manager land here."
+        : tab === "tour"
+          ? "No site visits waiting for a price."
+          : tab === "scheduled"
+            ? "No confirmed jobs on the calendar yet."
+            : "No completed jobs yet.";
 
   return (
     <ManagerPortalPageShell
@@ -762,7 +752,7 @@ export function VendorWorkOrdersPanel() {
           <div className="space-y-2 lg:hidden">
             {visible.map((row) => {
               const bid = bidsByWorkOrderId[row.id];
-              const pricingPending = isPricingPendingBid(bid);
+              const phaseLabel = vendorWorkOrderPhaseLabel(row, bid);
               const isExpanded = expandedId === row.id;
               return (
                 <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
@@ -777,22 +767,9 @@ export function VendorWorkOrdersPanel() {
                       <p className="mt-0.5 truncate text-xs text-muted">{propertyLabel(row)}</p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <WorkOrderStatusBadge bucket={row.bucket} />
-                        {row.biddingOpen || pricingPending ? (
+                        {phaseLabel ? (
                           <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                            {pricingPending
-                              ? "Pricing pending"
-                              : bid
-                                ? "Bid submitted"
-                                : "Open for bids"}
-                          </span>
-                        ) : null}
-                        {row.automationStatus === "vendor_marked_done" ? (
-                          <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                            Awaiting approval
-                          </span>
-                        ) : row.automationStatus === "paid" ? (
-                          <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                            Paid
+                            {phaseLabel}
                           </span>
                         ) : null}
                       </div>
@@ -813,7 +790,7 @@ export function VendorWorkOrdersPanel() {
                     <th className={MANAGER_TABLE_TH}>Property</th>
                     <th className={MANAGER_TABLE_TH}>Scheduled visit</th>
                     <th className={MANAGER_TABLE_TH}>Status</th>
-                    <th className={MANAGER_TABLE_TH}>Bid</th>
+                    <th className={MANAGER_TABLE_TH}>Phase</th>
                     <th className={PORTAL_TABLE_EXPAND_TH}>
                       <span className="sr-only">Expand</span>
                     </th>
@@ -822,7 +799,7 @@ export function VendorWorkOrdersPanel() {
                 <tbody>
                   {visible.map((row) => {
                     const bid = bidsByWorkOrderId[row.id];
-                    const pricingPending = isPricingPendingBid(bid);
+                    const phaseLabel = vendorWorkOrderPhaseLabel(row, bid);
                     const isExpanded = expandedId === row.id;
                     return (
                       <Fragment key={row.id}>
@@ -838,32 +815,18 @@ export function VendorWorkOrdersPanel() {
                           <td className={PORTAL_TABLE_TD}>{propertyLabel(row)}</td>
                           <td className={PORTAL_TABLE_TD}>{row.scheduled || "Not yet scheduled"}</td>
                           <td className={PORTAL_TABLE_TD}>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <WorkOrderStatusBadge bucket={row.bucket} />
-                              {pricingPending ? (
-                                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                                  Pricing pending
-                                </span>
-                              ) : null}
-                              {row.automationStatus === "vendor_marked_done" ? (
-                                <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                                  Awaiting approval
-                                </span>
-                              ) : row.automationStatus === "paid" ? (
-                                <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                                  Paid
-                                </span>
-                              ) : null}
-                            </div>
+                            <WorkOrderStatusBadge bucket={row.bucket} />
                           </td>
                           <td className={PORTAL_TABLE_TD}>
-                            {row.biddingOpen || pricingPending ? (
-                              <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                                {pricingPending ? "Pricing pending" : bid ? "Submitted" : "Open"}
-                              </span>
-                            ) : bid?.status === "accepted" ? (
-                              <span className="inline-flex rounded-full bg-accent/40 px-2 py-0.5 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                                Accepted
+                            {phaseLabel ? (
+                              <span
+                                className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] ${
+                                  phaseLabel === "Paid"
+                                    ? "bg-accent/40 text-foreground ring-border"
+                                    : "portal-badge-pending"
+                                }`}
+                              >
+                                {phaseLabel}
                               </span>
                             ) : (
                               <span className="text-muted">—</span>

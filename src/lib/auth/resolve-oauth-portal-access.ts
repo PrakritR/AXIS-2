@@ -111,7 +111,7 @@ export async function resolveOAuthPortalRedirect(
       email,
     });
     const home = residentPortalHomePath(access);
-    if (isGenericOAuthContinuePath(safeIntended) || safeIntended === "/resident/dashboard") {
+    if (isGenericOAuthContinuePath(safeIntended) || safeIntended === "/resident/dashboard" || safeIntended === "/resident") {
       return finish(home);
     }
     return finish(resolvePostOAuthPathFromRoles(roles, safeIntended));
@@ -179,7 +179,12 @@ export async function resolveOAuthPortalRedirect(
   if (linkableApplication) {
     const linked = await completeResidentSignupFromOAuth(supabase, user.id, email, linkableApplication.id);
     if (linked.ok) {
-      return finish("/resident/dashboard");
+      const access = await loadResidentPortalAccessState({
+        userId: user.id,
+        role: "resident",
+        email,
+      });
+      return finish(residentPortalHomePath(access));
     }
     const params = new URLSearchParams({ role: "resident", message: "resident_signup_failed" });
     if (linked.error) params.set("error", linked.error);
@@ -189,7 +194,7 @@ export async function resolveOAuthPortalRedirect(
   // Unknown account: no role, no purchase, no application. Do NOT silently create a free
   // manager. Honor an explicit intent; otherwise send the user to the quick role chooser.
   if (intent === "manager") {
-    return finish(MANAGER_PRICING_ENTRY_PATH);
+    return finish("/auth/create-account?mode=create&role=manager");
   }
   if (intent === "resident") {
     return finish("/auth/create-account?role=resident");
@@ -219,7 +224,17 @@ export async function finalizeOAuthPortalRedirect(
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
   ]);
   const roles = normalizePortalRoles(roleRows, profile?.role);
-  if (roles.length === 1) return portalDashboardPath(roles[0]!);
+  if (roles.length === 1) {
+    if (roles[0] === "resident") {
+      const access = await loadResidentPortalAccessState({
+        userId: user.id,
+        role: "resident",
+        email: user.email?.trim().toLowerCase() ?? "",
+      });
+      return residentPortalHomePath(access);
+    }
+    return portalDashboardPath(roles[0]!);
+  }
   if (roles.length > 1) return "/auth/choose-portal";
   if (isPrimaryAdminEmail(email)) return portalDashboardPath("admin");
   return GET_STARTED_PATH;

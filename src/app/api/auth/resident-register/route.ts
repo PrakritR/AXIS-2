@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       ok: true,
       axisId: provisioned.axisId,
       linkedApplication: provisioned.linkedApplication,
-      redirectTo: "/resident/applications",
+      redirectTo: "/resident/applications/apply",
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not create resident account.";

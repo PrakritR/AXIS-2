@@ -421,7 +421,7 @@ export function ResidentHousingBrowse() {
 
   return (
     <div className="w-full">
-      <div className="mb-5 rounded-2xl border border-border/50 bg-background px-3 py-3 sm:px-4 lg:sticky lg:top-16 lg:z-20 lg:bg-background/90 lg:backdrop-blur-md">
+      <div className="mb-6 rounded-2xl border border-border/50 bg-background px-3 py-3 sm:px-4 sm:mb-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">
@@ -496,7 +496,6 @@ export function ResidentHousingBrowse() {
         </div>
       </div>
 
-      <div className="relative z-0">
       {loading ? (
         <BrowseSkeleton />
       ) : cards.length === 0 ? (
@@ -528,7 +527,6 @@ export function ResidentHousingBrowse() {
           </div>
         </>
       )}
-      </div>
     </div>
   );
 }

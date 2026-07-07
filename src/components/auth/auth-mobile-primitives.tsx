@@ -4,6 +4,45 @@ import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { AuthRoleIcon, type AuthRoleIconName } from "@/components/auth/auth-role-icons";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
+export const AUTH_TERMS_HREF = "/tos";
+export const AUTH_PRIVACY_HREF = "/privacy";
+
+/** Enrollio-style consent copy under auth CTAs — links to public Terms and Privacy pages. */
+export function AuthLegalConsent({
+  action = "continue",
+  className = "",
+}: {
+  action?: "continue" | "create";
+  className?: string;
+}) {
+  const lead = action === "create" ? "By creating an account, you agree to our" : "By continuing, you agree to our";
+  return (
+    <p
+      className={`auth-legal-consent whitespace-nowrap text-center text-[9px] leading-tight tracking-tight text-muted sm:text-[10px] ${className}`.trim()}
+    >
+      {lead}{" "}
+      <Link
+        href={AUTH_TERMS_HREF}
+        className="font-semibold text-primary/90 underline-offset-2 hover:text-primary hover:underline"
+        data-attr="auth-terms-link"
+        aria-label="Terms of Service"
+      >
+        Terms
+      </Link>{" "}
+      and{" "}
+      <Link
+        href={AUTH_PRIVACY_HREF}
+        className="font-semibold text-primary/90 underline-offset-2 hover:text-primary hover:underline"
+        data-attr="auth-privacy-link"
+        aria-label="Privacy Policy"
+      >
+        Privacy
+      </Link>
+      .
+    </p>
+  );
+}
+
 type AuthPageHeaderProps = {
   eyebrow?: string;
   title: string;
@@ -13,13 +52,32 @@ type AuthPageHeaderProps = {
 };
 
 /** Welcome / entry — logo mark with optional title and subtitle. */
-export function AuthBrandHeader({ title, subtitle }: { title?: string; subtitle?: string }) {
+export function AuthBrandHeader({
+  title,
+  subtitle,
+  homeLink = false,
+}: {
+  title?: string;
+  subtitle?: string;
+  /** Native auth hub — centered logo links home. */
+  homeLink?: boolean;
+}) {
+  const logo = (
+    <AxisLogoMark
+      size="default"
+      className="auth-brand-logo shadow-[0_14px_44px_-14px_rgba(47,107,255,0.5)]"
+    />
+  );
+
   return (
     <div className="auth-brand-header flex flex-col items-center text-center">
-      <AxisLogoMark
-        size="default"
-        className="auth-brand-logo shadow-[0_14px_44px_-14px_rgba(47,107,255,0.5)]"
-      />
+      {homeLink ? (
+        <Link href="/" data-attr="auth-home-logo" aria-label="Axis home">
+          {logo}
+        </Link>
+      ) : (
+        logo
+      )}
       {title ? (
         <h1 className="auth-brand-title mt-4 text-[1.5rem] font-semibold tracking-tight text-gradient-accent sm:mt-5 sm:text-[1.625rem]">
           {title}
@@ -267,6 +325,11 @@ export function AuthLoadingCard({ label = "Loading…" }: { label?: string }) {
       <p className="text-sm text-muted">{label}</p>
     </div>
   );
+}
+
+/** Spacer above the bottom Apple OAuth button on blended auth screens. */
+export function AuthAppleBottom({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`auth-apple-bottom mt-4 space-y-3 pt-1 ${className}`.trim()}>{children}</div>;
 }
 
 export function AuthDivider({ label = "or" }: { label?: string }) {

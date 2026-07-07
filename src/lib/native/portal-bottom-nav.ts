@@ -177,7 +177,10 @@ export function splitNativeBottomNavItems<T extends { section: string }>(
     .map((section) => bySection.get(section))
     .filter((item): item is T => Boolean(item));
   const primarySections = new Set(primary.map((item) => item.section));
-  const overflow = ordered.filter((item) => !primarySections.has(item.section));
+  // Settings is always reached via the mobile profile menu, never the bar or More sheet.
+  const overflow = ordered.filter(
+    (item) => !primarySections.has(item.section) && item.section !== SETTINGS_SECTION,
+  );
   return { primary, overflow };
 }
 

@@ -13,7 +13,7 @@ export async function middleware(request: NextRequest) {
   }
   if (path === "/portal/resident" || path === "/portal/resident/") {
     const url = request.nextUrl.clone();
-    url.pathname = "/resident/dashboard";
+    url.pathname = "/resident";
     return NextResponse.redirect(url);
   }
 

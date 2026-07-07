@@ -1257,6 +1257,12 @@ html[data-auth-native] .auth-layout {
 
 html[data-auth-welcome] .auth-layout-main {
   align-items: center;
+  padding-top: 0.75rem;
+}
+
+html[data-auth-native] .auth-layout-main,
+html[data-native] .auth-layout-main:has(.native-auth-hub) {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
 }
 
 html[data-auth-welcome] .auth-layout-panel {
@@ -1341,6 +1347,57 @@ html[data-auth-native] .auth-card {
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
+/* Auth hub — form floats on wallpaper/background without a frosted panel */
+.auth-card-blend {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+
+html[data-auth-welcome] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+html[data-auth-native] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+html[data-auth-welcome][data-theme="light"] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+html[data-auth-native][data-theme="light"] .native-auth-hub :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+html[data-auth-welcome] .native-auth-hub .auth-oauth-google,
+html[data-auth-native] .native-auth-hub .auth-oauth-google {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+html[data-auth-welcome][data-theme="light"] .native-auth-hub .auth-oauth-google,
+html[data-auth-native][data-theme="light"] .native-auth-hub .auth-oauth-google {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+html[data-auth-welcome] .native-auth-role-toggle,
+html[data-auth-native] .native-auth-role-toggle {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+html[data-auth-welcome][data-theme="light"] .native-auth-role-toggle,
+html[data-auth-native][data-theme="light"] .native-auth-role-toggle {
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
 html[data-native] .auth-brand-header .auth-brand-title {
   margin-top: 0.625rem;
 }
@@ -1354,7 +1411,11 @@ html[data-native] .native-auth-hub > .mt-4 {
 }
 
 html[data-native] .auth-card:has(.native-auth-hub) {
-  padding-top: 0.5rem;
+  padding-top: 0;
+}
+
+html[data-native] .auth-card-blend:has(.native-auth-hub) {
+  padding: 0;
 }
 
 html[data-native] .auth-card-shell {
@@ -1413,17 +1474,33 @@ html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="s
   align-items: center;
 }
 
-html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="create"]) {
+html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="create-compact"]) {
+  justify-content: flex-start;
+  align-items: center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html[data-native] .native-auth-hub-stack[data-auth-mode="create-compact"] .auth-brand-header-wrap {
+  margin-bottom: 0.5rem;
+}
+
+html[data-native] .native-auth-hub-stack[data-auth-mode="create-compact"] .native-auth-hub-footer {
+  padding-bottom: max(0.5rem, var(--native-safe-bottom));
+}
+
+html[data-native] .auth-layout-main:has(.native-auth-hub-stack[data-auth-mode="create-tall"]) {
   justify-content: flex-start;
   align-items: center;
 }
 
-html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="sign-in"]) {
+html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="sign-in"]),
+html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="create-compact"]) {
   margin: auto;
   align-self: center;
 }
 
-html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="create"]) {
+html[data-native] .auth-layout-panel:has(.native-auth-hub-stack[data-auth-mode="create-tall"]) {
   margin: 0 auto;
   align-self: center;
   max-width: min(100%, 52rem);

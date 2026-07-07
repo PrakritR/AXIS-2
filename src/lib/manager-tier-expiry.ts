@@ -1,3 +1,4 @@
+import { MANAGER_SUBSCRIPTION_TRIAL_DAYS } from "@/lib/stripe/subscription-checkout-session";
 import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-access";
 
 export type ManagerPurchaseExpiryInput = {
@@ -6,6 +7,10 @@ export type ManagerPurchaseExpiryInput = {
   paid_at?: string | null;
   stripe_subscription_id?: string | null;
 };
+
+export function isSignupTrialManagerPurchase(billing: string | null | undefined): boolean {
+  return billing?.toLowerCase().trim() === "trial";
+}
 
 /** End of the current paid period for admin-assigned / non-Stripe purchases. */
 export function managerPurchasePeriodEndMs(
@@ -18,6 +23,14 @@ export function managerPurchasePeriodEndMs(
   if (input.stripe_subscription_id?.trim()) return null;
 
   const billing = input.billing?.toLowerCase().trim();
+  if (billing === "trial") {
+    const paidAt = input.paid_at ? new Date(input.paid_at) : null;
+    if (!paidAt || Number.isNaN(paidAt.getTime())) return null;
+    const end = new Date(paidAt);
+    end.setUTCDate(end.getUTCDate() + MANAGER_SUBSCRIPTION_TRIAL_DAYS);
+    return end.getTime();
+  }
+
   if (billing !== "monthly" && billing !== "annual") return null;
 
   const paidAt = input.paid_at ? new Date(input.paid_at) : null;

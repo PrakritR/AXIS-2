@@ -1,8 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   MANAGER_TABLE_TH,
@@ -77,6 +76,7 @@ function sortApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] {
 export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const { email: sessionEmail, ready: sessionReady } = usePortalSession();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const residentEmail = (sessionEmail ?? "").trim().toLowerCase();
   const [tick, setTick] = useState(0);
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
@@ -112,6 +112,11 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
   );
 
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
+
+  useEffect(() => {
+    if (!sessionReady || rows.length > 0) return;
+    router.replace("/resident/applications/apply");
+  }, [sessionReady, rows.length, router]);
 
   useEffect(() => {
     if (openHandled.current || rows.length === 0) return;
@@ -169,44 +174,22 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
     </div>
   );
 
-  const body = (
-    <>
-      {rows.length === 0 ? (
-        <div className="mx-auto max-w-lg space-y-6 py-6 text-center sm:py-10">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Apply for housing</h2>
-            <p className="text-sm leading-relaxed text-muted">
-              Start your rental application here. You&apos;ll choose a property and room, then complete the standard Axis application.
-            </p>
-          </div>
-          <Link
-            href="/resident/applications/apply"
-            className="btn-cobalt inline-flex min-h-[48px] items-center justify-center rounded-full px-8 text-base font-semibold"
-            data-attr="resident-start-application"
-          >
-            Start application
-          </Link>
-          <p className="text-sm text-muted">
-            <Link href="/rent/browse" className="font-semibold text-primary underline-offset-4 hover:underline">
-              Browse available housing
-            </Link>
-          </p>
-        </div>
-      ) : (
-        <>
-          <ManagerPortalFilterRow>
-            <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          </ManagerPortalFilterRow>
+  const body =
+    !sessionReady || rows.length === 0 ? (
+      <div className={PORTAL_DATA_TABLE_WRAP}>
+        <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
+      </div>
+    ) : (
+      <>
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+        </ManagerPortalFilterRow>
 
-          {!sessionReady ? (
-            <div className={PORTAL_DATA_TABLE_WRAP}>
-              <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
-            </div>
-          ) : rowsForBucket.length === 0 ? (
-            <PortalDataTableEmpty icon="application" message="No applications in this tab yet." />
-          ) : (
-            <>
-              <div className="space-y-2 lg:hidden">
+        {rowsForBucket.length === 0 ? (
+          <PortalDataTableEmpty icon="application" message="No applications in this tab yet." />
+        ) : (
+          <>
+            <div className="space-y-2 lg:hidden">
             {rowsForBucket.map((row) => {
               const expanded = expandedId === row.id;
               return (
@@ -283,19 +266,14 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
             </div>
           </div>
         </>
-          )}
-        </>
-      )}
-    </>
-  );
+        )}
+      </>
+    );
 
   if (embedded) return body;
 
   return (
-    <ManagerPortalPageShell
-      title="Applications"
-      subtitle="View and update rental applications tied to your account email."
-    >
+    <ManagerPortalPageShell title="Applications">
       {body}
     </ManagerPortalPageShell>
   );

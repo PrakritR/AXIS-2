@@ -1,11 +1,14 @@
 import { AxisLogoLink } from "@/components/brand/axis-logo";
 import Link from "next/link";
+import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
 
 const PARTNER_LINKS = [
   { href: "/partner", label: "Partner overview" },
   { href: "/partner/pricing", label: "Software & pricing" },
   { href: "/partner/contact", label: "Partner inquiries" },
 ];
+
+const RESIDENT_LINKS = [{ href: RESIDENT_BROWSE_PATH, label: "Resident" }];
 
 const sectionHeading =
   "text-end text-[11px] font-normal uppercase tracking-[0.22em] text-muted";
@@ -52,7 +55,21 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
             </p>
           </div>
 
-          <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 lg:max-w-3xl lg:justify-self-end">
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-2 lg:grid-cols-4 lg:max-w-4xl lg:justify-self-end">
+            {/* Resident */}
+            <div className="min-w-0 lg:text-end">
+              <p className={sectionHeading}>Resident</p>
+              <ul className="mt-3 flex flex-col items-end gap-2">
+                {RESIDENT_LINKS.map(({ href, label }) => (
+                  <li key={href} className="w-full lg:w-auto">
+                    <Link href={href} className={footerLinkClass}>
+                      {label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             {/* Partner */}
             <div className="min-w-0 lg:text-end">
               <p className={sectionHeading}>Partner</p>

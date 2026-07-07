@@ -1,8 +1,10 @@
 "use client";
 
 import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
+import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { PublicFooter } from "@/components/layout/public-footer";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
+import Link from "next/link";
 import { useSyncExternalStore } from "react";
 
 function shouldHideAuthFooter(): boolean {
@@ -32,6 +34,41 @@ function useHideAuthFooter(): boolean {
 
 function useHideAuthSubstrate(): boolean {
   return useSyncExternalStore(subscribeAuthChrome, shouldHideAuthSubstrate, () => false);
+}
+
+function useAuthWelcomeActive(): boolean {
+  return useSyncExternalStore(
+    subscribeAuthChrome,
+    () => typeof document !== "undefined" && document.documentElement.hasAttribute("data-auth-welcome"),
+    () => false,
+  );
+}
+
+function useAuthNativeActive(): boolean {
+  return useSyncExternalStore(
+    subscribeAuthChrome,
+    () =>
+      typeof document !== "undefined" &&
+      (document.documentElement.hasAttribute("data-auth-native") ||
+        document.documentElement.hasAttribute("data-native")),
+    () => false,
+  );
+}
+
+export function AuthLayoutHomeMark() {
+  const active = useAuthWelcomeActive();
+  const isNative = useAuthNativeActive();
+  if (!active || isNative) return null;
+  return (
+    <Link
+      href="/"
+      data-attr="auth-home-logo"
+      aria-label="Axis home"
+      className="auth-layout-home-mark absolute left-0 top-0 z-30 p-4 pl-[max(1rem,env(safe-area-inset-left))] pt-[max(1rem,env(safe-area-inset-top))]"
+    >
+      <AxisLogoMark size="compact" />
+    </Link>
+  );
 }
 
 export function AuthLayoutSubstrate() {

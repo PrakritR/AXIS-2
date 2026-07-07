@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import {
   ManagerPortalPageShell,
@@ -40,42 +39,7 @@ function propertyLabel(row: DemoManagerWorkOrderRow): string {
   return unit && unit !== "—" ? `${row.propertyName} · ${unit}` : row.propertyName;
 }
 
-function ChecklistItem({
-  done,
-  title,
-  description,
-  href,
-  dataAttr,
-}: {
-  done: boolean;
-  title: string;
-  description: string;
-  href: string;
-  dataAttr: string;
-}) {
-  return (
-    <Link
-      href={href}
-      data-attr={dataAttr}
-      className="flex items-start gap-3 rounded-xl bg-accent/30 px-3 py-2.5 transition hover:bg-accent/50"
-    >
-      <span
-        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-          done ? "bg-[var(--status-success-fg)]/15 text-[var(--status-success-fg)]" : "border border-border text-muted"
-        }`}
-        aria-hidden
-      >
-        {done ? "✓" : ""}
-      </span>
-      <span>
-        <span className="block text-sm font-medium text-foreground">{title}</span>
-        <span className="mt-0.5 block text-xs text-muted">{description}</span>
-      </span>
-    </Link>
-  );
-}
-
-/** Vendor Home — section previews and getting-started checklist. */
+/** Vendor Home — section previews in nav order: Services, Calendar, Messages, Payments. */
 export function VendorDashboard({ displayName }: { displayName: string }) {
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
@@ -113,10 +77,6 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
     void tick;
     const rows = readVendorWorkOrderRows();
 
-    const activeRows = rows
-      .filter((r) => r.bucket !== "completed")
-      .sort((a, b) => (a.scheduledAtIso ?? "").localeCompare(b.scheduledAtIso ?? ""));
-
     const upcomingVisits = rows
       .filter((r) => r.scheduledAtIso && r.bucket !== "completed")
       .sort((a, b) => (a.scheduledAtIso ?? "").localeCompare(b.scheduledAtIso ?? ""));
@@ -125,14 +85,18 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       .filter((r) => r.biddingOpen && !r.biddingResolvedAt)
       .sort((a, b) => (b.biddingOpenedAt ?? "").localeCompare(a.biddingOpenedAt ?? ""));
 
+    const pendingPayouts = rows
+      .filter((r) => r.bucket === "completed" && r.automationStatus === "vendor_marked_done" && !r.paidAt)
+      .sort((a, b) => (b.vendorMarkedDoneAt ?? b.completedAt ?? "").localeCompare(a.vendorMarkedDoneAt ?? a.completedAt ?? ""));
+
     const inboxThreads = loadPersistedInbox(VENDOR_INBOX_STORAGE_KEY, [])
       .filter((t) => t.folder === "inbox" && t.unread)
       .slice(0, 5);
 
-    return { activeRows, upcomingVisits, quotesPending, inboxThreads };
+    return { upcomingVisits, quotesPending, pendingPayouts, inboxThreads };
   }, [tick]);
 
-  const { activeRows, upcomingVisits, quotesPending, inboxThreads } = data;
+  const { upcomingVisits, quotesPending, pendingPayouts, inboxThreads } = data;
 
   return (
     <ManagerPortalPageShell
@@ -141,38 +105,13 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
-
-        {/* ── Visits & work orders ── */}
         <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader
-              title="Upcoming visits"
-              href={`${BASE}/calendar`}
-              linkLabel="Calendar →"
-              dataAttr="vendor-dashboard-visits-calendar-link"
-            />
-            <PortalDashboardPreviewList
-              items={upcomingVisits}
-              href={`${BASE}/calendar`}
-              emptyMessage="No upcoming visits yet."
-              keyForItem={(row) => row.id}
-              renderRow={(row) => (
-                <PortalDashboardCompactRow
-                  title={row.title}
-                  subtitle={[propertyLabel(row), fmt(row.scheduledAtIso ?? "")].filter(Boolean).join(" · ")}
-                  badge={<WorkOrderStatusBadge bucket={row.bucket} />}
-                />
-              )}
-            />
-          </div>
-
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Awaiting your quote"
+              title="Services"
               href={`${BASE}/work-orders`}
-              linkLabel="Work Orders →"
-              dataAttr="vendor-dashboard-quotes-work-orders-link"
+              linkLabel="Services →"
+              dataAttr="vendor-dashboard-services-link"
               badge={
                 quotesPending.length > 0 ? (
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
@@ -201,14 +140,31 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
             />
           </div>
 
-        </div>
-
-        {/* ── Messages & getting started ── */}
-        <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
+              title="Calendar"
+              href={`${BASE}/calendar`}
+              linkLabel="Calendar →"
+              dataAttr="vendor-dashboard-calendar-link"
+            />
+            <PortalDashboardPreviewList
+              items={upcomingVisits}
+              href={`${BASE}/calendar`}
+              emptyMessage="No upcoming visits yet."
+              keyForItem={(row) => row.id}
+              renderRow={(row) => (
+                <PortalDashboardCompactRow
+                  title={row.title}
+                  subtitle={[propertyLabel(row), fmt(row.scheduledAtIso ?? "")].filter(Boolean).join(" · ")}
+                  badge={<WorkOrderStatusBadge bucket={row.bucket} />}
+                />
+              )}
+            />
+          </div>
 
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader
-              title="Recent messages"
+              title="Messages"
               href={`${BASE}/inbox/unopened`}
               linkLabel="Inbox →"
               dataAttr="vendor-dashboard-messages-inbox-link"
@@ -233,25 +189,34 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
           </div>
 
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader title="Getting started" />
-            <div className="mt-3 space-y-2">
-              <ChecklistItem
-                done={paymentsConnected}
-                title="Link your bank"
-                description="Connect Stripe under Payments so managers can pay you directly for completed work."
-                href="/vendor/payments"
-                dataAttr="vendor-dashboard-checklist-payments"
+            <PortalDashboardSectionHeader
+              title="Payments"
+              href={`${BASE}/payments`}
+              linkLabel="Payments →"
+              dataAttr="vendor-dashboard-payments-link"
+            />
+            {!paymentsConnected ? (
+              <p className="mt-4 text-sm text-muted">Link your bank under Payments to receive payouts for completed work.</p>
+            ) : (
+              <PortalDashboardPreviewList
+                items={pendingPayouts}
+                href={`${BASE}/payments`}
+                emptyMessage="No payouts pending."
+                keyForItem={(row) => row.id}
+                renderRow={(row) => (
+                  <PortalDashboardCompactRow
+                    title={row.title}
+                    subtitle={propertyLabel(row)}
+                    badge={
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        Awaiting payout
+                      </span>
+                    }
+                  />
+                )}
               />
-              <ChecklistItem
-                done={activeRows.length > 0}
-                title="See your work orders"
-                description="Work offered or assigned to you appears here automatically."
-                href="/vendor/work-orders"
-                dataAttr="vendor-dashboard-checklist-work-orders"
-              />
-            </div>
+            )}
           </div>
-
         </div>
       </div>
     </ManagerPortalPageShell>

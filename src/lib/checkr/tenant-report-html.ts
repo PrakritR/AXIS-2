@@ -26,7 +26,9 @@ function historyRow(label: string, count: number): string {
 }
 
 function productStatus(snapshot: CheckrReportSnapshot | undefined, key: CheckrReportProductKey): string {
-  const status = snapshot?.[key]?.status;
+  const product = snapshot?.[key];
+  if (!product || typeof product !== "object") return "—";
+  const status = product.status;
   if (!status) return "—";
   if (status === "clear") return "Clear";
   if (status === "consider") return "Consider";

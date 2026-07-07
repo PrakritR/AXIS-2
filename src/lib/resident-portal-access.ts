@@ -197,9 +197,9 @@ export async function loadResidentLeaseSignedStatus(email: string): Promise<bool
 
 /** Default resident landing route after sign-in / account creation. */
 export function residentPortalHomePath(
-  access: Pick<ResidentPortalAccessState, "isPreApplicationResident">,
+  access: Pick<ResidentPortalAccessState, "leaseAccessUnlocked">,
 ): string {
-  return access.isPreApplicationResident ? "/resident/applications" : "/resident/dashboard";
+  return access.leaseAccessUnlocked ? "/resident/dashboard" : "/resident/applications/apply";
 }
 
 export function residentHasFullPortalAccess(params: {

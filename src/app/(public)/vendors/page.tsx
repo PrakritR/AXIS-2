@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { VendorSignupForm } from "@/components/auth/vendor-signup-form";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Vendors · Axis",
@@ -15,18 +15,36 @@ const KEY_FACTS = [
 ] as const;
 
 const HOW_IT_WORKS = [
-  "Get matched to properties near you",
-  "Tour the job and submit a bid",
-  "Get paid directly through Axis",
+  {
+    step: 1,
+    title: "Get matched",
+    body: "Managers near you send work orders when your trade fits the job.",
+  },
+  {
+    step: 2,
+    title: "Tour & bid",
+    body: "Visit the property, submit your price and schedule, and message in Axis.",
+  },
+  {
+    step: 3,
+    title: "Get paid",
+    body: "Approved work is paid directly through Axis — labor and materials tracked.",
+  },
 ] as const;
+
+const VENDOR_SIGNUP_HREF = "/auth/create-account?mode=create&role=vendor";
 
 export default function VendorsPage() {
   return (
     <div className="min-h-screen px-4 py-12 sm:px-5 sm:py-16">
       <div className="mx-auto max-w-2xl text-center">
-        <h1 className="text-[1.75rem] font-bold tracking-[-0.03em] text-foreground sm:whitespace-nowrap sm:text-4xl">
+        <h1 className="text-[1.75rem] font-bold tracking-[-0.03em] text-foreground sm:text-4xl">
           Work orders, sent straight to you.
         </h1>
+        <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-muted sm:text-base">
+          Axis connects you to property managers who need repairs, turnovers, and maintenance — without
+          marketplace fees or cold outreach.
+        </p>
 
         <div className="mx-auto mt-8 max-w-md">
           <div className="grid grid-cols-3 gap-2">
@@ -37,36 +55,68 @@ export default function VendorsPage() {
               </div>
             ))}
           </div>
+        </div>
 
-          <div className="mt-8 flex items-start justify-center">
-            {HOW_IT_WORKS.map((step, i) => (
-              <div key={step} className="contents">
+        <div className="mx-auto mt-10 max-w-xl">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">How it works</p>
+          <div className="mt-6 flex items-start justify-center">
+            {HOW_IT_WORKS.map((item, i) => (
+              <div key={item.step} className="contents">
                 {i > 0 ? (
                   <div
                     aria-hidden
-                    className="mt-4 h-0 w-6 shrink-0 border-t-2 border-dashed border-primary/40 sm:mt-4 sm:w-10"
+                    className="mt-5 h-0 w-6 shrink-0 border-t-2 border-dashed border-primary/40 sm:mt-5 sm:w-10"
                   />
                 ) : null}
-                <div className="flex w-20 flex-col items-center gap-2 sm:w-24">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                    {i + 1}
+                <div className="flex w-[5.5rem] flex-col items-center gap-2 sm:w-28">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
+                    {item.step}
                   </span>
-                  <span className="text-center text-xs leading-tight text-foreground">{step}</span>
+                  <span className="text-center text-xs font-semibold leading-tight text-foreground">{item.title}</span>
+                  <span className="text-center text-[11px] leading-snug text-muted">{item.body}</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
+
+        <div className="mx-auto mt-10 max-w-lg glass-card rounded-3xl p-6 text-left sm:p-7">
+          <h2 className="text-center text-base font-semibold text-foreground">Stay connected to every job</h2>
+          <ul className="mt-4 space-y-3 text-sm leading-relaxed text-muted">
+            <li className="flex gap-2">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+              <span>
+                <strong className="font-semibold text-foreground">Inbox with managers</strong> — schedule visits,
+                answer questions, and confirm scope without email chains.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+              <span>
+                <strong className="font-semibold text-foreground">Calendar &amp; work orders</strong> — see what&apos;s
+                open, in progress, and completed in one vendor portal.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+              <span>
+                <strong className="font-semibold text-foreground">Invites &amp; payouts</strong> — managers add you to
+                their roster; approved jobs flow to payment when work is done.
+              </span>
+            </li>
+          </ul>
+        </div>
       </div>
 
-      <div className="mx-auto mt-8 max-w-md">
-        <div className="glass-card rounded-3xl p-7">
-          <h2 className="text-center text-lg font-semibold text-foreground">Sign up as a vendor</h2>
-          <div className="mt-5">
-            <VendorSignupForm />
-          </div>
-        </div>
-        <p className="mt-5 text-center text-sm text-muted">
+      <div className="mx-auto mt-10 max-w-md text-center">
+        <Button
+          asChild
+          className="btn-cobalt w-full rounded-full py-3 text-[15px] font-semibold sm:w-auto sm:px-10"
+          data-attr="vendors-get-started"
+        >
+          <Link href={VENDOR_SIGNUP_HREF}>Get started</Link>
+        </Button>
+        <p className="mt-5 text-sm text-muted">
           Already have an account?{" "}
           <Link
             href="/auth/sign-in"

@@ -27,7 +27,7 @@ export function normalizePortalRoles(
 
 /** Default dashboard route after sign-in / create-account. */
 export function portalDashboardPath(role: AuthRole): string {
-  if (role === "resident") return "/resident/dashboard";
+  if (role === "resident") return "/resident";
   if (role === "manager") return "/portal/dashboard";
   if (role === "vendor") return "/vendor/dashboard";
   return "/admin/dashboard";
