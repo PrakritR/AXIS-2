@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
@@ -198,10 +199,15 @@ export function VendorPaymentMethodsModal({
             </span>
           </label>
           {draft.achPaymentsEnabled ? (
-            <p className="pl-7 text-xs text-muted">
-              Use <span className="font-medium text-foreground">Link bank</span> on this page to connect your account for
-              direct bank payouts.
-            </p>
+            <div className="pl-7">
+              <PortalStripeConnectPanel
+                basePath="/vendor"
+                apiBase="/api/vendor/stripe-connect"
+                returnPath="/vendor/payments"
+                dataAttrPrefix="vendor-stripe-connect"
+                variant="embedded"
+              />
+            </div>
           ) : null}
         </div>
 

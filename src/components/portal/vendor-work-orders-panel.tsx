@@ -31,7 +31,7 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { WorkOrderStatusBadge } from "@/components/portal/resident-services-panel";
-import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT } from "@/lib/manager-work-orders-storage";
+import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT, updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { parseMoneyAmount } from "@/lib/household-charges";
 import { fetchWorkOrderBidsResult, type WorkOrderBid } from "@/lib/work-order-bids";
@@ -64,10 +64,12 @@ function fromDatetimeLocalValue(s: string): string | null {
 
 type BidDraft = { amount: string; materials: string; proposedTime: string; note: string };
 
-function defaultBidDraft(bid: WorkOrderBid | undefined): BidDraft {
+function defaultBidDraft(row: DemoManagerWorkOrderRow, bid: WorkOrderBid | undefined): BidDraft {
+  const laborCents = bid?.amountCents ?? row.vendorCostCents;
+  const materialsCents = bid?.materialsCents ?? row.materialsCostCents;
   return {
-    amount: bid?.amountCents ? (bid.amountCents / 100).toFixed(2) : "",
-    materials: bid?.materialsCents ? (bid.materialsCents / 100).toFixed(2) : "",
+    amount: laborCents ? (laborCents / 100).toFixed(2) : "",
+    materials: materialsCents ? (materialsCents / 100).toFixed(2) : "",
     proposedTime: bid?.proposedTime ? toDatetimeLocalValue(bid.proposedTime) : "",
     note: bid?.note ?? "",
   };
@@ -109,6 +111,7 @@ export function VendorWorkOrdersPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Record<string, BidDraft>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [savingPriceId, setSavingPriceId] = useState<string | null>(null);
   const [doneNoteById, setDoneNoteById] = useState<Record<string, string>>({});
   const [markingDoneId, setMarkingDoneId] = useState<string | null>(null);
   /** Chosen before a bid row exists — once scheduled/submitted, the row's own quoteMode wins. */
@@ -203,11 +206,11 @@ export function VendorWorkOrdersPanel() {
   const openExpand = (row: DemoManagerWorkOrderRow) => {
     setExpandedId(row.id);
     const existing = bidsByWorkOrderId[row.id];
-    setDraftById((prev) => ({ ...prev, [row.id]: prev[row.id] ?? defaultBidDraft(existing) }));
+    setDraftById((prev) => ({ ...prev, [row.id]: prev[row.id] ?? defaultBidDraft(row, existing) }));
   };
 
   const submitBid = async (row: DemoManagerWorkOrderRow) => {
-    const draft = draftById[row.id] ?? defaultBidDraft(undefined);
+    const draft = draftById[row.id] ?? defaultBidDraft(row, bidsByWorkOrderId[row.id]);
     const amountCents = Math.round(parseMoneyAmount(draft.amount) * 100);
     const materialsCents = draft.materials.trim() ? Math.round(parseMoneyAmount(draft.materials) * 100) : 0;
     const proposedTimeIso = fromDatetimeLocalValue(draft.proposedTime);
@@ -324,6 +327,51 @@ export function VendorWorkOrdersPanel() {
     }
   };
 
+  const saveScheduledPrice = async (row: DemoManagerWorkOrderRow) => {
+    const draft = draftById[row.id] ?? defaultBidDraft(row, bidsByWorkOrderId[row.id]);
+    const amountCents = Math.round(parseMoneyAmount(draft.amount) * 100);
+    const materialsCents = draft.materials.trim() ? Math.round(parseMoneyAmount(draft.materials) * 100) : 0;
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+      showToast("Enter a valid labor cost.");
+      return;
+    }
+    if (!Number.isFinite(materialsCents) || materialsCents < 0) {
+      showToast("Enter a valid equipment/materials cost.");
+      return;
+    }
+
+    setSavingPriceId(row.id);
+    try {
+      const totalCents = amountCents + materialsCents;
+      if (demo) {
+        updateManagerWorkOrder(row.id, (current) => ({
+          ...current,
+          vendorCostCents: amountCents,
+          materialsCostCents: materialsCents,
+          cost: `$${(totalCents / 100).toFixed(2)}`,
+        }));
+        setRows(readVendorWorkOrderRows());
+        showToast("Price saved — your manager will see this on payment.");
+        return;
+      }
+      const res = await fetch("/api/portal/work-orders/set-vendor-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ workOrderId: row.id, amountCents, materialsCents }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Could not save price.");
+      await syncManagerWorkOrdersFromServer({ force: true });
+      setRows(readVendorWorkOrderRows());
+      showToast("Price saved — your manager will see this on payment.");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not save price.");
+    } finally {
+      setSavingPriceId(null);
+    }
+  };
+
   const markDone = async (row: DemoManagerWorkOrderRow) => {
     setMarkingDoneId(row.id);
     try {
@@ -391,7 +439,7 @@ export function VendorWorkOrdersPanel() {
 
   const renderRowDetail = (row: DemoManagerWorkOrderRow) => {
     const bid = bidsByWorkOrderId[row.id];
-    const draft = draftById[row.id] ?? defaultBidDraft(bid);
+    const draft = draftById[row.id] ?? defaultBidDraft(row, bid);
     const pricingPending = isPricingPendingBid(bid);
     const canEditBid = (row.biddingOpen || pricingPending) && (!bid || bid.status === "submitted");
     const canMarkDone = row.bucket === "scheduled" && !row.automationStatus;
@@ -400,6 +448,7 @@ export function VendorWorkOrdersPanel() {
     const showModeToggle = canEditBid && !bid && row.biddingOpen;
     const showScheduleConsultation = canEditBid && !bid && mode === "after_consultation" && row.biddingOpen;
     const showPricingFields = canEditBid && (mode === "upfront" || consultationScheduled || pricingPending);
+    const showScheduledPrice = canMarkDone && !showPricingFields;
 
     return (
       <>
@@ -524,7 +573,7 @@ export function VendorWorkOrdersPanel() {
                     placeholder="$0"
                     value={draft.amount}
                     onChange={(e) =>
-                      setDraftById((prev) => ({ ...prev, [row.id]: { ...(prev[row.id] ?? defaultBidDraft(bid)), amount: e.target.value } }))
+                      setDraftById((prev) => ({ ...prev, [row.id]: { ...(prev[row.id] ?? defaultBidDraft(row, bid)), amount: e.target.value } }))
                     }
                     className="h-8 w-24 rounded-md text-sm"
                   />
@@ -539,7 +588,7 @@ export function VendorWorkOrdersPanel() {
                     onChange={(e) =>
                       setDraftById((prev) => ({
                         ...prev,
-                        [row.id]: { ...(prev[row.id] ?? defaultBidDraft(bid)), materials: e.target.value },
+                        [row.id]: { ...(prev[row.id] ?? defaultBidDraft(row, bid)), materials: e.target.value },
                       }))
                     }
                     className="h-8 w-24 rounded-md text-sm"
@@ -553,7 +602,7 @@ export function VendorWorkOrdersPanel() {
                     onChange={(e) =>
                       setDraftById((prev) => ({
                         ...prev,
-                        [row.id]: { ...(prev[row.id] ?? defaultBidDraft(bid)), proposedTime: e.target.value },
+                        [row.id]: { ...(prev[row.id] ?? defaultBidDraft(row, bid)), proposedTime: e.target.value },
                       }))
                     }
                     className="h-8 rounded-md text-sm"
@@ -566,7 +615,7 @@ export function VendorWorkOrdersPanel() {
                     placeholder="Anything the manager should know"
                     value={draft.note}
                     onChange={(e) =>
-                      setDraftById((prev) => ({ ...prev, [row.id]: { ...(prev[row.id] ?? defaultBidDraft(bid)), note: e.target.value } }))
+                      setDraftById((prev) => ({ ...prev, [row.id]: { ...(prev[row.id] ?? defaultBidDraft(row, bid)), note: e.target.value } }))
                     }
                     className="h-8 rounded-md text-sm"
                   />
@@ -593,6 +642,68 @@ export function VendorWorkOrdersPanel() {
 
         {canMarkDone ? (
           <div className="mt-3 border-t border-border pt-3">
+            {showScheduledPrice ? (
+              <div className="mb-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted">Job price</p>
+                <p className="mt-1 text-xs text-muted">
+                  Set what you&apos;ll charge — your manager sees this on outgoing payment when you mark done.
+                </p>
+                <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
+                  <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                    Labor cost
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="$0"
+                      value={draft.amount}
+                      onChange={(e) =>
+                        setDraftById((prev) => ({
+                          ...prev,
+                          [row.id]: { ...(prev[row.id] ?? defaultBidDraft(row, bid)), amount: e.target.value },
+                        }))
+                      }
+                      className="h-8 w-28 rounded-md text-sm"
+                      data-attr="vendor-scheduled-price-labor"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
+                    Equipment / materials
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="$0"
+                      value={draft.materials}
+                      onChange={(e) =>
+                        setDraftById((prev) => ({
+                          ...prev,
+                          [row.id]: { ...(prev[row.id] ?? defaultBidDraft(row, bid)), materials: e.target.value },
+                        }))
+                      }
+                      className="h-8 w-28 rounded-md text-sm"
+                      data-attr="vendor-scheduled-price-materials"
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={PORTAL_DETAIL_BTN}
+                    data-attr="vendor-save-scheduled-price"
+                    disabled={savingPriceId === row.id}
+                    onClick={() => void saveScheduledPrice(row)}
+                  >
+                    {savingPriceId === row.id ? "Saving…" : "Save price"}
+                  </Button>
+                </div>
+                {(row.vendorCostCents ?? 0) > 0 ? (
+                  <p className="mt-2 text-xs text-muted">
+                    Saved total:{" "}
+                    <span className="font-medium text-foreground">
+                      ${(((row.vendorCostCents ?? 0) + (row.materialsCostCents ?? 0)) / 100).toFixed(2)}
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
               Note for the manager (optional)
               <Input

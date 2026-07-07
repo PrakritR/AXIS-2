@@ -76,6 +76,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Official PDF is unavailable in offline demo mode." }, { status: 404 });
     }
 
+    const inline = url.searchParams.get("disposition") !== "attachment";
+
     const pdf = await fetchCheckrReportPdfBytes(checkrApiFetch, {
       orderId: bc.reportId,
       reportResourceId: bc.reportResourceId,
@@ -89,7 +91,7 @@ export async function GET(req: Request) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${filename}"`,
         "Cache-Control": "private, max-age=300",
       },
     });

@@ -8,18 +8,51 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { ApplicationBackgroundCheck } from "@/lib/checkr/types";
 import { applicationShowsBackgroundCheck } from "@/lib/application-background-check";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { buildBackgroundCheckReportHtml } from "@/lib/background-check-report-html";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import type { ManagerScreeningSettings } from "@/lib/screening/types";
 
-function BackgroundCheckReportFrame({ row }: { row: DemoApplicantRow }) {
-  const reportHtml = useMemo(() => buildBackgroundCheckReportHtml(row), [row]);
+function backgroundCheckDocumentHref(applicationId: string, opts?: { attachment?: boolean }): string {
+  const params = new URLSearchParams({ applicationId });
+  if (opts?.attachment) params.set("disposition", "attachment");
+  return `/api/screening/background-check/document?${params.toString()}`;
+}
 
-  if (!reportHtml) {
+function downloadBackgroundCheckPdf(applicationId: string): void {
+  const anchor = document.createElement("a");
+  anchor.href = backgroundCheckDocumentHref(applicationId, { attachment: true });
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+function BackgroundCheckReportFrame({ row }: { row: DemoApplicantRow }) {
+  const bg = row.backgroundCheck;
+  const demo = isDemoModeActive();
+  const useOfficialPdf = bg?.status === "complete" && !(bg.simulated && demo);
+  const pdfSrc = useOfficialPdf
+    ? `${backgroundCheckDocumentHref(row.id)}#toolbar=0&navpanes=0`
+    : null;
+  const reportHtml = useMemo(() => (useOfficialPdf ? "" : buildBackgroundCheckReportHtml(row)), [row, useOfficialPdf]);
+
+  if (!pdfSrc && !reportHtml) {
     return (
       <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
         No screening report yet.
       </div>
+    );
+  }
+
+  if (pdfSrc) {
+    return (
+      <iframe
+        src={pdfSrc}
+        title="Background check report preview"
+        loading="lazy"
+        className="h-[min(52vh,420px)] w-full border-0 bg-white"
+      />
     );
   }
 
@@ -158,6 +191,17 @@ export function ApplicationScreeningPanel({
 
   const headerActions = (
     <>
+      {bg?.status === "complete" && !(bg.simulated && isDemoModeActive()) ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-full px-4 text-xs"
+          data-attr="screening-pdf-download"
+          onClick={() => downloadBackgroundCheckPdf(row.id)}
+        >
+          Download PDF
+        </Button>
+      ) : null}
       {canOrder ? (
         <Button
           type="button"

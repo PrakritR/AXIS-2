@@ -217,9 +217,10 @@ export function ManagerAllServicesPanel({
               type="button"
               variant="primary"
               className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={() => vendorsPanelRef.current?.openAdd()}
+              onClick={() => vendorsPanelRef.current?.openSettings()}
+              data-attr="manager-vendor-settings-open"
             >
-              Add vendor
+              Vendor settings
             </Button>
           ) : null}
           {typeFilter === "requests" ? (

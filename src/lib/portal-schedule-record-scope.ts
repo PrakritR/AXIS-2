@@ -46,6 +46,10 @@ export function isManagerScopedScheduleRecordType(recordType: string): boolean {
   );
 }
 
+export function vendorScheduleRecordTypes(): Array<"vendor_availability" | "vendor_flexible_preferences"> {
+  return ["vendor_availability", "vendor_flexible_preferences"];
+}
+
 /** Expected storage keys for a manager + property (used to validate reads). */
 export function expectedManagerScheduleRecordIds(userId: string, propertyId: string): {
   shareKey: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -67,6 +67,7 @@ export function ManagerServiceRequestDetail({
   const [editingCharges, setEditingCharges] = useState(false);
   const [editPrice, setEditPrice] = useState(req.price ?? "");
   const [editDeposit, setEditDeposit] = useState(req.deposit ?? "");
+  const priceInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setEditPrice(req.price ?? "");
@@ -74,8 +75,20 @@ export function ManagerServiceRequestDetail({
     setEditingCharges(false);
   }, [req.id, req.price, req.deposit]);
 
+  useEffect(() => {
+    if (!editingCharges) return;
+    priceInputRef.current?.focus();
+    priceInputRef.current?.select();
+  }, [editingCharges]);
+
   const chargesSummary = managerServiceRequestPricingSummary(req);
   const depositSummary = needsReturn && req.deposit?.trim() ? req.deposit.trim() : null;
+
+  const cancelEditing = () => {
+    setEditPrice(req.price ?? "");
+    setEditDeposit(req.deposit ?? "");
+    setEditingCharges(false);
+  };
 
   const saveCharges = () => {
     updateServiceRequest(req.id, {
@@ -98,14 +111,46 @@ export function ManagerServiceRequestDetail({
         <p>
           Service: <span className="text-foreground">{req.offerName}</span>
         </p>
-        <p>
-          Charges: <span className="tabular-nums text-foreground">{chargesSummary}</span>
-          {depositSummary ? (
-            <>
-              {" "}
-              · Deposit: <span className="tabular-nums text-foreground">{depositSummary}</span>
-            </>
-          ) : null}
+        <p className="flex flex-wrap items-center gap-x-1 gap-y-1">
+          <span>Charges:</span>
+          {req.status === "pending" && editingCharges ? (
+            <span className="inline-flex items-center gap-1 text-foreground">
+              <span className="text-muted">$</span>
+              <input
+                ref={priceInputRef}
+                id={`service-request-price-${req.id}`}
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+                placeholder={req.priceLimit?.trim() ? req.priceLimit.replace(/[^\d.]/g, "") : "0"}
+                inputMode="decimal"
+                className="h-8 w-24 rounded-lg border border-border bg-card px-2 text-sm tabular-nums text-foreground outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                aria-label="Service fee"
+              />
+              {needsReturn || editDeposit.trim() ? (
+                <>
+                  <span className="text-muted">· Deposit: $</span>
+                  <Input
+                    value={editDeposit}
+                    onChange={(e) => setEditDeposit(e.target.value)}
+                    placeholder="0"
+                    inputMode="decimal"
+                    className="h-8 w-20 rounded-lg px-2 text-sm tabular-nums"
+                    aria-label="Deposit"
+                  />
+                </>
+              ) : null}
+            </span>
+          ) : (
+            <span className="tabular-nums text-foreground">
+              {chargesSummary}
+              {depositSummary ? (
+                <>
+                  {" "}
+                  · Deposit: {depositSummary}
+                </>
+              ) : null}
+            </span>
+          )}
         </p>
         <p>
           Status: <span className="text-foreground">{serviceRequestStatusLabel(req.status)}</span>
@@ -118,43 +163,6 @@ export function ManagerServiceRequestDetail({
         ) : null}
         {req.notes ? <p className="italic">&ldquo;{req.notes}&rdquo;</p> : null}
       </div>
-
-      {req.status === "pending" && editingCharges ? (
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <div className="w-28">
-            <p className="mb-1 text-[11px] font-medium text-muted">Service fee</p>
-            <div className="flex items-center gap-1">
-              <span className="text-sm text-muted">$</span>
-              <Input
-                value={editPrice}
-                onChange={(e) => setEditPrice(e.target.value)}
-                placeholder={req.priceLimit?.trim() ? req.priceLimit.replace(/[^\d.]/g, "") : "0"}
-                inputMode="decimal"
-                className="h-8 rounded-lg px-2 text-sm"
-              />
-            </div>
-          </div>
-          <div className="w-28">
-            <p className="mb-1 text-[11px] font-medium text-muted">Deposit</p>
-            <div className="flex items-center gap-1">
-              <span className="text-sm text-muted">$</span>
-              <Input
-                value={editDeposit}
-                onChange={(e) => setEditDeposit(e.target.value)}
-                placeholder="0"
-                inputMode="decimal"
-                className="h-8 rounded-lg px-2 text-sm"
-              />
-            </div>
-          </div>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={saveCharges}>
-            Save
-          </Button>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setEditingCharges(false)}>
-            Cancel
-          </Button>
-        </div>
-      ) : null}
 
       <PortalTableDetailActions>
         {req.status === "pending" ? (
@@ -196,15 +204,26 @@ export function ManagerServiceRequestDetail({
             >
               Deny
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN}
-              data-attr="service-request-edit-charges"
-              onClick={() => setEditingCharges(true)}
-            >
-              Edit payment
-            </Button>
+            {editingCharges ? (
+              <>
+                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={saveCharges}>
+                  Save
+                </Button>
+                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEditing}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                data-attr="service-request-edit-charges"
+                onClick={() => setEditingCharges(true)}
+              >
+                Edit
+              </Button>
+            )}
           </>
         ) : null}
         {allowDelete ? (

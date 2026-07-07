@@ -14,7 +14,6 @@ import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_MOBILE_DETAIL_EXPAND,
   PORTAL_TABLE_DETAIL_CELL,
@@ -29,7 +28,6 @@ import {
   PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { PortalStripeConnectPanel } from "@/components/portal/portal-stripe-connect-panel";
 import { VendorPaymentMethodsModal } from "@/components/portal/vendor-payment-methods-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
@@ -42,7 +40,8 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payouts";
-import { vendorPaymentMethodSummaryLabel } from "@/lib/vendor-payment-methods";
+import { VENDOR_ACCEPTED_PAYMENT_METHOD_LABELS } from "@/lib/vendor-payment-methods";
+import { managerVendorPayMethodLabel } from "@/lib/manager-vendor-payment-flow";
 
 type VendorPaymentBucket = "pending" | "paid";
 
@@ -141,7 +140,7 @@ function toLedgerRow(row: DemoManagerWorkOrderRow, payout: VendorPayout | undefi
   };
 }
 
-type VendorPaymentNotifyAction = "send_reminder" | "report_paid";
+type VendorPaymentNotifyAction = "send_reminder";
 
 function VendorPaymentPendingActions({
   workOrderId,
@@ -152,38 +151,34 @@ function VendorPaymentPendingActions({
 }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
-  const [busy, setBusy] = useState<VendorPaymentNotifyAction | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const notify = async (action: VendorPaymentNotifyAction) => {
+  const sendReminder = async () => {
     if (demo) {
-      showToast(
-        action === "send_reminder"
-          ? "Reminder sent to your property manager."
-          : "Payment confirmation sent to your property manager.",
-      );
+      showToast("Reminder sent to your property manager.");
       onDone?.();
       return;
     }
 
-    setBusy(action);
+    setBusy(true);
     try {
       const res = await fetch("/api/vendor/work-orders/payment-notify", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workOrderId, action }),
+        body: JSON.stringify({ workOrderId, action: "send_reminder" }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         showToast(data.error ?? "Could not send notification.");
         return;
       }
-      showToast(action === "send_reminder" ? "Reminder sent." : "Manager notified — payment marked as received.");
+      showToast("Reminder sent.");
       onDone?.();
     } catch {
       showToast("Could not send notification.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
@@ -194,22 +189,11 @@ function VendorPaymentPendingActions({
         variant="outline"
         className={PORTAL_DETAIL_BTN}
         data-portal-row-ignore
-        disabled={busy === "send_reminder"}
+        disabled={busy}
         data-attr="vendor-payments-send-reminder"
-        onClick={() => void notify("send_reminder")}
+        onClick={() => void sendReminder()}
       >
-        {busy === "send_reminder" ? "Sending reminder…" : "Send reminder"}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className={PORTAL_DETAIL_BTN_PRIMARY}
-        data-portal-row-ignore
-        disabled={busy === "report_paid"}
-        data-attr="vendor-payments-mark-paid"
-        onClick={() => void notify("report_paid")}
-      >
-        {busy === "report_paid" ? "Notifying…" : "Mark as paid"}
+        {busy ? "Sending reminder…" : "Send reminder"}
       </Button>
     </PortalTableDetailActions>
   );
@@ -217,25 +201,99 @@ function VendorPaymentPendingActions({
 
 function VendorPaymentExpandedDetail({
   row,
+  workOrder,
+  vendorProfile,
   bucket,
 }: {
   row: VendorPaymentLedgerRow;
+  workOrder: DemoManagerWorkOrderRow;
+  vendorProfile: ManagerVendorRow | null;
   bucket: VendorPaymentBucket;
 }) {
+  const { showToast } = useAppUi();
   const showActions = bucket === "pending";
-
-  if (!row.payoutFailureReason && !showActions) return null;
+  const paidChannel = workOrder.vendorPaymentChannel;
 
   return (
     <div className={PORTAL_MOBILE_DETAIL_EXPAND}>
-      {row.payoutFailureReason ? (
-        <p className="text-xs text-muted">{row.payoutFailureReason}</p>
-      ) : null}
-      {showActions ? (
-        <div className={row.payoutFailureReason ? "mt-3" : undefined}>
-          <VendorPaymentPendingActions workOrderId={row.id} />
+      <p className="mb-3 text-sm text-muted">
+        {bucket === "paid" ? "Paid" : "Updated"}:{" "}
+        <span className="font-semibold text-foreground">{row.dateLabel}</span>
+        {" · "}
+        Amount: <span className="font-semibold text-foreground">{row.amountLabel}</span>
+      </p>
+
+      {paidChannel && bucket === "paid" ? (
+        <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
+          <p className="text-xs font-semibold">Paid via {managerVendorPayMethodLabel(paidChannel)}</p>
+          {paidChannel === "zelle" && workOrder.vendorZelleContactSnapshot ? (
+            <p className="mt-1 text-sm leading-relaxed">
+              Sent to <span className="font-mono font-medium">{workOrder.vendorZelleContactSnapshot}</span>
+            </p>
+          ) : null}
+          {paidChannel === "venmo" && workOrder.vendorVenmoContactSnapshot ? (
+            <p className="mt-1 text-sm leading-relaxed">
+              Sent to <span className="font-mono font-medium">{workOrder.vendorVenmoContactSnapshot}</span>
+            </p>
+          ) : null}
+          {paidChannel === "ach" ? (
+            <p className="mt-1 text-sm leading-relaxed">
+              {row.payoutStatus ?? "ACH transfer through Axis when your bank is linked."}
+            </p>
+          ) : null}
         </div>
       ) : null}
+
+      {bucket === "pending" && vendorProfile?.zellePaymentsEnabled && vendorProfile.zelleContact?.trim() ? (
+        <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
+          <p className="text-xs font-semibold">{VENDOR_ACCEPTED_PAYMENT_METHOD_LABELS.zelle}</p>
+          <p className="mt-1 text-sm leading-relaxed">
+            Your manager can send to{" "}
+            <span className="font-mono font-medium">{vendorProfile.zelleContact.trim()}</span>. Include the work order
+            title in the memo.
+          </p>
+        </div>
+      ) : null}
+
+      {bucket === "pending" && vendorProfile?.venmoPaymentsEnabled && vendorProfile.venmoContact?.trim() ? (
+        <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-approved-fg)]">
+          <p className="text-xs font-semibold">{VENDOR_ACCEPTED_PAYMENT_METHOD_LABELS.venmo}</p>
+          <p className="mt-1 text-sm leading-relaxed">
+            Your manager can send to{" "}
+            <span className="font-mono font-medium">{vendorProfile.venmoContact.trim()}</span>. Include the property and
+            work order in the note.
+          </p>
+        </div>
+      ) : null}
+
+      {bucket === "pending" && vendorProfile?.achPaymentsEnabled ? (
+        <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-pending-fg)]">
+          <p className="text-xs font-semibold">Pay through Axis (ACH)</p>
+          <p className="mt-1 text-sm leading-relaxed">
+            When your bank is linked, your manager can approve &amp; pay to send an ACH transfer automatically.
+          </p>
+        </div>
+      ) : null}
+
+      {row.payoutFailureReason ? (
+        <p className="mb-4 text-xs text-muted">{row.payoutFailureReason}</p>
+      ) : null}
+
+      {showActions ? <VendorPaymentPendingActions workOrderId={row.id} /> : null}
+
+      <PortalTableDetailActions>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => {
+            void navigator.clipboard?.writeText(row.amountLabel);
+            showToast("Amount copied.");
+          }}
+        >
+          Copy amount
+        </Button>
+      </PortalTableDetailActions>
     </div>
   );
 }
@@ -308,9 +366,16 @@ export function VendorPaymentsPanel() {
     if (connect === "done") {
       showToast("Bank account linked.");
     } else if (connect === "refresh") {
-      showToast("Setup link expired — try Link bank again.");
+      showToast("Setup link expired — open Payment methods and try again.");
     }
   }, [showToast]);
+
+  const workOrderById = useMemo(() => {
+    void tick;
+    const map = new Map<string, DemoManagerWorkOrderRow>();
+    for (const row of readVendorWorkOrderRows()) map.set(row.id, row);
+    return map;
+  }, [tick]);
 
   const ledgerRows = useMemo(() => {
     void tick;
@@ -355,26 +420,15 @@ export function VendorPaymentsPanel() {
     <ManagerPortalPageShell
       title="Payments"
       titleAside={
-        <div className="flex min-w-0 flex-col items-stretch gap-2">
-          <div className="flex items-center justify-end gap-2">
-            <PortalStripeConnectPanel
-              basePath="/vendor"
-              apiBase="/api/vendor/stripe-connect"
-              returnPath="/vendor/payments"
-              dataAttrPrefix="vendor-stripe-connect"
-              variant="header"
-            />
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_HEADER_ACTION_BTN}
-              onClick={() => setPaymentMethodsOpen(true)}
-              data-attr="vendor-payments-add"
-            >
-              Payment methods
-            </Button>
-          </div>
-        </div>
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_HEADER_ACTION_BTN}
+          onClick={() => setPaymentMethodsOpen(true)}
+          data-attr="vendor-payments-add"
+        >
+          Payment methods
+        </Button>
       }
       filterRow={filterRow}
     >
@@ -384,19 +438,6 @@ export function VendorPaymentsPanel() {
           data-attr="vendor-payments-unlinked-banner"
         >
           Waiting on a property manager to connect with you — completed work will appear here once you&apos;re linked.
-        </p>
-      ) : vendorProfile ? (
-        <p className="mb-4 rounded-xl border border-border bg-accent/20 px-4 py-3 text-sm text-muted">
-          <span className="font-medium text-foreground">You accept: </span>
-          {vendorPaymentMethodSummaryLabel(vendorProfile)}
-          <button
-            type="button"
-            className="ml-2 font-medium text-foreground underline underline-offset-2"
-            onClick={() => setPaymentMethodsOpen(true)}
-            data-attr="vendor-payments-edit-methods"
-          >
-            Edit
-          </button>
         </p>
       ) : null}
 
@@ -422,15 +463,24 @@ export function VendorPaymentsPanel() {
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
                       <p className="text-base font-bold tabular-nums text-foreground">{row.amountLabel}</p>
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}
-                      >
-                        {row.statusLabel}
-                      </span>
+                      {bucket !== "paid" ? (
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}
+                        >
+                          {row.statusLabel}
+                        </span>
+                      ) : null}
                       <PortalTableExpandChevron expanded={expanded} />
                     </div>
                   </button>
-                  {expanded ? <VendorPaymentExpandedDetail row={row} bucket={bucket} /> : null}
+                  {expanded ? (
+                    <VendorPaymentExpandedDetail
+                      row={row}
+                      workOrder={workOrderById.get(row.id)!}
+                      vendorProfile={vendorProfile}
+                      bucket={bucket}
+                    />
+                  ) : null}
                 </div>
               );
             })}
@@ -444,7 +494,9 @@ export function VendorPaymentsPanel() {
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Work order</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-right`}>Amount</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    {bucket !== "paid" ? (
+                      <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                    ) : null}
                     <th className={`${MANAGER_TABLE_TH} text-left`}>
                       {bucket === "paid" ? "Paid" : "Updated"}
                     </th>
@@ -466,27 +518,27 @@ export function VendorPaymentsPanel() {
                         <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.workOrderTitle}</td>
                         <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.propertyName}</td>
                         <td className={`${PORTAL_TABLE_TD} text-right tabular-nums`}>{row.amountLabel}</td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone(row.statusLabel)}`}
-                          >
-                            {row.statusLabel}
-                          </span>
-                        </td>
+                        {bucket !== "paid" ? (
+                          <td className={PORTAL_TABLE_TD}>
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone(row.statusLabel)}`}
+                            >
+                              {row.statusLabel}
+                            </span>
+                          </td>
+                        ) : null}
                         <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.dateLabel}</td>
                         <PortalTableExpandCell expanded={expandedId === row.id} />
                       </tr>
                       {expandedId === row.id ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
-                            {row.payoutFailureReason ? (
-                              <p className="text-xs text-muted">{row.payoutFailureReason}</p>
-                            ) : null}
-                            {bucket === "pending" ? (
-                              <div className={row.payoutFailureReason ? "mt-4" : undefined}>
-                                <VendorPaymentPendingActions workOrderId={row.id} />
-                              </div>
-                            ) : null}
+                          <td colSpan={bucket === "paid" ? 5 : 6} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <VendorPaymentExpandedDetail
+                              row={row}
+                              workOrder={workOrderById.get(row.id)!}
+                              vendorProfile={vendorProfile}
+                              bucket={bucket}
+                            />
                           </td>
                         </tr>
                       ) : null}

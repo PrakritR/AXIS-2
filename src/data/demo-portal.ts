@@ -152,6 +152,14 @@ export type DemoManagerOutgoingPaymentRow = {
   fromExpense?: boolean;
   /** When true the row is an estimated Axis platform / processing fee on a resident payment. */
   fromAxisFee?: boolean;
+  vendorId?: string;
+  amountCents?: number;
+  vendorPaymentMethods?: ("zelle" | "venmo" | "ach")[];
+  zelleContactSnapshot?: string;
+  venmoContactSnapshot?: string;
+  achAvailable?: boolean;
+  paidViaChannel?: "zelle" | "venmo" | "ach";
+  paidAtLabel?: string;
 };
 
 export const demoManagerPaymentLedgerRows: DemoManagerPaymentLedgerRow[] = [];
@@ -204,6 +212,10 @@ export type DemoManagerWorkOrderRow = {
   vendorMarkedDoneAt?: string;
   vendorMarkedDoneNote?: string;
   paidAt?: string;
+  /** How the manager paid the vendor (bookkeeping + payout routing). */
+  vendorPaymentChannel?: "zelle" | "venmo" | "ach";
+  vendorZelleContactSnapshot?: string;
+  vendorVenmoContactSnapshot?: string;
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];

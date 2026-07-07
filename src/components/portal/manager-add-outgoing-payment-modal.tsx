@@ -12,7 +12,8 @@ import {
   readPendingManagerPropertiesForUser,
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
-import { readActiveManagerVendorRows, syncManagerVendorsFromServer, MANAGER_VENDORS_EVENT } from "@/lib/manager-vendors-storage";
+import { readOwnActiveManagerVendorRows, readManagerVendorCategorySettings, syncManagerVendorsFromServer, MANAGER_VENDORS_EVENT } from "@/lib/manager-vendors-storage";
+import { vendorTradeForExpenseCategory } from "@/lib/axis-vendor-catalog";
 import { OUTGOING_PAYMENT_CATEGORY_CODES } from "@/lib/manager-outgoing-payments";
 import { isCategoryDeductible, SYSTEM_CHART_ACCOUNTS } from "@/lib/reports/categories";
 
@@ -75,6 +76,22 @@ export function ManagerAddOutgoingPaymentModal({
     setVendorId("");
   }, [open]);
 
+  const vendors = useMemo(() => {
+    void vendorTick;
+    return readOwnActiveManagerVendorRows(managerUserId);
+  }, [vendorTick, managerUserId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const trade = vendorTradeForExpenseCategory(categoryCode);
+    if (!trade) return;
+    const defaults = readManagerVendorCategorySettings(managerUserId).defaultVendorIdByTrade;
+    const defaultId = defaults[trade];
+    if (defaultId && vendors.some((vendor) => vendor.id === defaultId)) {
+      setVendorId(defaultId);
+    }
+  }, [open, categoryCode, vendors]);
+
   const propertyOptions = useMemo(() => {
     void propertyTick;
     if (!managerUserId) return [];
@@ -82,17 +99,14 @@ export function ManagerAddOutgoingPaymentModal({
     for (const property of [...readExtraListingsForUser(managerUserId), ...readPendingManagerPropertiesForUser(managerUserId)]) {
       const id = property.id.trim();
       if (!id || seen.has(id)) continue;
-      const label = displayPropertyLabel(property.buildingName.trim() || property.title);
+      const label = displayPropertyLabel(
+        property.buildingName.trim() || ("title" in property ? property.title : ""),
+      );
       if (!label) continue;
       seen.set(id, label);
     }
     return [...seen.entries()].map(([id, label]) => ({ id, label }));
   }, [managerUserId, propertyTick]);
-
-  const vendors = useMemo(() => {
-    void vendorTick;
-    return readActiveManagerVendorRows();
-  }, [vendorTick]);
 
   async function save() {
     const amountCents = Math.round(Number.parseFloat(amount.replace(/[^0-9.]/g, "")) * 100);
@@ -187,9 +201,13 @@ export function ManagerAddOutgoingPaymentModal({
             {vendors.map((vendor) => (
               <option key={vendor.id} value={vendor.id}>
                 {vendor.name}
+                {vendor.trade ? ` · ${vendor.trade}` : ""}
               </option>
             ))}
           </Select>
+          {vendors.length === 0 ? (
+            <p className="text-xs text-muted">Add vendors in Services → Vendors → Vendor settings.</p>
+          ) : null}
         </label>
         <div className="flex flex-wrap justify-end gap-2 pt-1">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>

@@ -2,6 +2,7 @@ import { createJsonRecordRoute } from "@/lib/portal-record-api";
 import {
   isManagerScopedScheduleRecordType,
   managerScheduleRecordIdOwnedByUser,
+  vendorScheduleRecordTypes,
 } from "@/lib/portal-schedule-record-scope";
 
 export const runtime = "nodejs";
@@ -26,9 +27,13 @@ const route = createJsonRecordRoute({
   buildUpsert: (row, user) => {
     const recordType = String(row.recordType ?? row.record_type ?? "event");
     const managerScoped = isManagerScopedScheduleRecordType(recordType);
+    const vendorScoped = user.role === "vendor";
     return {
       id: row.id,
-      manager_user_id: managerScoped && user.role !== "admin" ? user.id : row.managerUserId ?? row.manager_user_id ?? null,
+      manager_user_id:
+        vendorScoped || (managerScoped && user.role !== "admin")
+          ? user.id
+          : row.managerUserId ?? row.manager_user_id ?? null,
       property_id: row.propertyId ?? row.property_id ?? null,
       record_type: recordType,
       starts_at: row.startsAt ?? row.starts_at ?? row.startIso ?? null,
@@ -39,6 +44,7 @@ const route = createJsonRecordRoute({
   },
   assignOwnership: (record, user) => {
     if (user.role === "admin") return record;
+    if (user.role === "vendor") return { ...record, manager_user_id: user.id };
     const recordType = String(record.record_type ?? "");
     const managerScoped = isManagerScopedScheduleRecordType(recordType);
     // Only stamp ownership on manager-scoped types; shared singleton records
@@ -48,6 +54,16 @@ const route = createJsonRecordRoute({
   assertInsertAllowed: (record, user) => {
     if (user.role === "admin") return null;
     const recordType = String(record.record_type ?? "");
+    if (user.role === "vendor") {
+      if (!vendorScheduleRecordTypes().includes(recordType as "vendor_availability" | "vendor_flexible_preferences")) {
+        return "Vendors can only update their own availability records.";
+      }
+      const id = String(record.id ?? "");
+      if (!managerScheduleRecordIdOwnedByUser(id, user.id, recordType)) {
+        return "Record id must belong to the authenticated vendor.";
+      }
+      return null;
+    }
     if (!isManagerScopedScheduleRecordType(recordType)) return null;
     const id = String(record.id ?? "");
     if (!managerScheduleRecordIdOwnedByUser(id, user.id, recordType)) {

@@ -55,11 +55,11 @@ import {
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib/demo-property-pipeline";
 import { transitionApplicationBucket } from "@/lib/application-review";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   fetchCosignerSubmissionsForSignerAppId,
   readCosignerSubmissionsForSignerAppId,
 } from "@/lib/cosigner-submissions-storage";
-import { buildApplicationHtml } from "@/lib/manager-application-html";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   removeAllApplicationCharges,
@@ -116,38 +116,36 @@ export function downloadApplicationPdf(row: DemoApplicantRow): void {
 }
 
 /**
- * Inline application preview — rendered HTML (same content as the PDF download)
- * so managers see the document without the browser PDF viewer chrome.
+ * Inline application preview — the same PDF bytes as Download PDF, embedded without
+ * opening a new tab (demo builds the PDF locally; production uses the API route).
  */
 export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
-  const [cosignerSubmissions, setCosignerSubmissions] = useState(
-    () =>
-      row.application?.hasCosigner === "yes" ? readCosignerSubmissionsForSignerAppId(row.id) : [],
-  );
+  const demo = isDemoModeActive();
+  const [pdfSrc, setPdfSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    if (row.application?.hasCosigner !== "yes") {
-      setCosignerSubmissions([]);
-      return;
-    }
-    setCosignerSubmissions(readCosignerSubmissionsForSignerAppId(row.id));
     let cancelled = false;
-    void fetchCosignerSubmissionsForSignerAppId(row.id).then((rows) => {
-      if (!cancelled) setCosignerSubmissions(rows);
-    });
+    if (demo) {
+      void (async () => {
+        const cosignerSubmissions =
+          row.application?.hasCosigner === "yes"
+            ? await fetchCosignerSubmissionsForSignerAppId(row.id).catch(() =>
+                readCosignerSubmissionsForSignerAppId(row.id),
+              )
+            : [];
+        const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
+        const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
+        if (!cancelled) setPdfSrc(url);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    setPdfSrc(`${applicationPdfHref(row, { inline: true })}#toolbar=0&navpanes=0`);
     return () => {
       cancelled = true;
     };
-  }, [row.id, row.application?.hasCosigner]);
-
-  const previewHtml = useMemo(
-    () =>
-      buildApplicationHtml(row, {
-        roomLabel: applicationRoomLabel(row) || undefined,
-        cosignerSubmissions,
-      }),
-    [row, cosignerSubmissions],
-  );
+  }, [row, demo]);
 
   return (
     <PortalCollapsibleSection
@@ -157,16 +155,32 @@ export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
       className="mt-4"
       contentClassName="p-4 pt-0"
       toggleDataAttr="application-document-toggle"
+      headerActions={
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-full px-4 text-xs"
+          data-attr="application-pdf-download"
+          onClick={() => downloadApplicationPdf(row)}
+        >
+          Download PDF
+        </Button>
+      }
     >
       <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-        <iframe
-          key={row.id}
-          srcDoc={previewHtml}
-          title="Application document"
-          sandbox="allow-same-origin"
-          loading="lazy"
-          className="h-[min(52vh,420px)] w-full border-0 bg-white"
-        />
+        {pdfSrc ? (
+          <iframe
+            key={pdfSrc}
+            src={pdfSrc}
+            title="Application document"
+            loading="lazy"
+            className="h-[min(52vh,420px)] w-full border-0 bg-white"
+          />
+        ) : (
+          <div className="flex h-[min(24vh,200px)] items-center justify-center px-4 text-center text-sm text-muted">
+            Loading application PDF…
+          </div>
+        )}
       </div>
     </PortalCollapsibleSection>
   );
@@ -435,15 +449,6 @@ export function ManagerApplications() {
             Move to pending
           </Button>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          className={PORTAL_DETAIL_BTN}
-          data-attr="application-pdf-download"
-          onClick={() => downloadApplicationPdf(row)}
-        >
-          Download PDF
-        </Button>
         <Button
           type="button"
           variant="outline"

@@ -56,7 +56,7 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import {
   MANAGER_VENDORS_EVENT,
-  readActiveManagerVendorRows,
+  readOwnActiveManagerVendorRows,
   syncManagerVendorsFromServer,
 } from "@/lib/manager-vendors-storage";
 
@@ -314,9 +314,14 @@ export function ManagerPayments() {
     return map;
   }, [userId, propertyTick]);
 
+  const vendorById = useMemo(() => {
+    void ledgerDataVersion;
+    return new Map(readOwnActiveManagerVendorRows(userId).map((vendor) => [vendor.id, vendor]));
+  }, [userId, ledgerDataVersion]);
+
   const outgoingRows = useMemo(() => {
     void ledgerDataVersion;
-    const vendorNameById = new Map(readActiveManagerVendorRows().map((vendor) => [vendor.id, vendor.name]));
+    const vendorNameById = new Map([...vendorById.entries()].map(([id, vendor]) => [id, vendor.name]));
     return buildManagerOutgoingPaymentRows({
       managerUserId: userId,
       expenses: readManagerOutgoingExpenses(),
@@ -324,8 +329,9 @@ export function ManagerPayments() {
       paidCharges: readChargesForManager(userId).filter((charge) => charge.status === "paid"),
       propertyLabelById,
       vendorNameById,
+      vendorById,
     });
-  }, [userId, ledgerDataVersion, propertyLabelById]);
+  }, [userId, ledgerDataVersion, propertyLabelById, vendorById]);
 
   const outgoingRowsForCounts = useMemo(() => {
     return outgoingRows.filter((row) => {
@@ -493,6 +499,7 @@ export function ManagerPayments() {
       <ManagerOutgoingPaymentsPanel
         rows={outgoingRowsForBucket}
         activeBucket={bucket}
+        vendorById={vendorById}
         onRowsChanged={() => {
           setOutgoingTick((n) => n + 1);
           void syncManagerOutgoingExpensesFromServer(true);

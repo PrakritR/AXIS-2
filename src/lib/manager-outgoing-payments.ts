@@ -2,9 +2,12 @@ import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow, ManagerPay
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { demoExpenseRows } from "@/lib/demo/demo-data";
 import type { HouseholdCharge } from "@/lib/household-charges";
+import { enrichOutgoingRowWithVendorPayments, managerVendorPayMethodLabel } from "@/lib/manager-vendor-payment-flow";
+import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { readManagerWorkOrderRows } from "@/lib/manager-work-orders-storage";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { residentConnectApplicationFeeCents } from "@/lib/payment-policy";
+import { safeFormatDateTime } from "@/lib/pacific-time";
 
 export type ManagerExpenseSnapshot = {
   id: string;
@@ -144,10 +147,12 @@ export function buildManagerOutgoingPaymentRows(input: {
   paidCharges?: HouseholdCharge[];
   propertyLabelById?: Map<string, string>;
   vendorNameById?: Map<string, string>;
+  vendorById?: Map<string, ManagerVendorRow>;
 }): DemoManagerOutgoingPaymentRow[] {
   const rows: DemoManagerOutgoingPaymentRow[] = [];
   const propertyLabelById = input.propertyLabelById ?? new Map<string, string>();
   const vendorNameById = input.vendorNameById ?? new Map<string, string>();
+  const vendorById = input.vendorById ?? new Map<string, ManagerVendorRow>();
   const workOrders = input.workOrders ?? readManagerWorkOrderRows();
   const paidCharges = input.paidCharges ?? [];
   const workOrderExpenseIds = new Set(
@@ -185,18 +190,49 @@ export function buildManagerOutgoingPaymentRows(input: {
     if (!bucket || bucket === "paid") continue;
     if (workOrderExpenseIds.has(workOrder.id)) continue;
     const amountCents = workOrderAmountCents(workOrder);
-    rows.push({
+    const vendor = workOrder.vendorId ? vendorById.get(workOrder.vendorId) : undefined;
+    const baseRow: DemoManagerOutgoingPaymentRow = {
       id: `work-order-${workOrder.id}`,
       propertyName: workOrder.propertyName,
       categoryLabel: "Vendor payment",
       payeeLabel: workOrder.vendorName?.trim() || "Vendor",
       chargeTitle: workOrder.title,
       amountLabel: amountCents > 0 ? formatMoney(amountCents) : workOrder.cost || "—",
+      amountCents: amountCents > 0 ? amountCents : undefined,
       dueDate: dueDateLabelFromIso(workOrder.vendorMarkedDoneAt ?? workOrder.completedAt),
       bucket,
       statusLabel: workOrderStatusLabel(bucket),
       workOrderId: workOrder.id,
-    });
+      vendorId: workOrder.vendorId,
+    };
+    rows.push(enrichOutgoingRowWithVendorPayments(baseRow, vendor));
+  }
+
+  for (const workOrder of workOrders) {
+    if (input.managerUserId && workOrder.managerUserId && workOrder.managerUserId !== input.managerUserId) continue;
+    if (workOrder.automationStatus !== "paid") continue;
+    if (workOrderExpenseIds.has(workOrder.id)) continue;
+    const amountCents = workOrderAmountCents(workOrder);
+    const vendor = workOrder.vendorId ? vendorById.get(workOrder.vendorId) : undefined;
+    const baseRow: DemoManagerOutgoingPaymentRow = {
+      id: `work-order-paid-${workOrder.id}`,
+      propertyName: workOrder.propertyName,
+      categoryLabel: "Vendor payment",
+      payeeLabel: workOrder.vendorName?.trim() || "Vendor",
+      chargeTitle: workOrder.title,
+      amountLabel: amountCents > 0 ? formatMoney(amountCents) : workOrder.cost || "—",
+      amountCents: amountCents > 0 ? amountCents : undefined,
+      dueDate: dueDateLabelFromIso(workOrder.paidAt ?? workOrder.completedAt),
+      bucket: "paid",
+      statusLabel: workOrder.vendorPaymentChannel
+        ? `Paid · ${managerVendorPayMethodLabel(workOrder.vendorPaymentChannel)}`
+        : "Paid",
+      workOrderId: workOrder.id,
+      vendorId: workOrder.vendorId,
+      paidViaChannel: workOrder.vendorPaymentChannel,
+      paidAtLabel: workOrder.paidAt ? safeFormatDateTime(workOrder.paidAt) : undefined,
+    };
+    rows.push(enrichOutgoingRowWithVendorPayments(baseRow, vendor));
   }
 
   for (const charge of paidCharges) {

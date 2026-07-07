@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       materialsCostCents?: number;
       materialsMemo?: string;
       workDoneSummary?: string;
+      paymentChannel?: "ach" | "zelle" | "venmo";
     };
 
     const workOrder = body.workOrder;
@@ -60,7 +61,26 @@ export async function POST(req: Request) {
     const acceptedVendorId =
       typeof acceptedBid?.vendor_directory_id === "string" && acceptedBid.vendor_directory_id.trim()
         ? acceptedBid.vendor_directory_id
-        : workOrder.vendorId;
+        : existingRow.vendorId;
+
+    const paymentChannel = body.paymentChannel === "zelle" || body.paymentChannel === "venmo" || body.paymentChannel === "ach"
+      ? body.paymentChannel
+      : "ach";
+
+    const { data: vendorDirectory } = acceptedVendorId
+      ? await auth.db
+          .from("manager_vendor_records")
+          .select("row_data")
+          .eq("id", acceptedVendorId)
+          .eq("manager_user_id", ownerManagerUserId)
+          .maybeSingle()
+      : { data: null };
+    const vendorRow = (vendorDirectory?.row_data ?? null) as {
+      zelleContact?: string;
+      venmoContact?: string;
+      zellePaymentsEnabled?: boolean;
+      venmoPaymentsEnabled?: boolean;
+    } | null;
 
     const expenseEntryIds = await createExpensesFromWorkOrder(auth.db, ownerManagerUserId, {
       workOrderId: workOrder.id,
@@ -87,7 +107,13 @@ export async function POST(req: Request) {
       },
       expenseEntryIds,
     );
-    const paid = markWorkOrderPaid(completed);
+    const paid = markWorkOrderPaid(completed, new Date().toISOString(), {
+      channel: paymentChannel,
+      zelleContactSnapshot:
+        paymentChannel === "zelle" && vendorRow?.zellePaymentsEnabled ? vendorRow.zelleContact?.trim() : undefined,
+      venmoContactSnapshot:
+        paymentChannel === "venmo" && vendorRow?.venmoPaymentsEnabled ? vendorRow.venmoContact?.trim() : undefined,
+    });
 
     const { error } = await auth.db.from("portal_work_order_records").upsert(
       {
@@ -102,7 +128,7 @@ export async function POST(req: Request) {
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    if (existing.vendor_user_id) {
+    if (existing.vendor_user_id && paymentChannel === "ach") {
       // amountCents here is only a fallback for jobs assigned without formal bidding —
       // payoutVendorForWorkOrder anchors to the work order's accepted bid when one exists,
       // so a forged body.vendorCostCents can't inflate a payout beyond the agreed bid.

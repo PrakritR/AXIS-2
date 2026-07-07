@@ -138,7 +138,7 @@ import {
 import { Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PillTabs } from "@/components/ui/tabs";
-import { ApplicationDocumentPreview, downloadApplicationPdf } from "@/components/portal/manager-applications";
+import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
@@ -1805,14 +1805,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                         Move to pending
                                       </Button>
                                     )}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      className={PORTAL_DETAIL_BTN}
-                                      onClick={() => downloadApplicationPdf(selectedApplicationRow)}
-                                    >
-                                      Download PDF
-                                    </Button>
                                   </PortalTableDetailActions>
                                   <ApplicationDocumentPreview row={selectedApplicationRow} />
                                   <ApplicationScreeningPanel

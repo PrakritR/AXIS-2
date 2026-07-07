@@ -89,7 +89,22 @@ export function mergeWorkOrderCompletion(
   };
 }
 
-/** Bookkeeping-only "paid" flag — no real money movement (Stripe vendor payout is a later slice). */
-export function markWorkOrderPaid(row: DemoManagerWorkOrderRow, paidAt: string = new Date().toISOString()): DemoManagerWorkOrderRow {
-  return { ...row, automationStatus: "paid", paidAt };
+/** Bookkeeping-only "paid" flag — Stripe vendor payout runs separately for ACH. */
+export function markWorkOrderPaid(
+  row: DemoManagerWorkOrderRow,
+  paidAt: string = new Date().toISOString(),
+  payment?: {
+    channel?: DemoManagerWorkOrderRow["vendorPaymentChannel"];
+    zelleContactSnapshot?: string;
+    venmoContactSnapshot?: string;
+  },
+): DemoManagerWorkOrderRow {
+  return {
+    ...row,
+    automationStatus: "paid",
+    paidAt,
+    vendorPaymentChannel: payment?.channel ?? row.vendorPaymentChannel,
+    vendorZelleContactSnapshot: payment?.zelleContactSnapshot ?? row.vendorZelleContactSnapshot,
+    vendorVenmoContactSnapshot: payment?.venmoContactSnapshot ?? row.vendorVenmoContactSnapshot,
+  };
 }
