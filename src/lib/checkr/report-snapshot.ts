@@ -11,6 +11,8 @@ const PRODUCT_KEYS = [
   "global_watchlist",
 ] as const;
 
+export type CheckrReportProductKey = (typeof PRODUCT_KEYS)[number];
+
 /** Parse GET /orders/{id}/report into a compact snapshot safe to store on the application row. */
 export function parseCheckrReportSnapshot(raw: Record<string, unknown> | null): CheckrReportSnapshot | undefined {
   if (!raw) return undefined;
@@ -213,7 +215,10 @@ export function aggregateResultFromSnapshot(snapshot: CheckrReportSnapshot | und
   return sawClear ? "clear" : null;
 }
 
-export function countRecordsFromSnapshot(snapshot: CheckrReportSnapshot | undefined, key: keyof CheckrReportSnapshot): number {
+export function countRecordsFromSnapshot(
+  snapshot: CheckrReportSnapshot | undefined,
+  key: CheckrReportProductKey,
+): number {
   const status = snapshot?.[key]?.status;
   if (!status || status === "clear") return 0;
   return status === "consider" ? 1 : 0;

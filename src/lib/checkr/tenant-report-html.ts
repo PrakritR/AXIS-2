@@ -2,7 +2,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { clean, escapeHtml } from "@/lib/manager-application-html";
 import { leaseCss } from "@/lib/lease-templates/types";
 import type { CheckrReportSnapshot } from "@/lib/checkr/types";
-import { countRecordsFromSnapshot } from "@/lib/checkr/report-snapshot";
+import { countRecordsFromSnapshot, type CheckrReportProductKey } from "@/lib/checkr/report-snapshot";
 import { formatCheckrPrice } from "@/lib/checkr/packages";
 
 function statCard(label: string, value: string, sub?: string): string {
@@ -25,7 +25,7 @@ function historyRow(label: string, count: number): string {
 </div>`;
 }
 
-function productStatus(snapshot: CheckrReportSnapshot | undefined, key: keyof CheckrReportSnapshot): string {
+function productStatus(snapshot: CheckrReportSnapshot | undefined, key: CheckrReportProductKey): string {
   const status = snapshot?.[key]?.status;
   if (!status) return "—";
   if (status === "clear") return "Clear";
