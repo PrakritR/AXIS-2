@@ -43,6 +43,7 @@ const PortalProfileClient = dynamic(() => import("@/components/portal/portal-pro
 
 // Resident panels
 const ResidentDashboard = dynamic(() => import("@/components/portal/resident-dashboard").then((m) => m.ResidentDashboard), { ssr: false, loading });
+const ResidentApplicationsPanel = dynamic(() => import("@/components/portal/resident-applications-panel").then((m) => m.ResidentApplicationsPanel), { ssr: false, loading });
 const ResidentLeasePanel = dynamic(() => import("@/components/portal/resident-lease-panel").then((m) => m.ResidentLeasePanel), { ssr: false, loading });
 const ResidentPaymentsPanel = dynamic(() => import("@/components/portal/resident-payments-panel").then((m) => m.ResidentPaymentsPanel), { ssr: false, loading });
 const ResidentServicesPanel = dynamic(() => import("@/components/portal/resident-services-panel").then((m) => m.ResidentServicesPanel), { ssr: false, loading });
@@ -168,6 +169,12 @@ export function DemoSectionRenderer({
           managerSubscriptionTier="paid"
         />
       );
+    case "applications":
+      // Same live-data component as the real portal: usePortalSession() and
+      // readManagerApplicationRows() are both demo-aware, so it renders the
+      // seeded demoApplications() rows with no adapter needed (mirrors how
+      // the manager switch above reuses ManagerApplications directly).
+      return <ResidentApplicationsPanel />;
     case "lease":
       // ResidentLeasePanel renders its own "Lease" page shell; wrapping it in a
       // second shell would stack the header twice.
