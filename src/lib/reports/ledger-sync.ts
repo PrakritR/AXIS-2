@@ -275,7 +275,7 @@ export async function backfillLedgerFromCharges(
   db: SupabaseClient,
   managerUserId?: string,
 ): Promise<{ synced: number; removedDuplicates: number }> {
-  await reconcileDuplicateHouseholdChargeRecords(db, managerUserId);
+  const { removedChargeIds } = await reconcileDuplicateHouseholdChargeRecords(db, managerUserId);
 
   let query = db
     .from("portal_household_charge_records")
@@ -294,5 +294,5 @@ export async function backfillLedgerFromCharges(
     .map((record) => normalizeChargeOwner(record.row_data as HouseholdCharge | null, record.manager_user_id))
     .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
   const synced = await syncDedupedCharges(db, raw);
-  return { synced, removedDuplicates: 0 };
+  return { synced, removedDuplicates: removedChargeIds.length };
 }
