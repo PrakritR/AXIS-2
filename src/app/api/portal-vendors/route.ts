@@ -90,9 +90,9 @@ export async function GET(req: Request) {
       .map((record) => {
         const row = record.row_data as ManagerVendorRow | null;
         if (!row?.id || isVendorCategorySettingsRow(row)) return null;
-        return { ...row, managerUserId: String(record.manager_user_id ?? user.id) };
+        return normalizeRow(row, String(record.manager_user_id ?? user.id));
       })
-      .filter((row): row is ManagerVendorRow => Boolean(row));
+      .filter((row): row is ManagerVendorRow => row !== null);
 
     let sharedRows: ManagerVendorRow[] = [];
     if (!admin) {
@@ -108,9 +108,11 @@ export async function GET(req: Request) {
         .map((record) => {
           const row = record.row_data as ManagerVendorRow | null;
           if (!row?.id || row.name === "__vendor_category_settings__") return null;
-          return { ...row, managerUserId: record.manager_user_id };
+          const ownerId = record.manager_user_id;
+          if (!ownerId) return null;
+          return normalizeRow(row, ownerId);
         })
-        .filter(Boolean) as ManagerVendorRow[];
+        .filter((row): row is ManagerVendorRow => row !== null);
     }
 
     const seen = new Set<string>();

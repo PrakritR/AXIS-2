@@ -9,11 +9,9 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { usePathname } from "next/navigation";
 
 import { track } from "@/lib/analytics/track-client";
 import { useIsClient } from "@/hooks/use-is-client";
-import { useNativeChrome } from "@/hooks/use-is-native-app";
 import {
   closeGeneralAssistant,
   getGeneralAssistantOpen,
@@ -62,21 +60,14 @@ function handleOpen() {
 }
 
 /**
- * Site-wide general AI assistant. A larger FAB pinned bottom-right on
- * public / marketing pages (home, pricing, create-account, /demo). It is
- * intentionally NOT rendered inside the manager, admin, resident, or vendor
- * portals — those surfaces keep their own portal-scoped Axis Assistant, so
- * only one AI button ever shows there. Answers broad questions about Axis via
- * the tool-free `/api/agent/general-chat` endpoint.
+ * Site-wide general AI assistant — pinned bottom-right on every page except
+ * portal surfaces, which mount their own scoped Axis Assistant instead.
+ * Answers broad questions about Axis via `/api/agent/general-chat`.
  */
-const PORTAL_PATH_PREFIXES = ["/portal", "/admin", "/resident", "/vendor"];
-
 export function GeneralAssistant() {
   const isClient = useIsClient();
-  const showNativeChrome = useNativeChrome();
   const open = useGeneralOpen();
   const portalPresent = usePortalAssistantPresent();
-  const pathname = usePathname();
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -138,20 +129,8 @@ export function GeneralAssistant() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  // Native app uses the in-portal assistant + bottom nav; keep the web-only
-  // general FAB out of the native chrome entirely.
-  if (showNativeChrome) return null;
-
-  // Portal surfaces (manager, admin, resident) have their own Axis Assistant —
-  // the captain wants only that one there, so the general FAB stays on
-  // public / marketing pages only.
-  const inPortal = PORTAL_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname?.startsWith(`${prefix}/`),
-  );
-  if (inPortal) return null;
-
-  // Browse page has its own housing-search filter chat FAB.
-  if (pathname === "/rent/browse" || pathname?.startsWith("/rent/browse/")) return null;
+  // Portal layouts mount Axis Assistant — keep a single bottom-right AI control.
+  if (portalPresent) return null;
 
   const trigger =
     open ? null : (
@@ -162,17 +141,15 @@ export function GeneralAssistant() {
         aria-label="Open Axis AI assistant"
         aria-expanded={open}
         className={cn(
-          "group fixed right-[max(1.25rem,env(safe-area-inset-right))] z-[60] inline-flex items-center gap-2 rounded-full pl-4 pr-5 py-3.5 text-white shadow-[0_16px_36px_-14px_rgba(47,107,255,0.8)] outline-none transition-[transform,filter,bottom] duration-200 hover:scale-[1.03] hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95",
-          // Lift above the portal Axis Assistant FAB (bottom-6) when present so
-          // the two never overlap on the same corner.
-          portalPresent
-            ? "bottom-[max(5.25rem,calc(env(safe-area-inset-bottom)+4rem))] lg:bottom-24"
-            : "bottom-[max(1.25rem,env(safe-area-inset-bottom))] lg:bottom-6",
+          "group fixed right-[max(1.25rem,env(safe-area-inset-right))] z-[60] flex items-center justify-center rounded-full text-white shadow-[0_16px_36px_-14px_rgba(47,107,255,0.8)] outline-none transition-[transform,filter,bottom] duration-200 hover:scale-[1.03] hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95",
+          "bottom-[max(1.25rem,env(safe-area-inset-bottom))] lg:bottom-6",
+          "h-11 w-11 [html[data-native]_&]:h-11 [html[data-native]_&]:w-11",
+          "lg:inline-flex lg:h-auto lg:w-auto lg:gap-2 lg:pl-4 lg:pr-5 lg:py-3.5",
         )}
         style={{ background: "var(--btn-primary)" }}
       >
-        <ChatBubbleIcon className="h-6 w-6 shrink-0" />
-        <span className="text-sm font-semibold tracking-[-0.01em]">Ask Axis AI</span>
+        <ChatBubbleIcon className="h-[18px] w-[18px] shrink-0 lg:h-6 lg:w-6" />
+        <span className="hidden text-sm font-semibold tracking-[-0.01em] lg:inline">Ask Axis AI</span>
       </button>
     );
 

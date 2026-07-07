@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import type { PropertyBrowseCard } from "@/lib/room-listings-catalog";
 
 const SWIPE_THRESHOLD_PX = 72;
+const TAP_THRESHOLD_PX = 12;
 const EXIT_ANIM_MS = 280;
 
 function formatRent(card: PropertyBrowseCard): string {
@@ -19,18 +20,12 @@ function formatRent(card: PropertyBrowseCard): string {
 function SwipeCardFace({
   card,
   style,
-  dragX,
-  exiting,
 }: {
   card: PropertyBrowseCard;
   style?: CSSProperties;
-  dragX?: number;
-  exiting?: "left" | "right" | null;
 }) {
   const rent = formatRent(card);
   const isDataUrl = card.imageUrl.startsWith("data:");
-  const passOpacity = dragX !== undefined && dragX < -20 ? Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD_PX) : 0;
-  const likeOpacity = dragX !== undefined && dragX > 20 ? Math.min(1, dragX / SWIPE_THRESHOLD_PX) : 0;
 
   return (
     <div
@@ -48,21 +43,6 @@ function SwipeCardFace({
           draggable={false}
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
-
-        <div
-          className="pointer-events-none absolute left-4 top-6 rotate-[-12deg] rounded-lg border-4 border-rose-400 px-3 py-1 text-lg font-extrabold uppercase tracking-wide text-rose-400"
-          style={{ opacity: exiting === "left" ? 1 : passOpacity }}
-          aria-hidden
-        >
-          Pass
-        </div>
-        <div
-          className="pointer-events-none absolute right-4 top-6 rotate-[12deg] rounded-lg border-4 border-emerald-400 px-3 py-1 text-lg font-extrabold uppercase tracking-wide text-emerald-400"
-          style={{ opacity: exiting === "right" ? 1 : likeOpacity }}
-          aria-hidden
-        >
-          Like
-        </div>
 
         <div className="absolute inset-x-0 bottom-0 p-5">
           <p className="text-sm font-semibold text-white/90">{card.neighborhood}</p>
@@ -100,24 +80,49 @@ export function HousingBrowseSwipeStack({ cards }: { cards: PropertyBrowseCard[]
 
   const current = cards[index];
   const next = cards[index + 1];
+  const prev = cards[index - 1];
   const done = !current;
 
-  const advance = useCallback((direction: "left" | "right") => {
-    if (!current) return;
-    setExiting(direction);
-    const targetX = direction === "left" ? -window.innerWidth * 1.1 : window.innerWidth * 1.1;
-    setDragX(targetX);
+  const openListing = useCallback(
+    (card: PropertyBrowseCard) => {
+      router.push(`/rent/listings/${encodeURIComponent(card.propertyId)}`);
+    },
+    [router],
+  );
+
+  const goNext = useCallback(() => {
+    if (!current || exiting || index >= cards.length - 1) {
+      setDragX(0);
+      setDragY(0);
+      return;
+    }
+    setExiting("left");
+    setDragX(-window.innerWidth * 1.1);
 
     window.setTimeout(() => {
-      if (direction === "right") {
-        router.push(`/rent/listings/${encodeURIComponent(current.propertyId)}`);
-      }
       setIndex((i) => i + 1);
       setDragX(0);
       setDragY(0);
       setExiting(null);
     }, EXIT_ANIM_MS);
-  }, [current, router]);
+  }, [cards.length, current, exiting, index]);
+
+  const goPrev = useCallback(() => {
+    if (!current || exiting || index <= 0) {
+      setDragX(0);
+      setDragY(0);
+      return;
+    }
+    setExiting("right");
+    setDragX(window.innerWidth * 1.1);
+
+    window.setTimeout(() => {
+      setIndex((i) => i - 1);
+      setDragX(0);
+      setDragY(0);
+      setExiting(null);
+    }, EXIT_ANIM_MS);
+  }, [current, exiting, index]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (exiting || !current) return;
@@ -131,8 +136,12 @@ export function HousingBrowseSwipeStack({ cards }: { cards: PropertyBrowseCard[]
     if (!dragging || pointerIdRef.current !== e.pointerId || exiting) return;
     const dx = e.clientX - startRef.current.x;
     const dy = e.clientY - startRef.current.y;
-    setDragX(dx);
-    setDragY(dy * 0.25);
+    const atStart = index <= 0;
+    const atEnd = index >= cards.length - 1;
+    const resistedDx =
+      (atStart && dx > 0) || (atEnd && dx < 0) ? dx * 0.25 : dx;
+    setDragX(resistedDx);
+    setDragY(dy * 0.15);
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -141,12 +150,22 @@ export function HousingBrowseSwipeStack({ cards }: { cards: PropertyBrowseCard[]
     setDragging(false);
     if (exiting || !current) return;
 
-    if (dragX > SWIPE_THRESHOLD_PX) {
-      advance("right");
+    const dx = e.clientX - startRef.current.x;
+    const dy = e.clientY - startRef.current.y;
+
+    if (Math.abs(dx) < TAP_THRESHOLD_PX && Math.abs(dy) < TAP_THRESHOLD_PX) {
+      openListing(current);
+      setDragX(0);
+      setDragY(0);
       return;
     }
-    if (dragX < -SWIPE_THRESHOLD_PX) {
-      advance("left");
+
+    if (dx < -SWIPE_THRESHOLD_PX) {
+      goNext();
+      return;
+    }
+    if (dx > SWIPE_THRESHOLD_PX) {
+      goPrev();
       return;
     }
     setDragX(0);
@@ -179,19 +198,20 @@ export function HousingBrowseSwipeStack({ cards }: { cards: PropertyBrowseCard[]
     );
   }
 
-  const rotate = dragX * 0.06;
+  const rotate = dragX * 0.04;
   const transition = dragging ? "none" : `transform ${EXIT_ANIM_MS}ms ease-out`;
+  const peekCard = dragX < 0 ? next : dragX > 0 ? prev : next;
 
   return (
     <div className="flex flex-col items-center">
       <div
         className="relative mx-auto w-full max-w-[min(100%,22rem)] touch-none select-none"
         style={{ height: "min(62dvh, 520px)" }}
-        aria-label="Swipe homes — right to view, left to pass"
+        aria-label="Browse homes — swipe left for next, right for previous, tap to view"
       >
-        {next ? (
+        {peekCard ? (
           <div className="absolute inset-0 scale-[0.96] opacity-90" aria-hidden>
-            <SwipeCardFace card={next} />
+            <SwipeCardFace card={peekCard} />
           </div>
         ) : null}
 
@@ -208,36 +228,13 @@ export function HousingBrowseSwipeStack({ cards }: { cards: PropertyBrowseCard[]
           onPointerCancel={onPointerCancel}
           data-attr="resident-browse-swipe-card"
         >
-          <SwipeCardFace card={current} dragX={dragX} exiting={exiting} />
+          <SwipeCardFace card={current} />
         </div>
       </div>
 
       <p className="mt-3 text-center text-xs text-muted">
-        {index + 1} of {cards.length} · swipe right to view · left to pass
+        {index + 1} of {cards.length} · swipe left for next · right for back · tap to view
       </p>
-
-      <div className="mt-4 flex items-center justify-center gap-6">
-        <button
-          type="button"
-          onClick={() => advance("left")}
-          disabled={Boolean(exiting)}
-          data-attr="resident-browse-swipe-pass"
-          aria-label="Pass on this home"
-          className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-rose-400/80 bg-background text-2xl font-light text-rose-500 shadow-sm transition active:scale-95 disabled:opacity-50"
-        >
-          ×
-        </button>
-        <button
-          type="button"
-          onClick={() => advance("right")}
-          disabled={Boolean(exiting)}
-          data-attr="resident-browse-swipe-like"
-          aria-label="View this home"
-          className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-400/80 bg-background text-xl text-emerald-500 shadow-sm transition active:scale-95 disabled:opacity-50"
-        >
-          ♥
-        </button>
-      </div>
     </div>
   );
 }

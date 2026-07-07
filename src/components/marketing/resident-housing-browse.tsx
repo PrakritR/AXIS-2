@@ -192,7 +192,7 @@ function HousingBrowseCarousel({ cards }: { cards: PropertyBrowseCard[] }) {
   );
 }
 
-function BrowseFiltersInline({
+function BrowseManualFilters({
   moveIn,
   setMoveIn,
   moveOut,
@@ -205,7 +205,6 @@ function BrowseFiltersInline({
   setRoomType,
   activeCount,
   onClear,
-  onApplyChatFilters,
 }: {
   moveIn: string;
   setMoveIn: (v: string) => void;
@@ -219,23 +218,12 @@ function BrowseFiltersInline({
   setRoomType: (v: string) => void;
   activeCount: number;
   onClear: () => void;
-  onApplyChatFilters: (filters: HousingChatAppliedFilters) => void;
 }) {
   const budgetActive = budget < RESIDENT_HOUSING_BUDGET_MAX;
   const budgetLabel = budgetActive ? `$${budget.toLocaleString()}` : "Any";
 
   return (
-    <div className="mt-4 space-y-4 border-t border-border/40 pt-4">
-      <ResidentHousingChat
-        onApplyFilters={onApplyChatFilters}
-        title="What would you like in your next home?"
-        subtitle="Tell Axis your move-in dates, budget, neighborhood, room type, or bathroom setup — we'll filter the homes below."
-        placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
-        showMatchListings={false}
-      />
-
-      <div className="h-px w-full bg-border/50" />
-
+    <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <ResidentHousingFieldBlock label="Move-in date">
           <input
@@ -317,36 +305,7 @@ function BrowseFiltersInline({
   );
 }
 
-function BrowseFilterFab({ activeCount, onClick }: { activeCount: number; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-attr="resident-browse-open-filters"
-      aria-label="Open manual filters"
-      className="fixed bottom-[max(5.5rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] transition hover:scale-105 hover:brightness-110 active:scale-95 lg:hidden [html[data-native]_&]:bottom-[max(5.5rem,env(safe-area-inset-bottom))]"
-    >
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden>
-        <path
-          d="M12 3c5 0 9 3.4 9 7.6 0 4.2-4 7.6-9 7.6-1 0-2-.14-2.9-.4L4 20l1.1-3.3C3.8 15.4 3 13.1 3 10.6 3 6.4 7 3 12 3Z"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-        <path d="M8.5 10.6h7M8.5 13.4h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-      {activeCount > 0 ? (
-        <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-primary">
-          {activeCount}
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
-function BrowseFilterPanel({
-  open,
-  onClose,
+function BrowseFiltersInline({
   moveIn,
   setMoveIn,
   moveOut,
@@ -357,12 +316,10 @@ function BrowseFilterPanel({
   setBathroom,
   roomType,
   setRoomType,
-  onApplyChatFilters,
-  onClear,
   activeCount,
+  onClear,
+  onApplyChatFilters,
 }: {
-  open: boolean;
-  onClose: () => void;
   moveIn: string;
   setMoveIn: (v: string) => void;
   moveOut: string;
@@ -373,149 +330,36 @@ function BrowseFilterPanel({
   setBathroom: (v: string) => void;
   roomType: string;
   setRoomType: (v: string) => void;
-  onApplyChatFilters: (filters: HousingChatAppliedFilters) => void;
-  onClear: () => void;
   activeCount: number;
+  onClear: () => void;
+  onApplyChatFilters: (filters: HousingChatAppliedFilters) => void;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  const budgetActive = budget < RESIDENT_HOUSING_BUDGET_MAX;
-  const budgetLabel = budgetActive ? `$${budget.toLocaleString()}` : "Any";
-
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <button
-        type="button"
-        aria-label="Close filters"
-        className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
-        onClick={onClose}
+    <div className="mt-4 space-y-4 border-t border-border/40 pt-4">
+      <ResidentHousingChat
+        onApplyFilters={onApplyChatFilters}
+        title="What would you like in your next home?"
+        subtitle="Tell Axis your move-in dates, budget, neighborhood, room type, or bathroom setup — we'll filter the homes below."
+        placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
+        showMatchListings={false}
       />
-      <div
-        role="dialog"
-        aria-labelledby="browse-filter-title"
-        className="relative z-10 flex max-h-[min(92dvh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-[1.25rem] border border-border/60 bg-background shadow-2xl sm:rounded-[1.25rem]"
-      >
-        <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-          <h2 id="browse-filter-title" className="text-base font-semibold text-foreground">
-            Find your home
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-2 py-1 text-sm font-semibold text-primary hover:bg-primary/10"
-          >
-            Done
-          </button>
-        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          <p className="text-sm font-semibold text-foreground">Manual filters</p>
-          <p className="mt-1 text-xs text-muted">Fine-tune dates, bathroom setup, room type, and budget.</p>
+      <div className="h-px w-full bg-border/50" />
 
-          <div className="my-4 h-px w-full bg-border" />
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <ResidentHousingFieldBlock label="Move-in date">
-                <input
-                  type="date"
-                  value={moveIn}
-                  onChange={(e) => setMoveIn(e.target.value)}
-                  data-attr="resident-browse-move-in"
-                  className={`${RESIDENT_HOUSING_INPUT_CLS} min-w-0`}
-                />
-              </ResidentHousingFieldBlock>
-              <ResidentHousingFieldBlock label="Move-out date">
-                <input
-                  type="date"
-                  value={moveOut}
-                  onChange={(e) => setMoveOut(e.target.value)}
-                  data-attr="resident-browse-move-out"
-                  className={`${RESIDENT_HOUSING_INPUT_CLS} min-w-0`}
-                />
-              </ResidentHousingFieldBlock>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <ResidentHousingFieldBlock label="Room type">
-                <select
-                  value={roomType}
-                  onChange={(e) => setRoomType(e.target.value)}
-                  aria-label="Room type"
-                  data-attr="resident-browse-room-type"
-                  className={RESIDENT_HOUSING_INPUT_CLS}
-                >
-                  {RESIDENT_ROOM_TYPE_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </ResidentHousingFieldBlock>
-              <ResidentHousingFieldBlock label="Shared bathroom">
-                <select
-                  value={bathroom}
-                  onChange={(e) => setBathroom(e.target.value)}
-                  aria-label="Shared bathroom"
-                  data-attr="resident-browse-bathroom"
-                  className={RESIDENT_HOUSING_INPUT_CLS}
-                >
-                  {RESIDENT_BATHROOM_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.id === "any"
-                        ? "Any setup"
-                        : opt.id === "private"
-                          ? "Private bath"
-                          : `Shared · ${opt.label}`}
-                    </option>
-                  ))}
-                </select>
-              </ResidentHousingFieldBlock>
-            </div>
-
-            <ResidentHousingFieldBlock label="Max budget per mo">
-              <div className="flex items-center justify-between gap-2">
-                <span className={`text-xs font-semibold ${budgetActive ? "text-primary" : "text-muted"}`}>
-                  {budgetLabel}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={RESIDENT_HOUSING_BUDGET_MIN}
-                max={RESIDENT_HOUSING_BUDGET_MAX}
-                step={RESIDENT_HOUSING_BUDGET_STEP}
-                value={budget}
-                onChange={(e) => setBudget(Number(e.target.value))}
-                aria-label="Maximum monthly budget"
-                data-attr="resident-browse-budget"
-                className="mt-2 h-2 w-full cursor-pointer accent-primary"
-              />
-            </ResidentHousingFieldBlock>
-          </div>
-        </div>
-
-        {activeCount > 0 ? (
-          <div className="border-t border-border/50 px-4 py-3">
-            <button
-              type="button"
-              onClick={onClear}
-              data-attr="resident-browse-clear-filters"
-              className="w-full rounded-xl border border-border py-2.5 text-sm font-semibold text-muted transition hover:border-primary/30 hover:text-foreground"
-            >
-              Clear all filters
-            </button>
-          </div>
-        ) : null}
-      </div>
+      <BrowseManualFilters
+        moveIn={moveIn}
+        setMoveIn={setMoveIn}
+        moveOut={moveOut}
+        setMoveOut={setMoveOut}
+        budget={budget}
+        setBudget={setBudget}
+        bathroom={bathroom}
+        setBathroom={setBathroom}
+        roomType={roomType}
+        setRoomType={setRoomType}
+        activeCount={activeCount}
+        onClear={onClear}
+      />
     </div>
   );
 }
@@ -529,10 +373,8 @@ export function ResidentHousingBrowse() {
   const [bathroom, setBathroom] = useState("any");
   const [roomType, setRoomType] = useState("any");
   const [neighborhood, setNeighborhood] = useState<string | undefined>(undefined);
-  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
 
   const budgetActive = budget < RESIDENT_HOUSING_BUDGET_MAX;
-  const budgetLabel = budgetActive ? `$${budget.toLocaleString()}` : "Any";
 
   const activeFilterCount = [
     moveIn.trim().length > 0,
@@ -578,8 +420,8 @@ export function ResidentHousingBrowse() {
   }
 
   return (
-    <div className="w-full pb-20">
-      <div className="sticky top-[calc(env(safe-area-inset-top)+3.5rem)] z-20 -mx-1 mb-4 rounded-2xl border border-border/50 bg-background/85 px-3 py-3 backdrop-blur-md sm:top-16 sm:px-4">
+    <div className="w-full">
+      <div className="mb-5 rounded-2xl border border-border/50 bg-background px-3 py-3 sm:px-4 lg:sticky lg:top-16 lg:z-20 lg:bg-background/90 lg:backdrop-blur-md">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">
@@ -611,18 +453,20 @@ export function ResidentHousingBrowse() {
             ) : null}
           </div>
         </div>
-        {budgetActive ? (
-          <p className="mt-2 text-[11px] text-muted lg:hidden">
-            Max budget: <span className="font-semibold text-primary">{budgetLabel}</span>
-          </p>
-        ) : null}
         <div className="mt-4 border-t border-border/40 pt-4 lg:hidden">
-          <ResidentHousingChat
-            onApplyFilters={applyChatFilters}
-            title="What would you like in your next home?"
-            subtitle="Describe your ideal home and we'll filter the list."
-            placeholder="e.g. 2-share bath under $1,500, moving in August"
-            showMatchListings={false}
+          <BrowseManualFilters
+            moveIn={moveIn}
+            setMoveIn={setMoveIn}
+            moveOut={moveOut}
+            setMoveOut={setMoveOut}
+            budget={budget}
+            setBudget={setBudget}
+            bathroom={bathroom}
+            setBathroom={setBathroom}
+            roomType={roomType}
+            setRoomType={setRoomType}
+            activeCount={activeFilterCount}
+            onClear={clearFilters}
           />
         </div>
         <div className="hidden lg:block">
@@ -644,6 +488,7 @@ export function ResidentHousingBrowse() {
         </div>
       </div>
 
+      <div className="relative z-0">
       {loading ? (
         <BrowseSkeleton />
       ) : cards.length === 0 ? (
@@ -675,26 +520,6 @@ export function ResidentHousingBrowse() {
           </div>
         </>
       )}
-
-      <BrowseFilterFab activeCount={activeFilterCount} onClick={() => setFilterPanelOpen(true)} />
-      <div className="lg:hidden">
-        <BrowseFilterPanel
-        open={filterPanelOpen}
-        onClose={() => setFilterPanelOpen(false)}
-        moveIn={moveIn}
-        setMoveIn={setMoveIn}
-        moveOut={moveOut}
-        setMoveOut={setMoveOut}
-        budget={budget}
-        setBudget={setBudget}
-        bathroom={bathroom}
-        setBathroom={setBathroom}
-        roomType={roomType}
-        setRoomType={setRoomType}
-        onApplyChatFilters={applyChatFilters}
-        onClear={clearFilters}
-        activeCount={activeFilterCount}
-        />
       </div>
     </div>
   );
