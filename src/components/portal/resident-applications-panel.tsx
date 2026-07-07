@@ -26,18 +26,20 @@ import {
   PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { ManagerApplicationReadonlyReview } from "@/components/portal/manager-application-readonly-review";
+import {
+  ApplicationDocumentPreview,
+} from "@/components/portal/manager-applications";
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
   MANAGER_APPLICATIONS_EVENT,
-  effectiveApplicationForRow,
   normalizeApplicationAxisId,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 
 function countByBucket(rows: DemoApplicantRow[]) {
@@ -57,10 +59,18 @@ function displayRoomForRow(row: DemoApplicantRow): string {
   return full.split(" · ")[0]?.trim() || full || "—";
 }
 
-function bucketStatusLabel(bucket: ManagerApplicationBucket): string {
-  if (bucket === "approved") return "Approved";
-  if (bucket === "rejected") return "Rejected";
+function rowStatusLabel(row: DemoApplicantRow): string {
+  if (row.bucket === "approved") return "Approved";
+  if (row.bucket === "rejected") return "Rejected";
+  if (isInProgressApplicationRow(row)) return "In progress";
   return "Pending review";
+}
+
+function continueApplicationPath(row: DemoApplicantRow): string {
+  const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
+  return pid
+    ? `${RESIDENT_PORTAL_BASE_PATH}/applications/apply?propertyId=${encodeURIComponent(pid)}`
+    : `${RESIDENT_PORTAL_BASE_PATH}/applications/apply`;
 }
 
 function sortApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] {
@@ -134,8 +144,8 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
   }, [rows, searchParams]);
 
   const renderRowDetail = (row: DemoApplicantRow) => (
-    <div className="mx-auto max-w-5xl space-y-6">
-      {editingId === row.id && row.bucket === "pending" && row.application ? (
+    <div className="mx-auto max-w-5xl space-y-4">
+      {editingId === row.id && row.bucket === "pending" && row.application && !isInProgressApplicationRow(row) ? (
         <ResidentApplicationEditor
           row={row}
           residentEmail={residentEmail}
@@ -148,7 +158,16 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
       ) : (
         <>
           <PortalTableDetailActions placement="top">
-            {row.bucket === "pending" && row.application ? (
+            {isInProgressApplicationRow(row) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                onClick={() => router.push(continueApplicationPath(row))}
+              >
+                Continue application
+              </Button>
+            ) : row.bucket === "pending" && row.application ? (
               <Button
                 type="button"
                 variant="outline"
@@ -159,14 +178,10 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
               </Button>
             ) : null}
           </PortalTableDetailActions>
-          {row.application ? (
-            <ManagerApplicationReadonlyReview
-              partial={{
-                ...(effectiveApplicationForRow(row) ?? row.application),
-              }}
-              assignedPropertyId={row.assignedPropertyId}
-              assignedRoomChoice={row.assignedRoomChoice}
-            />
+          {isInProgressApplicationRow(row) ? (
+            <p className="text-sm text-muted">Application in progress. Continue to finish and submit.</p>
+          ) : row.application ? (
+            <ApplicationDocumentPreview row={row} collapsible={false} showDownload={false} />
           ) : (
             <p className="text-sm text-muted">Application details are not available for this record.</p>
           )}
@@ -175,25 +190,30 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
     </div>
   );
 
-  const body = !sessionReady ? (
+  const filterRow = (
+    <ManagerPortalFilterRow>
+      <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
+    </ManagerPortalFilterRow>
+  );
+
+  const newApplicationButton = sessionReady ? (
+    <Button
+      type="button"
+      className="rounded-full"
+      data-attr="resident-applications-new"
+      onClick={() => router.push(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`)}
+    >
+      New application
+    </Button>
+  ) : null;
+
+  const tableBody = !sessionReady ? (
       <div className={PORTAL_DATA_TABLE_WRAP}>
         <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading applications…</div>
       </div>
     ) : (
       <>
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills tabs={[...tabs]} activeId={bucket} onChange={(id) => setBucket(id as ManagerApplicationBucket)} />
-          {sessionReady ? (
-            <Button
-              type="button"
-              className="rounded-full"
-              data-attr="resident-applications-new"
-              onClick={() => router.push(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`)}
-            >
-              New application
-            </Button>
-          ) : null}
-        </ManagerPortalFilterRow>
+        {embedded ? filterRow : null}
 
         {rows.length === 0 ? (
           <PortalDataTableEmpty icon="application" message="No applications yet. Start your first application." />
@@ -220,7 +240,7 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                       <p className="mt-0.5 truncate text-xs text-muted">
                         {[row.property || "—", `Room ${displayRoomForRow(row)}`].join(" · ")}
                       </p>
-                      <p className="mt-0.5 truncate text-[11px] text-muted/90">{bucketStatusLabel(row.bucket)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">{rowStatusLabel(row)}</p>
                     </div>
                     <PortalTableExpandChevron expanded={expanded} />
                   </button>
@@ -261,7 +281,7 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                         </td>
                         <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property || "—"}</td>
                         <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
-                        <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{bucketStatusLabel(row.bucket)}</td>
+                        <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{rowStatusLabel(row)}</td>
                         <PortalTableExpandCell expanded={expandedId === row.id} />
                       </tr>
                       {expandedId === row.id ? (
@@ -282,11 +302,15 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
       </>
     );
 
-  if (embedded) return body;
+  if (embedded) return tableBody;
 
   return (
-    <ManagerPortalPageShell title="Applications">
-      {body}
+    <ManagerPortalPageShell
+      title="Applications"
+      titleAside={newApplicationButton}
+      filterRow={filterRow}
+    >
+      {tableBody}
     </ManagerPortalPageShell>
   );
 }

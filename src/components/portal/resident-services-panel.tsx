@@ -61,7 +61,6 @@ import {
   deleteServiceRequest,
   readServiceRequestsForResident,
   syncServiceRequestsFromServer,
-  submitReturnPhoto,
   updateServiceRequest,
   hasDeposit,
   isServiceRequestFeePaid,
@@ -193,46 +192,14 @@ export function requestChargesSummary(req: ServiceRequest): string {
 
 export function ServiceRequestCard({
   req,
-  onReturnPhotoUploaded,
   onDelete,
   onEdit,
 }: {
   req: ServiceRequest;
-  onReturnPhotoUploaded: () => void;
   onDelete: () => void;
   onEdit: () => void;
 }) {
   const { showToast } = useAppUi();
-  const returnPhotoRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-
-  const needsReturn = hasDeposit(req.deposit);
-  const feePaid = isServiceRequestFeePaid(req);
-  // Show checkout once the service fee is paid (or on return) and the item needs a return photo.
-  const showCheckout = req.status === "approved" && feePaid && needsReturn && !req.returnPhotoDataUrl;
-
-  async function handleReturnPhoto(files: FileList | null) {
-    if (!files?.[0]) return;
-    const file = files[0];
-    if (!file.type.startsWith("image/")) { showToast("Images only."); return; }
-    setUploading(true);
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.onerror = () => reject(new Error("Read error"));
-        reader.readAsDataURL(file);
-      });
-      submitReturnPhoto(req.id, dataUrl);
-      onReturnPhotoUploaded();
-      showToast("Return photo submitted! Your manager will review it.");
-    } catch {
-      showToast("Could not upload photo.");
-    } finally {
-      setUploading(false);
-      if (returnPhotoRef.current) returnPhotoRef.current.value = "";
-    }
-  }
 
   function removeRequest() {
     if (!window.confirm("Delete this service request? This cannot be undone.")) return;
@@ -241,15 +208,10 @@ export function ServiceRequestCard({
     showToast("Request deleted.");
   }
 
+  const feePaid = isServiceRequestFeePaid(req);
+
   return (
     <>
-      <input
-        ref={returnPhotoRef}
-        type="file"
-        accept="image/*"
-        className="sr-only"
-        onChange={(e) => { void handleReturnPhoto(e.target.files); }}
-      />
       {req.offerDescription ? (
         <>
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Description</p>
@@ -270,7 +232,7 @@ export function ServiceRequestCard({
           ) : null}
         </>
       ) : null}
-      {needsReturn ? (
+      {hasDeposit(req.deposit) ? (
         <>
           <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Deposit</p>
           <p className="mt-1 text-sm font-medium text-foreground">{req.deposit}</p>
@@ -285,29 +247,8 @@ export function ServiceRequestCard({
 
       {req.status === "approved" && req.price?.trim() && !feePaid ? (
         <p className="mt-3 text-xs text-muted">
-          Pay the service fee under <span className="font-medium text-foreground">Payments</span> before returning the item.
+          Pay the service fee under <span className="font-medium text-foreground">Payments</span> when your manager approves the final amount.
         </p>
-      ) : null}
-
-      {showCheckout ? (
-        <>
-          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Return checklist</p>
-          <ol className="mt-1.5 space-y-1 pl-4 text-xs text-muted list-decimal">
-            <li>Clean and prepare the item for return.</li>
-            <li>Take a clear photo showing the item&apos;s current condition.</li>
-            <li>Upload the photo below — your manager will review it.</li>
-            <li>Your deposit will be refunded once the return is confirmed.</li>
-          </ol>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-3 rounded-full px-4 py-1.5 text-xs font-semibold"
-            onClick={() => returnPhotoRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? "Uploading…" : "Upload return photo"}
-          </Button>
-        </>
       ) : null}
 
       {req.status === "returned" && req.returnPhotoDataUrl ? (
@@ -1038,7 +979,6 @@ export function ResidentServicesPanel({
                 {expanded ? (
                   <ServiceRequestCard
                     req={req}
-                    onReturnPhotoUploaded={reloadServiceRequests}
                     onDelete={reloadServiceRequests}
                     onEdit={() => openRequestEdit(req)}
                   />
@@ -1078,7 +1018,6 @@ export function ResidentServicesPanel({
                             <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
                               <ServiceRequestCard
                                 req={req}
-                                onReturnPhotoUploaded={reloadServiceRequests}
                                 onDelete={reloadServiceRequests}
                                 onEdit={() => openRequestEdit(req)}
                               />

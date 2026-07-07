@@ -9,12 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
-import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
-  PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
@@ -22,7 +21,6 @@ import {
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableDetailActions,
   PortalTableExpandCell,
   PortalTableExpandChevron,
   createPortalRowExpandClick,
@@ -116,6 +114,14 @@ function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+type PaymentStatusBucket = "pending" | "paid";
+
+function chargeStatusBadge(row: HouseholdCharge): { tone: "approved" | "overdue" | "pending"; label: string } {
+  if (row.status === "paid") return { tone: "approved", label: "Paid" };
+  const overdue = isHouseholdChargeOverdue(row);
+  return { tone: overdue ? "overdue" : "pending", label: overdue ? "Overdue" : "Pending" };
+}
+
 export function ResidentPaymentsPanel() {
   const { showToast } = useAppUi();
   const searchParams = useSearchParams();
@@ -136,6 +142,7 @@ export function ResidentPaymentsPanel() {
     [paymentMethodOptions],
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [bucket, setBucket] = useState<PaymentStatusBucket>("pending");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [paymentMethod, setPaymentMethod] = useState<ResidentPayMethod>("ach");
   const [payConfirm, setPayConfirm] = useState<PayConfirmState | null>(null);
@@ -331,6 +338,45 @@ export function ResidentPaymentsPanel() {
       return 0;
     });
   }, [charges]);
+
+  const pendingRows = useMemo(() => rows.filter((c) => c.status === "pending"), [rows]);
+  const paidRows = useMemo(() => rows.filter((c) => c.status === "paid"), [rows]);
+  const rowsForBucket = useMemo(
+    () => (bucket === "pending" ? pendingRows : paidRows),
+    [bucket, pendingRows, paidRows],
+  );
+
+  const bucketCounts = useMemo(
+    () => ({ pending: pendingRows.length, paid: paidRows.length }),
+    [pendingRows.length, paidRows.length],
+  );
+
+  const statusTabs = useMemo(
+    () =>
+      [
+        { id: "pending" as const, label: "Pending", count: bucketCounts.pending },
+        { id: "paid" as const, label: "Paid", count: bucketCounts.paid },
+      ] as const,
+    [bucketCounts],
+  );
+
+  const allBucketSelected = useMemo(
+    () => rowsForBucket.length > 0 && rowsForBucket.every((charge) => selectedIds.has(charge.id)),
+    [rowsForBucket, selectedIds],
+  );
+
+  const toggleSelectAllBucket = useCallback(() => {
+    setSelectedIds((prev) => {
+      const allSelected = rowsForBucket.every((charge) => prev.has(charge.id));
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const charge of rowsForBucket) next.delete(charge.id);
+      } else {
+        for (const charge of rowsForBucket) next.add(charge.id);
+      }
+      return next;
+    });
+  }, [rowsForBucket]);
 
   const counts = useMemo(() => {
     return {
@@ -651,28 +697,11 @@ export function ResidentPaymentsPanel() {
             .
           </p>
         ) : null}
-        <PortalTableDetailActions>
-          <Button
-            type="button"
-            variant="outline"
-            className={PORTAL_DETAIL_BTN}
-            onClick={() => {
-              void navigator.clipboard?.writeText(row.balanceLabel);
-              showToast("Balance copied.");
-            }}
-          >
-            Copy balance
-          </Button>
-          <Link
-            href="/resident/lease"
-            className={`inline-flex items-center justify-center ${PORTAL_DETAIL_BTN}`}
-          >
-            Lease tab
-          </Link>
-        </PortalTableDetailActions>
       </>
     );
   };
+
+  const showSelectCol = rowsForBucket.length > 0;
 
   const checkoutMethodOptions = useMemo(() => {
     const manualOptions = MANUAL_METHOD_OPTIONS.filter((option) =>
@@ -724,14 +753,19 @@ export function ResidentPaymentsPanel() {
         ) : null
       }
       filterRow={
-        counts.overdue > 0 ? (
-          <ManagerPortalFilterRow>
+        <ManagerPortalFilterRow>
+          <ManagerPortalStatusPills
+            tabs={[...statusTabs]}
+            activeId={bucket}
+            onChange={(id) => setBucket(id as PaymentStatusBucket)}
+          />
+          {counts.overdue > 0 ? (
             <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
               <span aria-hidden className="size-1.5 rounded-full bg-current" />
               {counts.overdue} overdue
             </div>
-          </ManagerPortalFilterRow>
-        ) : undefined
+          ) : null}
+        </ManagerPortalFilterRow>
       }
     >
       {!email ? (
@@ -757,104 +791,110 @@ export function ResidentPaymentsPanel() {
               icon="payment"
               message="No charges yet."
             />
+          ) : rowsForBucket.length === 0 ? (
+            <PortalDataTableEmpty
+              icon="payment"
+              message="No payments in this tab yet."
+            />
           ) : (
             <>
-            <div className="space-y-2 lg:hidden">
-              {rows.map((row) => {
-                const overdue = row.status === "pending" && isHouseholdChargeOverdue(row);
-                const payable = isPayableHouseholdCharge(row);
-                const showSelectCol = unpaidPayableCharges.length > 0;
-                const expanded = expandedId === row.id;
-                const toggleExpand = () =>
-                  setExpandedId((cur) => {
-                    const next = cur === row.id ? null : row.id;
-                    if (next !== cur && next) {
-                      setCheckout(null);
-                    }
-                    return next;
-                  });
-                return (
-                  <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-                    <div className="flex items-start gap-2.5">
-                      {showSelectCol && payable ? (
-                        <input
-                          type="checkbox"
-                          className="mt-1 size-4 shrink-0 rounded border-border"
-                          checked={selectedIds.has(row.id)}
-                          onChange={() => toggleSelected(row.id)}
-                          aria-label={`Select ${row.title}`}
-                        />
-                      ) : null}
-                      <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left" onClick={toggleExpand} aria-expanded={expanded}>
-                        <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
-                            <p className="mt-0.5 truncate text-xs text-muted">{row.propertyLabel}</p>
-                            <p className="mt-0.5 truncate text-[11px] text-muted/90">
-                              Due {chargeDueLabel(row)} · {row.amountLabel}
-                            </p>
+              <div className="space-y-2 lg:hidden">
+                {rowsForBucket.map((row) => {
+                  const status = chargeStatusBadge(row);
+                  const expanded = expandedId === row.id;
+                  const toggleExpand = () =>
+                    setExpandedId((cur) => {
+                      const next = cur === row.id ? null : row.id;
+                      if (next !== cur && next) setCheckout(null);
+                      return next;
+                    });
+                  return (
+                    <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+                      <div className="flex items-start gap-2.5">
+                        {showSelectCol ? (
+                          <input
+                            type="checkbox"
+                            className="mt-1 size-4 shrink-0 rounded border-border"
+                            checked={selectedIds.has(row.id)}
+                            onChange={() => toggleSelected(row.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`Select ${row.title}`}
+                          />
+                        ) : null}
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+                          onClick={toggleExpand}
+                          aria-expanded={expanded}
+                        >
+                          <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
+                              <p className="mt-0.5 truncate text-xs text-muted">{row.propertyLabel}</p>
+                              <p className="mt-0.5 truncate text-[11px] text-muted/90">
+                                Due {chargeDueLabel(row)} · {row.amountLabel}
+                              </p>
+                            </div>
+                            <Badge tone={status.tone}>{status.label}</Badge>
                           </div>
-                          <Badge tone={row.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
-                            {row.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending"}
-                          </Badge>
-                        </div>
-                        <PortalTableExpandChevron expanded={expanded} />
-                      </button>
-                    </div>
-                    {expanded ? (
-                      <div className="mt-2.5 border-t border-border pt-2.5 text-sm text-muted">
-                        {renderRowDetail(row)}
+                          <PortalTableExpandChevron expanded={expanded} />
+                        </button>
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-            <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-              <div className={PORTAL_DATA_TABLE_SCROLL}>
-                <table className="w-full table-fixed border-collapse text-left text-sm">
-                  <thead>
-                    <tr className={PORTAL_TABLE_HEAD_ROW}>
-                      {unpaidPayableCharges.length > 0 ? (
-                        <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
-                          <span className="sr-only">Select</span>
-                        </th>
+                      {expanded ? (
+                        <div className="mt-2.5 border-t border-border pt-2.5 text-sm text-muted">
+                          {renderRowDetail(row)}
+                        </div>
                       ) : null}
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Property</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Due</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                      <th className={PORTAL_TABLE_EXPAND_TH}>
-                        <span className="sr-only">Expand</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => {
-                      const overdue = row.status === "pending" && isHouseholdChargeOverdue(row);
-                      const payable = isPayableHouseholdCharge(row);
-                      const showSelectCol = unpaidPayableCharges.length > 0;
-                      const detailColSpan = showSelectCol ? 8 : 7;
-                      return (
-                        <Fragment key={row.id}>
-                          <tr
-                            className={PORTAL_TABLE_TR_EXPANDABLE}
-                            onClick={createPortalRowExpandClick(() =>
-                              setExpandedId((cur) => {
-                                const next = cur === row.id ? null : row.id;
-                                if (next !== cur && next) {
-                                  setCheckout(null);
-                                }
-                                return next;
-                              }),
-                            )}
-                            aria-expanded={expandedId === row.id}
-                          >
-                            {showSelectCol ? (
-                              <td className={PORTAL_TABLE_TD}>
-                                {payable ? (
+                    </div>
+                  );
+                })}
+              </div>
+              <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+                <div className={PORTAL_DATA_TABLE_SCROLL}>
+                  <table className="w-full table-fixed border-collapse text-left text-sm">
+                    <thead>
+                      <tr className={PORTAL_TABLE_HEAD_ROW}>
+                        {showSelectCol ? (
+                          <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
+                            <input
+                              type="checkbox"
+                              className="size-4 rounded border-border"
+                              checked={allBucketSelected}
+                              onChange={toggleSelectAllBucket}
+                              aria-label={`Select all ${bucket} charges`}
+                            />
+                          </th>
+                        ) : null}
+                        <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
+                        <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Property</th>
+                        <th className={`${MANAGER_TABLE_TH} text-left`}>Due</th>
+                        <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
+                        <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
+                        <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                        <th className={PORTAL_TABLE_EXPAND_TH}>
+                          <span className="sr-only">Expand</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rowsForBucket.map((row) => {
+                        const status = chargeStatusBadge(row);
+                        const detailColSpan = showSelectCol ? 8 : 7;
+                        return (
+                          <Fragment key={row.id}>
+                            <tr
+                              className={PORTAL_TABLE_TR_EXPANDABLE}
+                              onClick={createPortalRowExpandClick(() =>
+                                setExpandedId((cur) => {
+                                  const next = cur === row.id ? null : row.id;
+                                  if (next !== cur && next) setCheckout(null);
+                                  return next;
+                                }),
+                              )}
+                              aria-expanded={expandedId === row.id}
+                            >
+                              {showSelectCol ? (
+                                <td className={PORTAL_TABLE_TD} onClick={(e) => e.stopPropagation()}>
                                   <input
                                     type="checkbox"
                                     className="size-4 rounded border-border"
@@ -862,37 +902,34 @@ export function ResidentPaymentsPanel() {
                                     onChange={() => toggleSelected(row.id)}
                                     aria-label={`Select ${row.title}`}
                                   />
-                                ) : null}
+                                </td>
+                              ) : null}
+                              <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                              <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{row.propertyLabel}</td>
+                              <td className={PORTAL_TABLE_TD}>{chargeDueLabel(row)}</td>
+                              <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{row.amountLabel}</td>
+                              <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground hidden sm:table-cell`}>
+                                {row.balanceLabel}
                               </td>
-                            ) : null}
-                            <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                            <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{row.propertyLabel}</td>
-                            <td className={PORTAL_TABLE_TD}>{chargeDueLabel(row)}</td>
-                            <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{row.amountLabel}</td>
-                            <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground hidden sm:table-cell`}>
-                              {row.balanceLabel}
-                            </td>
-                            <td className={PORTAL_TABLE_TD}>
-                              <Badge tone={row.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
-                                {row.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending"}
-                              </Badge>
-                            </td>
-                            <PortalTableExpandCell expanded={expandedId === row.id} />
-                          </tr>
-                          {expandedId === row.id ? (
-                            <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                              <td colSpan={detailColSpan} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
-                                {renderRowDetail(row)}
+                              <td className={PORTAL_TABLE_TD}>
+                                <Badge tone={status.tone}>{status.label}</Badge>
                               </td>
+                              <PortalTableExpandCell expanded={expandedId === row.id} />
                             </tr>
-                          ) : null}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            {expandedId === row.id ? (
+                              <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                                <td colSpan={detailColSpan} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                                  {renderRowDetail(row)}
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
             </>
           )}
         </>

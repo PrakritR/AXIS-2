@@ -29,12 +29,7 @@ import {
   triggerDocumentDownload,
   type AddDocumentMode,
 } from "@/components/portal/resident-other-documents";
-import { buildApplicationHtml } from "@/lib/manager-application-html";
-import {
-  fetchCosignerSubmissionsForSignerAppId,
-  readCosignerSubmissionsForSignerAppId,
-  type CosignerSubmission,
-} from "@/lib/cosigner-submissions-storage";
+import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { usePortalSession } from "@/hooks/use-portal-session";
@@ -61,7 +56,6 @@ import {
   syncUploadedOwnLeasesFromServer,
   type UploadedOwnLease,
 } from "@/lib/resident-lease-upload";
-import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import type { ReportResult } from "@/lib/reports/types";
@@ -111,49 +105,12 @@ function applicationStatusLabel(bucket: ManagerApplicationBucket): string {
   return "Pending review";
 }
 
-/** Human room label for an application row, resolved from the listing catalog. */
-function applicationRoomLabel(row: DemoApplicantRow): string {
-  const roomChoice = row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "";
-  return getRoomChoiceLabel(roomChoice);
-}
-
-/** Server PDF endpoint for an application (residents may fetch their own). */
-function applicationPdfHref(row: DemoApplicantRow): string {
-  const roomLabel = applicationRoomLabel(row);
-  const params = new URLSearchParams();
-  if (roomLabel) params.set("roomLabel", roomLabel);
-  const query = params.toString();
-  return `/api/manager-applications/${encodeURIComponent(row.id)}/pdf${query ? `?${query}` : ""}`;
-}
-
-/** Documents › Application — the resident's applications as table rows with an inline document view below. */
+/** Documents › Application — the resident's applications as table rows with the official PDF below. */
 function ApplicationDocumentsTable() {
   const session = usePortalSession();
   const email = session.email?.trim().toLowerCase() ?? "";
   const [tick, setTick] = useState(0);
   const [preview, setPreview] = useState<DemoApplicantRow | null>(null);
-  const [previewCosignerSubmissions, setPreviewCosignerSubmissions] = useState<CosignerSubmission[]>([]);
-  // Demo sandbox: the PDF route requires auth, so build the same PDF in the
-  // browser and feed it to the download as a data URL.
-  const demoMode = isDemoModeActive();
-  const demoPdfCache = useRef(new Map<string, string>());
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset co-signer data when the previewed application changes
-    setPreviewCosignerSubmissions([]);
-    if (!preview || preview.application?.hasCosigner !== "yes") return;
-    if (demoMode) {
-      setPreviewCosignerSubmissions(readCosignerSubmissionsForSignerAppId(preview.id));
-      return;
-    }
-    let cancelled = false;
-    void fetchCosignerSubmissionsForSignerAppId(preview.id).then((rows) => {
-      if (!cancelled) setPreviewCosignerSubmissions(rows);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [preview, demoMode]);
 
   useEffect(() => {
     const on = () => setTick((t) => t + 1);
@@ -167,41 +124,6 @@ function ApplicationDocumentsTable() {
     if (!email) return [];
     return readManagerApplicationRows().filter((row) => (row.email ?? "").trim().toLowerCase() === email);
   }, [email, tick]);
-
-  const buildDemoPdf = useCallback(async (row: DemoApplicantRow): Promise<string> => {
-    const cached = demoPdfCache.current.get(row.id);
-    if (cached) return cached;
-    const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-    const cosignerSubmissions =
-      row.application?.hasCosigner === "yes" ? readCosignerSubmissionsForSignerAppId(row.id) : [];
-    const url = await buildDemoApplicationPdfDataUrl(row, applicationRoomLabel(row) || undefined, cosignerSubmissions);
-    demoPdfCache.current.set(row.id, url);
-    return url;
-  }, []);
-
-  const downloadRow = useCallback(
-    (row: DemoApplicantRow) => {
-      if (demoMode) {
-        void buildDemoPdf(row).then((url) => triggerDocumentDownload(url, `rental-application-${row.id}.pdf`));
-        return;
-      }
-      triggerDocumentDownload(applicationPdfHref(row));
-    },
-    [demoMode, buildDemoPdf],
-  );
-
-  // Rendered-document HTML (same as the manager Applications preview) — the
-  // application data is already client-side, so this works in demo mode too.
-  const previewHtml = useMemo(
-    () =>
-      preview
-        ? buildApplicationHtml(preview, {
-            roomLabel: applicationRoomLabel(preview) || undefined,
-            cosignerSubmissions: previewCosignerSubmissions,
-          })
-        : null,
-    [preview, previewCosignerSubmissions],
-  );
 
   if (rows.length === 0) {
     return <PortalDataTableEmpty icon="application" message="No applications are linked to your account yet." />;
@@ -250,11 +172,7 @@ function ApplicationDocumentsTable() {
         ))}
       </DocumentsTableShell>
       {preview ? (
-        <DocumentInlineViewer
-          title={`Rental application ${preview.id}`}
-          srcDoc={previewHtml}
-          onDownload={() => downloadRow(preview)}
-        />
+        <ApplicationDocumentPreview row={preview} collapsible={false} showDownload />
       ) : null}
     </>
   );

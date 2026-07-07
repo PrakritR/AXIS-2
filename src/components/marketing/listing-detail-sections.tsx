@@ -155,11 +155,11 @@ function Sidebar({
         </p>
         <Link
           href={`/rent/tours-contact?propertyId=${encodeURIComponent(property.id)}`}
-          data-attr="listing-check-availability"
+          data-attr="listing-schedule-tour"
           className={`${primaryCtaClass} min-h-[48px]`}
           {...newTabProps}
         >
-          Check availability
+          Schedule a tour
         </Link>
         <Link
           href={buildRentalApplyHref({ propertyId: property.id })}

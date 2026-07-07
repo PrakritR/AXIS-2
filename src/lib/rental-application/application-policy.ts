@@ -7,6 +7,7 @@ import {
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyById } from "@/lib/rental-application/data";
+import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -30,7 +31,7 @@ export function listingApplicationFeeOnlyFirstApplication(propertyId: string): b
 
 /** Resident already has a submitted application (any property) before this new one. */
 export function residentHasPriorApplication(email: string): boolean {
-  return applicationsForResidentEmail(email).length > 0;
+  return applicationsForResidentEmail(email).some((row) => !isInProgressApplicationRow(row));
 }
 
 /** Resident has a paid application-fee charge on any property. */
@@ -82,11 +83,13 @@ export function residentApplicationSubmitBlocked(input: {
 
   const sub = getPropertyById(pid)?.listingSubmission;
   const allowMultiple = sub?.allowMultiplePropertyApplications === true;
-  const existing = applicationsForResidentEmail(email);
+  const existing = applicationsForResidentEmail(email).filter((row) => !isInProgressApplicationRow(row));
   const room = input.roomChoice1?.trim() || "";
 
   if (!allowMultiple) {
-    const active = existing.filter((row) => row.bucket === "pending" || row.bucket === "approved");
+    const active = existing.filter(
+      (row) => (row.bucket === "pending" || row.bucket === "approved") && !isInProgressApplicationRow(row),
+    );
     if (active.length > 0) {
       return {
         blocked: true,
@@ -98,7 +101,7 @@ export function residentApplicationSubmitBlocked(input: {
   }
 
   const duplicatePending = existing.some((row) => {
-    if (row.bucket !== "pending") return false;
+    if (row.bucket !== "pending" || isInProgressApplicationRow(row)) return false;
     const rowPid = row.propertyId?.trim() || row.application?.propertyId?.trim() || "";
     if (rowPid !== pid) return false;
     const rowRoom = row.application?.roomChoice1?.trim() || row.assignedRoomChoice?.trim() || "";
@@ -112,6 +115,11 @@ export function residentApplicationSubmitBlocked(input: {
   }
 
   return { blocked: false };
+}
+
+/** Residents may withdraw only applications still awaiting manager review. */
+export function residentCanWithdrawApplication(row: DemoApplicantRow): boolean {
+  return row.bucket === "pending";
 }
 
 export function listingApplicationSettingsSummary(sub: ManagerListingSubmissionV1 | null | undefined): {

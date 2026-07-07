@@ -352,7 +352,7 @@ export function ManagerDocumentsPanel({
               (() => {
                 const renderVendorDetail = (vendorId: string, vendorName: string) => (
                   <>
-                    <PortalTableDetailActions>
+                    <PortalTableDetailActions placement="top">
                       <Button
                         type="button"
                         variant="outline"

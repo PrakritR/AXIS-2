@@ -1,5 +1,6 @@
 "use client";
 
+import { PublicPageAuthFooter } from "@/components/marketing/public-page-auth-footer";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { persistManagerPricingOffer, readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { MANAGER_PLAN_TIERS, isPlanTierId, type ManagerPlanTierDefinition, type PlanTierId } from "@/data/manager-plan-tiers";
@@ -180,12 +181,13 @@ export function ManagerStartPage() {
         })}
       </div>
 
-      <p className="mx-auto mt-10 max-w-md text-center text-sm text-muted">
-        Already have an account?{" "}
-        <a href="/auth/sign-in" className="font-semibold text-primary hover:underline" data-attr="pricing-sign-in-link">
-          Sign in
-        </a>
-      </p>
+      <PublicPageAuthFooter
+        getStartedHref={createAccountPath("free", billing)}
+        signInHref="/auth/sign-in"
+        getStartedLabel="Get started"
+        getStartedDataAttr="pricing-get-started"
+        signInDataAttr="pricing-sign-in-link"
+      />
     </div>
   );
 }
