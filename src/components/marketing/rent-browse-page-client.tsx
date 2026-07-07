@@ -17,7 +17,7 @@ export function RentBrowsePageClient() {
 
   return (
     <div className="native-auth-screen min-h-[100dvh] px-4 py-5 [html[data-native]_&]:pt-[max(1rem,env(safe-area-inset-top))] [html[data-native]_&]:pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:py-8">
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto w-full max-w-7xl">
         {isNative === true && (
           <Link
             href={backHref}
@@ -31,9 +31,6 @@ export function RentBrowsePageClient() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             Browse homes
           </h1>
-          <p className="mt-2 text-sm text-muted sm:text-base">
-            Scroll through available rentals — cheapest first
-          </p>
         </header>
 
         <div className="mt-6 sm:mt-8">

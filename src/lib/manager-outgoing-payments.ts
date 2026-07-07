@@ -155,6 +155,7 @@ export function buildManagerOutgoingPaymentRows(input: {
   const vendorById = input.vendorById ?? new Map<string, ManagerVendorRow>();
   const workOrders = input.workOrders ?? readManagerWorkOrderRows();
   const paidCharges = input.paidCharges ?? [];
+  const workOrderById = new Map(workOrders.map((workOrder) => [workOrder.id, workOrder]));
   const workOrderExpenseIds = new Set(
     input.expenses.map((expense) => expense.sourceWorkOrderId).filter((id): id is string => Boolean(id)),
   );
@@ -167,7 +168,12 @@ export function buildManagerOutgoingPaymentRows(input: {
     const payee =
       (expense.vendorId && vendorNameById.get(expense.vendorId)) ||
       (expense.categoryCode === "service_fees" ? "Axis" : "—");
-    rows.push({
+    const sourceWorkOrder = expense.sourceWorkOrderId
+      ? workOrderById.get(expense.sourceWorkOrderId)
+      : undefined;
+    const paidChannel = sourceWorkOrder?.vendorPaymentChannel;
+    const vendor = sourceWorkOrder?.vendorId ? vendorById.get(sourceWorkOrder.vendorId) : undefined;
+    const baseRow: DemoManagerOutgoingPaymentRow = {
       id: `expense-${expense.id}`,
       propertyName,
       categoryLabel: expense.categoryLabel,
@@ -176,12 +182,16 @@ export function buildManagerOutgoingPaymentRows(input: {
       amountLabel: formatMoney(expense.amountCents),
       dueDate: dueDateLabelFromIso(expense.expenseDate),
       bucket: "paid",
-      statusLabel: "Paid",
+      statusLabel: paidChannel ? `Paid · ${managerVendorPayMethodLabel(paidChannel)}` : "Paid",
       expenseEntryId: expense.id,
       workOrderId: expense.sourceWorkOrderId ?? undefined,
       fromExpense: true,
       fromAxisFee: expense.categoryCode === "service_fees",
-    });
+      paidViaChannel: paidChannel,
+      paidAtLabel: sourceWorkOrder?.paidAt ? safeFormatDateTime(sourceWorkOrder.paidAt) : undefined,
+      vendorId: sourceWorkOrder?.vendorId,
+    };
+    rows.push(enrichOutgoingRowWithVendorPayments(baseRow, vendor));
   }
 
   for (const workOrder of workOrders) {

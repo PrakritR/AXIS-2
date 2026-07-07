@@ -150,6 +150,9 @@ export function GeneralAssistant() {
   );
   if (inPortal) return null;
 
+  // Browse page has its own housing-search filter chat FAB.
+  if (pathname === "/rent/browse" || pathname?.startsWith("/rent/browse/")) return null;
+
   const trigger =
     open ? null : (
       <button

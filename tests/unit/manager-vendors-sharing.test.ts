@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { filterOwnVendorRowsForSync, type ManagerVendorRow } from "@/lib/manager-vendors-storage";
+import {
+  filterOwnVendorRowsForSync,
+  readOwnManagerVendorRows,
+  type ManagerVendorRow,
+} from "@/lib/manager-vendors-storage";
 
 const own: ManagerVendorRow = {
   id: "v-own",
@@ -34,5 +38,11 @@ describe("manager vendor sharing sync", () => {
   it("includes legacy rows without managerUserId for the syncing manager", () => {
     const legacy: ManagerVendorRow = { ...own, id: "v-legacy", managerUserId: null };
     expect(filterOwnVendorRowsForSync([legacy, sharedFromOther], "mgr-a")).toEqual([legacy]);
+  });
+
+  it("readOwnManagerVendorRows keeps legacy own vendors visible", () => {
+    const legacy: ManagerVendorRow = { ...own, id: "v-legacy", managerUserId: null };
+    const rows = readOwnManagerVendorRows("mgr-a", [legacy, sharedFromOther]);
+    expect(rows).toEqual([legacy]);
   });
 });

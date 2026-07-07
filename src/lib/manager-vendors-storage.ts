@@ -183,8 +183,8 @@ export function readOwnManagerVendorRows(
   fallback: ManagerVendorRow[] = EMPTY_FALLBACK,
 ): ManagerVendorRow[] {
   if (!managerUserId) return [];
-  return readManagerVendorRows(fallback).filter(
-    (row) => !isVendorCategorySettingsRow(row) && row.managerUserId === managerUserId,
+  return ownVendorRows(readManagerVendorRows(fallback), managerUserId).filter(
+    (row) => !isVendorCategorySettingsRow(row),
   );
 }
 

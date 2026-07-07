@@ -16,7 +16,11 @@ const BUDGET_MAX = 6500;
 const BUDGET_STEP = 100;
 const BUDGET_MARKERS = [500, 1500, 2500, 3500, 4500, 5500, 6500] as const;
 
-const BATHROOM_OPTIONS = [
+export const RESIDENT_HOUSING_BUDGET_MIN = BUDGET_MIN;
+export const RESIDENT_HOUSING_BUDGET_MAX = BUDGET_MAX;
+export const RESIDENT_HOUSING_BUDGET_STEP = BUDGET_STEP;
+
+export const RESIDENT_BATHROOM_OPTIONS = [
   { id: "any", label: "Any" },
   { id: "private", label: "Private bath" },
   { id: "2-share", label: "2-share" },
@@ -24,7 +28,7 @@ const BATHROOM_OPTIONS = [
   { id: "4-share", label: "4-share" },
 ] as const;
 
-const BEDROOM_OPTIONS = [
+export const RESIDENT_ROOM_TYPE_OPTIONS = [
   { id: "any", label: "Any" },
   { id: "studio", label: "Studio" },
   { id: "1", label: "1 bed" },
@@ -32,15 +36,20 @@ const BEDROOM_OPTIONS = [
   { id: "3", label: "3+ beds" },
 ] as const;
 
-const inputCls =
+const BATHROOM_OPTIONS = RESIDENT_BATHROOM_OPTIONS;
+const BEDROOM_OPTIONS = RESIDENT_ROOM_TYPE_OPTIONS;
+
+export const RESIDENT_HOUSING_INPUT_CLS =
   "min-h-[44px] w-full rounded-xl border border-border/60 bg-[var(--glass-fill)] px-3.5 py-2.5 text-sm text-foreground outline-none transition-all duration-200 placeholder:text-muted/60 focus:border-primary/40 focus:ring-2 focus:ring-primary/25 hover:border-primary/25";
+
+const inputCls = RESIDENT_HOUSING_INPUT_CLS;
 
 function clampBudget(n: number) {
   const stepped = Math.round(n / BUDGET_STEP) * BUDGET_STEP;
   return Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, stepped));
 }
 
-type ChatAppliedFilters = {
+export type HousingChatAppliedFilters = {
   moveIn?: string;
   moveOut?: string;
   maxBudget?: number;
@@ -49,6 +58,8 @@ type ChatAppliedFilters = {
   zip?: string;
   neighborhood?: string;
 };
+
+type ChatAppliedFilters = HousingChatAppliedFilters;
 
 export function ResidentListingSearch() {
   const { listings, loading } = usePublicListings();
@@ -253,12 +264,28 @@ export function ResidentListingSearch() {
   );
 }
 
-function FieldBlock({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+export function ResidentHousingFieldBlock({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <div className={`flex min-w-0 flex-col gap-2${className ? ` ${className}` : ""}`}>
       <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</span>
       {children}
     </div>
+  );
+}
+
+function FieldBlock({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <ResidentHousingFieldBlock label={label} className={className}>
+      {children}
+    </ResidentHousingFieldBlock>
   );
 }
 
@@ -270,7 +297,19 @@ type ChatListing = {
   priceLabel: string;
 };
 
-function ResidentHousingChat({ onApplyFilters }: { onApplyFilters: (filters: ChatAppliedFilters) => void }) {
+export function ResidentHousingChat({
+  onApplyFilters,
+  title = "Ask Axis",
+  subtitle = 'Describe what you need — e.g. "2 bed under $2000 in Ballard, moving in August"',
+  placeholder = "Tell us what you're looking for…",
+  showMatchListings = true,
+}: {
+  onApplyFilters: (filters: ChatAppliedFilters) => void;
+  title?: string;
+  subtitle?: string;
+  placeholder?: string;
+  showMatchListings?: boolean;
+}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [summary, setSummary] = useState<string | null>(null);
@@ -309,8 +348,8 @@ function ResidentHousingChat({ onApplyFilters }: { onApplyFilters: (filters: Cha
       setStatus("idle");
       setSummary(
         body.matchCount === 0
-          ? "No listings match that yet — filters below were still updated."
-          : `Found ${body.matchCount} matching listing${body.matchCount === 1 ? "" : "s"} — filters applied below.`,
+          ? "No listings match that yet — filters were still updated."
+          : `Found ${body.matchCount} matching home${body.matchCount === 1 ? "" : "s"} — filters applied.`,
       );
     } catch {
       setStatus("error");
@@ -320,16 +359,14 @@ function ResidentHousingChat({ onApplyFilters }: { onApplyFilters: (filters: Cha
 
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Ask Axis</p>
-      <p className="mt-1 text-sm text-muted">
-        Describe what you need — e.g. &ldquo;2 bed under $2000 in Ballard, moving in August&rdquo;
-      </p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{title}</p>
+      <p className="mt-1 text-sm text-muted">{subtitle}</p>
       <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2 sm:flex-row">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tell us what you're looking for…"
+          placeholder={placeholder}
           aria-label="Describe the home you're looking for"
           data-attr="resident-search-ai-chat-input"
           className={`${inputCls} flex-1`}
@@ -348,7 +385,7 @@ function ResidentHousingChat({ onApplyFilters }: { onApplyFilters: (filters: Cha
         <p className={`mt-3 text-sm ${status === "error" ? "text-red-500" : "text-foreground"}`}>{summary}</p>
       )}
 
-      {listings.length > 0 && status !== "error" && (
+      {showMatchListings && listings.length > 0 && status !== "error" && (
         <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label="AI-matched listings">
           {listings.map((room) => (
             <li key={room.key}>

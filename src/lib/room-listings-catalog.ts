@@ -355,16 +355,19 @@ export type PropertyBrowseCard = {
   petFriendly: boolean;
 };
 
-/** One shopping-style card per property — cheapest available room rent, hero image. */
-export function buildPropertyBrowseCards(properties: MockProperty[]): PropertyBrowseCard[] {
-  const roomRows = filterRoomListings(properties, {
-    zipRaw: "",
-    radiusMiles: 50,
-    maxBudgetNum: null,
-    bathroom: "any",
-    bedroom: "any",
-  });
+export type PropertyBrowseFilters = {
+  maxBudgetNum?: number | null;
+  bathroom?: string;
+  bedroom?: string;
+  moveIn?: string;
+  moveOut?: string;
+  petFriendly?: boolean;
+  neighborhood?: string;
+};
 
+export type BrowseSortId = "price-asc" | "price-desc" | "neighborhood";
+
+function aggregateRoomRowsToPropertyCards(roomRows: RoomListingRow[]): PropertyBrowseCard[] {
   const byProperty = new Map<string, PropertyBrowseCard>();
 
   for (const row of roomRows) {
@@ -397,13 +400,50 @@ export function buildPropertyBrowseCards(properties: MockProperty[]): PropertyBr
     if (!existing.imageUrl && imageUrl) existing.imageUrl = imageUrl;
   }
 
-  return [...byProperty.values()].sort((a, b) => {
-    if (a.rentNumeric === null && b.rentNumeric === null) {
-      return a.headlineAddress.localeCompare(b.headlineAddress);
+  return [...byProperty.values()];
+}
+
+export function sortPropertyBrowseCards(cards: PropertyBrowseCard[], sort: BrowseSortId): PropertyBrowseCard[] {
+  const sorted = [...cards];
+  sorted.sort((a, b) => {
+    if (sort === "neighborhood") {
+      const hood = a.neighborhood.localeCompare(b.neighborhood);
+      if (hood !== 0) return hood;
+      return compareBrowseCardsByPrice(a, b);
     }
-    if (a.rentNumeric === null) return 1;
-    if (b.rentNumeric === null) return -1;
-    if (a.rentNumeric !== b.rentNumeric) return a.rentNumeric - b.rentNumeric;
-    return a.headlineAddress.localeCompare(b.headlineAddress);
+    if (sort === "price-desc") return compareBrowseCardsByPrice(b, a);
+    return compareBrowseCardsByPrice(a, b);
   });
+  return sorted;
+}
+
+function compareBrowseCardsByPrice(a: PropertyBrowseCard, b: PropertyBrowseCard): number {
+  if (a.rentNumeric === null && b.rentNumeric === null) {
+    return a.headlineAddress.localeCompare(b.headlineAddress);
+  }
+  if (a.rentNumeric === null) return 1;
+  if (b.rentNumeric === null) return -1;
+  if (a.rentNumeric !== b.rentNumeric) return a.rentNumeric - b.rentNumeric;
+  return a.headlineAddress.localeCompare(b.headlineAddress);
+}
+
+/** One shopping-style card per property — cheapest available room rent, hero image. */
+export function buildPropertyBrowseCards(
+  properties: MockProperty[],
+  opts?: { filters?: PropertyBrowseFilters; sort?: BrowseSortId },
+): PropertyBrowseCard[] {
+  const filters = opts?.filters ?? {};
+  const roomRows = filterRoomListings(properties, {
+    zipRaw: "",
+    radiusMiles: 50,
+    maxBudgetNum: filters.maxBudgetNum ?? null,
+    bathroom: filters.bathroom ?? "any",
+    bedroom: filters.bedroom ?? "any",
+    moveIn: filters.moveIn,
+    moveOut: filters.moveOut,
+    petFriendly: filters.petFriendly,
+    neighborhood: filters.neighborhood,
+  });
+
+  return sortPropertyBrowseCards(aggregateRoomRowsToPropertyCards(roomRows), opts?.sort ?? "price-asc");
 }

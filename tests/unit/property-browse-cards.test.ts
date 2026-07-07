@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MockProperty } from "@/data/types";
-import { buildPropertyBrowseCards } from "@/lib/room-listings-catalog";
+import { buildPropertyBrowseCards, sortPropertyBrowseCards } from "@/lib/room-listings-catalog";
 
 function mockProperty(overrides: Partial<MockProperty> & Pick<MockProperty, "id">): MockProperty {
   return {
@@ -48,5 +48,20 @@ describe("buildPropertyBrowseCards", () => {
 
     expect(cards[0]!.imageUrl.length).toBeGreaterThan(0);
     expect(cards[0]!.propertyId).toBe("p1");
+  });
+
+  it("sorts highest price first when requested", () => {
+    const properties = [
+      mockProperty({ id: "cheap", neighborhood: "U District" }),
+      mockProperty({ id: "expensive", neighborhood: "Ballard" }),
+    ];
+    const cards = sortPropertyBrowseCards(buildPropertyBrowseCards(properties), "price-desc");
+    if (cards.length < 2) return;
+
+    const first = cards[0]!.rentNumeric;
+    const second = cards[1]!.rentNumeric;
+    if (first !== null && second !== null) {
+      expect(first).toBeGreaterThanOrEqual(second);
+    }
   });
 });

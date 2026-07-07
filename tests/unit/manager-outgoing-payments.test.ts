@@ -43,4 +43,51 @@ describe("buildManagerOutgoingPaymentRows", () => {
     expect(rows.some((row) => row.id === "work-order-wo-1" && row.bucket === "pending")).toBe(true);
     expect(rows.some((row) => row.id === "expense-exp-1" && row.bucket === "paid")).toBe(true);
   });
+
+  it("shows paid-via channel on expense rows linked to a paid work order", () => {
+    const workOrders: DemoManagerWorkOrderRow[] = [
+      {
+        id: "wo-paid",
+        propertyName: "Magnolia House",
+        unit: "Room 1",
+        title: "Sink repair",
+        priority: "Medium",
+        status: "Completed",
+        bucket: "completed",
+        description: "",
+        scheduled: "—",
+        cost: "$200.00",
+        vendorName: "Rainier Plumbing",
+        vendorId: "vendor-1",
+        vendorCostCents: 20000,
+        automationStatus: "paid",
+        paidAt: "2026-06-02T12:00:00.000Z",
+        vendorPaymentChannel: "zelle",
+      },
+    ];
+
+    const rows = buildManagerOutgoingPaymentRows({
+      managerUserId: "mgr-1",
+      expenses: [
+        {
+          id: "exp-wo",
+          categoryCode: "vendor_payment",
+          categoryLabel: "Vendor payment",
+          amountCents: 20000,
+          expenseDate: "2026-06-02",
+          memo: "Sink repair",
+          propertyName: "Magnolia House",
+          sourceWorkOrderId: "wo-paid",
+          vendorId: "vendor-1",
+        },
+      ],
+      workOrders,
+      paidCharges: [],
+    });
+
+    const expenseRow = rows.find((row) => row.id === "expense-exp-wo");
+    expect(expenseRow?.paidViaChannel).toBe("zelle");
+    expect(expenseRow?.statusLabel).toBe("Paid · Zelle");
+    expect(rows.some((row) => row.id === "work-order-paid-wo-paid")).toBe(false);
+  });
 });

@@ -89,7 +89,7 @@ export async function POST(req: Request) {
       .eq("work_order_id", workOrderId)
       .eq("vendor_user_id", vendorUserId)
       .maybeSingle();
-    if (bid?.status === "submitted") {
+    if (bid && (bid.status === "submitted" || bid.status === "accepted")) {
       await db
         .from("work_order_bids")
         .update({

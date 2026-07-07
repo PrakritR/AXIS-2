@@ -75,7 +75,7 @@ export async function GET(req: Request) {
 
     let query = db
       .from("manager_vendor_records")
-      .select("row_data, updated_at")
+      .select("row_data, manager_user_id, updated_at")
       .order("updated_at", { ascending: false })
       .limit(500);
 
@@ -87,9 +87,12 @@ export async function GET(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const ownRows = (data ?? [])
-      .map((record) => record.row_data)
-      .filter((row): row is ManagerVendorRow => Boolean(row))
-      .filter((row) => !isVendorCategorySettingsRow(row));
+      .map((record) => {
+        const row = record.row_data as ManagerVendorRow | null;
+        if (!row?.id || isVendorCategorySettingsRow(row)) return null;
+        return { ...row, managerUserId: String(record.manager_user_id ?? user.id) };
+      })
+      .filter((row): row is ManagerVendorRow => Boolean(row));
 
     let sharedRows: ManagerVendorRow[] = [];
     if (!admin) {

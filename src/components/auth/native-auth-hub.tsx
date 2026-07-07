@@ -263,152 +263,147 @@ function NativeAuthHubInner({ defaultMode = "sign-in" }: { defaultMode?: AuthMod
 
   if (checkingSession) {
     return (
-      <AuthCard>
-        <AuthLoadingCard />
-      </AuthCard>
+      <div className="native-auth-hub-stack mx-auto w-full max-w-[460px]">
+        <AuthCard>
+          <AuthLoadingCard />
+        </AuthCard>
+      </div>
     );
   }
 
+  const stackClassName = `native-auth-hub-stack mx-auto w-full ${isCreate ? "max-w-[52rem]" : "max-w-[460px]"}`;
+
   return (
-    <AuthCard wide={isCreate}>
-      <div className="native-auth-hub">
-        <AuthBrandHeader />
+    <div className={stackClassName}>
+      <AuthCard wide={isCreate}>
+        <div className="native-auth-hub">
+          <AuthBrandHeader />
 
-        {mode === "sign-in" ? (
-          <>
-            <div className="mt-4">
-              <GoogleSignInButton nextPath="" intent={null} disabled={locked} />
-            </div>
-            <div className="my-4">
-              <AuthDivider label="or email" />
-            </div>
-            <div className="space-y-3">
-              <Input
-                type="email"
-                autoComplete="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setFailedSignInAttempts(0);
-                  setErrorText(null);
-                }}
-                disabled={locked}
-              />
-              <div>
-                <PasswordInput
-                  autoComplete="current-password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={locked}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void signIn();
-                  }}
-                />
-                {showForgotPassword ? (
-                  <p className="mt-1.5 text-right text-[12px]">
-                    <Link className="font-semibold text-primary hover:opacity-90" href="/auth/forgot-password">
-                      Forgot password?
-                    </Link>
-                  </p>
-                ) : null}
+          {mode === "sign-in" ? (
+            <>
+              <div className="mt-4">
+                <GoogleSignInButton nextPath="" intent={null} disabled={locked} />
               </div>
-              {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
-              <Button
-                type="button"
-                className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
-                disabled={locked}
-                onClick={() => void signIn()}
-              >
-                {busy ? "Signing in…" : "Sign in"}
-              </Button>
-            </div>
-
-            <div className="mt-5 space-y-2 text-center text-[12px]">
-              <p>
-                <Link
-                  className="font-semibold text-primary hover:opacity-90"
-                  href={createAccountHref}
-                  data-attr="auth-hub-create-account"
-                >
-                  Create your account
-                </Link>
-              </p>
-              {!isNative ? (
-                <p>
-                  <Link
-                    className="font-semibold text-muted transition hover:text-foreground"
-                    href="/"
-                    data-attr="auth-back-to-home"
-                  >
-                    ← Back to home
-                  </Link>
-                </p>
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="mt-4 space-y-3">
-              <RoleToggle role={role} onChange={setRole} disabled={locked} />
-
-              {role === "resident" ? (
-                <ResidentSignupForm
-                  nextPath={residentSignupNext}
-                  showBrowseLink
+              <div className="my-4">
+                <AuthDivider label="or email" />
+              </div>
+              <div className="space-y-3">
+                <Input
+                  type="email"
+                  autoComplete="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setFailedSignInAttempts(0);
+                    setErrorText(null);
+                  }}
                   disabled={locked}
                 />
-              ) : role === "vendor" ? (
-                <VendorSignupForm variant="compact" disabled={locked} />
-              ) : (
-                <>
-                  <ManagerPlanBillingToggle billing={billing} onChange={setBilling} disabled={locked} />
-                  <ManagerPlanTierCards
-                    tiers={planTiers}
-                    billing={billing}
-                    selectedTierId={selectedTierId}
-                    onSelectTier={setSelectedTierId}
+                <div>
+                  <PasswordInput
+                    autoComplete="current-password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     disabled={locked}
-                    compact
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void signIn();
+                    }}
                   />
-                  <ManagerSignupPanel
-                    tier={selectedTierId}
-                    billing={billing}
-                    planTiers={planTiers}
-                    returnSurface="mobile-plan"
-                    initialEmail={email}
-                  />
-                </>
-              )}
-            </div>
-
-            <div className="mt-5 space-y-2 text-center text-[12px]">
-              <p>
-                <Link
-                  className="font-semibold text-primary hover:opacity-90"
-                  href={signInHref}
-                  data-attr="auth-hub-sign-in"
+                  {showForgotPassword ? (
+                    <p className="mt-1.5 text-right text-[12px]">
+                      <Link className="font-semibold text-primary hover:opacity-90" href="/auth/forgot-password">
+                        Forgot password?
+                      </Link>
+                    </p>
+                  ) : null}
+                </div>
+                {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
+                <Button
+                  type="button"
+                  className="btn-cobalt w-full rounded-full py-2.5 text-[15px] font-semibold"
+                  disabled={locked}
+                  onClick={() => void signIn()}
                 >
-                  Sign in
-                </Link>
-              </p>
-              {!isNative ? (
-                <p>
-                  <Link
-                    className="font-semibold text-muted transition hover:text-foreground"
-                    href="/"
-                    data-attr="auth-back-to-home"
-                  >
-                    ← Back to home
-                  </Link>
-                </p>
-              ) : null}
-            </div>
-          </>
+                  {busy ? "Signing in…" : "Sign in"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mt-4 space-y-3">
+                <RoleToggle role={role} onChange={setRole} disabled={locked} />
+
+                {role === "resident" ? (
+                  <ResidentSignupForm
+                    nextPath={residentSignupNext}
+                    showBrowseLink
+                    disabled={locked}
+                  />
+                ) : role === "vendor" ? (
+                  <VendorSignupForm variant="compact" disabled={locked} />
+                ) : (
+                  <>
+                    <ManagerPlanBillingToggle billing={billing} onChange={setBilling} disabled={locked} />
+                    <ManagerPlanTierCards
+                      tiers={planTiers}
+                      billing={billing}
+                      selectedTierId={selectedTierId}
+                      onSelectTier={setSelectedTierId}
+                      disabled={locked}
+                      compact
+                    />
+                    <ManagerSignupPanel
+                      tier={selectedTierId}
+                      billing={billing}
+                      planTiers={planTiers}
+                      returnSurface="mobile-plan"
+                      initialEmail={email}
+                    />
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </AuthCard>
+
+      <div className="native-auth-hub-footer mt-5 space-y-2 text-center text-[12px]">
+        {mode === "sign-in" ? (
+          <p>
+            <Link
+              className="font-semibold text-primary hover:opacity-90"
+              href={createAccountHref}
+              data-attr="auth-hub-create-account"
+            >
+              Create your account
+            </Link>
+          </p>
+        ) : (
+          <p>
+            <Link
+              className="font-semibold text-primary hover:opacity-90"
+              href={signInHref}
+              data-attr="auth-hub-sign-in"
+            >
+              Sign in
+            </Link>
+          </p>
         )}
+        {!isNative ? (
+          <p>
+            <Link
+              className="font-semibold text-muted transition hover:text-foreground"
+              href="/"
+              data-attr="auth-back-to-home"
+            >
+              ← Back to home
+            </Link>
+          </p>
+        ) : null}
       </div>
-    </AuthCard>
+    </div>
   );
 }
 
@@ -416,9 +411,11 @@ export function NativeAuthHub({ defaultMode = "sign-in" }: { defaultMode?: AuthM
   return (
     <Suspense
       fallback={
-        <AuthCard>
-          <AuthLoadingCard />
-        </AuthCard>
+        <div className="native-auth-hub-stack mx-auto w-full max-w-[460px]">
+          <AuthCard>
+            <AuthLoadingCard />
+          </AuthCard>
+        </div>
       }
     >
       <NativeAuthHubInner defaultMode={defaultMode} />
