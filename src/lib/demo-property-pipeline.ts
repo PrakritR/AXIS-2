@@ -177,7 +177,6 @@ function mirrorPropertyRecord(input: {
   void fetch("/api/property-records", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify({
       action: "upsert",
       id: input.id,

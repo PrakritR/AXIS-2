@@ -276,7 +276,7 @@ export function ResidentLeasePanel() {
       <ManagerPortalPageShell
         title="Lease"
         titleAside={
-          <div className="flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-2">
+          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
             {leaseFullyExecuted ? (
               <Button
                 type="button"

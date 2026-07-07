@@ -13,23 +13,19 @@ import {
   PORTAL_TOOLBAR_PILL_BUTTON,
   PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
 } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_WRAP,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   PortalDataTableEmpty,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { WorkOrderStatusBadge } from "@/components/portal/resident-services-panel";
 import { readVendorWorkOrderRows, syncManagerWorkOrdersFromServer, MANAGER_WORK_ORDERS_EVENT, updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -39,7 +35,6 @@ import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payout
 import { upsertWorkOrderBid, WORK_ORDER_BIDS_EVENT } from "@/lib/work-order-bids-storage";
 import {
   isPricingPendingBid,
-  vendorWorkOrderPhaseLabel,
   vendorWorkOrderTab,
   VENDOR_WORK_ORDER_TAB_LABELS,
   VENDOR_WORK_ORDER_TAB_ORDER,
@@ -381,19 +376,25 @@ export function VendorWorkOrdersPanel() {
   };
 
   const renderInvoice = (row: DemoManagerWorkOrderRow) => {
-    const laborCents = row.vendorCostCents ?? 0;
-    const materialsCents = row.materialsCostCents ?? 0;
+    const bid = bidsByWorkOrderId[row.id];
+    // Fall back to the accepted bid when the row's own cents weren't mirrored,
+    // so a completed job always shows what it earned.
+    const laborCents = row.vendorCostCents || bid?.amountCents || 0;
+    const materialsCents = row.materialsCostCents || bid?.materialsCents || 0;
     const totalCents = laborCents + materialsCents;
-    if (totalCents <= 0) return null;
     const payout = payoutsByWorkOrderId[row.id];
 
     return (
       <div className="mt-3 border-t border-border pt-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted">Invoice</p>
-        <p className="mt-1.5 text-xs text-muted">
-          Labor ${(laborCents / 100).toFixed(2)}
-          {materialsCents > 0 ? ` + materials $${(materialsCents / 100).toFixed(2)}` : ""} ={" "}
-          <span className="font-medium text-foreground">${(totalCents / 100).toFixed(2)}</span>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted">Cost</p>
+        <p className="mt-1.5 text-sm">
+          <span className="font-semibold text-foreground">${(totalCents / 100).toFixed(2)}</span>
+          {materialsCents > 0 ? (
+            <span className="text-xs text-muted">
+              {" "}
+              (labor ${(laborCents / 100).toFixed(2)} + materials ${(materialsCents / 100).toFixed(2)})
+            </span>
+          ) : null}
         </p>
         {row.automationStatus !== "paid" ? (
           <p className="mt-1 text-xs text-muted">Awaiting manager approval and payment.</p>
@@ -629,14 +630,10 @@ export function VendorWorkOrdersPanel() {
         ) : null}
 
         {canMarkDone ? (
-          <div className="mt-3 border-t border-border pt-3">
-            {showScheduledPrice ? (
-              <div className="mb-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted">Job price</p>
-                <p className="mt-1 text-xs text-muted">
-                  Set what you&apos;ll charge — your manager sees this on outgoing payment when you mark done.
-                </p>
-                <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
+          <div className="mt-3 space-y-3 border-t border-border pt-3">
+            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+              {showScheduledPrice ? (
+                <>
                   <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
                     Labor cost
                     <Input
@@ -650,12 +647,12 @@ export function VendorWorkOrdersPanel() {
                           [row.id]: { ...(prev[row.id] ?? defaultBidDraft(row, bid)), amount: e.target.value },
                         }))
                       }
-                      className="h-8 w-28 rounded-md text-sm"
+                      className="h-8 w-24 rounded-md text-sm"
                       data-attr="vendor-scheduled-price-labor"
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
-                    Equipment / materials
+                    Materials
                     <Input
                       type="text"
                       inputMode="decimal"
@@ -667,42 +664,36 @@ export function VendorWorkOrdersPanel() {
                           [row.id]: { ...(prev[row.id] ?? defaultBidDraft(row, bid)), materials: e.target.value },
                         }))
                       }
-                      className="h-8 w-28 rounded-md text-sm"
+                      className="h-8 w-24 rounded-md text-sm"
                       data-attr="vendor-scheduled-price-materials"
                     />
                   </label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={PORTAL_DETAIL_BTN}
-                    data-attr="vendor-save-scheduled-price"
-                    disabled={savingPriceId === row.id}
-                    onClick={() => void saveScheduledPrice(row)}
-                  >
-                    {savingPriceId === row.id ? "Saving…" : "Save price"}
-                  </Button>
-                </div>
-                {(row.vendorCostCents ?? 0) > 0 ? (
-                  <p className="mt-2 text-xs text-muted">
-                    Saved total:{" "}
-                    <span className="font-medium text-foreground">
-                      ${(((row.vendorCostCents ?? 0) + (row.materialsCostCents ?? 0)) / 100).toFixed(2)}
-                    </span>
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
-              Note for the manager (optional)
-              <Input
-                type="text"
-                placeholder="Anything the manager should know"
-                value={doneNoteById[row.id] ?? ""}
-                onChange={(e) => setDoneNoteById((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                className="h-8 rounded-md text-sm"
-              />
-            </label>
+                </>
+              ) : null}
+              <label className="flex flex-1 min-w-[160px] flex-col gap-1 text-[11px] font-medium text-muted">
+                Note (optional)
+                <Input
+                  type="text"
+                  placeholder="Anything the manager should know"
+                  value={doneNoteById[row.id] ?? ""}
+                  onChange={(e) => setDoneNoteById((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                  className="h-8 rounded-md text-sm"
+                />
+              </label>
+            </div>
             <PortalTableDetailActions>
+              {showScheduledPrice ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={`${PORTAL_DETAIL_BTN} rounded-full`}
+                  data-attr="vendor-save-scheduled-price"
+                  disabled={savingPriceId === row.id}
+                  onClick={() => void saveScheduledPrice(row)}
+                >
+                  {savingPriceId === row.id ? "Saving…" : "Save price"}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="primary"
@@ -751,30 +742,24 @@ export function VendorWorkOrdersPanel() {
         <div>
           <div className="space-y-2 lg:hidden">
             {visible.map((row) => {
-              const bid = bidsByWorkOrderId[row.id];
-              const phaseLabel = vendorWorkOrderPhaseLabel(row, bid);
               const isExpanded = expandedId === row.id;
               return (
                 <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full gap-2 text-left"
                     onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
                     aria-expanded={isExpanded}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-foreground">{row.title}</p>
+                      <PortalTableInlineExpand expanded={isExpanded} className="font-semibold text-foreground">
+                        <span className="truncate">{row.title}</span>
+                      </PortalTableInlineExpand>
                       <p className="mt-0.5 truncate text-xs text-muted">{propertyLabel(row)}</p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <WorkOrderStatusBadge bucket={row.bucket} />
-                        {phaseLabel ? (
-                          <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]">
-                            {phaseLabel}
-                          </span>
-                        ) : null}
                       </div>
                     </div>
-                    <PortalTableExpandChevron expanded={isExpanded} />
                   </button>
                   {isExpanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
@@ -783,23 +768,18 @@ export function VendorWorkOrdersPanel() {
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
+                <PortalDataTableColGroup percents={portalTableColumnPercents(4)} />
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={MANAGER_TABLE_TH}>Work order</th>
                     <th className={MANAGER_TABLE_TH}>Property</th>
                     <th className={MANAGER_TABLE_TH}>Scheduled visit</th>
                     <th className={MANAGER_TABLE_TH}>Status</th>
-                    <th className={MANAGER_TABLE_TH}>Phase</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((row) => {
-                    const bid = bidsByWorkOrderId[row.id];
-                    const phaseLabel = vendorWorkOrderPhaseLabel(row, bid);
                     const isExpanded = expandedId === row.id;
                     return (
                       <Fragment key={row.id}>
@@ -809,7 +789,9 @@ export function VendorWorkOrdersPanel() {
                           aria-expanded={isExpanded}
                         >
                           <td className={PORTAL_TABLE_TD}>
-                            <p className="font-medium text-foreground">{row.title}</p>
+                            <PortalTableInlineExpand expanded={isExpanded} className="font-medium text-foreground">
+                              {row.title}
+                            </PortalTableInlineExpand>
                             {row.description ? <p className="mt-0.5 line-clamp-2 text-xs text-muted">{row.description}</p> : null}
                           </td>
                           <td className={PORTAL_TABLE_TD}>{propertyLabel(row)}</td>
@@ -817,26 +799,10 @@ export function VendorWorkOrdersPanel() {
                           <td className={PORTAL_TABLE_TD}>
                             <WorkOrderStatusBadge bucket={row.bucket} />
                           </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            {phaseLabel ? (
-                              <span
-                                className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] ${
-                                  phaseLabel === "Paid"
-                                    ? "bg-accent/40 text-foreground ring-border"
-                                    : "portal-badge-pending"
-                                }`}
-                              >
-                                {phaseLabel}
-                              </span>
-                            ) : (
-                              <span className="text-muted">—</span>
-                            )}
-                          </td>
-                          <PortalTableExpandCell expanded={isExpanded} />
                         </tr>
                         {isExpanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowDetail(row)}
                             </td>
                           </tr>

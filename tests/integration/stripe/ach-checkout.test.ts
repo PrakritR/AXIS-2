@@ -201,7 +201,7 @@ describe("ACH checkout routes", () => {
       expect(data.sessionId).toBe("cs_ach_session");
     });
 
-    it("forces ACH when native app header is present", async () => {
+    it("keeps card when native app header is present (native supports card)", async () => {
       vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
         from: vi.fn().mockImplementation((table: string) => {
           if (table === "portal_household_charge_records") {
@@ -250,7 +250,7 @@ describe("ACH checkout routes", () => {
       const res = await householdChargeCheckout(req);
       expect(res.status).toBe(200);
       const call = vi.mocked(createAxisAchCheckoutSession).mock.calls[0];
-      expect(call?.[1]).toMatchObject({ paymentMethod: "ach" });
+      expect(call?.[1]).toMatchObject({ paymentMethod: "card" });
     });
   });
 

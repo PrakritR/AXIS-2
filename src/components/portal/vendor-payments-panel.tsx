@@ -10,7 +10,7 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import {
-  PORTAL_DATA_TABLE,
+  PORTAL_DATA_TABLE, 
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
@@ -21,13 +21,10 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
-  PORTAL_DETAIL_BTN_PRIMARY,
 } from "@/components/portal/portal-data-table";
 import { VendorPaymentMethodsModal } from "@/components/portal/vendor-payment-methods-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -40,6 +37,7 @@ import {
   syncManagerWorkOrdersFromServer,
 } from "@/lib/manager-work-orders-storage";
 import { safeFormatDateTime } from "@/lib/pacific-time";
+import { vendorWorkOrderIncomeCents } from "@/lib/vendor-income";
 import { fetchVendorPayoutsResult, type VendorPayout } from "@/lib/vendor-payouts";
 import { VENDOR_ACCEPTED_PAYMENT_METHOD_LABELS } from "@/lib/vendor-payment-methods";
 import { managerVendorPayMethodLabel } from "@/lib/manager-vendor-payment-flow";
@@ -70,14 +68,6 @@ function propertyLabel(row: DemoManagerWorkOrderRow): string {
 
 function formatMoney(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
-}
-
-function workOrderAmountCents(row: DemoManagerWorkOrderRow): number {
-  const labor = row.vendorCostCents ?? 0;
-  const materials = row.materialsCostCents ?? 0;
-  if (labor + materials > 0) return labor + materials;
-  const parsed = parseFloat((row.cost ?? "").replace(/[^\d.]/g, ""));
-  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) : 0;
 }
 
 function vendorPaymentBucket(row: DemoManagerWorkOrderRow): VendorPaymentBucket | null {
@@ -112,7 +102,7 @@ function toLedgerRow(row: DemoManagerWorkOrderRow, payout: VendorPayout | undefi
   const bucket = vendorPaymentBucket(row);
   if (!bucket) return null;
 
-  const amountCents = workOrderAmountCents(row);
+  const amountCents = vendorWorkOrderIncomeCents(row, payout);
   const payoutLabel = payoutStatusLabel(payout);
 
   let statusLabel = "Awaiting payment";
@@ -445,8 +435,8 @@ export function VendorPaymentsPanel() {
           <PortalTableDetailActions>
             <Button
               type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN_PRIMARY}
+              variant="primary"
+              className={PORTAL_DETAIL_BTN}
               disabled={bulkBusy}
               data-attr="vendor-payments-mark-paid"
               onClick={() => void runBulkNotify("report_paid")}
@@ -497,12 +487,14 @@ export function VendorPaymentsPanel() {
                     ) : null}
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                      className="flex min-w-0 flex-1 gap-3 text-left"
                       onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                       aria-expanded={expanded}
                     >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-foreground">{row.workOrderTitle}</p>
+                      <PortalTableInlineExpand expanded={expanded} className="font-semibold text-foreground">
+                        <span className="truncate">{row.workOrderTitle}</span>
+                      </PortalTableInlineExpand>
                       <p className="mt-0.5 truncate text-xs text-muted">{row.propertyName}</p>
                       <p className="mt-0.5 text-xs text-muted">{row.dateLabel}</p>
                     </div>
@@ -515,7 +507,6 @@ export function VendorPaymentsPanel() {
                           {row.statusLabel}
                         </span>
                       ) : null}
-                      <PortalTableExpandChevron expanded={expanded} />
                     </div>
                   </button>
                   </div>
@@ -557,9 +548,6 @@ export function VendorPaymentsPanel() {
                     <th className={`${MANAGER_TABLE_TH} text-left`}>
                       {bucket === "paid" ? "Paid" : "Updated"}
                     </th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -583,7 +571,9 @@ export function VendorPaymentsPanel() {
                             />
                           </td>
                         ) : null}
-                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.workOrderTitle}</td>
+                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                          <PortalTableInlineExpand expanded={expandedId === row.id}>{row.workOrderTitle}</PortalTableInlineExpand>
+                        </td>
                         <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.propertyName}</td>
                         <td className={`${PORTAL_TABLE_TD} text-right tabular-nums`}>{row.amountLabel}</td>
                         {bucket !== "paid" ? (
@@ -596,11 +586,10 @@ export function VendorPaymentsPanel() {
                           </td>
                         ) : null}
                         <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.dateLabel}</td>
-                        <PortalTableExpandCell expanded={expandedId === row.id} />
                       </tr>
                       {expandedId === row.id ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={(bucket === "paid" ? 5 : 6) + (showSelection ? 1 : 0)} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={(bucket === "paid" ? 4 : 5) + (showSelection ? 1 : 0)} className={PORTAL_TABLE_DETAIL_CELL}>
                             <VendorPaymentExpandedDetail
                               row={row}
                               workOrder={workOrderById.get(row.id)!}

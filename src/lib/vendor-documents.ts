@@ -61,7 +61,6 @@ export const VENDOR_DOCUMENT_HINTS: Record<VendorDocumentKind, string> = {
 export const VENDOR_DOCUMENT_SECTIONS: {
   id: string;
   label: string;
-  description?: string;
   kinds: VendorDocumentKind[];
 }[] = [
   {
@@ -72,13 +71,11 @@ export const VENDOR_DOCUMENT_SECTIONS: {
   {
     id: "insurance",
     label: "Insurance",
-    description: "Coverage proof managers review before scheduling or paying for work.",
     kinds: ["insurance", "workers_comp"],
   },
   {
     id: "licensing",
     label: "Business & licensing",
-    description: "Licenses, bonds, and registrations for your trade.",
     kinds: ["license", "bond"],
   },
 ];

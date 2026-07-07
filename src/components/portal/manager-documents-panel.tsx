@@ -13,24 +13,19 @@ import {
   PORTAL_HEADER_ACTION_BTN,
   PORTAL_PAGE_ACTIONS_DESKTOP,
 } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_WRAP,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   PortalDataTableEmpty,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import {
   ReportExportButtons,
   type ReportFilterState,
@@ -356,7 +351,7 @@ export function ManagerDocumentsPanel({
                       <Button
                         type="button"
                         variant="outline"
-                        className={PORTAL_DETAIL_BTN_PRIMARY}
+                        className={PORTAL_DETAIL_BTN}
                         onClick={() => {
                           setTaxVendorId(vendorId);
                           setTaxVendorName(vendorName);
@@ -390,13 +385,15 @@ export function ManagerDocumentsPanel({
                           <div key={vendorId} className={PORTAL_MOBILE_CARD_CLASS}>
                             <button
                               type="button"
-                              className="flex w-full items-center justify-between gap-2 text-left"
+                              className="w-full text-left"
                               onClick={() => setExpanded1099Id((cur) => (cur === vendorId ? null : vendorId))}
                               aria-expanded={expanded}
                             >
-                              <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
-                                <div className="min-w-0">
-                                  <p className="truncate font-semibold text-foreground">{vendorName}</p>
+                              <div className="flex min-w-0 items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <PortalTableInlineExpand expanded={expanded} className="font-semibold text-foreground">
+                                    <span className="truncate">{vendorName}</span>
+                                  </PortalTableInlineExpand>
                                   <p className="mt-0.5 truncate text-xs text-muted tabular-nums">
                                     {String(row.totalPaid)}
                                   </p>
@@ -407,7 +404,6 @@ export function ManagerDocumentsPanel({
                                   {w9Status || "Unknown"}
                                 </span>
                               </div>
-                              <PortalTableExpandChevron expanded={expanded} />
                             </button>
                             {expanded ? (
                               <div className="mt-3 border-t border-border pt-3">
@@ -420,15 +416,12 @@ export function ManagerDocumentsPanel({
                     </div>
                     <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
                       <div className={PORTAL_DATA_TABLE_SCROLL}>
-                        <table className="w-full table-fixed border-collapse text-left text-sm">
+                        <table className={PORTAL_DATA_TABLE}>
                           <thead>
                             <tr className={PORTAL_TABLE_HEAD_ROW}>
                               <th className={`${MANAGER_TABLE_TH} text-left`}>Vendor</th>
                               <th className={`${MANAGER_TABLE_TH} text-left`}>Total paid</th>
                               <th className={`${MANAGER_TABLE_TH} text-left`}>W-9 status</th>
-                              <th className={PORTAL_TABLE_EXPAND_TH}>
-                                <span className="sr-only">Expand</span>
-                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -445,7 +438,11 @@ export function ManagerDocumentsPanel({
                                     )}
                                     aria-expanded={expanded1099Id === vendorId}
                                   >
-                                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{vendorName}</td>
+                                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                                      <PortalTableInlineExpand expanded={expanded1099Id === vendorId}>
+                                        {vendorName}
+                                      </PortalTableInlineExpand>
+                                    </td>
                                     <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{String(row.totalPaid)}</td>
                                     <td className={PORTAL_TABLE_TD}>
                                       <span
@@ -454,11 +451,10 @@ export function ManagerDocumentsPanel({
                                         {w9Status || "Unknown"}
                                       </span>
                                     </td>
-                                    <PortalTableExpandCell expanded={expanded1099Id === vendorId} />
                                   </tr>
                                   {expanded1099Id === vendorId ? (
                                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                                      <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                                         {renderVendorDetail(vendorId, vendorName)}
                                       </td>
                                     </tr>

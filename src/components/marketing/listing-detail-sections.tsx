@@ -29,7 +29,7 @@ const sectionScroll =
   "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+9.5rem))]";
 
 const listingSectionCard =
-  "rounded-2xl border border-border/70 bg-card/90 shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_4%,transparent)] backdrop-blur-sm";
+  "rounded-2xl border border-border bg-card shadow-sm backdrop-blur-sm";
 
 function filterSidebarQuickFacts(
   facts: { label: string; value: string }[],
@@ -44,14 +44,6 @@ function filterSidebarQuickFacts(
     if (label === "Building" && value.toLowerCase() === title) return false;
     return true;
   });
-}
-
-function HeroStatPill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full border border-border/60 bg-accent/20 px-3 py-1 text-xs font-semibold text-foreground">
-      {children}
-    </span>
-  );
 }
 
 function ListingSection({
@@ -119,7 +111,7 @@ function ListingHeroPhotoGrid({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm [html[data-theme=dark]_&]:from-slate-800 [html[data-theme=dark]_&]:to-slate-900">
+      <div className="relative overflow-hidden rounded-3xl border border-border bg-accent/25 shadow-sm">
         {mainUrl ? (
           <Image src={mainUrl} alt="" fill className="object-cover" unoptimized sizes="(max-width: 1024px) 100vw, 60vw" />
         ) : null}
@@ -215,9 +207,9 @@ function Sidebar({
   const sidebarFacts = filterSidebarQuickFacts(rich.quickFacts, property);
   return (
     <aside
-      className={`order-2 space-y-5 lg:sticky lg:top-[calc(env(safe-area-inset-top,0px)+7.5rem)] lg:self-start ${className}`}
+      className={`order-2 space-y-5 lg:sticky lg:top-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+7.5rem))] lg:self-start ${className}`}
     >
-      <Card className="overflow-hidden border-border/70 p-0 shadow-sm backdrop-blur-xl">
+      <Card className="overflow-hidden border-border bg-card p-0 shadow-sm backdrop-blur-xl">
         <div className="border-b border-border/60 bg-gradient-to-br from-primary/8 via-transparent to-transparent px-6 py-6">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
             {showsEstimatedTotal ? "Estimated monthly from" : "Base rent from"}
@@ -249,7 +241,7 @@ function Sidebar({
         </div>
       </Card>
       {sidebarFacts.length > 0 ? (
-        <Card className="border-border/70 p-5 shadow-sm backdrop-blur-xl sm:p-6">
+        <Card className="border-border bg-card p-5 shadow-sm backdrop-blur-xl sm:p-6">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">At a glance</p>
           <ul className="mt-3 divide-y divide-border/50 text-sm">
             {sidebarFacts.map((q) => (
@@ -276,7 +268,7 @@ function HouseRulesSection({ rulesBody }: { rulesBody: string | null }) {
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-border bg-accent/40 px-4 py-1.5 text-sm font-semibold text-foreground transition hover:bg-accent active:bg-accent"
+              className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-border bg-accent/35 px-4 py-1.5 text-sm font-semibold text-foreground transition hover:bg-accent/50"
             >
               {open ? "Hide" : "View"}
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
@@ -308,10 +300,6 @@ export function ListingDetailSections({
   previewModal?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
-  const bathroomLabel =
-    rich.quickFacts.find((q) => q.label === "Bathrooms")?.value ??
-    (rich.bathrooms.length ? String(rich.bathrooms.length) : String(property.baths));
-  const petsLabel = rich.quickFacts.find((q) => q.label === "Pets")?.value;
   const houseRulesDisplay =
     rich.houseRulesBody?.trim() ||
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
@@ -332,17 +320,11 @@ export function ListingDetailSections({
           </Link>
         )}
 
-        {!previewModal ? (
-          <div className="order-2 -mx-4 mb-4 lg:order-4 lg:mx-0 lg:mb-0 lg:mt-6">
-            <ListingStickySubnav />
-          </div>
-        ) : null}
-
-        <div className="order-3 lg:order-2">
+        <div className="order-2">
           <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
         </div>
 
-        <div className="order-4 mt-6 flex flex-col gap-4 lg:order-3 lg:mt-8">
+        <div className="order-3 mt-6 flex flex-col gap-4 lg:mt-8">
           <div className="max-w-3xl">
             <Badge tone="info">{property.neighborhood}</Badge>
             <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-[2.125rem] md:leading-tight">
@@ -359,15 +341,11 @@ export function ListingDetailSections({
                 {formatBoldSegments(rich.heroOverview)}
               </p>
             ) : null}
-            <div className="mt-4 flex flex-wrap gap-2">
-              {roomCount > 0 ? <HeroStatPill>{roomCount} room{roomCount === 1 ? "" : "s"}</HeroStatPill> : null}
-              {bathroomLabel ? <HeroStatPill>{bathroomLabel}</HeroStatPill> : null}
-              {petsLabel ? <HeroStatPill>{petsLabel}</HeroStatPill> : null}
-            </div>
           </div>
         </div>
 
-        <div className={`order-5 relative z-0 ${previewModal ? "mt-6" : "mt-8 lg:mt-10"}`}>
+        <div className={`order-4 ${previewModal ? "mt-6" : "mt-6 lg:mt-8"}`}>
+          {!previewModal ? <ListingStickySubnav className="mb-4 lg:mb-6" /> : null}
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] lg:gap-10">
             <div className="order-1 space-y-8 lg:space-y-10">
               <ListingSection
@@ -375,7 +353,7 @@ export function ListingDetailSections({
                 title={rich.floorPlansSectionTitle ?? "Floor plans"}
                 headerAside={
                   roomCount > 0 ? (
-                    <span className="rounded-full bg-accent/40 px-3 py-1 text-xs font-semibold text-muted">
+                    <span className="rounded-full border border-border bg-accent/35 px-3 py-1 text-xs font-semibold text-foreground listing-detail-surface">
                       {roomCount} room{roomCount === 1 ? "" : "s"}
                     </span>
                   ) : null
@@ -413,14 +391,14 @@ export function ListingDetailSections({
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Packages</p>
                       <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Bundles & leasing</h2>
                     </div>
-                    <span className="rounded-full bg-accent/40 px-3 py-1 text-xs font-semibold text-muted">
+                    <span className="rounded-full border border-border bg-accent/35 px-3 py-1 text-xs font-semibold text-foreground listing-detail-surface">
                       {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
                     </span>
                   </div>
                   <div className="mt-5">
                     <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} />
                   </div>
-                  <div className="mt-6 rounded-xl border border-border/60 bg-accent/25 p-4 sm:p-5">
+                  <div className="mt-6 rounded-xl border border-border/60 bg-accent/25 p-4 listing-detail-surface sm:p-5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Lease lengths</p>
                     <p className="mt-2 text-sm leading-relaxed text-muted">{formatBoldSegments(rich.bundlesText)}</p>
                   </div>

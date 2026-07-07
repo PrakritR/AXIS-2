@@ -2,15 +2,13 @@
 
 import type { ReportColumn, ReportResult } from "@/lib/reports/types";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
-} from "@/components/portal/portal-data-table";
+  PORTAL_TABLE_TR,} from "@/components/portal/portal-data-table";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 
 function cellAlign(col: ReportColumn): string {
@@ -70,7 +68,7 @@ export function ReportTable({
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full table-fixed border-collapse text-left text-sm">
+          <table className={PORTAL_DATA_TABLE}>
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 {report.columns.map((col) => (

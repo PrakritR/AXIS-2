@@ -4,6 +4,7 @@ export type AxisCatalogVendor = {
   name: string;
   trade: string;
   city: string;
+  zip: string;
   phone: string;
   email: string;
   notes?: string;
@@ -15,6 +16,7 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
     name: "Sound HVAC Collective",
     trade: "HVAC",
     city: "Seattle, WA",
+    zip: "98104",
     phone: "(206) 555-4401",
     email: "dispatch@soundhvac.example.com",
     notes: "Licensed residential HVAC — installs, tune-ups, and emergency repair.",
@@ -24,6 +26,7 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
     name: "Emerald City Plumbing",
     trade: "Plumbing",
     city: "Bellevue, WA",
+    zip: "98004",
     phone: "(425) 555-1182",
     email: "jobs@emeraldcityplumb.example.com",
   },
@@ -32,6 +35,7 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
     name: "Puget Power Pros",
     trade: "Electrical",
     city: "Tacoma, WA",
+    zip: "98402",
     phone: "(253) 555-9020",
     email: "service@pugetpowerpros.example.com",
   },
@@ -40,6 +44,7 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
     name: "Sparkle Turnover Co.",
     trade: "Cleaning",
     city: "Seattle, WA",
+    zip: "98109",
     phone: "(206) 555-7710",
     email: "turns@sparkleturnover.example.com",
     notes: "Move-out and recurring unit cleaning for multifamily.",
@@ -49,6 +54,7 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
     name: "Axis Handyman Network",
     trade: "General maintenance",
     city: "Greater Seattle",
+    zip: "98101",
     phone: "(206) 555-3300",
     email: "workorders@axishandyman.example.com",
   },
@@ -57,6 +63,7 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
     name: "Northwest Appliance Repair",
     trade: "Appliance repair",
     city: "Kirkland, WA",
+    zip: "98033",
     phone: "(425) 555-6614",
     email: "repairs@nwappliance.example.com",
   },
@@ -65,6 +72,7 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
     name: "Greenline Exterior Care",
     trade: "Landscaping",
     city: "Redmond, WA",
+    zip: "98052",
     phone: "(425) 555-2290",
     email: "crew@greenlinecare.example.com",
   },
@@ -73,18 +81,54 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
     name: "Harbor Pest Response",
     trade: "Pest control",
     city: "Seattle, WA",
+    zip: "98122",
     phone: "(206) 555-8844",
     email: "dispatch@harborpest.example.com",
   },
 ];
 
-export function searchAxisVendorCatalog(query: string): AxisCatalogVendor[] {
+export function vendorCatalogEntryMatchesQuery(
+  fields: {
+    name: string;
+    trade: string;
+    city?: string;
+    zip?: string;
+    email?: string;
+    phone?: string;
+    notes?: string;
+  },
+  query: string,
+): boolean {
   const q = query.trim().toLowerCase();
-  if (!q) return AXIS_VENDOR_CATALOG;
-  return AXIS_VENDOR_CATALOG.filter((row) => {
-    const haystack = [row.name, row.trade, row.city, row.email, row.notes ?? ""].join(" ").toLowerCase();
-    return haystack.includes(q);
-  });
+  if (!q) return true;
+  const haystack = [
+    fields.name,
+    fields.trade,
+    fields.city ?? "",
+    fields.zip ?? "",
+    fields.email ?? "",
+    fields.phone ?? "",
+    fields.notes ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(q);
+}
+
+export function managerOwnsCatalogVendor(
+  ownVendors: { name: string; trade: string }[],
+  name: string,
+  trade: string,
+): boolean {
+  const normalizedName = name.trim().toLowerCase();
+  const normalizedTrade = trade.trim();
+  return ownVendors.some(
+    (row) => row.name.trim().toLowerCase() === normalizedName && row.trade.trim() === normalizedTrade,
+  );
+}
+
+export function searchAxisVendorCatalog(query: string): AxisCatalogVendor[] {
+  return AXIS_VENDOR_CATALOG.filter((row) => vendorCatalogEntryMatchesQuery(row, query));
 }
 
 /** Map outgoing expense category codes to vendor trade labels. */

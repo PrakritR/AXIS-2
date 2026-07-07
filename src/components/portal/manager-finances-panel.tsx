@@ -17,15 +17,13 @@ import {
   ReportFilterBar,
   type ReportFilterState,
 } from "@/components/portal/reports/report-filter-bar";
-import {
-  PORTAL_DATA_TABLE_WRAP,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TD,
-  PortalDataTableEmpty,
-} from "@/components/portal/portal-data-table";
+  PortalDataTableEmpty,} from "@/components/portal/portal-data-table";
 import type { ReportColumn, ReportResult, ReportRow } from "@/lib/reports/types";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
@@ -207,7 +205,7 @@ function FinancesDataTable({
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="w-full table-fixed border-collapse text-left text-sm">
+        <table className={PORTAL_DATA_TABLE}>
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               {visibleCols.map((col) => (

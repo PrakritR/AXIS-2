@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
@@ -10,8 +10,11 @@ export const PORTAL_DATA_TABLE_WRAP =
 
 export const PORTAL_DATA_TABLE_SCROLL = "relative z-0 min-w-0 max-w-full overflow-hidden";
 
-/** Fluid portal table — fits the card width without horizontal scrolling. */
-export const PORTAL_DATA_TABLE = "w-full table-fixed border-collapse text-left text-sm";
+/** Fluid portal table — fits the card width without horizontal scrolling.
+ *  Pair {@link MANAGER_TABLE_TH} (`w-0`) with {@link PORTAL_TABLE_TD} (`max-w-0`) so columns fill the width.
+ *  Expand chevrons sit inline after the primary label ({@link PortalTableInlineExpand}). */
+export const PORTAL_DATA_TABLE =
+  "portal-data-table w-full table-fixed border-collapse text-left text-sm";
 
 /** Table header row (use under `<thead>`). */
 export const PORTAL_TABLE_HEAD_ROW = "border-b border-border bg-accent/30";
@@ -23,24 +26,96 @@ export const PORTAL_TABLE_TR =
 /** Summary row that expands on click (entire row toggles detail). */
 export const PORTAL_TABLE_TR_EXPANDABLE = `${PORTAL_TABLE_TR} cursor-pointer`;
 
-/** Trailing chevron column header for expandable portal tables. */
+/** @deprecated Trailing expand column — use {@link PortalTableInlineExpand} in the primary column instead. */
 export const PORTAL_TABLE_EXPAND_TH =
-  "portal-table-th w-10 px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-2";
+  "portal-table-expand-th portal-table-th w-0 border-0 p-0";
 
 export function PortalTableExpandChevron({ expanded = false }: { expanded?: boolean }) {
+  const Icon = expanded ? ChevronDown : ChevronRight;
+  return <Icon className="block h-4 w-4 shrink-0 text-muted" aria-hidden />;
+}
+
+/** Inline label + expand chevron — chevron sits immediately after primary text (resident dashboard pattern). */
+export function PortalTableInlineExpand({
+  expanded = false,
+  children,
+  className = "",
+}: {
+  expanded?: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <ChevronDown
-      className={`ml-auto block h-4 w-4 text-muted transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
-      aria-hidden
-    />
+    <span className={`inline-flex min-w-0 max-w-full items-center gap-1.5 ${className}`}>
+      <span className="min-w-0">{children}</span>
+      <PortalTableExpandChevron expanded={expanded} />
+    </span>
   );
 }
 
-/** Trailing expand indicator cell — pair with {@link PORTAL_TABLE_EXPAND_TH}. */
+/** @deprecated Use {@link PortalTableInlineExpand} in the primary column instead of a trailing expand column. */
 export function PortalTableExpandCell({ expanded = false }: { expanded?: boolean }) {
   return (
-    <td className={`${PORTAL_TABLE_TD} w-10 align-middle`}>
+    <td className="portal-table-expand-td w-0 border-0 p-0 align-middle">
       <PortalTableExpandChevron expanded={expanded} />
+    </td>
+  );
+}
+
+/** Weighted column widths (percent strings) for {@link PortalDataTableColGroup}. */
+const PORTAL_TABLE_COLUMN_WEIGHT_PRESETS: Record<number, readonly number[]> = {
+  2: [54, 46],
+  3: [36, 32, 32],
+  4: [26, 22, 28, 24],
+  5: [22, 18, 22, 20, 18],
+  6: [18, 16, 18, 16, 16, 16],
+  7: [16, 14, 16, 14, 14, 13, 13],
+  8: [14, 12, 14, 12, 12, 12, 12, 12],
+  9: [13, 11, 13, 11, 11, 11, 11, 10, 9],
+};
+
+/** Inbox-style tables: party, subject, when. */
+export const PORTAL_TABLE_INBOX_COLUMN_WEIGHTS = [28, 40, 32] as const;
+
+/** Inbox Schedule tab: checkbox, recipient, send date & time, subject. */
+export const INBOX_SCHEDULE_TABLE_COLUMN_WEIGHTS = [4, 26, 28, 42] as const;
+
+export function portalTableColumnPercents(
+  dataColumnCount: number,
+  weights?: readonly number[],
+): string[] {
+  const preset = weights ?? PORTAL_TABLE_COLUMN_WEIGHT_PRESETS[dataColumnCount];
+  const w =
+    preset ??
+    Array.from({ length: dataColumnCount }, () => 100 / Math.max(dataColumnCount, 1));
+  const sum = w.reduce((acc, n) => acc + n, 0);
+  return w.map((n) => `${((n / sum) * 100).toFixed(4)}%`);
+}
+
+/** Optional `<colgroup>` so `table-fixed` columns use the full card width. */
+export function PortalDataTableColGroup({ percents }: { percents: readonly string[] }) {
+  return (
+    <colgroup>
+      {percents.map((width, index) => (
+        <col key={index} className="min-w-0" style={{ width }} />
+      ))}
+    </colgroup>
+  );
+}
+
+/** Last data column when the expand chevron should sit inline (no separate expand column). */
+export function PortalTableLastDataCell({
+  expanded = false,
+  children,
+  className = "",
+}: {
+  expanded?: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <td className={`${PORTAL_TABLE_TD} align-middle ${className}`}>
+      <PortalTableInlineExpand expanded={expanded}>{children}</PortalTableInlineExpand>
     </td>
   );
 }
@@ -74,7 +149,7 @@ export const PORTAL_MOBILE_CARD_CLASS =
 
 /** Expanded detail block below a mobile summary card row. */
 export const PORTAL_MOBILE_DETAIL_EXPAND =
-  "mt-3 border-t border-border pt-3 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pt-2.5 [&_[data-portal-detail-actions]:last-child]:mb-0";
+  "mt-3 border-t border-border pt-4 [html[data-native]_&]:mt-2.5 [html[data-native]_&]:pt-3.5 [&_[data-portal-detail-actions]:last-child]:mb-0";
 
 /** Tighter data cells on native — keeps tabbed lists on one screen longer. */
 export const PORTAL_TABLE_TD_COMPACT =
@@ -117,14 +192,19 @@ export function PortalMobileSummaryCard({
   const body = (
     <div className="flex items-start justify-between gap-2.5">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+        {onClick ? (
+          <PortalTableInlineExpand expanded={expanded} className="text-sm font-semibold text-foreground">
+            <span className="truncate">{title}</span>
+          </PortalTableInlineExpand>
+        ) : (
+          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+        )}
         {subtitle ? <p className="mt-0.5 truncate text-xs text-muted">{subtitle}</p> : null}
         {meta ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{meta}</p> : null}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         {trailing}
         {badge}
-        {onClick ? <PortalTableExpandChevron expanded={expanded} /> : null}
       </div>
     </div>
   );
@@ -193,9 +273,8 @@ export function PortalResponsiveDataView({
   );
 }
 
-/** Detail row cell padding — top padding omitted when {@link PortalTableDetailActions} leads with `placement="top"`. */
-export const PORTAL_TABLE_DETAIL_CELL =
-  "px-4 py-4 align-top sm:px-6 sm:py-5 [&:has(>[data-portal-detail-actions-placement=top]:first-child)]:pt-0 sm:[&:has(>[data-portal-detail-actions-placement=top]:first-child)]:pt-0";
+/** Detail row cell padding for expanded table sections. */
+export const PORTAL_TABLE_DETAIL_CELL = "px-4 py-4 align-top sm:px-6 sm:py-5";
 
 /**
  * Action strip in an expanded detail row — subtle divider + compact buttons.
@@ -212,8 +291,8 @@ export function PortalTableDetailActions({
   if (children == null) return null;
   const edge =
     placement === "top"
-      ? "border-b border-border pb-3 mb-4 last:mb-0 last:border-b-0 last:pb-0"
-      : "border-t border-border pt-3 mt-4 first:mt-0 first:border-t-0 first:pt-0 last:mb-0";
+      ? "border-b border-border pb-4 mb-4 last:mb-0 last:border-b-0 last:pb-0"
+      : "border-t border-border pt-4 mt-4 first:mt-0 first:border-t-0 first:pt-0 last:mb-0";
   return (
     <div
       data-portal-detail-actions=""
@@ -233,7 +312,10 @@ export const PORTAL_TABLE_ROW_TOGGLE_CLASS =
 export const PORTAL_DETAIL_BTN =
   "h-11 min-h-[44px] !rounded-lg border-border px-3 py-0 text-xs font-medium text-foreground/80 !shadow-none hover:!translate-y-0 [html[data-theme=dark]_&]:portal-outline-control";
 
-/** Primary / success action in detail toolbar (use with `Button variant="outline"`). */
+/**
+ * @deprecated Use `Button variant="primary"` with {@link PORTAL_DETAIL_BTN} instead.
+ * Emerald styling is reserved for status badges, not action buttons.
+ */
 export const PORTAL_DETAIL_BTN_PRIMARY =
   "h-11 min-h-[44px] !rounded-lg !border-emerald-600 !bg-emerald-600 px-3 py-0 text-xs font-medium !text-white hover:!border-emerald-700 hover:!bg-emerald-700 !shadow-none hover:!translate-y-0";
 

@@ -67,8 +67,7 @@ function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
     id: t.id,
     name: tabId === "sent" ? (t.email || "Unknown recipient") : t.from,
     email: tabId === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
-    topic: t.subject,
-    preview: t.preview,
+    subject: t.subject,
     whenLabel: t.time,
     read: !t.unread,
   }));

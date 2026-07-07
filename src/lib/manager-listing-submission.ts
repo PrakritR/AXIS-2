@@ -186,6 +186,13 @@ export type ManagerListingSubmissionV1 = {
   houseMoveInInstructions?: string;
   /** General house photos (common areas, exterior, kitchen) shown at the top of the public listing. */
   housePhotoDataUrls: string[];
+  /**
+   * Floor plan images keyed by floor / level label (matches `ManagerRoomSubmission.floor`).
+   * Shown when residents tap Details on a floor plan row.
+   */
+  floorPlanByLabel?: Record<string, string>;
+  /** Optional single floor plan for the whole property when floors are not split. */
+  propertyFloorPlanDataUrl?: string | null;
   /** Optional full-house walkthrough video shown on the public listing. */
   houseVideoDataUrl?: string | null;
   /** Lease lengths offered on this listing (checkbox selections on Pricing step). */
@@ -394,7 +401,11 @@ export function customApplicationFieldKeyFromLabel(label: string, taken: Iterabl
 }
 
 /** Coerce persisted custom application fields into a clean array (drops malformed rows). */
-export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApplicationField[] {
+export function normalizeCustomApplicationFields(
+  raw: unknown,
+  opts?: { includeIncomplete?: boolean },
+): ManagerCustomApplicationField[] {
+  const includeIncomplete = opts?.includeIncomplete === true;
   if (!Array.isArray(raw)) return [];
   const out: ManagerCustomApplicationField[] = [];
   const usedKeys = new Set<string>();
@@ -402,14 +413,17 @@ export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApp
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const label = typeof o.label === "string" ? o.label.trim() : "";
-    if (!label) continue;
+    if (!label && !includeIncomplete) continue;
+    const id = typeof o.id === "string" && o.id.trim() ? o.id.trim() : rid("caf");
     const type = CUSTOM_APPLICATION_FIELD_TYPES.has(String(o.type))
       ? (o.type as ManagerCustomApplicationFieldType)
       : "text";
     const key =
       typeof o.key === "string" && o.key.trim()
         ? o.key.trim()
-        : customApplicationFieldKeyFromLabel(label, usedKeys);
+        : label
+          ? customApplicationFieldKeyFromLabel(label, usedKeys)
+          : `draft-${id}`;
     if (usedKeys.has(key)) continue;
     usedKeys.add(key);
     const options =
@@ -418,13 +432,14 @@ export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApp
             .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
             .map((v) => v.trim())
         : [];
-    if (type === "select" && options.length === 0) continue;
-    const section =
-      typeof o.section === "string" && RENTAL_APPLICATION_SECTION_IDS.has(o.section) ? o.section : undefined;
     const standardKey =
       typeof o.standardKey === "string" && o.standardKey.trim() ? o.standardKey.trim() : undefined;
+    // Built-in overrides may be dynamic selects (property, rooms) with no fixed option list.
+    if (type === "select" && options.length === 0 && !includeIncomplete && !standardKey) continue;
+    const section =
+      typeof o.section === "string" && RENTAL_APPLICATION_SECTION_IDS.has(o.section) ? o.section : undefined;
     out.push({
-      id: typeof o.id === "string" && o.id.trim() ? o.id.trim() : rid("caf"),
+      id,
       key,
       label,
       type,
@@ -435,6 +450,11 @@ export function normalizeCustomApplicationFields(raw: unknown): ManagerCustomApp
     });
   }
   return out;
+}
+
+/** Editor UI — keep in-progress custom rows (empty label) until the manager saves. */
+export function normalizeCustomApplicationFieldsForEditor(raw: unknown): ManagerCustomApplicationField[] {
+  return normalizeCustomApplicationFields(raw, { includeIncomplete: true });
 }
 
 /**
@@ -1051,6 +1071,21 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     houseVideoDataUrl: typeof (sub as Record<string, unknown>).houseVideoDataUrl === "string"
       ? ((sub as Record<string, unknown>).houseVideoDataUrl as string) || null
       : null,
+    floorPlanByLabel: (() => {
+      const raw = (sub as { floorPlanByLabel?: unknown }).floorPlanByLabel;
+      if (!raw || typeof raw !== "object") return undefined;
+      const out: Record<string, string> = {};
+      for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof key !== "string" || !key.trim()) continue;
+        if (typeof value !== "string" || !value.trim()) continue;
+        out[key.trim()] = value.trim();
+      }
+      return Object.keys(out).length > 0 ? out : undefined;
+    })(),
+    propertyFloorPlanDataUrl:
+      typeof sub.propertyFloorPlanDataUrl === "string" && sub.propertyFloorPlanDataUrl.trim()
+        ? sub.propertyFloorPlanDataUrl.trim()
+        : null,
   };
   delete (next as Record<string, unknown>).sharedSpacesDescription;
   delete (next as Record<string, unknown>).paymentAtSigning;

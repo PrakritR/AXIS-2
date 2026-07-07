@@ -9,7 +9,7 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PropertyRequestEditForm } from "@/components/portal/property-request-edit-form";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import {
-  PORTAL_DATA_TABLE,
+  PORTAL_DATA_TABLE, 
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
@@ -17,10 +17,8 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import {
@@ -412,14 +410,14 @@ export function AdminPropertiesClient() {
                 <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full gap-2 text-left"
                     onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
                     aria-expanded={expanded}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="break-words font-semibold text-foreground">
+                      <PortalTableInlineExpand expanded={expanded} className="break-words font-semibold text-foreground">
                         {row.buildingName} · {row.unitLabel}
-                      </p>
+                      </PortalTableInlineExpand>
                       <p className="mt-0.5 break-words text-xs text-muted">
                         <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths} ba ·{" "}
                         {row.neighborhood}
@@ -429,7 +427,6 @@ export function AdminPropertiesClient() {
                         {row.zip ? `, ${row.zip}` : ""}
                       </p>
                     </div>
-                    <PortalTableExpandChevron expanded={expanded} />
                   </button>
                   {expanded ? (
                     <div className="mt-3 border-t border-border pt-3">
@@ -454,9 +451,6 @@ export function AdminPropertiesClient() {
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} w-[45%] text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -473,9 +467,9 @@ export function AdminPropertiesClient() {
                           aria-expanded={expanded}
                         >
                           <td className={PORTAL_TABLE_TD}>
-                            <p className="break-words font-medium text-foreground">
+                            <PortalTableInlineExpand expanded={expanded} className="break-words font-medium text-foreground">
                               {row.buildingName} · {row.unitLabel}
-                            </p>
+                            </PortalTableInlineExpand>
                             <p className="mt-0.5 break-words text-xs leading-relaxed text-muted">
                               {row.address}
                               {row.zip ? `, ${row.zip}` : ""}
@@ -487,11 +481,10 @@ export function AdminPropertiesClient() {
                               {row.neighborhood}
                             </p>
                           </td>
-                          <PortalTableExpandCell expanded={expanded} />
                         </tr>
                         {expanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
                               <AdminPropertyInlineDetails
                                 key={rowKey}
                                 bucket={activeKpi}

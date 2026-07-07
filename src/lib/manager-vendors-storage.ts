@@ -16,6 +16,8 @@ export type ManagerVendorRow = {
   propertyIds?: string[];
   /** When true, other managers on Axis can use this vendor for work orders. */
   sharedWithManagers?: boolean;
+  /** Preferred vendor tier within the vendor's trade (one primary per trade on the account). */
+  vendorPriority?: "primary" | "secondary" | "backup";
   insuranceProvider?: string;
   insurancePolicyNumber?: string;
   /** ISO date (yyyy-mm-dd) the vendor's insurance coverage expires. */
@@ -265,6 +267,46 @@ export function upsertManagerVendor(row: ManagerVendorRow, managerUserId?: strin
   const next = idx === -1 ? [...rows, row] : rows.map((r, i) => (i === idx ? row : r));
   writeManagerVendorRows(next, managerUserId ?? row.managerUserId);
   mirrorVendorRowToServer(row);
+}
+
+export function setManagerVendorActive(
+  vendorId: string,
+  active: boolean,
+  managerUserId?: string | null,
+): void {
+  const rows = readManagerVendorRows();
+  const target = rows.find((r) => r.id === vendorId);
+  if (!target) return;
+  upsertManagerVendor({ ...target, active, updatedAt: new Date().toISOString() }, managerUserId);
+}
+
+export function setManagerVendorPriority(
+  vendorId: string,
+  priority: ManagerVendorRow["vendorPriority"],
+  managerUserId?: string | null,
+): void {
+  const rows = readManagerVendorRows();
+  const target = rows.find((r) => r.id === vendorId);
+  if (!target) return;
+  const trade = target.trade.trim().toLowerCase();
+  const now = new Date().toISOString();
+  const next = rows.map((row) => {
+    if (row.id === vendorId) {
+      return { ...row, vendorPriority: priority, updatedAt: now };
+    }
+    if (
+      priority === "primary" &&
+      trade &&
+      row.trade.trim().toLowerCase() === trade &&
+      row.vendorPriority === "primary"
+    ) {
+      return { ...row, vendorPriority: undefined, updatedAt: now };
+    }
+    return row;
+  });
+  writeManagerVendorRows(next, managerUserId ?? target.managerUserId);
+  const updated = next.find((r) => r.id === vendorId);
+  if (updated) mirrorVendorRowToServer(updated);
 }
 
 export function deleteManagerVendorRow(id: string, managerUserId?: string | null): boolean {

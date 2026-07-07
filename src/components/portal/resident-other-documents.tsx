@@ -6,17 +6,15 @@ import { Modal, MODAL_FIELD_LABEL_CLASS } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useNativeCamera } from "@/lib/native/use-native-camera";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
-  PortalTableExpandCell,
-} from "@/components/portal/portal-data-table";
+  PortalTableDetailActions,
+  PortalTableInlineExpand,} from "@/components/portal/portal-data-table";
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 
@@ -53,6 +51,8 @@ export function DocumentInlineViewer({
   children,
   downloadLabel = "Download",
   downloadAttr = "resident-document-download",
+  /** When true, omits outer margin and uses the portal table detail action strip. */
+  embedded = false,
 }: {
   /** Used for iframe/img accessibility only — not shown in the UI. */
   title: string;
@@ -69,24 +69,36 @@ export function DocumentInlineViewer({
   downloadLabel?: string;
   /** data-attr override for the download button. */
   downloadAttr?: string;
+  embedded?: boolean;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
     sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [title, src, srcDoc]);
 
+  const downloadButton = (
+    <Button type="button" className={embedded ? undefined : "rounded-full"} data-attr={downloadAttr} onClick={onDownload}>
+      {downloadLabel}
+    </Button>
+  );
+
   return (
-    <section ref={sectionRef} className="mt-6">
-      <div
-        data-portal-detail-actions=""
-        className="mb-6 flex flex-wrap items-center gap-3 border-b border-border py-6 sm:gap-4"
-      >
-        <Button type="button" className="rounded-full" data-attr={downloadAttr} onClick={onDownload}>
-          {downloadLabel}
-        </Button>
-        {extraActions}
-      </div>
-      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+    <section ref={sectionRef} className={embedded ? undefined : "mt-6"}>
+      {embedded ? (
+        <PortalTableDetailActions placement="top">
+          {downloadButton}
+          {extraActions}
+        </PortalTableDetailActions>
+      ) : (
+        <div
+          data-portal-detail-actions=""
+          className="mb-6 flex flex-wrap items-center gap-3 border-b border-border py-6 sm:gap-4"
+        >
+          {downloadButton}
+          {extraActions}
+        </div>
+      )}
+      <div className={`overflow-hidden rounded-2xl border border-border bg-white shadow-sm${embedded ? " mt-4" : ""}`}>
         {children ? (
           children
         ) : src ? (
@@ -369,15 +381,12 @@ export function ResidentOtherDocumentsTable({
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full table-fixed border-collapse text-left text-sm">
+          <table className={PORTAL_DATA_TABLE}>
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Date added</th>
-                <th className={PORTAL_TABLE_EXPAND_TH}>
-                  <span className="sr-only">Expand</span>
-                </th>
               </tr>
             </thead>
             <tbody>
@@ -389,13 +398,12 @@ export function ResidentOtherDocumentsTable({
                   onClick={() => toggleRow(row.id)}
                 >
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                    <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground" title={row.fileName}>
-                      {row.fileName}
-                    </p>
+                    <PortalTableInlineExpand expanded={selectedId === row.id} className="min-w-0 truncate font-medium text-foreground">
+                      <span title={row.fileName}>{row.fileName}</span>
+                    </PortalTableInlineExpand>
                   </td>
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>{uploadedDocumentKind(row)}</td>
                   <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(row.uploadedAt)}</td>
-                  <PortalTableExpandCell expanded={selectedId === row.id} />
                 </tr>
               ))}
             </tbody>

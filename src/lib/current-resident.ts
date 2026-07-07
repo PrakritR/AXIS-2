@@ -1,4 +1,5 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 
 export const PREVIOUS_RESIDENT_STAGE_TOKENS = ["moved out", "previous", "past", "former", "inactive"] as const;
 
@@ -21,8 +22,9 @@ export function isCurrentResidentApplicationRow(row: DemoApplicantRow, nowMs = D
   return !isPreviousResidentStage(row.stage);
 }
 
-/** Pending or approved applications shown on the manager Residents tab. */
+/** Pending (submitted) or approved applications shown on the manager Residents tab. */
 export function isResidentDirectoryRow(row: DemoApplicantRow): boolean {
+  if (isInProgressApplicationRow(row)) return false;
   return row.bucket === "approved" || row.bucket === "pending";
 }
 

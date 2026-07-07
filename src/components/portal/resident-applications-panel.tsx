@@ -9,8 +9,7 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
 } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
@@ -19,13 +18,10 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import {
   ApplicationDocumentPreview,
 } from "@/components/portal/manager-applications";
@@ -178,9 +174,7 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
               </Button>
             ) : null}
           </PortalTableDetailActions>
-          {isInProgressApplicationRow(row) ? (
-            <p className="text-sm text-muted">Application in progress. Continue to finish and submit.</p>
-          ) : row.application ? (
+          {isInProgressApplicationRow(row) ? null : row.application ? (
             <ApplicationDocumentPreview row={row} collapsible={false} showDownload={false} />
           ) : (
             <p className="text-sm text-muted">Application details are not available for this record.</p>
@@ -228,21 +222,20 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                 <div key={row.id} id={`resident-application-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="w-full text-left"
                     onClick={() => {
                       setExpandedId((cur) => (cur === row.id ? null : row.id));
                       setEditingId(null);
                     }}
                     aria-expanded={expanded}
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-foreground">{row.name || "Applicant"}</p>
+                    <PortalTableInlineExpand expanded={expanded} className="font-semibold text-foreground">
+                      <span className="truncate">{row.name || "Applicant"}</span>
+                    </PortalTableInlineExpand>
                       <p className="mt-0.5 truncate text-xs text-muted">
                         {[row.property || "—", `Room ${displayRoomForRow(row)}`].join(" · ")}
                       </p>
                       <p className="mt-0.5 truncate text-[11px] text-muted/90">{rowStatusLabel(row)}</p>
-                    </div>
-                    <PortalTableExpandChevron expanded={expanded} />
                   </button>
                   {expanded ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
@@ -251,16 +244,13 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Application</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -276,17 +266,18 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                         aria-expanded={expandedId === row.id}
                       >
                         <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                          <p className="font-medium leading-snug text-foreground">{row.name || "Applicant"}</p>
+                          <PortalTableInlineExpand expanded={expandedId === row.id} className="font-medium leading-snug text-foreground">
+                            {row.name || "Applicant"}
+                          </PortalTableInlineExpand>
                           <p className="mt-1.5 font-mono text-[10px] leading-relaxed tracking-wide text-muted">{row.id}</p>
                         </td>
                         <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property || "—"}</td>
                         <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
                         <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{rowStatusLabel(row)}</td>
-                        <PortalTableExpandCell expanded={expandedId === row.id} />
                       </tr>
                       {expandedId === row.id ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderRowDetail(row)}
                           </td>
                         </tr>

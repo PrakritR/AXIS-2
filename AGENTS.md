@@ -145,6 +145,24 @@ Feedback (`admin-bug-feedback-client.tsx`) and Inbox (`admin-inbox-client.tsx`)
 are the reference implementations — copy their structure rather than
 reinventing table/filter markup per tab.
 
+## Portal UI system
+
+**Read [`docs/portal-ui-system.md`](docs/portal-ui-system.md) before editing portal UI.**
+
+Expandable rows, section cards, and data tables share one pattern across manager,
+resident, vendor, and admin portals:
+
+- **Chevron inline after primary label** — use `PortalTableInlineExpand` in table
+  rows; never a trailing `PortalTableExpandCell` / `PORTAL_TABLE_EXPAND_TH` column.
+- **Chevron direction:** `ChevronRight` (→) collapsed, `ChevronDown` (↓) expanded
+  via `PortalTableExpandChevron`.
+- **Section cards:** `PortalCollapsibleSection` with title + inline chevron,
+  subtitle on the next line (`titleVariant="resident"` for property-portal detail).
+- **Mobile cards:** chevron beside title, not `justify-between` at far right.
+
+Reference: resident detail sections in `manager-residents.tsx`; inbox table in
+`portal-inbox-ui.tsx`.
+
 # Branching & deployment (Vercel)
 
 The Vercel project (`axis-2`, connected to `PrakritR/AXIS-2`) is configured so the

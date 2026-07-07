@@ -4,6 +4,7 @@ import {
   sanitizeFlyerImages,
   type ManagerPromotionRow,
 } from "@/lib/promotion-flyer";
+import { type PromotionTextEntry } from "@/lib/promotion-text";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -30,6 +31,20 @@ function normalizeRow(row: ManagerPromotionRow, managerUserId: string): ManagerP
     template: normalizePromotionTemplate(row.template),
     // Re-validate uploaded photos server-side: data:image/* base64 only, capped.
     inputs: { ...row.inputs, images: sanitizeFlyerImages(row.inputs?.images) },
+    flyerCopies: Array.isArray(row.flyerCopies)
+      ? row.flyerCopies.map((entry) => ({
+          ...entry,
+          title: String(entry.title ?? "").trim(),
+          template: normalizePromotionTemplate(entry.template),
+          inputs: { ...entry.inputs, images: sanitizeFlyerImages(entry.inputs?.images) },
+        }))
+      : row.flyerCopies,
+    textCopies: Array.isArray(row.textCopies)
+      ? row.textCopies.map((entry: PromotionTextEntry) => ({
+          ...entry,
+          title: String(entry.title ?? "").trim(),
+        }))
+      : row.textCopies,
     status: row.status === "generated" ? "generated" : "draft",
     updatedAt: new Date().toISOString(),
   };

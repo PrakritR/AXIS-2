@@ -9,24 +9,19 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_WRAP,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_WRAP,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { safeFormatDateTime } from "@/lib/pacific-time";
@@ -202,8 +197,8 @@ export function VendorDocumentsPanel({
       <PortalTableDetailActions>
         <Button
           type="button"
-          variant="outline"
-          className={PORTAL_DETAIL_BTN_PRIMARY}
+          variant="primary"
+          className={PORTAL_DETAIL_BTN}
           disabled={busy}
           data-attr={`vendor-documents-upload-${kind}`}
           onClick={() => fileRefs.current[kind]?.click()}
@@ -283,10 +278,6 @@ export function VendorDocumentsPanel({
         </p>
       ) : null}
 
-      {activeSection?.description ? (
-        <p className="mb-4 text-sm text-muted">{activeSection.description}</p>
-      ) : null}
-
       {loading ? (
         <p className="text-sm text-muted">Loading documents…</p>
       ) : rows.length === 0 ? (
@@ -301,13 +292,15 @@ export function VendorDocumentsPanel({
                 <div key={kind} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full gap-2 text-left"
                     onClick={() => setExpandedKind((cur) => (cur === kind ? null : kind))}
                     aria-expanded={expanded}
                   >
                     <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-foreground">{VENDOR_DOCUMENT_LABELS[kind]}</p>
+                        <PortalTableInlineExpand expanded={expanded} className="font-semibold text-foreground">
+                          <span className="truncate">{VENDOR_DOCUMENT_LABELS[kind]}</span>
+                        </PortalTableInlineExpand>
                         <p className="mt-0.5 truncate text-xs text-muted">
                           {doc ? doc.fileName : "No file on file"}
                         </p>
@@ -318,7 +311,6 @@ export function VendorDocumentsPanel({
                         {statusLabel}
                       </span>
                     </div>
-                    <PortalTableExpandChevron expanded={expanded} />
                   </button>
                   {expanded ? (
                     <div className="mt-3 border-t border-border pt-3">
@@ -338,15 +330,12 @@ export function VendorDocumentsPanel({
 
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Document</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>File</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -363,7 +352,9 @@ export function VendorDocumentsPanel({
                           )}
                         >
                           <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                            <p className="font-medium text-foreground">{VENDOR_DOCUMENT_LABELS[kind]}</p>
+                            <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
+                              {VENDOR_DOCUMENT_LABELS[kind]}
+                            </PortalTableInlineExpand>
                             <p className="mt-0.5 line-clamp-2 text-xs text-muted">{VENDOR_DOCUMENT_HINTS[kind]}</p>
                           </td>
                           <td className={`${PORTAL_TABLE_TD} align-middle`}>
@@ -385,11 +376,10 @@ export function VendorDocumentsPanel({
                               <p className="text-muted">No file on file</p>
                             )}
                           </td>
-                          <PortalTableExpandCell expanded={expanded} />
                         </tr>
                         {expanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowActions(kind, doc)}
                             </td>
                           </tr>

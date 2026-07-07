@@ -14,6 +14,8 @@
  * data URLs in `inputs.images` and embedded per template.
  */
 
+import type { PromotionTextCopy, PromotionTextEntry } from "@/lib/promotion-text";
+
 export type PromotionTheme = "cobalt" | "sunset" | "forest" | "slate";
 
 export type PromotionStatus = "draft" | "generated";
@@ -88,9 +90,115 @@ export type ManagerPromotionRow = {
   inputs: PromotionInputs;
   /** null until copy has been generated. */
   copy: FlyerCopy | null;
+  /** Channel-specific marketing text (social, email, SMS). Legacy — prefer {@link textCopies}. */
+  textCopy?: PromotionTextCopy | null;
+  /** Multiple channel-specific marketing texts per promotion. */
+  textCopies?: PromotionTextEntry[];
+  /**
+   * Multiple flyer variants per promotion. When absent, the legacy top-level
+   * `copy`/`template`/`theme`/`flyerSize`/`inputs` describe the single flyer;
+   * {@link readFlyerEntries} migrates that shape into one entry.
+   */
+  flyerCopies?: FlyerEntry[];
   createdAt: string;
   updatedAt: string;
 };
+
+/** One flyer variant (design + copy) within a promotion. Multiple per promotion. */
+export type FlyerEntry = {
+  id: string;
+  /** Label shown on the flyer's dropdown box. */
+  title: string;
+  copy: FlyerCopy;
+  template: PromotionTemplate;
+  theme: PromotionTheme;
+  flyerSize: FlyerSize;
+  inputs: PromotionInputs;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function makeFlyerEntryId(): string {
+  return `flyer-${crypto.randomUUID()}`;
+}
+
+/** Default collapsible header label for the Nth flyer (1-based). */
+export function defaultFlyerEntryTitle(sequenceNumber: number): string {
+  return `Flyer ${sequenceNumber}`;
+}
+
+/** Prefer a manager-set title; otherwise numbered "Flyer N". */
+export function flyerEntryDisplayTitle(entry: Pick<FlyerEntry, "title">, index: number): string {
+  const trimmed = entry.title?.trim();
+  return trimmed || defaultFlyerEntryTitle(index + 1);
+}
+
+export function createFlyerEntry(
+  args: {
+    title: string;
+    copy: FlyerCopy;
+    template: PromotionTemplate;
+    theme: PromotionTheme;
+    flyerSize: FlyerSize;
+    inputs: PromotionInputs;
+  },
+  now = new Date().toISOString(),
+): FlyerEntry {
+  return { id: makeFlyerEntryId(), ...args, createdAt: now, updatedAt: now };
+}
+
+function isFlyerEntry(raw: unknown): raw is FlyerEntry {
+  if (!raw || typeof raw !== "object") return false;
+  const e = raw as FlyerEntry;
+  return Boolean(e.id && e.copy && typeof e.copy.headline === "string");
+}
+
+/** Read flyer variants from a promotion row, migrating the legacy single `copy`. */
+export function readFlyerEntries(row: ManagerPromotionRow): FlyerEntry[] {
+  if (Array.isArray(row.flyerCopies)) {
+    const entries = row.flyerCopies.filter(isFlyerEntry);
+    if (entries.length > 0) return entries;
+  }
+  if (row.copy) {
+    return [
+      {
+        // Deterministic id so migration is stable across renders (used as a React key).
+        id: `${row.id}::flyer-0`,
+        title: "",
+        copy: row.copy,
+        template: normalizePromotionTemplate(row.template),
+        theme: row.theme,
+        flyerSize: row.flyerSize,
+        inputs: row.inputs,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      },
+    ];
+  }
+  return [];
+}
+
+/** Newest entry — kept in sync with the row's legacy top-level fields. */
+export function primaryFlyerEntry(entries: FlyerEntry[]): FlyerEntry | null {
+  return entries[0] ?? null;
+}
+
+/**
+ * Build a render-ready row for a single flyer variant. {@link buildFlyerHtml},
+ * {@link PromotionFlyerPreview}, and the download helper all take a full row, so
+ * this projects a variant's fields onto the row without changing the renderer.
+ */
+export function flyerRowForEntry(row: ManagerPromotionRow, entry: FlyerEntry): ManagerPromotionRow {
+  return {
+    ...row,
+    title: entry.title,
+    copy: entry.copy,
+    template: entry.template,
+    theme: entry.theme,
+    flyerSize: entry.flyerSize,
+    inputs: entry.inputs,
+  };
+}
 
 export const PROMOTION_THEME_OPTIONS: { id: PromotionTheme; label: string }[] = [
   { id: "cobalt", label: "Axis Cobalt" },

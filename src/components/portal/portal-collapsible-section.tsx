@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -80,7 +80,7 @@ export function PortalCollapsibleSection({
       } ${className}`.trim()}
     >
       <div
-        className={`flex flex-wrap items-center justify-between gap-2 bg-accent/30 px-4 py-3 ${
+        className={`flex flex-wrap items-start justify-between gap-x-2 gap-y-3 bg-accent/30 px-4 py-3 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2.5 ${
           canCollapse ? "cursor-pointer" : ""
         }`}
         role={canCollapse ? "button" : undefined}
@@ -101,17 +101,18 @@ export function PortalCollapsibleSection({
             <span className="min-w-0">{title}</span>
             {titleAddon ? <span className="shrink-0">{titleAddon}</span> : null}
             {canCollapse ? (
-              <ChevronDown
-                className={`h-4 w-4 shrink-0 text-muted transition-transform ${expanded ? "" : "-rotate-90"}`}
-                aria-hidden
-              />
+              expanded ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+              )
             ) : null}
           </div>
           {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
         </div>
         {headerActions ? (
           <div
-            className="flex shrink-0 flex-wrap items-center justify-end gap-2"
+            className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 lg:ml-auto lg:w-auto lg:max-w-[70%] lg:justify-end"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
@@ -122,9 +123,8 @@ export function PortalCollapsibleSection({
       {showBody ? (
         <div
           className={cn(
-            "px-4 pb-4 pt-4",
-            contentClassName ??
-              "pb-6 pt-0 [&:not(:has([data-portal-detail-actions]))]:pt-6 sm:[&:not(:has([data-portal-detail-actions]))]:pt-8",
+            "px-4 pb-4 pt-4 sm:pt-5 [html[data-native]_&]:px-3 [html[data-native]_&]:pb-3 [html[data-native]_&]:pt-3",
+            contentClassName ?? "pb-6",
           )}
         >
           {children}

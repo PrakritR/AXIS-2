@@ -51,7 +51,7 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
       body: [
         "Hi {residentName},",
         "",
-        "This is an automated reminder that your {chargeTitle} payment is due in {daysUntilDue} ({dueDate}).",
+        "This is a reminder that your {chargeTitle} payment is due in {daysUntilDue} ({dueDate}).",
         "",
         "Amount due: {balanceDue}",
         "{propertyLine}",
@@ -69,7 +69,7 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
       body: [
         "Hi {residentName},",
         "",
-        "This is an automated reminder that your {chargeTitle} payment is overdue ({dueDate}).",
+        "This is a reminder that your {chargeTitle} payment is overdue ({dueDate}).",
         "",
         "Amount due: {balanceDue}",
         "{propertyLine}",

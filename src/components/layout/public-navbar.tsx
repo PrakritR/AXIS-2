@@ -6,6 +6,7 @@ import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalDashboardPath, normalizePortalRoles, parseAuthRole, type AuthRole } from "@/lib/auth/portal-roles";
 import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
+import { isPublicDemoSurfaceEnabled } from "@/lib/public-demo-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { Session } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
@@ -88,18 +89,23 @@ export function PublicNavbar() {
   const contactActive = useMemo(() => pathname === "/contact", [pathname]);
 
   const menu: NavbarMenuItem[] = useMemo(
-    () => [
-      {
-        title: "Resident",
-        url: RESIDENT_BROWSE_PATH,
-        active: residentActive,
-        dataAttr: "nav-resident",
-      },
-      { title: "Manager", url: "/partner", active: managerActive, dataAttr: "nav-manager" },
-      { title: "Vendor", url: "/vendors", active: vendorActive, dataAttr: "nav-vendor" },
-      { title: "Demo", url: "/demo", active: demoActive, dataAttr: "nav-demo" },
-      { title: "Contact", url: "/contact", active: contactActive, dataAttr: "nav-contact" },
-    ],
+    () => {
+      const items: NavbarMenuItem[] = [
+        {
+          title: "Resident",
+          url: RESIDENT_BROWSE_PATH,
+          active: residentActive,
+          dataAttr: "nav-resident",
+        },
+        { title: "Manager", url: "/partner", active: managerActive, dataAttr: "nav-manager" },
+        { title: "Vendor", url: "/vendors", active: vendorActive, dataAttr: "nav-vendor" },
+      ];
+      if (isPublicDemoSurfaceEnabled()) {
+        items.push({ title: "Demo", url: "/demo", active: demoActive, dataAttr: "nav-demo" });
+      }
+      items.push({ title: "Contact", url: "/contact", active: contactActive, dataAttr: "nav-contact" });
+      return items;
+    },
     [residentActive, managerActive, vendorActive, demoActive, contactActive],
   );
 

@@ -160,7 +160,6 @@ async function seedProductionExtras(managerUserId) {
       bucket: "scheduled",
       status: "Scheduled",
       days: 5,
-      cost: "18500",
       vendorCostCents: 18500,
     },
     {
@@ -171,7 +170,6 @@ async function seedProductionExtras(managerUserId) {
       bucket: "open",
       status: "Open",
       days: null,
-      cost: "",
       vendorCostCents: null,
     },
     {
@@ -182,10 +180,23 @@ async function seedProductionExtras(managerUserId) {
       bucket: "completed",
       status: "Completed",
       days: -14,
-      cost: "9500",
       vendorCostCents: 9500,
       materialsCostCents: 2500,
+      automationStatus: "paid",
       paidAt: daysFromNow(-7).toISOString(),
+    },
+    {
+      id: "prod-wo-completed-hvac",
+      propertyId: cascadeId,
+      propertyName: "Birch Court — 4 rooms",
+      title: "HVAC seasonal tune-up",
+      bucket: "completed",
+      status: "Completed",
+      days: -12,
+      vendorCostCents: 28500,
+      materialsCostCents: 4500,
+      automationStatus: "paid",
+      paidAt: daysFromNow(-3).toISOString(),
     },
   ];
 
@@ -210,9 +221,13 @@ async function seedProductionExtras(managerUserId) {
             description: `Production demo work order (${wo.bucket}).`,
             scheduled: wo.days != null ? isoDate(daysFromNow(wo.days)) : "",
             scheduledAtIso: wo.days != null ? daysFromNow(wo.days).toISOString() : "",
-            cost: wo.cost ? String(Number(wo.cost) / 100) : "",
+            cost:
+              wo.vendorCostCents != null
+                ? `$${((wo.vendorCostCents + (wo.materialsCostCents ?? 0)) / 100).toFixed(2)}`
+                : "",
             vendorCostCents: wo.vendorCostCents,
             materialsCostCents: wo.materialsCostCents ?? 0,
+            automationStatus: wo.automationStatus ?? (wo.paidAt ? "paid" : null),
             residentName: PROD_DEMO_RESIDENT_NAME,
             residentEmail: PROD_DEMO_RESIDENT_EMAIL,
             propertyId: wo.propertyId,

@@ -21,6 +21,15 @@ import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listin
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 
+const LISTING_TABLE_HEAD =
+  "text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-[11px]";
+const LISTING_ROW_SURFACE =
+  "rounded-xl border border-border bg-card p-3 listing-detail-surface sm:p-4";
+const LISTING_FLOOR_CARD =
+  "overflow-hidden rounded-xl border border-border bg-card shadow-sm listing-detail-surface";
+const LISTING_DETAIL_BUTTON =
+  "listing-detail-control inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3.5 py-1.5 text-[11px] font-semibold text-foreground shadow-sm transition hover:border-primary/45 hover:bg-accent/35 hover:text-primary sm:min-h-0";
+
 function AvailabilityPill({ text, variant = "default" }: { text: string; variant?: "default" | "room" }) {
   if (variant === "room") {
     const tone = roomAvailabilityTone(text);
@@ -38,11 +47,11 @@ function AvailabilityPill({ text, variant = "default" }: { text: string; variant
   const green = t.includes("available") || t.includes("included");
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs ${
-        green ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]" : "bg-accent/30 text-muted ring-1 ring-border"
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs ${
+        green ? "portal-badge-success" : "border border-border bg-accent/35 text-foreground"
       }`}
     >
-      <span className={`h-1 w-1 shrink-0 rounded-full sm:h-1.5 sm:w-1.5 ${green ? "bg-emerald-500" : "bg-slate-400"}`} />
+      <span className={`h-1 w-1 shrink-0 rounded-full sm:h-1.5 sm:w-1.5 ${green ? "bg-emerald-500" : "bg-muted"}`} />
       {text}
     </span>
   );
@@ -62,7 +71,7 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
       type="button"
       data-attr="listing-row-details"
       onClick={onClick}
-      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border/70 bg-card px-3.5 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary sm:min-h-0 ${className}`}
+      className={`${LISTING_DETAIL_BUTTON} ${className}`}
     >
       Details
     </button>
@@ -187,6 +196,8 @@ function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWind
 
 const LISTING_MODAL_LABEL = "text-xs font-semibold uppercase tracking-wide text-muted";
 const LISTING_MODAL_CARD = "rounded-xl border border-border bg-card p-4";
+const LISTING_MODAL_MEDIA_WRAP = "mx-auto flex w-full max-w-2xl flex-col items-center";
+const LISTING_MODAL_MEDIA_FRAME = "aspect-video w-full overflow-hidden rounded-lg";
 
 function ListingModalBody({ children }: { children: React.ReactNode }) {
   return <div className="space-y-4 p-5 pb-6 sm:p-6">{children}</div>;
@@ -230,13 +241,22 @@ function ListingModalSection({ label, children }: { label: string; children: Rea
   );
 }
 
+function truncateModalText(text: string | undefined, max = 100): string {
+  const t = text?.trim();
+  if (!t) return "—";
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
+
 function ListingModalStatGrid({ items }: { items: { label: string; value: React.ReactNode }[] }) {
+  const colClass =
+    items.length >= 5 ? "sm:grid-cols-2 lg:grid-cols-3" : items.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2";
   return (
-    <div className={`grid gap-3 ${items.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+    <div className={`grid gap-3 ${colClass}`}>
       {items.map((item) => (
         <div key={item.label} className={LISTING_MODAL_CARD}>
           <p className={LISTING_MODAL_LABEL}>{item.label}</p>
-          <div className="mt-2 text-sm font-medium text-foreground">{item.value}</div>
+          <div className="mt-2 text-xs font-medium leading-snug text-foreground sm:text-sm [&_*]:break-words">{item.value}</div>
         </div>
       ))}
     </div>
@@ -269,20 +289,26 @@ function ListingModalVideo({
 }) {
   return (
     <ListingModalSection label={label}>
-      {videoSrc ? (
-        <video
-          src={videoSrc}
-          controls
-          playsInline
-          className="max-h-[min(50vh,380px)] w-full overflow-hidden rounded-lg bg-black"
-        />
-      ) : (
-        <div className="flex aspect-video flex-col items-center justify-center rounded-lg border border-dashed border-border bg-accent/20 px-4 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border text-lg text-muted">▶</span>
-          <p className="mt-3 text-sm font-semibold text-foreground">{placeholderTitle}</p>
-          <p className="mt-1 max-w-sm text-xs text-muted">{placeholderSubtitle}</p>
-        </div>
-      )}
+      <div className={LISTING_MODAL_MEDIA_WRAP}>
+        {videoSrc ? (
+          <video
+            src={videoSrc}
+            controls
+            playsInline
+            className={`${LISTING_MODAL_MEDIA_FRAME} bg-black object-cover`}
+          />
+        ) : (
+          <div
+            className={`${LISTING_MODAL_MEDIA_FRAME} flex flex-col items-center justify-center border border-dashed border-border bg-accent/20 px-4 text-center`}
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border text-lg text-muted">
+              ▶
+            </span>
+            <p className="mt-3 text-sm font-semibold text-foreground">{placeholderTitle}</p>
+            <p className="mt-1 max-w-sm text-xs text-muted">{placeholderSubtitle}</p>
+          </div>
+        )}
+      </div>
     </ListingModalSection>
   );
 }
@@ -330,25 +356,26 @@ function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: 
   const imgs = imageUrls?.filter(Boolean) ?? [];
   if (imgs.length > 0) {
     return (
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className={`${LISTING_MODAL_MEDIA_WRAP} space-y-3`}>
         {imgs.map((src, i) => (
-          <div key={`${src.slice(0, 48)}-${i}`} className="overflow-hidden rounded-xl bg-accent/30">
+          <div key={`${src.slice(0, 48)}-${i}`} className={`${LISTING_MODAL_MEDIA_FRAME} bg-accent/30`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt="" className="aspect-[4/3] h-full w-full object-cover" />
+            <img src={src} alt="" className="h-full w-full object-cover object-center" />
           </div>
         ))}
       </div>
     );
   }
   const caps = captions ?? [];
+  if (caps.length === 0) return null;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div className={`${LISTING_MODAL_MEDIA_WRAP} space-y-3`}>
       {caps.map((cap) => (
         <div
           key={cap}
-          className="flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 p-2 [html[data-theme=dark]_&]:from-slate-700 [html[data-theme=dark]_&]:to-slate-800"
+          className={`${LISTING_MODAL_MEDIA_FRAME} flex flex-col items-center justify-center border border-dashed border-border bg-accent/25 p-4 text-center`}
         >
-          <p className="text-[11px] font-semibold text-foreground">{cap}</p>
+          <p className="text-sm font-semibold text-foreground">{cap}</p>
         </div>
       ))}
     </div>
@@ -357,6 +384,7 @@ function PhotoStrip({ captions, imageUrls }: { captions?: string[]; imageUrls?: 
 
 type ModalState =
   | { kind: "room"; room: ListingRoomRow; floorLabel: string }
+  | { kind: "floorPlan"; floor: ListingFloorCard }
   | { kind: "bathroom"; row: ListingBathroomRow }
   | { kind: "shared"; row: ListingSharedRow }
   | { kind: "lease"; row: LeaseBasicRow }
@@ -414,35 +442,43 @@ function ListingDetailModal({
               return (
                 <>
                   <ListingModalHeader eyebrow={state.floorLabel} title={state.room.name} />
-                  <ListingModalSection label="Overview">
-                    <div className="space-y-2 text-muted">
-                      {state.room.modal.floorLine ? (
-                        <p>
-                          <span className="font-semibold text-foreground">Floor / level: </span>
-                          {state.room.modal.floorLine}
-                        </p>
-                      ) : null}
-                      {state.room.utilitiesEstimate ? (
-                        <p>
-                          <span className="font-semibold text-foreground">Utilities estimate: </span>
-                          {state.room.utilitiesEstimate}
-                        </p>
-                      ) : null}
-                      {state.room.modal.roomNotes ? (
-                        <div>
-                          <p className="font-semibold text-foreground">Room details</p>
-                          <p className="mt-1 whitespace-pre-wrap">{state.room.modal.roomNotes}</p>
-                        </div>
-                      ) : (
-                        <p>No extra room notes from the listing manager.</p>
-                      )}
-                    </div>
-                  </ListingModalSection>
                   <ListingModalStatGrid
                     items={[
-                      { label: "Monthly rent", value: state.room.price },
-                      { label: "Bathroom", value: state.room.modal.setupLine },
-                      { label: "Status", value: <AvailabilityPill text={state.room.availability} variant="room" /> },
+                      {
+                        label: "Floor / level",
+                        value: state.room.modal.floorLine?.trim() || "—",
+                      },
+                      ...(state.room.utilitiesEstimate
+                        ? [{ label: "Utilities", value: state.room.utilitiesEstimate }]
+                        : []),
+                      {
+                        label: "Room details",
+                        value:
+                          state.room.modal.roomNotes?.trim() ? (
+                            <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed">
+                              {truncateModalText(state.room.modal.roomNotes, 160)}
+                            </p>
+                          ) : (
+                            "No extra room notes"
+                          ),
+                      },
+                      {
+                        label: "Bathroom",
+                        value: (
+                          <div className="space-y-1">
+                            <p>{state.room.modal.bathroomShortLabel ?? "—"}</p>
+                            {state.room.modal.bathroomDetailLine ? (
+                              <p className="text-xs font-normal leading-snug text-muted">
+                                {state.room.modal.bathroomDetailLine}
+                              </p>
+                            ) : null}
+                          </div>
+                        ),
+                      },
+                      {
+                        label: "Status",
+                        value: <AvailabilityPill text={state.room.availability} variant="room" />,
+                      },
                     ]}
                   />
                   <ListingModalSection label="Availability timeline">
@@ -467,7 +503,9 @@ function ListingDetailModal({
                         </div>
                       </>
                     ) : (
-                      <p className="text-emerald-700">No blocked ranges or resident occupancy currently set for this room.</p>
+                      <p className="text-emerald-700 [html[data-theme=dark]_&]:text-emerald-300">
+                        No blocked ranges or resident occupancy currently set for this room.
+                      </p>
                     )}
                   </ListingModalSection>
                   {(state.room.modal.photoUrls?.length ?? 0) > 0 ? (
@@ -493,14 +531,14 @@ function ListingDetailModal({
                             <ListingModalTags tags={highlightTags} />
                           </ListingModalSection>
                         ) : null}
-                        {furnishingLine || amenityLabels.length > 0 ? (
+                        {furnishingLine ? (
                           <ListingModalSection label="Included in this room">
-                            {furnishingLine ? <p className="text-muted">{furnishingLine}</p> : null}
-                            {amenityLabels.length > 0 ? (
-                              <div className={furnishingLine ? "mt-3" : ""}>
-                                <ListingModalTags tags={amenityLabels} />
-                              </div>
-                            ) : null}
+                            <p className="text-muted">{furnishingLine}</p>
+                          </ListingModalSection>
+                        ) : null}
+                        {amenityLabels.length > 0 ? (
+                          <ListingModalSection label="Room amenities">
+                            <ListingModalTags tags={amenityLabels} />
                           </ListingModalSection>
                         ) : null}
                       </>
@@ -523,6 +561,40 @@ function ListingDetailModal({
                 </>
               );
             })()}
+          </ListingModalBody>
+        ) : null}
+
+        {state.kind === "floorPlan" ? (
+          <ListingModalBody>
+            <ListingModalHeader eyebrow="Floor plan" title={state.floor.floorLabel} />
+            <ListingModalSection label="Layout">
+              <div className={LISTING_MODAL_MEDIA_WRAP}>
+                {state.floor.floorPlanImageUrl ? (
+                  <div className={`${LISTING_MODAL_MEDIA_FRAME} bg-accent/30`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={state.floor.floorPlanImageUrl}
+                      alt={`Floor plan for ${state.floor.floorLabel}`}
+                      className="h-full w-full object-contain object-center"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={`${LISTING_MODAL_MEDIA_FRAME} flex flex-col items-center justify-center border border-dashed border-border bg-accent/20 px-4 text-center`}
+                  >
+                    <p className="text-sm font-semibold text-foreground">No floor plan submitted yet</p>
+                    <p className="mt-1 max-w-sm text-xs text-muted">
+                      The property manager has not uploaded a floor plan for this level. Ask leasing for layout details.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </ListingModalSection>
+            <ListingModalActions
+              newTabProps={newTabProps}
+              primary={{ href: toursContactHref, label: "Ask about layout" }}
+              secondary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
+            />
           </ListingModalBody>
         ) : null}
 
@@ -662,10 +734,16 @@ function ListingDetailModal({
   return createPortal(panel, document.body);
 }
 
-function FloorPlanSummaryBar({ floor }: { floor: ListingFloorCard }) {
+function FloorPlanSummaryBar({
+  floor,
+  onOpenFloorPlan,
+}: {
+  floor: ListingFloorCard;
+  onOpenFloorPlan: () => void;
+}) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{floor.floorLabel}</p>
         <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">{floor.fromPrice}</p>
         {floor.remainingNote ? (
@@ -675,9 +753,12 @@ function FloorPlanSummaryBar({ floor }: { floor: ListingFloorCard }) {
           </p>
         ) : null}
       </div>
-      <div className="flex items-center gap-2 rounded-full bg-accent/30 px-3 py-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</span>
-        <span className="text-sm font-bold text-foreground">{floor.roomCount}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 rounded-full border border-border bg-accent/35 px-3 py-1.5 listing-detail-surface">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</span>
+          <span className="text-sm font-bold text-foreground">{floor.roomCount}</span>
+        </div>
+        <DetailsButton onClick={onOpenFloorPlan} />
       </div>
     </div>
   );
@@ -688,9 +769,9 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-accent/10">
+      <div className={LISTING_FLOOR_CARD}>
         <div className="border-b border-border/50 px-4 py-3.5 sm:px-5">
-          <FloorPlanSummaryBar floor={floor} />
+          <FloorPlanSummaryBar floor={floor} onOpenFloorPlan={() => setModal({ kind: "floorPlan", floor })} />
         </div>
         <div className="relative isolate px-4 py-3 sm:px-5 sm:py-4 md:overflow-x-auto">
           <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
@@ -706,7 +787,7 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
     <>
       <div className="space-y-3 md:hidden">
         {rooms.map((r) => (
-          <div key={r.id} className="flex flex-col gap-2 rounded-xl border border-border bg-accent/30 p-3 sm:gap-2.5 sm:p-4">
+          <div key={r.id} className={`flex flex-col gap-2 sm:gap-2.5 ${LISTING_ROW_SURFACE}`}>
             <div>
               <p className="text-sm font-semibold text-foreground">{r.name}</p>
               <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
@@ -721,7 +802,7 @@ function RoomTableWithModals({ rooms, onOpen }: { rooms: ListingRoomRow[]; onOpe
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
             <span>Room</span>
             <span>Price</span>
             <span>Availability</span>
@@ -754,7 +835,7 @@ export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: Li
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
+          <div key={r.id} className={LISTING_ROW_SURFACE}>
             <p className="text-sm font-semibold text-foreground">{r.name}</p>
             <p className="mt-0.5 text-xs text-muted">{r.detail}</p>
             <p className="mt-2 text-xs text-foreground sm:text-sm">
@@ -767,7 +848,7 @@ export function BathroomTableInteractive({ rows, listingPropertyId }: { rows: Li
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[520px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,2.2fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
             <span>Bathroom</span>
             <span>Info</span>
             <span className="w-[80px] sm:w-[88px]" />
@@ -819,7 +900,7 @@ export function SharedTableInteractive({ rows, listingPropertyId }: { rows: List
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
+          <div key={r.id} className={LISTING_ROW_SURFACE}>
             <p className="text-sm font-semibold text-foreground">{r.name}</p>
             <p className="mt-0.5 text-xs text-muted">{sharedSpaceAccessSummary(r.detail)}</p>
             <p className="mt-2 text-xs text-muted sm:text-sm">{sharedSpaceInfoSummary(r.useNote)}</p>
@@ -829,7 +910,7 @@ export function SharedTableInteractive({ rows, listingPropertyId }: { rows: List
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[520px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
             <span>Space</span>
             <span>Info</span>
             <span className="w-[80px] sm:w-[88px]" />
@@ -861,7 +942,7 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
-          <div key={r.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
+          <div key={r.id} className={LISTING_ROW_SURFACE}>
             <div className="flex items-start gap-2">
               <span className="text-lg leading-none" aria-hidden>
                 {r.icon}
@@ -878,7 +959,7 @@ export function LeaseBasicsTableInteractive({ rows, listingPropertyId }: { rows:
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
             <span>Item</span>
             <span>Price</span>
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />
@@ -920,7 +1001,7 @@ function BundleRoomPreview({ row }: { row: BundleCard }) {
       {preview.map((line) => (
         <span
           key={line}
-          className="inline-flex max-w-full items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/[0.06]"
+          className="inline-flex max-w-full items-center rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground"
         >
           <span className="truncate">{line}</span>
         </span>
@@ -943,7 +1024,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
         {rows.map((c) => (
           <div
             key={c.id}
-            className="group relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm ring-1 ring-border/70 transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/20 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-[rgba(255,255,255,0.06)] [html[data-theme=dark]_&]:ring-white/10 sm:p-5"
+            className="group relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm ring-1 ring-border/70 transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:ring-primary/20 sm:p-5"
           >
             <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary to-primary/40 opacity-90" aria-hidden />
             <div className="relative pl-2">
@@ -955,7 +1036,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
                 </div>
                 {c.promo ? <AvailabilityPill text={c.promo} /> : null}
               </div>
-              <div className="mt-4 rounded-xl border border-border bg-accent/25 p-3 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-white/[0.04]">
+              <div className="mt-4 rounded-xl border border-border bg-accent/25 p-3">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Monthly</p>
                 <div className="mt-1 flex flex-wrap items-baseline gap-2">
                   {c.strikethrough ? <span className="text-sm text-muted line-through">{c.strikethrough}</span> : null}
@@ -967,7 +1048,7 @@ export function BundleTableInteractive({ rows, listingPropertyId }: { rows: Bund
                   {c.summaryItems.slice(0, 3).map((item) => (
                     <span
                       key={`${c.id}-${item.label}`}
-                      className="inline-flex items-center rounded-full border border-border bg-accent/30 px-2.5 py-1 text-[10px] font-semibold text-muted [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/[0.06]"
+                      className="inline-flex items-center rounded-full border border-border bg-accent/35 px-2.5 py-1 text-[10px] font-semibold text-foreground"
                     >
                       <span className="text-muted">{item.label}:</span>
                       <span className="ml-1 text-foreground">{item.value}</span>
@@ -993,7 +1074,7 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
     <>
       <div className="space-y-2.5 md:hidden">
         {rows.map((a) => (
-          <div key={a.id} className="rounded-xl border border-border bg-accent/30 p-3 sm:p-4">
+          <div key={a.id} className={LISTING_ROW_SURFACE}>
             <div className="flex items-start gap-2">
               <span className="text-lg text-primary" aria-hidden>
                 {a.icon}
@@ -1007,7 +1088,7 @@ export function AmenitiesTableInteractive({ rows, listingPropertyId }: { rows: A
       </div>
       <div className="hidden min-w-0 md:block">
         <div className="min-w-[560px] lg:min-w-0">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted sm:gap-3 sm:pb-2 sm:text-[11px]">
+          <div className={`grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 border-b border-border pb-1.5 sm:gap-3 sm:pb-2 ${LISTING_TABLE_HEAD}`}>
             <span>Amenity</span>
             <span>Info</span>
             <span className="w-[80px] text-right sm:w-[88px] sm:text-left" />

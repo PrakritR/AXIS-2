@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
+  PORTAL_TABLE_DETAIL_ROW,
+  PORTAL_TABLE_DETAIL_CELL,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
-  PortalTableExpandCell,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
@@ -50,17 +50,20 @@ function DocumentsTableShell({
   head,
   children,
   mobile,
+  colPercents,
 }: {
   head: React.ReactNode;
   children: React.ReactNode;
   mobile: React.ReactNode;
+  colPercents?: readonly string[];
 }) {
   return (
     <>
       <div className="space-y-2 lg:hidden">{mobile}</div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full table-fixed border-collapse text-left text-sm">
+          <table className={PORTAL_DATA_TABLE}>
+            {colPercents ? <PortalDataTableColGroup percents={colPercents} /> : null}
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
             </thead>
@@ -191,6 +194,24 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
     [preview, previewCosignerSubmissions],
   );
 
+  const togglePreview = useCallback((row: DemoApplicantRow) => {
+    setPreview((cur) => (cur?.id === row.id ? null : row));
+  }, []);
+
+  const renderApplicationDocumentDetail = (row: DemoApplicantRow) => {
+    if (preview?.id !== row.id) return null;
+    return (
+      <DocumentInlineViewer
+        embedded
+        title={`Application — ${row.name || row.id}`}
+        srcDoc={previewHtml}
+        onDownload={() => downloadRow(row)}
+        downloadLabel="Download PDF"
+        downloadAttr="manager-documents-application-download"
+      />
+    );
+  };
+
   if (!userId) {
     return <PortalDataTableEmpty icon="application" message="Sign in to view application documents." />;
   }
@@ -208,14 +229,12 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
       ) : (
         <>
           <DocumentsTableShell
+            colPercents={portalTableColumnPercents(3)}
             head={
               <>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={PORTAL_TABLE_EXPAND_TH}>
-                  <span className="sr-only">Expand</span>
-                </th>
               </>
             }
             mobile={rows.map((row) => (
@@ -225,42 +244,43 @@ export function ManagerApplicationDocumentsTab({ userId }: { userId: string | nu
                 subtitle={applicationStatusLabel(row.bucket)}
                 meta={[row.property, applicationRoomLabel(row)].filter(Boolean).join(" · ") || "—"}
                 expanded={preview?.id === row.id}
-                onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
-              />
+                onClick={() => togglePreview(row)}
+              >
+                {renderApplicationDocumentDetail(row)}
+              </PortalMobileSummaryCard>
             ))}
           >
             {rows.map((row) => (
-              <tr
-                key={row.id}
-                className={PORTAL_TABLE_TR_EXPANDABLE}
-                aria-expanded={preview?.id === row.id}
-                onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
-              >
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <p className="font-medium text-foreground">{row.name || "—"}</p>
-                  {row.email ? <p className="mt-0.5 text-xs text-muted">{row.email}</p> : null}
-                </td>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>{applicationStatusLabel(row.bucket)}</td>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <p className="truncate">{row.property || "—"}</p>
-                  {applicationRoomLabel(row) ? (
-                    <p className="mt-0.5 text-xs text-muted">{applicationRoomLabel(row)}</p>
-                  ) : null}
-                </td>
-                <PortalTableExpandCell expanded={preview?.id === row.id} />
-              </tr>
+              <Fragment key={row.id}>
+                <tr
+                  className={PORTAL_TABLE_TR_EXPANDABLE}
+                  aria-expanded={preview?.id === row.id}
+                  onClick={createPortalRowExpandClick(() => togglePreview(row))}
+                >
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                    <PortalTableInlineExpand expanded={preview?.id === row.id} className="font-medium text-foreground">
+                      {row.name || "—"}
+                    </PortalTableInlineExpand>
+                    {row.email ? <p className="mt-0.5 text-xs text-muted">{row.email}</p> : null}
+                  </td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{applicationStatusLabel(row.bucket)}</td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                    <p className="truncate">{row.property || "—"}</p>
+                    {applicationRoomLabel(row) ? (
+                      <p className="mt-0.5 text-xs text-muted">{applicationRoomLabel(row)}</p>
+                    ) : null}
+                  </td>
+                </tr>
+                {preview?.id === row.id ? (
+                  <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                    <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                      {renderApplicationDocumentDetail(row)}
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             ))}
           </DocumentsTableShell>
-
-          {preview ? (
-            <DocumentInlineViewer
-              title={`Application — ${preview.name || preview.id}`}
-              srcDoc={previewHtml}
-              onDownload={() => downloadRow(preview)}
-              downloadLabel="Download PDF"
-              downloadAttr="manager-documents-application-download"
-            />
-          ) : null}
         </>
       )}
     </div>
@@ -303,15 +323,31 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
       .sort((a, b) => b.updatedAtIso.localeCompare(a.updatedAtIso));
   }, [userId, tick, propertyFilter]);
 
+  const togglePreview = useCallback((row: LeasePipelineRow) => {
+    setPreview((cur) => (cur?.id === row.id ? null : row));
+  }, []);
+
+  const renderLeaseDocumentDetail = (row: LeasePipelineRow) => {
+    if (preview?.id !== row.id) return null;
+    const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
+    const html = pdfSrc ? null : getLeaseDocumentHtml(row);
+    const label = `Lease — ${row.residentName || row.residentEmail}${row.unit ? ` · ${row.unit}` : ""}`;
+    return (
+      <DocumentInlineViewer
+        embedded
+        title={label}
+        src={pdfSrc}
+        srcDoc={html}
+        onDownload={() => downloadLeaseFromRow(row)}
+        downloadLabel={pdfSrc ? "Download PDF" : "Download / print"}
+        downloadAttr="manager-documents-lease-download"
+      />
+    );
+  };
+
   if (!userId) {
     return <PortalDataTableEmpty icon="lease" message="Sign in to view lease documents." />;
   }
-
-  const previewPdfSrc = preview?.managerUploadedPdf?.dataUrl ?? null;
-  const previewHtml = preview ? getLeaseDocumentHtml(preview) : null;
-  const previewLabel = preview
-    ? `Lease — ${preview.residentName || preview.residentEmail}${preview.unit ? ` · ${preview.unit}` : ""}`
-    : "";
 
   return (
     <div className="space-y-4">
@@ -326,15 +362,13 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
       ) : (
         <>
           <DocumentsTableShell
+            colPercents={portalTableColumnPercents(4)}
             head={
               <>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property / unit</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
-                <th className={PORTAL_TABLE_EXPAND_TH}>
-                  <span className="sr-only">Expand</span>
-                </th>
               </>
             }
             mobile={rows.map((row) => (
@@ -344,46 +378,46 @@ export function ManagerLeaseDocumentsTab({ userId }: { userId: string | null }) 
                 subtitle={row.stageLabel || row.status}
                 meta={[row.unit, safeFormatDateTime(row.updatedAtIso)].filter(Boolean).join(" · ")}
                 expanded={preview?.id === row.id}
-                onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
-              />
+                onClick={() => togglePreview(row)}
+              >
+                {renderLeaseDocumentDetail(row)}
+              </PortalMobileSummaryCard>
             ))}
           >
             {rows.map((row) => (
-              <tr
-                key={row.id}
-                className={PORTAL_TABLE_TR_EXPANDABLE}
-                aria-expanded={preview?.id === row.id}
-                onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
-              >
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <p className="font-medium text-foreground">{row.residentName || "—"}</p>
-                  <p className="mt-0.5 text-xs text-muted">{row.residentEmail}</p>
-                </td>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <p className="truncate">{row.unit || "—"}</p>
-                </td>
-                <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  {row.stageLabel || row.status}
-                  {!leaseHasDownloadableDocument(row) ? (
-                    <p className="mt-0.5 text-xs text-muted">No document yet</p>
-                  ) : null}
-                </td>
-                <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{safeFormatDateTime(row.updatedAtIso)}</td>
-                <PortalTableExpandCell expanded={preview?.id === row.id} />
-              </tr>
+              <Fragment key={row.id}>
+                <tr
+                  className={PORTAL_TABLE_TR_EXPANDABLE}
+                  aria-expanded={preview?.id === row.id}
+                  onClick={createPortalRowExpandClick(() => togglePreview(row))}
+                >
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                    <PortalTableInlineExpand expanded={preview?.id === row.id} className="font-medium text-foreground">
+                      {row.residentName || "—"}
+                    </PortalTableInlineExpand>
+                    <p className="mt-0.5 text-xs text-muted">{row.residentEmail}</p>
+                  </td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                    <p className="truncate">{row.unit || "—"}</p>
+                  </td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                    {row.stageLabel || row.status}
+                    {!leaseHasDownloadableDocument(row) ? (
+                      <p className="mt-0.5 text-xs text-muted">No document yet</p>
+                    ) : null}
+                  </td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{safeFormatDateTime(row.updatedAtIso)}</td>
+                </tr>
+                {preview?.id === row.id ? (
+                  <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                    <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                      {renderLeaseDocumentDetail(row)}
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             ))}
           </DocumentsTableShell>
-
-          {preview ? (
-            <DocumentInlineViewer
-              title={previewLabel}
-              src={previewPdfSrc}
-              srcDoc={previewPdfSrc ? null : previewHtml}
-              onDownload={() => downloadLeaseFromRow(preview)}
-              downloadLabel={previewPdfSrc ? "Download PDF" : "Download / print"}
-              downloadAttr="manager-documents-lease-download"
-            />
-          ) : null}
         </>
       )}
     </div>

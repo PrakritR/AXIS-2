@@ -73,8 +73,8 @@ export function roomAvailabilityPillClasses(tone: RoomAvailabilityTone): { wrap:
       };
     default:
       return {
-        wrap: `bg-foreground/5 text-muted ${ring}`,
-        dot: "bg-slate-400",
+        wrap: `border border-border bg-accent/35 text-foreground ${ring}`,
+        dot: "bg-muted",
       };
   }
 }

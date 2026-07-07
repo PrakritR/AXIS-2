@@ -12,20 +12,20 @@ import {
   PORTAL_TOOLBAR_SELECT,
   PortalToolbarSelectWrap,
 } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
-  PortalTableExpandCell,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  PortalTableDetailActions,
+  PORTAL_DETAIL_BTN,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
+import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
@@ -54,6 +54,12 @@ import {
   type ProRelationshipRecord,
 } from "@/lib/pro-relationships";
 import { maxAccountLinksForTier, normalizeManagerSkuTier } from "@/lib/manager-access";
+import {
+  listOutgoingCoManagerLinks,
+  listOutgoingCoManagersForProperty,
+  resolveAssignedPropertyId,
+  type CoManagerPropertyLink,
+} from "@/lib/co-manager-property-links";
 
 const CO_MANAGER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -709,12 +715,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
 
   const removePropertyFromLink = async (inv: AccountLinkInviteDto, propId: string) => {
     const draft = getInviteDraft(inv);
-    if (!draft.assignedPropertyIds.includes(propId)) return;
+    const assignedId = resolveAssignedPropertyId(propId, draft.assignedPropertyIds);
+    if (!assignedId) return;
     if (draft.assignedPropertyIds.length === 1) {
       await removeLink(inv.id);
       return;
     }
-    const nextAssigned = draft.assignedPropertyIds.filter((id) => id !== propId);
+    const nextAssigned = draft.assignedPropertyIds.filter((id) => id !== assignedId);
     const nextPerms = normalizePropertyCoManagerPermissions(draft.propertyCoManagerPermissions, nextAssigned);
     if (useRemote && remoteLoaded) {
       scheduleInviteSave(inv.id, { assignedPropertyIds: nextAssigned, propertyCoManagerPermissions: nextPerms });
@@ -734,7 +741,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const removePropertyFromLocalRow = (rowId: string, propId: string) => {
     const all = readProRelationships(userId);
     const row = all.find((r) => r.id === rowId);
-    if (!row || !row.assignedPropertyIds.includes(propId)) return;
+    const assignedId = row ? resolveAssignedPropertyId(propId, row.assignedPropertyIds) : null;
+    if (!row || !assignedId) return;
     if (row.assignedPropertyIds.length === 1) {
       writeProRelationships(
         userId,
@@ -744,7 +752,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       showToast("Link removed.");
       return;
     }
-    const nextAssigned = row.assignedPropertyIds.filter((id) => id !== propId);
+    const nextAssigned = row.assignedPropertyIds.filter((id) => id !== assignedId);
     const nextPerms = normalizePropertyCoManagerPermissions(row.propertyCoManagerPermissions, nextAssigned);
     writeProRelationships(
       userId,
@@ -818,13 +826,147 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     await patchInvite(id, { action: "cancel" }, "Invite withdrawn.");
   };
 
-  const coManagersForProperty = useCallback(
-    (propertyId: string) =>
-      activeRemote.filter(
-        (inv) => inv.direction === "outgoing" && inv.assignedPropertyIds.includes(propertyId),
-      ),
-    [activeRemote],
+  const outgoingCoManagerLinks = useMemo(
+    () =>
+      listOutgoingCoManagerLinks({
+        useRemote,
+        remoteInvites,
+        localRows,
+        inviteDrafts,
+      }),
+    [useRemote, remoteInvites, localRows, inviteDrafts],
   );
+
+  const coManagersForProperty = useCallback(
+    (propertyId: string) => listOutgoingCoManagersForProperty(propertyId, outgoingCoManagerLinks),
+    [outgoingCoManagerLinks],
+  );
+
+  const removeCoManagerFromProperty = async (link: CoManagerPropertyLink, propertyId: string) => {
+    if (useRemote && remoteLoaded) {
+      const inv = activeRemote.find((row) => row.id === link.id);
+      if (!inv) return;
+      await removePropertyFromLink(inv, propertyId);
+      return;
+    }
+    removePropertyFromLocalRow(link.id, propertyId);
+  };
+
+  const renderCoManagerPropertyActions = (
+    propertyId: string,
+    link: CoManagerPropertyLink,
+    readOnly: boolean,
+  ) => {
+    if (readOnly) return null;
+    return (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 rounded-full px-4 text-xs"
+          onClick={() => void openTransferForCoManager(propertyId, link.linkedAxisId, link.linkedUserId)}
+        >
+          Make owner of property
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+          onClick={() => void removeCoManagerFromProperty(link, propertyId)}
+        >
+          Remove access
+        </Button>
+      </>
+    );
+  };
+
+  const renderPropertyPermissionsSection = (
+    propertyId: string,
+    draft: InviteDraft,
+    inv: AccountLinkInviteDto,
+    readOnly: boolean,
+  ) => {
+    const label = resolvePropertyLabel(propertyId, propertyId);
+    const perms = permissionsForProperty(draft.propertyCoManagerPermissions, propertyId);
+    return (
+      <PortalCollapsibleSection
+        key={propertyId}
+        title={label}
+        subtitle={summarizePropertyCoManagerPermissions({ [propertyId]: perms })}
+        defaultExpanded={false}
+        surfaceMuted={false}
+        className="mt-4 first:mt-0"
+        toggleDataAttr="co-manager-property-toggle"
+        headerActions={renderCoManagerPropertyActions(propertyId, {
+          id: inv.id,
+          linkedAxisId: inv.linkedAxisId,
+          linkedDisplayName: inv.linkedDisplayName,
+          linkedUserId: inv.linkedUserId,
+          assignedPropertyIds: draft.assignedPropertyIds,
+          propertyCoManagerPermissions: draft.propertyCoManagerPermissions,
+        }, readOnly)}
+      >
+        <div className="px-4 pb-4">
+          {readOnly ? (
+            <p className="text-xs text-muted">{summarizePropertyCoManagerPermissions({ [propertyId]: perms })}</p>
+          ) : (
+            <CoManagerPermissionsEditor
+              value={perms}
+              onChange={(next) => updatePropertyPermissions(inv, propertyId, next)}
+            />
+          )}
+        </div>
+      </PortalCollapsibleSection>
+    );
+  };
+
+  const renderLocalPropertyPermissionsSection = (propertyId: string, row: ProRelationshipRecord) => {
+    const label = resolvePropertyLabel(propertyId, propertyId);
+    const perms = normalizeCoManagerPermissions(
+      row.propertyCoManagerPermissions?.[propertyId] ?? row.coManagerPermissions,
+    );
+    return (
+      <PortalCollapsibleSection
+        key={propertyId}
+        title={label}
+        subtitle={summarizePropertyCoManagerPermissions({ [propertyId]: perms })}
+        defaultExpanded={false}
+        surfaceMuted={false}
+        className="mt-4 first:mt-0"
+        toggleDataAttr="co-manager-property-toggle"
+        headerActions={renderCoManagerPropertyActions(propertyId, {
+          id: row.id,
+          linkedAxisId: row.linkedAxisId,
+          linkedDisplayName: row.linkedDisplayName,
+          linkedUserId: row.linkedUserId,
+          assignedPropertyIds: row.assignedPropertyIds,
+          propertyCoManagerPermissions: row.propertyCoManagerPermissions ?? {},
+        }, false)}
+      >
+        <div className="px-4 pb-4">
+          <CoManagerPermissionsEditor
+            value={perms}
+            onChange={(next) => {
+              const all = readProRelationships(userId);
+              const updated = all.map((rel) =>
+                rel.id === row.id
+                  ? {
+                      ...rel,
+                      propertyCoManagerPermissions: {
+                        ...(rel.propertyCoManagerPermissions ?? {}),
+                        [propertyId]: next,
+                      },
+                    }
+                  : rel,
+              );
+              writeProRelationships(userId, updated);
+              refreshLocal();
+            }}
+          />
+        </div>
+      </PortalCollapsibleSection>
+    );
+  };
 
   const submitTransfer = async () => {
     if (!transferPropertyId || !transferCoManagerUserId) return;
@@ -877,53 +1019,76 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     .map(([k]) => k);
 
   const renderSelfDetail = () => (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <>
       {ownedProperties.map((prop) => {
         const coManagers = coManagersForProperty(prop.id);
         return (
-          <div key={prop.id} className="rounded-xl border border-border bg-card p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">{prop.label}</p>
-                <p className="mt-1 text-xs text-muted">
-                  {coManagers.length === 0
-                    ? "No co-managers on this property"
-                    : `Co-managers: ${coManagers.map((c) => c.linkedDisplayName ?? c.linkedAxisId).join(", ")}`}
-                </p>
-              </div>
-              {coManagers.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full text-xs"
-                  onClick={() =>
-                    void openTransferForCoManager(
-                      prop.id,
-                      coManagers[0]!.linkedAxisId,
-                      coManagers[0]!.linkedUserId,
-                    )
-                  }
-                >
-                  Make owner of property
-                </Button>
-              ) : null}
+          <PortalCollapsibleSection
+            key={prop.id}
+            title={prop.label}
+            subtitle={
+              coManagers.length === 0
+                ? "No co-managers on this property"
+                : `${coManagers.length} co-manager${coManagers.length === 1 ? "" : "s"}`
+            }
+            defaultExpanded={false}
+            surfaceMuted={false}
+            className="mt-4 first:mt-0"
+            toggleDataAttr="owner-property-toggle"
+          >
+            <div className="space-y-3 px-4 pb-4">
+              {coManagers.length === 0 ? (
+                <p className="text-sm text-muted">No co-managers on this property yet.</p>
+              ) : (
+                coManagers.map((link) => {
+                  const assignedId =
+                    resolveAssignedPropertyId(prop.id, link.assignedPropertyIds) ?? prop.id;
+                  const perms = permissionsForProperty(link.propertyCoManagerPermissions, assignedId);
+                  return (
+                  <PortalCollapsibleSection
+                    key={link.id}
+                    title={link.linkedDisplayName ?? link.linkedAxisId}
+                    subtitle={summarizePropertyCoManagerPermissions({ [assignedId]: perms })}
+                    defaultExpanded={false}
+                    surfaceMuted={false}
+                    titleVariant="resident"
+                    toggleDataAttr="owner-co-manager-toggle"
+                    headerActions={renderCoManagerPropertyActions(prop.id, link, false)}
+                  >
+                    <p className="px-4 pb-4 text-xs text-muted">
+                      {summarizePropertyCoManagerPermissions({ [assignedId]: perms })}
+                    </p>
+                  </PortalCollapsibleSection>
+                  );
+                })
+              )}
             </div>
-          </div>
+          </PortalCollapsibleSection>
         );
       })}
-    </div>
+    </>
   );
 
   const renderInviteDetail = (inv: AccountLinkInviteDto) => {
     const draft = getInviteDraft(inv);
     const readOnly = inv.direction === "incoming";
     return (
-      <div className="mx-auto max-w-4xl space-y-4">
+      <>
         {!readOnly ? (
-          <div className="space-y-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-              Linked properties
-            </p>
+          <PortalTableDetailActions placement="top">
+            <Button
+              type="button"
+              variant="outline"
+              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              onClick={() => void removeLink(inv.id)}
+            >
+              Remove access
+            </Button>
+          </PortalTableDetailActions>
+        ) : null}
+
+        {!readOnly ? (
+          <div className="mt-4">
             <AddPropertyToCoManager
               linkId={inv.id}
               assignedPropertyIds={draft.assignedPropertyIds}
@@ -936,77 +1101,36 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             />
           </div>
         ) : (
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+          <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
             Properties they granted you
           </p>
         )}
 
         {draft.assignedPropertyIds.length === 0 ? (
-          <p className="text-sm text-muted">No properties in this link yet.</p>
+          <p className="mt-4 text-sm text-muted">No properties in this link yet.</p>
         ) : (
-          draft.assignedPropertyIds.map((pid) => (
-            <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
-              <div className="flex flex-wrap items-start justify-start gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {resolvePropertyLabel(pid, pid)}
-                  </p>
-                  <p className="mt-1 text-xs text-muted">Permissions for this property</p>
-                </div>
-                {!readOnly ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full text-xs"
-                      onClick={() =>
-                        void openTransferForCoManager(
-                          pid,
-                          inv.linkedAxisId,
-                          inv.linkedUserId,
-                        )
-                      }
-                    >
-                      Make owner of property
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-full text-xs border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
-                      onClick={() => void removePropertyFromLink(inv, pid)}
-                    >
-                      Remove property
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-              <div className="mt-3">
-                {readOnly ? (
-                  <p className="text-xs text-muted">
-                    {summarizePropertyCoManagerPermissions({
-                      [pid]: permissionsForProperty(draft.propertyCoManagerPermissions, pid),
-                    })}
-                  </p>
-                ) : (
-                  <CoManagerPermissionsEditor
-                    value={permissionsForProperty(draft.propertyCoManagerPermissions, pid)}
-                    onChange={(next) => updatePropertyPermissions(inv, pid, next)}
-                  />
-                )}
-              </div>
-            </div>
-          ))
+          draft.assignedPropertyIds.map((pid) =>
+            renderPropertyPermissionsSection(pid, draft, inv, readOnly),
+          )
         )}
-      </div>
+      </>
     );
   };
 
   const renderLocalRowDetail = (r: ProRelationshipRecord) => (
-    <div className="mx-auto max-w-4xl space-y-4">
-      <div className="space-y-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-          Linked properties
-        </p>
+    <>
+      <PortalTableDetailActions placement="top">
+        <Button
+          type="button"
+          variant="outline"
+          className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+          onClick={() => removeLink(r.id)}
+        >
+          Remove access
+        </Button>
+      </PortalTableDetailActions>
+
+      <div className="mt-4">
         <AddPropertyToCoManager
           linkId={r.id}
           assignedPropertyIds={r.assignedPropertyIds}
@@ -1018,68 +1142,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           onAdd={() => addPropertyToLocalRow(r.id, addPropertySelect[r.id] ?? "")}
         />
       </div>
+
       {r.assignedPropertyIds.length === 0 ? (
-        <p className="text-sm text-muted">No properties in this link yet.</p>
+        <p className="mt-4 text-sm text-muted">No properties in this link yet.</p>
       ) : (
-        r.assignedPropertyIds.map((pid) => (
-          <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
-            <div className="flex flex-wrap items-start justify-start gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">{resolvePropertyLabel(pid, pid)}</p>
-                <p className="mt-1 text-xs text-muted">Permissions for this property</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full text-xs"
-                  onClick={() =>
-                    void openTransferForCoManager(
-                      pid,
-                      r.linkedAxisId,
-                      r.linkedUserId,
-                    )
-                  }
-                >
-                  Make owner of property
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full text-xs border-rose-200 text-rose-700 hover:bg-[var(--status-overdue-bg)]"
-                  onClick={() => removePropertyFromLocalRow(r.id, pid)}
-                >
-                  Remove property
-                </Button>
-              </div>
-            </div>
-            <div className="mt-3">
-              <CoManagerPermissionsEditor
-                value={normalizeCoManagerPermissions(
-                  r.propertyCoManagerPermissions?.[pid] ?? r.coManagerPermissions,
-                )}
-                onChange={(next) => {
-                  const all = readProRelationships(userId);
-                  const updated = all.map((row) =>
-                    row.id === r.id
-                      ? {
-                          ...row,
-                          propertyCoManagerPermissions: {
-                            ...(row.propertyCoManagerPermissions ?? {}),
-                            [pid]: next,
-                          },
-                        }
-                      : row,
-                  );
-                  writeProRelationships(userId, updated);
-                  refreshLocal();
-                }}
-              />
-            </div>
-          </div>
-        ))
+        r.assignedPropertyIds.map((pid) => renderLocalPropertyPermissionsSection(pid, r))
       )}
-    </div>
+    </>
   );
 
   return (
@@ -1335,15 +1404,12 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             </div>
             <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
-                <table className="w-full table-fixed border-collapse text-left text-sm">
+                <table className={PORTAL_DATA_TABLE}>
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Manager</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Role</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Properties</th>
-                      <th className={PORTAL_TABLE_EXPAND_TH}>
-                        <span className="sr-only">Expand</span>
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1357,7 +1423,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                           aria-expanded={expandedLinkId === "__self__"}
                         >
                           <td className={PORTAL_TABLE_TD}>
-                            <p className="font-medium text-foreground">You</p>
+                            <PortalTableInlineExpand expanded={expandedLinkId === "__self__"}>
+                              <span className="font-medium text-foreground">You</span>
+                            </PortalTableInlineExpand>
                             <p className="mt-0.5 text-xs text-muted">Main manager</p>
                           </td>
                           <td className={PORTAL_TABLE_TD}>
@@ -1367,11 +1435,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             <span className="tabular-nums">{ownedProperties.length}</span>
                             <span className="text-muted"> owned</span>
                           </td>
-                          <PortalTableExpandCell expanded={expandedLinkId === "__self__"} />
                         </tr>
                         {expandedLinkId === "__self__" ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderSelfDetail()}
                             </td>
                           </tr>
@@ -1393,7 +1460,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                 aria-expanded={expandedLinkId === inv.id}
                               >
                                 <td className={PORTAL_TABLE_TD}>
-                                  <p className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
+                                  <PortalTableInlineExpand expanded={expandedLinkId === inv.id}>
+                                    <span className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</span>
+                                  </PortalTableInlineExpand>
                                   <p className="mt-0.5 font-mono text-xs text-muted">{inv.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
@@ -1417,11 +1486,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                     <span>linked</span>
                                   </button>
                                 </td>
-                                <PortalTableExpandCell expanded={expandedLinkId === inv.id} />
                               </tr>
                               {expandedLinkId === inv.id ? (
                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                  <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                                  <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                                     {renderInviteDetail(inv)}
                                   </td>
                                 </tr>
@@ -1440,7 +1508,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                 aria-expanded={expandedLinkId === r.id}
                               >
                                 <td className={PORTAL_TABLE_TD}>
-                                  <p className="font-medium text-foreground">{r.linkedDisplayName ?? r.linkedAxisId}</p>
+                                  <PortalTableInlineExpand expanded={expandedLinkId === r.id}>
+                                    <span className="font-medium text-foreground">{r.linkedDisplayName ?? r.linkedAxisId}</span>
+                                  </PortalTableInlineExpand>
                                   <p className="mt-0.5 font-mono text-xs text-muted">{r.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
@@ -1462,11 +1532,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                     <span>linked</span>
                                   </button>
                                 </td>
-                                <PortalTableExpandCell expanded={expandedLinkId === r.id} />
                               </tr>
                               {expandedLinkId === r.id ? (
                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                  <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                                  <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                                     {renderLocalRowDetail(r)}
                                   </td>
                                 </tr>

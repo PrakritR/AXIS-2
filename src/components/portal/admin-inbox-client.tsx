@@ -1,26 +1,15 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   INBOX_TAB_DEFS,
-  PORTAL_INBOX_TABLE_WRAP,
   PortalInboxEmptyState,
+  PortalInboxMessageTable,
+  type PortalInboxTableRow,
 } from "@/components/portal/portal-inbox-ui";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_ROW_TOGGLE_CLASS,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
-  PORTAL_TABLE_TR,
-  PORTAL_TABLE_TD,
-  PortalTableExpandCell,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
-import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
+import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -54,10 +43,21 @@ function formatWhen(iso: string) {
   }
 }
 
-function previewSnippet(text: string, max = 100) {
-  const t = text.trim();
-  if (t.length <= max) return t;
-  return `${t.slice(0, max)}…`;
+function toAdminTableRows(list: InboxMessage[], tabId: string): PortalInboxTableRow[] {
+  return list.map((row) => ({
+    id: row.id,
+    name: tabId === "sent" ? row.composeRecipientLabel ?? row.name : row.name,
+    email:
+      tabId === "sent" &&
+      (row.composeAudience === "all" ||
+        row.composeAudience === "all_managers" ||
+        row.composeAudience === "all_residents")
+        ? ""
+        : row.email,
+    subject: row.topic,
+    whenLabel: formatWhen(row.createdAt),
+    read: row.read,
+  }));
 }
 
 // Admin inbox has no scheduled-messages backend, so the shared "schedule" tab
@@ -333,7 +333,6 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   const navigate = usePortalNavigate();
   const [tick, setTick] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [replyDraft, setReplyDraft] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
   const [recipients, setRecipients] = useState<{ managers: Recipient[]; residents: Recipient[] }>({
     managers: [],
@@ -411,15 +410,16 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
     }
   }, [rows, expandedId]);
 
-  useEffect(() => {
-    queueMicrotask(() => setReplyDraft(""));
-  }, [expandedId]);
+  const tableRows = useMemo(() => toAdminTableRows(rows, tabId), [rows, tabId]);
 
-  const toggleDetails = (row: InboxMessage) => {
-    const opening = expandedId !== row.id;
-    setExpandedId(opening ? row.id : null);
-    if (opening && row.folder === "inbox" && !row.read) {
-      if (markInboxMessageRead(row.id)) setTick((t) => t + 1);
+  const toggleExpand = (id: string) => {
+    const opening = expandedId !== id;
+    setExpandedId(opening ? id : null);
+    if (opening) {
+      const row = rows.find((r) => r.id === id);
+      if (row && row.folder === "inbox" && !row.read) {
+        if (markInboxMessageRead(row.id)) setTick((t) => t + 1);
+      }
     }
   };
 
@@ -434,12 +434,11 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
 
   const fromOrToHeader = tabId === "sent" ? "To" : "From";
 
-  const expanded = expandedId ? rows.find((r) => r.id === expandedId) : null;
-  const canReply =
-    expanded &&
-    expanded.folder !== "trash" &&
-    roleAllowsThread(expanded.senderRole) &&
-    (expanded.folder === "inbox" || expanded.folder === "sent");
+  const bodyById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const row of rows) m[row.id] = row.body;
+    return m;
+  }, [rows]);
 
   return (
     <ManagerPortalPageShell
@@ -492,189 +491,111 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
         {rows.length === 0 ? (
           <PortalInboxEmptyState title={emptyCopy} />
         ) : (
-          <div className={PORTAL_INBOX_TABLE_WRAP}>
-            <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
-                <thead>
-                  <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>{fromOrToHeader}</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Preview</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
-                    <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => {
-                    const isOpen = expandedId === row.id;
-                    const primaryName =
-                      tabId === "sent" ? row.composeRecipientLabel ?? row.name : row.name;
-                    const primaryEmail =
-                      tabId === "sent" &&
-                      (row.composeAudience === "all" ||
-                        row.composeAudience === "all_managers" ||
-                        row.composeAudience === "all_residents")
-                        ? ""
-                        : row.email;
-                    return (
-                      <Fragment key={row.id}>
-                        <tr
-                          className={`${PORTAL_TABLE_TR_EXPANDABLE} ${isOpen ? "bg-accent/30/30" : ""}`}
-                          onClick={createPortalRowExpandClick(() => toggleDetails(row))}
-                          aria-expanded={isOpen}
-                        >
-                          <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                            <p className="font-medium text-foreground">{primaryName}</p>
-                            {primaryEmail ? <p className="mt-0.5 text-xs text-muted">{primaryEmail}</p> : null}
-                          </td>
-                          <td className={`${PORTAL_TABLE_TD} align-middle text-foreground`}>{row.topic}</td>
-                          <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-muted`}>
-                            <span className="line-clamp-2">{previewSnippet(row.body)}</span>
-                          </td>
-                          <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{formatWhen(row.createdAt)}</td>
-                          <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
-                            <div className="flex flex-wrap justify-start gap-1.5">
-                              {tabId === "trash" ? (
-                                <>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-emerald-200 text-emerald-900 hover:bg-[var(--status-confirmed-bg)]`}
-                                    onClick={() => {
-                                      void restoreInboxMessageFromTrash(row.id).then((ok) => {
-                                        if (ok) {
-                                          showToast("Restored.");
-                                          setExpandedId(null);
-                                          setTick((t) => t + 1);
-                                        } else {
-                                          showToast("Could not restore message.");
-                                        }
-                                      });
-                                    }}
-                                  >
-                                    Restore
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className={`${PORTAL_TABLE_ROW_TOGGLE_CLASS} !border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
-                                    onClick={() => {
-                                      void permanentlyDeleteInboxMessage(row.id).then((ok) => {
-                                        if (ok) {
-                                          showToast("Deleted permanently.");
-                                          setExpandedId(null);
-                                          setTick((t) => t + 1);
-                                        } else {
-                                          showToast("Could not delete message.");
-                                        }
-                                      });
-                                    }}
-                                  >
-                                    Delete forever
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                                  onClick={() => {
-                                    void moveInboxMessageToTrash(row.id).then((ok) => {
-                                      if (ok) {
-                                        showToast("Moved to trash.");
-                                        setExpandedId(null);
-                                        setTick((t) => t + 1);
-                                      } else {
-                                        showToast("Could not move message to trash.");
-                                      }
-                                    });
-                                  }}
-                                >
-                                  Move to trash
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                          <PortalTableExpandCell expanded={isOpen} />
-                        </tr>
-                        {isOpen ? (
-                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
-                              <div className="space-y-3 text-left">
-                                <div>
-                                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Message</p>
-                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted">{row.body}</p>
-                                </div>
-
-                                {row.thread.length > 0 ? (
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                                      Thread
-                                    </p>
-                                    <ul className="mt-2 space-y-2">
-                                      {row.thread.map((t) => (
-                                        <li
-                                          key={t.id}
-                                          className="rounded-lg border border-border bg-card px-3 py-2.5 text-sm"
-                                        >
-                                          <p className="font-semibold text-foreground">{t.authorLabel}</p>
-                                          <p className="mt-0.5 text-xs text-muted">{formatWhen(t.createdAt)}</p>
-                                          <p className="mt-2 whitespace-pre-wrap text-muted">{t.body}</p>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ) : null}
-
-                                {canReply && expanded?.id === row.id ? (
-                                  <div>
-                                    <label
-                                      htmlFor={`reply-${row.id}`}
-                                      className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted"
-                                    >
-                                      Add to thread
-                                    </label>
-                                    <Textarea
-                                      id={`reply-${row.id}`}
-                                      className="mt-2 min-h-[100px]"
-                                      value={replyDraft}
-                                      onChange={(e) => setReplyDraft(e.target.value)}
-                                      placeholder="Write a reply…"
-                                    />
-                                    <Button
-                                      type="button"
-                                      className="mt-2 rounded-full"
-                                      onClick={() => {
-                                        const text = replyDraft.trim();
-                                        if (!text) {
-                                          showToast("Enter a reply.");
-                                          return;
-                                        }
-                                        if (appendThreadReply(row.id, "Axis Admin", text)) {
-                                          showToast("Added to thread.");
-                                          setReplyDraft("");
-                                          setTick((t) => t + 1);
-                                        } else showToast("Could not add reply.");
-                                      }}
-                                    >
-                                      Add to thread
-                                    </Button>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <PortalInboxMessageTable
+            rows={tableRows}
+            primaryPartyHeader={fromOrToHeader}
+            getDetailBody={(row) => bodyById[row.id]}
+            getThreadMessages={(row) => {
+              const message = rows.find((r) => r.id === row.id);
+              if (!message) return [];
+              return [
+                {
+                  id: `${message.id}-root`,
+                  from: message.name,
+                  body: message.body,
+                  at: formatWhen(message.createdAt),
+                },
+                ...message.thread.map((t) => ({
+                  id: t.id,
+                  from: t.authorLabel,
+                  body: t.body,
+                  at: formatWhen(t.createdAt),
+                })),
+              ];
+            }}
+            onReply={
+              tabId === "trash"
+                ? undefined
+                : (row, text) => {
+                    const message = rows.find((r) => r.id === row.id);
+                    if (!message) return;
+                    if (!roleAllowsThread(message.senderRole)) return;
+                    if (message.folder !== "inbox" && message.folder !== "sent") return;
+                    if (appendThreadReply(row.id, "Axis Admin", text)) {
+                      showToast("Added to thread.");
+                      setTick((t) => t + 1);
+                    } else {
+                      showToast("Could not add reply.");
+                    }
+                  }
+            }
+            expandedId={expandedId}
+            onToggleExpand={toggleExpand}
+            renderExtraActions={(row) => {
+              if (tabId === "trash") {
+                return (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={PORTAL_DETAIL_BTN}
+                      onClick={() => {
+                        void restoreInboxMessageFromTrash(row.id).then((ok) => {
+                          if (ok) {
+                            showToast("Restored.");
+                            setExpandedId(null);
+                            setTick((t) => t + 1);
+                          } else {
+                            showToast("Could not restore message.");
+                          }
+                        });
+                      }}
+                    >
+                      Restore
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={`${PORTAL_DETAIL_BTN} !border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)]`}
+                      onClick={() => {
+                        void permanentlyDeleteInboxMessage(row.id).then((ok) => {
+                          if (ok) {
+                            showToast("Deleted permanently.");
+                            setExpandedId(null);
+                            setTick((t) => t + 1);
+                          } else {
+                            showToast("Could not delete message.");
+                          }
+                        });
+                      }}
+                    >
+                      Delete forever
+                    </Button>
+                  </>
+                );
+              }
+              return (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => {
+                    void moveInboxMessageToTrash(row.id).then((ok) => {
+                      if (ok) {
+                        showToast("Moved to trash.");
+                        setExpandedId(null);
+                        setTick((t) => t + 1);
+                      } else {
+                        showToast("Could not move message to trash.");
+                      }
+                    });
+                  }}
+                >
+                  Move to trash
+                </Button>
+              );
+            }}
+          />
         )}
       </div>
     </ManagerPortalPageShell>

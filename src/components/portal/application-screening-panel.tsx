@@ -269,9 +269,7 @@ export function ApplicationScreeningPanel({
       {screeningAllowed && configured && settings?.mode === "off" ? (
         <p className="text-xs text-muted">Screening is off in Applications settings.</p>
       ) : null}
-      {screeningAllowed && !bgConfigured ? (
-        <p className="text-xs text-muted">Add CHECKR_API_KEY to enable background checks.</p>
-      ) : screeningAllowed && !row.application?.consentCredit ? (
+      {screeningAllowed && !row.application?.consentCredit ? (
         <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
       ) : null}
 

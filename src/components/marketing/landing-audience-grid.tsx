@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
 import { RevealOnView } from "@/components/motion/reveal-on-view";
+import { isPublicDemoSurfaceEnabled } from "@/lib/public-demo-access";
 
 const AUDIENCES = [
   {
@@ -38,6 +39,10 @@ const AUDIENCES = [
 ] as const;
 
 export function LandingAudienceGrid() {
+  const audiences = isPublicDemoSurfaceEnabled()
+    ? AUDIENCES
+    : AUDIENCES.filter((a) => a.href !== "/demo");
+
   return (
     <section className="relative overflow-hidden py-14 sm:py-20">
       <ChromeSubstrate variant="quiet" />
@@ -49,7 +54,7 @@ export function LandingAudienceGrid() {
         </RevealOnView>
 
         <div className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 lg:grid-cols-4">
-          {AUDIENCES.map((a, i) => (
+          {audiences.map((a, i) => (
             <RevealOnView key={a.href} delayMs={i * 60} className="h-full">
               <Link
                 href={a.href}

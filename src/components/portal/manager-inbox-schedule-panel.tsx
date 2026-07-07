@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ManagerPortalFilterRow, MANAGER_TABLE_TH, PORTAL_TOOLBAR_SELECT, PortalToolbarSelectWrap } from "@/components/portal/portal-metrics";
 import {
+  INBOX_SCHEDULE_TABLE_COLUMN_WEIGHTS,
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
@@ -13,15 +14,14 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_EXPAND_TH,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalDataTableColGroup,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
+  portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
 import { PortalInboxEmptyState } from "@/components/portal/portal-inbox-ui";
 import { readPortalApiError } from "@/lib/portal-api-error";
 import {
-  PortalInboxSelectionToolbar,
   sendAutomationScheduledMessageNow,
   sendManualScheduledMessageNow,
   useInboxRowSelection,
@@ -50,18 +50,6 @@ import {
   formatScheduledSendAt,
   type ScheduledPaymentMessage,
 } from "@/lib/scheduled-payment-messages";
-
-function messagePreview(body: string, max = 120): string {
-  const text = body.trim().replace(/\s+/g, " ");
-  if (text.length <= max) return text;
-  return `${text.slice(0, max)}…`;
-}
-
-function statusClass(status: string): string {
-  if (status === "sent") return "text-emerald-700";
-  if (status === "cancelled") return "text-muted line-through";
-  return "text-primary";
-}
 
 type ScheduleRow =
   | { kind: "manual"; message: ScheduledInboxMessageRecord }
@@ -288,32 +276,49 @@ export function ManagerInboxSchedulePanel({
 
   return (
     <div className="space-y-4">
-      <PortalInboxSelectionToolbar count={selectedIds.size} onClear={clearSelection}>
-        <Button type="button" variant="primary" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkSendNow()}>
-          Send now
-        </Button>
-        <Button type="button" variant="outline" className="rounded-full" disabled={bulkBusy} onClick={() => void bulkCancelSend()}>
-          Cancel send
-        </Button>
-      </PortalInboxSelectionToolbar>
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <ManagerPortalFilterRow>
         <label className="inline-flex items-center gap-2 text-xs font-medium text-muted">
-            <span className="sr-only">Show messages scheduled within</span>
-            <PortalToolbarSelectWrap>
-              <select
-                className={`${PORTAL_TOOLBAR_SELECT} h-9 text-xs font-semibold`}
-                value={horizonId}
-                onChange={(e) => setHorizonId(e.target.value as InboxScheduleHorizonId)}
-              >
-                {INBOX_SCHEDULE_HORIZON_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </PortalToolbarSelectWrap>
-          </label>
-      </div>
+          <span className="sr-only">Show messages scheduled within</span>
+          <PortalToolbarSelectWrap>
+            <select
+              className={`${PORTAL_TOOLBAR_SELECT} h-9 text-xs font-semibold`}
+              value={horizonId}
+              onChange={(e) => setHorizonId(e.target.value as InboxScheduleHorizonId)}
+            >
+              {INBOX_SCHEDULE_HORIZON_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </PortalToolbarSelectWrap>
+        </label>
+        {selectedIds.size > 0 ? (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="primary"
+              className="rounded-full"
+              disabled={bulkBusy}
+              onClick={() => void bulkSendNow()}
+            >
+              Send now
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              disabled={bulkBusy}
+              onClick={() => void bulkCancelSend()}
+            >
+              Cancel send
+            </Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={clearSelection}>
+              Clear
+            </Button>
+          </div>
+        ) : null}
+      </ManagerPortalFilterRow>
 
       {loading ? (
         <p className="text-sm text-muted">Loading schedule…</p>
@@ -327,14 +332,9 @@ export function ManagerInboxSchedulePanel({
               const isManual = row.kind === "manual";
               const recipientName = isManual ? row.message.recipientName : row.message.residentName;
               const recipientEmail = isManual ? row.message.recipientEmail : row.message.residentEmail;
-              const topic = isManual ? "Inbox message" : row.message.chargeTitle;
-              const topicMeta = isManual ? null : row.message.propertyLabel;
               const subject = row.message.subject;
-              const body = row.message.body;
               const status = row.message.status;
-              const sendAt = row.message.sendAt;
-              const sendLabel = formatScheduledSendAt(sendAt);
-
+              const sendLabel = formatScheduledSendAt(row.message.sendAt);
               const isRowExpanded = expandedRowId === id;
 
               return (
@@ -352,25 +352,12 @@ export function ManagerInboxSchedulePanel({
                       <span className="w-4 shrink-0" />
                     )}
                     <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleRowExpand(row)}>
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="truncate font-semibold text-foreground">{subject}</p>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
-                          {isManual ? "Manual" : "Automated"}
-                        </span>
-                        <PortalTableExpandChevron expanded={isRowExpanded} />
-                      </div>
-                    </div>
-                    <p className="mt-1 truncate text-xs text-muted">
-                      {recipientName} · {recipientEmail}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {[topic, topicMeta].filter(Boolean).join(" · ")}
-                      {!isManual && row.message.dueDateLabel ? ` · Due ${row.message.dueDateLabel}` : ""}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted">{sendLabel}</p>
-                    <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted">{messagePreview(body)}</p>
-                    <p className={`mt-1.5 text-xs font-medium capitalize ${statusClass(status)}`}>{status}</p>
+                      <PortalTableInlineExpand expanded={isRowExpanded} className="font-semibold text-foreground">
+                        {recipientName}
+                      </PortalTableInlineExpand>
+                      <p className="mt-0.5 truncate text-xs text-muted">{recipientEmail}</p>
+                      <p className="mt-1 truncate text-xs text-muted">{sendLabel}</p>
+                      <p className="mt-0.5 truncate text-xs font-medium text-foreground">{subject}</p>
                     </button>
                   </div>
                   {isRowExpanded ? (
@@ -383,105 +370,79 @@ export function ManagerInboxSchedulePanel({
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
               <table className={PORTAL_DATA_TABLE}>
-              <thead>
-                <tr className={PORTAL_TABLE_HEAD_ROW}>
-                  <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
-                    {selectableIds.length > 0 ? (
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-border accent-primary"
-                        checked={allSelected}
-                        onChange={() => toggleSelectAll()}
-                        aria-label="Select all scheduled messages"
-                      />
-                    ) : null}
-                  </th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Send date &amp; time</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Source</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Recipient</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Subject</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Message</th>
-                  <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={PORTAL_TABLE_EXPAND_TH}>
-                    <span className="sr-only">Expand</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const id = rowId(row);
-                  const isManual = row.kind === "manual";
-                  const recipientName = isManual ? row.message.recipientName : row.message.residentName;
-                  const recipientEmail = isManual ? row.message.recipientEmail : row.message.residentEmail;
-                  const topic = isManual ? "Inbox message" : row.message.chargeTitle;
-                  const topicMeta = isManual ? null : row.message.propertyLabel;
-                  const subject = row.message.subject;
-                  const body = row.message.body;
-                  const status = row.message.status;
-                  const sendAt = row.message.sendAt;
-                  const sendLabel = formatScheduledSendAt(sendAt);
-
-                  const isRowExpanded = expandedRowId === id;
-
-                  return (
-                    <Fragment key={id}>
-                      <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() => toggleRowExpand(row))}
-                        aria-expanded={isRowExpanded}
-                      >
-                        <td className={`${PORTAL_TABLE_TD} w-10 align-middle`}>
-                          {status === "scheduled" ? (
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-border accent-primary"
-                              checked={selectedIds.has(id)}
-                              onChange={() => toggleSelected(id)}
-                              onClick={(e) => e.stopPropagation()}
-                              aria-label={`Select ${subject}`}
-                            />
-                          ) : null}
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>{sendLabel}</td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[11px] font-medium text-muted">
-                            {isManual ? "Manual" : "Automated"}
-                          </span>
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <div className="font-medium">{recipientName}</div>
-                          <div className="text-xs text-muted">{recipientEmail}</div>
-                        </td>
-                        <td className={PORTAL_TABLE_TD}>
-                          <div>{topic}</div>
-                          {topicMeta ? <div className="text-xs text-muted">{topicMeta}</div> : null}
-                          {!isManual && row.message.dueDateLabel ? (
-                            <div className="text-xs text-muted">Due {row.message.dueDateLabel}</div>
-                          ) : null}
-                        </td>
-                        <td className={`${PORTAL_TABLE_TD} max-w-[180px]`}>
-                          <div className="truncate font-medium text-foreground">{subject}</div>
-                        </td>
-                        <td className={`${PORTAL_TABLE_TD} max-w-[240px]`}>
-                          <p className="line-clamp-2 text-xs leading-relaxed text-muted">{messagePreview(body)}</p>
-                        </td>
-                        <td className={`${PORTAL_TABLE_TD} capitalize ${statusClass(status)}`}>{status}</td>
-                        <PortalTableExpandCell expanded={isRowExpanded} />
-                      </tr>
-                      {isRowExpanded ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={9} className={PORTAL_TABLE_DETAIL_CELL}>
-                            {renderRowEditPanel(row)}
-                          </td>
-                        </tr>
+                <PortalDataTableColGroup
+                  percents={portalTableColumnPercents(4, INBOX_SCHEDULE_TABLE_COLUMN_WEIGHTS)}
+                />
+                <thead>
+                  <tr className={PORTAL_TABLE_HEAD_ROW}>
+                    <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
+                      {selectableIds.length > 0 ? (
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border accent-primary"
+                          checked={allSelected}
+                          onChange={() => toggleSelectAll()}
+                          aria-label="Select all scheduled messages"
+                        />
                       ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    </th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Recipient</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Send date &amp; time</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Subject</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const id = rowId(row);
+                    const isManual = row.kind === "manual";
+                    const recipientName = isManual ? row.message.recipientName : row.message.residentName;
+                    const recipientEmail = isManual ? row.message.recipientEmail : row.message.residentEmail;
+                    const subject = row.message.subject;
+                    const status = row.message.status;
+                    const sendLabel = formatScheduledSendAt(row.message.sendAt);
+                    const isRowExpanded = expandedRowId === id;
+
+                    return (
+                      <Fragment key={id}>
+                        <tr
+                          className={PORTAL_TABLE_TR_EXPANDABLE}
+                          onClick={createPortalRowExpandClick(() => toggleRowExpand(row))}
+                          aria-expanded={isRowExpanded}
+                        >
+                          <td className={`${PORTAL_TABLE_TD} w-10 align-middle`}>
+                            {status === "scheduled" ? (
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-border accent-primary"
+                                checked={selectedIds.has(id)}
+                                onChange={() => toggleSelected(id)}
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={`Select ${subject}`}
+                              />
+                            ) : null}
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <PortalTableInlineExpand expanded={isRowExpanded} className="font-medium text-foreground">
+                              {recipientName}
+                            </PortalTableInlineExpand>
+                            <div className="text-xs text-muted">{recipientEmail}</div>
+                          </td>
+                          <td className={`${PORTAL_TABLE_TD} text-muted`}>{sendLabel}</td>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{subject}</td>
+                        </tr>
+                        {isRowExpanded ? (
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                              {renderRowEditPanel(row)}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}

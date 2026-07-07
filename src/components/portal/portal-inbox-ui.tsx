@@ -7,8 +7,12 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE, 
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableColGroup,
+  portalTableColumnPercents,
+  PORTAL_TABLE_INBOX_COLUMN_WEIGHTS,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
@@ -18,9 +22,7 @@ import {
   PORTAL_TABLE_TR,
   PORTAL_TABLE_TR_EXPANDABLE,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_EXPAND_TH,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   PortalResponsiveDataView,
   PortalTableDetailActions,
   createPortalRowExpandClick,
@@ -165,13 +167,14 @@ export type PortalInboxTableRow = {
   id: string;
   name: string;
   email: string;
-  topic: string;
-  preview: string;
+  subject: string;
   whenLabel: string;
   read: boolean;
   /** When false, row cannot be bulk-selected (e.g. already sent/cancelled). */
   selectable?: boolean;
 };
+
+export type PortalInboxTableLayout = "default" | "schedule";
 
 export type PortalInboxSelectionProps = {
   selectedIds: Set<string>;
@@ -191,6 +194,7 @@ export function PortalInboxMessageTable({
   onToggleExpand,
   renderExtraActions,
   primaryPartyHeader = "From",
+  layout = "default",
   selection,
 }: {
   rows: PortalInboxTableRow[];
@@ -203,7 +207,9 @@ export function PortalInboxMessageTable({
   onToggleExpand?: (id: string) => void;
   /** Trash / restore / delete — shown in the expanded row only (with Mark read, Reply, Hide). */
   renderExtraActions?: (row: PortalInboxTableRow) => ReactNode;
-  primaryPartyHeader?: "From" | "To";
+  primaryPartyHeader?: "From" | "To" | "Recipient";
+  /** Schedule tab uses Recipient + Send date & time + Subject (no trailing When). */
+  layout?: PortalInboxTableLayout;
   selection?: PortalInboxSelectionProps;
 }) {
   const { showToast } = useAppUi();
@@ -277,8 +283,13 @@ export function PortalInboxMessageTable({
   };
 
   const showSelection = Boolean(selection && selection.selectableCount > 0);
-  const baseColCount = onToggleExpand ? 5 : 5;
-  const detailColSpan = baseColCount + (showSelection ? 1 : 0);
+  const dataColCount = 3;
+  const detailColSpan = dataColCount + (showSelection ? 1 : 0);
+  const isScheduleLayout = layout === "schedule";
+  const partyHeader =
+    primaryPartyHeader === "Recipient" || isScheduleLayout ? "Recipient" : primaryPartyHeader;
+  const middleHeader = isScheduleLayout ? "Send date & time" : "Subject";
+  const trailingHeader = isScheduleLayout ? "Subject" : "When";
 
   const renderRowCheckbox = (row: PortalInboxTableRow, className = "") => {
     if (!selection || row.selectable === false) return null;
@@ -289,7 +300,7 @@ export function PortalInboxMessageTable({
         checked={selection.selectedIds.has(row.id)}
         onChange={() => selection.onToggleSelected(row.id)}
         onClick={(e) => e.stopPropagation()}
-        aria-label={`Select message ${row.topic}`}
+        aria-label={`Select message ${row.subject}`}
       />
     );
   };
@@ -313,21 +324,35 @@ export function PortalInboxMessageTable({
                 onClick={() => (rowExpandable ? onToggleExpand?.(row.id) : undefined)}
                 disabled={!rowExpandable}
               >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className={`truncate font-semibold text-foreground ${!row.read ? "" : "text-foreground/90"}`}>
-                    {!row.read ? "● " : ""}
-                    {row.name}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs font-medium text-foreground">{row.topic}</p>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted">{row.preview}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    {rowExpandable ? (
+                      <PortalTableInlineExpand
+                        expanded={isExpanded}
+                        className={`truncate font-semibold text-foreground ${!row.read ? "" : "text-foreground/90"}`}
+                      >
+                        {!row.read ? "● " : ""}
+                        {row.name}
+                      </PortalTableInlineExpand>
+                    ) : (
+                      <p className={`truncate font-semibold text-foreground ${!row.read ? "" : "text-foreground/90"}`}>
+                        {!row.read ? "● " : ""}
+                        {row.name}
+                      </p>
+                    )}
+                    {row.email ? <p className="mt-0.5 truncate text-xs text-muted">{row.email}</p> : null}
+                    {isScheduleLayout ? (
+                      <p className="mt-1 truncate text-xs text-muted">{row.whenLabel}</p>
+                    ) : null}
+                    <p className={`truncate text-xs font-medium text-foreground ${isScheduleLayout ? "mt-1" : "mt-0.5"}`}>
+                      {row.subject}
+                    </p>
+                  </div>
+                  {!isScheduleLayout ? (
+                    <p className="shrink-0 text-[11px] text-muted">{row.whenLabel}</p>
+                  ) : null}
                 </div>
-                <p className="shrink-0 text-[11px] text-muted">{row.whenLabel}</p>
-                {rowExpandable ? (
-                  <PortalTableExpandChevron expanded={isExpanded} />
-                ) : null}
-              </div>
-            </button>
+              </button>
             </div>
             {!rowExpandable && (hasMarkRead || extra) ? (
               <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
@@ -351,7 +376,14 @@ export function PortalInboxMessageTable({
   const desktopTable = (
     <div className={PORTAL_INBOX_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="w-full table-fixed border-collapse text-left text-sm">
+        <table className={PORTAL_DATA_TABLE}>
+          <PortalDataTableColGroup
+            percents={[
+              ...(showSelection
+                ? portalTableColumnPercents(dataColCount, [3, ...PORTAL_TABLE_INBOX_COLUMN_WEIGHTS])
+                : portalTableColumnPercents(dataColCount, PORTAL_TABLE_INBOX_COLUMN_WEIGHTS)),
+            ]}
+          />
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               {showSelection ? (
@@ -365,18 +397,9 @@ export function PortalInboxMessageTable({
                   />
                 </th>
               ) : null}
-              <th className={`${MANAGER_TABLE_TH} text-left`}>{primaryPartyHeader}</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Topic</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Preview</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
-              {onToggleExpand ? (
-                <th className={PORTAL_TABLE_EXPAND_TH}>
-                  <span className="sr-only">Expand</span>
-                </th>
-              ) : null}
-              {!onToggleExpand ? (
-                <th className={`${MANAGER_TABLE_TH} text-right`}>Actions</th>
-              ) : null}
+              <th className={`${MANAGER_TABLE_TH} text-left`}>{partyHeader}</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>{middleHeader}</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>{trailingHeader}</th>
             </tr>
           </thead>
           <tbody>
@@ -384,9 +407,7 @@ export function PortalInboxMessageTable({
               const detailText = getDetailBody?.(row);
               const rowExpandable = Boolean(onToggleExpand);
               const isExpanded = expandedId === row.id && rowExpandable;
-              const hasMarkRead = Boolean(!row.read && onMarkRead);
               const extra = renderExtraActions?.(row);
-              const fallbackSummaryActions = !rowExpandable && (hasMarkRead || extra);
 
               return (
                 <Fragment key={row.id}>
@@ -403,36 +424,21 @@ export function PortalInboxMessageTable({
                       <td className={`${PORTAL_TABLE_TD} w-10 align-middle`}>{renderRowCheckbox(row)}</td>
                     ) : null}
                     <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                      <p className="font-medium text-foreground">{row.name}</p>
-                      <p className="mt-0.5 text-xs text-muted">{row.email}</p>
+                      {rowExpandable ? (
+                        <PortalTableInlineExpand expanded={isExpanded} className="font-medium text-foreground">
+                          {row.name}
+                        </PortalTableInlineExpand>
+                      ) : (
+                        <p className="font-medium text-foreground">{row.name}</p>
+                      )}
+                      {row.email ? <p className="mt-0.5 text-xs text-muted">{row.email}</p> : null}
                     </td>
-                    <td className={`${PORTAL_TABLE_TD} align-middle text-foreground`}>{row.topic}</td>
-                    <td className={`max-w-[220px] ${PORTAL_TABLE_TD} align-middle text-muted`}>
-                      <span className="line-clamp-2">{row.preview}</span>
+                    <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>
+                      {isScheduleLayout ? row.whenLabel : row.subject}
                     </td>
-                    <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>{row.whenLabel}</td>
-                    {rowExpandable ? <PortalTableExpandCell expanded={isExpanded} /> : null}
-                    {!rowExpandable ? (
-                      <td className={`${PORTAL_TABLE_TD} text-right align-middle`}>
-                        {fallbackSummaryActions ? (
-                          <div className="flex flex-wrap items-center justify-start gap-1.5">
-                            {hasMarkRead ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className={PORTAL_TABLE_ROW_TOGGLE_CLASS}
-                                onClick={() => onMarkRead?.(row.id)}
-                              >
-                                Mark read
-                              </Button>
-                            ) : null}
-                            {extra}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted/70">—</span>
-                        )}
-                      </td>
-                    ) : null}
+                    <td className={`${PORTAL_TABLE_TD} align-middle ${isScheduleLayout ? "font-medium text-foreground" : "text-muted"}`}>
+                      {isScheduleLayout ? row.subject : row.whenLabel}
+                    </td>
                   </tr>
                   {isExpanded ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>

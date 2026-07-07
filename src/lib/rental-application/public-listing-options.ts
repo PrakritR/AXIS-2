@@ -2,6 +2,8 @@ import type { PropertySearchOption } from "@/components/marketing/property-searc
 import { getListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
 import { isPropertyActiveForLeads, readExtraListingsPublic } from "@/lib/demo-property-pipeline";
+import { isProductionPublicSite } from "@/lib/public-demo-access";
+import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
 
 function listingThumbnailUrl(property: MockProperty): string | undefined {
   return getListingRichContent(property).heroHousePhotoUrls?.[0];
@@ -22,5 +24,8 @@ export function publicListingSearchOptions(properties: MockProperty[]): Property
 }
 
 export function readPublicListingSearchOptions(): PropertySearchOption[] {
-  return publicListingSearchOptions(readExtraListingsPublic());
+  const listings = filterSandboxFromPublicCatalog(readExtraListingsPublic(), {
+    production: isProductionPublicSite(),
+  });
+  return publicListingSearchOptions(listings);
 }

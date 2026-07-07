@@ -14,10 +14,16 @@ import {
   saveManagerVendorCategorySettings,
   syncManagerVendorsFromServer,
   upsertManagerVendor,
+  setManagerVendorPriority,
   vendorsMatchingTrade,
   type ManagerVendorRow,
 } from "@/lib/manager-vendors-storage";
-import { searchAxisVendorCatalog, type AxisCatalogVendor } from "@/lib/axis-vendor-catalog";
+import {
+  managerOwnsCatalogVendor,
+  searchAxisVendorCatalog,
+  vendorCatalogEntryMatchesQuery,
+  type AxisCatalogVendor,
+} from "@/lib/axis-vendor-catalog";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
 
 type VendorDraft = {
@@ -26,6 +32,8 @@ type VendorDraft = {
   phone: string;
   email: string;
   notes: string;
+  sharedWithManagers: boolean;
+  vendorPriority: "" | "primary" | "secondary" | "backup";
 };
 
 const EMPTY_DRAFT: VendorDraft = {
@@ -34,14 +42,18 @@ const EMPTY_DRAFT: VendorDraft = {
   phone: "",
   email: "",
   notes: "",
+  sharedWithManagers: false,
+  vendorPriority: "",
 };
 
 function VendorManualForm({
   draft,
   setDraft,
+  formIdPrefix,
 }: {
   draft: VendorDraft;
   setDraft: (d: VendorDraft) => void;
+  formIdPrefix: string;
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -70,6 +82,55 @@ function VendorManualForm({
       <div className="sm:col-span-2">
         <label className="text-xs font-semibold text-muted">Notes</label>
         <Input className="mt-1" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
+      </div>
+      <fieldset className="space-y-2 sm:col-span-2">
+        <legend className="text-xs font-semibold text-muted">Priority for this trade</legend>
+        {(
+          [
+            { id: "primary", label: "Primary" },
+            { id: "secondary", label: "Secondary" },
+            { id: "backup", label: "Backup" },
+          ] as const
+        ).map((opt) => (
+          <div key={opt.id} className="flex items-center gap-2">
+            <input
+              id={`${formIdPrefix}-priority-${opt.id}`}
+              type="radio"
+              name={`${formIdPrefix}-vendor-priority`}
+              checked={draft.vendorPriority === opt.id}
+              onChange={() => setDraft({ ...draft, vendorPriority: opt.id })}
+            />
+            <label htmlFor={`${formIdPrefix}-priority-${opt.id}`} className="text-sm text-foreground">
+              {opt.label}
+            </label>
+          </div>
+        ))}
+        <div className="flex items-center gap-2">
+          <input
+            id={`${formIdPrefix}-priority-none`}
+            type="radio"
+            name={`${formIdPrefix}-vendor-priority`}
+            checked={draft.vendorPriority === ""}
+            onChange={() => setDraft({ ...draft, vendorPriority: "" })}
+          />
+          <label htmlFor={`${formIdPrefix}-priority-none`} className="text-sm text-foreground">
+            No priority
+          </label>
+        </div>
+      </fieldset>
+      <div className="flex items-start gap-2 sm:col-span-2">
+        <input
+          id={`${formIdPrefix}-shared`}
+          type="checkbox"
+          checked={draft.sharedWithManagers}
+          onChange={(e) => setDraft({ ...draft, sharedWithManagers: e.target.checked })}
+        />
+        <label htmlFor={`${formIdPrefix}-shared`} className="text-sm leading-6 text-foreground">
+          Share with others
+          <span className="mt-0.5 block text-xs text-muted">
+            Other property managers on Axis can view and assign this vendor.
+          </span>
+        </label>
       </div>
     </div>
   );
@@ -113,7 +174,7 @@ export function ManagerVendorSettingsModal({
     if (!open) return;
     let cancelled = false;
     setCatalogLoading(true);
-    void fetch(`/api/portal-vendors?catalog=1&q=${encodeURIComponent(catalogQuery)}`, { credentials: "include" })
+    void fetch("/api/portal-vendors?catalog=1", { credentials: "include" })
       .then(async (res) => {
         if (!res.ok) return [];
         const body = (await res.json()) as { rows?: ManagerVendorRow[] };
@@ -131,14 +192,32 @@ export function ManagerVendorSettingsModal({
     return () => {
       cancelled = true;
     };
-  }, [open, catalogQuery]);
+  }, [open]);
 
   const ownVendors = useMemo(() => {
     void tick;
     return readOwnManagerVendorRows(userId);
   }, [tick, userId]);
 
-  const curatedCatalog = useMemo(() => searchAxisVendorCatalog(catalogQuery), [catalogQuery]);
+  const curatedCatalogVisible = useMemo(
+    () =>
+      searchAxisVendorCatalog(catalogQuery).filter(
+        (row) => !managerOwnsCatalogVendor(ownVendors, row.name, row.trade),
+      ),
+    [catalogQuery, ownVendors],
+  );
+
+  const sharedCatalogVisible = useMemo(
+    () =>
+      sharedCatalog.filter(
+        (row) =>
+          vendorCatalogEntryMatchesQuery(
+            { name: row.name, trade: row.trade, email: row.email, phone: row.phone, notes: row.notes },
+            catalogQuery,
+          ) && !managerOwnsCatalogVendor(ownVendors, row.name, row.trade),
+      ),
+    [sharedCatalog, catalogQuery, ownVendors],
+  );
 
   const saveManualVendor = useCallback(() => {
     const name = draft.name.trim();
@@ -159,12 +238,16 @@ export function ManagerVendorSettingsModal({
         email: draft.email.trim(),
         notes: draft.notes.trim(),
         active: true,
-        sharedWithManagers: false,
+        sharedWithManagers: draft.sharedWithManagers,
+        vendorPriority: draft.vendorPriority || undefined,
         createdAt: now,
         updatedAt: now,
       },
       userId,
     );
+    if (draft.vendorPriority === "primary") {
+      setManagerVendorPriority(id, "primary", userId);
+    }
     setDraft({ ...EMPTY_DRAFT, trade: draft.trade });
     showToast("Vendor added to your account.");
   }, [draft, showToast, userId]);
@@ -217,9 +300,9 @@ export function ManagerVendorSettingsModal({
             <p className="font-semibold text-foreground">Add vendor manually</p>
             <p className="mt-1 text-xs text-muted">Create a vendor on your account for work orders and outgoing payments.</p>
           </div>
-          <VendorManualForm draft={draft} setDraft={setDraft} />
-          <Button type="button" className="rounded-full" data-attr="vendor-settings-save-manual" onClick={saveManualVendor}>
-            Save vendor
+          <VendorManualForm draft={draft} setDraft={setDraft} formIdPrefix="vendor-settings-manual" />
+          <Button type="button" className="rounded-full" data-attr="vendor-settings-add-manual" onClick={saveManualVendor}>
+            Add vendor
           </Button>
         </section>
 
@@ -234,7 +317,7 @@ export function ManagerVendorSettingsModal({
             {VENDOR_TRADE_OPTIONS.map((trade) => {
               const matches = vendorsMatchingTrade(ownVendors, trade);
               return (
-                <li key={trade} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-center">
+                <li key={trade} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:items-center">
                   <span className="font-medium text-foreground">{trade}</span>
                   <Select
                     value={defaults[trade] ?? ""}
@@ -255,14 +338,6 @@ export function ManagerVendorSettingsModal({
                       </option>
                     ))}
                   </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-8 rounded-full text-xs"
-                    onClick={() => setDraft({ ...EMPTY_DRAFT, trade })}
-                  >
-                    Add for category
-                  </Button>
                 </li>
               );
             })}
@@ -282,12 +357,12 @@ export function ManagerVendorSettingsModal({
           <Input
             value={catalogQuery}
             onChange={(e) => setCatalogQuery(e.target.value)}
-            placeholder="Search by name, trade, or city…"
+            placeholder="Search by name, trade, city, or ZIP…"
             data-attr="vendor-catalog-search"
           />
           <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
             {catalogLoading ? <p className="text-xs text-muted">Searching catalog…</p> : null}
-            {sharedCatalog.map((row) => (
+            {sharedCatalogVisible.map((row) => (
               <div
                 key={`shared-${row.id}`}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2"
@@ -305,7 +380,7 @@ export function ManagerVendorSettingsModal({
                 </Button>
               </div>
             ))}
-            {curatedCatalog.map((row) => (
+            {curatedCatalogVisible.map((row) => (
               <div
                 key={row.catalogId}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2"
@@ -313,7 +388,7 @@ export function ManagerVendorSettingsModal({
                 <div>
                   <p className="font-medium text-foreground">{row.name}</p>
                   <p className="text-xs text-muted">
-                    {row.trade} · {row.city}
+                    {row.trade} · {row.city} · {row.zip}
                   </p>
                   <p className="text-[11px] text-muted">Axis catalog</p>
                 </div>
@@ -322,7 +397,7 @@ export function ManagerVendorSettingsModal({
                 </Button>
               </div>
             ))}
-            {!catalogLoading && sharedCatalog.length === 0 && curatedCatalog.length === 0 ? (
+            {!catalogLoading && sharedCatalogVisible.length === 0 && curatedCatalogVisible.length === 0 ? (
               <p className="text-xs text-muted">No catalog matches yet.</p>
             ) : null}
           </div>

@@ -16,15 +16,18 @@ async function sessionUser() {
 }
 
 function normalizeRow(row: ManagerVendorRow, managerUserId: string): ManagerVendorRow {
+  // Tolerate partial/legacy rows missing optional string fields — a single
+  // vendor row without `trade`/`phone`/`email`/`notes` must never 500 the
+  // whole list (shared rows from other managers can be sparse).
   return {
     ...row,
-    id: row.id.trim(),
+    id: (row.id ?? "").trim(),
     managerUserId,
-    name: row.name.trim(),
-    trade: row.trade.trim(),
-    phone: row.phone.trim(),
-    email: row.email.trim().toLowerCase(),
-    notes: row.notes.trim(),
+    name: (row.name ?? "").trim(),
+    trade: (row.trade ?? "").trim(),
+    phone: (row.phone ?? "").trim(),
+    email: (row.email ?? "").trim().toLowerCase(),
+    notes: (row.notes ?? "").trim(),
     active: row.active !== false,
     sharedWithManagers: row.sharedWithManagers === true,
     propertyIds: Array.isArray(row.propertyIds) ? row.propertyIds : undefined,

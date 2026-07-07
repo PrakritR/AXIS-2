@@ -13,7 +13,7 @@ import {
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
   BUSINESS_MAX_PROPERTIES,
@@ -37,6 +37,7 @@ import {
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
   normalizeCustomApplicationFields,
+  normalizeCustomApplicationFieldsForEditor,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
   duplicateRoomEntry,
@@ -214,6 +215,10 @@ function roomFloorSelectValueFromOptions(floor: string, options: readonly { id: 
   if (hit) return hit.id;
   if (!floor.trim()) return "";
   return ROOM_FLOOR_LEVEL_CUSTOM;
+}
+
+function uniqueRoomFloorLabels(rooms: { floor: string }[]): string[] {
+  return sortUniqueFloorLabels(rooms.map((r) => r.floor));
 }
 
 const LOCATION_LEVEL_CUSTOM = "__location_custom__";
@@ -788,10 +793,19 @@ async function uploadSubmissionMedia(
     return uploadDataUrl(url);
   }
 
-  const [housePhotos, houseVideo, leaseTemplateDocUrl, rooms, bathrooms, sharedSpaces] = await Promise.all([
+  const [housePhotos, houseVideo, leaseTemplateDocUrl, propertyFloorPlan, floorPlanByLabel, rooms, bathrooms, sharedSpaces] = await Promise.all([
     uploadAll(sub.housePhotoDataUrls ?? []),
     uploadOne(sub.houseVideoDataUrl),
     uploadOne(sub.leaseTemplateDocUrl),
+    uploadOne(sub.propertyFloorPlanDataUrl),
+    (async () => {
+      const entries = Object.entries(sub.floorPlanByLabel ?? {});
+      if (entries.length === 0) return {} as Record<string, string>;
+      const uploaded = await Promise.all(
+        entries.map(async ([label, url]) => [label, await uploadDataUrl(url)] as const),
+      );
+      return Object.fromEntries(uploaded) as Record<string, string>;
+    })(),
     Promise.all(
       sub.rooms.map(async (r) => ({
         ...r,
@@ -820,6 +834,8 @@ async function uploadSubmissionMedia(
     housePhotoDataUrls: housePhotos,
     houseVideoDataUrl: houseVideo,
     leaseTemplateDocUrl,
+    propertyFloorPlanDataUrl: propertyFloorPlan,
+    floorPlanByLabel: Object.keys(floorPlanByLabel).length > 0 ? floorPlanByLabel : undefined,
     rooms,
     bathrooms,
     sharedSpaces,
@@ -1007,6 +1023,7 @@ export function ManagerAddListingForm({
   );
   const locationLevelOptions = useMemo(() => locationOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
   const roomFloorOptions = useMemo(() => roomFloorOptionsFromStories(sub.listingStoriesId), [sub.listingStoriesId]);
+  const roomFloorLabelsForPlans = useMemo(() => uniqueRoomFloorLabels(sub.rooms), [sub.rooms]);
 
   const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
   const lastStepIndex = LISTING_STEP_COUNT - 1;
@@ -1180,7 +1197,7 @@ export function ManagerAddListingForm({
   };
 
   // ── Application step (all questions — built-in + custom) ─────────────────
-  const applicationFields = resolveListingApplicationFields(sub, normalizeCustomApplicationFields);
+  const applicationFields = resolveListingApplicationFields(sub, normalizeCustomApplicationFieldsForEditor);
 
   const patchApplicationQuestion = (field: ResolvedApplicationField, patch: Partial<ManagerCustomApplicationField>) => {
     clearListingFieldError(listingCustomQuestionErrorKey(field.id));
@@ -1189,10 +1206,12 @@ export function ManagerAddListingForm({
   };
 
   const addCustomQuestion = (section: string) => {
+    const field = emptyCustomApplicationField(section);
     expandListingItem(listingItemKey("app-section", section));
+    expandListingItem(listingCustomQuestionErrorKey(field.id));
     setSub((s) => ({
       ...s,
-      ...addListingApplicationField(s, emptyCustomApplicationField(section)),
+      ...addListingApplicationField(s, field),
     }));
   };
 
@@ -1827,6 +1846,59 @@ export function ManagerAddListingForm({
       ...s,
       housePhotoDataUrls: (s.housePhotoDataUrls ?? []).filter((_, j) => j !== photoIndex),
     }));
+  };
+
+  const onPickPropertyFloorPlan = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Images only for floor plans.");
+      return;
+    }
+    try {
+      const url = await fileToDataUrl(file, MAX_IMG_BYTES);
+      if (!url) {
+        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${file.name}`);
+        return;
+      }
+      setSub((s) => ({ ...s, propertyFloorPlanDataUrl: url }));
+    } catch {
+      showToast("Could not process image. Please try a different file.");
+    }
+  };
+
+  const clearPropertyFloorPlan = () => {
+    setSub((s) => ({ ...s, propertyFloorPlanDataUrl: null }));
+  };
+
+  const onPickFloorPlanForLabel = async (floorLabel: string, files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Images only for floor plans.");
+      return;
+    }
+    try {
+      const url = await fileToDataUrl(file, MAX_IMG_BYTES);
+      if (!url) {
+        showToast(`Image too large (max ${Math.round(MAX_IMG_BYTES / 1024 / 1024)} MB): ${file.name}`);
+        return;
+      }
+      setSub((s) => ({
+        ...s,
+        floorPlanByLabel: { ...(s.floorPlanByLabel ?? {}), [floorLabel]: url },
+      }));
+    } catch {
+      showToast("Could not process image. Please try a different file.");
+    }
+  };
+
+  const removeFloorPlanForLabel = (floorLabel: string) => {
+    setSub((s) => {
+      const next = { ...(s.floorPlanByLabel ?? {}) };
+      delete next[floorLabel];
+      return { ...s, floorPlanByLabel: Object.keys(next).length > 0 ? next : undefined };
+    });
   };
 
   const clearRoomVideo = (roomIndex: number) => {
@@ -3355,7 +3427,8 @@ export function ManagerAddListingForm({
               {stepFieldErrors.rooms ? (
                 <p className="text-xs font-medium text-red-600">{stepFieldErrors.rooms}</p>
               ) : null}
-              {sub.rooms.map((room, i) => {
+              {sortRoomIndicesByFloor(sub.rooms).map((i) => {
+                const room = sub.rooms[i]!;
                 const isUnfurnished = room.furnishing.trim().toLowerCase() === "unfurnished";
                 const checkedFurniture = parseFurnitureSet(room.furnishing);
                 const roomNameKey = listingRoomNameKey(room.id);
@@ -3623,6 +3696,78 @@ export function ManagerAddListingForm({
                 );
               })}
             </div>
+
+            <ListingSubsection
+              title="Floor plans"
+              description="Upload a layout image for each floor / level (or one property-wide plan). Residents open it from Details on the public listing."
+            >
+              <div className="mt-3 space-y-4">
+                <div className="rounded-xl border border-border bg-accent/20 p-4">
+                  <FieldLabel hint="Used when you do not upload separate plans per floor.">
+                    Property-wide floor plan
+                  </FieldLabel>
+                  <MediaPickTrigger accept="image/*" onFiles={(files) => { void onPickPropertyFloorPlan(files); }}>
+                    {sub.propertyFloorPlanDataUrl ? "Replace property floor plan" : "Upload property floor plan"}
+                  </MediaPickTrigger>
+                  {sub.propertyFloorPlanDataUrl ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="relative max-w-md overflow-hidden rounded-lg border border-border bg-accent/30">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sub.propertyFloorPlanDataUrl} alt="" className="max-h-56 w-full object-contain" />
+                      </div>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-rose-600 hover:underline"
+                        onClick={clearPropertyFloorPlan}
+                      >
+                        Remove property floor plan
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-muted">Optional — JPG or PNG, up to 10 MB.</p>
+                  )}
+                </div>
+
+                {roomFloorLabelsForPlans.length > 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-foreground">Per-floor plans</p>
+                    {roomFloorLabelsForPlans.map((floorLabel) => {
+                      const planUrl = sub.floorPlanByLabel?.[floorLabel];
+                      return (
+                        <div key={floorLabel} className="rounded-xl border border-border bg-accent/20 p-4">
+                          <FieldLabel hint={`Floor plan for bedrooms on ${floorLabel}.`}>{floorLabel}</FieldLabel>
+                          <MediaPickTrigger
+                            accept="image/*"
+                            onFiles={(files) => { void onPickFloorPlanForLabel(floorLabel, files); }}
+                          >
+                            {planUrl ? "Replace floor plan" : "Upload floor plan"}
+                          </MediaPickTrigger>
+                          {planUrl ? (
+                            <div className="mt-3 space-y-2">
+                              <div className="relative max-w-md overflow-hidden rounded-lg border border-border bg-accent/30">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={planUrl} alt="" className="max-h-56 w-full object-contain" />
+                              </div>
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-rose-600 hover:underline"
+                                onClick={() => removeFloorPlanForLabel(floorLabel)}
+                              >
+                                Remove floor plan
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-[11px] text-muted">Recommended before you go live.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">Set a floor / level on each room above to upload per-floor plans.</p>
+                )}
+              </div>
+            </ListingSubsection>
           </FormSection>
           ) : null}
 

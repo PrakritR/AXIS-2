@@ -1,8 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
@@ -12,12 +11,9 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { MANAGER_TABLE_TH, ManagerPortalPageShell, ManagerPortalStatusPills } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/input";
@@ -295,16 +291,13 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -328,7 +321,9 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
                               {roleGroupLabelForFeedback(row.reporterRole)} · {row.reporterEmail}
                             </p>
                           </td>
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                            <PortalTableInlineExpand expanded={open}>{row.title}</PortalTableInlineExpand>
+                          </td>
                           <td className={PORTAL_TABLE_TD}>
                             <span
                               className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
@@ -336,11 +331,10 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
                               {row.status}
                             </span>
                           </td>
-                          <PortalTableExpandCell expanded={open} />
                         </tr>
                         {open ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowDetail(row)}
                             </td>
                           </tr>

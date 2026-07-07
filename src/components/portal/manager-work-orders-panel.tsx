@@ -7,24 +7,19 @@ import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import type { DemoManagerWorkOrderRow, ManagerWorkOrderBucket } from "@/data/demo-portal";
 import {
   findWorkOrderCharge,
@@ -32,6 +27,7 @@ import {
   HOUSEHOLD_CHARGES_EVENT,
   parseMoneyAmount,
   recordWorkOrderResidentCharge,
+  updateHouseholdChargeAmount,
 } from "@/lib/household-charges";
 import { deleteManagerWorkOrderRow, updateManagerWorkOrder } from "@/lib/manager-work-orders-storage";
 import {
@@ -44,6 +40,7 @@ import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-docu
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
 import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
+import { isWorkOrderCostLockedByVendor } from "@/lib/work-order-cost-lock";
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
@@ -465,12 +462,11 @@ export function ManagerWorkOrdersPanel({
   };
 
   /** Auto-save the Cost field and, once a resident is linked and the amount warrants it,
-   * auto-create the payment line — replaces the old separate "Save cost" / "Create payment
-   * line" buttons. Fires on Cost blur and on Payment-status change; a no-op once a payment
-   * line already exists (cost is locked at that point). */
+   * auto-create or update the payment line. Locked only when a vendor fixed the price
+   * (set-vendor-price or accepted bid). */
   const commitBilling = useCallback(
     (row: DemoManagerWorkOrderRow, overrides?: Partial<BillDraft>) => {
-      if (findWorkOrderCharge(row.id)) return;
+      if (isWorkOrderCostLockedByVendor(row)) return;
       const draft = { ...(billDraftById[row.id] ?? defaultBillDraft(row)), ...overrides };
       const trimmed = draft.cost.trim();
       if (!trimmed) {
@@ -480,6 +476,14 @@ export function ManagerWorkOrdersPanel({
       const amt = parseMoneyAmount(trimmed);
       if (!Number.isFinite(amt) || amt < 0) return;
       const residentEmail = (row.residentEmail ?? "").trim();
+      const existing = findWorkOrderCharge(row.id);
+      if (existing) {
+        if (updateHouseholdChargeAmount(existing.id, amt, effectiveManagerId)) {
+          updateManagerWorkOrder(row.id, (r) => ({ ...r, cost: `$${amt.toFixed(2)}` }));
+          setHcTick((n) => n + 1);
+        }
+        return;
+      }
       if (amt > 0 && residentEmail.includes("@")) {
         const created = recordWorkOrderResidentCharge({
           managerUserId: effectiveManagerId,
@@ -532,6 +536,7 @@ export function ManagerWorkOrdersPanel({
         vendorId: undefined,
         vendorName: undefined,
         vendorAssignedAt: undefined,
+        vendorPriceSetAt: undefined,
         selfAssigned: false,
       }));
       showToast("Vendor unassigned.");
@@ -640,7 +645,7 @@ export function ManagerWorkOrdersPanel({
                               inputMode="decimal"
                               placeholder="$0"
                               value={draft.cost}
-                              disabled={!!linkedCharge}
+                              disabled={isWorkOrderCostLockedByVendor(row)}
                               data-attr="work-order-cost-input"
                               onChange={(e) =>
                                 setBillDraftById((prev) => ({
@@ -675,11 +680,7 @@ export function ManagerWorkOrdersPanel({
                                 <option value="paid">Paid</option>
                               </Select>
                             </label>
-                          ) : (
-                            <span className="pb-1.5 text-xs text-muted">
-                              {linkedCharge.status === "paid" ? "Paid" : "Pending"} · {linkedCharge.amountLabel}
-                            </span>
-                          )}
+                          ) : null}
                           {row.bucket !== "completed" ? (
                             <label className="flex flex-col gap-1 text-[11px] font-medium text-muted">
                               Visit date
@@ -850,7 +851,7 @@ export function ManagerWorkOrdersPanel({
                               type="button"
                               variant="primary"
                               data-attr="work-order-approve-pay"
-                              className={`${PORTAL_DETAIL_BTN_PRIMARY} rounded-full`}
+                              className={`${PORTAL_DETAIL_BTN} rounded-full`}
                               disabled={approvePayBusy}
                               onClick={() => approvePay(row)}
                             >
@@ -895,12 +896,14 @@ export function ManagerWorkOrdersPanel({
             <div key={`wo-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
               <button
                 type="button"
-                className="flex w-full items-center justify-between gap-2 text-left"
+                className="flex w-full gap-2 text-left"
                 onClick={() => (isExpanded ? setExpandedId(null) : openExpand(row))}
                 aria-expanded={isExpanded}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-foreground">{row.title}</p>
+                  <PortalTableInlineExpand expanded={isExpanded} className="font-semibold text-foreground">
+                    <span className="truncate">{row.title}</span>
+                  </PortalTableInlineExpand>
                   <p className="mt-0.5 truncate text-xs text-muted">
                     {[row.propertyName, row.unit].filter(Boolean).join(" · ")}
                   </p>
@@ -920,7 +923,6 @@ export function ManagerWorkOrdersPanel({
                     ) : null}
                   </div>
                 </div>
-                <PortalTableExpandChevron expanded={isExpanded} />
               </button>
               {isExpanded ? (
                 <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div>
@@ -931,16 +933,14 @@ export function ManagerWorkOrdersPanel({
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full table-fixed border-collapse text-left text-sm">
+          <table className={PORTAL_DATA_TABLE}>
+            <PortalDataTableColGroup percents={portalTableColumnPercents(4)} />
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
-                <th className={PORTAL_TABLE_EXPAND_TH}>
-                  <span className="sr-only">Expand</span>
-                </th>
               </tr>
             </thead>
             <tbody>
@@ -958,7 +958,7 @@ export function ManagerWorkOrdersPanel({
                       aria-expanded={isExpanded}
                     >
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        {row.title}
+                        <PortalTableInlineExpand expanded={isExpanded}>{row.title}</PortalTableInlineExpand>
                         <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
                       </td>
                       <td className={PORTAL_TABLE_TD}>
@@ -984,11 +984,10 @@ export function ManagerWorkOrdersPanel({
                           ) : null}
                         </div>
                       </td>
-                      <PortalTableExpandCell expanded={isExpanded} />
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                           {renderRowDetail(row)}
                         </td>
                       </tr>

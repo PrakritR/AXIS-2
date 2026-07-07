@@ -14,8 +14,7 @@ import {
   ManagerPortalPageShell,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
@@ -23,13 +22,11 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalMobileSummaryCard,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { PillTabs, TabNav } from "@/components/ui/tabs";
 import { PreferredArrivalField } from "@/components/portal/preferred-arrival-field";
 import { formatPreferredArrival, parsePreferredArrival } from "@/lib/preferred-arrival";
@@ -1049,13 +1046,10 @@ export function ResidentServicesPanel({
         </div>
         <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1070,12 +1064,13 @@ export function ResidentServicesPanel({
                           )}
                           aria-expanded={expandedId === rowId}
                         >
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
-                          <PortalTableExpandCell expanded={expandedId === rowId} />
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                            <PortalTableInlineExpand expanded={expandedId === rowId}>{req.offerName}</PortalTableInlineExpand>
+                          </td>
                         </tr>
                         {expandedId === rowId ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={1} className={PORTAL_TABLE_DETAIL_CELL}>
                               <ServiceRequestCard
                                 req={req}
                                 onDelete={reloadServiceRequests}
@@ -1141,13 +1136,10 @@ export function ResidentServicesPanel({
             </div>
             <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
-                <table className="w-full table-fixed border-collapse text-left text-sm">
+                <table className={PORTAL_DATA_TABLE}>
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                      <th className={PORTAL_TABLE_EXPAND_TH}>
-                        <span className="sr-only">Expand</span>
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1160,12 +1152,13 @@ export function ResidentServicesPanel({
                           )}
                           aria-expanded={expandedId === row.id}
                         >
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                          <PortalTableExpandCell expanded={expandedId === row.id} />
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                            <PortalTableInlineExpand expanded={expandedId === row.id}>{row.title}</PortalTableInlineExpand>
+                          </td>
                         </tr>
                         {expandedId === row.id ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={2} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                            <td colSpan={1} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
                               <WorkOrderDetail
                                 row={row}
                                 onEdit={() => openWorkOrderEdit(row)}

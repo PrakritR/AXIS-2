@@ -5,22 +5,19 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
-  PORTAL_DATA_TABLE,
+  PORTAL_DATA_TABLE, 
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
@@ -424,7 +421,7 @@ export function ManagerPaymentsLedgerPanel({
     <PortalTableDetailActions>
       {row.statusLabel !== "Paid" && row.balanceDue !== "$0.00" ? (
         <>
-          <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => recordPaid(row, "Marked as paid.")}>
+          <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={() => recordPaid(row, "Marked as paid.")}>
             Mark as paid
           </Button>
         </>
@@ -455,7 +452,7 @@ export function ManagerPaymentsLedgerPanel({
       {row.householdChargeId && !isPaidRow(row) ? (
         editingRowId === row.id ? (
           <>
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => saveEdit(row)}>
+            <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={() => saveEdit(row)}>
               Save
             </Button>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
@@ -517,8 +514,8 @@ export function ManagerPaymentsLedgerPanel({
           {selectedRows.some(isMarkableAsPaid) ? (
             <Button
               type="button"
-              variant="outline"
-              className={PORTAL_DETAIL_BTN_PRIMARY}
+              variant="primary"
+              className={PORTAL_DETAIL_BTN}
               data-attr="payments-mark-selected-paid"
               onClick={markSelectedAsPaid}
             >
@@ -556,7 +553,7 @@ export function ManagerPaymentsLedgerPanel({
           {singleSelectedRow?.householdChargeId && !isPaidRow(singleSelectedRow) ? (
             editingRowId === singleSelectedRow.id ? (
               <>
-                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={saveBulkEditAmount}>
+                <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={saveBulkEditAmount}>
                   Save
                 </Button>
                 <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={cancelEdit}>
@@ -606,12 +603,13 @@ export function ManagerPaymentsLedgerPanel({
               <div className="min-w-0 flex-1">
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between gap-2 text-left"
+                  className="w-full text-left"
                   onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                   aria-expanded={expanded}
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-foreground">{row.residentName}</p>
+                  <PortalTableInlineExpand expanded={expanded} className="truncate font-semibold text-foreground">
+                    {row.residentName}
+                  </PortalTableInlineExpand>
                     <p className="mt-0.5 truncate text-xs text-muted">
                       {row.chargeTitle}
                       {row.roomNumber ? ` · Room ${row.roomNumber}` : ""}
@@ -642,8 +640,6 @@ export function ManagerPaymentsLedgerPanel({
                         <>Due {row.dueDate}</>
                       )}
                     </p>
-                  </div>
-                  <PortalTableExpandChevron expanded={expanded} />
                 </button>
                 {!isPaidRow(row) && reminders.length ? (
                   <button
@@ -698,9 +694,6 @@ export function ManagerPaymentsLedgerPanel({
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount paid</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount owed</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Due date</th>
-              <th className={PORTAL_TABLE_EXPAND_TH}>
-                <span className="sr-only">Expand</span>
-              </th>
             </tr>
           </thead>
           <tbody>
@@ -727,15 +720,16 @@ export function ManagerPaymentsLedgerPanel({
                   <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.propertyName}</td>
                   <td className={PORTAL_TABLE_TD}>Room {row.roomNumber}</td>
                   <td className={PORTAL_TABLE_TD}>{row.residentName}</td>
-                  <td className={PORTAL_TABLE_TD}>{row.chargeTitle}</td>
+                  <td className={PORTAL_TABLE_TD}>
+                    <PortalTableInlineExpand expanded={expandedId === row.id}>{row.chargeTitle}</PortalTableInlineExpand>
+                  </td>
                   <td className={`${PORTAL_TABLE_TD} tabular-nums text-muted`}>{row.amountPaid}</td>
                   <td className={PORTAL_TABLE_TD}>{renderAmountOwedCell(row)}</td>
                   <td className={`${PORTAL_TABLE_TD} text-muted`}>{renderDueDateCell(row)}</td>
-                  <PortalTableExpandCell expanded={expandedId === row.id} />
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={showSelection ? 9 : 8} className={PORTAL_TABLE_DETAIL_CELL}>
+                    <td colSpan={showSelection ? 8 : 7} className={PORTAL_TABLE_DETAIL_CELL}>
                       {renderDetailActions(row)}
                     </td>
                   </tr>

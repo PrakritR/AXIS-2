@@ -22,7 +22,7 @@ export function Modal({
   dense = false,
 }: {
   open: boolean;
-  title: string;
+  title: ReactNode;
   onClose: () => void;
   children: ReactNode;
   /** Width / layout overrides merged onto the default glass panel shell. */

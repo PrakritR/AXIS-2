@@ -7,7 +7,6 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalPaymentMethodPicker } from "@/components/portal/portal-payment-method-picker";
 import {
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow } from "@/data/demo-portal";
@@ -254,7 +253,7 @@ export function ManagerOutgoingPaymentDetail({
             <Button
               type="button"
               variant="primary"
-              className={PORTAL_DETAIL_BTN_PRIMARY}
+              className={PORTAL_DETAIL_BTN}
               data-attr="manager-outgoing-payment-confirm-pay"
               disabled={busy || (paymentMethod !== "ach" && !manualSentConfirmed)}
               onClick={() => void submitPay()}

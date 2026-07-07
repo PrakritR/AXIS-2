@@ -26,6 +26,7 @@ import { VendorDashboard } from "@/components/portal/vendor-dashboard";
 import { VendorWorkOrdersPanel } from "@/components/portal/vendor-work-orders-panel";
 import { VendorCalendarPanel } from "@/components/portal/vendor-calendar-panel";
 import { VendorInboxPanel } from "@/components/portal/vendor-inbox-panel";
+import { VendorFinancesPanel } from "@/components/portal/vendor-finances-panel";
 import { VendorPaymentsPanel } from "@/components/portal/vendor-payments-panel";
 import { VendorDocumentsPanel } from "@/components/portal/vendor-documents-panel";
 import { VendorSettingsPanel } from "@/components/portal/vendor-settings-panel";
@@ -657,6 +658,17 @@ export async function renderPortalSection(
     const inboxTab = tabParts[0]!;
     if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
     return <VendorInboxPanel tabId={inboxTab} />;
+  }
+
+  if (kind === "vendor" && section === "financials") {
+    if (!meta.tabs.length) notFound();
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/financials/income`);
+    }
+    if (tabParts.length > 1) notFound();
+    const finTab = tabParts[0]!;
+    if (!meta.tabs.some((tab) => tab.id === finTab)) notFound();
+    return <VendorFinancesPanel tabId={finTab} basePath={def.basePath} />;
   }
 
   if (kind === "vendor" && section === "payments") {

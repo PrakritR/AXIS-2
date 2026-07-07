@@ -13,6 +13,20 @@ export function isInProgressApplicationRow(row: DemoApplicantRow): boolean {
   return row.bucket === "pending" && row.stage.trim().toLowerCase() === IN_PROGRESS_APPLICATION_STAGE.toLowerCase();
 }
 
+/** Submitted applications awaiting manager review (pending bucket, not a draft). */
+export function isSubmittedPendingApplicationRow(row: DemoApplicantRow): boolean {
+  return row.bucket === "pending" && !isInProgressApplicationRow(row);
+}
+
+export function inProgressApplicationResumeUrl(origin: string, row: DemoApplicantRow): string {
+  const base = origin.replace(/\/$/, "");
+  const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
+  const path = pid
+    ? `/resident/applications/apply?propertyId=${encodeURIComponent(pid)}`
+    : "/resident/applications/apply";
+  return `${base}${path}`;
+}
+
 export function buildInProgressApplicationRow(input: {
   axisId: string;
   form: RentalWizardFormState;

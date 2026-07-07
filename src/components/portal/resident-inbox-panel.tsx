@@ -54,19 +54,12 @@ export const RESIDENT_INBOX_THREAD_FALLBACK: PersistedInboxThread[] = demoReside
   unread: t.unread,
 }));
 
-function previewLine(body: string, max = 100) {
-  const x = body.trim().replace(/\s+/g, " ");
-  if (x.length <= max) return x;
-  return `${x.slice(0, max)}…`;
-}
-
 function toRows(list: InboxThread[], tabId: string): PortalInboxTableRow[] {
   return list.map((t) => ({
     id: t.id,
     name: tabId === "sent" ? (t.email || "Unknown recipient") : t.from,
     email: tabId === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
-    topic: t.subject,
-    preview: t.preview,
+    subject: t.subject,
     whenLabel: t.time,
     read: !t.unread,
   }));
@@ -86,8 +79,7 @@ function scheduledToRows(list: ScheduledInboxMessageRecord[]): PortalInboxTableR
     id: message.id,
     name: message.recipientName || message.recipientEmail,
     email: message.recipientEmail,
-    topic: message.subject,
-    preview: previewLine(message.body),
+    subject: message.subject,
     whenLabel: formatPacificDateTime(message.sendAt),
     read: message.status !== "scheduled",
     selectable: message.status === "scheduled" || message.status === "cancelled",
@@ -742,7 +734,8 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
             </PortalInboxSelectionToolbar>
             <PortalInboxMessageTable
               rows={scheduledToRows(scheduledRows)}
-              primaryPartyHeader="To"
+              layout="schedule"
+              primaryPartyHeader="Recipient"
               getDetailBody={(row) => scheduledBodyById[row.id]}
               onReply={undefined}
               expandedId={expandedId}

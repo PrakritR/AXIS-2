@@ -14,6 +14,7 @@ import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import {
   applicationVisibleToPortalUser,
 } from "@/lib/manager-portfolio-access";
+import { isSubmittedPendingApplicationRow } from "@/lib/rental-application/in-progress-application";
 import {
   MANAGER_APPLICATIONS_EVENT,
   readManagerApplicationRows,
@@ -90,7 +91,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
     if ((kind === "manager" || kind === "pro") && userId) {
       const [pendingProps] = adminKpiCounts(userId);
       const pendingApps = readManagerApplicationRows().filter(
-        (a) => applicationVisibleToPortalUser(a, userId) && a.bucket === "pending",
+        (a) => applicationVisibleToPortalUser(a, userId) && isSubmittedPendingApplicationRow(a),
       ).length;
       const pendingServiceRequests = readServiceRequestsForManager(userId).filter((r) => r.status === "pending").length;
       const pendingWorkOrders = readManagerWorkOrderRows().filter(

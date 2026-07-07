@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   filterOwnVendorRowsForSync,
+  readManagerVendorRows,
   readOwnManagerVendorRows,
+  seedDemoManagerVendorRows,
+  setManagerVendorActive,
+  setManagerVendorPriority,
+  writeManagerVendorRows,
   type ManagerVendorRow,
 } from "@/lib/manager-vendors-storage";
 
@@ -44,5 +49,25 @@ describe("manager vendor sharing sync", () => {
     const legacy: ManagerVendorRow = { ...own, id: "v-legacy", managerUserId: null };
     const rows = readOwnManagerVendorRows("mgr-a", [legacy, sharedFromOther]);
     expect(rows).toEqual([legacy]);
+  });
+
+  it("sets vendor active/inactive and primary priority per trade", () => {
+    const a: ManagerVendorRow = { ...own, id: "v-a", name: "Plumber A", vendorPriority: "primary" };
+    const b: ManagerVendorRow = { ...own, id: "v-b", name: "Plumber B" };
+    writeManagerVendorRows([a, b], "mgr-a");
+
+    setManagerVendorActive("v-b", false, "mgr-a");
+    expect(readManagerVendorRows().find((row) => row.id === "v-b")?.active).toBe(false);
+
+    setManagerVendorPriority("v-b", "primary", "mgr-a");
+    const rows = readManagerVendorRows();
+    expect(rows.find((row) => row.id === "v-b")?.vendorPriority).toBe("primary");
+    expect(rows.find((row) => row.id === "v-a")?.vendorPriority).toBeUndefined();
+
+    setManagerVendorPriority("v-b", "secondary", "mgr-a");
+    expect(readManagerVendorRows().find((row) => row.id === "v-b")?.vendorPriority).toBe("secondary");
+
+    setManagerVendorPriority("v-b", "backup", "mgr-a");
+    expect(readManagerVendorRows().find((row) => row.id === "v-b")?.vendorPriority).toBe("backup");
   });
 });

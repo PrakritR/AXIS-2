@@ -13,6 +13,8 @@ import {
   isPropertyActiveForLeads,
   readExtraListingsPublic,
 } from "@/lib/demo-property-pipeline";
+import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
+import { isProductionPublicSite } from "@/lib/public-demo-access";
 import {
   ensurePendingApplicationFeeCharge,
   findApplicationFeeCharge,
@@ -113,27 +115,6 @@ function rentalApplicationExitPath(mode: RentalApplicationWizardMode, exitPath?:
 
 function rentalApplicationApplyPath(mode: RentalApplicationWizardMode): string {
   return mode === "portal" ? "/resident/applications/apply" : "/rent/apply";
-}
-
-function RentalWizardExitButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rental-wizard-exit inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15"
-    >
-      <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path
-          d="M15 18l-6-6 6-6"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      Back
-    </button>
-  );
 }
 
 export function RentalApplicationWizard({
@@ -256,7 +237,9 @@ function RentalApplicationWizardInner({
   const propertyOptions = useMemo(() => {
     void extrasTick;
     if (mode === "portal" && !linkedPropertyId) {
-      return readExtraListingsPublic()
+      return filterSandboxFromPublicCatalog(readExtraListingsPublic(), {
+        production: isProductionPublicSite(),
+      })
         .filter(isPropertyActiveForLeads)
         .map((property) => ({ value: property.id, label: property.title }))
         .sort((a, b) => a.label.localeCompare(b.label));
@@ -870,12 +853,6 @@ function RentalApplicationWizardInner({
 
   return (
     <div className="rental-wizard mx-auto max-w-3xl px-4 py-5 sm:py-14">
-      {applicationPath === "signer" && !postSubmit ? (
-        <div className="rental-wizard-exit-row mb-2 sm:mb-3">
-          <RentalWizardExitButton onClick={exitApplication} />
-        </div>
-      ) : null}
-
       <div className="rental-wizard-page-title text-center sm:text-left">
         <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Rental application</h1>
       </div>

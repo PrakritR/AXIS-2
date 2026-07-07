@@ -471,9 +471,11 @@ export function ManagerPortalPageShell({
   );
 }
 
-/** Table header cell class (admin leases / managers / portal tabs). */
+/** Table header cell class (admin leases / managers / portal tabs).
+ *  `w-0` pairs with {@link PORTAL_TABLE_TD}'s `max-w-0` under `table-fixed` so data
+ *  columns share the remaining width instead of shrinking to header label width. */
 export const MANAGER_TABLE_TH =
-  "portal-table-th px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-5";
+  "portal-table-th w-0 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted sm:px-5";
 
 /** Shared toolbar shell for filters/toggles in portal tabs. */
 export const PORTAL_TOOLBAR_GROUP =

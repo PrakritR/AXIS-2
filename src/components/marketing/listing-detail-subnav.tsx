@@ -47,6 +47,9 @@ function syncListingScrollStack(mode: "page" | "modal", subnavEl: HTMLElement | 
   }
   const navEl = document.getElementById(NAVBAR_ID);
   const navH = isNative ? 0 : (navEl?.getBoundingClientRect().height ?? 0);
+  if (!isNative && navH > 0) {
+    document.documentElement.style.setProperty("--public-nav-height", `${navH}px`);
+  }
   const safeTop =
     typeof window !== "undefined"
       ? Number.parseFloat(
@@ -86,14 +89,19 @@ function scrollToSection(id: string, mode: "page" | "modal", subnavEl: HTMLEleme
 }
 
 /** Sticky section tabs: full marketing pages use the public navbar offset; preview modal pins to top of its scroller. */
-export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal" }) {
+export function ListingStickySubnav({
+  mode = "page",
+  className = "",
+}: {
+  mode?: "page" | "modal";
+  className?: string;
+}) {
   const rootRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const tabRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
   // While a click-initiated smooth scroll is in flight, the spy would flap
   // through intermediate sections — pin the clicked tab until it settles.
   const clickLockRef = useRef<{ id: string; until: number } | null>(null);
-  const [stickyTopPx, setStickyTopPx] = useState(mode === "modal" ? 0 : 64);
   const [pageScrolled, setPageScrolled] = useState(false);
   const [activeId, setActiveId] = useState<string>(nav[0].id);
 
@@ -104,13 +112,8 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
     if (mode === "modal") {
       const scrollRoot = getScrollRootFromSubnav(subEl);
       syncListingScrollStack(mode, subEl);
-      setStickyTopPx(0);
       setPageScrolled(scrollRoot ? scrollRoot.scrollTop > 8 : false);
     } else {
-      const isNative = document.documentElement.hasAttribute("data-native");
-      const navEl = document.getElementById(NAVBAR_ID);
-      const navH = isNative ? 0 : (navEl?.getBoundingClientRect().height ?? 0);
-      setStickyTopPx(navH);
       syncListingScrollStack(mode, subEl);
       setPageScrolled(window.scrollY > 20);
     }
@@ -160,6 +163,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
         window.removeEventListener("scroll", onScroll);
         window.removeEventListener("resize", publishStackAndSpy);
         document.documentElement.style.removeProperty("--listing-sticky-stack");
+        document.documentElement.style.removeProperty("--public-nav-height");
         getListingSectionsRoot(subEl)?.style.removeProperty("--listing-sticky-stack");
       };
     };
@@ -243,17 +247,12 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
     <nav
       ref={rootRef}
       data-listing-subnav
-      className={`sticky z-40 -mx-4 border-b px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 [html[data-native]_&]:pt-2 ${
+      className={`sticky z-[45] -mx-4 border-b border-border px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 [html[data-native]_&]:pt-2 ${className} ${
         pageScrolled
-          ? "border-border bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)] [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-background/92 [html[data-theme=dark]_&]:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.45)]"
-          : "border-border bg-background/90 [html[data-theme=dark]_&]:border-white/10 [html[data-theme=dark]_&]:bg-background/88"
+          ? "bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)]"
+          : "bg-background/90"
       }`}
-      style={{
-        top:
-          mode === "modal"
-            ? 0
-            : `max(${stickyTopPx}px, env(safe-area-inset-top, 0px))`,
-      }}
+      style={mode === "modal" ? { top: 0 } : undefined}
       aria-label="Listing sections"
     >
       <ul
@@ -274,7 +273,7 @@ export function ListingStickySubnav({ mode = "page" }: { mode?: "page" | "modal"
                 className={`inline-flex min-h-[44px] cursor-pointer items-center rounded-full border-0 px-3.5 py-2 text-[inherit] transition-colors sm:min-h-0 sm:py-1.5 ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-transparent text-muted hover:bg-accent/40 hover:text-foreground [html[data-theme=dark]_&]:hover:bg-white/10"
+                    : "bg-transparent text-muted hover:bg-accent/40 hover:text-foreground"
                 }`}
                 onClick={() => {
                   clickLockRef.current = { id: item.id, until: Date.now() + 1500 };

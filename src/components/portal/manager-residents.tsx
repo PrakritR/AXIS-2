@@ -16,24 +16,19 @@ import {
   ManagerPortalStatusPills,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseRegenerateConfirmModal } from "@/components/portal/lease-regenerate-confirm-modal";
@@ -66,6 +61,7 @@ import {
 import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
 import { isPreviousResidentDirectoryRow, isResidentDirectoryRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import { isSubmittedPendingApplicationRow } from "@/lib/rental-application/in-progress-application";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { sanitizePaymentContactInput } from "@/lib/listing-form-inputs";
 import {
@@ -143,6 +139,10 @@ import { ResidentApplicationEditor } from "@/components/portal/resident-applicat
 import { ApplicationScreeningPanel } from "@/components/portal/application-screening-panel";
 import { CheckrScreeningModal } from "@/components/portal/checkr-screening-modal";
 import {
+  PortalInboxSelectionToolbar,
+  useInboxRowSelection,
+} from "@/components/portal/portal-inbox-selection";
+import {
   INBOX_TAB_DEFS,
   PortalInboxEmptyState,
   PortalInboxMessageTable,
@@ -198,7 +198,7 @@ function ResidentDetailSection({
         if (open !== expanded) onToggle();
       }}
       headerActions={headerAction}
-      contentClassName="px-4 pb-6 pt-0 [&:not(:has([data-portal-detail-actions]))]:pt-6 sm:[&:not(:has([data-portal-detail-actions]))]:pt-8"
+      contentClassName="pb-6"
       surfaceMuted={false}
       toggleDataAttr="resident-section-toggle"
     >
@@ -263,7 +263,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const [residentsTab, setResidentsTab] = useState<ResidentsTabId>(tabId);
   const [prevTabId, setPrevTabId] = useState(tabId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [chargeTab, setChargeTab] = useState<"pending" | "paid">("pending");
+  const [chargeTab, setChargeTab] = useState<"pending" | "overdue" | "paid">("pending");
   const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [uploadingLeaseRowId, setUploadingLeaseRowId] = useState<string | null>(null);
@@ -762,21 +762,20 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
   const chargeCounts = useMemo(
     () => ({
-      pending: residentCharges.filter((c) => c.status === "pending").length,
+      pending: residentCharges.filter((c) => c.status === "pending" && !isHouseholdChargeOverdue(c)).length,
+      overdue: residentCharges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c)).length,
       paid: residentCharges.filter((c) => c.status === "paid").length,
     }),
     [residentCharges],
   );
 
-  const visibleCharges = useMemo(
-    () => residentCharges.filter((c) => c.status === chargeTab),
-    [residentCharges, chargeTab],
-  );
-
-  const overdueChargeCount = useMemo(
-    () => residentCharges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c)).length,
-    [residentCharges],
-  );
+  const visibleCharges = useMemo(() => {
+    if (chargeTab === "paid") return residentCharges.filter((c) => c.status === "paid");
+    if (chargeTab === "overdue") {
+      return residentCharges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c));
+    }
+    return residentCharges.filter((c) => c.status === "pending" && !isHouseholdChargeOverdue(c));
+  }, [residentCharges, chargeTab]);
 
   const selectedApplicationRow = useMemo<DemoApplicantRow | null>(() => {
     void hcTick;
@@ -885,13 +884,18 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         id: t.id,
         name: inboxSubTab === "sent" ? t.email || "Unknown recipient" : t.from,
         email: inboxSubTab === "sent" ? (t.from ? `From ${t.from}` : "") : t.email,
-        topic: t.subject,
-        preview: t.preview,
+        subject: t.subject,
         whenLabel: t.time,
         read: !t.unread,
       })),
     [residentInboxRowsForTab, inboxSubTab],
   );
+
+  const residentInboxRowIds = useMemo(
+    () => residentInboxRowsForTab.map((t) => t.id),
+    [residentInboxRowsForTab],
+  );
+  const residentInboxSelection = useInboxRowSelection(residentInboxRowIds);
 
   const residentInboxBodyById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -1053,6 +1057,46 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       setInboxTick((n) => n + 1);
       setInboxExpandedId(null);
       showToast("Deleted permanently.");
+    })();
+  }
+
+  function bulkMarkResidentInboxRead() {
+    for (const id of residentInboxSelection.selectedIds) markResidentInboxThreadRead(id);
+    residentInboxSelection.clearSelection();
+  }
+
+  function bulkMarkResidentInboxUnread() {
+    for (const id of residentInboxSelection.selectedIds) markResidentInboxThreadUnread(id);
+    residentInboxSelection.clearSelection();
+  }
+
+  function bulkMoveResidentInboxToTrash() {
+    for (const id of residentInboxSelection.selectedIds) moveResidentInboxThreadToTrash(id);
+    residentInboxSelection.clearSelection();
+  }
+
+  function bulkRestoreResidentInboxFromTrash() {
+    for (const id of residentInboxSelection.selectedIds) restoreResidentInboxThreadFromTrash(id);
+    residentInboxSelection.clearSelection();
+  }
+
+  function bulkDeleteResidentInboxForever() {
+    if (!window.confirm(`Delete ${residentInboxSelection.selectedIds.size} message(s) permanently?`)) return;
+    void (async () => {
+      const ids = [...residentInboxSelection.selectedIds];
+      invalidatePersistedInboxCache(MANAGER_INBOX_STORAGE_KEY);
+      const ok = await deleteInboxThreadIds(ids);
+      if (!ok) {
+        showToast("Could not delete messages.");
+        return;
+      }
+      const all = loadPersistedInbox(MANAGER_INBOX_STORAGE_KEY, []) as PersistedInboxThread[];
+      const next = all.filter((t) => !ids.includes(t.id));
+      persistInbox(MANAGER_INBOX_STORAGE_KEY, next);
+      setInboxTick((n) => n + 1);
+      setInboxExpandedId(null);
+      residentInboxSelection.clearSelection();
+      showToast(ids.length === 1 ? "Deleted permanently." : `Deleted ${ids.length} messages.`);
     })();
   }
 
@@ -1719,7 +1763,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  className="rounded-full bg-primary/[0.06] px-3 py-1 text-xs text-primary hover:bg-primary/[0.12]"
+                                  className={PORTAL_DETAIL_BTN}
                                   onClick={() => {
                                     const signupUrl = residentAccountCreationUrl(window.location.origin, selected.axisId);
                                     const previewBody = buildResidentWelcomeEmailBody({ residentName: selected.name, axisId: selected.axisId, signupUrl });
@@ -1732,7 +1776,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  className="rounded-full px-3 py-1 text-xs"
+                                  className={PORTAL_DETAIL_BTN}
                                   onClick={openEditResidentModal}
                                 >
                                   Edit resident
@@ -1740,7 +1784,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  className="rounded-full border-rose-200 px-3 py-1 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)]"
+                                  className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
                                   onClick={deleteSelectedResident}
                                 >
                                   Delete resident
@@ -1764,7 +1808,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    className="h-8 rounded-full px-3 text-xs"
+                                    className={PORTAL_DETAIL_BTN}
                                     data-attr="resident-application-edit"
                                     onClick={() => setApplicationEditOpen(true)}
                                   >
@@ -1776,12 +1820,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               {selectedApplicationRow ? (
                                 <div className="space-y-8">
                                   <PortalTableDetailActions placement="top">
-                                    {selectedApplicationRow.bucket === "pending" ? (
+                                    {selectedApplicationRow && isSubmittedPendingApplicationRow(selectedApplicationRow) ? (
                                       <>
                                         <Button
                                           type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN_PRIMARY}
+                                          variant="primary"
+                                          className={PORTAL_DETAIL_BTN}
                                           onClick={() => setApprovePreviewRow(selectedApplicationRow)}
                                         >
                                           Approve
@@ -2014,14 +2058,22 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               summary={
                                 residentCharges.length === 0
                                   ? "No charges yet."
-                                  : `${chargeCounts.pending} unpaid${overdueChargeCount > 0 ? ` · ${overdueChargeCount} overdue` : ""}`
+                                  : [
+                                      chargeCounts.pending > 0 ? `${chargeCounts.pending} pending` : null,
+                                      chargeCounts.overdue > 0 ? `${chargeCounts.overdue} overdue` : null,
+                                      chargeCounts.paid > 0 && chargeCounts.pending === 0 && chargeCounts.overdue === 0
+                                        ? `${chargeCounts.paid} paid`
+                                        : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ") || "No open charges."
                               }
                               expanded={expandedResidentSection === "payments"}
                               onToggle={() =>
                                 setExpandedResidentSection((cur) => (cur === "payments" ? null : "payments"))
                               }
                               headerAction={
-                                <div className="flex shrink-0 flex-row items-center gap-3">
+                                <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -2046,18 +2098,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               <div className="flex flex-wrap items-center gap-2">
                                 <ManagerPortalStatusPills
                                   tabs={[
-                                    { id: "pending", label: "Unpaid", count: chargeCounts.pending },
+                                    { id: "pending", label: "Pending", count: chargeCounts.pending },
+                                    { id: "overdue", label: "Overdue", count: chargeCounts.overdue },
                                     { id: "paid", label: "Paid", count: chargeCounts.paid },
                                   ]}
                                   activeId={chargeTab}
-                                  onChange={(id) => setChargeTab(id as "pending" | "paid")}
+                                  onChange={(id) => setChargeTab(id as "pending" | "overdue" | "paid")}
                                 />
-                                {overdueChargeCount > 0 ? (
-                                  <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
-                                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                                    {overdueChargeCount} overdue
-                                  </div>
-                                ) : null}
                               </div>
                               {visibleCharges.length === 0 ? (
                                 <div className="mt-3">
@@ -2067,15 +2114,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       residentCharges.length === 0
                                         ? "No charges yet."
                                         : chargeTab === "pending"
-                                          ? "No unpaid charges yet."
-                                          : "No paid charges yet."
+                                          ? "No pending charges yet."
+                                          : chargeTab === "overdue"
+                                            ? "No overdue charges yet."
+                                            : "No paid charges yet."
                                     }
                                   />
                                 </div>
                               ) : (
                                 <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
-                                  <div className={PORTAL_DATA_TABLE_SCROLL}>
-                                    <table className="w-full table-fixed border-collapse text-left text-sm">
+                                  <div className={`${PORTAL_DATA_TABLE_SCROLL} overflow-x-auto`}>
+                                    <table className={PORTAL_DATA_TABLE}>
                                       <thead>
                                         <tr className={PORTAL_TABLE_HEAD_ROW}>
                                           <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
@@ -2084,9 +2133,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                           <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
                                           <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
                                           <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                                          <th className={PORTAL_TABLE_EXPAND_TH}>
-                                            <span className="sr-only">Expand</span>
-                                          </th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -2101,7 +2147,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                 )}
                                                 aria-expanded={chargeExpandedId === c.id}
                                               >
-                                                <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{c.title}</td>
+                                                <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                                                  <PortalTableInlineExpand expanded={chargeExpandedId === c.id}>{c.title}</PortalTableInlineExpand>
+                                                </td>
                                                 <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{selected.propertyLabel || "—"}</td>
                                                 <td className={PORTAL_TABLE_TD}>{chargeDueLabel(c)}</td>
                                                 <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{c.amountLabel}</td>
@@ -2110,14 +2158,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                 </td>
                                                 <td className={PORTAL_TABLE_TD}>
                                                   <Badge tone={c.status === "paid" ? "approved" : overdue ? "overdue" : "pending"}>
-                                                    {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Unpaid"}
+                                                    {c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending"}
                                                   </Badge>
                                                 </td>
-                                                <PortalTableExpandCell expanded={chargeExpandedId === c.id} />
                                               </tr>
                                               {chargeExpandedId === c.id ? (
                                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                  <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
+                                                  <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                                                     <div className="space-y-1 text-sm text-muted">
                                                       <p>
                                                         Property: <span className="text-foreground">{selected.propertyLabel || "—"}</span>
@@ -2156,8 +2203,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                             </div>
                                                             <Button
                                                               type="button"
-                                                              variant="outline"
-                                                              className={PORTAL_DETAIL_BTN_PRIMARY}
+                                                              variant="primary"
+                                                              className={PORTAL_DETAIL_BTN}
                                                               onClick={() => {
                                                                 const amt = parseFloat(editChargeAmountDraft.replace(/[^\d.]/g, ""));
                                                                 if (!editChargeTitleDraft.trim()) {
@@ -2198,8 +2245,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                           <>
                                                             <Button
                                                               type="button"
-                                                              variant="outline"
-                                                              className={PORTAL_DETAIL_BTN_PRIMARY}
+                                                              variant="primary"
+                                                              className={PORTAL_DETAIL_BTN}
                                                               onClick={() => {
                                                                 if (markHouseholdChargePaid(c.id, userId)) {
                                                                   showToast("Marked as paid.");
@@ -2233,14 +2280,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                           className={PORTAL_DETAIL_BTN}
                                                           onClick={() => {
                                                             if (markHouseholdChargePending(c.id, userId)) {
-                                                              showToast("Moved to unpaid.");
+                                                              showToast("Moved to pending.");
                                                               setChargeExpandedId(null);
                                                             } else {
                                                               showToast("Could not update this charge.");
                                                             }
                                                           }}
                                                         >
-                                                          Move to unpaid
+                                                          Move to pending
                                                         </Button>
                                                       )}
                                                     </PortalTableDetailActions>
@@ -2324,17 +2371,14 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     <PortalDataTableEmpty message="No requests in this status yet." icon="service" />
                                   ) : (
                                     <div className={`mt-3 ${PORTAL_DATA_TABLE_WRAP}`}>
-                                      <div className={PORTAL_DATA_TABLE_SCROLL}>
-                                        <table className="w-full table-fixed border-collapse text-left text-sm">
+                                      <div className={`${PORTAL_DATA_TABLE_SCROLL} overflow-x-auto`}>
+                                        <table className={PORTAL_DATA_TABLE}>
                                           <thead>
                                             <tr className={PORTAL_TABLE_HEAD_ROW}>
                                               <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>Type</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Item</th>
                                               <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
                                               <th className={`${MANAGER_TABLE_TH} hidden text-left sm:table-cell`}>Charges</th>
-                                              <th className={PORTAL_TABLE_EXPAND_TH}>
-                                                <span className="sr-only">Expand</span>
-                                              </th>
                                             </tr>
                                           </thead>
                                           <tbody>
@@ -2352,7 +2396,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                     <td className={`${PORTAL_TABLE_TD} hidden text-muted sm:table-cell`}>Request</td>
                                                     <td className={`${PORTAL_TABLE_TD} min-w-0 font-medium text-foreground`}>
                                                       <span className="block text-xs text-muted sm:hidden">Request</span>
-                                                      <span className="break-words">{req.offerName}</span>
+                                                      <PortalTableInlineExpand expanded={svcExpandedId === rowId}>
+                                                        <span className="break-words">{req.offerName}</span>
+                                                      </PortalTableInlineExpand>
                                                     </td>
                                                     <td className={PORTAL_TABLE_TD}>
                                                       <ServiceStatusBadge status={req.status} />
@@ -2360,11 +2406,10 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                                     <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>
                                                       {managerServiceRequestPricingSummary(req)}
                                                     </td>
-                                                    <PortalTableExpandCell expanded={svcExpandedId === rowId} />
                                                   </tr>
                                                   {svcExpandedId === rowId ? (
                                                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                                      <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                                                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                                                         <ManagerServiceRequestDetail
                                                           req={req}
                                                           propertyLabel={selected.propertyLabel || "—"}
@@ -2419,7 +2464,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               expanded={expandedResidentSection === "inbox"}
                               onToggle={() => setExpandedResidentSection((cur) => (cur === "inbox" ? null : "inbox"))}
                               headerAction={
-                                <Button type="button" variant="outline" className="rounded-full px-3 py-1 text-xs" onClick={openResidentMessageModal}>
+                                <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={openResidentMessageModal}>
                                   New message
                                 </Button>
                               }
@@ -2454,23 +2499,71 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                   }
                                 />
                               ) : (
-                                <PortalInboxMessageTable
-                                  rows={residentInboxTableRows}
-                                  primaryPartyHeader={inboxSubTab === "sent" ? "To" : "From"}
-                                  onMarkRead={inboxSubTab === "unopened" ? markResidentInboxThreadRead : undefined}
-                                  getDetailBody={(row) => residentInboxBodyById[row.id]}
-                                  onReply={
-                                    inboxSubTab === "trash"
-                                      ? undefined
-                                      : (row, text) => {
-                                          const thread = residentInboxThreads.find((t) => t.id === row.id);
-                                          if (!thread) return;
-                                          return replyToResidentInboxThread(thread, text);
-                                        }
-                                  }
-                                  expandedId={inboxExpandedId}
-                                  onToggleExpand={(id) => setInboxExpandedId((cur) => (cur === id ? null : id))}
-                                  renderExtraActions={(row) => {
+                                <div className="space-y-3">
+                                  <PortalInboxSelectionToolbar
+                                    count={residentInboxSelection.selectedIds.size}
+                                    onClear={residentInboxSelection.clearSelection}
+                                  >
+                                    {inboxSubTab === "unopened" ? (
+                                      <>
+                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkResidentInboxRead}>
+                                          Mark read
+                                        </Button>
+                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveResidentInboxToTrash}>
+                                          Trash
+                                        </Button>
+                                      </>
+                                    ) : null}
+                                    {inboxSubTab === "opened" ? (
+                                      <>
+                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkMarkResidentInboxUnread}>
+                                          Mark unread
+                                        </Button>
+                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveResidentInboxToTrash}>
+                                          Trash
+                                        </Button>
+                                      </>
+                                    ) : null}
+                                    {inboxSubTab === "sent" ? (
+                                      <Button type="button" variant="outline" className="rounded-full" onClick={bulkMoveResidentInboxToTrash}>
+                                        Trash
+                                      </Button>
+                                    ) : null}
+                                    {inboxSubTab === "trash" ? (
+                                      <>
+                                        <Button type="button" variant="outline" className="rounded-full" onClick={bulkRestoreResidentInboxFromTrash}>
+                                          Restore
+                                        </Button>
+                                        <Button type="button" variant="outline" className="rounded-full text-rose-700" onClick={bulkDeleteResidentInboxForever}>
+                                          Delete forever
+                                        </Button>
+                                      </>
+                                    ) : null}
+                                  </PortalInboxSelectionToolbar>
+                                  <PortalInboxMessageTable
+                                    rows={residentInboxTableRows}
+                                    primaryPartyHeader={inboxSubTab === "sent" ? "To" : "From"}
+                                    onMarkRead={inboxSubTab === "unopened" ? markResidentInboxThreadRead : undefined}
+                                    getDetailBody={(row) => residentInboxBodyById[row.id]}
+                                    onReply={
+                                      inboxSubTab === "trash"
+                                        ? undefined
+                                        : (row, text) => {
+                                            const thread = residentInboxThreads.find((t) => t.id === row.id);
+                                            if (!thread) return;
+                                            return replyToResidentInboxThread(thread, text);
+                                          }
+                                    }
+                                    expandedId={inboxExpandedId}
+                                    onToggleExpand={(id) => setInboxExpandedId((cur) => (cur === id ? null : id))}
+                                    selection={{
+                                      selectedIds: residentInboxSelection.selectedIds,
+                                      onToggleSelected: residentInboxSelection.toggleSelected,
+                                      onToggleSelectAll: residentInboxSelection.toggleSelectAll,
+                                      allSelected: residentInboxSelection.allSelected,
+                                      selectableCount: residentInboxRowIds.length,
+                                    }}
+                                    renderExtraActions={(row) => {
                                     if (inboxSubTab === "trash") {
                                       return (
                                         <>
@@ -2502,6 +2595,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                     );
                                   }}
                                 />
+                                </div>
                               )}
                             </ResidentDetailSection>
                           </div>
@@ -2579,17 +2673,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
           <div key={res.id} className={PORTAL_MOBILE_CARD_CLASS}>
             <button
               type="button"
-              className="flex w-full items-center justify-between gap-2 text-left"
+              className="w-full text-left"
               onClick={() => setSelectedId((cur) => (cur === res.id ? null : res.id))}
               aria-expanded={selectedId === res.id}
             >
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-foreground">{res.name || "—"}</p>
-                {housingLabel ? (
-                  <p className="mt-0.5 truncate text-xs text-muted">{housingLabel}</p>
-                ) : null}
-              </div>
-              <PortalTableExpandChevron expanded={selectedId === res.id} />
+              <PortalTableInlineExpand expanded={selectedId === res.id} className="font-semibold text-foreground">
+                <span className="truncate">{res.name || "—"}</span>
+              </PortalTableInlineExpand>
+              {housingLabel ? (
+                <p className="mt-0.5 truncate text-xs text-muted">{housingLabel}</p>
+              ) : null}
             </button>
             {selectedId === res.id && selected ? (
               <div className="mt-3 border-t border-border pt-3">{residentDetailPanel}</div>
@@ -2600,7 +2693,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       </div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full table-fixed border-collapse text-left text-sm">
+            <table className={PORTAL_DATA_TABLE}>
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
@@ -2609,9 +2702,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
-                  <th className={PORTAL_TABLE_EXPAND_TH}>
-                    <span className="sr-only">Expand</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -2625,18 +2715,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                       aria-expanded={selectedId === res.id}
                     >
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        {res.name || "—"}
+                        <PortalTableInlineExpand expanded={selectedId === res.id}>{res.name || "—"}</PortalTableInlineExpand>
                       </td>
                       <td className={PORTAL_TABLE_TD}>{res.email}</td>
                       <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
                       <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
-                      <PortalTableExpandCell expanded={selectedId === res.id} />
                     </tr>
                     {selectedId === res.id && selected ? (
                       <tr>
-                        <td colSpan={7} className="bg-accent/30 px-4 py-5">
+                        <td colSpan={6} className="bg-accent/30 px-4 py-5">
                           {residentDetailPanel}
                         </td>
                       </tr>

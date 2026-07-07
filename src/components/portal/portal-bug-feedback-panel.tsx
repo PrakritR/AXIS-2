@@ -7,8 +7,7 @@ import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/po
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { PortalFeedbackSubmitModal } from "@/components/portal/portal-feedback-submit-modal";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_MOBILE_DETAIL_EXPAND,
@@ -18,13 +17,10 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
 import {
   readBugFeedbackRows,
@@ -160,13 +156,15 @@ export function PortalBugFeedbackPanel({
               <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between gap-2 text-left"
+                  className="flex w-full gap-2 text-left"
                   onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                   aria-expanded={open}
                 >
                   <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
+                      <PortalTableInlineExpand expanded={open} className="truncate text-sm font-semibold text-foreground">
+                        {row.title}
+                      </PortalTableInlineExpand>
                       <p className="mt-0.5 truncate text-xs text-muted">Submitted {formatWhen(row.createdAt)}</p>
                     </div>
                     <span
@@ -175,7 +173,6 @@ export function PortalBugFeedbackPanel({
                       {row.status}
                     </span>
                   </div>
-                  <PortalTableExpandChevron expanded={open} />
                 </button>
                 {open ? <div className={PORTAL_MOBILE_DETAIL_EXPAND}>{renderRowDetail(row)}</div> : null}
               </div>
@@ -184,15 +181,12 @@ export function PortalBugFeedbackPanel({
         </div>
         <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className="w-full table-fixed border-collapse text-left text-sm">
+            <table className={PORTAL_DATA_TABLE}>
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Submitted</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  <th className={PORTAL_TABLE_EXPAND_TH}>
-                    <span className="sr-only">Expand</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -210,7 +204,9 @@ export function PortalBugFeedbackPanel({
                         <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
                           {formatWhen(row.createdAt)}
                         </td>
-                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
+                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                          <PortalTableInlineExpand expanded={open}>{row.title}</PortalTableInlineExpand>
+                        </td>
                         <td className={PORTAL_TABLE_TD}>
                           <span
                             className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
@@ -218,11 +214,10 @@ export function PortalBugFeedbackPanel({
                             {row.status}
                           </span>
                         </td>
-                        <PortalTableExpandCell expanded={open} />
                       </tr>
                       {open ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderRowDetail(row)}
                           </td>
                         </tr>

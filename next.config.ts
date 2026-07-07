@@ -28,6 +28,10 @@ function capacitorDevOrigins(): string[] {
 }
 
 const nextConfig: NextConfig = {
+  env: {
+    // Baked at build time per Vercel environment — keeps SSR and client in sync for demo gating.
+    NEXT_PUBLIC_AXIS_PUBLIC_DEMO_ENABLED: process.env.VERCEL_ENV === "production" ? "false" : "true",
+  },
   // Lets the iOS/Android WebView load from your Mac's LAN IP during `npm run dev`.
   allowedDevOrigins: capacitorDevOrigins(),
   skipTrailingSlashRedirect: true,

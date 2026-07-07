@@ -246,10 +246,6 @@ export function CheckrScreeningModal({
           <p className="text-muted">This applicant has not authorized a background check.</p>
         ) : (
           <>
-            <p className="leading-relaxed text-foreground">
-              Choose a Checkr Tenant package for <span className="font-semibold">{row.name}</span>.
-            </p>
-
             <div className="space-y-3">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Select a package</p>
               <div className="grid gap-3 lg:grid-cols-3">

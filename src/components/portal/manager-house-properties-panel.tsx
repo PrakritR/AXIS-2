@@ -8,23 +8,20 @@ import { ListingDetailSections } from "@/components/marketing/listing-detail-sec
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
+import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-lease-panel";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
 import { ManagerPropertyServiceOptionsPanel } from "@/components/portal/manager-property-service-options-panel";
 import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PORTAL_MOBILE_CARD_CLASS,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import {
@@ -464,6 +461,14 @@ function ManagerPropertyInlineDetails({
         showToast={showToast}
       />
 
+      <ManagerPropertyLeasePanel
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+      />
+
       <ManagerPropertyServiceOptionsPanel
         sub={managerSubmission}
         saveTarget={houseSaveTarget}
@@ -603,12 +608,14 @@ export function ManagerHousePropertiesPanel({
                 <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full gap-2 text-left"
                     onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
                     aria-expanded={expanded}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground">{row.buildingName}</p>
+                      <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
+                        {row.buildingName}
+                      </PortalTableInlineExpand>
                       <p className="mt-0.5 text-xs leading-relaxed text-muted">
                         {row.address}
                         {row.zip ? `, ${row.zip}` : ""}
@@ -618,7 +625,6 @@ export function ManagerHousePropertiesPanel({
                         ba · {row.neighborhood}
                       </p>
                     </div>
-                    <PortalTableExpandChevron expanded={expanded} />
                   </button>
                   {expanded ? (
                     <div className="mt-3 border-t border-border pt-3">
@@ -631,14 +637,12 @@ export function ManagerHousePropertiesPanel({
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
+                <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -656,9 +660,9 @@ export function ManagerHousePropertiesPanel({
                           aria-expanded={expanded}
                         >
                           <td className={PORTAL_TABLE_TD}>
-                            <p className="font-medium text-foreground">
+                            <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
                               {row.buildingName}
-                            </p>
+                            </PortalTableInlineExpand>
                             <p className="mt-0.5 text-xs leading-relaxed text-muted">
                               {row.address}
                               {row.zip ? `, ${row.zip}` : ""}
@@ -670,11 +674,10 @@ export function ManagerHousePropertiesPanel({
                               ba · {row.neighborhood}
                             </p>
                           </td>
-                          <PortalTableExpandCell expanded={expanded} />
                         </tr>
                         {expanded ? (
                           <tr key={`${rowKey}-details`} className="border-b border-border">
-                            <td colSpan={3} className="bg-accent/30/40 px-4 py-4">
+                            <td colSpan={2} className="bg-accent/30/40 px-4 py-4">
                               {renderRowDetail(sourceBucket, row, rowKey)}
                             </td>
                           </tr>

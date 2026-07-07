@@ -1,6 +1,5 @@
 import type { MockProperty } from "@/data/types";
 import type {
-  ManagerBathroomRoomAccessKind,
   ManagerBathroomSubmission,
   ManagerBundleRow,
   ManagerListingSubmissionV1,
@@ -14,6 +13,15 @@ import {
   splitLineList,
 } from "@/data/manager-listing-presets";
 import { parseMonthlyRent } from "@/lib/listings-search";
+import {
+  bathroomShareCountForRoom,
+  describeRoomBathroomSituation,
+  listingHasWholeHouseBath,
+  roomBathroomModalLabel,
+  roomBathroomSetupLine,
+  roomHasPrivateBath,
+} from "@/lib/listing-bathroom-layout";
+import { compareFloorLabels, compareRoomsByFloorThenName } from "@/lib/listing-floor-order";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import {
   formatListingFeeDisplay,
@@ -30,6 +38,8 @@ function filterLeaseBasicsRows(
 ): LeaseBasicRow[] {
   return rows.filter((row) => {
     switch (row.id) {
+      case "lease-multi-room":
+        return !isEntireHomeListing(sub) && twoOrMoreRoomPriceLabel(rooms) !== null;
       case "lease-terms":
         return resolveAllowedLeaseTerms(sub).length > 0 || Boolean(sub.leaseTermsBody.trim());
       case "lease-application":
@@ -107,59 +117,20 @@ function splitRoomAmenityLines(text: string): string[] {
     .slice(0, 24);
 }
 
-function accessKindClause(kind: ManagerBathroomRoomAccessKind | undefined): string {
-  if (kind === "ensuite") return " — noted en suite for this bathroom";
-  if (kind === "shared") return " — noted shared with other rooms on this bathroom";
-  if (kind === "hall") return " — noted hall / common access";
-  return "";
-}
-
-function roomHasPrivateBath(roomId: string, sub: ManagerListingSubmissionV1): boolean {
-  return sub.bathrooms.some((b) => {
-    if (b.allResidents) return false;
-    const ids = b.assignedRoomIds ?? [];
-    return ids.length === 1 && ids[0] === roomId;
-  });
-}
-
-/** Rooms on the same assigned bathroom row (incl. this room). Null when no bathroom row claims this room. */
-function bathroomShareCountForRoom(roomId: string, sub: ManagerListingSubmissionV1): number | null {
-  const direct = sub.bathrooms.find(
-    (b) => b.name.trim() && !b.allResidents && (b.assignedRoomIds ?? []).includes(roomId),
-  );
-  if (!direct) return null;
-  const n = (direct.assignedRoomIds ?? []).filter(Boolean).length;
-  return n > 0 ? n : null;
-}
-
-function roomSetupLine(room: ManagerRoomSubmission, sub: ManagerListingSubmissionV1): string {
-  const wholeHouse = sub.bathrooms.filter((b) => b.name.trim() && b.allResidents);
-  const direct = sub.bathrooms.filter((b) => b.name.trim() && !b.allResidents && (b.assignedRoomIds ?? []).includes(room.id));
-
-  if (direct.length > 0) {
-    const b = direct[0]!;
-    const ids = b.assignedRoomIds ?? [];
-    const kind = b.accessKindByRoomId?.[room.id];
-    let line: string;
-    if (ids.length === 1) line = "Private bathroom (en suite to this room)";
-    else {
-      const otherNames = ids
-        .filter((id) => id !== room.id)
-        .map((id) => sub.rooms.find((r) => r.id === id)?.name?.trim())
-        .filter(Boolean);
-      line = otherNames.length ? `Shared bathroom · with ${otherNames.join(", ")}` : "Shared bathroom";
-    }
-    line += accessKindClause(kind);
-    if (wholeHouse.length > 0) {
-      line += ` · Whole-house bath: ${wholeHouse.map((x) => x.name.trim()).join(", ")}`;
-    }
-    return line;
+function resolveFloorPlanImageUrl(
+  cardFloorLabel: string,
+  rs: ManagerRoomSubmission[],
+  sub: ManagerListingSubmissionV1,
+): string | undefined {
+  const byLabel = sub.floorPlanByLabel ?? {};
+  const direct = byLabel[cardFloorLabel]?.trim();
+  if (direct) return direct;
+  for (const r of rs) {
+    const fl = r.floor.trim();
+    if (fl && byLabel[fl]?.trim()) return byLabel[fl]!.trim();
   }
-
-  if (wholeHouse.length > 0) {
-    return `Whole-house / hall bath: ${wholeHouse.map((b) => b.name.trim()).join(", ")}`;
-  }
-  return "Bathroom details not listed — contact leasing for layout.";
+  const propertyWide = sub.propertyFloorPlanDataUrl?.trim();
+  return propertyWide || undefined;
 }
 
 /** One-line hint under the room name on listing cards — avoid repeating floor + detail. */
@@ -176,8 +147,8 @@ function roomModalIncludedTags(room: ManagerRoomSubmission, sub: ManagerListingS
   const tags: string[] = [];
 
   if (roomHasPrivateBath(room.id, sub)) tags.push("Private bath");
-  else if (sub.bathrooms.some((b) => !b.allResidents && (b.assignedRoomIds ?? []).includes(room.id))) tags.push("Shared bath");
-  if (sub.bathrooms.some((b) => b.name.trim() && b.allResidents)) tags.push("House hall bath");
+  else if (bathroomShareCountForRoom(room.id, sub) !== null) tags.push("Shared bath");
+  if (listingHasWholeHouseBath(sub)) tags.push("House hall bath");
 
   const genericOnly = (segment: string): boolean => {
     const meaningful = segment
@@ -243,13 +214,16 @@ function buildListingFloorCard(
   rs: ManagerRoomSubmission[],
   sub: ManagerListingSubmissionV1,
   property: MockProperty,
+  floorPlanImageUrl?: string,
 ): ListingFloorCard {
   const entireHome = isEntireHomeListing(sub);
   const entireRent = entireHomeMonthlyRentAmount(sub);
   const rents = entireHome && entireRent > 0 ? [entireRent] : rs.map((r) => r.monthlyRent).filter((n) => n > 0);
   const from = rents.length ? Math.min(...rents) : parseMonthlyRent(property.rentLabel) ?? 800;
   const roomRows: ListingRoomRow[] = rs.map((r) => {
-    const setup = roomSetupLine(r, sub);
+    const setup = describeRoomBathroomSituation(r.id, sub);
+    const bathroomShort = roomBathroomModalLabel(r, sub);
+    const bathroomDetail = roomBathroomSetupLine(r, sub);
     const furnish = formatFurnishingForListing(r.furnishing);
     const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
     const utilRaw = formatUtilitiesEstimate(r.utilitiesEstimate);
@@ -264,6 +238,8 @@ function buildListingFloorCard(
       bathroomShareCount: bathroomShareCountForRoom(r.id, sub),
       modal: {
         setupLine: setup,
+        bathroomShortLabel: bathroomShort,
+        bathroomDetailLine: bathroomDetail || undefined,
         tourEyebrow: "Room tour",
         tourTitle: r.videoDataUrl ? "Uploaded video" : "Video tour",
         tourSubtitle: r.videoDataUrl
@@ -285,6 +261,7 @@ function buildListingFloorCard(
     fromPrice: `$${from}`,
     roomCount: rs.length,
     remainingNote: `${rs.length} room${rs.length === 1 ? "" : "s"} in this group`,
+    floorPlanImageUrl: floorPlanImageUrl ?? resolveFloorPlanImageUrl(floorLabel, rs, sub),
     rooms: roomRows,
   };
 }
@@ -339,7 +316,7 @@ function formatFurnishingForListing(raw: string | undefined): string | undefined
   const t = raw?.trim();
   if (!t) return undefined;
   const lower = t.toLowerCase();
-  if (lower === "fully furnished") return "Includes bed, desk, and standard bedroom furniture";
+  if (lower === "fully furnished") return "Includes bed, desk, and other important stuff";
   if (lower === "bed only") return "Includes bed";
   if (lower === "bed and desk") return "Includes bed and desk";
   if (lower === "bed, desk, and chair") return "Includes bed, desk, and chair";
@@ -415,6 +392,95 @@ function monthlyRangeLabel(values: number[], prefix = ""): string {
   const lo = Math.min(...clean);
   const hi = Math.max(...clean);
   return lo === hi ? `${prefix}${moneyLabel(lo)}/mo` : `${prefix}${moneyLabel(lo)}–${moneyLabel(hi)}/mo`;
+}
+
+function twoOrMoreRoomRents(rooms: ManagerRoomSubmission[]): number[] {
+  return rooms.map((r) => r.monthlyRent).filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+}
+
+function twoOrMoreRoomPriceLabel(rooms: ManagerRoomSubmission[]): string | null {
+  const rents = twoOrMoreRoomRents(rooms);
+  if (rents.length < 2) return null;
+  const start = rents[0]! + rents[1]!;
+  return rents.length === 2 ? `$${start}/mo` : `from $${start}/mo`;
+}
+
+function twoOrMoreRoomDetailBody(rooms: ManagerRoomSubmission[]): string {
+  const rents = twoOrMoreRoomRents(rooms);
+  const start = rents[0]! + rents[1]!;
+  const cheapestRooms = [...rooms]
+    .filter((r) => r.monthlyRent > 0)
+    .sort((a, b) => a.monthlyRent - b.monthlyRent)
+    .slice(0, 2);
+  const example =
+    cheapestRooms.length === 2
+      ? `${cheapestRooms[0]!.name.trim()} + ${cheapestRooms[1]!.name.trim()}`
+      : "";
+  return [
+    `Rent two or more rooms on one lease. Starting at $${start}/mo (${moneyLabel(rents[0]!)} + ${moneyLabel(rents[1]!)} for the two lowest-priced rooms).`,
+    example ? `Example pairing: ${example}.` : "",
+    "Each additional room adds its listed monthly rent. Utilities are estimated separately per room.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function preferredMultiRoomBundle(
+  sub: ManagerListingSubmissionV1,
+): ManagerBundleRow | undefined {
+  const bundles = (sub.bundles ?? []).filter(bundleRowHasContent);
+  return (
+    bundles.find((b) => (b.includedRoomIds?.length ?? 0) >= 2) ??
+    bundles.find((b) => /two or more|group lease|multi/i.test(b.label))
+  );
+}
+
+function multiRoomLeaseBasicRow(
+  rooms: ManagerRoomSubmission[],
+  sub: ManagerListingSubmissionV1,
+): LeaseBasicRow | null {
+  if (isEntireHomeListing(sub)) return null;
+  const autoPrice = twoOrMoreRoomPriceLabel(rooms);
+  if (!autoPrice) return null;
+  const bundle = preferredMultiRoomBundle(sub);
+  return {
+    id: "lease-multi-room",
+    icon: "🏘️",
+    title: bundle?.label.trim() || "Two or more rooms",
+    detail: bundle?.promo.trim() || "Combine bedrooms on one lease",
+    price: bundle?.price.trim() || autoPrice,
+    status: "Monthly rent",
+    body: bundle?.roomsLine.trim()
+      ? `${bundle.promo.trim() || "Group lease available."} ${bundle.roomsLine.trim()}.`
+      : twoOrMoreRoomDetailBody(rooms),
+  };
+}
+
+function buildDefaultMultiRoomBundleCard(
+  sub: ManagerListingSubmissionV1,
+  rooms: ManagerRoomSubmission[],
+): BundleCard | null {
+  const price = twoOrMoreRoomPriceLabel(rooms);
+  if (!price || isEntireHomeListing(sub)) return null;
+  const rents = twoOrMoreRoomRents(rooms);
+  const start = rents[0]! + rents[1]!;
+  return {
+    id: "bundle-multi-room",
+    label: "Two or more rooms",
+    price,
+    promo: "Combine any bedrooms on one lease",
+    roomsLine: `${rooms.length} room${rooms.length === 1 ? "" : "s"} available — rent 2 or more together`,
+    roomLines: rooms.map((room) => perRoomBundleSummaryLine(room, sub)),
+    summaryItems: [
+      { label: "Rooms", value: String(rooms.length) },
+      { label: "2-room start", value: `$${start}/mo` },
+      {
+        label: "Rent range",
+        value: monthlyRangeLabel(rents).replace(/^from /, ""),
+      },
+      { label: "Utilities", value: utilitiesListingEstimateLabel(sub) },
+    ],
+  };
 }
 
 function deriveQuickFacts(
@@ -499,6 +565,9 @@ function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSub
 
   const lo = Math.min(...mids);
   const hi = Math.max(...mids);
+  const multiRoom = buildDefaultMultiRoomBundleCard(sub, rooms);
+  if (multiRoom) return [multiRoom];
+
   const priceSummary = lo === hi ? `$${lo}/mo` : `$${lo}–$${hi}/mo`;
 
   return [
@@ -524,48 +593,31 @@ export function listingRichFromManagerSubmission(
       ...r,
       name: r.name.trim() || `Room ${index + 1}`,
     }));
-  const namedBaths = sub.bathrooms.filter((b) => b.name.trim());
-  const specificBaths = namedBaths.filter((b) => !b.allResidents);
-  const hasSpecificAssignments = specificBaths.some((b) => (b.assignedRoomIds ?? []).length > 0);
-
-  let floorPlansSectionTitle: string | undefined;
-  let floorPlans: ListingFloorCard[];
-
-  if (hasSpecificAssignments) {
-    floorPlansSectionTitle = "Rooms by bathroom";
-    const used = new Set<string>();
-    const groups: ListingFloorCard[] = [];
-    for (const b of specificBaths) {
-      const ids = b.assignedRoomIds ?? [];
-      const rs = rooms.filter((r) => ids.includes(r.id));
-      for (const r of rs) used.add(r.id);
-      if (rs.length === 0) continue;
-      const loc = b.location.trim();
-      const label = loc ? `${b.name.trim()} · ${loc}` : b.name.trim();
-      groups.push(buildListingFloorCard(b.id, label, rs, sub, property));
-    }
-    const orphans = rooms.filter((r) => !used.has(r.id));
-    if (orphans.length > 0) {
-      groups.push(buildListingFloorCard("rooms-other", "Other bedrooms (bathroom not specified)", orphans, sub, property));
-    }
-    floorPlans = groups;
-  } else {
-    const floorsMap = new Map<string, typeof rooms>();
-    for (const r of rooms) {
-      const fl = r.floor.trim() || "Floor plan";
-      if (!floorsMap.has(fl)) floorsMap.set(fl, []);
-      floorsMap.get(fl)!.push(r);
-    }
-    let idx = 0;
-    floorPlans = [...floorsMap.entries()].map(([floorLabel, rs]) => {
+  const floorsMap = new Map<string, typeof rooms>();
+  for (const r of rooms) {
+    const fl = r.floor.trim() || "Floor plan";
+    if (!floorsMap.has(fl)) floorsMap.set(fl, []);
+    floorsMap.get(fl)!.push(r);
+  }
+  let idx = 0;
+  const floorPlans: ListingFloorCard[] = [...floorsMap.entries()]
+    .sort(([a], [b]) => compareFloorLabels(a, b))
+    .map(([floorLabel, rs]) => {
+      const sortedRooms = [...rs].sort(compareRoomsByFloorThenName);
       idx += 1;
-      const card = buildListingFloorCard(`floor-${idx}-${floorLabel}`, floorLabel, rs, sub, property);
+      const card = buildListingFloorCard(
+        `floor-${idx}-${floorLabel}`,
+        floorLabel,
+        sortedRooms,
+        sub,
+        property,
+        resolveFloorPlanImageUrl(floorLabel, sortedRooms, sub),
+      );
       return {
         ...card,
-        remainingNote: `${rs.length} room${rs.length === 1 ? "" : "s"} on this floor`,
+        remainingNote: `${sortedRooms.length} room${sortedRooms.length === 1 ? "" : "s"} on this floor`,
       };
     });
-  }
 
   let bathrooms: ListingBathroomRow[] = sub.bathrooms
     .filter((b) => b.name.trim())
@@ -681,6 +733,7 @@ export function listingRichFromManagerSubmission(
         return sub.leaseTermsBody.trim() || "Lease terms will be confirmed with applicants.";
       })(),
     },
+    ...(multiRoomLeaseBasicRow(rooms, sub) ? [multiRoomLeaseBasicRow(rooms, sub)!] : []),
     ...(sub.shortTermRentalsAllowed
       ? [
           {
@@ -850,7 +903,7 @@ export function listingRichFromManagerSubmission(
       ? monthlyRangeLabel([Math.min(...mids)])
       : property.rentLabel.trim().replace(/\s*\/\s*/g, "/") || "—",
     estimatedMonthlyTotalLabel: monthlyTotals.length ? monthlyRangeLabel([Math.min(...monthlyTotals)]) : undefined,
-    floorPlansSectionTitle: floorPlansSectionTitle ?? undefined,
+    floorPlansSectionTitle: undefined,
     floorPlans:
       floorPlans.length > 0
         ? floorPlans

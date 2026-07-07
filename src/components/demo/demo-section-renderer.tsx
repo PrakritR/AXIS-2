@@ -57,6 +57,7 @@ const VendorWorkOrdersPanel = dynamic(() => import("@/components/portal/vendor-w
 const VendorCalendarPanel = dynamic(() => import("@/components/portal/vendor-calendar-panel").then((m) => m.VendorCalendarPanel), { ssr: false, loading });
 const VendorInboxPanel = dynamic(() => import("@/components/portal/vendor-inbox-panel").then((m) => m.VendorInboxPanel), { ssr: false, loading });
 const VendorPaymentsPanel = dynamic(() => import("@/components/portal/vendor-payments-panel").then((m) => m.VendorPaymentsPanel), { ssr: false, loading });
+const VendorFinancesPanel = dynamic(() => import("@/components/portal/vendor-finances-panel").then((m) => m.VendorFinancesPanel), { ssr: false, loading });
 const VendorDocumentsPanel = dynamic(() => import("@/components/portal/vendor-documents-panel").then((m) => m.VendorDocumentsPanel), { ssr: false, loading });
 const VendorSettingsPanel = dynamic(() => import("@/components/portal/vendor-settings-panel").then((m) => m.VendorSettingsPanel), { ssr: false, loading });
 
@@ -93,6 +94,8 @@ export function DemoSectionRenderer({
         return <VendorCalendarPanel />;
       case "inbox":
         return <VendorInboxPanel tabId={tabId} />;
+      case "financials":
+        return <VendorFinancesPanel tabId={tabId ?? "income"} basePath="/vendor" />;
       case "payments":
         return <VendorPaymentsPanel />;
       case "documents":

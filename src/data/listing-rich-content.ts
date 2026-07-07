@@ -21,6 +21,10 @@ export type ListingRoomModal = {
   floorLine?: string;
   /** Manager “Room details” textarea — full notes for modal & catalog blurbs. */
   roomNotes?: string;
+  /** Short ensuite / shared label for the room modal stat card. */
+  bathroomShortLabel?: string;
+  /** Secondary bathroom detail under the stat-card label (shared-with names, etc.). */
+  bathroomDetailLine?: string;
 };
 
 export type ListingRoomRow = {
@@ -47,6 +51,8 @@ export type ListingFloorCard = {
   fromPrice: string;
   roomCount: number;
   remainingNote?: string;
+  /** Uploaded floor plan image for this floor group (data URL or https). */
+  floorPlanImageUrl?: string;
   rooms: ListingRoomRow[];
 };
 
@@ -397,6 +403,15 @@ const defaultLease: LeaseBasicRow[] = [
     body: "Lease lengths and rent details appear here after the property manager completes the listing application. Apply online to choose your term in the rental application.",
   },
   {
+    id: "lease-multi-room",
+    icon: "🏘️",
+    title: "Two or more rooms",
+    detail: "Combine bedrooms on one lease",
+    price: "from $1,550/mo",
+    status: "Monthly rent",
+    body: "Rent two or more rooms on one lease. Starting rates combine the lowest-priced room pair; each additional room adds its listed monthly rent. Utilities are estimated separately.",
+  },
+  {
     id: "lease-application",
     icon: "📄",
     title: "Application",
@@ -478,20 +493,17 @@ export const DEFAULT_LISTING_HOUSE_RULES_FALLBACK =
 
 const defaultBundles: BundleCard[] = [
   {
-    id: "bundle-2f",
-    label: "Second floor rental",
-    strikethrough: "$3,400/mo",
-    price: "$3,200/mo",
-    promo: "Promo rate",
-    roomsLine: "Room 2 · Room 3 · Room 4 · Room 5",
-  },
-  {
-    id: "bundle-full",
-    label: "Full house",
-    strikethrough: "$7,175/mo",
-    price: "$7,000/mo",
-    promo: "Promo rate",
-    roomsLine: "All rooms · shared spaces included",
+    id: "bundle-multi-room",
+    label: "Two or more rooms",
+    price: "from $1,550/mo",
+    promo: "Combine any bedrooms on one lease",
+    roomsLine: "5 rooms available — rent 2 or more together",
+    roomLines: ["Room 1: $875", "Room 2: $800", "Room 3: $775", "Room 4: $775"],
+    summaryItems: [
+      { label: "Rooms", value: "5" },
+      { label: "2-room start", value: "$1,550/mo" },
+      { label: "Rent range", value: "$775–$875/mo" },
+    ],
   },
 ];
 

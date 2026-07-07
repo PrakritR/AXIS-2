@@ -8,10 +8,13 @@ import {
   PROPERTY_PIPELINE_EVENT,
   readExtraListingsPublic,
 } from "@/lib/demo-property-pipeline";
+import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
+import { isProductionPublicSite } from "@/lib/public-demo-access";
 import { syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 
 function readActivePublicListings(): MockProperty[] {
-  return readExtraListingsPublic().filter(isPropertyActiveForLeads);
+  const listings = readExtraListingsPublic().filter(isPropertyActiveForLeads);
+  return filterSandboxFromPublicCatalog(listings, { production: isProductionPublicSite() });
 }
 
 export function usePublicListings() {
@@ -42,7 +45,8 @@ export function usePublicListings() {
     ])
       .then(([loaded]) => {
         if (cancelled) return;
-        setListings(loaded.filter(isPropertyActiveForLeads));
+        const active = loaded.filter(isPropertyActiveForLeads);
+        setListings(filterSandboxFromPublicCatalog(active, { production: isProductionPublicSite() }));
         setOccupancyReady(true);
       })
       .finally(() => {

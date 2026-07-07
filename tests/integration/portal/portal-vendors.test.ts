@@ -74,7 +74,7 @@ describe("/api/portal-vendors", () => {
       }),
     } as never);
 
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/portal-vendors"));
     const { status, data } = await parseJsonResponse<{ rows?: { id: string; managerUserId?: string }[] }>(res);
     expect(status).toBe(200);
     expect(data.rows?.map((r) => r.id)).toEqual(["v1", "v2"]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultListingSubmission, normalizeCustomApplicationFields } from "@/lib/manager-listing-submission";
+import { createDefaultListingSubmission, normalizeCustomApplicationFields, normalizeCustomApplicationFieldsForEditor } from "@/lib/manager-listing-submission";
 import {
   isWizardFormFieldEnabled,
   listingDisabledWizardFormKeys,
@@ -8,7 +8,14 @@ import {
   resolveListingApplicationFields,
   restoreDefaultApplicationConfig,
   STANDARD_APPLICATION_FIELD_CATALOG,
+  type StandardApplicationFieldDef,
 } from "@/lib/rental-application/application-field-catalog";
+
+function catalogField(section: StandardApplicationFieldDef["section"], label: string): StandardApplicationFieldDef {
+  const def = STANDARD_APPLICATION_FIELD_CATALOG.find((d) => d.section === section && d.label === label);
+  if (!def) throw new Error(`Missing catalog field ${section}:${label}`);
+  return def;
+}
 
 describe("application-field-catalog", () => {
   it("materializes the full standard catalog by default", () => {
@@ -55,6 +62,22 @@ describe("application-field-catalog", () => {
     expect(restored.customApplicationFields).toEqual([]);
   });
 
+  it("editor normalizer keeps in-progress custom questions in their section", () => {
+    const sub = {
+      ...createDefaultListingSubmission(),
+      customApplicationFields: [
+        { id: "new-q", key: "", label: "", type: "text" as const, required: false, options: [], section: "property" },
+      ],
+    };
+    const fields = resolveListingApplicationFields(sub, normalizeCustomApplicationFieldsForEditor);
+    const propertyCustom = fields.filter((f) => !f.isStandard && (f.section ?? "additional") === "property");
+    expect(propertyCustom).toHaveLength(1);
+    expect(propertyCustom[0]?.id).toBe("new-q");
+    expect(resolveListingApplicationFields(sub, normalizeCustomApplicationFields)).toHaveLength(
+      STANDARD_APPLICATION_FIELD_CATALOG.length,
+    );
+  });
+
   it("remove built-in adds disabled key", () => {
     const sub = createDefaultListingSubmission();
     const field = resolveListingApplicationFields(sub, normalizeCustomApplicationFields)[0]!;
@@ -77,5 +100,57 @@ describe("application-field-catalog", () => {
   it("every built-in catalog row maps to at least one wizard field", () => {
     const missing = STANDARD_APPLICATION_FIELD_CATALOG.filter((d) => d.wizardFormKeys.length === 0);
     expect(missing.map((d) => `${d.section}:${d.label}`)).toEqual([]);
+  });
+
+  it("assigns wizard-aligned types and options to key built-in questions", () => {
+    expect(catalogField("additional", "Number of occupants")).toMatchObject({
+      type: "select",
+      options: ["1", "2", "3", "4", "5"],
+    });
+    expect(catalogField("additional", "Pets")).toMatchObject({ type: "text", options: [] });
+    expect(catalogField("additional", "Eviction history")).toMatchObject({
+      type: "select",
+      options: ["Yes", "No"],
+    });
+    expect(catalogField("additional", "Bankruptcy history")).toMatchObject({
+      type: "select",
+      options: ["Yes", "No"],
+    });
+    expect(catalogField("additional", "Criminal history")).toMatchObject({
+      type: "select",
+      options: ["Yes", "No"],
+    });
+    expect(catalogField("consent", "Credit & background check consent")).toMatchObject({
+      type: "checkbox",
+      options: [],
+    });
+    expect(catalogField("consent", "Truthfulness certification")).toMatchObject({
+      type: "checkbox",
+      options: [],
+    });
+    expect(catalogField("consent", "Digital signature & date")).toMatchObject({
+      type: "text",
+      options: [],
+    });
+    expect(catalogField("employment", "Monthly / annual income")).toMatchObject({
+      type: "number",
+      options: [],
+    });
+    expect(catalogField("employment", "Other income")).toMatchObject({
+      type: "number",
+      options: [],
+    });
+    expect(catalogField("property", "Lease start & end dates")).toMatchObject({
+      type: "date",
+      options: [],
+    });
+    expect(catalogField("property", "Room choices (1st – 3rd)")).toMatchObject({
+      type: "select",
+      options: [],
+    });
+    expect(catalogField("property", "Lease term")).toMatchObject({
+      type: "select",
+      options: [],
+    });
   });
 });

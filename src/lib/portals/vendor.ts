@@ -20,6 +20,11 @@ export const vendorPortal: PortalDefinition = {
         { id: "trash", label: "Trash" },
       ],
     },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [{ id: "income", label: "Income" }],
+    },
     { section: "payments", label: "Payments", tabs: [] },
     {
       section: "documents",
@@ -40,6 +45,7 @@ export const VENDOR_PORTAL_SMOKE_PATHS = [
   { label: "Services", path: "/vendor/work-orders" },
   { label: "Calendar", path: "/vendor/calendar" },
   { label: "Inbox", path: "/vendor/inbox/unopened" },
+  { label: "Finances", path: "/vendor/financials/income" },
   { label: "Payments", path: "/vendor/payments" },
   { label: "Documents", path: "/vendor/documents/tax" },
   { label: "Settings", path: "/vendor/profile" },

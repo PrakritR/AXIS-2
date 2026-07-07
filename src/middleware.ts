@@ -1,11 +1,20 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isProductionAxisHost } from "@/lib/auth/native-auth-entry";
 import { legacyPaidPortalToPortal } from "@/lib/legacy-portal-redirect";
 
 const PROTECTED_PREFIXES = ["/portal", "/pro", "/manager", "/owner", "/resident", "/admin", "/vendor"];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const host = request.headers.get("host")?.split(":")[0] ?? "";
+  const productionPublicSite =
+    process.env.VERCEL_ENV === "production" || isProductionAxisHost(host);
+  if (productionPublicSite && (path === "/demo" || path.startsWith("/demo/"))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
   if (path === "/dashboard" || path === "/dashboard/") {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/continue";
@@ -65,6 +74,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/demo",
+    "/demo/:path*",
     "/dashboard",
     "/dashboard/",
     "/portal/:path*",

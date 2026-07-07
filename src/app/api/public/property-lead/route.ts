@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { MockProperty } from "@/data/types";
 import { isPropertyActiveForLeads } from "@/lib/demo-property-pipeline";
+import { isSandboxPublicListing } from "@/lib/public-sandbox-listings";
+import { isProductionRuntime } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -21,7 +23,7 @@ export async function GET(req: Request) {
     const db = createSupabaseServiceRoleClient();
     const { data, error } = await db
       .from("manager_property_records")
-      .select("id, status, property_data")
+      .select("id, manager_user_id, status, property_data")
       .eq("id", propertyId)
       .maybeSingle();
 
@@ -35,9 +37,30 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Property is not active for apply or tour links." }, { status: 404 });
     }
 
+    const resolved: MockProperty = {
+      ...property,
+      id: property.id || propertyId,
+      managerUserId: property.managerUserId ?? data.manager_user_id ?? undefined,
+    };
+
+    if (isProductionRuntime()) {
+      let managerEmail: string | null = null;
+      if (data.manager_user_id) {
+        const { data: profile } = await db
+          .from("profiles")
+          .select("email")
+          .eq("id", data.manager_user_id)
+          .maybeSingle();
+        managerEmail = profile?.email ?? null;
+      }
+      if (isSandboxPublicListing({ property: resolved, managerEmail })) {
+        return NextResponse.json({ error: "Property not found." }, { status: 404 });
+      }
+    }
+
     // Public per-property detail: CDN-cacheable, same for everyone.
     return NextResponse.json(
-      { property: { ...property, id: property.id || propertyId } },
+      { property: resolved },
       { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600" } },
     );
   } catch (error) {

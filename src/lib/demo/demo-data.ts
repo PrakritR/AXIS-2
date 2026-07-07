@@ -82,6 +82,7 @@ export const PROP = {
   cascade: "mgr-demo-cascade",
   emerald: "mgr-demo-emerald",
   lakeview: "mgr-demo-lakeview",
+  ballard: "mgr-demo-ballard",
 } as const;
 
 export const PROP_LABEL: Record<string, string> = {
@@ -89,6 +90,7 @@ export const PROP_LABEL: Record<string, string> = {
   [PROP.cascade]: "Cascade Lofts · 4B",
   [PROP.emerald]: "Emerald Court · 3",
   [PROP.lakeview]: "Lakeview Flats · S2",
+  [PROP.ballard]: "Ballard Commons · 2B",
 };
 
 /** Room-choice value (`propertyId::roomId`) for a demo property's single unit. */
@@ -104,6 +106,7 @@ export const DEMO_HOUSE_IMAGE: Record<string, string> = {
   [PROP.cascade]: "/demo/house-cascade.svg",
   [PROP.emerald]: "/demo/house-emerald.svg",
   [PROP.lakeview]: "/demo/house-lakeview.svg",
+  [PROP.ballard]: "/demo/house-cascade.svg",
 };
 
 /**
@@ -228,6 +231,7 @@ export function demoProperties(): MockProperty[] {
     base(PROP.cascade, "Cascade Lofts", "88 Bell St", "Belltown", 1, 1, 1950, "Unit 4B"),
     base(PROP.emerald, "Emerald Court", "455 Boren Ave", "First Hill", 3, 2, 3200, "Unit 3"),
     base(PROP.lakeview, "Lakeview Flats", "210 Fairview Ave N", "South Lake Union", 0, 1, 1700, "Unit S2"),
+    base(PROP.ballard, "Ballard Commons", "5515 22nd Ave NW", "Ballard", 2, 1, 2150, "Unit 2B"),
   ];
 }
 
@@ -350,6 +354,27 @@ export function demoApplications(): DemoApplicantRow[] {
       }),
     mk("demo-app-8", "Tyler Brooks", "tyler.brooks@example.com", PROP.pioneer, "Declined", "rejected",
       "Did not meet income requirement", { backgroundCheckStatus: "flagged" }),
+    mk("demo-app-10", "Ava Nguyen", "ava.nguyen@example.com", PROP.ballard, "New application", "pending",
+      "Submitted yesterday — strong rental history", {
+        application: demoApplicationData({
+          propertyId: PROP.ballard,
+          fullLegalName: "Ava Nguyen",
+          email: "ava.nguyen@example.com",
+          ssn: "123-45-6780",
+          consentCredit: true,
+        }),
+      }),
+    mk("demo-app-11", "Liam Carter", "liam.carter@example.com", PROP.cascade, "Interview scheduled", "pending",
+      "Tour completed — manager follow-up this week", {
+        backgroundCheckStatus: "passed",
+        application: demoApplicationData({
+          propertyId: PROP.cascade,
+          fullLegalName: "Liam Carter",
+          email: "liam.carter@example.com",
+          ssn: "123-45-6786",
+          consentCredit: true,
+        }),
+      }),
     // Former Pioneer 12A tenant, moved out just before Jordan's incoming lease
     // — gives the manager Residents › Previous tab a real row.
     mk("demo-app-9", "Maya Torres", "maya.torres@example.com", PROP.pioneer, "Moved out", "approved",
@@ -854,6 +879,36 @@ export function demoWorkOrders(): DemoManagerWorkOrderRow[] {
         category: "electrical",
         managerInitiated: true,
       }),
+    mk("demo-wo-10", PROP.pioneer, "Dishwasher install", "Medium", "Completed", "completed",
+      "Replaced aging dishwasher with Energy Star unit.", {
+        residentName: DEMO_RESIDENT_NAME,
+        residentEmail: DEMO_RESIDENT_EMAIL,
+        category: "general",
+        vendorName: DEMO_VENDOR_NAME,
+        vendorId: "demo-vendor-1",
+        vendorCostCents: 22_500,
+        materialsCostCents: 8_500,
+        automationStatus: "paid",
+        paidAt: isoDaysFromNow(-4),
+        completedAt: isoDaysFromNow(-5),
+        cost: "$310.00",
+        workDoneSummary: "Removed old unit, installed new Bosch dishwasher, tested drain line.",
+      }),
+    mk("demo-wo-11", PROP.emerald, "Electrical panel inspection", "Low", "Completed", "completed",
+      "Annual panel inspection and breaker labeling.", {
+        residentName: "Dana Whitfield",
+        residentEmail: "dana.whitfield@example.com",
+        category: "electrical",
+        vendorName: "Puget Electric",
+        vendorId: "demo-vendor-4",
+        vendorCostCents: 18_500,
+        materialsCostCents: 0,
+        automationStatus: "paid",
+        paidAt: isoDaysFromNow(-8),
+        completedAt: isoDaysFromNow(-9),
+        cost: "$185.00",
+        workDoneSummary: "Panel passed inspection; replaced two worn breakers.",
+      }),
   ];
 }
 
@@ -923,23 +978,40 @@ export function demoVendorPayouts(): VendorPayout[] {
       failureReason: null,
       createdAt: isoDaysFromNow(-10),
     },
+    {
+      id: "demo-payout-10",
+      workOrderId: "demo-wo-10",
+      amountCents: 22_500,
+      stripeTransferId: "tr_demo_payout_10",
+      status: "paid",
+      failureReason: null,
+      createdAt: isoDaysFromNow(-4),
+    },
   ];
 }
 
 export function demoVendors(): ManagerVendorRow[] {
-  const mk = (id: string, name: string, trade: string, phone: string, email: string): ManagerVendorRow => ({
+  const mk = (id: string, name: string, trade: string, phone: string, email: string, extra: Partial<ManagerVendorRow> = {}): ManagerVendorRow => ({
     id,
     managerUserId: DEMO_MANAGER_USER_ID,
     name,
     trade,
+    trades: [trade],
     phone,
     email,
     notes: "",
     active: true,
     propertyIds: [],
+    achPaymentsEnabled: id === "demo-vendor-1",
+    acceptedPaymentMethods: id === "demo-vendor-1" ? ["ach"] : undefined,
+    ...extra,
   });
   return [
-    mk("demo-vendor-1", "Cascade Mechanical", "HVAC", "(206) 555-0142", "service@cascademech.example.com"),
+    mk("demo-vendor-1", "Cascade Mechanical", "HVAC", "(206) 555-0142", "service@cascademech.example.com", {
+      vendorPriority: "primary",
+      insuranceProvider: "Evergreen Mutual",
+      insuranceExpiresAt: isoDateOnly(120),
+    }),
     mk("demo-vendor-2", "Rainier Plumbing", "Plumbing", "(206) 555-0177", "dispatch@rainierplumb.example.com"),
     mk("demo-vendor-3", "Emerald Painters", "Painting", "(206) 555-0163", "hello@emeraldpaint.example.com"),
     mk("demo-vendor-4", "Puget Electric", "Electrical", "(206) 555-0189", "team@pugetelectric.example.com"),
@@ -978,6 +1050,33 @@ export function demoPromotions(): ManagerPromotionRow[] {
       },
       createdAt: isoDaysFromNow(-4),
       updatedAt: isoDaysFromNow(-4),
+      textCopies: [
+        {
+          id: "demo-ptext-1a",
+          copy: {
+            format: "instagram_caption",
+            hook: "Your Pioneer Square home is waiting",
+            body: "In-unit laundry, rooftop deck, and steps from light rail — $2,400/mo with first month free.",
+            hashtags: "#seattle #pioneersquare #rentalseattle",
+            ctaLine: "Book a tour today",
+          },
+          createdAt: isoDaysFromNow(-4),
+          updatedAt: isoDaysFromNow(-4),
+        },
+        {
+          id: "demo-ptext-1b",
+          copy: {
+            format: "email_blast",
+            hook: "",
+            body: "Hi there,\n\nThe Pioneer has a bright 2-bed available now in Pioneer Square. First month free for qualified applicants.\n\nBest,\nAxis Leasing",
+            hashtags: "",
+            ctaLine: "Reply to schedule a tour",
+            subjectLine: "First month free at The Pioneer",
+          },
+          createdAt: isoDaysFromNow(-3),
+          updatedAt: isoDaysFromNow(-3),
+        },
+      ],
     },
     {
       id: "demo-promo-2",
@@ -1171,6 +1270,17 @@ export function demoManagerInbox(): PersistedInboxThread[] {
       unread: false,
     },
     {
+      id: "demo-mi-6",
+      folder: "inbox",
+      from: DEMO_VENDOR_NAME,
+      email: "service@cascademech.example.com",
+      subject: "Bid submitted — smart thermostat upgrade",
+      preview: "Submitted pricing for the Pioneer thermostat install…",
+      body: `Hi Alex,\n\nI submitted my bid for the smart thermostat upgrade at ${PROP_LABEL[PROP.pioneer]} — $435 labor + materials, available next week.\n\n${DEMO_VENDOR_NAME}`,
+      time: dateLabel(-1),
+      unread: true,
+    },
+    {
       id: "demo-mi-4",
       folder: "sent",
       from: DEMO_MANAGER_NAME,
@@ -1244,6 +1354,17 @@ export function demoVendorInbox(): PersistedInboxThread[] {
       preview: `${PROP_LABEL[PROP.lakeview]} · ${dateLabel(6)} at 1:30 PM…`,
       body: `Hi ${DEMO_VENDOR_NAME},\n\nQuick one — please swap the furnace filter at ${PROP_LABEL[PROP.lakeview]} on ${dateLabel(6)} at 1:30 PM ahead of the new resident's move-in.\n\nThanks,\nAlex`,
       time: dateLabel(-2),
+      unread: false,
+    },
+    {
+      id: "demo-vi-3",
+      folder: "inbox",
+      from: DEMO_MANAGER_NAME,
+      email: DEMO_MANAGER_EMAIL,
+      subject: "Payment sent — dishwasher install",
+      preview: "Your payout for the Pioneer dishwasher job has been processed…",
+      body: `Hi ${DEMO_VENDOR_NAME},\n\nWe approved and paid the dishwasher install at ${PROP_LABEL[PROP.pioneer]}. $225.00 labor was transferred to your connected account.\n\nThanks,\nAlex`,
+      time: dateLabel(-4),
       unread: false,
     },
   ];
@@ -1407,6 +1528,7 @@ export function demoSchedule(): DemoScheduleSeed {
       tour("demo-tour-1", "Sofia Rossi", "sofia.rossi@example.com", PROP.pioneer, 1, 10, 0),
       tour("demo-tour-2", "Priya Sharma", "priya.sharma@example.com", PROP.cascade, 2, 15, 30),
       tour("demo-tour-3", "Marcus Chen", "marcus.chen@example.com", PROP.emerald, 4, 11, 0),
+      tour("demo-tour-4", "Ava Nguyen", "ava.nguyen@example.com", PROP.ballard, 3, 16, 0),
     ],
     partnerInquiries: [
       request(
@@ -1436,6 +1558,7 @@ export function demoSchedule(): DemoScheduleSeed {
       [PROP.cascade]: slots,
       [PROP.emerald]: slots,
       [PROP.lakeview]: slots,
+      [PROP.ballard]: slots,
     },
   };
 }

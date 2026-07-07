@@ -61,13 +61,59 @@ export type ResolvedApplicationField = ManagerCustomApplicationField & {
   isStandard: boolean;
 };
 
-function inferStandardFieldType(
-  section: RentalApplicationSectionId,
-  label: string,
-): ManagerCustomApplicationFieldType {
-  if (section === "consent") return "checkbox";
-  if (/date/i.test(label)) return "date";
-  return "text";
+const OCCUPANCY_OPTIONS = ["1", "2", "3", "4", "5"] as const;
+const YES_NO_OPTIONS = ["Yes", "No"] as const;
+
+type StandardFieldConfig = {
+  type: ManagerCustomApplicationFieldType;
+  options?: readonly string[];
+};
+
+/** Default editor types/options aligned with the applicant rental wizard. */
+const STANDARD_FIELD_TYPE_MAP: Record<string, StandardFieldConfig> = {
+  "property:Property": { type: "select" },
+  "property:Room choices (1st – 3rd)": { type: "select" },
+  "property:Rental type (standard or short-term)": { type: "select" },
+  "property:Lease term": { type: "select" },
+  "property:Lease start & end dates": { type: "date" },
+  "personal:Full legal name": { type: "text" },
+  "personal:Date of birth": { type: "date" },
+  "personal:Social Security number": { type: "text" },
+  "personal:Driver's license / ID": { type: "text" },
+  "personal:Phone": { type: "text" },
+  "personal:Email": { type: "text" },
+  "current_address:Street, city, state, ZIP": { type: "text" },
+  "current_address:Current landlord name & phone": { type: "text" },
+  "current_address:Move-in / move-out dates": { type: "date" },
+  "current_address:Reason for leaving": { type: "text" },
+  "previous_address:Street, city, state, ZIP": { type: "text" },
+  "previous_address:Previous landlord name & phone": { type: "text" },
+  "previous_address:Move-in / move-out dates": { type: "date" },
+  "previous_address:Reason for leaving": { type: "text" },
+  "employment:Employer & employer address": { type: "text" },
+  "employment:Supervisor name & phone": { type: "text" },
+  "employment:Job title & employment start": { type: "text" },
+  "employment:Monthly / annual income": { type: "number" },
+  "employment:Other income": { type: "number" },
+  "references:Reference 1 — name, relationship, phone": { type: "text" },
+  "references:Reference 2 — name, relationship, phone": { type: "text" },
+  "additional:Number of occupants": { type: "select", options: OCCUPANCY_OPTIONS },
+  "additional:Pets": { type: "text" },
+  "additional:Eviction history": { type: "select", options: YES_NO_OPTIONS },
+  "additional:Bankruptcy history": { type: "select", options: YES_NO_OPTIONS },
+  "additional:Criminal history": { type: "select", options: YES_NO_OPTIONS },
+  "consent:Credit & background check consent": { type: "checkbox" },
+  "consent:Truthfulness certification": { type: "checkbox" },
+  "consent:Digital signature & date": { type: "text" },
+};
+
+function standardFieldConfig(section: RentalApplicationSectionId, label: string): StandardFieldConfig {
+  const key = `${section}:${label}`;
+  const config = STANDARD_FIELD_TYPE_MAP[key];
+  if (!config) {
+    throw new Error(`Missing standard field type map entry for ${key}`);
+  }
+  return config;
 }
 
 function standardKeyFor(section: RentalApplicationSectionId, label: string, index: number): string {
@@ -82,15 +128,18 @@ function standardKeyFor(section: RentalApplicationSectionId, label: string, inde
 /** Canonical built-in application questions — one row per standard applicant prompt. */
 export const STANDARD_APPLICATION_FIELD_CATALOG: readonly StandardApplicationFieldDef[] =
   RENTAL_APPLICATION_SECTIONS.flatMap((section) =>
-    section.standardFields.map((label, index) => ({
-      standardKey: standardKeyFor(section.id, label, index),
-      section: section.id,
-      label,
-      type: inferStandardFieldType(section.id, label),
-      required: true,
-      options: [] as string[],
-      wizardFormKeys: STANDARD_FIELD_WIZARD_KEYS[`${section.id}:${label}`] ?? [],
-    })),
+    section.standardFields.map((label, index) => {
+      const config = standardFieldConfig(section.id, label);
+      return {
+        standardKey: standardKeyFor(section.id, label, index),
+        section: section.id,
+        label,
+        type: config.type,
+        required: true,
+        options: [...(config.options ?? [])],
+        wizardFormKeys: STANDARD_FIELD_WIZARD_KEYS[`${section.id}:${label}`] ?? [],
+      };
+    }),
   );
 
 const CATALOG_BY_KEY = new Map(

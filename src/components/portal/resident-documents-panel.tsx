@@ -11,17 +11,14 @@ import { TabNav } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
-  PortalTableExpandCell,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,} from "@/components/portal/portal-data-table";
 import {
   DocumentInlineViewer,
   ResidentAddDocumentModal,
@@ -87,7 +84,7 @@ function DocumentsTableShell({
       <div className="space-y-2 lg:hidden">{mobile}</div>
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className="w-full table-fixed border-collapse text-left text-sm">
+          <table className={PORTAL_DATA_TABLE}>
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>{head}</tr>
             </thead>
@@ -137,9 +134,6 @@ function ApplicationDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-            <th className={PORTAL_TABLE_EXPAND_TH}>
-              <span className="sr-only">Expand</span>
-            </th>
           </>
         }
         mobile={rows.map((row) => (
@@ -161,13 +155,14 @@ function ApplicationDocumentsTable() {
             onClick={() => setPreview((cur) => (cur?.id === row.id ? null : row))}
           >
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">Rental application</p>
+              <PortalTableInlineExpand expanded={preview?.id === row.id} className="min-w-0 truncate font-medium text-foreground">
+                Rental application
+              </PortalTableInlineExpand>
             </td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>{applicationStatusLabel(row.bucket)}</td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <p className="min-w-0 max-w-[280px] truncate">{row.property || "—"}</p>
+              <p className="min-w-0 truncate">{row.property || "—"}</p>
             </td>
-            <PortalTableExpandCell expanded={preview?.id === row.id} />
           </tr>
         ))}
       </DocumentsTableShell>
@@ -328,9 +323,6 @@ function RentReceiptsTab() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
-            <th className={PORTAL_TABLE_EXPAND_TH}>
-              <span className="sr-only">Expand</span>
-            </th>
           </>
             }
             mobile={receipts.map((row, i) => {
@@ -359,11 +351,12 @@ function RentReceiptsTab() {
                 onClick={() => setPreview((cur) => (isOpen ? null : row))}
               >
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                  <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">Rent receipt</p>
+                  <PortalTableInlineExpand expanded={isOpen} className="min-w-0 truncate font-medium text-foreground">
+                    Rent receipt
+                  </PortalTableInlineExpand>
                 </td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
                 <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
-                <PortalTableExpandCell expanded={isOpen} />
               </tr>
               );
             })}
@@ -473,9 +466,6 @@ function SignedLeaseDocumentsTable() {
             <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
             <th className={`${MANAGER_TABLE_TH} text-left`}>Date signed</th>
-            <th className={PORTAL_TABLE_EXPAND_TH}>
-              <span className="sr-only">Expand</span>
-            </th>
           </>
         }
         mobile={
@@ -494,11 +484,12 @@ function SignedLeaseDocumentsTable() {
           onClick={() => setPreviewOpen((open) => !open)}
         >
           <td className={`${PORTAL_TABLE_TD} align-middle`}>
-            <p className="min-w-0 max-w-[320px] truncate font-medium text-foreground">{leaseName}</p>
+            <PortalTableInlineExpand expanded={previewOpen} className="min-w-0 truncate font-medium text-foreground">
+              {leaseName}
+            </PortalTableInlineExpand>
           </td>
           <td className={`${PORTAL_TABLE_TD} align-middle`}>Fully signed</td>
           <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(signedAt)}</td>
-          <PortalTableExpandCell expanded={previewOpen} />
         </tr>
       </DocumentsTableShell>
       {previewOpen ? (

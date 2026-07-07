@@ -28,7 +28,6 @@ import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-
 import {
   ManagerServiceRequestDetail,
   managerServiceRequestBucket,
-  managerServiceRequestPricingSummary,
   type ManagerServiceRequestBucket,
 } from "@/components/portal/manager-service-request-detail";
 import { ManagerCreateServiceRequestModal } from "@/components/portal/manager-create-service-request-modal";
@@ -40,8 +39,7 @@ import {
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { TabNav } from "@/components/ui/tabs";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_MOBILE_CARD_CLASS,
@@ -49,12 +47,9 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-} from "@/components/portal/portal-data-table";
+  PortalTableInlineExpand,
+  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
 
 type FilterType = "requests" | "work-orders" | "vendors";
 
@@ -307,23 +302,22 @@ export function ManagerAllServicesPanel({
                 req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
                   ? propertyOptions.find((p) => p.id === req.propertyId)!.label
                   : "—";
-              const summary = managerServiceRequestPricingSummary(req);
               return (
                 <div key={`req-mobile-${req.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full gap-2 text-left"
                     onClick={() => setExpandedId(isExpanded ? null : id)}
                     aria-expanded={isExpanded}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-foreground">{req.offerName}</p>
+                      <PortalTableInlineExpand expanded={isExpanded} className="truncate font-semibold text-foreground">
+                        {req.offerName}
+                      </PortalTableInlineExpand>
                       <p className="mt-0.5 truncate text-xs text-muted">
                         {[req.residentName || req.residentEmail, propertyLabel].filter(Boolean).join(" · ")}
                       </p>
-                      <p className="mt-0.5 truncate text-[11px] text-muted/90">{summary}</p>
                     </div>
-                    <PortalTableExpandChevron expanded={isExpanded} />
                   </button>
                   {isExpanded ? (
                     <div className="mt-3 border-t border-border pt-3">{renderRequestDetail(req)}</div>
@@ -334,17 +328,13 @@ export function ManagerAllServicesPanel({
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
+                <PortalDataTableColGroup percents={portalTableColumnPercents(3)} />
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -358,20 +348,19 @@ export function ManagerAllServicesPanel({
                       onClick={createPortalRowExpandClick(() => setExpandedId(isExpanded ? null : id))}
                       aria-expanded={isExpanded}
                     >
-                      <td className={PORTAL_TABLE_TD}>Request</td>
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                        <PortalTableInlineExpand expanded={isExpanded}>{req.offerName}</PortalTableInlineExpand>
+                      </td>
                       <td className={PORTAL_TABLE_TD}>{req.residentName || req.residentEmail}</td>
                       <td className={PORTAL_TABLE_TD}>
                         {req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
                           ? propertyOptions.find((p) => p.id === req.propertyId)!.label
                           : "—"}
                       </td>
-                      <td className={PORTAL_TABLE_TD}>{managerServiceRequestPricingSummary(req)}</td>
-                      <PortalTableExpandCell expanded={isExpanded} />
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                           {renderRequestDetail(req)}
                         </td>
                       </tr>

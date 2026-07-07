@@ -339,7 +339,17 @@ try {
         accessKindByRoomId: { "room-3": "ensuite" },
       },
     ],
-    bundles: [],
+    bundles: [
+      {
+        id: "mgr-test-e2e-bundle-multi",
+        label: "Two or more rooms",
+        price: "$4,700/mo",
+        strikethrough: "",
+        promo: "Combine any two or more bedrooms on one lease.",
+        roomsLine: "Example: Room 3 + Room 2",
+        includedRoomIds: ["room-3", "room-2"],
+      },
+    ],
     quickFacts: [],
   };
 
@@ -680,6 +690,73 @@ try {
     "portal_work_order_records(vendor)",
   );
 
+  // Completed + paid HVAC job so the vendor Payments tab shows a real dollar amount
+  // (not "—") when vendorCostCents/materialsCostCents are mirrored on the row.
+  const vendorCompletedHvacId = "test-workorder-vendor-completed-hvac";
+  await must(
+    supabase.from("portal_work_order_records").upsert(
+      {
+        id: vendorCompletedHvacId,
+        manager_user_id: managerUserId,
+        resident_email: residentEmail,
+        property_id: propertyId,
+        assigned_property_id: propertyId,
+        vendor_user_id: vendorUserId,
+        row_data: {
+          id: vendorCompletedHvacId,
+          propertyName,
+          unit: "Room 1",
+          title: "HVAC seasonal tune-up",
+          priority: "normal",
+          status: "Completed",
+          bucket: "completed",
+          description: "Annual HVAC maintenance before summer heat.",
+          scheduled: isoDate(daysFromNow(-10)),
+          scheduledAtIso: daysFromNow(-10).toISOString(),
+          cost: "$330.00",
+          vendorCostCents: 28500,
+          materialsCostCents: 4500,
+          automationStatus: "paid",
+          paidAt: daysFromNow(-2).toISOString(),
+          completedAt: daysFromNow(-3).toISOString(),
+          residentName: PRIMARY_RESIDENT_NAME,
+          residentEmail,
+          propertyId,
+          assignedPropertyId: propertyId,
+          managerUserId,
+          vendorId: vendorDirectoryId,
+          vendorName: "Test Vendor Co",
+          vendorAssignedAt: daysFromNow(-12).toISOString(),
+          category: "hvac",
+          workDoneSummary: "Seasonal tune-up and filter replacement.",
+          testRunId,
+        },
+        updated_at: NOW.toISOString(),
+      },
+      { onConflict: "id" },
+    ),
+    "portal_work_order_records(vendor completed hvac)",
+  );
+
+  await must(
+    supabase.from("vendor_payouts").upsert(
+      {
+        id: "00000000-0000-4000-8000-000000000e2e",
+        manager_user_id: managerUserId,
+        vendor_user_id: vendorUserId,
+        work_order_id: vendorCompletedHvacId,
+        amount_cents: 28500,
+        stripe_transfer_id: "tr_test_payout_hvac_e2e",
+        status: "paid",
+        failure_reason: null,
+        created_at: daysFromNow(-2).toISOString(),
+        updated_at: daysFromNow(-2).toISOString(),
+      },
+      { onConflict: "work_order_id" },
+    ),
+    "vendor_payouts(vendor completed hvac)",
+  );
+
   // ══════════════════════════════════════════════════════════════════════════
   // Coherent browse catalog: every home shown by the public browse/apply flow
   // is manager-owned, fully listed (listingSubmission v:1), and has at least
@@ -794,6 +871,25 @@ try {
   }
 
   /** Full v1 listing submission so listings render in browse AND generated leases carry real fees/rooms/rules. */
+  function buildMultiRoomBundle(p) {
+    if (p.rooms.length < 2) return [];
+    const sorted = [...p.rooms].sort((a, b) => a.rent - b.rent);
+    const first = sorted[0];
+    const second = sorted[1];
+    const start = first.rent + second.rent;
+    return [
+      {
+        id: `${p.id}-bundle-multi`,
+        label: "Two or more rooms",
+        price: `$${start.toLocaleString("en-US")}/mo`,
+        strikethrough: "",
+        promo: "Combine any two or more bedrooms on one lease.",
+        roomsLine: `Example: ${first.name} + ${second.name}`,
+        includedRoomIds: [first.id, second.id],
+      },
+    ];
+  }
+
   function buildListingSubmission(p) {
     const roomIds = p.rooms.map((r) => r.id);
     return {
@@ -861,7 +957,7 @@ try {
         prorateMethod: "auto",
       })),
       bathrooms: buildCatalogBathrooms(p),
-      bundles: [],
+      bundles: buildMultiRoomBundle(p),
       quickFacts: [],
     };
   }

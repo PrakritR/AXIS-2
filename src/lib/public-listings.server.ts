@@ -1,6 +1,8 @@
 import "server-only";
 import type { MockProperty } from "@/data/types";
 import { isPropertyActiveForLeads } from "@/lib/demo-property-pipeline";
+import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
+import { isProductionRuntime } from "@/lib/server-env";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 function asProperty(value: unknown, id: string): MockProperty | null {
@@ -19,12 +21,32 @@ export async function getPublicListings(): Promise<MockProperty[]> {
   const db = createSupabaseServiceRoleClient();
   const { data, error } = await db
     .from("manager_property_records")
-    .select("id, property_data")
+    .select("id, manager_user_id, property_data")
     .eq("status", "live")
     .order("updated_at", { ascending: false })
     .limit(500);
 
   if (error) throw new Error(error.message);
+
+  const production = isProductionRuntime();
+  const managerIds = [
+    ...new Set(
+      (data ?? [])
+        .map((row) => row.manager_user_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  const managerEmailByUserId = new Map<string, string | null>();
+  if (production && managerIds.length > 0) {
+    const { data: profiles, error: profileError } = await db
+      .from("profiles")
+      .select("id, email")
+      .in("id", managerIds);
+    if (profileError) throw new Error(profileError.message);
+    for (const profile of profiles ?? []) {
+      managerEmailByUserId.set(profile.id, profile.email ?? null);
+    }
+  }
 
   const byKey = new Map<string, MockProperty>();
   for (const row of data ?? []) {
@@ -33,9 +55,14 @@ export async function getPublicListings(): Promise<MockProperty[]> {
     // `status = live` is the source of truth in Supabase; older rows may omit the flag in JSON.
     const live = property.adminPublishLive === true ? property : { ...property, adminPublishLive: true as const };
     if (!isPropertyActiveForLeads(live)) continue;
-    const dedupeKey = `${live.buildingName}::${live.address}`.trim().toLowerCase();
-    byKey.set(dedupeKey, live);
+    const withOwner =
+      row.manager_user_id && !live.managerUserId
+        ? { ...live, managerUserId: row.manager_user_id }
+        : live;
+    const dedupeKey = `${withOwner.buildingName}::${withOwner.address}`.trim().toLowerCase();
+    byKey.set(dedupeKey, withOwner);
   }
 
-  return [...byKey.values()].sort((a, b) => a.title.localeCompare(b.title));
+  const listings = [...byKey.values()].sort((a, b) => a.title.localeCompare(b.title));
+  return filterSandboxFromPublicCatalog(listings, { production, managerEmailByUserId });
 }

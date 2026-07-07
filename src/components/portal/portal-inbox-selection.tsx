@@ -49,9 +49,9 @@ export function PortalInboxSelectionToolbar({
 }) {
   if (count === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
+    <div className="flex flex-wrap items-center justify-end gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
       {children}
-      <Button type="button" variant="outline" className={`${PORTAL_HEADER_ACTION_BTN} ml-auto`} onClick={onClear}>
+      <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={onClear}>
         Clear
       </Button>
     </div>

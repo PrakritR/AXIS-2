@@ -59,6 +59,7 @@ import {
   formatCompactChargeLine,
   formatCompactPlacementLine,
 } from "@/components/portal/portal-metrics";
+import { isSubmittedPendingApplicationRow } from "@/lib/rental-application/in-progress-application";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
 const BASE = "/portal";
@@ -115,7 +116,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     if (!userId) return null;
 
     const allApps = readManagerApplicationRows().filter((a) => applicationVisibleToPortalUser(a, userId));
-    const pendingApps = allApps.filter((a) => a.bucket === "pending");
+    const pendingApps = allApps.filter((a) => isSubmittedPendingApplicationRow(a));
 
     const leases = readLeasePipeline(userId);
     const pendingLeaseRows = leases

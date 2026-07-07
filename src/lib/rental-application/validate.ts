@@ -10,7 +10,13 @@ import {
   validateStateAbbrev,
   validateZip,
 } from "@/app/(public)/rent/apply/apply-validation";
+import type { MockProperty } from "@/data/types";
+import {
+  resolveAllowedLeaseTerms,
+} from "@/lib/manager-listing-submission";
+import { parseMoneyAmount } from "@/lib/parse-money";
 import { propertyAllowsShortTermRental, listingAllowedLeaseTerms, getPropertyById } from "./data";
+import { LEASE_TERM_OPTIONS } from "./lease-terms";
 import { listingApplicationFeeAmount } from "@/lib/household-charges";
 import {
   isAchApplicationFeeChannel,
@@ -53,11 +59,46 @@ function hasIncomeValue(monthly: string, annual: string, other: string): boolean
   return (Number.isFinite(mn) && mn > 0) || (Number.isFinite(an) && an > 0) || (Number.isFinite(on) && on > 0);
 }
 
-export function validateRentalWizardStep(step: number, f: RentalWizardFormState): RentalWizardErrors {
-  const prop = getPropertyById(f.propertyId);
+export type ValidateRentalWizardStepOptions = {
+  property?: Pick<MockProperty, "id" | "listingSubmission"> | null;
+};
+
+function resolveWizardProperty(
+  f: RentalWizardFormState,
+  opts?: ValidateRentalWizardStepOptions,
+): Pick<MockProperty, "id" | "listingSubmission"> | undefined {
+  return opts?.property ?? getPropertyById(f.propertyId);
+}
+
+function leaseTermsForProperty(
+  propertyId: string,
+  prop: Pick<MockProperty, "id" | "listingSubmission"> | undefined,
+): string[] {
+  const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+  if (sub) {
+    const terms = resolveAllowedLeaseTerms(sub);
+    return terms.length > 0 ? terms : [...LEASE_TERM_OPTIONS];
+  }
+  return listingAllowedLeaseTerms(propertyId);
+}
+
+function shortTermAllowedForProperty(
+  propertyId: string,
+  prop: Pick<MockProperty, "id" | "listingSubmission"> | undefined,
+): boolean {
+  if (prop?.listingSubmission) return Boolean(prop.listingSubmission.shortTermRentalsAllowed);
+  return propertyAllowsShortTermRental(propertyId);
+}
+
+export function validateRentalWizardStep(
+  step: number,
+  f: RentalWizardFormState,
+  opts?: ValidateRentalWizardStepOptions,
+): RentalWizardErrors {
+  const prop = resolveWizardProperty(f, opts);
   const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
   const fieldEnabled = (key: string) => isWizardFormFieldEnabled(sub, key);
-  const e = validateStandardWizardStep(step, f, fieldEnabled);
+  const e = validateStandardWizardStep(step, f, fieldEnabled, prop);
   // Manager custom questions are asked inside their configured section's step (untagged → step 9).
   const stepCustomFields = customFieldsForWizardStep(
     listingCustomApplicationFields(sub),
@@ -69,10 +110,11 @@ export function validateRentalWizardStep(step: number, f: RentalWizardFormState)
   return e;
 }
 
-function validateStandardWizardStep(
+export function validateStandardWizardStep(
   step: number,
   f: RentalWizardFormState,
   fieldEnabled: (key: string) => boolean = () => true,
+  prop?: Pick<MockProperty, "id" | "listingSubmission">,
 ): RentalWizardErrors {
   const e: RentalWizardErrors = {};
 
@@ -116,12 +158,16 @@ function validateStandardWizardStep(
       f.propertyId.trim() &&
       f.leaseTerm.trim()
     ) {
-      const allowed = listingAllowedLeaseTerms(f.propertyId);
+      const allowed = leaseTermsForProperty(f.propertyId, prop);
       if (allowed.length > 0 && !allowed.includes(f.leaseTerm)) {
         e.leaseTerm = "This lease term is not offered for the selected property.";
       }
     }
-    if (fieldEnabled("rentalType") && f.rentalType === "short_term" && !propertyAllowsShortTermRental(f.propertyId)) {
+    if (
+      fieldEnabled("rentalType") &&
+      f.rentalType === "short_term" &&
+      !shortTermAllowedForProperty(f.propertyId, prop)
+    ) {
       e.leaseTerm = "This listing does not allow short-term stays.";
     }
     const start = f.leaseStart.trim();
@@ -336,12 +382,13 @@ function validateStandardWizardStep(
 
   if (step === 12) {
     const pid = f.propertyId.trim();
-    const { amount } = listingApplicationFeeAmount(pid);
+    const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+    const amount = sub ? parseMoneyAmount(sub.applicationFee) : listingApplicationFeeAmount(pid).amount;
     const needsFee = Boolean(pid && amount > 0);
     if (needsFee) {
-      const prop = getPropertyById(pid);
-      const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
-      const payChannel = resolveApplicationFeePayChannel(sub, f.applicationFeePayChannel);
+      const feeProp = prop ?? getPropertyById(pid);
+      const feeSub = feeProp?.listingSubmission?.v === 1 ? feeProp.listingSubmission : undefined;
+      const payChannel = resolveApplicationFeePayChannel(feeSub, f.applicationFeePayChannel);
       if (!isAchApplicationFeeChannel(payChannel) && !f.applicationFeeZelleSentConfirmed) {
         e.applicationFeeZelleSentConfirmed =
           payChannel === "other"

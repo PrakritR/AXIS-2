@@ -9,14 +9,12 @@ import {
   PORTAL_KPI_LABEL,
   PORTAL_KPI_VALUE,
 } from "@/components/portal/portal-metrics";
-import {
-  PORTAL_DATA_TABLE_SCROLL,
+import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR,
-} from "@/components/portal/portal-data-table";
+  PORTAL_TABLE_TR,} from "@/components/portal/portal-data-table";
 import { PortalListSectionShell, PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +117,7 @@ export function PortalWorkspaceClient({
   const tableContent = hasTable ? (
     <div className={PORTAL_DATA_TABLE_WRAP}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className="w-full table-fixed border-collapse text-left text-sm">
+        <table className={PORTAL_DATA_TABLE}>
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               {model.columns!.map((c) => (

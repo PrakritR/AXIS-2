@@ -1,7 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   buildInProgressApplicationRow,
+  inProgressApplicationResumeUrl,
   isInProgressApplicationRow,
+  isSubmittedPendingApplicationRow,
   IN_PROGRESS_APPLICATION_STAGE,
 } from "@/lib/rental-application/in-progress-application";
 import { residentApplicationSubmitBlocked } from "@/lib/rental-application/application-policy";
@@ -49,6 +51,32 @@ describe("in-progress-application", () => {
         detail: "",
       }),
     ).toBe(false);
+  });
+
+  it("detects submitted pending rows separately from in-progress", () => {
+    const inProgress = {
+      id: "AXIS-1",
+      name: "A",
+      property: "P",
+      bucket: "pending" as const,
+      stage: IN_PROGRESS_APPLICATION_STAGE,
+      detail: "",
+    };
+    const submitted = { ...inProgress, id: "AXIS-2", stage: "Submitted" };
+    expect(isSubmittedPendingApplicationRow(inProgress)).toBe(false);
+    expect(isSubmittedPendingApplicationRow(submitted)).toBe(true);
+  });
+
+  it("builds resume url with property id", () => {
+    const form = { ...createInitialRentalWizardState(), propertyId: "prop-1", fullLegalName: "Jane Doe" };
+    const row = buildInProgressApplicationRow({
+      axisId: "AXIS-ABC",
+      form,
+      residentEmail: "jane@test.com",
+    });
+    expect(inProgressApplicationResumeUrl("https://axis.test", row)).toBe(
+      "https://axis.test/resident/applications/apply?propertyId=prop-1",
+    );
   });
 
   it("builds a pending in-progress row from wizard form", () => {

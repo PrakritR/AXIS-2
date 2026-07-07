@@ -5,12 +5,19 @@
  * subscribe to. Demo mode never touches the network (seeded locally).
  */
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { readScopedExtraListings } from "@/lib/demo-property-pipeline";
+import { enrichPromotionInputsFromListing } from "@/lib/promotion-listing-context";
 import {
   composeFallbackFlyerCopy,
   type FlyerCopy,
   type ManagerPromotionRow,
   type PromotionInputs,
 } from "@/lib/promotion-flyer";
+import {
+  composeFallbackPromotionText,
+  type PromotionTextCopy,
+  type PromotionTextFormat,
+} from "@/lib/promotion-text";
 
 export type { ManagerPromotionRow } from "@/lib/promotion-flyer";
 
@@ -193,5 +200,55 @@ export async function generateFlyerCopy(
     return { copy: body.copy, source: "ai" };
   } catch {
     return { copy: composeFallbackFlyerCopy(inputs, propertyLabel), source: "fallback" };
+  }
+}
+
+/**
+ * Generate channel-specific promotion text (social, email, SMS).
+ */
+export async function generatePromotionTextCopy(
+  inputs: PromotionInputs,
+  propertyLabel: string,
+  format: PromotionTextFormat,
+  opts?: { propertyId?: string | null; extraInstructions?: string; managerUserId?: string | null },
+): Promise<{ copy: PromotionTextCopy; source: "ai" | "fallback" | "forbidden" }> {
+  const propertyId = opts?.propertyId?.trim() || "";
+  const localProperty =
+    propertyId && typeof window !== "undefined"
+      ? readScopedExtraListings(opts?.managerUserId ?? null).find((p) => p.id === propertyId) ?? null
+      : null;
+  const enrichedInputs = enrichPromotionInputsFromListing(inputs, localProperty);
+
+  if (isDemoModeActive() || typeof window === "undefined") {
+    return { copy: composeFallbackPromotionText(enrichedInputs, propertyLabel, format), source: "fallback" };
+  }
+  try {
+    const textInputs = { ...enrichedInputs };
+    delete textInputs.images;
+    const res = await fetch("/api/portal/promotion-text-generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        inputs: textInputs,
+        propertyLabel,
+        propertyId: propertyId || null,
+        format,
+        extraInstructions: opts?.extraInstructions ?? "",
+      }),
+    });
+    if (res.status === 403) {
+      return { copy: composeFallbackPromotionText(enrichedInputs, propertyLabel, format), source: "forbidden" };
+    }
+    if (!res.ok) {
+      return { copy: composeFallbackPromotionText(enrichedInputs, propertyLabel, format), source: "fallback" };
+    }
+    const body = (await res.json()) as { copy?: PromotionTextCopy };
+    if (!body.copy?.body?.trim()) {
+      return { copy: composeFallbackPromotionText(enrichedInputs, propertyLabel, format), source: "fallback" };
+    }
+    return { copy: { ...body.copy, format }, source: "ai" };
+  } catch {
+    return { copy: composeFallbackPromotionText(enrichedInputs, propertyLabel, format), source: "fallback" };
   }
 }
