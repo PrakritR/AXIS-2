@@ -66,8 +66,5 @@ describe("manager vendor sharing sync", () => {
 
     setManagerVendorPriority("v-b", "secondary", "mgr-a");
     expect(readManagerVendorRows().find((row) => row.id === "v-b")?.vendorPriority).toBe("secondary");
-
-    setManagerVendorPriority("v-b", "backup", "mgr-a");
-    expect(readManagerVendorRows().find((row) => row.id === "v-b")?.vendorPriority).toBe("backup");
   });
 });

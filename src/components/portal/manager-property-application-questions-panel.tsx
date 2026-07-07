@@ -9,8 +9,14 @@ import {
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import {
+  persistManagerListingSubmission,
+  type ManagerPropertySaveTarget,
+} from "@/lib/manager-property-save-target";
+import {
   listingApplicationIsCustomized,
+  removeListingApplicationField,
   resolveListingApplicationFields,
+  type ResolvedApplicationField,
 } from "@/lib/rental-application/application-field-catalog";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 
@@ -63,6 +69,17 @@ export function ManagerPropertyApplicationQuestionsPanel({
 
   const closeModal = () => setModalOpen(false);
 
+  const removeField = (field: ResolvedApplicationField) => {
+    const patch = removeListingApplicationField(sub, field);
+    const next: ManagerListingSubmissionV1 = { ...sub, ...patch };
+    if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
+      showToast("Could not remove question.");
+      return;
+    }
+    showToast("Question removed.");
+    onUpdated();
+  };
+
   return (
     <>
       <PortalCollapsibleSection
@@ -108,17 +125,29 @@ export function ManagerPropertyApplicationQuestionsPanel({
                   {sectionQuestions.map((field) => (
                     <div
                       key={field.id}
-                      className="rounded-xl border border-border bg-accent/15 px-3 py-2.5"
+                      className="flex gap-2 rounded-xl border border-border bg-accent/15 px-3 py-2.5"
                     >
-                      <p className="text-sm font-medium leading-snug text-foreground">{field.label}</p>
-                      <p className="mt-0.5 text-xs text-muted">
-                        {applicationQuestionTypeLabel(field.type)}
-                        {field.required ? " · Required" : " · Optional"}
-                        {field.type === "select" && field.options.length > 0
-                          ? ` · ${shortenOptions(field.options)}`
-                          : ""}
-                        {field.isStandard ? " · Built-in" : " · Custom"}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium leading-snug text-foreground">{field.label}</p>
+                        <p className="mt-0.5 text-xs text-muted">
+                          {applicationQuestionTypeLabel(field.type)}
+                          {field.required ? " · Required" : " · Optional"}
+                          {field.type === "select" && field.options.length > 0
+                            ? ` · ${shortenOptions(field.options)}`
+                            : ""}
+                          {field.isStandard ? " · Built-in" : " · Custom"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 text-sm font-bold text-rose-800 portal-danger-outline hover:bg-rose-50"
+                        data-attr="application-question-remove-one"
+                        title={`Remove ${field.label}`}
+                        aria-label={`Remove ${field.label}`}
+                        onClick={() => removeField(field)}
+                      >
+                        ×
+                      </button>
                     </div>
                   ))}
                 </PortalCollapsibleSection>

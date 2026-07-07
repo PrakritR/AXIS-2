@@ -17,7 +17,7 @@ export type ManagerVendorRow = {
   /** When true, other managers on Axis can use this vendor for work orders. */
   sharedWithManagers?: boolean;
   /** Preferred vendor tier within the vendor's trade (one primary per trade on the account). */
-  vendorPriority?: "primary" | "secondary" | "backup";
+  vendorPriority?: "primary" | "secondary";
   insuranceProvider?: string;
   insurancePolicyNumber?: string;
   /** ISO date (yyyy-mm-dd) the vendor's insurance coverage expires. */

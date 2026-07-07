@@ -9,7 +9,6 @@ import { traceAgentTurn } from "@/lib/observability/langfuse";
 import { track } from "@/lib/analytics/posthog";
 import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
 import { parseSellingPoints, type PromotionInputs } from "@/lib/promotion-flyer";
-import { enrichPromotionInputsFromListing, formatPromotionListingContext } from "@/lib/promotion-listing-context";
 import {
   composeFallbackPromotionText,
   normalizePromotionTextFormat,
@@ -56,18 +55,12 @@ function buildUserPrompt(
   propertyLabel: string,
   format: PromotionTextFormat,
   extraInstructions: string,
-  listingContext: string,
 ): string {
   const points = parseSellingPoints(inputs.sellingPoints || inputs.customDetails);
   return [
     promotionTextFormatPrompt(format),
     extraInstructions.trim() ? `Extra manager notes: ${extraInstructions.trim()}` : "",
-    listingContext.trim()
-      ? ["Listing record (primary facts — name the property, neighborhood, rooms, and amenities from here):", listingContext.trim()].join(
-          "\n",
-        )
-      : "",
-    `Property / listing label: ${propertyLabel || "(unspecified)"}`,
+    `Property / listing: ${propertyLabel || "(unspecified)"}`,
     `Address: ${inputs.address || "(none)"}`,
     `Headline idea: ${inputs.headline || "(none)"}`,
     `Selling points: ${points.length ? points.join("; ") : "(none)"}`,
@@ -75,10 +68,10 @@ function buildUserPrompt(
     `Promo: ${inputs.promo || "(none)"}`,
     `CTA: ${inputs.cta || "(none)"}`,
     `Contact: ${inputs.contact || "(none)"}`,
-    `Additional details: ${inputs.customDetails || "(none)"}`,
+    `Details: ${inputs.customDetails || "(none)"}`,
     `Tone: ${inputs.tone || "Warm & welcoming"}`,
     "",
-    "Write the promotion text now as the JSON object. Reference specific property names, neighborhoods, room types, and amenities from the listing record when available.",
+    "Write the promotion text now as the JSON object.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -130,26 +123,22 @@ export async function POST(req: Request) {
     const extraInstructions = clean(body.extraInstructions);
 
     const propertyId = typeof body.propertyId === "string" ? body.propertyId.trim() : "";
-    let listingProperty: Awaited<ReturnType<typeof getShareablePropertyForUser>> = null;
     if (propertyId) {
-      listingProperty = await getShareablePropertyForUser(ctx.userId, propertyId);
-      if (!listingProperty) {
+      const owned = await getShareablePropertyForUser(ctx.userId, propertyId);
+      if (!owned) {
         return NextResponse.json({ error: "You do not manage this property." }, { status: 403 });
       }
     }
 
-    const enrichedInputs = enrichPromotionInputsFromListing(inputs, listingProperty);
-    const listingContext = listingProperty ? formatPromotionListingContext(listingProperty) : "";
-
     if (!process.env.ANTHROPIC_API_KEY?.trim()) {
       return NextResponse.json({
-        copy: composeFallbackPromotionText(enrichedInputs, propertyLabel, format),
+        copy: composeFallbackPromotionText(inputs, propertyLabel, format),
         source: "fallback",
       });
     }
 
     const model = TIER_MODELS.standard;
-    const userPrompt = buildUserPrompt(enrichedInputs, propertyLabel, format, extraInstructions, listingContext);
+    const userPrompt = buildUserPrompt(inputs, propertyLabel, format, extraInstructions);
 
     const result = await traceAgentTurn(ctx, [{ role: "user", content: userPrompt }], async () => {
       const client = new Anthropic();
@@ -174,7 +163,7 @@ export async function POST(req: Request) {
       };
     });
 
-    const copy = parseCopy(result.reply, enrichedInputs, propertyLabel, format);
+    const copy = parseCopy(result.reply, inputs, propertyLabel, format);
     track("promotion_text_generated", ctx.userId, { format, model });
     return NextResponse.json({ copy, source: "ai" });
   } catch (e) {

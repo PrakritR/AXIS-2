@@ -4,19 +4,20 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
-  PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_TD,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_DETAIL_BTN,
   PortalTableDetailActions,
-  PortalTableInlineExpand,
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
@@ -27,8 +28,7 @@ import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
 import { PromotionFlyerPreview, downloadPromotionFlyer } from "@/components/portal/promotion-flyer-preview";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
-import { PromotionTextEntriesList } from "@/components/portal/promotion-text-preview";
-import { PromotionEntryEditableTitle } from "@/components/portal/promotion-entry-title";
+import { PromotionTextCopyButton, PromotionTextPreview } from "@/components/portal/promotion-text-preview";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import {
   buildManagerPromotionPropertyOptions,
@@ -36,20 +36,13 @@ import {
 } from "@/lib/manager-property-links";
 import {
   FLYER_IMAGE_LIMIT,
-  createFlyerEntry,
-  defaultFlyerEntryTitle,
-  flyerEntryDisplayTitle,
-  flyerRowForEntry,
   normalizePromotionTemplate,
-  primaryFlyerEntry,
-  readFlyerEntries,
   PROMOTION_TEMPLATE_DEFAULT,
   PROMOTION_TEMPLATE_OPTIONS,
   PROMOTION_THEME_OPTIONS,
   PROMOTION_TONE_OPTIONS,
   PROMOTION_SIZE_OPTIONS,
   sanitizeFlyerImages,
-  type FlyerEntry,
   type FlyerSize,
   type ManagerPromotionRow,
   type PromotionInputs,
@@ -68,11 +61,6 @@ import {
 } from "@/lib/manager-promotions-storage";
 import {
   PROMOTION_TEXT_FORMAT_OPTIONS,
-  createPromotionTextEntry,
-  defaultPromotionTextEntryTitle,
-  primaryPromotionTextCopy,
-  readPromotionTextEntries,
-  type PromotionTextEntry,
   type PromotionTextFormat,
 } from "@/lib/promotion-text";
 import {
@@ -120,11 +108,6 @@ export const EMPTY_DRAFT: PromotionDraft = {
   tone: PROMOTION_TONE_OPTIONS[0]!,
   images: [],
 };
-
-/** @deprecated Use {@link flyerEntryDisplayTitle} with list index. */
-export function flyerEntryLabel(entry: FlyerEntry, index = 0): string {
-  return flyerEntryDisplayTitle(entry, index);
-}
 
 export function draftInputs(draft: PromotionDraft): PromotionInputs {
   return {
@@ -239,9 +222,7 @@ export function ManagerPromotion() {
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [generatingTextId, setGeneratingTextId] = useState<string | null>(null);
   const [textModalRowId, setTextModalRowId] = useState<string | null>(null);
-  const [textModalEntryId, setTextModalEntryId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingFlyerId, setEditingFlyerId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -276,14 +257,12 @@ export function ManagerPromotion() {
   const openNew = useCallback(() => {
     setDraft(EMPTY_DRAFT);
     setEditingId(null);
-    setEditingFlyerId(null);
     setShowForm(true);
   }, []);
 
   const openNewWithProperty = useCallback(
     (propertyId?: string) => {
       setEditingId(null);
-      setEditingFlyerId(null);
       if (propertyId && listings.some((l) => l.id === propertyId)) {
         setDraft(draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings));
       } else {
@@ -313,68 +292,36 @@ export function ManagerPromotion() {
   const closeForm = useCallback(() => {
     setShowForm(false);
     setEditingId(null);
-    setEditingFlyerId(null);
     setDraft(EMPTY_DRAFT);
   }, []);
 
-  const draftFromFlyer = useCallback(
-    (
-      row: ManagerPromotionRow,
-      source: { title: string; inputs: PromotionInputs; theme: PromotionTheme; flyerSize: FlyerSize; template?: PromotionTemplate },
-    ): PromotionDraft => ({
-      propertyKey:
-        row.propertyId && listings.some((l) => l.id === row.propertyId) ? row.propertyId : CUSTOM_PROPERTY_KEY,
-      propertyLabel: row.propertyLabel,
-      address: source.inputs.address ?? "",
-      title: source.title,
-      headline: source.inputs.headline,
-      sellingPoints: source.inputs.sellingPoints,
-      customDetails: source.inputs.customDetails,
-      price: source.inputs.price,
-      promo: source.inputs.promo,
-      cta: source.inputs.cta,
-      contact: source.inputs.contact,
-      theme: source.theme,
-      flyerSize: source.flyerSize,
-      template: normalizePromotionTemplate(source.template),
-      tone: source.inputs.tone || PROMOTION_TONE_OPTIONS[0]!,
-      images: source.inputs.images ?? [],
-    }),
-    [listings],
-  );
-
-  // Edit an existing flyer variant.
-  const openEditFlyer = useCallback(
-    (row: ManagerPromotionRow, entry: FlyerEntry) => {
-      setDraft(draftFromFlyer(row, entry));
-      setEditingId(row.id);
-      setEditingFlyerId(entry.id);
-      setShowForm(true);
-    },
-    [draftFromFlyer],
-  );
-
-  // Add another flyer variant to an existing promotion — prefill from the
-  // primary flyer's facts so the manager can just tweak the design/copy.
-  const openNewFlyer = useCallback(
+  const openEdit = useCallback(
     (row: ManagerPromotionRow) => {
-      const primary = primaryFlyerEntry(readFlyerEntries(row));
-      setDraft(
-        primary
-          ? draftFromFlyer(row, primary)
-          : draftFromFlyer(row, {
-              title: row.title,
-              inputs: row.inputs,
-              theme: row.theme,
-              flyerSize: row.flyerSize,
-              template: row.template,
-            }),
-      );
+      setDraft({
+        propertyKey:
+          row.propertyId && listings.some((l) => l.id === row.propertyId)
+            ? row.propertyId
+            : CUSTOM_PROPERTY_KEY,
+        propertyLabel: row.propertyLabel,
+        address: row.inputs.address ?? "",
+        title: row.title,
+        headline: row.inputs.headline,
+        sellingPoints: row.inputs.sellingPoints,
+        customDetails: row.inputs.customDetails,
+        price: row.inputs.price,
+        promo: row.inputs.promo,
+        cta: row.inputs.cta,
+        contact: row.inputs.contact,
+        theme: row.theme,
+        flyerSize: row.flyerSize,
+        template: normalizePromotionTemplate(row.template),
+        tone: row.inputs.tone || PROMOTION_TONE_OPTIONS[0]!,
+        images: row.inputs.images ?? [],
+      });
       setEditingId(row.id);
-      setEditingFlyerId(null);
       setShowForm(true);
     },
-    [draftFromFlyer],
+    [listings],
   );
 
   function onSelectProperty(key: string) {
@@ -409,125 +356,47 @@ export function ManagerPromotion() {
         return;
       }
       const now = new Date().toISOString();
-      if (!editing) {
-        // Brand-new promotion — seed it with a single flyer variant.
-        const entry = createFlyerEntry(
-          {
-            title: defaultFlyerEntryTitle(1),
-            copy,
-            template: draft.template,
-            theme: draft.theme,
-            flyerSize: draft.flyerSize,
-            inputs,
-          },
-          now,
-        );
-        upsertManagerPromotion({
-          id: makePromotionId(),
-          managerUserId: userId ?? null,
-          propertyId,
-          propertyLabel: label,
-          title,
-          theme: draft.theme,
-          flyerSize: draft.flyerSize,
-          template: draft.template,
-          status: "generated",
-          inputs,
-          copy,
-          flyerCopies: [entry],
-          textCopy: null,
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
-        const entries = readFlyerEntries(editing);
-        const nextEntries = editingFlyerId
-          ? entries.map((entry) =>
-              entry.id === editingFlyerId
-                ? {
-                    ...entry,
-                    title: draft.title.trim() || entry.title || defaultFlyerEntryTitle(entries.findIndex((e) => e.id === editingFlyerId) + 1),
-                    copy,
-                    template: draft.template,
-                    theme: draft.theme,
-                    flyerSize: draft.flyerSize,
-                    inputs,
-                    updatedAt: now,
-                  }
-                : entry,
-            )
-          : [
-              createFlyerEntry(
-                {
-                  title: defaultFlyerEntryTitle(entries.length + 1),
-                  copy,
-                  template: draft.template,
-                  theme: draft.theme,
-                  flyerSize: draft.flyerSize,
-                  inputs,
-                },
-                now,
-              ),
-              ...entries,
-            ];
-        const primary = primaryFlyerEntry(nextEntries)!;
-        upsertManagerPromotion({
-          ...editing,
-          theme: primary.theme,
-          flyerSize: primary.flyerSize,
-          template: primary.template,
-          inputs: primary.inputs,
-          copy: primary.copy,
-          flyerCopies: nextEntries,
-          status: "generated",
-          updatedAt: now,
-        });
-      }
+      upsertManagerPromotion({
+        id: editing?.id ?? makePromotionId(),
+        managerUserId: editing?.managerUserId ?? userId ?? null,
+        propertyId,
+        propertyLabel: label,
+        title,
+        theme: draft.theme,
+        flyerSize: draft.flyerSize,
+        template: draft.template,
+        status: "generated",
+        inputs,
+        copy,
+        textCopy: editing?.textCopy ?? null,
+        createdAt: editing?.createdAt ?? now,
+        updatedAt: now,
+      });
       closeForm();
       showToast(
-        editing && editingFlyerId
+        editing
           ? "Flyer updated."
           : source === "ai"
             ? "Flyer generated."
             : "Flyer generated (offline copy).",
       );
     } catch {
-      showToast(
-        editing && editingFlyerId ? "Could not update the flyer. Try again." : "Could not generate the flyer. Try again.",
-      );
+      showToast(editing ? "Could not update the flyer. Try again." : "Could not generate the flyer. Try again.");
     } finally {
       setGenerating(false);
     }
   }
 
-  async function regenerate(row: ManagerPromotionRow, entryId: string) {
-    const entries = readFlyerEntries(row);
-    const target = entries.find((entry) => entry.id === entryId);
-    if (!target) return;
-    setRegeneratingId(entryId);
-    track("promotion_regenerated", { theme: target.theme, template: normalizePromotionTemplate(target.template) });
+  async function regenerate(row: ManagerPromotionRow) {
+    setRegeneratingId(row.id);
+    track("promotion_regenerated", { theme: row.theme, template: normalizePromotionTemplate(row.template) });
     try {
-      const { copy, source } = await generateFlyerCopy(target.inputs, row.propertyLabel, row.propertyId);
+      const { copy, source } = await generateFlyerCopy(row.inputs, row.propertyLabel, row.propertyId);
       if (source === "forbidden") {
         showToast("You can only create flyers for your own properties.");
         return;
       }
-      const now = new Date().toISOString();
-      const nextEntries = entries.map((entry) =>
-        entry.id === entryId ? { ...entry, copy, updatedAt: now } : entry,
-      );
-      const primary = primaryFlyerEntry(nextEntries)!;
-      upsertManagerPromotion({
-        ...row,
-        theme: primary.theme,
-        flyerSize: primary.flyerSize,
-        template: primary.template,
-        inputs: primary.inputs,
-        copy: primary.copy,
-        flyerCopies: nextEntries,
-        status: "generated",
-        updatedAt: now,
-      });
+      upsertManagerPromotion({ ...row, copy, status: "generated", updatedAt: new Date().toISOString() });
       showToast("Flyer regenerated.");
     } catch {
       showToast("Could not regenerate the flyer.");
@@ -536,112 +405,34 @@ export function ManagerPromotion() {
     }
   }
 
-  function deleteFlyerEntry(row: ManagerPromotionRow, entryId: string) {
-    const remaining = readFlyerEntries(row).filter((entry) => entry.id !== entryId);
-    if (remaining.length === 0) {
-      removePromotion(row.id);
-      return;
-    }
-    const primary = primaryFlyerEntry(remaining)!;
-    upsertManagerPromotion({
-      ...row,
-      theme: primary.theme,
-      flyerSize: primary.flyerSize,
-      template: primary.template,
-      inputs: primary.inputs,
-      copy: primary.copy,
-      flyerCopies: remaining,
-      updatedAt: new Date().toISOString(),
-    });
-    showToast("Flyer removed.");
-  }
-
   async function regenerateText(
     row: ManagerPromotionRow,
     opts: { format: PromotionTextFormat; tone: string; extraInstructions: string },
-    targetEntryId?: string | null,
   ) {
-    setGeneratingTextId(targetEntryId ?? row.id);
+    setGeneratingTextId(row.id);
     try {
       const inputs = { ...row.inputs, tone: opts.tone.trim() || row.inputs.tone };
       const { copy, source } = await generatePromotionTextCopy(inputs, row.propertyLabel, opts.format, {
         propertyId: row.propertyId,
         extraInstructions: opts.extraInstructions,
-        managerUserId: userId,
       });
       if (source === "forbidden") {
         showToast("You can only create promotions for your own properties.");
         return;
       }
-      const existing = readPromotionTextEntries(row);
-      const newEntry = createPromotionTextEntry(copy, defaultPromotionTextEntryTitle(existing.length + 1));
-      const nextEntries = targetEntryId
-        ? existing.map((entry) =>
-            entry.id === targetEntryId
-              ? { ...newEntry, id: entry.id, title: entry.title ?? newEntry.title, createdAt: entry.createdAt }
-              : entry,
-          )
-        : [newEntry, ...existing];
       upsertManagerPromotion({
         ...row,
         inputs,
-        textCopies: nextEntries,
-        textCopy: primaryPromotionTextCopy(nextEntries),
+        textCopy: copy,
         updatedAt: new Date().toISOString(),
       });
       setTextModalRowId(null);
-      setTextModalEntryId(null);
       showToast(source === "ai" ? "Promotion text generated." : "Promotion text generated (offline copy).");
     } catch {
       showToast("Could not generate promotion text.");
     } finally {
       setGeneratingTextId(null);
     }
-  }
-
-  function saveFlyerTitle(row: ManagerPromotionRow, entryId: string, title: string) {
-    const entries = readFlyerEntries(row).map((entry) =>
-      entry.id === entryId ? { ...entry, title, updatedAt: new Date().toISOString() } : entry,
-    );
-    const primary = primaryFlyerEntry(entries)!;
-    upsertManagerPromotion({
-      ...row,
-      theme: primary.theme,
-      flyerSize: primary.flyerSize,
-      template: primary.template,
-      inputs: primary.inputs,
-      copy: primary.copy,
-      flyerCopies: entries,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  function saveTextEntry(row: ManagerPromotionRow, entry: PromotionTextEntry) {
-    const nextEntries = readPromotionTextEntries(row).map((existing) =>
-      existing.id === entry.id ? entry : existing,
-    );
-    upsertManagerPromotion({
-      ...row,
-      textCopies: nextEntries,
-      textCopy: primaryPromotionTextCopy(nextEntries),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  function deleteTextEntry(row: ManagerPromotionRow, entryId: string) {
-    const nextEntries = readPromotionTextEntries(row).filter((entry) => entry.id !== entryId);
-    upsertManagerPromotion({
-      ...row,
-      textCopies: nextEntries,
-      textCopy: primaryPromotionTextCopy(nextEntries),
-      updatedAt: new Date().toISOString(),
-    });
-    showToast("Promotion text removed.");
-  }
-
-  function openTextModal(rowId: string, entryId?: string | null) {
-    setTextModalRowId(rowId);
-    setTextModalEntryId(entryId ?? null);
   }
 
   function removePromotion(id: string) {
@@ -652,25 +443,11 @@ export function ManagerPromotion() {
   }
 
   const textModalRow = textModalRowId ? promotions.find((p) => p.id === textModalRowId) ?? null : null;
-  const textModalEntry =
-    textModalRow && textModalEntryId
-      ? readPromotionTextEntries(textModalRow).find((entry) => entry.id === textModalEntryId) ?? null
-      : null;
 
   const renderRowDetail = (row: ManagerPromotionRow) => {
-    const textEntries = readPromotionTextEntries(row);
-    const flyerEntries = readFlyerEntries(row);
-    const latestText = textEntries[0]?.copy ?? null;
-    const textFormatLabel = latestText
-      ? PROMOTION_TEXT_FORMAT_OPTIONS.find((o) => o.id === latestText.format)?.label
+    const textFormatLabel = row.textCopy
+      ? PROMOTION_TEXT_FORMAT_OPTIONS.find((o) => o.id === row.textCopy?.format)?.label
       : null;
-
-    const flyerLabel = flyerEntries.length > 1 ? `${flyerEntries.length} flyers` : "Flyer";
-    const promotionSubtitle = textFormatLabel
-      ? `${flyerLabel} · ${textFormatLabel}${textEntries.length > 1 ? ` (+${textEntries.length - 1})` : ""}`
-      : flyerEntries.length > 0
-        ? flyerLabel
-        : undefined;
 
     return (
       <>
@@ -687,135 +464,87 @@ export function ManagerPromotion() {
         </PortalTableDetailActions>
 
         <PortalCollapsibleSection
-          title="Promotion"
-          subtitle={promotionSubtitle}
+          title="Promotion flyer"
           defaultExpanded
           surfaceMuted={false}
           className="mt-4"
-          contentClassName="space-y-3 pt-0"
-          toggleDataAttr="promotion-detail-toggle"
-        >
-          <PortalCollapsibleSection
-            title="Flyer"
-            defaultExpanded
-            surfaceMuted={false}
-            contentClassName="space-y-3 pt-0"
-            toggleDataAttr="promotion-flyer-toggle"
-            headerActions={
+          contentClassName="p-0 pt-0 pb-0"
+          toggleDataAttr="promotion-flyer-toggle"
+          headerActions={
+            <>
               <Button
                 type="button"
                 variant="outline"
                 className="h-8 rounded-full px-4 text-xs"
-                onClick={() => openNewFlyer(row)}
-                data-attr="promotion-flyer-generate"
+                onClick={() => downloadPromotionFlyer(row)}
+                data-attr="promotion-flyer-download"
               >
-                Generate
+                Download
               </Button>
-            }
-          >
-            {flyerEntries.length > 0 ? (
-              flyerEntries.map((entry, index) => (
-                <PortalCollapsibleSection
-                  key={entry.id}
-                  title={
-                    <PromotionEntryEditableTitle
-                      value={entry.title}
-                      fallback={flyerEntryDisplayTitle(entry, index)}
-                      onSave={(title) => saveFlyerTitle(row, entry.id, title)}
-                    />
-                  }
-                  titleVariant="label"
-                  defaultExpanded={index === 0}
-                  surfaceMuted={false}
-                  contentClassName="p-0 pt-0"
-                  toggleDataAttr="promotion-flyer-entry-toggle"
-                  headerActions={
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => downloadPromotionFlyer(flyerRowForEntry(row, entry))}
-                        data-attr="promotion-flyer-download"
-                      >
-                        Download
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => openEditFlyer(row, entry)}
-                        data-attr="promotion-edit"
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8 rounded-full px-3 text-xs"
-                        onClick={() => void regenerate(row, entry.id)}
-                        disabled={regeneratingId === entry.id}
-                        data-attr="promotion-regenerate"
-                      >
-                        {regeneratingId === entry.id ? "Regenerating…" : "Regenerate"}
-                      </Button>
-                      {flyerEntries.length > 1 ? (
-                        <button
-                          type="button"
-                          aria-label="Delete flyer"
-                          className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition hover:bg-accent hover:text-foreground"
-                          data-attr="promotion-flyer-delete"
-                          onClick={() => deleteFlyerEntry(row, entry.id)}
-                        >
-                          ×
-                        </button>
-                      ) : null}
-                    </>
-                  }
-                >
-                  <div className="p-3 sm:p-4">
-                    <PromotionFlyerPreview
-                      key={`${entry.id}-${entry.updatedAt}`}
-                      promotion={flyerRowForEntry(row, entry)}
-                      embedded
-                    />
-                  </div>
-                </PortalCollapsibleSection>
-              ))
-            ) : (
-              <p className="text-sm text-muted">Generate a flyer to get started.</p>
-            )}
-          </PortalCollapsibleSection>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 rounded-full px-4 text-xs"
+                onClick={() => openEdit(row)}
+                data-attr="promotion-edit"
+              >
+                Edit flyer
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 rounded-full px-4 text-xs"
+                onClick={() => regenerate(row)}
+                disabled={regeneratingId === row.id}
+                data-attr="promotion-regenerate"
+              >
+                {regeneratingId === row.id ? "Regenerating…" : "Regenerate"}
+              </Button>
+            </>
+          }
+        >
+          <div className="p-3 sm:p-4">
+            <PromotionFlyerPreview promotion={row} embedded />
+          </div>
+        </PortalCollapsibleSection>
 
-          <PortalCollapsibleSection
-            title="Text"
-            defaultExpanded={false}
-            surfaceMuted={false}
-            contentClassName="space-y-3 pt-0"
-            toggleDataAttr="promotion-text-toggle"
-            headerActions={
+        <PortalCollapsibleSection
+          title="Promotion text"
+          subtitle={textFormatLabel ?? "Generate copy for social, email, or SMS"}
+          defaultExpanded={false}
+          surfaceMuted={false}
+          className="mt-4"
+          contentClassName={row.textCopy ? "p-0 pt-0" : undefined}
+          toggleDataAttr="promotion-text-toggle"
+          headerActions={
+            <>
+              {row.textCopy ? (
+                <PromotionTextCopyButton
+                  copy={row.textCopy}
+                  className="h-8 rounded-full px-4 text-xs"
+                  onCopied={() => showToast("Copied to clipboard.")}
+                />
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
                 className="h-8 rounded-full px-4 text-xs"
                 data-attr="promotion-text-generate-open"
-                onClick={() => openTextModal(row.id, null)}
+                onClick={() => setTextModalRowId(row.id)}
               >
-                Generate
+                {row.textCopy ? "Regenerate text" : "Generate text"}
               </Button>
-            }
-          >
-            {textEntries.length > 0 ? (
-              <PromotionTextEntriesList
-                entries={textEntries}
-                onSave={(entry) => saveTextEntry(row, entry)}
-                onDelete={(entryId) => deleteTextEntry(row, entryId)}
-                onRegenerate={(entryId) => openTextModal(row.id, entryId)}
-                regeneratingId={generatingTextId}
-                showToast={showToast}
-              />
-            ) : null}
-          </PortalCollapsibleSection>
+            </>
+          }
+        >
+          {row.textCopy ? (
+            <PromotionTextPreview copy={row.textCopy} />
+          ) : (
+            <p className="px-4 pb-4 text-sm text-muted">
+              Choose a channel preset (Instagram, Facebook, listing blurb, email, or SMS) and generate polished
+              marketing copy from the same property facts as your flyer.
+            </p>
+          )}
         </PortalCollapsibleSection>
       </>
     );
@@ -832,7 +561,7 @@ export function ManagerPromotion() {
     >
       <Modal
         open={showForm}
-        title={editingFlyerId ? "Edit flyer" : editingId ? "New flyer" : "New promotion flyer"}
+        title={editingId ? "Edit promotion flyer" : "New promotion flyer"}
         onClose={closeForm}
         panelClassName="max-w-2xl"
       >
@@ -840,10 +569,10 @@ export function ManagerPromotion() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" onClick={generate} disabled={generating} data-attr="promotion-generate">
             {generating
-              ? editingFlyerId
+              ? editingId
                 ? "Updating…"
                 : "Generating…"
-              : editingFlyerId
+              : editingId
                 ? "Update flyer"
                 : "Generate flyer"}
           </Button>
@@ -855,19 +584,13 @@ export function ManagerPromotion() {
 
       <PromotionTextGenerateModal
         open={textModalRowId !== null}
-        onClose={() => {
-          setTextModalRowId(null);
-          setTextModalEntryId(null);
-        }}
+        onClose={() => setTextModalRowId(null)}
         busy={generatingTextId !== null}
-        initialFormat={
-          textModalEntry?.copy.format ??
-          (textModalRow ? readPromotionTextEntries(textModalRow)[0]?.copy.format : undefined)
-        }
+        initialFormat={textModalRow?.textCopy?.format}
         initialTone={textModalRow?.inputs.tone}
         onGenerate={(opts) => {
           if (!textModalRow) return;
-          void regenerateText(textModalRow, opts, textModalEntryId);
+          void regenerateText(textModalRow, opts);
         }}
       />
 
@@ -882,20 +605,21 @@ export function ManagerPromotion() {
                 <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="w-full text-left"
+                    className="flex w-full items-center justify-between gap-2 text-left"
                     onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
                     aria-expanded={isOpen}
                     data-attr="promotion-row"
                   >
-                    <PortalTableInlineExpand expanded={isOpen} className="font-semibold text-foreground">
-                      <span className="truncate">{row.propertyLabel || "—"}</span>
-                    </PortalTableInlineExpand>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {row.copy?.headline || row.title || "—"}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] text-muted/90">
-                      Created {formatDate(row.createdAt)}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-foreground">{row.propertyLabel || "—"}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {row.copy?.headline || row.title || "—"}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted/90">
+                        Created {formatDate(row.createdAt)}
+                      </p>
+                    </div>
+                    <PortalTableExpandChevron expanded={isOpen} />
                   </button>
                   {isOpen ? <div className="mt-3 border-t border-border pt-3">{renderRowDetail(row)}</div> : null}
                 </div>
@@ -904,12 +628,15 @@ export function ManagerPromotion() {
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className={PORTAL_DATA_TABLE}>
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={MANAGER_TABLE_TH}>Property / Listing</th>
                     <th className={MANAGER_TABLE_TH}>Title / Headline</th>
                     <th className={MANAGER_TABLE_TH}>Created</th>
+                    <th className={PORTAL_TABLE_EXPAND_TH}>
+                      <span className="sr-only">Expand</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -925,21 +652,14 @@ export function ManagerPromotion() {
                           aria-expanded={isOpen}
                           data-attr="promotion-row"
                         >
-                          <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                            <PortalTableInlineExpand expanded={isOpen} className="font-medium text-foreground">
-                              {row.propertyLabel || "—"}
-                            </PortalTableInlineExpand>
-                          </td>
-                          <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                            {row.copy?.headline || row.title || "—"}
-                          </td>
-                          <td className={`${PORTAL_TABLE_TD} align-middle text-muted`}>
-                            {formatDate(row.createdAt)}
-                          </td>
+                          <td className={PORTAL_TABLE_TD}>{row.propertyLabel || "—"}</td>
+                          <td className={PORTAL_TABLE_TD}>{row.copy?.headline || row.title || "—"}</td>
+                          <td className={PORTAL_TABLE_TD}>{formatDate(row.createdAt)}</td>
+                          <PortalTableExpandCell expanded={isOpen} />
                         </tr>
                         {isOpen ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowDetail(row)}
                             </td>
                           </tr>
@@ -1066,64 +786,14 @@ export function PromotionForm({
 }) {
   const { showToast } = useAppUi();
   const [readingPhotos, setReadingPhotos] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiDrafting, setAiDrafting] = useState(false);
   const isCustom = draft.propertyKey === CUSTOM_PROPERTY_KEY;
   const selectedTemplate =
     PROMOTION_TEMPLATE_OPTIONS.find((t) => t.id === draft.template) ?? PROMOTION_TEMPLATE_OPTIONS[0]!;
 
-  // "AI draft": the manager describes the property in plain language and AI
-  // fills in the structured fields below (headline, selling points, offer, CTA)
-  // for them to review before generating the flyer. Reuses the same generation
-  // pipeline as the flyer copy, so no separate endpoint.
-  async function draftWithAi() {
-    const notes = aiPrompt.trim();
-    if (!notes) {
-      showToast("Write a few words about the property first.");
-      return;
-    }
-    setAiDrafting(true);
-    try {
-      const label = draft.propertyLabel.trim() || draft.title.trim();
-      const propertyId = draft.propertyKey === CUSTOM_PROPERTY_KEY ? null : draft.propertyKey;
-      const inputs = draftInputs({ ...draft, customDetails: notes });
-      const { copy, source } = await generateFlyerCopy(inputs, label, propertyId);
-      if (source === "forbidden") {
-        showToast("You can only create flyers for your own properties.");
-        return;
-      }
-      setDraft((d) => ({
-        ...d,
-        customDetails: notes,
-        headline: copy.headline || d.headline,
-        sellingPoints: copy.sellingPoints.length ? copy.sellingPoints.join("\n") : d.sellingPoints,
-        promo: d.promo.trim() || copy.promoLine,
-        cta: d.cta.trim() || copy.ctaText,
-      }));
-      showToast(
-        source === "ai"
-          ? "AI drafted your flyer — review the fields below and generate."
-          : "Drafted from your notes — review the fields below and generate.",
-      );
-    } catch {
-      showToast("Couldn't draft the flyer. Try again.");
-    } finally {
-      setAiDrafting(false);
-    }
-  }
-
   async function onPhotoFiles(list: FileList | null) {
     if (!list || list.length === 0) return;
-    // Snapshot the selected files up front: the caller resets the <input> value
-    // synchronously after this call, which empties the live FileList — so we
-    // must not read `list` again in the async continuation below.
-    const selected = Array.from(list);
-    const room = Math.max(0, FLYER_IMAGE_LIMIT - draft.images.length);
-    if (room === 0) {
-      showToast(`Up to ${FLYER_IMAGE_LIMIT} photos per flyer.`);
-      return;
-    }
-    const files = selected.slice(0, room);
+    const room = FLYER_IMAGE_LIMIT - draft.images.length;
+    const files = Array.from(list).slice(0, Math.max(0, room));
     setReadingPhotos(true);
     try {
       const results = await Promise.all(files.map(fileToFlyerImage));
@@ -1131,10 +801,12 @@ export function PromotionForm({
       if (added.length) {
         setDraft((d) => ({ ...d, images: [...d.images, ...added].slice(0, FLYER_IMAGE_LIMIT) }));
       }
-      if (added.length < files.length) {
-        showToast("Some files couldn't be read as images.");
-      } else if (selected.length > files.length) {
-        showToast(`Up to ${FLYER_IMAGE_LIMIT} photos per flyer.`);
+      if (added.length < list.length) {
+        showToast(
+          added.length < files.length
+            ? "Some files couldn't be read as images."
+            : `Up to ${FLYER_IMAGE_LIMIT} photos per flyer.`,
+        );
       }
     } finally {
       setReadingPhotos(false);
@@ -1143,89 +815,6 @@ export function PromotionForm({
 
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      <div className="sm:col-span-2 rounded-2xl border border-primary/30 bg-primary/5 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <label className="text-xs font-semibold text-primary" htmlFor="promotion-ai-draft">
-            AI draft
-          </label>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
-            Beta
-          </span>
-        </div>
-        <p className="mt-1 text-[11px] text-muted">
-          Describe the place in your own words — AI fills in the headline, selling points, offer, and call to action
-          below. Add house photos here and they&apos;ll appear on the flyer too.
-        </p>
-        <Textarea
-          id="promotion-ai-draft"
-          className="mt-2"
-          rows={3}
-          value={aiPrompt}
-          onChange={(e) => setAiPrompt(e.target.value)}
-          placeholder={"e.g. Sunny 2-bed in Ballard, quiet street, new kitchen, in-unit W/D, small dog ok, $2,300, one month free if they sign by August."}
-          data-attr="promotion-ai-draft-input"
-        />
-        <div className="mt-2">
-          <label className="text-[11px] font-semibold text-primary/80">
-            House photos <span className="font-normal text-muted">(added to flyer)</span>
-          </label>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            {draft.images.map((src, i) => (
-              <div key={i} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element -- small local data-URL thumbnail */}
-                <img
-                  src={src}
-                  alt={`Uploaded property photo ${i + 1}`}
-                  className="h-14 w-[4.5rem] rounded-lg border border-primary/20 object-cover"
-                />
-                <button
-                  type="button"
-                  aria-label={`Remove photo ${i + 1}`}
-                  onClick={() => setDraft((d) => ({ ...d, images: d.images.filter((_, j) => j !== i) }))}
-                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-[11px] font-bold leading-none text-background shadow"
-                  data-attr="promotion-ai-draft-photo-remove"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {draft.images.length < FLYER_IMAGE_LIMIT ? (
-              <label
-                className="flex h-14 w-[4.5rem] cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-primary/30 text-primary/70 transition-colors hover:border-primary/50 hover:text-primary"
-                data-attr="promotion-ai-draft-photo-add"
-              >
-                <span className="text-lg leading-none">+</span>
-                <span className="text-[10px] font-semibold">{readingPhotos ? "Adding…" : "Add photo"}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="sr-only"
-                  disabled={readingPhotos}
-                  onChange={(e) => {
-                    void onPhotoFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-            ) : null}
-          </div>
-          <p className="mt-1 text-[10px] text-muted">
-            Photos are added to the flyer automatically. AI drafts copy from your text description, not the images.
-          </p>
-        </div>
-        <div className="mt-2 flex justify-end">
-          <Button
-            type="button"
-            className="h-8 rounded-full px-4 text-xs"
-            onClick={() => void draftWithAi()}
-            disabled={aiDrafting}
-            data-attr="promotion-ai-draft-submit"
-          >
-            {aiDrafting ? "Drafting…" : "Draft with AI"}
-          </Button>
-        </div>
-      </div>
       {hidePropertyPicker ? null : (
         <div>
           <label className="text-xs font-semibold text-muted">Property / listing</label>

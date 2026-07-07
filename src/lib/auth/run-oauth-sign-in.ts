@@ -1,3 +1,7 @@
+import {
+  APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
+  probeSupabaseAppleOAuthUrl,
+} from "@/lib/auth/apple-sign-in-config";
 import { persistOAuthSignInContext } from "@/lib/auth/oauth-next-cookie";
 import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { oauthContinuePath, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
@@ -63,13 +67,21 @@ export async function runOAuthSignIn({
   const label = PROVIDER_LABEL[provider];
 
   if (error) {
-    const message = error.message.toLowerCase().includes("not enabled")
-      ? `${label} sign-in is not enabled in Supabase. Ask your admin to enable the ${label} provider.`
-      : error.message;
+    const lower = error.message.toLowerCase();
+    const message =
+      lower.includes("not enabled") || lower.includes("unsupported provider")
+        ? provider === "apple"
+          ? APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE
+          : `${label} sign-in is not enabled in Supabase. Ask your admin to enable the ${label} provider.`
+        : error.message;
     return { ok: false, message };
   }
 
   if (data?.url) {
+    if (provider === "apple") {
+      const probe = await probeSupabaseAppleOAuthUrl(data.url);
+      if (!probe.ok) return probe;
+    }
     await openOAuthUrl(data.url);
     return { ok: true, opened: true };
   }

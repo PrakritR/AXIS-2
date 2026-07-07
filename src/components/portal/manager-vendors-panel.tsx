@@ -1,12 +1,8 @@
 "use client";
 
 import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import {
-  ManagerPortalPageShell,
-  MANAGER_TABLE_TH,
-  PORTAL_TOOLBAR_SELECT,
-  PortalToolbarSelectWrap,
-} from "@/components/portal/portal-metrics";
+import { ChevronDown } from "lucide-react";
+import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -24,7 +20,8 @@ import {
 } from "@/lib/manager-vendors-storage";
 import { ManagerVendorSettingsModal } from "@/components/portal/manager-vendor-settings-modal";
 import { ManagerVendorInviteModal } from "@/components/portal/manager-vendor-invite-modal";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
+import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_MOBILE_CARD_CLASS,
@@ -32,9 +29,11 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
+  PortalTableExpandCell,
+  createPortalRowExpandClick,
+} from "@/components/portal/portal-data-table";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
 
 const TRADE_OPTIONS: readonly string[] = VENDOR_TRADE_OPTIONS;
@@ -47,7 +46,7 @@ type VendorDraft = {
   notes: string;
   active: boolean;
   sharedWithManagers: boolean;
-  vendorPriority: "" | "primary" | "secondary" | "backup";
+  vendorPriority: "" | "primary" | "secondary";
 };
 
 const EMPTY_DRAFT: VendorDraft = {
@@ -173,14 +172,48 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
       showToast(`${row.name} is now the primary ${row.trade || "vendor"}.`);
     } else if (priority === "secondary") {
       showToast(`${row.name} marked as secondary.`);
-    } else if (priority === "backup") {
-      showToast(`${row.name} marked as backup.`);
+    } else {
+      showToast("Priority cleared.");
     }
   }
 
+  const renderVendorQuickControls = (row: ManagerVendorRow) => (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div>
+        <label className="text-xs font-semibold text-muted">Status</label>
+        <Select
+          className="mt-1"
+          value={row.active !== false ? "active" : "inactive"}
+          onChange={(e) => updateVendorStatus(row, e.target.value === "active")}
+          data-attr="vendor-status-select"
+        >
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </Select>
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-muted">Priority</label>
+        <Select
+          className="mt-1"
+          value={row.vendorPriority ?? ""}
+          onChange={(e) =>
+            updateVendorPriority(
+              row,
+              e.target.value === "primary" || e.target.value === "secondary" ? e.target.value : undefined,
+            )
+          }
+          data-attr="vendor-priority-select"
+        >
+          <option value="">Standard</option>
+          <option value="primary">Primary</option>
+          <option value="secondary">Secondary</option>
+        </Select>
+      </div>
+    </div>
+  );
+
   const renderVendorDetail = (row: ManagerVendorRow) => {
     const editing = editingId === row.id;
-    const priorityValue = row.vendorPriority ?? "backup";
     return editing ? (
       <>
         <VendorForm draft={draft} setDraft={setDraft} />
@@ -192,61 +225,8 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
     ) : (
       <div className="space-y-3">
         {row.notes ? <p className="text-sm text-muted">{row.notes}</p> : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 shrink-0 rounded-full px-3 text-xs"
-            onClick={() => startEdit(row)}
-          >
-            Edit
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 shrink-0 rounded-full px-3 text-xs"
-            onClick={() => setInviteVendor(row)}
-            data-attr="vendor-send-invite"
-          >
-            Send invite
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 shrink-0 rounded-full px-3 text-xs"
-            onClick={() => removeVendor(row.id)}
-          >
-            Remove
-          </Button>
-          <PortalToolbarSelectWrap className="shrink-0">
-            <select
-              className={`${PORTAL_TOOLBAR_SELECT} h-8 min-w-[5.5rem] text-xs font-semibold`}
-              value={row.active !== false ? "active" : "inactive"}
-              onChange={(e) => updateVendorStatus(row, e.target.value === "active")}
-              data-attr="vendor-status-select"
-              aria-label="Status"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </PortalToolbarSelectWrap>
-          <PortalToolbarSelectWrap className="shrink-0">
-            <select
-              className={`${PORTAL_TOOLBAR_SELECT} h-8 min-w-[5.5rem] text-xs font-semibold`}
-              value={priorityValue}
-              onChange={(e) =>
-                updateVendorPriority(row, e.target.value as "primary" | "secondary" | "backup")
-              }
-              data-attr="vendor-priority-select"
-              aria-label="Priority"
-            >
-              <option value="primary">Primary</option>
-              <option value="secondary">Secondary</option>
-              <option value="backup">Backup</option>
-            </select>
-          </PortalToolbarSelectWrap>
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {renderVendorQuickControls(row)}
+        <div className="flex flex-wrap gap-2">
           {row.phone ? (
             <a href={`tel:${row.phone}`} className="text-sm font-medium text-primary hover:underline">
               Call {row.phone}
@@ -257,6 +237,23 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
               Email {row.email}
             </a>
           ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => startEdit(row)}>
+            Edit
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() => setInviteVendor(row)}
+            data-attr="vendor-send-invite"
+          >
+            Send invite
+          </Button>
+          <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => removeVendor(row.id)}>
+            Remove
+          </Button>
         </div>
       </div>
     );
@@ -294,14 +291,16 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
               <div key={`vendor-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                 <button
                   type="button"
-                  className="w-full text-left transition-opacity active:opacity-70"
+                  className="flex w-full items-center justify-between gap-2 text-left transition-opacity active:opacity-70"
                   onClick={() => setExpandedId(open ? null : row.id)}
                   aria-expanded={open}
                   data-attr="vendor-card-toggle"
                 >
-                  <PortalTableInlineExpand expanded={open} className="font-semibold text-foreground">
-                    <span className="truncate">{row.name}</span>
-                  </PortalTableInlineExpand>
+                  <p className="min-w-0 flex-1 truncate font-semibold text-foreground">{row.name}</p>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+                    aria-hidden
+                  />
                 </button>
                 {open ? (
                   <div className="mt-3 border-t border-border pt-3">{renderVendorDetail(row)}</div>
@@ -312,13 +311,16 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
         </div>
         <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
           <div className={PORTAL_DATA_TABLE_SCROLL}>
-            <table className={PORTAL_DATA_TABLE}>
+            <table className="w-full table-fixed border-collapse text-left text-sm">
               <thead>
                 <tr className={PORTAL_TABLE_HEAD_ROW}>
                   <th className={MANAGER_TABLE_TH}>Name</th>
                   <th className={MANAGER_TABLE_TH}>Trade</th>
                   <th className={MANAGER_TABLE_TH}>Phone</th>
                   <th className={MANAGER_TABLE_TH}>Email</th>
+                  <th className={PORTAL_TABLE_EXPAND_TH}>
+                    <span className="sr-only">Expand</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -331,16 +333,15 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
                         onClick={createPortalRowExpandClick(() => setExpandedId(open ? null : row.id))}
                         aria-expanded={open}
                       >
-                        <td className={PORTAL_TABLE_TD}>
-                          <PortalTableInlineExpand expanded={open}>{row.name}</PortalTableInlineExpand>
-                        </td>
+                        <td className={PORTAL_TABLE_TD}>{row.name}</td>
                         <td className={PORTAL_TABLE_TD}>{row.trade || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
+                        <PortalTableExpandCell expanded={open} />
                       </tr>
                       {open ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderVendorDetail(row)}
                           </td>
                         </tr>
@@ -444,23 +445,13 @@ function VendorForm({
       </div>
       <div className="flex items-start gap-2 sm:col-span-2">
         <input
-          id="vendor-priority-backup"
-          type="radio"
-          name="vendor-priority"
-          checked={draft.vendorPriority === "backup"}
-          onChange={() => setDraft({ ...draft, vendorPriority: "backup" })}
-        />
-        <label htmlFor="vendor-priority-backup" className="text-sm text-foreground">Backup for this trade</label>
-      </div>
-      <div className="flex items-start gap-2 sm:col-span-2">
-        <input
           id="vendor-priority-standard"
           type="radio"
           name="vendor-priority"
           checked={draft.vendorPriority === ""}
           onChange={() => setDraft({ ...draft, vendorPriority: "" })}
         />
-        <label htmlFor="vendor-priority-standard" className="text-sm text-foreground">No priority</label>
+        <label htmlFor="vendor-priority-standard" className="text-sm text-foreground">Standard (no priority)</label>
       </div>
       <div className="flex items-start gap-2 sm:col-span-2">
         <input
@@ -470,7 +461,7 @@ function VendorForm({
           onChange={(e) => setDraft({ ...draft, sharedWithManagers: e.target.checked })}
         />
         <label htmlFor="vendor-shared" className="text-sm leading-6 text-foreground">
-          Share with others
+          Share with other managers on Axis
           <span className="mt-0.5 block text-xs text-muted">
             Other property managers can view and assign this vendor to work orders. You can turn this off anytime.
           </span>

@@ -29,6 +29,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { isNativeOAuthInProgress } from "@/lib/native/open-url";
 import { getNativeInfo } from "@/lib/native/push-client";
+import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -415,7 +416,6 @@ function NativeAuthHubInner({
               role === "resident" ? (
                 <ResidentSignupForm
                   nextPath={residentSignupNext}
-                  showBrowseLink={!isNative}
                   disabled={locked}
                   hideLegalFooter
                   initialEmail={email}
@@ -539,6 +539,17 @@ function NativeAuthHubInner({
           </p>
         )}
         <AuthLegalConsent action={mode === "sign-in" ? "continue" : "create"} className="px-1" />
+        {isCreate && role === "resident" ? (
+          <p>
+            <Link
+              href={`${RESIDENT_BROWSE_PATH}?from=auth`}
+              data-attr="resident-browse-homes"
+              className="text-sm font-semibold text-primary hover:opacity-90"
+            >
+              Browse homes
+            </Link>
+          </p>
+        ) : null}
       </div>
     </div>
   );

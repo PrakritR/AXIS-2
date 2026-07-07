@@ -13,6 +13,7 @@ import {
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
@@ -37,7 +38,6 @@ import {
   formatLeaseTermsBodyFromAllowed,
   isEntireHomeListing,
   normalizeCustomApplicationFields,
-  normalizeCustomApplicationFieldsForEditor,
   normalizeManagerListingSubmissionV1,
   resolveAllowedLeaseTerms,
   duplicateRoomEntry,
@@ -1197,7 +1197,7 @@ export function ManagerAddListingForm({
   };
 
   // ── Application step (all questions — built-in + custom) ─────────────────
-  const applicationFields = resolveListingApplicationFields(sub, normalizeCustomApplicationFieldsForEditor);
+  const applicationFields = resolveListingApplicationFields(sub, normalizeCustomApplicationFields);
 
   const patchApplicationQuestion = (field: ResolvedApplicationField, patch: Partial<ManagerCustomApplicationField>) => {
     clearListingFieldError(listingCustomQuestionErrorKey(field.id));
@@ -1206,12 +1206,10 @@ export function ManagerAddListingForm({
   };
 
   const addCustomQuestion = (section: string) => {
-    const field = emptyCustomApplicationField(section);
     expandListingItem(listingItemKey("app-section", section));
-    expandListingItem(listingCustomQuestionErrorKey(field.id));
     setSub((s) => ({
       ...s,
-      ...addListingApplicationField(s, field),
+      ...addListingApplicationField(s, emptyCustomApplicationField(section)),
     }));
   };
 

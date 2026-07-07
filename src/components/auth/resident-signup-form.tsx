@@ -1,7 +1,6 @@
 "use client";
 
 import posthog from "posthog-js";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthDivider, AuthLegalConsent } from "@/components/auth/auth-mobile-primitives";
 import { ResidentAppleSignUpButton } from "@/components/auth/resident-apple-sign-up-button";
@@ -16,17 +15,14 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 export function ResidentSignupForm({
   nextPath = "/resident/applications/apply",
   initialEmail = "",
-  showBrowseLink = false,
   disabled = false,
   hideLegalFooter = false,
 }: {
   nextPath?: string;
   initialEmail?: string;
-  showBrowseLink?: boolean;
   disabled?: boolean;
   hideLegalFooter?: boolean;
 }) {
-  const router = useRouter();
   const { showToast } = useAppUi();
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
@@ -126,22 +122,6 @@ export function ResidentSignupForm({
       </Button>
 
       {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
-
-      {showBrowseLink ? (
-        <>
-          <AuthDivider label="or" />
-          <Button
-            type="button"
-            variant="outline"
-            data-attr="auth-hub-resident-browse"
-            className="w-full rounded-full py-2.5 text-[15px] font-semibold"
-            disabled={locked}
-            onClick={() => router.push("/rent/browse?from=auth")}
-          >
-            Browse properties
-          </Button>
-        </>
-      ) : null}
 
       {!hideLegalFooter ? <AuthLegalConsent action="create" className="mt-2" /> : null}
     </div>

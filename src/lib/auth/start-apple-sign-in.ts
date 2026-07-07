@@ -1,4 +1,8 @@
 import {
+  APPLE_SIGN_IN_WEB_ENV_MESSAGE,
+  isAppleSignInAvailable,
+} from "@/lib/auth/apple-sign-in-config";
+import {
   isNativeApplePluginAvailable,
   NATIVE_APPLE_REBUILD_MESSAGE,
   runNativeAppleSignIn,
@@ -8,7 +12,9 @@ import { startOAuthSignIn, type StartOAuthSignInParams, type StartOAuthSignInRes
 
 /** Native iOS uses identityToken + signInWithIdToken; web uses Supabase OAuth redirect. */
 export async function startAppleSignIn(params: StartOAuthSignInParams): Promise<StartOAuthSignInResult> {
-  params.onBeforeRedirect?.();
+  if (!isAppleSignInAvailable()) {
+    return { ok: false, message: APPLE_SIGN_IN_WEB_ENV_MESSAGE };
+  }
 
   if (canUseNativeAppleSignIn()) {
     if (!isNativeApplePluginAvailable()) {

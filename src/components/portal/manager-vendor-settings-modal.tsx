@@ -14,7 +14,6 @@ import {
   saveManagerVendorCategorySettings,
   syncManagerVendorsFromServer,
   upsertManagerVendor,
-  setManagerVendorPriority,
   vendorsMatchingTrade,
   type ManagerVendorRow,
 } from "@/lib/manager-vendors-storage";
@@ -32,8 +31,6 @@ type VendorDraft = {
   phone: string;
   email: string;
   notes: string;
-  sharedWithManagers: boolean;
-  vendorPriority: "" | "primary" | "secondary" | "backup";
 };
 
 const EMPTY_DRAFT: VendorDraft = {
@@ -42,18 +39,14 @@ const EMPTY_DRAFT: VendorDraft = {
   phone: "",
   email: "",
   notes: "",
-  sharedWithManagers: false,
-  vendorPriority: "",
 };
 
 function VendorManualForm({
   draft,
   setDraft,
-  formIdPrefix,
 }: {
   draft: VendorDraft;
   setDraft: (d: VendorDraft) => void;
-  formIdPrefix: string;
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -82,55 +75,6 @@ function VendorManualForm({
       <div className="sm:col-span-2">
         <label className="text-xs font-semibold text-muted">Notes</label>
         <Input className="mt-1" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
-      </div>
-      <fieldset className="space-y-2 sm:col-span-2">
-        <legend className="text-xs font-semibold text-muted">Priority for this trade</legend>
-        {(
-          [
-            { id: "primary", label: "Primary" },
-            { id: "secondary", label: "Secondary" },
-            { id: "backup", label: "Backup" },
-          ] as const
-        ).map((opt) => (
-          <div key={opt.id} className="flex items-center gap-2">
-            <input
-              id={`${formIdPrefix}-priority-${opt.id}`}
-              type="radio"
-              name={`${formIdPrefix}-vendor-priority`}
-              checked={draft.vendorPriority === opt.id}
-              onChange={() => setDraft({ ...draft, vendorPriority: opt.id })}
-            />
-            <label htmlFor={`${formIdPrefix}-priority-${opt.id}`} className="text-sm text-foreground">
-              {opt.label}
-            </label>
-          </div>
-        ))}
-        <div className="flex items-center gap-2">
-          <input
-            id={`${formIdPrefix}-priority-none`}
-            type="radio"
-            name={`${formIdPrefix}-vendor-priority`}
-            checked={draft.vendorPriority === ""}
-            onChange={() => setDraft({ ...draft, vendorPriority: "" })}
-          />
-          <label htmlFor={`${formIdPrefix}-priority-none`} className="text-sm text-foreground">
-            No priority
-          </label>
-        </div>
-      </fieldset>
-      <div className="flex items-start gap-2 sm:col-span-2">
-        <input
-          id={`${formIdPrefix}-shared`}
-          type="checkbox"
-          checked={draft.sharedWithManagers}
-          onChange={(e) => setDraft({ ...draft, sharedWithManagers: e.target.checked })}
-        />
-        <label htmlFor={`${formIdPrefix}-shared`} className="text-sm leading-6 text-foreground">
-          Share with others
-          <span className="mt-0.5 block text-xs text-muted">
-            Other property managers on Axis can view and assign this vendor.
-          </span>
-        </label>
       </div>
     </div>
   );
@@ -238,16 +182,12 @@ export function ManagerVendorSettingsModal({
         email: draft.email.trim(),
         notes: draft.notes.trim(),
         active: true,
-        sharedWithManagers: draft.sharedWithManagers,
-        vendorPriority: draft.vendorPriority || undefined,
+        sharedWithManagers: false,
         createdAt: now,
         updatedAt: now,
       },
       userId,
     );
-    if (draft.vendorPriority === "primary") {
-      setManagerVendorPriority(id, "primary", userId);
-    }
     setDraft({ ...EMPTY_DRAFT, trade: draft.trade });
     showToast("Vendor added to your account.");
   }, [draft, showToast, userId]);
@@ -300,9 +240,9 @@ export function ManagerVendorSettingsModal({
             <p className="font-semibold text-foreground">Add vendor manually</p>
             <p className="mt-1 text-xs text-muted">Create a vendor on your account for work orders and outgoing payments.</p>
           </div>
-          <VendorManualForm draft={draft} setDraft={setDraft} formIdPrefix="vendor-settings-manual" />
-          <Button type="button" className="rounded-full" data-attr="vendor-settings-add-manual" onClick={saveManualVendor}>
-            Add vendor
+          <VendorManualForm draft={draft} setDraft={setDraft} />
+          <Button type="button" className="rounded-full" data-attr="vendor-settings-save-manual" onClick={saveManualVendor}>
+            Save vendor
           </Button>
         </section>
 
@@ -317,7 +257,7 @@ export function ManagerVendorSettingsModal({
             {VENDOR_TRADE_OPTIONS.map((trade) => {
               const matches = vendorsMatchingTrade(ownVendors, trade);
               return (
-                <li key={trade} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:items-center">
+                <li key={trade} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-center">
                   <span className="font-medium text-foreground">{trade}</span>
                   <Select
                     value={defaults[trade] ?? ""}
@@ -338,6 +278,14 @@ export function ManagerVendorSettingsModal({
                       </option>
                     ))}
                   </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-full text-xs"
+                    onClick={() => setDraft({ ...EMPTY_DRAFT, trade })}
+                  >
+                    Add for category
+                  </Button>
                 </li>
               );
             })}

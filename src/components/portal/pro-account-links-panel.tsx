@@ -12,19 +12,22 @@ import {
   PORTAL_TOOLBAR_SELECT,
   PortalToolbarSelectWrap,
 } from "@/components/portal/portal-metrics";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
+import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
-  PortalTableInlineExpand,
+  PortalTableExpandCell,
   PortalTableDetailActions,
   PORTAL_DETAIL_BTN,
-  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
+  createPortalRowExpandClick,
+} from "@/components/portal/portal-data-table";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
@@ -1404,12 +1407,15 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             </div>
             <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
-                <table className={PORTAL_DATA_TABLE}>
+                <table className="w-full table-fixed border-collapse text-left text-sm">
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Manager</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Role</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Properties</th>
+                      <th className={PORTAL_TABLE_EXPAND_TH}>
+                        <span className="sr-only">Expand</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1423,9 +1429,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                           aria-expanded={expandedLinkId === "__self__"}
                         >
                           <td className={PORTAL_TABLE_TD}>
-                            <PortalTableInlineExpand expanded={expandedLinkId === "__self__"}>
-                              <span className="font-medium text-foreground">You</span>
-                            </PortalTableInlineExpand>
+                            <p className="font-medium text-foreground">You</p>
                             <p className="mt-0.5 text-xs text-muted">Main manager</p>
                           </td>
                           <td className={PORTAL_TABLE_TD}>
@@ -1435,10 +1439,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             <span className="tabular-nums">{ownedProperties.length}</span>
                             <span className="text-muted"> owned</span>
                           </td>
+                          <PortalTableExpandCell expanded={expandedLinkId === "__self__"} />
                         </tr>
                         {expandedLinkId === "__self__" ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderSelfDetail()}
                             </td>
                           </tr>
@@ -1460,9 +1465,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                 aria-expanded={expandedLinkId === inv.id}
                               >
                                 <td className={PORTAL_TABLE_TD}>
-                                  <PortalTableInlineExpand expanded={expandedLinkId === inv.id}>
-                                    <span className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</span>
-                                  </PortalTableInlineExpand>
+                                  <p className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
                                   <p className="mt-0.5 font-mono text-xs text-muted">{inv.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
@@ -1486,10 +1489,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                     <span>linked</span>
                                   </button>
                                 </td>
+                                <PortalTableExpandCell expanded={expandedLinkId === inv.id} />
                               </tr>
                               {expandedLinkId === inv.id ? (
                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                  <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                                  <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                                     {renderInviteDetail(inv)}
                                   </td>
                                 </tr>
@@ -1508,9 +1512,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                 aria-expanded={expandedLinkId === r.id}
                               >
                                 <td className={PORTAL_TABLE_TD}>
-                                  <PortalTableInlineExpand expanded={expandedLinkId === r.id}>
-                                    <span className="font-medium text-foreground">{r.linkedDisplayName ?? r.linkedAxisId}</span>
-                                  </PortalTableInlineExpand>
+                                  <p className="font-medium text-foreground">{r.linkedDisplayName ?? r.linkedAxisId}</p>
                                   <p className="mt-0.5 font-mono text-xs text-muted">{r.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
@@ -1532,10 +1534,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                     <span>linked</span>
                                   </button>
                                 </td>
+                                <PortalTableExpandCell expanded={expandedLinkId === r.id} />
                               </tr>
                               {expandedLinkId === r.id ? (
                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                  <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
+                                  <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                                     {renderLocalRowDetail(r)}
                                   </td>
                                 </tr>

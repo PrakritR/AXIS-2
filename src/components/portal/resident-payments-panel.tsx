@@ -10,7 +10,8 @@ import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
 import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
-import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, PORTAL_DATA_TABLE_SCROLL,
+import {
+  PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_MOBILE_CARD_CLASS,
@@ -18,9 +19,12 @@ import { PORTAL_DATA_TABLE, PortalDataTableColGroup, portalTableColumnPercents, 
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,} from "@/components/portal/portal-data-table";
+  PortalTableExpandCell,
+  PortalTableExpandChevron,
+  createPortalRowExpandClick,
+} from "@/components/portal/portal-data-table";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { useNativePlatform } from "@/hooks/use-native-platform";
 import {
@@ -819,15 +823,13 @@ export function ResidentPaymentsPanel() {
                         ) : null}
                         <button
                           type="button"
-                          className="min-w-0 flex-1 text-left"
+                          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
                           onClick={toggleExpand}
                           aria-expanded={expanded}
                         >
                           <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
                             <div className="min-w-0 flex-1">
-                              <PortalTableInlineExpand expanded={expanded} className="text-sm font-semibold text-foreground">
-                                <span className="truncate">{row.title}</span>
-                              </PortalTableInlineExpand>
+                              <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
                               <p className="mt-0.5 truncate text-xs text-muted">{row.propertyLabel}</p>
                               <p className="mt-0.5 truncate text-[11px] text-muted/90">
                                 Due {chargeDueLabel(row)} · {row.amountLabel}
@@ -835,6 +837,7 @@ export function ResidentPaymentsPanel() {
                             </div>
                             <Badge tone={status.tone}>{status.label}</Badge>
                           </div>
+                          <PortalTableExpandChevron expanded={expanded} />
                         </button>
                       </div>
                       {expanded ? (
@@ -848,7 +851,7 @@ export function ResidentPaymentsPanel() {
               </div>
               <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
                 <div className={PORTAL_DATA_TABLE_SCROLL}>
-                  <table className={PORTAL_DATA_TABLE}>
+                  <table className="w-full table-fixed border-collapse text-left text-sm">
                     <thead>
                       <tr className={PORTAL_TABLE_HEAD_ROW}>
                         {showSelectCol ? (
@@ -868,12 +871,15 @@ export function ResidentPaymentsPanel() {
                         <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
                         <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
                         <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+                        <th className={PORTAL_TABLE_EXPAND_TH}>
+                          <span className="sr-only">Expand</span>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {rowsForBucket.map((row) => {
                         const status = chargeStatusBadge(row);
-                        const detailColSpan = showSelectCol ? 7 : 6;
+                        const detailColSpan = showSelectCol ? 8 : 7;
                         return (
                           <Fragment key={row.id}>
                             <tr
@@ -898,9 +904,7 @@ export function ResidentPaymentsPanel() {
                                   />
                                 </td>
                               ) : null}
-                              <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                                <PortalTableInlineExpand expanded={expandedId === row.id}>{row.title}</PortalTableInlineExpand>
-                              </td>
+                              <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
                               <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{row.propertyLabel}</td>
                               <td className={PORTAL_TABLE_TD}>{chargeDueLabel(row)}</td>
                               <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{row.amountLabel}</td>
@@ -910,6 +914,7 @@ export function ResidentPaymentsPanel() {
                               <td className={PORTAL_TABLE_TD}>
                                 <Badge tone={status.tone}>{status.label}</Badge>
                               </td>
+                              <PortalTableExpandCell expanded={expandedId === row.id} />
                             </tr>
                             {expandedId === row.id ? (
                               <tr className={PORTAL_TABLE_DETAIL_ROW}>

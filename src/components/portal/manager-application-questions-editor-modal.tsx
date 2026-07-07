@@ -10,7 +10,6 @@ import {
   customApplicationFieldKeyFromLabel,
   emptyCustomApplicationField,
   normalizeCustomApplicationFields,
-  normalizeCustomApplicationFieldsForEditor,
   type ManagerCustomApplicationField,
   type ManagerCustomApplicationFieldType,
   type ManagerListingSubmissionV1,
@@ -24,6 +23,7 @@ import {
   patchListingApplicationField,
   removeListingApplicationField,
   resolveListingApplicationFields,
+  restoreDefaultApplicationConfig,
   type ResolvedApplicationField,
 } from "@/lib/rental-application/application-field-catalog";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
@@ -64,15 +64,6 @@ function applicationConfigModeFromDraft(draft: DraftConfig): "standard" | "custo
     : "standard";
 }
 
-function submissionFromDraft(sub: ManagerListingSubmissionV1, draft: DraftConfig): ManagerListingSubmissionV1 {
-  return {
-    ...sub,
-    disabledStandardApplicationKeys: draft.disabledStandardApplicationKeys,
-    customApplicationFields: draft.customApplicationFields,
-    applicationConfigMode: applicationConfigModeFromDraft(draft),
-  };
-}
-
 /** Shared application-question editor — same modal used on property details and Applications. */
 export function ManagerApplicationQuestionsEditorModal({
   open,
@@ -109,7 +100,7 @@ export function ManagerApplicationQuestionsEditorModal({
   }, [open, sub]);
 
   const applicationFields = useMemo(
-    () => resolveListingApplicationFields(draft, normalizeCustomApplicationFieldsForEditor),
+    () => resolveListingApplicationFields(draft, normalizeCustomApplicationFields),
     [draft],
   );
 
@@ -134,34 +125,13 @@ export function ManagerApplicationQuestionsEditorModal({
   };
 
   const addField = (section: string) => {
-    const field = emptyCustomApplicationField(section);
-    setDraft((prev) => ({ ...prev, ...addListingApplicationField(prev, field) }));
-    setExpandedSections((prev) => ({ ...prev, [section]: true }));
-    setExpandedQuestions((prev) => ({ ...prev, [field.id]: true }));
+    setDraft((prev) => ({ ...prev, ...addListingApplicationField(prev, emptyCustomApplicationField(section)) }));
   };
 
   const restoreDefaults = () => {
-    if (
-      !window.confirm(
-        "Reset all application questions to Axis defaults? Custom questions will be removed and any disabled built-in questions will be restored.",
-      )
-    ) {
-      return;
-    }
-    const restored: DraftConfig = {
-      disabledStandardApplicationKeys: [],
-      customApplicationFields: [],
-    };
-    const next = submissionFromDraft(sub, restored);
-    if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not restore application defaults.");
-      return;
-    }
-    setDraft(restored);
+    setDraft(draftFromSubmission({ ...sub, ...restoreDefaultApplicationConfig() }));
     setOptionsDrafts({});
     setRowErrors({});
-    showToast("Application restored to Axis defaults.");
-    onSaved();
   };
 
   const questionOptionsText = (field: ResolvedApplicationField): string =>
@@ -210,7 +180,12 @@ export function ManagerApplicationQuestionsEditorModal({
       return;
     }
 
-    const next = submissionFromDraft(sub, draft);
+    const next: ManagerListingSubmissionV1 = {
+      ...sub,
+      disabledStandardApplicationKeys: draft.disabledStandardApplicationKeys,
+      customApplicationFields: draft.customApplicationFields,
+      applicationConfigMode: applicationConfigModeFromDraft(draft),
+    };
     if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
       showToast("Could not save application questions.");
       return;
@@ -227,13 +202,7 @@ export function ManagerApplicationQuestionsEditorModal({
           <p className="text-sm text-muted">
             {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on this application
           </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
-            data-attr="application-restore-defaults"
-            onClick={restoreDefaults}
-          >
+          <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={restoreDefaults}>
             Restore Axis defaults
           </Button>
         </div>
@@ -263,9 +232,9 @@ export function ManagerApplicationQuestionsEditorModal({
                   variant="outline"
                   className="h-7 rounded-full px-2.5 text-xs"
                   data-attr="application-questions-add"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={() => {
                     addField(section.id);
+                    setExpandedSections((prev) => ({ ...prev, [section.id]: true }));
                   }}
                 >
                   + Add question

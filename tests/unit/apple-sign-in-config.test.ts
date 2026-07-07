@@ -1,0 +1,81 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
+  isAppleSignInAvailable,
+  isAppleSignInEnabledInEnv,
+  probeSupabaseAppleOAuthUrl,
+} from "@/lib/auth/apple-sign-in-config";
+
+vi.mock("@/lib/native/detect-native", () => ({
+  detectNativePlatformSync: vi.fn(() => null),
+}));
+
+import { detectNativePlatformSync } from "@/lib/native/detect-native";
+
+describe("apple-sign-in-config", () => {
+  const originalEnv = { ...process.env };
+  const detectNative = vi.mocked(detectNativePlatformSync);
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED;
+    detectNative.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  it("isAppleSignInEnabledInEnv is false unless explicitly true", () => {
+    expect(isAppleSignInEnabledInEnv()).toBe(false);
+    process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED = "true";
+    expect(isAppleSignInEnabledInEnv()).toBe(true);
+    process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED = "false";
+    expect(isAppleSignInEnabledInEnv()).toBe(false);
+  });
+
+  it("isAppleSignInAvailable is true on native iOS regardless of env", () => {
+    detectNative.mockReturnValue("ios");
+    expect(isAppleSignInAvailable()).toBe(true);
+  });
+
+  it("isAppleSignInAvailable on web follows env flag", () => {
+    expect(isAppleSignInAvailable()).toBe(false);
+    process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED = "true";
+    expect(isAppleSignInAvailable()).toBe(true);
+  });
+
+  it("probeSupabaseAppleOAuthUrl rejects disabled provider JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        headers: { get: () => "application/json" },
+        json: async () => ({
+          code: 400,
+          error_code: "validation_failed",
+          msg: "Unsupported provider: provider is not enabled",
+        }),
+      })),
+    );
+
+    const result = await probeSupabaseAppleOAuthUrl(
+      "https://example.supabase.co/auth/v1/authorize?provider=apple",
+    );
+    expect(result).toEqual({ ok: false, message: APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE });
+  });
+
+  it("probeSupabaseAppleOAuthUrl accepts redirect responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        headers: { get: () => "text/html" },
+      })),
+    );
+
+    const result = await probeSupabaseAppleOAuthUrl(
+      "https://example.supabase.co/auth/v1/authorize?provider=apple",
+    );
+    expect(result).toEqual({ ok: true });
+  });
+});

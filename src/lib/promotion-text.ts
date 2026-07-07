@@ -241,9 +241,9 @@ export function composeFallbackPromotionText(
   }
 
   // listing_blurb — prefer house overview and concrete facts over generic filler
-  const overview = inputs.customDetails.trim();
+  const overview = (inputs.customDetails ?? "").trim();
   const name = propertyLabel.split(" — ")[0]?.trim() || propertyLabel.trim();
-  const locationBit = [inputs.address.trim(), name].filter(Boolean).join(" · ");
+  const locationBit = [(inputs.address ?? "").trim(), name].filter(Boolean).join(" · ");
   const hookLine =
     name && overview
       ? `Welcome to ${name}.`

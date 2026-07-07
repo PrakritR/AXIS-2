@@ -2,6 +2,10 @@
 
 import { OAUTH_APPLE_BUTTON_CLASS } from "@/components/auth/oauth-social-styles";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import {
+  isAppleSignInAvailable,
+  logAppleSignInUnavailableDevHint,
+} from "@/lib/auth/apple-sign-in-config";
 import { startAppleSignIn } from "@/lib/auth/start-apple-sign-in";
 import { canUseNativeAppleSignIn } from "@/lib/auth/native-apple-sign-in";
 import type { OAuthSignInIntent } from "@/lib/auth/post-oauth-routing";
@@ -37,6 +41,10 @@ export function AppleSignInButton({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    logAppleSignInUnavailableDevHint();
+  }, []);
+
+  useEffect(() => {
     if (!busy) return;
     const onVisible = () => {
       if (document.visibilityState === "visible") {
@@ -46,6 +54,8 @@ export function AppleSignInButton({
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [busy]);
+
+  if (!isAppleSignInAvailable()) return null;
 
   const signInWithApple = async () => {
     setBusy(true);

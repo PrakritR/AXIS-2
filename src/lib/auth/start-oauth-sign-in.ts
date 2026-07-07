@@ -1,3 +1,7 @@
+import {
+  APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
+  probeSupabaseAppleOAuthUrl,
+} from "@/lib/auth/apple-sign-in-config";
 import { persistOAuthSignInContext } from "@/lib/auth/oauth-next-cookie";
 import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { oauthContinuePath, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
@@ -67,12 +71,16 @@ export async function startOAuthSignIn({
       if (lower.includes("not enabled") || lower.includes("unsupported provider")) {
         message =
           provider === "apple"
-            ? "Apple sign-in is not enabled in Supabase. Enable Apple, set Client IDs to com.axisseattlehousing.app, leave Secret Key blank."
+            ? APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE
             : `${label} sign-in is not enabled in Supabase. Enable the ${label} provider in Authentication → Providers.`;
       }
       return { ok: false, message };
     }
     if (data?.url) {
+      if (provider === "apple") {
+        const probe = await probeSupabaseAppleOAuthUrl(data.url);
+        if (!probe.ok) return probe;
+      }
       await openOAuthUrl(data.url);
       return { ok: true };
     }

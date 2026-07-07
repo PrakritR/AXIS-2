@@ -194,6 +194,8 @@ export type DemoManagerWorkOrderRow = {
   selfAssigned?: boolean;
   category?: "cleaning" | "plumbing" | "mold" | "electrical" | "hvac" | "general" | "appliance" | "access";
   vendorCostCents?: number;
+  /** ISO timestamp when the vendor set labor cost via set-vendor-price (locks manager edits). */
+  vendorPriceSetAt?: string;
   materialsCostCents?: number;
   materialsMemo?: string;
   workDoneSummary?: string;

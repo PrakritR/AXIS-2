@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -101,11 +101,10 @@ export function PortalCollapsibleSection({
             <span className="min-w-0">{title}</span>
             {titleAddon ? <span className="shrink-0">{titleAddon}</span> : null}
             {canCollapse ? (
-              expanded ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-muted" aria-hidden />
-              ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
-              )
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-muted transition-transform ${expanded ? "" : "-rotate-90"}`}
+                aria-hidden
+              />
             ) : null}
           </div>
           {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}

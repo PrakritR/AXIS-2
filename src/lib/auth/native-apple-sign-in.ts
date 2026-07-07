@@ -1,4 +1,8 @@
-import { IOS_BUNDLE_ID, supabaseAppleOAuthRedirectUri } from "@/lib/auth/apple-sign-in-config";
+import {
+  APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
+  IOS_BUNDLE_ID,
+  supabaseAppleOAuthRedirectUri,
+} from "@/lib/auth/apple-sign-in-config";
 import { sha256Hex } from "@/lib/crypto/sha256-hex";
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
 import { oauthContinuePath, usesDirectOAuthReturn } from "@/lib/auth/oauth-redirect";
@@ -120,9 +124,10 @@ export async function runNativeAppleSignIn(
 
     if (error) {
       const lower = error.message.toLowerCase();
-      const message = lower.includes("not enabled") || lower.includes("unsupported provider")
-        ? "Apple sign-in is not enabled in Supabase. Enable Apple, set Client IDs to com.axisseattlehousing.app, leave Secret Key blank."
-        : error.message;
+      const message =
+        lower.includes("not enabled") || lower.includes("unsupported provider")
+          ? APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE
+          : error.message;
       return { ok: false, message };
     }
 
