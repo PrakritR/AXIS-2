@@ -39,12 +39,8 @@ export function buildBackgroundCheckReportHtml(
   if (!screening && !bg) return "";
 
   if (bg?.reportSnapshot || (bg && bg.status === "complete")) {
-    // Prefer official Checkr PDF via /api/screening/background-check/document in the UI.
-    // Fall back to inline HTML only for legacy Certn rows or offline demo simulate.
-    if (bg?.simulated) {
-      const tenantHtml = buildCheckrTenantReportHtml(row);
-      if (tenantHtml) return tenantHtml;
-    }
+    const tenantHtml = buildCheckrTenantReportHtml(row);
+    if (tenantHtml) return tenantHtml;
   }
 
   const applicantName = clean(row.name) || "Applicant";

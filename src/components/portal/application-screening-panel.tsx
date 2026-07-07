@@ -13,22 +13,7 @@ import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import type { ManagerScreeningSettings } from "@/lib/screening/types";
 
 function BackgroundCheckReportFrame({ row }: { row: DemoApplicantRow }) {
-  const bg = row.backgroundCheck;
   const reportHtml = useMemo(() => buildBackgroundCheckReportHtml(row), [row]);
-  const useOfficialPdf = bg?.status === "complete" && !bg.simulated;
-  const pdfSrc = useOfficialPdf
-    ? `/api/screening/background-check/document?applicationId=${encodeURIComponent(row.id)}`
-    : null;
-
-  if (pdfSrc) {
-    return (
-      <iframe
-        src={pdfSrc}
-        title="Checkr background check report"
-        className="h-[min(52vh,420px)] w-full border-0 bg-card"
-      />
-    );
-  }
 
   if (!reportHtml) {
     return (
@@ -44,7 +29,7 @@ function BackgroundCheckReportFrame({ row }: { row: DemoApplicantRow }) {
       title="Background check report preview"
       sandbox="allow-same-origin"
       loading="lazy"
-      className="h-[min(52vh,420px)] w-full border-0 bg-card"
+      className="h-[min(52vh,420px)] w-full border-0 bg-white"
     />
   );
 }
@@ -246,7 +231,7 @@ export function ApplicationScreeningPanel({
         <p className="text-xs text-muted">Applicant must authorize a background check first.</p>
       ) : null}
 
-      <div className="overflow-hidden rounded-xl border border-border bg-accent/30">
+      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
         <BackgroundCheckReportFrame row={row} />
       </div>
 

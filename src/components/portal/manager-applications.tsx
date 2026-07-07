@@ -57,7 +57,9 @@ import { syncPropertyPipelineFromServer, hasCachedPropertyPipeline } from "@/lib
 import { transitionApplicationBucket } from "@/lib/application-review";
 import {
   fetchCosignerSubmissionsForSignerAppId,
+  readCosignerSubmissionsForSignerAppId,
 } from "@/lib/cosigner-submissions-storage";
+import { buildApplicationHtml } from "@/lib/manager-application-html";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import {
   removeAllApplicationCharges,
@@ -78,7 +80,7 @@ import {
   buildResidentWelcomeEmailBody,
   residentAccountCreationUrl,
 } from "@/lib/resident-welcome-email";
-import { resolveManagerScopeUserId, isDemoModeActive } from "@/lib/demo/demo-session";
+import { resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 function countByBucket(rows: DemoApplicantRow[]) {
   const c = { pending: 0, approved: 0, rejected: 0 };
   for (const r of rows) {
@@ -114,54 +116,38 @@ export function downloadApplicationPdf(row: DemoApplicantRow): void {
 }
 
 /**
- * Inline PDF preview of the application — same file as Download PDF (server-built via pdf-lib).
- * Avoids HTML preview drift from local cache and matches the downloaded document exactly.
+ * Inline application preview — rendered HTML (same content as the PDF download)
+ * so managers see the document without the browser PDF viewer chrome.
  */
 export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
-  const demoMode = isDemoModeActive();
-  const [demoPdfSrc, setDemoPdfSrc] = useState<string | null>(null);
-  const previewSrc = useMemo(() => applicationPdfHref(row, { inline: true }), [row]);
+  const [cosignerSubmissions, setCosignerSubmissions] = useState(
+    () =>
+      row.application?.hasCosigner === "yes" ? readCosignerSubmissionsForSignerAppId(row.id) : [],
+  );
 
   useEffect(() => {
-    if (!demoMode) {
-      setDemoPdfSrc(null);
+    if (row.application?.hasCosigner !== "yes") {
+      setCosignerSubmissions([]);
       return;
     }
+    setCosignerSubmissions(readCosignerSubmissionsForSignerAppId(row.id));
     let cancelled = false;
-    void (async () => {
-      const { buildDemoApplicationPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-      const cosignerSubmissions =
-        row.application?.hasCosigner === "yes" ? await fetchCosignerSubmissionsForSignerAppId(row.id) : [];
-      const url = await buildDemoApplicationPdfDataUrl(
-        row,
-        applicationRoomLabel(row) || undefined,
-        cosignerSubmissions,
-      );
-      if (!cancelled) setDemoPdfSrc(url);
-    })();
+    void fetchCosignerSubmissionsForSignerAppId(row.id).then((rows) => {
+      if (!cancelled) setCosignerSubmissions(rows);
+    });
     return () => {
       cancelled = true;
     };
-  }, [demoMode, row]);
+  }, [row.id, row.application?.hasCosigner]);
 
-  const iframeSrc = demoMode ? demoPdfSrc : previewSrc;
-
-  if (!iframeSrc) {
-    return (
-      <PortalCollapsibleSection
-        title="Application"
-        defaultExpanded={false}
-        surfaceMuted={false}
-        className="mt-4"
-        contentClassName="p-4 pt-0"
-        toggleDataAttr="application-document-toggle"
-      >
-        <div className="flex h-[min(24vh,200px)] items-center justify-center rounded-xl border border-border bg-accent/30 px-4 text-center text-sm text-muted">
-          Loading application preview…
-        </div>
-      </PortalCollapsibleSection>
-    );
-  }
+  const previewHtml = useMemo(
+    () =>
+      buildApplicationHtml(row, {
+        roomLabel: applicationRoomLabel(row) || undefined,
+        cosignerSubmissions,
+      }),
+    [row, cosignerSubmissions],
+  );
 
   return (
     <PortalCollapsibleSection
@@ -172,12 +158,14 @@ export function ApplicationDocumentPreview({ row }: { row: DemoApplicantRow }) {
       contentClassName="p-4 pt-0"
       toggleDataAttr="application-document-toggle"
     >
-      <div className="overflow-hidden rounded-xl border border-border bg-accent/30">
+      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
         <iframe
           key={row.id}
-          src={iframeSrc}
+          srcDoc={previewHtml}
           title="Application document"
-          className="h-[min(52vh,420px)] w-full border-0 bg-card"
+          sandbox="allow-same-origin"
+          loading="lazy"
+          className="h-[min(52vh,420px)] w-full border-0 bg-white"
         />
       </div>
     </PortalCollapsibleSection>
