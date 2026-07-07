@@ -13,6 +13,7 @@ import {
   updatePendingManagerPropertyOnServer,
 } from "@/lib/demo-property-pipeline";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { sortRoomIndicesByFloor, sortUniqueFloorLabels } from "@/lib/listing-floor-order";
 import { getPortalListingNote } from "@/lib/portal-listing-notes";
 import {
