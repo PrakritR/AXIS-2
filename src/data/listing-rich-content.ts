@@ -524,11 +524,10 @@ export function getListingRichContent(property: MockProperty): ListingRichConten
       "**Four lease options** are available for every package. Month-to-month renewals add **$25/month** where applicable.",
     bundleCards: defaultBundles,
     quickFacts: [
-      { label: "Neighborhood", value: property.neighborhood },
-      { label: "Bedrooms", value: String(Math.max(property.beds * 3, 3)) },
+      { label: "Rooms listed", value: String(Math.max(property.beds * 3, 3)) },
       { label: "Bathrooms", value: String(property.baths + 1.5) },
       { label: "Type", value: "Shared housing" },
-      { label: "Building", value: property.buildingName },
+      { label: "Pets", value: "Ask manager" },
     ],
   };
 }

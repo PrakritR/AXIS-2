@@ -8,6 +8,7 @@ import {
   PROPERTY_PIPELINE_EVENT,
   readExtraListingsPublic,
 } from "@/lib/demo-property-pipeline";
+import { syncPublicApprovedApplicationsFromServer } from "@/lib/manager-applications-storage";
 
 function readActivePublicListings(): MockProperty[] {
   return readExtraListingsPublic().filter(isPropertyActiveForLeads);
@@ -20,6 +21,7 @@ export function usePublicListings() {
   // effect, i.e. after hydration, so it can never disagree with what the server sent.
   const [listings, setListings] = useState<MockProperty[]>([]);
   const [loading, setLoading] = useState(true);
+  const [occupancyReady, setOccupancyReady] = useState(false);
 
   const refreshFromCache = useCallback(() => {
     setListings(readActivePublicListings());
@@ -34,10 +36,14 @@ export function usePublicListings() {
       setLoading(readActivePublicListings().length === 0);
     });
 
-    void loadPublicExtraListingsFromServer()
-      .then((loaded) => {
+    void Promise.all([
+      loadPublicExtraListingsFromServer(),
+      syncPublicApprovedApplicationsFromServer({ force: true }),
+    ])
+      .then(([loaded]) => {
         if (cancelled) return;
         setListings(loaded.filter(isPropertyActiveForLeads));
+        setOccupancyReady(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -51,5 +57,5 @@ export function usePublicListings() {
     };
   }, [refreshFromCache]);
 
-  return { listings, loading };
+  return { listings, loading, occupancyReady };
 }

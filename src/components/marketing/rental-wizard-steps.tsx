@@ -33,6 +33,7 @@ import {
 } from "@/lib/rental-application/custom-fields";
 import type { ManagerCustomApplicationField } from "@/lib/manager-listing-submission";
 import { wizardSectionErrorClass } from "@/lib/wizard-field-errors";
+import { isWizardFormFieldEnabled } from "@/lib/rental-application/application-field-catalog";
 
 const pillWrap = "flex flex-wrap gap-2 rounded-full border border-border bg-accent/30 p-1 [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-white/6";
 const pillActive = "rounded-full px-4 py-2.5 text-sm font-semibold bg-primary text-primary-foreground shadow-sm transition min-h-[44px] sm:min-h-0";
@@ -67,6 +68,19 @@ function Label({
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return <p className="mt-1.5 text-sm text-red-600">{msg}</p>;
+}
+
+function WizardFieldGate({
+  fieldKey,
+  enabled,
+  children,
+}: {
+  fieldKey: string;
+  enabled: (key: string) => boolean;
+  children: ReactNode;
+}) {
+  if (!enabled(fieldKey)) return null;
+  return <>{children}</>;
 }
 
 function StepIntro({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -245,6 +259,12 @@ function CustomQuestionField({
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
   const { step, form, errors, propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
+
+  const listingSub = (() => {
+    const prop = getPropertyById(form.propertyId);
+    return prop?.listingSubmission?.v === 1 ? prop.listingSubmission : undefined;
+  })();
+  const showWizardField = (key: string) => isWizardFormFieldEnabled(listingSub, key);
 
   // Manager custom questions render inside their configured section's step (untagged → step 9).
   const stepManagerQuestions = (() => {
@@ -450,6 +470,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </StepIntro>
         </div>
 
+        <WizardFieldGate fieldKey="propertyId" enabled={showWizardField}>
         <div className="space-y-2" data-wizard-field="propertyId">
           <Label htmlFor="propertyId" required>
             Property name
@@ -479,7 +500,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           )}
           <FieldError msg={errors.propertyId} />
         </div>
+        </WizardFieldGate>
 
+        <WizardFieldGate fieldKey="roomChoice1" enabled={showWizardField}>
         <div className="space-y-2">
           <Label required>Room preferences</Label>
           <p className="text-xs text-muted">
@@ -539,8 +562,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         </div>
+        </WizardFieldGate>
 
-        {shortTermAllowed ? (
+        {shortTermAllowed && showWizardField("rentalType") ? (
           <div className="space-y-3 rounded-2xl border p-5 portal-banner-info">
             <Label required>Application type</Label>
             <div className={pillWrap}>
@@ -579,6 +603,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           </div>
         ) : null}
 
+        <WizardFieldGate fieldKey="leaseTerm" enabled={showWizardField}>
         <div className="space-y-2" data-wizard-field="leaseTerm">
           <Label htmlFor="leaseTerm" required>
             {form.rentalType === "short_term" ? "Stay type" : "Lease term"}
@@ -611,7 +636,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </p>
           ) : null}
         </div>
+        </WizardFieldGate>
 
+        <WizardFieldGate fieldKey="leaseStart" enabled={showWizardField}>
         <div className={form.leaseTerm === "Month-to-Month" ? "space-y-2" : "grid gap-4 sm:grid-cols-2"}>
           <div className="space-y-2">
             <Label htmlFor="leaseStart" required>
@@ -660,19 +687,20 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
-        {showAvailabilityWarnings && room1ApprovedConflict ? (
+        </WizardFieldGate>
+        {showAvailabilityWarnings && showWizardField("roomChoice1") && room1ApprovedConflict ? (
           <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
             Warning: your first-choice room does not appear available for the selected move-in dates, but you can still submit
             this application.
           </p>
         ) : null}
-        {showAvailabilityWarnings && !room1ApprovedConflict && room1PendingConflict ? (
+        {showAvailabilityWarnings && showWizardField("roomChoice1") && !room1ApprovedConflict && room1PendingConflict ? (
           <p className="rounded-xl border px-4 py-3 text-sm portal-banner-pending">
             Warning: someone else has already applied for your first-choice room on these dates, but you can still submit this
             application.
           </p>
         ) : null}
-        {form.rentalType === "short_term" ? (
+        {form.rentalType === "short_term" && showWizardField("rentalType") ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="shortTermCheckInTime" optional>
@@ -718,6 +746,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div className="rounded-2xl border border-border bg-accent/30/40 p-5 sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Identity & contact</p>
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <WizardFieldGate fieldKey="fullLegalName" enabled={showWizardField}>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="fullLegalName" required>
                 Full legal name
@@ -732,6 +761,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.fullLegalName} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="dateOfBirth" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="dateOfBirth" required>
                 Date of birth
@@ -745,6 +776,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.dateOfBirth} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="ssn" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="ssn" required>
                 Social Security number
@@ -760,6 +793,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.ssn} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="driversLicense" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="driversLicense" required>
                 Driver&apos;s license or ID number
@@ -772,6 +807,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.driversLicense} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="phone" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="phone" required>
                 Phone number
@@ -788,6 +825,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.phone} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="email" enabled={showWizardField}>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="email" required>
                 Email address
@@ -805,6 +844,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.email} />
             </div>
+            </WizardFieldGate>
           </div>
         </div>
 
@@ -820,6 +860,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <h2 className="text-xl font-bold tracking-tight text-foreground">Current address</h2>
           <StepIntro className="mt-3">Where you live today. Landlord and move dates help us verify your rental history.</StepIntro>
         </div>
+        <WizardFieldGate fieldKey="currentStreet" enabled={showWizardField}>
         <div className="space-y-2">
           <Label htmlFor="currentStreet" required>
             Street address
@@ -874,6 +915,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <FieldError msg={errors.currentZip} />
           </div>
         </div>
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="currentLandlordName" enabled={showWizardField}>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="currentLandlordName" optional>
@@ -900,6 +943,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <FieldError msg={errors.currentLandlordPhone} />
           </div>
         </div>
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="currentMoveIn" enabled={showWizardField}>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="currentMoveIn" optional>
@@ -914,6 +959,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <Input id="currentMoveOut" type="date" value={form.currentMoveOut} onChange={(e) => patch({ currentMoveOut: e.target.value })} />
           </div>
         </div>
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="currentReasonLeaving" enabled={showWizardField}>
         <div className="space-y-2">
           <Label htmlFor="currentReasonLeaving" optional>
             Reason for leaving
@@ -926,6 +973,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             rows={3}
           />
         </div>
+        </WizardFieldGate>
 
         {stepManagerQuestions}
       </div>
@@ -951,6 +999,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
 
         {!form.noPreviousAddress ? (
           <>
+            <WizardFieldGate fieldKey="prevStreet" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="prevStreet" required>
                 Street address
@@ -1003,6 +1052,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <FieldError msg={errors.prevZip} />
               </div>
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="prevLandlordName" enabled={showWizardField}>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="prevLandlordName" optional>
@@ -1025,6 +1076,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <FieldError msg={errors.prevLandlordPhone} />
               </div>
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="prevMoveIn" enabled={showWizardField}>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="prevMoveIn" optional>
@@ -1039,6 +1092,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <Input id="prevMoveOut" type="date" value={form.prevMoveOut} onChange={(e) => patch({ prevMoveOut: e.target.value })} />
               </div>
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="prevReasonLeaving" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="prevReasonLeaving" optional>
                 Reason for leaving
@@ -1050,6 +1105,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 rows={3}
               />
             </div>
+            </WizardFieldGate>
           </>
         ) : null}
 
@@ -1085,6 +1141,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         <div className={`space-y-5 rounded-2xl border border-border p-5 sm:p-6 ${form.notEmployed ? "opacity-50" : ""}`}>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Employment</p>
           <div className="grid gap-4 sm:grid-cols-2">
+            <WizardFieldGate fieldKey="employer" enabled={showWizardField}>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="employer" required={!form.notEmployed}>
                 Employer
@@ -1104,6 +1161,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </Label>
               <Input id="employerAddress" value={form.employerAddress} disabled={form.notEmployed} onChange={(e) => patch({ employerAddress: e.target.value })} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="supervisorName" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="supervisorName" optional>
                 Supervisor name
@@ -1125,6 +1184,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.supervisorPhone} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="jobTitle" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="jobTitle" optional>
                 Job title
@@ -1137,9 +1198,11 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               </Label>
               <Input id="employmentStart" type="date" value={form.employmentStart} disabled={form.notEmployed} onChange={(e) => patch({ employmentStart: e.target.value })} />
             </div>
+            </WizardFieldGate>
           </div>
         </div>
 
+        {(showWizardField("monthlyIncome") || showWizardField("otherIncome")) ? (
         <div className="space-y-4 rounded-2xl border border-border p-5 sm:p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Income</p>
@@ -1149,6 +1212,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </StepIntro>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
+            <WizardFieldGate fieldKey="monthlyIncome" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="monthlyIncome">Monthly gross income</Label>
               <Input
@@ -1162,6 +1226,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.monthlyIncome} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="annualIncome" enabled={showWizardField}>
             <div className="space-y-2">
               <Label htmlFor="annualIncome">Annual gross income</Label>
               <Input
@@ -1175,6 +1241,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.annualIncome} />
             </div>
+            </WizardFieldGate>
+            <WizardFieldGate fieldKey="otherIncome" enabled={showWizardField}>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="otherIncome">Other income</Label>
               <Input
@@ -1187,8 +1255,10 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               />
               <FieldError msg={errors.otherIncome} />
             </div>
+            </WizardFieldGate>
           </div>
         </div>
+        ) : null}
 
         {stepManagerQuestions}
       </div>
@@ -1202,6 +1272,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <h2 className="text-xl font-bold tracking-tight text-foreground">References</h2>
           <StepIntro className="mt-3">List people who can speak to your character or employment. Avoid family members when possible.</StepIntro>
         </div>
+        <WizardFieldGate fieldKey="ref1Name" enabled={showWizardField}>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted/70">Reference 1</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -1241,6 +1312,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         </div>
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="ref2Name" enabled={showWizardField}>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted/70">Reference 2</p>
           <p className="mt-1 text-xs text-muted">Optional — leave blank if you only have one reference.</p>
@@ -1275,6 +1348,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         </div>
+        </WizardFieldGate>
 
         {stepManagerQuestions}
       </div>
@@ -1290,6 +1364,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             These questions are standard for rental screening. Your answers are reviewed in context; answer honestly.
           </StepIntro>
         </div>
+        <WizardFieldGate fieldKey="occupancyCount" enabled={showWizardField}>
         <div className="space-y-2">
           <Label htmlFor="occupancyCount" required>
             Number of occupants
@@ -1314,13 +1389,17 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           )}
           <FieldError msg={errors.occupancyCount} />
         </div>
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="pets" enabled={showWizardField}>
         <div className="space-y-2">
           <Label htmlFor="pets" optional>
             Pets
           </Label>
           <Textarea id="pets" value={form.pets} onChange={(e) => patch({ pets: e.target.value })} placeholder="Type, breed, weight, or write “None”" rows={2} />
         </div>
+        </WizardFieldGate>
 
+        <WizardFieldGate fieldKey="evictionHistory" enabled={showWizardField}>
         <div className="space-y-3 rounded-xl border border-border bg-accent/30 p-4">
           <Label required>Eviction history</Label>
           <YesNoPills
@@ -1344,6 +1423,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="bankruptcyHistory" enabled={showWizardField}>
         <div className="space-y-3 rounded-xl border border-border bg-accent/30 p-4">
           <Label required>Bankruptcy history</Label>
           <YesNoPills
@@ -1367,6 +1448,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="criminalHistory" enabled={showWizardField}>
         <div className="space-y-3 rounded-xl border border-border bg-accent/30 p-4">
           <Label required>Criminal history</Label>
           <YesNoPills
@@ -1390,6 +1473,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           ) : null}
         </div>
+        </WizardFieldGate>
 
         {stepManagerQuestions}
       </div>
@@ -1411,6 +1495,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             denial or termination of a lease.
           </p>
         </div>
+        <WizardFieldGate fieldKey="consentCredit" enabled={showWizardField}>
         <label
           data-wizard-field="consentCredit"
           className={`flex cursor-pointer items-start gap-3 rounded-xl border bg-card p-4 ${errors.consentCredit ? "border-red-300 bg-red-50/50 ring-2 ring-red-100" : "border-border"}`}
@@ -1424,6 +1509,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <span className="text-sm font-medium text-foreground">I authorize a credit and background check.</span>
         </label>
         <FieldError msg={errors.consentCredit} />
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="consentTruth" enabled={showWizardField}>
         <label
           data-wizard-field="consentTruth"
           className={`flex cursor-pointer items-start gap-3 rounded-xl border bg-card p-4 ${errors.consentTruth ? "border-red-300 bg-red-50/50 ring-2 ring-red-100" : "border-border"}`}
@@ -1437,6 +1524,8 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
           <span className="text-sm font-medium text-foreground">I confirm the information provided is true and complete.</span>
         </label>
         <FieldError msg={errors.consentTruth} />
+        </WizardFieldGate>
+        <WizardFieldGate fieldKey="digitalSignature" enabled={showWizardField}>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2 sm:col-span-2" data-wizard-field="digitalSignature">
             <Label htmlFor="digitalSignature" required>
@@ -1458,6 +1547,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             <FieldError msg={errors.dateSigned} />
           </div>
         </div>
+        </WizardFieldGate>
 
         {stepManagerQuestions}
       </div>

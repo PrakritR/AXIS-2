@@ -7,6 +7,44 @@ import {
   type RentalApplicationSectionId,
 } from "@/lib/rental-application/application-sections";
 
+/** Applicant wizard `RentalWizardFormState` keys controlled by one built-in question row. */
+const STANDARD_FIELD_WIZARD_KEYS: Record<string, readonly string[]> = {
+  "property:Property": ["propertyId"],
+  "property:Room choices (1st – 3rd)": ["roomChoice1", "roomChoice2", "roomChoice3"],
+  "property:Rental type (standard or short-term)": ["rentalType", "shortTermCheckInTime", "shortTermCheckOutTime"],
+  "property:Lease term": ["leaseTerm"],
+  "property:Lease start & end dates": ["leaseStart", "leaseEnd"],
+  "personal:Full legal name": ["fullLegalName"],
+  "personal:Date of birth": ["dateOfBirth"],
+  "personal:Social Security number": ["ssn"],
+  "personal:Driver's license / ID": ["driversLicense"],
+  "personal:Phone": ["phone"],
+  "personal:Email": ["email"],
+  "current_address:Street, city, state, ZIP": ["currentStreet", "currentCity", "currentState", "currentZip"],
+  "current_address:Current landlord name & phone": ["currentLandlordName", "currentLandlordPhone"],
+  "current_address:Move-in / move-out dates": ["currentMoveIn", "currentMoveOut"],
+  "current_address:Reason for leaving": ["currentReasonLeaving"],
+  "previous_address:Street, city, state, ZIP": ["prevStreet", "prevCity", "prevState", "prevZip"],
+  "previous_address:Previous landlord name & phone": ["prevLandlordName", "prevLandlordPhone"],
+  "previous_address:Move-in / move-out dates": ["prevMoveIn", "prevMoveOut"],
+  "previous_address:Reason for leaving": ["prevReasonLeaving"],
+  "employment:Employer & employer address": ["employer", "employerAddress"],
+  "employment:Supervisor name & phone": ["supervisorName", "supervisorPhone"],
+  "employment:Job title & employment start": ["jobTitle", "employmentStart"],
+  "employment:Monthly / annual income": ["monthlyIncome", "annualIncome"],
+  "employment:Other income": ["otherIncome"],
+  "references:Reference 1 — name, relationship, phone": ["ref1Name", "ref1Relationship", "ref1Phone"],
+  "references:Reference 2 — name, relationship, phone": ["ref2Name", "ref2Relationship", "ref2Phone"],
+  "additional:Number of occupants": ["occupancyCount"],
+  "additional:Pets": ["pets"],
+  "additional:Eviction history": ["evictionHistory", "evictionDetails"],
+  "additional:Bankruptcy history": ["bankruptcyHistory", "bankruptcyDetails"],
+  "additional:Criminal history": ["criminalHistory", "criminalDetails"],
+  "consent:Credit & background check consent": ["consentCredit"],
+  "consent:Truthfulness certification": ["consentTruth"],
+  "consent:Digital signature & date": ["digitalSignature", "dateSigned"],
+};
+
 export type StandardApplicationFieldDef = {
   standardKey: string;
   section: RentalApplicationSectionId;
@@ -14,6 +52,7 @@ export type StandardApplicationFieldDef = {
   type: ManagerCustomApplicationFieldType;
   required: boolean;
   options: string[];
+  wizardFormKeys: readonly string[];
 };
 
 export type ResolvedApplicationField = ManagerCustomApplicationField & {
@@ -50,6 +89,7 @@ export const STANDARD_APPLICATION_FIELD_CATALOG: readonly StandardApplicationFie
       type: inferStandardFieldType(section.id, label),
       required: true,
       options: [] as string[],
+      wizardFormKeys: STANDARD_FIELD_WIZARD_KEYS[`${section.id}:${label}`] ?? [],
     })),
   );
 
@@ -250,4 +290,34 @@ export function addListingApplicationField(
     customApplicationFields: [...(sub.customApplicationFields ?? []), field],
     applicationConfigMode: "custom",
   };
+}
+
+function disabledStandardKeysSet(
+  sub: { disabledStandardApplicationKeys?: unknown } | null | undefined,
+): Set<string> {
+  return new Set(
+    Array.isArray(sub?.disabledStandardApplicationKeys)
+      ? sub!.disabledStandardApplicationKeys.filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+      : [],
+  );
+}
+
+/** Wizard form keys hidden for this listing (manager removed built-in questions). */
+export function listingDisabledWizardFormKeys(
+  sub: { disabledStandardApplicationKeys?: unknown } | null | undefined,
+): ReadonlySet<string> {
+  const disabled = disabledStandardKeysSet(sub);
+  const keys = new Set<string>();
+  for (const def of STANDARD_APPLICATION_FIELD_CATALOG) {
+    if (!disabled.has(def.standardKey)) continue;
+    for (const k of def.wizardFormKeys) keys.add(k);
+  }
+  return keys;
+}
+
+export function isWizardFormFieldEnabled(
+  sub: { disabledStandardApplicationKeys?: unknown } | null | undefined,
+  formKey: string,
+): boolean {
+  return !listingDisabledWizardFormKeys(sub).has(formKey);
 }

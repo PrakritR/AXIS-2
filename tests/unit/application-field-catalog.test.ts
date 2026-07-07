@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultListingSubmission, normalizeCustomApplicationFields } from "@/lib/manager-listing-submission";
 import {
+  isWizardFormFieldEnabled,
+  listingDisabledWizardFormKeys,
   patchListingApplicationField,
   removeListingApplicationField,
   resolveListingApplicationFields,
@@ -58,5 +60,22 @@ describe("application-field-catalog", () => {
     const field = resolveListingApplicationFields(sub, normalizeCustomApplicationFields)[0]!;
     const next = removeListingApplicationField(sub, field);
     expect(next.disabledStandardApplicationKeys).toContain(field.standardKey);
+  });
+
+  it("maps disabled built-in questions to wizard form keys", () => {
+    const leaseTermDef = STANDARD_APPLICATION_FIELD_CATALOG.find((d) => d.label === "Lease term")!;
+    const sub = {
+      ...createDefaultListingSubmission(),
+      disabledStandardApplicationKeys: [leaseTermDef.standardKey],
+    };
+    const disabled = listingDisabledWizardFormKeys(sub);
+    expect(disabled.has("leaseTerm")).toBe(true);
+    expect(isWizardFormFieldEnabled(sub, "leaseTerm")).toBe(false);
+    expect(isWizardFormFieldEnabled(sub, "roomChoice1")).toBe(true);
+  });
+
+  it("every built-in catalog row maps to at least one wizard field", () => {
+    const missing = STANDARD_APPLICATION_FIELD_CATALOG.filter((d) => d.wizardFormKeys.length === 0);
+    expect(missing.map((d) => `${d.section}:${d.label}`)).toEqual([]);
   });
 });

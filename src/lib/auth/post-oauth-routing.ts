@@ -87,6 +87,13 @@ export function parseOAuthSignInIntent(raw: string | null | undefined): OAuthSig
   return null;
 }
 
+/** Sign-in hub: honor explicit `next`, otherwise default from URL `intent`. */
+export function resolveSignInNextPath(nextFromUrl: string, intent: OAuthSignInIntent | null): string {
+  const trimmed = nextFromUrl.trim();
+  if (trimmed.startsWith("/")) return trimmed;
+  return defaultOAuthNextPath(intent);
+}
+
 export function parseOAuthSurface(raw: string | null | undefined): OAuthSurface | null {
   if (raw === "native" || raw === "web") return raw;
   return null;

@@ -14,7 +14,9 @@ import {
 } from "@/lib/manager-property-save-target";
 import {
   listingApplicationIsCustomized,
+  removeListingApplicationField,
   resolveListingApplicationFields,
+  type ResolvedApplicationField,
 } from "@/lib/rental-application/application-field-catalog";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 
@@ -66,14 +68,9 @@ export function ManagerPropertyApplicationQuestionsPanel({
 
   const closeModal = () => setModalOpen(false);
 
-  const removeSingleField = (fieldId: string) => {
-    const customFields = normalizeCustomApplicationFields(sub.customApplicationFields);
-    const nextFields = customFields.filter((f) => f.id !== fieldId);
-    const next: ManagerListingSubmissionV1 = {
-      ...sub,
-      customApplicationFields: nextFields,
-      applicationConfigMode: nextFields.length > 0 ? "custom" : "standard",
-    };
+  const removeField = (field: ResolvedApplicationField) => {
+    const patch = removeListingApplicationField(sub, field);
+    const next: ManagerListingSubmissionV1 = { ...sub, ...patch };
     if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
       showToast("Could not remove question.");
       return;
@@ -98,7 +95,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
             data-attr="application-questions-add"
             onClick={() => setModalOpen(true)}
           >
-            {customized ? "Edit application" : "Add"}
+            Edit application
           </Button>
         }
         contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
@@ -117,7 +114,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
                     {sectionQuestions.map((field) => (
                       <div
                         key={field.id}
-                        className="flex gap-3 rounded-xl border border-border bg-accent/15 px-3 py-2.5"
+                        className="flex gap-2 rounded-xl border border-border bg-accent/15 px-3 py-2.5"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium leading-snug text-foreground">{field.label}</p>
@@ -130,18 +127,16 @@ export function ManagerPropertyApplicationQuestionsPanel({
                             {field.isStandard ? " · Built-in" : " · Custom"}
                           </p>
                         </div>
-                        {!field.isStandard ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-7 shrink-0 rounded-full px-2.5 text-[11px] border-rose-200 text-rose-800 portal-danger-outline"
-                            data-attr="application-question-remove-one"
-                            title={`Remove ${field.label}`}
-                            onClick={() => removeSingleField(field.id)}
-                          >
-                            Remove
-                          </Button>
-                        ) : null}
+                        <button
+                          type="button"
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 text-sm font-bold text-rose-800 portal-danger-outline hover:bg-rose-50"
+                          data-attr="application-question-remove-one"
+                          title={`Remove ${field.label}`}
+                          aria-label={`Remove ${field.label}`}
+                          onClick={() => removeField(field)}
+                        >
+                          ×
+                        </button>
                       </div>
                     ))}
                   </div>

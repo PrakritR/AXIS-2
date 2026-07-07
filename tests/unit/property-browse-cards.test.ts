@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { MockProperty } from "@/data/types";
-import { buildPropertyBrowseCards, sortPropertyBrowseCards } from "@/lib/room-listings-catalog";
+import {
+  buildPropertyBrowseCards,
+  filterRoomListings,
+  sortPropertyBrowseCards,
+} from "@/lib/room-listings-catalog";
+import { LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
+import { writeManagerApplicationRows } from "@/lib/manager-applications-storage";
 
 function mockProperty(overrides: Partial<MockProperty> & Pick<MockProperty, "id">): MockProperty {
   return {
@@ -63,5 +69,86 @@ describe("buildPropertyBrowseCards", () => {
     if (first !== null && second !== null) {
       expect(first).toBeGreaterThanOrEqual(second);
     }
+  });
+
+  it("shows all listed properties when no move-in or move-out is set", () => {
+    const property = mockProperty({
+      id: "brooklyn",
+      title: "5259 Brooklyn Ave NE",
+      listingSubmission: {
+        v: 1,
+        rooms: [{ id: "r3", name: "Room 3", monthlyRent: 825, floor: "", detail: "", furnishing: "", roomAmenitiesText: "", utilitiesEstimate: "", photoDataUrls: [] }],
+        bathrooms: [],
+        buildingPhotos: [],
+        entireHome: false,
+      } as MockProperty["listingSubmission"],
+    });
+
+    writeManagerApplicationRows([
+      {
+        id: "resident-1",
+        bucket: "approved",
+        assignedPropertyId: "brooklyn",
+        assignedRoomChoice: `brooklyn${LISTING_ROOM_CHOICE_SEP}r3`,
+        manualResidentDetails: {
+          moveInDate: "2026-05-23",
+          moveOutDate: "2026-09-05",
+          roomNumber: "Room 3",
+        },
+      } as never,
+    ]);
+
+    const rows = filterRoomListings([property], {
+      zipRaw: "",
+      radiusMiles: 50,
+      maxBudgetNum: null,
+      bathroom: "any",
+    });
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it("hides rooms occupied during the requested move-in window", () => {
+    const property = mockProperty({
+      id: "brooklyn",
+      listingSubmission: {
+        v: 1,
+        rooms: [{ id: "r3", name: "Room 3", monthlyRent: 825, floor: "", detail: "", furnishing: "", roomAmenitiesText: "", utilitiesEstimate: "", photoDataUrls: [] }],
+        bathrooms: [],
+        buildingPhotos: [],
+        entireHome: false,
+      } as MockProperty["listingSubmission"],
+    });
+
+    writeManagerApplicationRows([
+      {
+        id: "resident-1",
+        bucket: "approved",
+        assignedPropertyId: "brooklyn",
+        assignedRoomChoice: `brooklyn${LISTING_ROOM_CHOICE_SEP}r3`,
+        manualResidentDetails: {
+          moveInDate: "2026-05-23",
+          moveOutDate: "2026-09-05",
+          roomNumber: "Room 3",
+        },
+      } as never,
+    ]);
+
+    const blocked = filterRoomListings([property], {
+      zipRaw: "",
+      radiusMiles: 50,
+      maxBudgetNum: null,
+      bathroom: "any",
+      moveIn: "2026-06-01",
+    });
+    expect(blocked.some((r) => r.roomId === "r3")).toBe(false);
+
+    const available = filterRoomListings([property], {
+      zipRaw: "",
+      radiusMiles: 50,
+      maxBudgetNum: null,
+      bathroom: "any",
+      moveIn: "2026-09-14",
+    });
+    expect(available.some((r) => r.roomId === "r3")).toBe(true);
   });
 });

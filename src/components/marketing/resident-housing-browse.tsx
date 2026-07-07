@@ -365,7 +365,7 @@ function BrowseFiltersInline({
 }
 
 export function ResidentHousingBrowse() {
-  const { listings, loading } = usePublicListings();
+  const { listings, loading, occupancyReady } = usePublicListings();
   const [sort, setSort] = useState<BrowseSortId>("price-asc");
   const [moveIn, setMoveIn] = useState("");
   const [moveOut, setMoveOut] = useState("");
@@ -398,7 +398,7 @@ export function ResidentHousingBrowse() {
           neighborhood,
         },
       }),
-    [listings, sort, budgetActive, budget, bathroom, roomType, moveIn, moveOut, neighborhood],
+    [listings, sort, budgetActive, budget, bathroom, roomType, moveIn, moveOut, neighborhood, occupancyReady],
   );
 
   function applyChatFilters(applied: HousingChatAppliedFilters) {

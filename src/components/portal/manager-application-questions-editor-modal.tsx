@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -17,26 +17,15 @@ import {
   persistManagerListingSubmission,
   type ManagerPropertySaveTarget,
 } from "@/lib/manager-property-save-target";
-
-type DraftQuestionRow = {
-  id: string;
-  key: string;
-  label: string;
-  type: ManagerCustomApplicationFieldType;
-  required: boolean;
-  optionsText: string;
-};
-
-function draftRowsFromFields(fields: ManagerCustomApplicationField[]): DraftQuestionRow[] {
-  return fields.map((f) => ({
-    id: f.id,
-    key: f.key,
-    label: f.label,
-    type: f.type,
-    required: f.required,
-    optionsText: f.options.join(", "),
-  }));
-}
+import {
+  addListingApplicationField,
+  patchListingApplicationField,
+  removeListingApplicationField,
+  resolveListingApplicationFields,
+  restoreDefaultApplicationConfig,
+  type ResolvedApplicationField,
+} from "@/lib/rental-application/application-field-catalog";
+import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 
 function parseOptionsText(raw: string): string[] {
   const seen = new Set<string>();
@@ -55,6 +44,24 @@ function typeLabel(type: ManagerCustomApplicationFieldType): string {
 }
 
 export { typeLabel as applicationQuestionTypeLabel };
+
+type DraftConfig = {
+  disabledStandardApplicationKeys: string[];
+  customApplicationFields: ManagerCustomApplicationField[];
+};
+
+function draftFromSubmission(sub: ManagerListingSubmissionV1): DraftConfig {
+  return {
+    disabledStandardApplicationKeys: [...(sub.disabledStandardApplicationKeys ?? [])],
+    customApplicationFields: normalizeCustomApplicationFields(sub.customApplicationFields),
+  };
+}
+
+function applicationConfigModeFromDraft(draft: DraftConfig): "standard" | "custom" {
+  return draft.disabledStandardApplicationKeys.length > 0 || draft.customApplicationFields.length > 0
+    ? "custom"
+    : "standard";
+}
 
 /** Shared application-question editor — same modal used on property details and Applications. */
 export function ManagerApplicationQuestionsEditorModal({
@@ -76,69 +83,81 @@ export function ManagerApplicationQuestionsEditorModal({
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
-  const [rows, setRows] = useState<DraftQuestionRow[]>([]);
+  const [draft, setDraft] = useState<DraftConfig>(() => draftFromSubmission(sub));
+  const [optionsDrafts, setOptionsDrafts] = useState<Record<string, string>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open) return;
-    const fields = normalizeCustomApplicationFields(sub.customApplicationFields);
-    setRows(draftRowsFromFields(fields));
+    setDraft(draftFromSubmission(sub));
+    setOptionsDrafts({});
     setRowErrors({});
   }, [open, sub]);
 
-  const patchRow = (id: string, patch: Partial<DraftQuestionRow>) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const applicationFields = useMemo(
+    () => resolveListingApplicationFields(draft, normalizeCustomApplicationFields),
+    [draft],
+  );
+
+  const patchField = (field: ResolvedApplicationField, patch: Partial<ManagerCustomApplicationField>) => {
+    setDraft((prev) => ({ ...prev, ...patchListingApplicationField(prev, field, patch) }));
     setRowErrors((prev) => {
-      if (!prev[id]) return prev;
+      if (!prev[field.id]) return prev;
       const next = { ...prev };
-      delete next[id];
+      delete next[field.id];
       return next;
     });
   };
 
-  const moveRow = (id: string, dir: -1 | 1) => {
-    setRows((prev) => {
-      const idx = prev.findIndex((r) => r.id === id);
-      const swap = idx + dir;
-      if (idx === -1 || swap < 0 || swap >= prev.length) return prev;
-      const next = [...prev];
-      [next[idx], next[swap]] = [next[swap]!, next[idx]!];
+  const removeField = (field: ResolvedApplicationField) => {
+    setDraft((prev) => ({ ...prev, ...removeListingApplicationField(prev, field) }));
+    setRowErrors((prev) => {
+      if (!prev[field.id]) return prev;
+      const next = { ...prev };
+      delete next[field.id];
       return next;
     });
   };
 
-  const removeRow = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
+  const addField = (section: string) => {
+    setDraft((prev) => ({ ...prev, ...addListingApplicationField(prev, emptyCustomApplicationField(section)) }));
+  };
 
-  const addRow = () => {
-    const blank = emptyCustomApplicationField();
-    setRows((prev) => [
-      ...prev,
-      { id: blank.id, key: "", label: "", type: "text", required: false, optionsText: "" },
-    ]);
+  const restoreDefaults = () => {
+    setDraft(draftFromSubmission({ ...sub, ...restoreDefaultApplicationConfig() }));
+    setOptionsDrafts({});
+    setRowErrors({});
+  };
+
+  const questionOptionsText = (field: ResolvedApplicationField): string =>
+    optionsDrafts[field.id] ?? field.options.join(", ");
+
+  const setQuestionOptionsText = (field: ResolvedApplicationField, text: string) => {
+    setOptionsDrafts((d) => ({ ...d, [field.id]: text }));
+    patchField(field, { options: parseOptionsText(text) });
   };
 
   const save = () => {
     const errors: Record<string, string> = {};
     const usedKeys = new Set<string>();
-    const nextFields: ManagerCustomApplicationField[] = [];
-    for (const row of rows) {
-      const label = row.label.trim();
-      if (!label) {
-        errors[row.id] = "Question label is required.";
-        continue;
+    for (const field of applicationFields) {
+      if (!field.isStandard) {
+        const label = field.label.trim();
+        if (!label) {
+          errors[field.id] = "Question label is required.";
+          continue;
+        }
+        if (field.type === "select" && field.options.length === 0) {
+          errors[field.id] = "Add at least one dropdown option (comma-separated).";
+          continue;
+        }
+        const key = field.key.trim() || customApplicationFieldKeyFromLabel(label, usedKeys);
+        if (usedKeys.has(key)) {
+          errors[field.id] = "Duplicate question — rename or remove one of the copies.";
+          continue;
+        }
+        usedKeys.add(key);
       }
-      const options = row.type === "select" ? parseOptionsText(row.optionsText) : [];
-      if (row.type === "select" && options.length === 0) {
-        errors[row.id] = "Add at least one dropdown option (comma-separated).";
-        continue;
-      }
-      const key = row.key.trim() || customApplicationFieldKeyFromLabel(label, usedKeys);
-      if (usedKeys.has(key)) {
-        errors[row.id] = "Duplicate question — rename or remove one of the copies.";
-        continue;
-      }
-      usedKeys.add(key);
-      nextFields.push({ id: row.id, key, label, type: row.type, required: row.required, options });
     }
     if (Object.keys(errors).length > 0) {
       setRowErrors(errors);
@@ -148,8 +167,9 @@ export function ManagerApplicationQuestionsEditorModal({
 
     const next: ManagerListingSubmissionV1 = {
       ...sub,
-      customApplicationFields: nextFields,
-      applicationConfigMode: nextFields.length > 0 ? "custom" : "standard",
+      disabledStandardApplicationKeys: draft.disabledStandardApplicationKeys,
+      customApplicationFields: draft.customApplicationFields,
+      applicationConfigMode: applicationConfigModeFromDraft(draft),
     };
     if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
       showToast("Could not save application questions.");
@@ -163,100 +183,109 @@ export function ManagerApplicationQuestionsEditorModal({
   return (
     <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl">
       <div className="space-y-4">
-        {rows.map((row, idx) => (
-          <div
-            key={row.id}
-            className={`space-y-3 rounded-xl border p-3 ${rowErrors[row.id] ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
-          >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Question {idx + 1}</p>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-7 rounded-full px-2.5 text-xs"
-                  disabled={idx === 0}
-                  title="Move up"
-                  aria-label="Move question up"
-                  onClick={() => moveRow(row.id, -1)}
-                >
-                  ↑
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-7 rounded-full px-2.5 text-xs"
-                  disabled={idx === rows.length - 1}
-                  title="Move down"
-                  aria-label="Move question down"
-                  onClick={() => moveRow(row.id, 1)}
-                >
-                  ↓
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-7 shrink-0 rounded-full px-2.5 text-xs border-rose-200 text-rose-800 portal-danger-outline"
-                  title="Remove question"
-                  onClick={() => removeRow(row.id)}
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">Question</p>
-              <Input
-                value={row.label}
-                onChange={(e) => patchRow(row.id, { label: e.target.value })}
-                placeholder="e.g. Do you smoke?"
-                className="mt-1"
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <p className="text-sm font-medium text-foreground">Answer type</p>
-                <Select
-                  value={row.type}
-                  onChange={(e) => patchRow(row.id, { type: e.target.value as ManagerCustomApplicationFieldType })}
-                  className="mt-1"
-                >
-                  {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border text-primary"
-                  checked={row.required}
-                  onChange={(e) => patchRow(row.id, { required: e.target.checked })}
-                />
-                <span className="text-sm font-medium text-foreground">Required</span>
-              </label>
-            </div>
-            {row.type === "select" ? (
-              <div>
-                <p className="text-sm font-medium text-foreground">Dropdown options</p>
-                <Input
-                  value={row.optionsText}
-                  onChange={(e) => patchRow(row.id, { optionsText: e.target.value })}
-                  placeholder="Comma-separated, e.g. Yes, No, Occasionally"
-                  className="mt-1"
-                />
-              </div>
-            ) : null}
-            {rowErrors[row.id] ? <p className="text-sm text-red-600">{rowErrors[row.id]}</p> : null}
-          </div>
-        ))}
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" className="rounded-full" onClick={addRow}>
-            + Add question
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted">
+            {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on this application
+          </p>
+          <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={restoreDefaults}>
+            Restore Axis defaults
           </Button>
         </div>
+
+        {RENTAL_APPLICATION_SECTIONS.map((section) => {
+          const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === section.id);
+          return (
+            <div key={section.id} className="space-y-3 rounded-xl border border-border bg-accent/10 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{section.title}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-7 rounded-full px-2.5 text-xs"
+                  data-attr="application-questions-add"
+                  onClick={() => addField(section.id)}
+                >
+                  + Add question
+                </Button>
+              </div>
+              {sectionQuestions.length === 0 ? (
+                <p className="text-sm text-muted">No questions in this section.</p>
+              ) : (
+                sectionQuestions.map((field) => (
+                  <div
+                    key={field.id}
+                    className={`space-y-3 rounded-xl border p-3 ${rowErrors[field.id] ? "border-red-300 ring-2 ring-red-100" : "border-border bg-accent/20"}`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${field.isStandard ? "bg-sky-100 text-sky-900 dark:bg-sky-950/40 dark:text-sky-100" : "bg-violet-100 text-violet-900 dark:bg-violet-950/40 dark:text-violet-100"}`}
+                      >
+                        {field.isStandard ? "Built-in" : "Custom"}
+                      </span>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 text-sm font-bold text-rose-800 portal-danger-outline hover:bg-rose-50"
+                        title="Remove question"
+                        aria-label="Remove question"
+                        onClick={() => removeField(field)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Question</p>
+                      <Input
+                        value={field.label}
+                        onChange={(e) => patchField(field, { label: e.target.value })}
+                        placeholder="e.g. Do you smoke?"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Answer type</p>
+                        <Select
+                          value={field.type}
+                          onChange={(e) =>
+                            patchField(field, { type: e.target.value as ManagerCustomApplicationFieldType })
+                          }
+                          className="mt-1"
+                        >
+                          {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border text-primary"
+                          checked={field.required}
+                          onChange={(e) => patchField(field, { required: e.target.checked })}
+                        />
+                        <span className="text-sm font-medium text-foreground">Required</span>
+                      </label>
+                    </div>
+                    {field.type === "select" ? (
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Dropdown options</p>
+                        <Input
+                          value={questionOptionsText(field)}
+                          onChange={(e) => setQuestionOptionsText(field, e.target.value)}
+                          placeholder="Comma-separated, e.g. Yes, No, Occasionally"
+                          className="mt-1"
+                        />
+                      </div>
+                    ) : null}
+                    {rowErrors[field.id] ? <p className="text-sm text-red-600">{rowErrors[field.id]}</p> : null}
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        })}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button

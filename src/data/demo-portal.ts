@@ -216,6 +216,8 @@ export type DemoManagerWorkOrderRow = {
   vendorPaymentChannel?: "zelle" | "venmo" | "ach";
   vendorZelleContactSnapshot?: string;
   vendorVenmoContactSnapshot?: string;
+  /** ISO timestamp of the resident's last manager reminder for this pending request. */
+  residentReminderSentAt?: string;
 };
 
 export const demoManagerWorkOrderRowsFull: DemoManagerWorkOrderRow[] = [];

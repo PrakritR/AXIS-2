@@ -422,8 +422,9 @@ function deriveQuickFacts(
   rooms: ManagerRoomSubmission[],
   property: MockProperty,
 ): { label: string; value: string }[] {
-  return [
-    { label: "Neighborhood", value: property.neighborhood || "—" },
+  const building = property.buildingName?.trim();
+  const title = property.title?.trim();
+  const facts: { label: string; value: string }[] = [
     { label: "Rooms listed", value: String(rooms.length || property.beds) },
     {
       label: "Bathrooms",
@@ -438,13 +439,11 @@ function deriveQuickFacts(
       ? [{ label: "Property & layout", value: sub.homeStructureNote.trim() || formatListingBasicsSummary(sub).trim() }]
       : []),
     { label: "Pets", value: sub.petFriendly ? "Pet-friendly (subject to approval)" : "No pets (per submission)" },
-    { label: "Building", value: property.buildingName || "—" },
-    {
-      label: "Overview",
-      value:
-        sub.houseOverview.trim().slice(0, 80) + (sub.houseOverview.length > 80 ? "…" : "") || "—",
-    },
   ];
+  if (building && building !== title) {
+    facts.push({ label: "Building", value: building });
+  }
+  return facts;
 }
 
 function buildBundleCards(sub: ManagerListingSubmissionV1, rooms: ManagerRoomSubmission[], property: MockProperty): BundleCard[] {
@@ -519,7 +518,12 @@ export function listingRichFromManagerSubmission(
   incoming: ManagerListingSubmissionV1,
 ): ListingRichContent {
   const sub = normalizeManagerListingSubmissionV1(incoming);
-  const rooms = sub.rooms.filter((r) => r.name.trim());
+  const rooms = sub.rooms
+    .filter((r) => r.name.trim() || r.monthlyRent > 0)
+    .map((r, index) => ({
+      ...r,
+      name: r.name.trim() || `Room ${index + 1}`,
+    }));
   const namedBaths = sub.bathrooms.filter((b) => b.name.trim());
   const specificBaths = namedBaths.filter((b) => !b.allResidents);
   const hasSpecificAssignments = specificBaths.some((b) => (b.assignedRoomIds ?? []).length > 0);

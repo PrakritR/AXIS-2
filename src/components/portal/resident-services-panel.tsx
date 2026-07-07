@@ -53,6 +53,8 @@ import type { ManagerListingServiceOption } from "@/lib/manager-listing-submissi
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { getPropertyById } from "@/lib/rental-application/data";
 import { notifyManagerOfResidentSubmission } from "@/lib/resident-manager-notifications";
+import { RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS } from "@/lib/resident-work-order-reminder-email";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { parseMoneyAmount } from "@/lib/household-charges";
 import { workOrderCategoryForResidentLabel } from "@/lib/work-order-taxonomy";
 import {
@@ -306,16 +308,32 @@ export function ServiceRequestCard({
   );
 }
 
+function residentWorkOrderReminderCooldownMs(row: DemoManagerWorkOrderRow, now = Date.now()): number {
+  const sentAt = row.residentReminderSentAt?.trim();
+  if (!sentAt) return 0;
+  const ts = Date.parse(sentAt);
+  if (!Number.isFinite(ts)) return 0;
+  const elapsed = now - ts;
+  if (elapsed >= RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS) return 0;
+  return RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS - elapsed;
+}
+
 export function WorkOrderDetail({
   row,
   onEdit,
   onCancel,
+  onSendReminder,
+  reminderSending = false,
 }: {
   row: DemoManagerWorkOrderRow;
   onEdit: () => void;
   onCancel: () => void;
+  onSendReminder?: () => void;
+  reminderSending?: boolean;
 }) {
   const canModify = row.bucket === "open";
+  const reminderCooldownMs = canModify ? residentWorkOrderReminderCooldownMs(row) : 0;
+  const reminderDisabled = reminderSending || reminderCooldownMs > 0;
   return (
     <>
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Priority</p>
@@ -354,6 +372,18 @@ export function WorkOrderDetail({
       ) : null}
       {canModify ? (
         <PortalTableDetailActions>
+          {onSendReminder ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              data-attr="resident-work-order-send-reminder"
+              disabled={reminderDisabled}
+              onClick={onSendReminder}
+            >
+              {reminderSending ? "Sending…" : reminderCooldownMs > 0 ? "Reminder sent" : "Send reminder"}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -405,6 +435,7 @@ export function ResidentServicesPanel({
   const [wArrivalPreset, setWArrivalPreset] = useState("Anytime");
   const [wArrivalCustom, setWArrivalCustom] = useState("");
   const [wDetails, setWDetails] = useState("");
+  const [reminderSendingId, setReminderSendingId] = useState<string | null>(null);
 
   // maintenance form
   const [mTitle, setMTitle] = useState("");
@@ -623,6 +654,35 @@ export function ResidentServicesPanel({
     setAllRows(readManagerWorkOrderRows());
     setExpandedId(null);
     showToast("Work order removed.");
+  }
+
+  async function sendWorkOrderReminder(row: DemoManagerWorkOrderRow) {
+    if (reminderSendingId) return;
+    if (isDemoModeActive()) {
+      showToast("Reminder sent (demo).");
+      return;
+    }
+    setReminderSendingId(row.id);
+    try {
+      const res = await fetch("/api/portal/work-orders/send-reminder", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workOrderId: row.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(data.error ?? "Could not send reminder.");
+        return;
+      }
+      await syncManagerWorkOrdersFromServer({ force: true });
+      setAllRows(readManagerWorkOrderRows());
+      showToast("Reminder sent to your property manager.");
+    } catch {
+      showToast("Could not send reminder.");
+    } finally {
+      setReminderSendingId(null);
+    }
   }
 
   const residentLeaseRow = useMemo(() => {
@@ -1071,6 +1131,8 @@ export function ResidentServicesPanel({
                         row={row}
                         onEdit={() => openWorkOrderEdit(row)}
                         onCancel={() => cancelWorkOrder(row.id)}
+                        onSendReminder={() => void sendWorkOrderReminder(row)}
+                        reminderSending={reminderSendingId === row.id}
                       />
                     ) : null}
                   </PortalMobileSummaryCard>
@@ -1108,6 +1170,8 @@ export function ResidentServicesPanel({
                                 row={row}
                                 onEdit={() => openWorkOrderEdit(row)}
                                 onCancel={() => cancelWorkOrder(row.id)}
+                                onSendReminder={() => void sendWorkOrderReminder(row)}
+                                reminderSending={reminderSendingId === row.id}
                               />
                             </td>
                           </tr>

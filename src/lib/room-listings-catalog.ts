@@ -1,6 +1,7 @@
 import { getListingRichContent } from "@/data/listing-rich-content";
-import type { ListingRoomRow } from "@/data/listing-rich-content";
+import type { ListingFloorCard, ListingRoomRow } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
+import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import {
   parseMonthlyRent,
   parseUSZip,
@@ -237,6 +238,83 @@ export function collectPropertyMediaSlides(rich: ReturnType<typeof getListingRic
   return slides.slice(0, 12);
 }
 
+const BROWSE_ROOM_MODAL_STUB: ListingRoomRow["modal"] = {
+  setupLine: "See listing for full room details.",
+  tourEyebrow: "Room",
+  tourTitle: "Details",
+  tourSubtitle: "Open the listing for photos and availability.",
+  includedTags: [],
+};
+
+/** Ensure every live manager listing yields at least one browsable room row. */
+function browseRoomEntries(
+  property: MockProperty,
+  rich: ReturnType<typeof getListingRichContent>,
+): Array<{ floor: ListingFloorCard; room: ListingRoomRow }> {
+  const entries: Array<{ floor: ListingFloorCard; room: ListingRoomRow }> = [];
+  for (const floor of rich.floorPlans) {
+    for (const room of floor.rooms) {
+      entries.push({ floor, room });
+    }
+  }
+  if (entries.length > 0) return entries;
+
+  if (property.listingSubmission?.v === 1) {
+    const sub = normalizeManagerListingSubmissionV1(property.listingSubmission);
+    const submissionRooms = sub.rooms
+      .filter((r) => r.name.trim() || r.monthlyRent > 0)
+      .map((r, index) => ({
+        ...r,
+        name: r.name.trim() || `Room ${index + 1}`,
+      }));
+    if (submissionRooms.length > 0) {
+      const rents = submissionRooms.map((r) => r.monthlyRent).filter((n) => n > 0);
+      const from = rents.length ? Math.min(...rents) : parseMonthlyRent(property.rentLabel) ?? 0;
+      const floor: ListingFloorCard = {
+        cardKey: `${property.id}-listed-rooms`,
+        floorLabel: "Listed rooms",
+        fromPrice: from > 0 ? `$${from}` : property.rentLabel || "—",
+        roomCount: submissionRooms.length,
+        rooms: [],
+      };
+      for (const r of submissionRooms) {
+        const room: ListingRoomRow = {
+          id: r.id,
+          name: r.name,
+          detail: r.utilitiesEstimate?.trim() ? `Utilities · ${r.utilitiesEstimate.trim()}` : "Listed by manager",
+          utilitiesEstimate: r.utilitiesEstimate?.trim() || undefined,
+          price: r.monthlyRent > 0 ? `$${r.monthlyRent}/mo` : property.rentLabel || "—",
+          availability: "Available now",
+          modal: BROWSE_ROOM_MODAL_STUB,
+        };
+        floor.rooms.push(room);
+        entries.push({ floor, room });
+      }
+      return entries;
+    }
+  }
+
+  const rent = property.rentLabel?.trim() || "Contact for pricing";
+  const floor: ListingFloorCard = {
+    cardKey: `${property.id}-property`,
+    floorLabel: "Property",
+    fromPrice: rent,
+    roomCount: 1,
+    rooms: [],
+  };
+  const room: ListingRoomRow = {
+    id: "listing",
+    name: property.title?.trim() || "Available",
+    detail: property.tagline?.trim() || property.neighborhood || "Listed property",
+    price: rent,
+    availability: "Available now",
+    modal: BROWSE_ROOM_MODAL_STUB,
+  };
+  floor.rooms.push(room);
+  entries.push({ floor, room });
+  return entries;
+}
+
 export function filterRoomListings(
   properties: MockProperty[],
   opts: {
@@ -252,15 +330,7 @@ export function filterRoomListings(
   },
 ): RoomListingRow[] {
   const centerZip = parseUSZip(opts.zipRaw);
-
-  // When browsing with no dates, check [today, far future] so rooms with any
-  // upcoming approved occupancy are hidden, not just ones occupied right now.
-  const noDates = !opts.moveIn?.trim() && !opts.moveOut?.trim();
-  const todayForOcc = (() => {
-    const t = new Date();
-    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
-  })();
-  const farFutureForOcc = `${new Date().getFullYear() + 5}-12-31`;
+  const hasDateFilter = Boolean(opts.moveIn?.trim() || opts.moveOut?.trim());
 
   const rows: RoomListingRow[] = [];
 
@@ -279,50 +349,49 @@ export function filterRoomListings(
       continue;
     }
 
-    for (const floor of rich.floorPlans) {
-      for (const room of floor.rooms) {
-        if (
-          !isRoomChoiceAvailable(`${p.id}${LISTING_ROOM_CHOICE_SEP}${room.id}`, room.availability, {
-            leaseStart: noDates ? todayForOcc : opts.moveIn,
-            leaseEnd: noDates ? farFutureForOcc : opts.moveOut,
-          })
-        ) {
-          continue;
-        }
-        if (!roomMatchesBathroomFilter(room, opts.bathroom)) continue;
-        const rentNumeric = parseMonthlyRent(room.price.replace("/month", "/ mo"));
-        const budgetOk =
-          opts.maxBudgetNum === null || !Number.isFinite(opts.maxBudgetNum)
-            ? true
-            : rentNumeric !== null && rentNumeric <= opts.maxBudgetNum;
-        if (!budgetOk) continue;
-
-        rows.push({
-          key: `${p.id}:${room.id}`,
-          propertyId: p.id,
-          roomId: room.id,
-          roomName: room.name,
-          floorLabel: floor.floorLabel,
-          title: formatRoomListingSubtitle({ floorLabel: floor.floorLabel, room, neighborhood: p.neighborhood }),
-          streetUpper: streetUpperFromProperty(p),
-          neighborhood: p.neighborhood,
-          priceLabel: room.price,
-          rentNumeric,
-          availabilityLabel: availabilityLabel(room),
-          bathroomHint: bathroomHintFromRoom(room),
-          zip: p.zip,
-          headlineAddress: headlineAddressFromProperty(p),
-          fullAddress: p.address,
-          propertyBeds: p.beds,
-          propertyBaths: p.baths,
-          petFriendly: p.petFriendly,
-          descriptionBlurb: descriptionBlurb(p, room),
-          listingTags: listingTags(p),
-          priceOverlayLabel: priceOverlayLabelForProperty(p),
-          availabilityRaw: room.availability,
-          mediaSlides,
-        });
+    for (const { floor, room } of browseRoomEntries(p, rich)) {
+      if (
+        hasDateFilter &&
+        !isRoomChoiceAvailable(`${p.id}${LISTING_ROOM_CHOICE_SEP}${room.id}`, room.availability, {
+          leaseStart: opts.moveIn,
+          leaseEnd: opts.moveOut,
+        })
+      ) {
+        continue;
       }
+      if (!roomMatchesBathroomFilter(room, opts.bathroom)) continue;
+      const rentNumeric = parseMonthlyRent(room.price.replace("/month", "/ mo"));
+      const budgetOk =
+        opts.maxBudgetNum === null || !Number.isFinite(opts.maxBudgetNum)
+          ? true
+          : rentNumeric !== null && rentNumeric <= opts.maxBudgetNum;
+      if (!budgetOk) continue;
+
+      rows.push({
+        key: `${p.id}:${room.id}`,
+        propertyId: p.id,
+        roomId: room.id,
+        roomName: room.name,
+        floorLabel: floor.floorLabel,
+        title: formatRoomListingSubtitle({ floorLabel: floor.floorLabel, room, neighborhood: p.neighborhood }),
+        streetUpper: streetUpperFromProperty(p),
+        neighborhood: p.neighborhood,
+        priceLabel: room.price,
+        rentNumeric,
+        availabilityLabel: availabilityLabel(room),
+        bathroomHint: bathroomHintFromRoom(room),
+        zip: p.zip,
+        headlineAddress: headlineAddressFromProperty(p),
+        fullAddress: p.address,
+        propertyBeds: p.beds,
+        propertyBaths: p.baths,
+        petFriendly: p.petFriendly,
+        descriptionBlurb: descriptionBlurb(p, room),
+        listingTags: listingTags(p),
+        priceOverlayLabel: priceOverlayLabelForProperty(p),
+        availabilityRaw: room.availability,
+        mediaSlides,
+      });
     }
   }
   return rows;

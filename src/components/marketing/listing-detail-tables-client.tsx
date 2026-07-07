@@ -62,7 +62,7 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
       type="button"
       data-attr="listing-row-details"
       onClick={onClick}
-      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary hover:text-primary [html[data-theme=dark]_&]:border-white/18 [html[data-theme=dark]_&]:bg-white/10 sm:min-h-0 ${className}`}
+      className={`inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-full border border-border/70 bg-card px-3.5 py-1.5 text-[11px] font-semibold text-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary sm:min-h-0 ${className}`}
     >
       Details
     </button>
@@ -664,20 +664,20 @@ function ListingDetailModal({
 
 function FloorPlanSummaryBar({ floor }: { floor: ListingFloorCard }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{floor.floorLabel}</p>
-        <p className="mt-0.5 text-xl font-bold tracking-tight text-foreground sm:text-2xl">{floor.fromPrice}</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{floor.floorLabel}</p>
+        <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">{floor.fromPrice}</p>
         {floor.remainingNote ? (
-          <p className="mt-1.5 flex items-center gap-2 text-xs text-sky-800 sm:text-sm [html[data-theme=dark]_&]:text-sky-200">
+          <p className="mt-1.5 flex items-center gap-2 text-xs text-sky-700 [html[data-theme=dark]_&]:text-sky-300">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" aria-hidden />
             {floor.remainingNote}
           </p>
         ) : null}
       </div>
-      <div className="shrink-0 text-right">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</p>
-        <p className="text-xl font-bold text-foreground sm:text-2xl">{floor.roomCount}</p>
+      <div className="flex items-center gap-2 rounded-full bg-accent/30 px-3 py-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rooms</span>
+        <span className="text-sm font-bold text-foreground">{floor.roomCount}</span>
       </div>
     </div>
   );
@@ -688,11 +688,11 @@ export function InteractiveFloorPlanCard({ floor, listingPropertyId }: { floor: 
 
   return (
     <>
-      <div className="rounded-2xl border border-border bg-card shadow-sm md:p-5">
-        <div className="border-b border-border bg-card px-4 py-3 md:px-0 md:pb-3">
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-accent/10">
+        <div className="border-b border-border/50 px-4 py-3.5 sm:px-5">
           <FloorPlanSummaryBar floor={floor} />
         </div>
-        <div className="relative isolate px-4 pb-4 pt-3 md:mt-4 md:overflow-x-auto md:px-0 sm:pt-4">
+        <div className="relative isolate px-4 py-3 sm:px-5 sm:py-4 md:overflow-x-auto">
           <RoomTableWithModals rooms={floor.rooms} onOpen={(r) => setModal({ kind: "room", room: r, floorLabel: floor.floorLabel })} />
         </div>
       </div>

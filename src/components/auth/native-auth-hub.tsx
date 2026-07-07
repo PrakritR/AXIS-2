@@ -19,6 +19,11 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { type PlanTierId } from "@/data/manager-plan-tiers";
 import { readManagerPricingOffer } from "@/lib/auth/manager-pricing-oauth-storage";
+import { oauthContinuePath } from "@/lib/auth/oauth-redirect";
+import {
+  parseOAuthSignInIntent,
+  resolveSignInNextPath,
+} from "@/lib/auth/post-oauth-routing";
 import { detectNativePlatformSync } from "@/lib/native/detect-native";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
@@ -165,6 +170,12 @@ function NativeAuthHubInner({
   const [failedSignInAttempts, setFailedSignInAttempts] = useState(0);
 
   const nextFromUrl = searchParams.get("next")?.trim() ?? "";
+  const signInIntent = parseOAuthSignInIntent(searchParams.get("intent"));
+  const signInNextPath = useMemo(
+    () => resolveSignInNextPath(nextFromUrl, signInIntent),
+    [nextFromUrl, signInIntent],
+  );
+  const signInContinueHref = useMemo(() => oauthContinuePath(signInNextPath), [signInNextPath]);
   const residentSignupNext = nextFromUrl.startsWith("/") ? nextFromUrl : "/resident/applications/apply";
 
   const [billing, setBilling] = useState<"monthly" | "annual">(initialBilling);
@@ -249,7 +260,7 @@ function NativeAuthHubInner({
         const supabase = createSupabaseBrowserClient();
         const user = await waitForOAuthUser(supabase, { attempts: 4, delayMs: 200 });
         if (!cancelled && user) {
-          window.location.replace("/auth/continue");
+          window.location.replace(signInContinueHref);
         }
       } finally {
         if (!cancelled) setCheckingSession(false);
@@ -258,7 +269,7 @@ function NativeAuthHubInner({
     return () => {
       cancelled = true;
     };
-  }, [skipSessionRedirect]);
+  }, [skipSessionRedirect, signInContinueHref]);
 
   useEffect(() => {
     if (checkingSession || skipSessionRedirect) return;
@@ -267,7 +278,7 @@ function NativeAuthHubInner({
       if (!isNativeOAuthInProgress()) return;
       const supabase = createSupabaseBrowserClient();
       const user = await waitForOAuthUser(supabase, { attempts: 6, delayMs: 200 });
-      if (user) window.location.replace("/auth/continue");
+      if (user) window.location.replace(signInContinueHref);
     };
 
     const onVisible = () => {
@@ -276,7 +287,7 @@ function NativeAuthHubInner({
 
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [checkingSession, skipSessionRedirect]);
+  }, [checkingSession, skipSessionRedirect, signInContinueHref]);
 
   const signIn = async () => {
     if (!email.trim() || !password) {
@@ -312,7 +323,7 @@ function NativeAuthHubInner({
       } catch {
         /* ignore */
       }
-      window.location.replace("/auth/continue");
+      window.location.replace(signInContinueHref);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign-in failed";
       setErrorText(msg);
@@ -431,7 +442,7 @@ function NativeAuthHubInner({
               )
             ) : (
               <>
-                <OAuthSocialStack nextPath="" intent={null} disabled={locked} />
+                <OAuthSocialStack nextPath={signInNextPath} intent={signInIntent} disabled={locked} />
                 <AuthDivider label="or enter your details" />
                 <div className="space-y-3">
                   <Input

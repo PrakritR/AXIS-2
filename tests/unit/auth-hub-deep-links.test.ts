@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveSignInNextPath } from "@/lib/auth/post-oauth-routing";
 
 /**
  * Mirrors URL helpers in native-auth-hub — stable deep links per role/mode.
@@ -38,5 +39,18 @@ describe("auth hub deep links", () => {
     expect(buildAuthHref("/auth/sign-in", params, { role: "manager" })).toBe(
       "/auth/sign-in?next=%2Fportal%2Fdashboard&role=manager",
     );
+  });
+});
+
+describe("resolveSignInNextPath", () => {
+  it("prefers explicit next over intent default", () => {
+    expect(resolveSignInNextPath("/rent/apply?propertyId=abc", "resident")).toBe(
+      "/rent/apply?propertyId=abc",
+    );
+  });
+
+  it("falls back to intent default when next is missing", () => {
+    expect(resolveSignInNextPath("", "resident")).toBe("/resident/applications/apply");
+    expect(resolveSignInNextPath("", "manager")).toBe("/portal/dashboard");
   });
 });

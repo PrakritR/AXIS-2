@@ -5,7 +5,6 @@ import Image from "next/image";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { PropertyDetailActions } from "@/components/marketing/property-detail-actions";
 import { ListingStickySubnav } from "@/components/marketing/listing-detail-subnav";
 import { ListingLocationBlock } from "@/components/marketing/listing-location-block";
 import {
@@ -28,6 +27,76 @@ import { DEFAULT_LISTING_HOUSE_RULES_FALLBACK, type ListingRichContent } from "@
 
 const sectionScroll =
   "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+9.5rem))]";
+
+const listingSectionCard =
+  "rounded-2xl border border-border/70 bg-card/90 shadow-[0_1px_0_color-mix(in_srgb,var(--foreground)_4%,transparent)] backdrop-blur-sm";
+
+function filterSidebarQuickFacts(
+  facts: { label: string; value: string }[],
+  property: MockProperty,
+): { label: string; value: string }[] {
+  const title = property.title?.trim().toLowerCase() ?? "";
+  const skip = new Set(["Neighborhood", "Overview", "Bedrooms"]);
+  return facts.filter((q) => {
+    const label = q.label.trim();
+    const value = q.value.trim();
+    if (!value || value === "—" || skip.has(label)) return false;
+    if (label === "Building" && value.toLowerCase() === title) return false;
+    return true;
+  });
+}
+
+function HeroStatPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-border/60 bg-accent/20 px-3 py-1 text-xs font-semibold text-foreground">
+      {children}
+    </span>
+  );
+}
+
+function ListingSection({
+  id,
+  title,
+  eyebrow,
+  headerAside,
+  children,
+  className = "",
+}: {
+  id?: string;
+  title: string;
+  eyebrow?: string;
+  headerAside?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section id={id} className={`${sectionScroll} ${className}`}>
+      <div className={`${listingSectionCard} p-5 sm:p-7`}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            {eyebrow ? (
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p>
+            ) : null}
+            <h2 className={`font-bold tracking-tight text-foreground ${eyebrow ? "mt-1 text-xl sm:text-2xl" : "text-xl sm:text-2xl"}`}>
+              {title}
+            </h2>
+          </div>
+          {headerAside}
+        </div>
+        <div className="mt-5 sm:mt-6">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function ListingSubsection({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
+  return (
+    <div id={id} className={`${id ? sectionScroll : ""} border-t border-border/60 pt-8 first:border-0 first:pt-0`}>
+      <h3 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">{title}</h3>
+      <div className="mt-4 md:overflow-x-auto">{children}</div>
+    </div>
+  );
+}
 
 function ListingHeroPhotoGrid({
   urls,
@@ -125,67 +194,73 @@ function formatBoldSegments(text: string) {
 }
 
 const primaryCtaClass =
-  "btn-cobalt mt-5 flex w-full items-center justify-center rounded-full py-3 text-sm font-semibold outline-none transition hover:-translate-y-[1px] active:translate-y-0";
+  "btn-cobalt flex w-full items-center justify-center rounded-full py-3 text-sm font-semibold outline-none transition hover:-translate-y-[1px] active:translate-y-0";
 const secondaryCtaClass =
   "btn-metallic mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full py-3 text-sm font-semibold text-foreground outline-none transition hover:-translate-y-[1px] active:translate-y-0";
 
 function Sidebar({
   property,
   rich,
+  roomCount,
   className = "",
 }: {
   property: MockProperty;
   rich: ListingRichContent;
+  roomCount: number;
   className?: string;
 }) {
   const primaryPrice = rich.estimatedMonthlyTotalLabel ?? rich.startingRentLabel;
   const showsEstimatedTotal = Boolean(rich.estimatedMonthlyTotalLabel);
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
+  const sidebarFacts = filterSidebarQuickFacts(rich.quickFacts, property);
   return (
     <aside
-      className={`order-1 space-y-6 lg:order-2 lg:sticky lg:top-[calc(env(safe-area-inset-top,0px)+7.5rem)] lg:self-start ${className}`}
+      className={`order-2 space-y-5 lg:sticky lg:top-[calc(env(safe-area-inset-top,0px)+7.5rem)] lg:self-start ${className}`}
     >
-      <Card className="p-6 backdrop-blur-xl">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
-          {showsEstimatedTotal ? "Estimated monthly from" : "Base rent from"}
-        </p>
-        <p className="mt-1 text-4xl font-bold text-primary">{primaryPrice}</p>
-        <p className="text-sm text-muted">
-          {showsEstimatedTotal ? `Includes rent + utilities estimate. Base rent from ${rich.startingRentLabel}.` : "Before utilities and other fees."}
-        </p>
-        <Link
-          href={`/rent/tours-contact?propertyId=${encodeURIComponent(property.id)}`}
-          data-attr="listing-schedule-tour"
-          className={`${primaryCtaClass} min-h-[48px]`}
-          {...newTabProps}
-        >
-          Schedule a tour
-        </Link>
-        <Link
-          href={buildRentalApplyHref({ propertyId: property.id })}
-          data-attr="listing-apply-online"
-          className={secondaryCtaClass}
-          {...newTabProps}
-        >
-          Apply online
-        </Link>
+      <Card className="overflow-hidden border-border/70 p-0 shadow-sm backdrop-blur-xl">
+        <div className="border-b border-border/60 bg-gradient-to-br from-primary/8 via-transparent to-transparent px-6 py-6">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
+            {showsEstimatedTotal ? "Estimated monthly from" : "Base rent from"}
+          </p>
+          <p className="mt-1 text-4xl font-bold tracking-tight text-primary">{primaryPrice}</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            {showsEstimatedTotal
+              ? `Rent + utilities estimate. Base rent ${rich.startingRentLabel}.`
+              : "Before utilities and other fees."}
+          </p>
+        </div>
+        <div className="px-6 pb-6 pt-4">
+          <Link
+            href={`/rent/tours-contact?propertyId=${encodeURIComponent(property.id)}`}
+            data-attr="listing-schedule-tour"
+            className={`${primaryCtaClass} min-h-[48px] mt-0`}
+            {...newTabProps}
+          >
+            Schedule a tour
+          </Link>
+          <Link
+            href={buildRentalApplyHref({ propertyId: property.id })}
+            data-attr="listing-apply-online"
+            className={secondaryCtaClass}
+            {...newTabProps}
+          >
+            Apply online
+          </Link>
+        </div>
       </Card>
-      <Card className="p-6 backdrop-blur-xl">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
-          Quick facts
-        </p>
-        <ul className="mt-4 divide-y divide-border/60 text-sm">
-          {rich.quickFacts.map((q) => (
-            <li
-              key={q.label}
-              className="flex justify-between gap-4 py-3 first:pt-0"
-            >
-              <span className="text-muted">{q.label}</span>
-              <span className="font-semibold text-foreground">{q.value}</span>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      {sidebarFacts.length > 0 ? (
+        <Card className="border-border/70 p-5 shadow-sm backdrop-blur-xl sm:p-6">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">At a glance</p>
+          <ul className="mt-3 divide-y divide-border/50 text-sm">
+            {sidebarFacts.map((q) => (
+              <li key={q.label} className="flex flex-col gap-0.5 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <span className="shrink-0 text-xs font-medium text-muted">{q.label}</span>
+                <span className="font-semibold leading-snug text-foreground sm:text-right">{q.value}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
     </aside>
   );
 }
@@ -194,16 +269,16 @@ function HouseRulesSection({ rulesBody }: { rulesBody: string | null }) {
   const [open, setOpen] = useState(false);
   return (
     <section id="house-rules" className={sectionScroll}>
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+      <div className={`${listingSectionCard} p-5 sm:p-7`}>
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-xl font-bold tracking-tight text-foreground">House rules</h2>
+          <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">House rules</h2>
           {rulesBody ? (
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-border bg-accent/50 px-4 py-1.5 text-sm font-semibold text-foreground transition hover:bg-accent active:bg-accent"
+              className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-border bg-accent/40 px-4 py-1.5 text-sm font-semibold text-foreground transition hover:bg-accent active:bg-accent"
             >
-              {open ? "Hide rules" : "View rules"}
+              {open ? "Hide" : "View"}
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
                 <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
               </svg>
@@ -212,13 +287,11 @@ function HouseRulesSection({ rulesBody }: { rulesBody: string | null }) {
         </div>
         {!rulesBody ? (
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            No house rules were added to this listing yet. Ask the property manager during your tour or application.
+            No house rules were added to this listing yet.
           </p>
         ) : open ? (
-          <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-muted">{rulesBody}</p>
-        ) : (
-          <p className="mt-3 text-sm text-muted">Click &quot;View rules&quot; to see the community guidelines.</p>
-        )}
+          <p className="mt-5 whitespace-pre-wrap text-sm leading-relaxed text-muted">{rulesBody}</p>
+        ) : null}
       </div>
     </section>
   );
@@ -235,6 +308,10 @@ export function ListingDetailSections({
   previewModal?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
+  const bathroomLabel =
+    rich.quickFacts.find((q) => q.label === "Bathrooms")?.value ??
+    (rich.bathrooms.length ? String(rich.bathrooms.length) : String(property.baths));
+  const petsLabel = rich.quickFacts.find((q) => q.label === "Pets")?.value;
   const houseRulesDisplay =
     rich.houseRulesBody?.trim() ||
     (!property.listingSubmission ? DEFAULT_LISTING_HOUSE_RULES_FALLBACK : null);
@@ -265,41 +342,46 @@ export function ListingDetailSections({
           <ListingHeroPhotoGrid key={heroUrls.join("|")} urls={heroUrls} priceRangeLabel={rich.priceRangeLabel} />
         </div>
 
-        <div className="order-4 mt-8 flex flex-col gap-4 lg:order-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
+        <div className="order-4 mt-6 flex flex-col gap-4 lg:order-3 lg:mt-8">
+          <div className="max-w-3xl">
             <Badge tone="info">{property.neighborhood}</Badge>
-            <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">
+            <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-[2.125rem] md:leading-tight">
               {property.title}
             </h1>
-            <p className="mt-2 text-muted">{property.address}</p>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">
-              {rich.heroTagline}
-            </p>
+            <p className="mt-2 text-sm text-muted sm:text-base">{property.address}</p>
+            {rich.heroTagline ? (
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-[0.9375rem]">
+                {rich.heroTagline}
+              </p>
+            ) : null}
             {rich.heroOverview ? (
-              <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-muted">
+              <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-foreground/85 sm:text-[0.9375rem]">
                 {formatBoldSegments(rich.heroOverview)}
               </p>
             ) : null}
-            <p className="mt-4 text-sm text-muted">
-              {property.beds} bed{property.beds !== 1 ? "s" : ""} ·{" "}
-              {property.baths} bath{property.baths !== 1 ? "s" : ""}
-            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {roomCount > 0 ? <HeroStatPill>{roomCount} room{roomCount === 1 ? "" : "s"}</HeroStatPill> : null}
+              {bathroomLabel ? <HeroStatPill>{bathroomLabel}</HeroStatPill> : null}
+              {petsLabel ? <HeroStatPill>{petsLabel}</HeroStatPill> : null}
+            </div>
           </div>
         </div>
 
-        <div className={`order-5 relative z-0 ${previewModal ? "mt-6" : "mt-6 lg:mt-10"}`}>
-          <div className="grid gap-10 lg:grid-cols-[1fr_minmax(280px,320px)]">
-            <div className="order-2 space-y-14 lg:order-1">
-              <section id="floor-plans" className={sectionScroll}>
-                <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-                  <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                    {rich.floorPlansSectionTitle ?? "Floor plans"}
-                  </h2>
-                  <p className="text-xs font-medium text-muted sm:text-sm">
-                    {roomCount} rooms listed
-                  </p>
-                </div>
-                <div className="space-y-5">
+        <div className={`order-5 relative z-0 ${previewModal ? "mt-6" : "mt-8 lg:mt-10"}`}>
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] lg:gap-10">
+            <div className="order-1 space-y-8 lg:space-y-10">
+              <ListingSection
+                id="floor-plans"
+                title={rich.floorPlansSectionTitle ?? "Floor plans"}
+                headerAside={
+                  roomCount > 0 ? (
+                    <span className="rounded-full bg-accent/40 px-3 py-1 text-xs font-semibold text-muted">
+                      {roomCount} room{roomCount === 1 ? "" : "s"}
+                    </span>
+                  ) : null
+                }
+              >
+                <div className="space-y-4">
                   {rich.floorPlans.map((f) => (
                     <InteractiveFloorPlanCard
                       key={f.cardKey ?? f.floorLabel}
@@ -308,127 +390,39 @@ export function ListingDetailSections({
                     />
                   ))}
                 </div>
+                <ListingSubsection title="Bathrooms">
+                  <BathroomTableInteractive rows={rich.bathrooms} listingPropertyId={property.id} />
+                </ListingSubsection>
+                <ListingSubsection title="Shared spaces" id="listing-shared">
+                  <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} />
+                </ListingSubsection>
+              </ListingSection>
 
-                <div className="mt-8 rounded-2xl border border-border bg-card p-4 shadow-sm sm:mt-10 sm:p-5">
-                  <h3 className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                    Bathrooms
-                  </h3>
-                  <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted sm:text-sm">
-                    Fixtures are summarized under{" "}
-                    <span className="font-semibold text-foreground">Info</span>.
-                    Open the{" "}
-                    <span className="font-semibold text-foreground">
-                      Details
-                    </span>{" "}
-                    button for photos and setup notes.
-                  </p>
-                  <div className="mt-4 md:overflow-x-auto sm:mt-5">
-                    <BathroomTableInteractive
-                      rows={rich.bathrooms}
-                      listingPropertyId={property.id}
-                    />
-                  </div>
-                </div>
+              <ListingSection id="lease-basics" title="Lease basics">
+                <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} />
+              </ListingSection>
 
-                <div
-                  id="listing-shared"
-                  className={`${sectionScroll} mt-8 rounded-2xl border border-border bg-card p-4 shadow-sm sm:mt-10 sm:p-5`}
-                >
-                  <h3 className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-                    Shared spaces
-                  </h3>
-                  <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted sm:text-sm">
-                    Laundry, kitchen, living areas, and more. Open{" "}
-                    <span className="font-semibold text-foreground">Details</span> for the full description, room access,
-                    amenities, and photos.
-                  </p>
-                  <div className="mt-4 md:overflow-x-auto sm:mt-5">
-                    <SharedTableInteractive
-                      rows={rich.sharedSpaces}
-                      listingPropertyId={property.id}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              <section id="lease-basics" className={sectionScroll}>
-                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
-                  <h2 className="text-xl font-bold tracking-tight text-foreground">
-                    Lease basics
-                  </h2>
-                  <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted sm:text-sm">
-                    Each line is a quick summary. Open{" "}
-                    <span className="font-semibold text-foreground">
-                      Details
-                    </span>{" "}
-                    for the full explanation and next steps.
-                  </p>
-                  <div className="mt-5 md:overflow-x-auto">
-                    <LeaseBasicsTableInteractive
-                      rows={rich.leaseBasics}
-                      listingPropertyId={property.id}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              <section id="amenities" className={sectionScroll}>
-                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
-                  <h2 className="text-xl font-bold tracking-tight text-foreground">
-                    Amenities
-                  </h2>
-                  <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
-                    Building-wide & neighborhood
-                  </p>
-                  <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted sm:text-sm">
-                    Kitchen appliances, shared desks, and bathroom finishes are listed under{" "}
-                    <span className="font-semibold text-foreground">Shared spaces</span> and{" "}
-                    <span className="font-semibold text-foreground">Bathrooms</span> above. Use{" "}
-                    <span className="font-semibold text-foreground">Details</span> on a row for more context.
-                  </p>
-                  <div className="mt-5 md:overflow-x-auto">
-                    <AmenitiesTableInteractive
-                      rows={rich.amenities}
-                      listingPropertyId={property.id}
-                    />
-                  </div>
-                </div>
-              </section>
+              <ListingSection id="amenities" title="Amenities" eyebrow="Building & neighborhood">
+                <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} />
+              </ListingSection>
 
               <section id="bundles" className={sectionScroll}>
-                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm [html[data-theme=dark]_&]:border-white/12 [html[data-theme=dark]_&]:bg-[rgba(255,255,255,0.05)] sm:p-8">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className={`${listingSectionCard} p-5 sm:p-7`}>
+                  <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
-                        Pricing packages
-                      </p>
-                      <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground">
-                        Bundles & leasing
-                      </h2>
-                      <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted sm:text-sm">
-                        Compare grouped leases at a glance. Each card rolls up rooms, rent, utilities context, and signing
-                        charges — open <span className="font-semibold text-foreground">Details</span> for the full breakdown.
-                      </p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Packages</p>
+                      <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Bundles & leasing</h2>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="rounded-2xl border border-border bg-accent/50 px-4 py-3 text-sm font-semibold text-foreground">
-                        {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
-                      </div>
-                    </div>
+                    <span className="rounded-full bg-accent/40 px-3 py-1 text-xs font-semibold text-muted">
+                      {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
+                    </span>
                   </div>
                   <div className="mt-5">
-                    <BundleTableInteractive
-                      rows={rich.bundleCards}
-                      listingPropertyId={property.id}
-                    />
+                    <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} />
                   </div>
-                  <div className="mt-6 rounded-2xl border border-border bg-accent/40 p-4 sm:p-5">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
-                      Lease lengths
-                    </p>
-                    <p className="mt-2 text-sm leading-relaxed text-muted">
-                      {formatBoldSegments(rich.bundlesText)}
-                    </p>
+                  <div className="mt-6 rounded-xl border border-border/60 bg-accent/25 p-4 sm:p-5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Lease lengths</p>
+                    <p className="mt-2 text-sm leading-relaxed text-muted">{formatBoldSegments(rich.bundlesText)}</p>
                   </div>
                 </div>
               </section>
@@ -441,18 +435,9 @@ export function ListingDetailSections({
                   address={property.address}
                 />
               </section>
-
-              <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-                <p className="text-sm font-semibold text-foreground">
-                  Ready to apply?
-                </p>
-                <div className="mt-4">
-                  <PropertyDetailActions propertyId={property.id} />
-                </div>
-              </div>
             </div>
 
-            <Sidebar property={property} rich={rich} />
+            <Sidebar property={property} rich={rich} roomCount={roomCount} className="lg:order-2" />
           </div>
         </div>
       </div>
