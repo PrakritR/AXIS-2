@@ -343,8 +343,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const coManagerBucketTabs = useMemo(
     () =>
       [
-        { id: "active" as const, label: "Active", count: coManagerBucketCounts.active, dataAttr: "co-manager-filter-active" },
         { id: "pending" as const, label: "Pending", count: coManagerBucketCounts.pending, dataAttr: "co-manager-filter-pending" },
+        { id: "active" as const, label: "Active", count: coManagerBucketCounts.active, dataAttr: "co-manager-filter-active" },
       ] as const,
     [coManagerBucketCounts],
   );

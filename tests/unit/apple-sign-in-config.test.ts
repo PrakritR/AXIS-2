@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  APPLE_SIGN_IN_REDIRECT_SETUP_MESSAGE,
   APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
   isAppleSignInAvailable,
   isAppleSignInDisabledOnWeb,
   isAppleSignInEnabledInEnv,
   probeSupabaseAppleOAuthUrl,
+  resetAppleSignInSessionStateForTests,
+  shouldShowAppleSignInErrorToast,
 } from "@/lib/auth/apple-sign-in-config";
 
 vi.mock("@/lib/native/detect-native", () => ({
@@ -21,6 +24,7 @@ describe("apple-sign-in-config", () => {
     process.env = { ...originalEnv };
     delete process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED;
     detectNative.mockReturnValue(null);
+    resetAppleSignInSessionStateForTests();
   });
 
   afterEach(() => {
@@ -56,6 +60,8 @@ describe("apple-sign-in-config", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
+        type: "basic",
+        status: 400,
         headers: { get: () => "application/json" },
         json: async () => ({
           code: 400,
@@ -71,10 +77,54 @@ describe("apple-sign-in-config", () => {
     expect(result).toEqual({ ok: false, message: APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE });
   });
 
+  it("probeSupabaseAppleOAuthUrl ignores unrelated validation_failed JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        type: "basic",
+        status: 400,
+        headers: { get: () => "application/json" },
+        json: async () => ({
+          code: 400,
+          error_code: "validation_failed",
+          msg: "requested path is invalid",
+        }),
+      })),
+    );
+
+    const result = await probeSupabaseAppleOAuthUrl(
+      "https://example.supabase.co/auth/v1/authorize?provider=apple",
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("probeSupabaseAppleOAuthUrl maps redirect allowlist failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        type: "basic",
+        status: 400,
+        headers: { get: () => "application/json" },
+        json: async () => ({
+          code: 400,
+          error_code: "validation_failed",
+          msg: "redirect url is not allowed",
+        }),
+      })),
+    );
+
+    const result = await probeSupabaseAppleOAuthUrl(
+      "https://example.supabase.co/auth/v1/authorize?provider=apple",
+    );
+    expect(result).toEqual({ ok: false, message: APPLE_SIGN_IN_REDIRECT_SETUP_MESSAGE });
+  });
+
   it("probeSupabaseAppleOAuthUrl accepts redirect responses", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
+        type: "basic",
+        status: 302,
         headers: { get: () => "text/html" },
       })),
     );
@@ -83,5 +133,10 @@ describe("apple-sign-in-config", () => {
       "https://example.supabase.co/auth/v1/authorize?provider=apple",
     );
     expect(result).toEqual({ ok: true });
+  });
+
+  it("shouldShowAppleSignInErrorToast dedupes per session", () => {
+    expect(shouldShowAppleSignInErrorToast(APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE)).toBe(true);
+    expect(shouldShowAppleSignInErrorToast(APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE)).toBe(false);
   });
 });

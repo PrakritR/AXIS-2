@@ -441,7 +441,7 @@ describe("scheduled-payment-messages", () => {
     expect(cancelled?.status).toBe("cancelled");
   });
 
-  it("projects default schedule: 3/2/1 before, due date, and 1 day after", () => {
+  it("projects default schedule: 3/2/1 before, due date, and every day late when overdue", () => {
     const now = new Date(2026, 5, 1);
     const messages = projectScheduledPaymentMessages({
       managerUserId: "mgr-1",
@@ -458,6 +458,34 @@ describe("scheduled-payment-messages", () => {
     );
     expect(manageable.filter((m) => m.kind === "pre_due").map((m) => m.daysBeforeDue).sort((a, b) => (b ?? 0) - (a ?? 0))).toEqual([3, 2, 1]);
     expect(manageable.some((m) => m.kind === "same_day")).toBe(true);
-    expect(manageable.some((m) => m.kind === "post_due" && m.daysBeforeDue === 1)).toBe(true);
+    expect(manageable.some((m) => m.kind === "post_due")).toBe(false);
+
+    const overdueNow = new Date(2026, 5, 11);
+    const overdueMessages = projectScheduledPaymentMessages({
+      managerUserId: "mgr-1",
+      charges: [makeCharge()],
+      settings: DEFAULT_MANAGER_AUTOMATION_SETTINGS,
+      now: overdueNow,
+      includeHidden: true,
+    });
+    const overdueManageable = manageableRemindersForCharge(
+      overdueMessages,
+      "hc_rent_test@test.com_prop1_2026-06",
+      12,
+      overdueNow,
+    );
+    expect(overdueManageable.some((m) => m.kind === "overdue_daily")).toBe(true);
+  });
+
+  it("does not project overdue daily reminders for paid charges", () => {
+    const now = new Date(2026, 5, 20);
+    const messages = projectScheduledPaymentMessages({
+      managerUserId: "mgr-1",
+      charges: [makeCharge({ status: "paid", balanceLabel: "$0.00", paidAt: now.toISOString() })],
+      settings: { ...DEFAULT_MANAGER_AUTOMATION_SETTINGS, scheduleVisibilityMode: "all", overdueDailyEnabled: true },
+      now,
+      includeHidden: true,
+    });
+    expect(messages.some((m) => m.kind === "overdue_daily")).toBe(false);
   });
 });

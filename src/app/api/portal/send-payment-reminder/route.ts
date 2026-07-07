@@ -1,10 +1,26 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
+import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@/lib/household-charges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
 
 export const runtime = "nodejs";
+
+async function loadOwnedChargeForReminder(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  managerUserId: string,
+  chargeId: string,
+): Promise<HouseholdCharge | null> {
+  const { data, error } = await db
+    .from("portal_household_charge_records")
+    .select("row_data, manager_user_id")
+    .eq("id", chargeId)
+    .maybeSingle();
+  if (error || !data?.row_data) return null;
+  if (data.manager_user_id !== managerUserId) return null;
+  return data.row_data as HouseholdCharge;
+}
 
 export async function POST(req: Request) {
   try {
@@ -15,6 +31,7 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ ok: false, error: "Not authenticated." }, { status: 401 });
 
     const body = (await req.json().catch(() => ({}))) as {
+      chargeId?: string;
       residentEmail?: string;
       residentName?: string;
       chargeTitle?: string;
@@ -24,16 +41,42 @@ export async function POST(req: Request) {
       managerName?: string;
     };
 
-    const residentEmail = String(body.residentEmail ?? "").trim().toLowerCase();
-    const residentName = String(body.residentName ?? "Resident").trim();
-    const chargeTitle = String(body.chargeTitle ?? "outstanding charge").trim();
-    const balanceDue = String(body.balanceDue ?? "").trim();
-    const dueDate = String(body.dueDate ?? "").trim();
-    const propertyLabel = String(body.propertyLabel ?? "").trim();
-    const managerName = String(body.managerName ?? "Your property manager").trim();
+    const db = createSupabaseServiceRoleClient();
+    const chargeId = String(body.chargeId ?? "").trim();
+    const ownedCharge = chargeId ? await loadOwnedChargeForReminder(db, user.id, chargeId) : null;
+    if (chargeId && !ownedCharge) {
+      return NextResponse.json({ ok: false, error: "Charge not found." }, { status: 404 });
+    }
+    if (ownedCharge && !isUnpaidHouseholdCharge(ownedCharge)) {
+      return NextResponse.json(
+        { ok: false, error: "This charge is already paid. Reminders are not sent for paid charges.", code: "charge_paid" },
+        { status: 409 },
+      );
+    }
+
+    const residentEmail = String(ownedCharge?.residentEmail ?? body.residentEmail ?? "").trim().toLowerCase();
+    const residentName = String(ownedCharge?.residentName ?? body.residentName ?? "Resident").trim();
+    const chargeTitle = String(ownedCharge?.title ?? body.chargeTitle ?? "outstanding charge").trim();
+    const balanceDue = String(ownedCharge?.balanceLabel ?? body.balanceDue ?? "").trim();
+    const dueDate = String(ownedCharge ? chargeDueLabel(ownedCharge) : body.dueDate ?? "").trim();
+    const propertyLabel = String(ownedCharge?.propertyLabel ?? body.propertyLabel ?? "").trim();
+
+    const { data: managerProfile } = await db
+      .from("profiles")
+      .select("full_name, email, sms_from_number")
+      .eq("id", user.id)
+      .maybeSingle();
+    const managerName =
+      managerProfile?.full_name?.trim() || managerProfile?.email?.trim() || String(body.managerName ?? "Your property manager").trim();
 
     if (!residentEmail || !residentEmail.includes("@")) {
       return NextResponse.json({ ok: false, error: "Valid resident email required." }, { status: 400 });
+    }
+    if (!ownedCharge && balanceDue === "$0.00") {
+      return NextResponse.json(
+        { ok: false, error: "This charge is already paid. Reminders are not sent for paid charges.", code: "charge_paid" },
+        { status: 409 },
+      );
     }
 
     const senderLower = (user.email ?? "").trim().toLowerCase();
@@ -41,7 +84,7 @@ export async function POST(req: Request) {
 
     if (skipExternalEmail) {
       // Demo email — still deliver to portal inbox, just skip real email
-      await deliverToPortalInbox({ db: createSupabaseServiceRoleClient(), userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
+      await deliverToPortalInbox({ db, userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
       return NextResponse.json({ ok: true, skipped: true, reason: "Skipped external delivery; portal inbox updated." });
     }
 
@@ -62,8 +105,6 @@ export async function POST(req: Request) {
       emailSent = res.ok;
     }
 
-    const db = createSupabaseServiceRoleClient();
-
     // 2. Deliver to resident's Axis portal inbox
     await deliverToPortalInbox({ db, userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
 
@@ -74,11 +115,10 @@ export async function POST(req: Request) {
       recipient_email: residentEmail.toLowerCase(),
       subject,
       channel: "email",
-      row_data: { id: outboundId, to: residentEmail, subject, body: messageBody, sentAt: new Date().toISOString(), emailSent },
+      row_data: { id: outboundId, to: residentEmail, subject, body: messageBody, sentAt: new Date().toISOString(), emailSent, chargeId: chargeId || undefined },
     }, { onConflict: "id" });
 
     // 4. SMS delivery (if manager has sms_from_number configured)
-    const { data: managerProfile } = await db.from("profiles").select("sms_from_number").eq("id", user.id).maybeSingle();
     const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
     if (smsFromNumber) {
       const { data: residentProfile } = await db.from("profiles").select("phone").eq("email", residentEmail.toLowerCase()).maybeSingle();

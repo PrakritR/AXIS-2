@@ -11,7 +11,7 @@ export type ReminderTemplate = {
 
 export type ManagerAutomationSettings = {
   preDueReminderDays: number[];
-  /** One-time reminders after the due date (e.g. [1] = one day after due). */
+  /** One-time reminders after the due date (legacy; day 1 migrates to overdueDailyEnabled). */
   postDueReminderDays: number[];
   /** One-off reminders sent on specific calendar dates (ISO YYYY-MM-DD), for every eligible charge. */
   setDateReminders: string[];
@@ -30,7 +30,7 @@ export type ManagerAutomationSettings = {
 };
 
 export const DEFAULT_PRE_DUE_REMINDER_DAYS = [3, 2, 1] as const;
-export const DEFAULT_POST_DUE_REMINDER_DAYS = [1] as const;
+export const DEFAULT_POST_DUE_REMINDER_DAYS = [] as const;
 
 export const PAYMENT_AUTOMATION_SETTINGS_EVENT = "axis:payment-automation-settings";
 
@@ -40,8 +40,8 @@ export const DEFAULT_MANAGER_AUTOMATION_SETTINGS: ManagerAutomationSettings = {
   setDateReminders: [],
   scheduleVisibilityMode: "days_before_send",
   scheduleVisibilityDays: 3,
-  overdueDailyEnabled: false,
-  overdueDailyStartDays: 2,
+  overdueDailyEnabled: true,
+  overdueDailyStartDays: 1,
   lateFeeNoticeEnabled: true,
   lateFeeNoticeDaysAfterDue: 5,
   sameDayReminderEnabled: true,
@@ -128,7 +128,7 @@ export function formatStandardReminderSchedule(settings: Pick<
   if (settings.sameDayReminderEnabled) parts.push("due date");
   const post = [...settings.postDueReminderDays].sort((a, b) => a - b);
   if (post.length) parts.push(`${post.join(", ")} day(s) after`);
-  if (settings.overdueDailyEnabled) parts.push("daily when overdue");
+  if (settings.overdueDailyEnabled) parts.push("every day late");
   return parts.length ? parts.join(" · ") : "Off";
 }
 
@@ -190,17 +190,28 @@ export function normalizeManagerAutomationSettings(raw: unknown): ManagerAutomat
     Math.min(30, Math.round(Number(row.scheduleVisibilityDays ?? base.scheduleVisibilityDays) || base.scheduleVisibilityDays)),
   );
 
+  let postDueReminderDays = normalizePostDueDays(row.postDueReminderDays);
+  let overdueDailyEnabled = row.overdueDailyEnabled !== false;
+  let overdueDailyStartDays = Math.max(
+    0,
+    Math.min(30, Math.round(Number(row.overdueDailyStartDays ?? base.overdueDailyStartDays) || base.overdueDailyStartDays)),
+  );
+
+  // Legacy one-time "1 day after due" → daily overdue starting day 1.
+  if (postDueReminderDays.includes(1)) {
+    overdueDailyEnabled = true;
+    overdueDailyStartDays = Math.min(overdueDailyStartDays, 1);
+    postDueReminderDays = postDueReminderDays.filter((d) => d !== 1);
+  }
+
   return {
     preDueReminderDays: normalizePreDueDays(row.preDueReminderDays),
-    postDueReminderDays: normalizePostDueDays(row.postDueReminderDays),
+    postDueReminderDays,
     setDateReminders: normalizeSetDateReminders(row.setDateReminders),
     scheduleVisibilityMode: visibilityMode,
     scheduleVisibilityDays: visibilityDays,
-    overdueDailyEnabled: row.overdueDailyEnabled !== false,
-    overdueDailyStartDays: Math.max(
-      0,
-      Math.min(30, Math.round(Number(row.overdueDailyStartDays ?? base.overdueDailyStartDays) || base.overdueDailyStartDays)),
-    ),
+    overdueDailyEnabled,
+    overdueDailyStartDays,
     lateFeeNoticeEnabled: row.lateFeeNoticeEnabled !== false,
     lateFeeNoticeDaysAfterDue: Math.max(
       0,

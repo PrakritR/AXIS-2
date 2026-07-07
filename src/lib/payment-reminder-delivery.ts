@@ -1,4 +1,4 @@
-import { chargeDueLabel, type HouseholdCharge } from "@/lib/household-charges";
+import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@/lib/household-charges";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
@@ -21,6 +21,9 @@ export async function deliverPaymentReminder(input: {
 }): Promise<{ sent: boolean; error?: string }> {
   const { db, charge, managerId, dedupId, managerName, managerSmsFromNumber, apiKey, from, subject, text, html, slotLabel } =
     input;
+  if (!isUnpaidHouseholdCharge(charge)) {
+    return { sent: false, error: "charge_paid" };
+  }
   const residentLower = charge.residentEmail.trim().toLowerCase();
 
   let emailSent = false;

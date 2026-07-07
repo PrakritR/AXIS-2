@@ -1,6 +1,6 @@
 import {
   APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
-  probeSupabaseAppleOAuthUrl,
+  resolveAppleWebOAuthSignIn,
 } from "@/lib/auth/apple-sign-in-config";
 import { persistOAuthSignInContext } from "@/lib/auth/oauth-next-cookie";
 import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
@@ -58,6 +58,17 @@ export async function startOAuthSignIn({
             persistOAuthSignInContext({ nextPath: afterAuth, intent });
             return resolveOAuthCallbackRedirectUrl(origin);
           })();
+
+    if (provider === "apple") {
+      const resolved = await resolveAppleWebOAuthSignIn(supabase, redirectTo);
+      if (!resolved.ok) return resolved;
+      if (resolved.url) {
+        await openOAuthUrl(resolved.url);
+        return { ok: true };
+      }
+      return { ok: false, message: "Could not start Apple sign-in." };
+    }
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -77,10 +88,6 @@ export async function startOAuthSignIn({
       return { ok: false, message };
     }
     if (data?.url) {
-      if (provider === "apple") {
-        const probe = await probeSupabaseAppleOAuthUrl(data.url);
-        if (!probe.ok) return probe;
-      }
       await openOAuthUrl(data.url);
       return { ok: true };
     }

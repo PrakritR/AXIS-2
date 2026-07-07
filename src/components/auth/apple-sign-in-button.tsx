@@ -5,12 +5,16 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   isAppleSignInAvailable,
   logAppleSignInUnavailableDevHint,
+  resolveAppleWebOAuthSignIn,
+  shouldShowAppleSignInErrorToast,
 } from "@/lib/auth/apple-sign-in-config";
+import { resolveOAuthCallbackRedirectUrl } from "@/lib/auth/native-oauth-callback";
 import { startAppleSignIn } from "@/lib/auth/start-apple-sign-in";
 import { canUseNativeAppleSignIn } from "@/lib/auth/native-apple-sign-in";
+import { resolveOAuthBrowserOrigin } from "@/lib/auth/password-reset-url";
 import type { OAuthSignInIntent } from "@/lib/auth/post-oauth-routing";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function AppleGlyph({ className = "h-5 w-5 shrink-0" }: { className?: string }) {
   return (
@@ -40,10 +44,30 @@ export function AppleSignInButton({
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
   const [available, setAvailable] = useState(isAppleSignInAvailable);
+  const signInInFlight = useRef(false);
 
   useEffect(() => {
-    setAvailable(isAppleSignInAvailable());
+    const envAvailable = isAppleSignInAvailable();
+    setAvailable(envAvailable);
     logAppleSignInUnavailableDevHint();
+    if (!envAvailable || canUseNativeAppleSignIn()) return;
+
+    let cancelled = false;
+    void (async () => {
+      const supabase = createSupabaseBrowserClient();
+      const origin = resolveOAuthBrowserOrigin();
+      const redirectTo = resolveOAuthCallbackRedirectUrl(origin);
+      const result = await resolveAppleWebOAuthSignIn(supabase, redirectTo);
+      if (!cancelled && !result.ok) {
+        setAvailable(false);
+        if (process.env.NODE_ENV !== "production") {
+          console.info(`[Apple Sign In] Hiding web button: ${result.message}`);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -60,26 +84,34 @@ export function AppleSignInButton({
   if (!available) return null;
 
   const signInWithApple = async () => {
+    if (signInInFlight.current) return;
+    signInInFlight.current = true;
     setBusy(true);
-    const supabase = createSupabaseBrowserClient();
-    const result = await startAppleSignIn({
-      supabase,
-      provider: "apple",
-      nextPath,
-      viaContinue,
-      fixedCallbackPath,
-      intent,
-      onBeforeRedirect,
-    });
-    if (!result.ok) {
-      showToast(result.message);
-      setBusy(false);
-      return;
-    }
-    if (!canUseNativeAppleSignIn()) {
-      window.setTimeout(() => setBusy(false), 90_000);
-    } else {
-      setBusy(false);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const result = await startAppleSignIn({
+        supabase,
+        provider: "apple",
+        nextPath,
+        viaContinue,
+        fixedCallbackPath,
+        intent,
+        onBeforeRedirect,
+      });
+      if (!result.ok) {
+        if (shouldShowAppleSignInErrorToast(result.message)) {
+          showToast(result.message);
+        }
+        setBusy(false);
+        return;
+      }
+      if (!canUseNativeAppleSignIn()) {
+        window.setTimeout(() => setBusy(false), 90_000);
+      } else {
+        setBusy(false);
+      }
+    } finally {
+      signInInFlight.current = false;
     }
   };
 

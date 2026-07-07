@@ -1,5 +1,6 @@
 "use client";
 
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { isResidentApplicationPhaseAllowedPath } from "@/lib/resident-portal-route-guard";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -20,6 +21,7 @@ export function ResidentPreApplicationGuard({
   const applicationPhase = leaseAccessUnlocked === false;
 
   useEffect(() => {
+    if (isDemoModeActive()) return;
     if (!applicationPhase) return;
     if (isResidentApplicationPhaseAllowedPath(pathname)) return;
     router.replace("/resident/applications/apply");

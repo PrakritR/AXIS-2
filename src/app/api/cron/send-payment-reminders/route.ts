@@ -188,7 +188,10 @@ export async function GET(req: Request) {
       }
 
       const charge = chargeById.get(message.chargeId);
-      if (!charge) continue;
+      if (!charge || !isUnpaidHouseholdCharge(charge)) {
+        skipped++;
+        continue;
+      }
 
       const result = await deliverPaymentReminder({
         db,

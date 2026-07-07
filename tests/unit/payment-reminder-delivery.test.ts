@@ -32,13 +32,35 @@ function makeCharge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
   };
 }
 
-describe("deliverPaymentReminder push", () => {
+describe("deliverPaymentReminder", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
     );
+  });
+
+  it("does not send when the charge is paid", async () => {
+    const from = vi.fn();
+    const result = await deliverPaymentReminder({
+      db: { from } as never,
+      charge: makeCharge({ status: "paid", balanceLabel: "$0.00", paidAt: "2026-07-01T00:00:00.000Z" }),
+      managerId: "mgr-1",
+      dedupId: "payment_reminder_test",
+      managerName: "Manager",
+      managerSmsFromNumber: "",
+      apiKey: "",
+      from: "Axis <test@example.com>",
+      subject: "Rent due in 3 days",
+      text: "Your rent for July is due in 3 days.",
+      html: "<p>test</p>",
+      slotLabel: "3_days_before",
+    });
+
+    expect(result).toEqual({ sent: false, error: "charge_paid" });
+    expect(from).not.toHaveBeenCalled();
+    expect(sendPushToUser).not.toHaveBeenCalled();
   });
 
   it("sends push to resident profile when delivery succeeds", async () => {

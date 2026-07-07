@@ -42,6 +42,21 @@ describe("payment-automation-settings", () => {
     expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.scheduleVisibilityMode).toBe("days_before_send");
     expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.scheduleVisibilityDays).toBe(3);
     expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.preDueReminderDays).toEqual([3, 2, 1]);
-    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.postDueReminderDays).toEqual([1]);
+  });
+
+  it("defaults to daily overdue reminders instead of one-time post-due", () => {
+    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.postDueReminderDays).toEqual([]);
+    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.overdueDailyEnabled).toBe(true);
+    expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.overdueDailyStartDays).toBe(1);
+  });
+
+  it("migrates legacy post-due day 1 to daily overdue", () => {
+    const settings = normalizeManagerAutomationSettings({
+      postDueReminderDays: [1],
+      overdueDailyEnabled: false,
+    });
+    expect(settings.postDueReminderDays).toEqual([]);
+    expect(settings.overdueDailyEnabled).toBe(true);
+    expect(settings.overdueDailyStartDays).toBe(1);
   });
 });

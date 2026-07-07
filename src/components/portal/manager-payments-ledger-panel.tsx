@@ -324,7 +324,7 @@ export function ManagerPaymentsLedgerPanel({
 
   const sendReminderForRow = async (
     row: DemoManagerPaymentLedgerRow,
-  ): Promise<{ ok: boolean; skipped?: boolean }> => {
+  ): Promise<{ ok: boolean; skipped?: boolean; chargePaid?: boolean }> => {
     const email = row.residentEmail?.trim();
     if (!email) return { ok: false };
     try {
@@ -333,6 +333,7 @@ export function ManagerPaymentsLedgerPanel({
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
+          chargeId: row.householdChargeId,
           residentEmail: email,
           residentName: row.residentName,
           chargeTitle: row.chargeTitle,
@@ -341,7 +342,10 @@ export function ManagerPaymentsLedgerPanel({
           propertyLabel: row.propertyName,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean };
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean; code?: string; error?: string };
+      if (res.status === 409 && data.code === "charge_paid") {
+        return { ok: false, chargePaid: true };
+      }
       return { ok: Boolean(data.ok), skipped: data.skipped };
     } catch {
       return { ok: false };
@@ -361,6 +365,7 @@ export function ManagerPaymentsLedgerPanel({
     let skipped = 0;
     for (const row of targets) {
       const result = await sendReminderForRow(row);
+      if (result.chargePaid) continue;
       if (result.ok) {
         ok += 1;
         if (result.skipped) skipped += 1;
@@ -394,7 +399,9 @@ export function ManagerPaymentsLedgerPanel({
     setSendingReminderId(row.id);
     try {
       const result = await sendReminderForRow(row);
-      if (result.skipped) {
+      if (result.chargePaid) {
+        showToast("This charge is already paid — no reminder was sent.");
+      } else if (result.skipped) {
         showToast("Reminder sent to portal inbox (demo email — no real email sent).");
       } else if (result.ok) {
         showToast("Reminder sent to resident via email and portal inbox.");

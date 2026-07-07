@@ -109,7 +109,7 @@ function typeLabel(kind: PaymentReminderKind, daysBeforeDue: number | null): str
     const d = daysBeforeDue ?? 1;
     return d === 1 ? "1 day after due" : `${d} days after due`;
   }
-  if (kind === "overdue_daily") return "Overdue daily";
+  if (kind === "overdue_daily") return "Every day late";
   if (kind === "set_date") {
     const formatted = formatSetDateIso(setDateReminderIsoFromKey(daysBeforeDue));
     return formatted ? `On ${formatted}` : "On set date";
@@ -127,7 +127,7 @@ export function scheduledReminderShortLabel(kind: PaymentReminderKind, daysBefor
     const d = daysBeforeDue ?? 1;
     return d === 1 ? "1 day after" : `${d} days after`;
   }
-  if (kind === "overdue_daily") return "Follow-up";
+  if (kind === "overdue_daily") return "Every day late";
   if (kind === "set_date") return "Set date";
   return "Notice";
 }
@@ -143,7 +143,7 @@ export function inboxScheduleTypeLabel(kind: PaymentReminderKind, daysBeforeDue:
     const d = daysBeforeDue ?? 1;
     return d === 1 ? "1 day after due" : `${d} days after due`;
   }
-  if (kind === "overdue_daily") return "Daily follow-up";
+  if (kind === "overdue_daily") return "Every day late";
   if (kind === "set_date") return "On set date";
   return "Notice";
 }

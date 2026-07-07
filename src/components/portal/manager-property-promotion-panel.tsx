@@ -449,7 +449,7 @@ export function ManagerPropertyPromotionPanel({
         title="Promotion"
         expanded={sectionExpanded}
         onExpandedChange={setSectionExpanded}
-        collapsible={assets.length > 0}
+        collapsible
         className="mt-4"
         toggleDataAttr="promotion-section-toggle"
         headerActions={

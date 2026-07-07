@@ -2,7 +2,20 @@
 
 Axis uses **Capacitor** (not Expo). Native iOS sign-in exchanges an Apple `identityToken` with Supabase via `signInWithIdToken`; Safari/desktop uses Supabase OAuth redirect.
 
-Gating: `isAppleSignInAvailable()` in `src/lib/auth/apple-sign-in-config.ts` — **iOS app always shows Apple** when Google is offered (App Store 4.8); **web shows Apple by default** alongside Google. Set `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false` to hide on web. Misconfigured Supabase Apple OAuth surfaces a toast via `probeSupabaseAppleOAuthUrl` instead of a raw JSON error page.
+Gating: `isAppleSignInAvailable()` in `src/lib/auth/apple-sign-in-config.ts` — **iOS app always shows Apple** when Google is offered (App Store 4.8); **web shows Apple by default** alongside Google. Set `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false` to hide on web. On web, the app probes the Supabase authorize URL once per tab; if Apple is disabled or misconfigured the button is hidden (dev logs the reason to the console) instead of stacking error toasts.
+
+## Dev vs production Supabase
+
+Axis uses **two Supabase projects** (see [`docs/database-environments.md`](database-environments.md)):
+
+| Project | Ref | Apple provider |
+|---------|-----|----------------|
+| **Dev + test** (local `npm run dev`, vitest) | `emstjswhotsnyksqhqyf` | Enable Apple here for localhost |
+| **Production** (Vercel Production deploy) | `qahnczmilgptcedaqype` | Enable Apple here for the live site |
+
+**Enabling Apple on production does not enable it on dev/test.** Local `.env` / `.env.local` must point at the dev/test project (`emstjswhotsnyksqhqyf`). Configure Authentication → Providers → Apple on **that** project for localhost sign-in to work.
+
+Each project has its own callback URL: `https://<project-ref>.supabase.co/auth/v1/callback`. Confirm you are editing the project that matches `NEXT_PUBLIC_SUPABASE_URL` in your env file.
 
 ## Native iOS checklist
 
@@ -90,9 +103,9 @@ If redirect URLs are missing, Supabase may fall back to **Site URL** (e.g. `http
 # NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false
 ```
 
-Web **shows** "Continue with Apple" on `/auth/sign-in` and `/auth/create-account` by default. The app probes the Supabase authorize URL before redirect; if Apple is disabled you get a toast instead of a raw JSON error page.
+Web **shows** "Continue with Apple" on `/auth/sign-in` and `/auth/create-account` by default when the Supabase probe succeeds. Set `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false` to hide the web button regardless of Supabase. If Apple is not configured on the **dev/test** project your local env uses, the button is hidden after the probe (check the browser console in development).
 
-**Flow:** `startAppleSignIn` → `signInWithOAuth({ provider: 'apple' })` → probe authorize URL → redirect to Apple.
+**Flow:** `startAppleSignIn` → `resolveAppleWebOAuthSignIn` (cached per tab) → probe authorize URL → redirect to Apple.
 
 Code reference for redirect URL lists: `appleSignInRedirectUrls()` in `src/lib/auth/apple-sign-in-config.ts`.
 
@@ -106,7 +119,7 @@ If you see:
 
 Apple is **not enabled** in this Supabase project. Complete the checklist for your surface (native vs web) above.
 
-On **web**, the button is shown by default. Set `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false` to hide it. If Apple is not configured in Supabase, the probe shows a setup toast instead of this page.
+On **web**, the button is shown when the probe passes. Set `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false` to hide it. If Apple is not configured on the Supabase project in your env, the button stays hidden (one console hint in dev) instead of spamming toasts.
 
 ## Test
 

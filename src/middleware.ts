@@ -1,16 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { isProductionAxisHost } from "@/lib/auth/native-auth-entry";
 import { legacyPaidPortalToPortal } from "@/lib/legacy-portal-redirect";
 
 const PROTECTED_PREFIXES = ["/portal", "/pro", "/manager", "/owner", "/resident", "/admin", "/vendor"];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  const host = request.headers.get("host")?.split(":")[0] ?? "";
-  const productionPublicSite =
-    process.env.VERCEL_ENV === "production" || isProductionAxisHost(host);
-  if (productionPublicSite && (path === "/demo" || path.startsWith("/demo/"))) {
+  if (
+    process.env.NEXT_PUBLIC_AXIS_PUBLIC_DEMO_ENABLED === "false" &&
+    (path === "/demo" || path.startsWith("/demo/"))
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

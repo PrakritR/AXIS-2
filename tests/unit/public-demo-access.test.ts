@@ -17,7 +17,7 @@ describe("public-demo-access", () => {
   it("treats Vercel production as a production public site", () => {
     process.env.VERCEL_ENV = "production";
     expect(isProductionPublicSite()).toBe(true);
-    expect(isPublicDemoSurfaceEnabled()).toBe(false);
+    expect(isPublicDemoSurfaceEnabled()).toBe(true);
   });
 
   it("keeps demo surfaces on preview and local builds", () => {
@@ -26,13 +26,11 @@ describe("public-demo-access", () => {
     expect(isPublicDemoSurfaceEnabled()).toBe(true);
 
     delete process.env.VERCEL_ENV;
-    process.env.NEXT_PUBLIC_AXIS_PUBLIC_DEMO_ENABLED = "true";
-    expect(isProductionPublicSite()).toBe(false);
+    expect(isPublicDemoSurfaceEnabled()).toBe(true);
   });
 
-  it("honors the baked public demo env flag", () => {
+  it("honors explicit opt-out via NEXT_PUBLIC_AXIS_PUBLIC_DEMO_ENABLED=false", () => {
     process.env.NEXT_PUBLIC_AXIS_PUBLIC_DEMO_ENABLED = "false";
-    expect(isProductionPublicSite()).toBe(true);
     expect(isPublicDemoSurfaceEnabled()).toBe(false);
   });
 });

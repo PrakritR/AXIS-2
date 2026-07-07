@@ -1,8 +1,9 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
@@ -28,12 +29,14 @@ import {
 import { ResidentApplicationEditor } from "@/components/portal/resident-application-editor";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
+import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
@@ -83,7 +86,9 @@ function sortApplicationRows(rows: DemoApplicantRow[]): DemoApplicantRow[] {
 export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const { email: sessionEmail, ready: sessionReady } = usePortalSession();
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const portalNavigate = usePortalNavigate();
+  const { showToast } = useAppUi();
+  const demoMode = isDemoModeActive();
   const residentEmail = (sessionEmail ?? "").trim().toLowerCase();
   const [tick, setTick] = useState(0);
   const [bucket, setBucket] = useState<ManagerApplicationBucket>("pending");
@@ -121,9 +126,9 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
   const rowsForBucket = useMemo(() => rows.filter((row) => row.bucket === bucket), [rows, bucket]);
 
   useEffect(() => {
-    if (!sessionReady || rows.length > 0) return;
-    router.replace("/resident/applications/apply");
-  }, [sessionReady, rows.length, router]);
+    if (demoMode || !sessionReady || rows.length > 0) return;
+    portalNavigate("/resident/applications/apply");
+  }, [demoMode, sessionReady, rows.length, portalNavigate]);
 
   useEffect(() => {
     if (openHandled.current || rows.length === 0) return;
@@ -159,7 +164,7 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
                 type="button"
                 variant="outline"
                 className={PORTAL_DETAIL_BTN}
-                onClick={() => router.push(continueApplicationPath(row))}
+                onClick={() => portalNavigate(continueApplicationPath(row))}
               >
                 Continue application
               </Button>
@@ -195,7 +200,13 @@ export function ResidentApplicationsPanel({ embedded = false }: { embedded?: boo
       type="button"
       className="rounded-full"
       data-attr="resident-applications-new"
-      onClick={() => router.push(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`)}
+      onClick={() => {
+        if (demoMode) {
+          showToast("Application submission is simulated in the demo — use Next step on the guided tour.");
+          return;
+        }
+        portalNavigate(`${RESIDENT_PORTAL_BASE_PATH}/applications/apply`);
+      }}
     >
       New application
     </Button>

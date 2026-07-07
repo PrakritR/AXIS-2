@@ -238,7 +238,7 @@ export function ChargeRemindersModal({
         <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-xs leading-relaxed text-muted">
           <p className="font-medium text-foreground">Automatic schedule</p>
           <p className="mt-1">
-            {scheduleSummary ?? "3, 2, 1 days before · due date · 1 day after"}
+            {scheduleSummary ?? "3, 2, 1 days before · due date · every day late"}
           </p>
           <p className="mt-1.5">Reminders stop automatically when this charge is marked paid. Skip any send below to turn it off for this charge only.</p>
         </div>
@@ -442,11 +442,17 @@ const SCHEDULE_SETTINGS_COPY: Record<
     description: "",
     daysBeforeLabel: "Days before due",
     sameDayLabel: "Due date",
-    followUpLabel: "Daily when overdue",
+    followUpLabel: "Every day late",
     templateLabel: "Default pre-due message template",
     saveLabel: "Save",
   },
 };
+
+const REMINDER_DAY_PILL =
+  "inline-flex shrink-0 items-center rounded-full min-h-8 px-3 py-1 text-xs font-semibold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50";
+const REMINDER_DAY_PILL_ACTIVE = "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]";
+const REMINDER_DAY_PILL_INACTIVE =
+  "border border-border bg-card/80 text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-primary/30 hover:bg-card [html[data-theme=dark]_&]:portal-outline-control";
 
 function PaymentAutomationSettingsForm({
   initialSettings,
@@ -523,14 +529,6 @@ function PaymentAutomationSettingsForm({
 
   const compact = layout === "modal" && variant === "payments";
 
-  const togglePostDay = (day: number) => {
-    setDraft((prev) => {
-      const has = prev.postDueReminderDays.includes(day);
-      const nextDays = has ? prev.postDueReminderDays.filter((d) => d !== day) : [...prev.postDueReminderDays, day].sort((a, b) => a - b);
-      return { ...prev, postDueReminderDays: nextDays.length ? nextDays : [1] };
-    });
-  };
-
   return (
     <div className={layout === "card" ? "rounded-2xl border border-border bg-accent/20 p-4 space-y-4" : "space-y-4"}>
       {layout === "card" ? (
@@ -550,18 +548,20 @@ function PaymentAutomationSettingsForm({
           {[3, 2, 1, ...draft.preDueReminderDays]
             .filter((d, i, arr) => arr.indexOf(d) === i)
             .sort((a, b) => b - a)
-            .map((day) => (
-              <Button
+            .map((day) => {
+              const active = draft.preDueReminderDays.includes(day);
+              return (
+              <button
                 key={day}
                 type="button"
-                variant={draft.preDueReminderDays.includes(day) ? "primary" : "outline"}
-                className="rounded-full px-3 py-1 text-xs"
+                className={`${REMINDER_DAY_PILL} ${active ? REMINDER_DAY_PILL_ACTIVE : REMINDER_DAY_PILL_INACTIVE}`}
                 onClick={() => toggleDay(day)}
                 disabled={busy}
               >
                 {day} day{day === 1 ? "" : "s"} before
-              </Button>
-            ))}
+              </button>
+              );
+            })}
           <div className="flex flex-wrap items-center gap-1">
             <Input
               className="h-8 w-16 text-xs"
@@ -577,9 +577,14 @@ function PaymentAutomationSettingsForm({
               }}
               disabled={busy}
             />
-            <Button type="button" variant="outline" className="rounded-full px-2 py-1 text-xs" onClick={addCustomDay} disabled={busy}>
+            <button
+              type="button"
+              className={`${REMINDER_DAY_PILL} ${REMINDER_DAY_PILL_INACTIVE} px-2`}
+              onClick={addCustomDay}
+              disabled={busy}
+            >
               Add day
-            </Button>
+            </button>
           </div>
         </div>
       </div>
@@ -595,11 +600,19 @@ function PaymentAutomationSettingsForm({
           <label className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm">
             <input
               type="checkbox"
-              checked={draft.postDueReminderDays.includes(1)}
-              onChange={() => togglePostDay(1)}
+              checked={draft.overdueDailyEnabled}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                setDraft((prev) => ({
+                  ...prev,
+                  overdueDailyEnabled: enabled,
+                  ...(enabled ? { overdueDailyStartDays: Math.min(prev.overdueDailyStartDays, 1) || 1 } : null),
+                  postDueReminderDays: prev.postDueReminderDays.filter((d) => d !== 1),
+                }));
+              }}
               disabled={busy}
             />
-            1 day after due
+            Every day late
           </label>
         ) : null}
         {!compact ? (

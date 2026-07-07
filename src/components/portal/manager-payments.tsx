@@ -9,10 +9,8 @@ import {
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
   PORTAL_HEADER_ACTION_BTN,
-  PORTAL_TOOLBAR_GROUP,
-  PORTAL_TOOLBAR_PILL_BUTTON,
-  PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE,
 } from "@/components/portal/portal-metrics";
+import { PillTabs } from "@/components/ui/tabs";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { ManagerPaymentsLedgerPanel } from "@/components/portal/manager-payments-ledger-panel";
 import { ManagerOutgoingPaymentsPanel } from "@/components/portal/manager-outgoing-payments-panel";
@@ -350,14 +348,6 @@ export function ManagerPayments() {
     return outgoingRowsForCounts.filter((row) => row.bucket === bucket);
   }, [outgoingRowsForCounts, bucket]);
 
-  const directionCounts = useMemo(
-    () => ({
-      incoming: rowsForCounts.length,
-      outgoing: outgoingRowsForCounts.length,
-    }),
-    [rowsForCounts.length, outgoingRowsForCounts.length],
-  );
-
   const propertyOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const row of mergedRows) {
@@ -398,40 +388,29 @@ export function ManagerPayments() {
 
   const filterRow = (
     <ManagerPortalFilterRow>
-      <div className={PORTAL_TOOLBAR_GROUP}>
-        {DIRECTION_LABELS.map(({ id, label }) => {
-          const active = direction === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              className={`${PORTAL_TOOLBAR_PILL_BUTTON} ${active ? PORTAL_TOOLBAR_PILL_BUTTON_ACTIVE : ""}`}
-              onClick={() => {
-                setDirection(id);
-                setBucket("pending");
-                setResidentFilter("");
-              }}
-              data-attr={`payments-direction-${id}`}
-            >
-              {label}
-              <span className="ml-1 tabular-nums text-muted">{directionCounts[id]}</span>
-            </button>
-          );
-        })}
-      </div>
-      <ManagerPortalStatusPills compact tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as ManagerPaymentBucket)} />
-      <PortalPropertyFilterPill
-        propertyOptions={propertyOptions}
-        propertyValue={propertyFilter}
-        onPropertyChange={(nextProperty) => {
-          setPropertyFilter(nextProperty);
+      <PillTabs
+        items={DIRECTION_LABELS}
+        activeId={direction}
+        onChange={(id) => {
+          setDirection(id as ManagerPaymentDirection);
+          setBucket("pending");
           setResidentFilter("");
         }}
-        residents={direction === "incoming"}
-        residentOptions={residentOptions}
-        residentValue={activeResidentFilter}
-        onResidentChange={setResidentFilter}
       />
+      <div className="ml-auto flex min-w-0 flex-wrap items-center gap-3">
+        <PortalPropertyFilterPill
+          propertyOptions={propertyOptions}
+          propertyValue={propertyFilter}
+          onPropertyChange={(nextProperty) => {
+            setPropertyFilter(nextProperty);
+            setResidentFilter("");
+          }}
+          residents={direction === "incoming"}
+          residentOptions={residentOptions}
+          residentValue={activeResidentFilter}
+          onResidentChange={setResidentFilter}
+        />
+      </div>
     </ManagerPortalFilterRow>
   );
 
@@ -439,74 +418,83 @@ export function ManagerPayments() {
     <ManagerPortalPageShell
       title="Payments"
       titleAside={
-        <div className="flex min-w-0 flex-col items-stretch gap-2">
-          <div className="flex items-center justify-end gap-2">
-            <PortalStripeConnectPanel
-              basePath={portalBase}
-              variant="header"
-              onConnectDone={() => setBankLinkBanner(true)}
-            />
-            <Button
-              type="button"
-              variant="primary"
-              className={PORTAL_HEADER_ACTION_BTN}
-              onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
-            >
-              Add
-            </Button>
-          </div>
+        <>
           {direction === "incoming" ? (
             <Button
               type="button"
               variant="outline"
-              className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
               onClick={() => setReminderSettingsOpen(true)}
+              data-attr="payments-reminder-settings"
             >
               Reminders
             </Button>
           ) : null}
-        </div>
+          <PortalStripeConnectPanel
+            basePath={portalBase}
+            variant="header"
+            onConnectDone={() => setBankLinkBanner(true)}
+          />
+          <Button
+            type="button"
+            variant="primary"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+            onClick={() => (direction === "incoming" ? setAddOpen(true) : setAddOutgoingOpen(true))}
+            data-attr="payments-add"
+          >
+            Add
+          </Button>
+        </>
       }
       filterRow={filterRow}
     >
-      {bankLinkBanner ? (
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-success">
-          <p>
-            <span className="font-semibold text-foreground">Bank account linked.</span> Resident payments will deposit to
-            your connected account. You can update bank details anytime with Update.
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="shrink-0 rounded-full px-3 py-1 text-xs"
-            onClick={() => setBankLinkBanner(false)}
-          >
-            Dismiss
-          </Button>
+      <div className="mt-1">
+        <div className="mb-4">
+          <ManagerPortalStatusPills
+            tabs={tabs}
+            activeId={bucket}
+            onChange={(id) => setBucket(id as ManagerPaymentBucket)}
+          />
         </div>
-      ) : null}
-      {direction === "incoming" ? (
-      <ManagerPaymentsLedgerPanel
-        rows={rowsForBucket}
-        managerUserId={userId ?? null}
-        activeBucket={bucket}
-        scheduledMessages={scheduledMessages}
-        onOpenReminderSettings={() => setReminderSettingsOpen(true)}
-        onScheduleChanged={() => void reloadSchedule()}
-        onRowsChanged={() => setHcTick((n) => n + 1)}
-      />
-      ) : (
-      <ManagerOutgoingPaymentsPanel
-        rows={outgoingRowsForBucket}
-        activeBucket={bucket}
-        vendorById={vendorById}
-        onRowsChanged={() => {
-          setOutgoingTick((n) => n + 1);
-          void syncManagerOutgoingExpensesFromServer(true);
-          void syncManagerWorkOrdersFromServer();
-        }}
-      />
-      )}
+        {bankLinkBanner ? (
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-success">
+            <p>
+              <span className="font-semibold text-foreground">Bank account linked.</span> Resident payments will deposit to
+              your connected account. You can update bank details anytime with Update.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full px-3 py-1 text-xs"
+              onClick={() => setBankLinkBanner(false)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        ) : null}
+        {direction === "incoming" ? (
+          <ManagerPaymentsLedgerPanel
+            rows={rowsForBucket}
+            managerUserId={userId ?? null}
+            activeBucket={bucket}
+            scheduledMessages={scheduledMessages}
+            onOpenReminderSettings={() => setReminderSettingsOpen(true)}
+            onScheduleChanged={() => void reloadSchedule()}
+            onRowsChanged={() => setHcTick((n) => n + 1)}
+          />
+        ) : (
+          <ManagerOutgoingPaymentsPanel
+            rows={outgoingRowsForBucket}
+            activeBucket={bucket}
+            vendorById={vendorById}
+            onRowsChanged={() => {
+              setOutgoingTick((n) => n + 1);
+              void syncManagerOutgoingExpensesFromServer(true);
+              void syncManagerWorkOrdersFromServer();
+            }}
+          />
+        )}
+      </div>
       <ReminderSettingsModal
         open={reminderSettingsOpen}
         onClose={() => setReminderSettingsOpen(false)}
