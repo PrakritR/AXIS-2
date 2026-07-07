@@ -41,14 +41,25 @@ function customTermsAddendumHtml(sub: ManagerListingSubmissionV1 | undefined, he
   const paragraphs = terms
     .split(/\n{2,}/)
     .map((p) => p.trim())
-    .filter(Boolean)
-    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br/>")}</p>`)
-    .join("\n");
+    .filter(Boolean);
+  let body: string;
+  if (paragraphs.length > 1) {
+    body = paragraphs.map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br/>")}</p>`).join("\n");
+  } else {
+    const lines = terms
+      .split(/\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    body =
+      lines.length > 1
+        ? `<ol>${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ol>`
+        : `<p>${escapeHtml(terms).replace(/\n/g, "<br/>")}</p>`;
+  }
   return `
 <div class="addendum">
 <h2>${escapeHtml(heading)}</h2>
 <p><em>The following provisions were supplied by the property manager for this property and form part of this Agreement. If a manager-supplied provision conflicts with applicable law, the law controls.</em></p>
-${paragraphs}
+${body}
 </div>
 `;
 }

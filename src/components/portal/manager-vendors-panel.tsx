@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { ManagerPortalPageShell, MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -29,9 +28,8 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableExpandCell,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
@@ -291,16 +289,16 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
               <div key={`vendor-mobile-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between gap-2 text-left transition-opacity active:opacity-70"
+                  className="flex w-full gap-2 text-left"
                   onClick={() => setExpandedId(open ? null : row.id)}
                   aria-expanded={open}
                   data-attr="vendor-card-toggle"
                 >
-                  <p className="min-w-0 flex-1 truncate font-semibold text-foreground">{row.name}</p>
-                  <ChevronDown
-                    className={`h-4 w-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
-                    aria-hidden
-                  />
+                  <div className="min-w-0 flex-1">
+                    <PortalTableInlineExpand expanded={open} className="font-semibold text-foreground">
+                      <span className="truncate">{row.name}</span>
+                    </PortalTableInlineExpand>
+                  </div>
                 </button>
                 {open ? (
                   <div className="mt-3 border-t border-border pt-3">{renderVendorDetail(row)}</div>
@@ -318,9 +316,6 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
                   <th className={MANAGER_TABLE_TH}>Trade</th>
                   <th className={MANAGER_TABLE_TH}>Phone</th>
                   <th className={MANAGER_TABLE_TH}>Email</th>
-                  <th className={PORTAL_TABLE_EXPAND_TH}>
-                    <span className="sr-only">Expand</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -333,15 +328,16 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
                         onClick={createPortalRowExpandClick(() => setExpandedId(open ? null : row.id))}
                         aria-expanded={open}
                       >
-                        <td className={PORTAL_TABLE_TD}>{row.name}</td>
+                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                          <PortalTableInlineExpand expanded={open}>{row.name}</PortalTableInlineExpand>
+                        </td>
                         <td className={PORTAL_TABLE_TD}>{row.trade || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.phone || "—"}</td>
                         <td className={PORTAL_TABLE_TD}>{row.email || "—"}</td>
-                        <PortalTableExpandCell expanded={open} />
                       </tr>
                       {open ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderVendorDetail(row)}
                           </td>
                         </tr>

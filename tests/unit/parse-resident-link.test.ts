@@ -43,7 +43,8 @@ describe("native entry paths", () => {
   it("redirects marketing and public-site paths on native", () => {
     expect(shouldNativeRedirectToWelcome("/")).toBe(true);
     expect(shouldNativeRedirectToWelcome("/partner")).toBe(true);
-    expect(shouldNativeRedirectToWelcome("/privacy")).toBe(true);
+    expect(shouldNativeRedirectToWelcome("/privacy")).toBe(false);
+    expect(shouldNativeRedirectToWelcome("/tos")).toBe(false);
     expect(shouldNativeRedirectToWelcome("/rent/listings/abc")).toBe(false);
     expect(shouldNativeRedirectToWelcome("/rent/browse")).toBe(false);
     expect(shouldNativeRedirectToWelcome("/rent/apply")).toBe(false);

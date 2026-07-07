@@ -99,7 +99,7 @@ export default function CreateAccountClient() {
     setAxisId(axisIdFromUrl);
   }
 
-  if (emailFromUrl && email !== emailFromUrl && role === "resident" && axisIdFromUrl) {
+  if (emailFromUrl && email !== emailFromUrl && role === "resident") {
     setEmail(emailFromUrl);
   }
 

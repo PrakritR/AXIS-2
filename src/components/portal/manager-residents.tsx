@@ -1829,8 +1829,8 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                       <>
                                         <Button
                                           type="button"
-                                          variant="outline"
-                                          className={PORTAL_DETAIL_BTN_PRIMARY}
+                                          variant="primary"
+                                          className={PORTAL_DETAIL_BTN}
                                           onClick={() => setApprovePreviewRow(selectedApplicationRow)}
                                         >
                                           Approve

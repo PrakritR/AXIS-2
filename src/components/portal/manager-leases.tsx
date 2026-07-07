@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ManagerEditLeasesModal } from "@/components/portal/manager-edit-leases-modal";
 import { ManagerLeasesPipelinePanel } from "@/components/portal/manager-leases-pipeline-panel";
 import {
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
   ManagerPortalFilterRow,
+  PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
+import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import type { ManagerLeaseTab } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
@@ -30,6 +35,7 @@ const LEASE_LABELS: { id: ManagerLeaseTab; label: string }[] = [
 ];
 
 export function ManagerLeases() {
+  const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [tab, setTab] = useState<ManagerLeaseTab>("manager");
   const [tick, setTick] = useState(0);
@@ -37,6 +43,7 @@ export function ManagerLeases() {
   const [propertyFilter, setPropertyFilter] = useState("");
   const [residentAccountEmails, setResidentAccountEmails] = useState<Set<string>>(new Set());
   const [clientReady, setClientReady] = useState(false);
+  const [editLeasesOpen, setEditLeasesOpen] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => setClientReady(true));
@@ -145,9 +152,29 @@ export function ManagerLeases() {
     [counts],
   );
 
+  const editablePropertyOptions = useMemo(() => {
+    void propertyTick;
+    return buildManagerPropertyFilterOptions(userId);
+  }, [userId, propertyTick]);
+
   return (
+    <>
     <ManagerPortalPageShell
       title="Leases"
+      titleAside={
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          data-attr="leases-edit-properties"
+          disabled={editablePropertyOptions.length === 0}
+          title={editablePropertyOptions.length === 0 ? "Add a property before editing lease settings" : undefined}
+          onClick={() => setEditLeasesOpen(true)}
+        >
+          Edit
+          <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
+        </Button>
+      }
       filterRow={
         <ManagerPortalFilterRow>
           <ManagerPortalStatusPills
@@ -175,5 +202,14 @@ export function ManagerLeases() {
         }}
       />
     </ManagerPortalPageShell>
+    <ManagerEditLeasesModal
+      open={editLeasesOpen}
+      onClose={() => setEditLeasesOpen(false)}
+      propertyOptions={editablePropertyOptions}
+      managerUserId={userId}
+      onSaved={() => setPropertyTick((n) => n + 1)}
+      showToast={showToast}
+    />
+    </>
   );
 }

@@ -4,7 +4,7 @@
 
 import {
   resolveManagerRecipientProfiles,
-  resolvePropertyScopedManagerRecipientIds,
+  resolvePropertyLeadRecipientIds,
 } from "@/lib/co-manager-notification-recipients.server";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
@@ -65,10 +65,9 @@ export async function notifyManagerPropertyLeadMessage(input: {
   body: string;
 }): Promise<void> {
   const db = (await import("@/lib/supabase/service")).createSupabaseServiceRoleClient();
-  const recipientIds = await resolvePropertyScopedManagerRecipientIds(db, {
+  const recipientIds = await resolvePropertyLeadRecipientIds(db, {
     ownerManagerUserId: input.managerUserId,
     propertyId: input.propertyId,
-    channel: "inbox",
   });
   const recipients = await resolveManagerRecipientProfiles(db, recipientIds);
   if (recipients.length === 0) return;

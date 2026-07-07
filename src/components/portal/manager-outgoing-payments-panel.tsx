@@ -23,6 +23,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { deleteManagerOutgoingExpense } from "@/lib/manager-outgoing-payments";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { readManagerWorkOrderRows } from "@/lib/manager-work-orders-storage";
 
@@ -56,16 +57,31 @@ export function ManagerOutgoingPaymentsPanel({
   }, [rows]);
 
   const deleteExpense = async (row: DemoManagerOutgoingPaymentRow) => {
-    if (!row.expenseEntryId || row.fromAxisFee) return;
-    if (row.workOrderId) {
+    if (!row.expenseEntryId) {
+      showToast("This payment cannot be deleted.");
+      return;
+    }
+    if (row.fromAxisFee) return;
+    if (
+      row.workOrderId &&
+      !row.fromExpense
+    ) {
       showToast("Work-order expenses are managed from Services.");
       return;
     }
+    if (!window.confirm(`Delete "${row.chargeTitle}"?`)) return;
+
     if (isDemoModeActive()) {
-      showToast("Expense removed (demo).");
+      if (!deleteManagerOutgoingExpense(row.expenseEntryId)) {
+        showToast("Could not delete expense.");
+        return;
+      }
+      setExpandedId(null);
+      showToast("Expense removed.");
       onRowsChanged?.();
       return;
     }
+
     setDeletingId(row.id);
     try {
       const res = await fetch(`/api/expenses?id=${encodeURIComponent(row.expenseEntryId)}`, {
@@ -74,6 +90,8 @@ export function ManagerOutgoingPaymentsPanel({
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Could not delete expense.");
+      deleteManagerOutgoingExpense(row.expenseEntryId);
+      setExpandedId(null);
       showToast("Expense removed.");
       onRowsChanged?.();
     } catch (e) {
@@ -83,16 +101,22 @@ export function ManagerOutgoingPaymentsPanel({
     }
   };
 
+  const canDeleteExpense = (row: DemoManagerOutgoingPaymentRow) =>
+    Boolean(row.fromExpense && row.expenseEntryId && !row.fromAxisFee);
+
   const renderExpenseActions = (row: DemoManagerOutgoingPaymentRow) => (
     <PortalTableDetailActions>
-      {row.fromExpense && !row.fromAxisFee && !row.workOrderId ? (
+      {canDeleteExpense(row) ? (
         <Button
           type="button"
           variant="outline"
           className={`${PORTAL_DETAIL_BTN} text-danger`}
           disabled={deletingId === row.id}
           data-attr="outgoing-payment-delete"
-          onClick={() => void deleteExpense(row)}
+          onClick={(event) => {
+            event.stopPropagation();
+            void deleteExpense(row);
+          }}
         >
           {deletingId === row.id ? "Deleting…" : "Delete"}
         </Button>
@@ -113,6 +137,8 @@ export function ManagerOutgoingPaymentsPanel({
             setExpandedId(null);
             onRowsChanged?.();
           }}
+          onDelete={canDeleteExpense(row) ? () => void deleteExpense(row) : undefined}
+          deleteBusy={deletingId === row.id}
         />
       );
     }

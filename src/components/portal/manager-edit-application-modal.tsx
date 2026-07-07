@@ -2,13 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { ManagerApplicationQuestionsEditorModal } from "@/components/portal/manager-application-questions-editor-modal";
 import type { ManagerPropertyFilterOption } from "@/lib/manager-portfolio-access";
 import { resolveManagerListingSubmissionForPropertyId } from "@/lib/manager-property-save-target";
 
-/** Pick a property, then open the shared application-question editor for that listing. */
+/** Pick one or more properties, then edit application questions in bulk. */
 export function ManagerEditApplicationModal({
   open,
   onClose,
@@ -24,77 +23,139 @@ export function ManagerEditApplicationModal({
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
-  const [propertyId, setPropertyId] = useState("");
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [editingPropertyIds, setEditingPropertyIds] = useState<string[]>([]);
+
+  const allSelected = propertyOptions.length > 0 && selectedIds.size === propertyOptions.length;
 
   useEffect(() => {
     if (!open) {
-      setPropertyId("");
-      setEditorOpen(false);
+      setSelectedIds(new Set());
+      setEditingPropertyIds([]);
     }
   }, [open]);
 
   const resolved = useMemo(() => {
-    if (!editorOpen || !managerUserId || !propertyId.trim()) return null;
-    return resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
-  }, [editorOpen, managerUserId, propertyId]);
+    const firstId = editingPropertyIds[0]?.trim();
+    if (!firstId || !managerUserId) return null;
+    return resolveManagerListingSubmissionForPropertyId(managerUserId, firstId);
+  }, [editingPropertyIds, managerUserId]);
 
-  const propertyLabel = propertyOptions.find((o) => o.id === propertyId)?.label ?? "Property";
+  const editorTitle = useMemo(() => {
+    if (editingPropertyIds.length === 1) {
+      const label = propertyOptions.find((o) => o.id === editingPropertyIds[0])?.label ?? "Property";
+      return `Edit application · ${label}`;
+    }
+    if (editingPropertyIds.length > 1) {
+      return `Edit application · ${editingPropertyIds.length} properties`;
+    }
+    return "Edit application";
+  }, [editingPropertyIds, propertyOptions]);
 
   const closeAll = () => {
-    setEditorOpen(false);
-    setPropertyId("");
+    setSelectedIds(new Set());
+    setEditingPropertyIds([]);
     onClose();
   };
 
-  const openEditor = () => {
-    if (!propertyId.trim()) {
-      showToast("Select a property first.");
+  const toggleAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(propertyOptions.map((o) => o.id)) : new Set());
+  };
+
+  const toggleOne = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const continueFromSelect = () => {
+    if (selectedIds.size === 0) {
+      showToast("Select at least one property.");
       return;
     }
     if (!managerUserId) {
       showToast("Sign in to edit applications.");
       return;
     }
-    const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
-    if (!hit) {
-      showToast("Could not load that property's application.");
+    const ids = [...selectedIds];
+    const firstHit = resolveManagerListingSubmissionForPropertyId(managerUserId, ids[0]!);
+    if (!firstHit) {
+      showToast("Could not load application settings for the selected properties.");
       return;
     }
-    setEditorOpen(true);
+    setEditingPropertyIds(ids);
+  };
+
+  const onEditorClose = () => {
+    setEditingPropertyIds([]);
+  };
+
+  const onEditorSaved = () => {
+    onSaved();
+    setEditingPropertyIds([]);
+    closeAll();
   };
 
   return (
     <>
-      <Modal open={open && !editorOpen} title="Edit application" onClose={closeAll} panelClassName="max-w-md">
+      <Modal
+        open={open && editingPropertyIds.length === 0}
+        title="Edit application settings"
+        onClose={closeAll}
+        panelClassName="max-w-md"
+      >
         <p className="text-sm text-muted">
-          Choose which property&apos;s rental application you want to edit. Applicants for that listing will see your
-          custom questions.
+          Choose which properties&apos; rental applications you want to edit. When you select multiple, the same
+          questions apply to all — built-in fields, custom questions, and required/optional settings.
         </p>
-        <div className="mt-4">
-          <p className="text-sm font-medium text-foreground">Property</p>
-          <Select
-            value={propertyId}
-            onChange={(e) => setPropertyId(e.target.value)}
-            className="mt-1"
-            disabled={propertyOptions.length === 0}
-          >
-            <option value="">{propertyOptions.length === 0 ? "No properties in portfolio" : "Select property"}</option>
-            {propertyOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
+
+        <div className="mt-4 space-y-3">
+          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-accent/20 px-3 py-2.5">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border text-primary"
+              data-attr="applications-edit-all-properties"
+              checked={allSelected}
+              disabled={propertyOptions.length === 0}
+              onChange={(e) => toggleAll(e.target.checked)}
+            />
+            <span className="text-sm font-semibold text-foreground">All properties</span>
+          </label>
+
+          <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
+            {propertyOptions.length === 0 ? (
+              <p className="px-2 py-3 text-sm text-muted">No properties in portfolio yet.</p>
+            ) : (
+              propertyOptions.map((o) => (
+                <label
+                  key={o.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-accent/30"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0 rounded border-border text-primary"
+                    data-attr={`applications-edit-property-${o.id}`}
+                    checked={selectedIds.has(o.id)}
+                    onChange={(e) => toggleOne(o.id, e.target.checked)}
+                  />
+                  <span className="min-w-0 text-sm text-foreground">{o.label}</span>
+                </label>
+              ))
+            )}
+          </div>
         </div>
+
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             type="button"
             variant="primary"
             className="rounded-full"
-            data-attr="edit-application-continue"
-            disabled={!propertyId.trim() || propertyOptions.length === 0}
-            onClick={openEditor}
+            data-attr="applications-edit-continue"
+            disabled={selectedIds.size === 0 || propertyOptions.length === 0}
+            onClick={continueFromSelect}
           >
             Continue
           </Button>
@@ -106,16 +167,14 @@ export function ManagerEditApplicationModal({
 
       {resolved && managerUserId ? (
         <ManagerApplicationQuestionsEditorModal
-          open={editorOpen}
-          title={`Application — ${propertyLabel}`}
+          open={editingPropertyIds.length > 0}
+          title={editorTitle}
           sub={resolved.sub}
           saveTarget={resolved.saveTarget}
+          propertyIds={editingPropertyIds.length > 1 ? editingPropertyIds : undefined}
           managerUserId={managerUserId}
-          onClose={() => setEditorOpen(false)}
-          onSaved={() => {
-            onSaved();
-            closeAll();
-          }}
+          onClose={onEditorClose}
+          onSaved={onEditorSaved}
           showToast={showToast}
         />
       ) : null}

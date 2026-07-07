@@ -19,10 +19,10 @@ export function DemoPortalExperience() {
         </h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted sm:text-base">
           Explore a fully-loaded manager, resident, and vendor portal with realistic data — no login required.
-          Switch roles, click through every tab, or hit <span className="font-semibold text-foreground">Run demo</span>{" "}
-          for a one-minute guided tour. Ask the in-portal <span className="font-semibold text-foreground">Axis Assistant</span> (✦,
-          bottom-right of the demo) about this portfolio, or the <span className="font-semibold text-foreground">Ask Axis AI</span>{" "}
-          button for general questions.
+          Switch roles and click through every tab, or hit <span className="font-semibold text-foreground">Run demo</span>{" "}
+          for a guided walkthrough that builds the portfolio step by step. Ask the in-portal{" "}
+          <span className="font-semibold text-foreground">Axis Assistant</span> (✦, bottom-right of the demo) about this
+          portfolio, or the <span className="font-semibold text-foreground">Ask Axis AI</span> button for general questions.
         </p>
       </section>
       {/* The in-demo, portal-scoped assistant is mounted INSIDE the frame by

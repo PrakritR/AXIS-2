@@ -4,8 +4,8 @@ import {
   listingLinkTargetProps,
   useListingPreviewNewTab,
 } from "@/components/marketing/listing-preview-context";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { buildTourContactHref } from "@/lib/manager-property-links";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import Link from "next/link";
 
 const ctaBase =
@@ -13,8 +13,8 @@ const ctaBase =
 
 export function PropertyDetailActions({ propertyId }: { propertyId: string }) {
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
-  const tourHref = buildTourContactHref(propertyId);
   const applyHref = buildRentalApplyHref({ propertyId });
+  const tourHref = buildTourContactHref(propertyId, { next: applyHref });
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">

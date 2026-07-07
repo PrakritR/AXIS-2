@@ -7,6 +7,8 @@
  */
 import type { MockProperty } from "@/data/types";
 import type { DemoApplicantRow, DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { backgroundCheckStatusFromCheckr } from "@/lib/application-background-check";
+import { buildDemoBackgroundCheck } from "@/lib/checkr/demo-simulate";
 import type { HouseholdCharge, RecurringRentProfile } from "@/lib/household-charges";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
@@ -29,6 +31,17 @@ import {
   DEMO_VENDOR_NAME,
   DEMO_VENDOR_USER_ID,
 } from "@/lib/demo/demo-session";
+
+export {
+  DEMO_MANAGER_EMAIL,
+  DEMO_MANAGER_NAME,
+  DEMO_MANAGER_USER_ID,
+  DEMO_RESIDENT_EMAIL,
+  DEMO_RESIDENT_NAME,
+  DEMO_RESIDENT_USER_ID,
+  DEMO_VENDOR_NAME,
+  DEMO_VENDOR_USER_ID,
+};
 import type { WorkOrderBid } from "@/lib/work-order-bids";
 import type { VendorPayout } from "@/lib/vendor-payouts";
 
@@ -244,6 +257,23 @@ function demoApplicationData(input: Partial<RentalWizardFormState>): RentalWizar
   return input as RentalWizardFormState;
 }
 
+/** Pre-seed Checkr-style screening reports for demo showcase rows (pending applicants stay empty for Test flow). */
+function attachDemoBackgroundCheck(row: DemoApplicantRow): DemoApplicantRow {
+  if (row.backgroundCheck) return row;
+  const showcase =
+    row.backgroundCheckStatus === "passed" ||
+    row.backgroundCheckStatus === "flagged" ||
+    row.id === "demo-app-3";
+  if (!showcase) return row;
+  if (!row.application && row.backgroundCheckStatus !== "passed") return row;
+  const backgroundCheck = buildDemoBackgroundCheck(row);
+  return {
+    ...row,
+    backgroundCheck,
+    backgroundCheckStatus: backgroundCheckStatusFromCheckr(backgroundCheck),
+  };
+}
+
 export function demoApplications(): DemoApplicantRow[] {
   const mk = (
     id: string,
@@ -399,7 +429,7 @@ export function demoApplications(): DemoApplicantRow[] {
           leaseEnd: dateLabel(-20),
         }),
       }),
-  ];
+  ].map(attachDemoBackgroundCheck);
 }
 
 export function demoCharges(): HouseholdCharge[] {
@@ -571,22 +601,72 @@ export function demoRentProfiles(): RecurringRentProfile[] {
 /**
  * Self-contained lease-agreement HTML for the demo (the panels render it in a
  * sandboxed iframe and append the signature certificate before `</body>`).
- * Kept static — the real generator needs jurisdiction data the demo doesn't have.
+ * Values should match the demo listing submission seed for each property.
  */
 export function demoLeaseAgreementHtml(input: {
   residentName: string;
   propertyTitle: string;
   unitLabel: string;
+  /** Street line only, or a full address — city/state is not duplicated when already present. */
   address: string;
+  cityStateZip?: string;
   rentLabel: string;
   startLabel: string;
   endLabel: string;
+  leaseTermLabel?: string;
+  securityDeposit?: string;
+  moveInFee?: string;
+  utilitiesLabel?: string;
+  houseRules?: string;
+  houseOverview?: string;
+  amenitiesText?: string;
+  parkingLabel?: string;
+  petPolicyLabel?: string;
+  customProvisions?: string;
 }): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const rawAddress = input.address.trim();
+  const hasCityState = /\b(seattle|washington|,\s*wa\b)/i.test(rawAddress);
+  const cityStateZip = input.cityStateZip?.trim() || "Seattle, WA 98101";
+  const streetLine = hasCityState
+    ? rawAddress.replace(/,?\s*seattle,?\s*wa\.?\s*\d{0,5}/i, "").replace(/\s*,\s*$/, "").trim() || rawAddress
+    : rawAddress;
+  const premisesLine = hasCityState && /\d{5}/.test(rawAddress) ? rawAddress : `${streetLine}, ${cityStateZip}`;
+  const securityDeposit = input.securityDeposit?.trim() || "$500.00, held per RCW 59.18.260";
+  const moveInFee = input.moveInFee?.trim() || "$150.00 (non-refundable)";
+  const utilitiesLabel = input.utilitiesLabel?.trim() || "$85.00 / month estimated (electricity, gas, water, sewer, trash, internet)";
+  const leaseTerm = input.leaseTermLabel?.trim() || "12-Month";
+  const parkingLabel = input.parkingLabel?.trim();
+  const petPolicy =
+    input.petPolicyLabel?.trim() ||
+    "Pets may be permitted subject to prior written approval, applicable deposit, and house rules.";
+  const houseOverview =
+    input.houseOverview?.trim() ||
+    "Shared co-living housing as described on the listing, including access to common kitchen, bath, and living areas.";
+  const amenities = input.amenitiesText?.trim() || "In-unit laundry, secure entry, bike storage";
+  const houseRulesHtml = input.houseRules?.trim()
+    ? `<p>${esc(input.houseRules.trim())}</p>`
+    : `<ul>
+    <li>Quiet hours 10:00 PM – 8:00 AM.</li>
+    <li>No smoking anywhere on the Premises.</li>
+    <li>Guests staying longer than 7 consecutive nights require Landlord approval.</li>
+  </ul>`;
+  const customLines = (input.customProvisions ?? "")
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const customProvisionsHtml = customLines.length
+    ? `<h2>9. Additional Provisions from Property Manager</h2>
+  <ol>${customLines.map((l) => `<li>${esc(l)}</li>`).join("")}</ol>`
+    : "";
+  const seattleCompliance =
+    "This Agreement shall be interpreted consistently with the Washington Residential Landlord-Tenant Act (RCW Chapter 59.18). If the Premises are located within the City of Seattle, applicable Seattle rental regulations shall apply to the minimum extent required by law.";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Residential Lease Agreement — ${input.propertyTitle} ${input.unitLabel}</title>
+<title>Residential Lease Agreement — ${esc(input.propertyTitle)} ${esc(input.unitLabel)}</title>
 <style>
   body { font-family: Georgia, "Times New Roman", serif; color: #1f2430; margin: 48px auto; max-width: 720px; line-height: 1.55; padding: 0 24px; }
   h1 { font-size: 22px; letter-spacing: 0.02em; text-align: center; margin-bottom: 4px; }
@@ -596,46 +676,60 @@ export function demoLeaseAgreementHtml(input: {
   table.facts td { padding: 6px 8px; border: 1px solid #e2e5ec; }
   table.facts td:first-child { width: 38%; color: #5a6172; }
   p, li { font-size: 14px; }
+  ol { margin: 0.5rem 0 0.5rem 1.25rem; }
 </style>
 </head>
 <body>
   <h1>Residential Lease Agreement</h1>
-  <p class="subtitle">${input.propertyTitle} · ${input.unitLabel} · ${input.address}, Seattle, WA 98101</p>
+  <p class="subtitle">${esc(input.propertyTitle)} · ${esc(input.unitLabel)} · ${esc(premisesLine)}</p>
 
   <h2>1. Parties &amp; Premises</h2>
-  <p>This Residential Lease Agreement ("Agreement") is entered into between <strong>Axis Housing Management</strong>
-  ("Landlord") and <strong>${input.residentName}</strong> ("Resident") for the residential premises located at
-  ${input.address}, ${input.unitLabel}, Seattle, WA 98101 (the "Premises").</p>
+  <p>This Residential Room Rental Agreement ("Agreement") is entered into between <strong>${esc(input.propertyTitle)}</strong>
+  ("Landlord") and <strong>${esc(input.residentName)}</strong> ("Resident") for the private room and appurtenant shared-area rights at
+  <strong>${esc(premisesLine)}</strong> (the "Premises"). ${esc(houseOverview)}</p>
+  <p>${esc(seattleCompliance)}</p>
 
   <h2>2. Term &amp; Rent</h2>
   <table class="facts">
-    <tr><td>Lease start</td><td>${input.startLabel}</td></tr>
-    <tr><td>Lease end</td><td>${input.endLabel}</td></tr>
-    <tr><td>Monthly rent</td><td>${input.rentLabel}, due on the 1st of each month</td></tr>
-    <tr><td>Security deposit</td><td>$500.00, held per RCW 59.18.260</td></tr>
-    <tr><td>Late fee</td><td>$50.00 after a 5-day grace period</td></tr>
+    <tr><td>Lease term</td><td>${esc(leaseTerm)}</td></tr>
+    <tr><td>Lease start</td><td>${esc(input.startLabel)}</td></tr>
+    <tr><td>Lease end</td><td>${esc(input.endLabel)}</td></tr>
+    <tr><td>Monthly rent</td><td><strong>${esc(input.rentLabel)}</strong>, due on the 1st of each month</td></tr>
+    <tr><td>Late fee</td><td>$50.00 after a 5-day grace period (per RCW 59.18.283)</td></tr>
   </table>
 
-  <h2>3. Utilities &amp; Services</h2>
-  <p>Resident is responsible for electricity, internet, and any elective add-on services. Water, sewer, and garbage
-  are billed monthly by Landlord alongside rent.</p>
+  <h2>3. Security Deposit &amp; Move-In Charges</h2>
+  <table class="facts">
+    <tr><td>Security deposit</td><td><strong>${esc(securityDeposit)}</strong></td></tr>
+    <tr><td>Move-in fee</td><td>${esc(moveInFee)}</td></tr>
+  </table>
+  <p>The deposit is held in accordance with RCW 59.18.260–.280 and secures Resident's performance under this Agreement.</p>
 
-  <h2>4. Maintenance &amp; Repairs</h2>
+  <h2>4. Utilities &amp; Services</h2>
+  <p>Estimated monthly utilities / services: <strong>${esc(utilitiesLabel)}</strong>. This covers a prorated share of household utilities including electricity, gas, water, sewer, trash, and internet as applicable.</p>
+  ${parkingLabel ? `<p>Parking: <strong>${esc(parkingLabel)}</strong> when selected on the listing.</p>` : ""}
+  <p><strong>Building amenities:</strong> ${esc(amenities)}</p>
+
+  <h2>5. House Rules &amp; Conduct</h2>
+  ${houseRulesHtml}
+
+  <h2>6. Maintenance &amp; Repairs</h2>
   <p>Resident shall keep the Premises clean and promptly report needed repairs through the resident portal.
-  Landlord will maintain the Premises in compliance with the Washington Residential Landlord-Tenant Act
-  (RCW 59.18) and respond to repair requests within a commercially reasonable time.</p>
+  Landlord will maintain the Premises in compliance with RCW 59.18.060 and respond to emergency repair requests within 24 hours.</p>
 
-  <h2>5. House Rules</h2>
-  <ul>
-    <li>Quiet hours 10:00 PM – 8:00 AM.</li>
-    <li>No smoking anywhere on the Premises.</li>
-    <li>Pets permitted with prior registration and applicable deposit.</li>
-    <li>Guests staying longer than 7 consecutive nights require Landlord approval.</li>
-  </ul>
+  <h2>7. Entry &amp; Notice</h2>
+  <p>Landlord may enter after at least <strong>24 hours' advance written notice</strong> (email to Resident's address of record shall suffice) for inspections, repairs, or showings, per RCW 59.18.150. Emergency entry without notice is permitted for imminent hazards.</p>
 
-  <h2>6. Entire Agreement</h2>
-  <p>This Agreement, together with addenda executed through the Axis portal, constitutes the entire agreement
-  between the parties. This is a fictional document generated for the Axis interactive demo.</p>
+  <h2>8. Default &amp; Termination</h2>
+  <p>Upon material breach (including nonpayment, unauthorized occupants, or violation of house rules), Landlord may provide written notice to cure or vacate per RCW 59.12.030 (3-day pay-or-vacate for nonpayment; 10-day cure for other violations). Early termination requires 30 days' written notice and may incur fees as stated in the full Axis lease at signing.</p>
+
+  ${customProvisionsHtml}
+
+  <h2>${customProvisionsHtml ? "10" : "9"}. Electronic Signature</h2>
+  <p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement
+  <strong>one time</strong> through the Axis portal. The <strong>Electronic Signature Certificate</strong> appended
+  to the signed copy is the binding record for both parties.</p>
+  <p><strong>Pets:</strong> ${esc(petPolicy)}</p>
 </body>
 </html>`;
 }
@@ -667,6 +761,8 @@ export function demoLeases(): LeasePipelineRow[] {
     ...extra,
   });
   const leaseHtml = (residentName: string, propertyId: string, rentLabel: string, startDays: number, endDays: number) => {
+    const prop = demoProperties().find((p) => p.id === propertyId);
+    const sub = prop?.listingSubmission?.v === 1 ? prop.listingSubmission : null;
     const meta: Record<string, { title: string; unit: string; address: string }> = {
       [PROP.pioneer]: { title: "The Pioneer", unit: "Unit 12A", address: "12 Pike St" },
       [PROP.cascade]: { title: "Cascade Lofts", unit: "Unit 4B", address: "88 Bell St" },
@@ -674,14 +770,33 @@ export function demoLeases(): LeasePipelineRow[] {
       [PROP.lakeview]: { title: "Lakeview Flats", unit: "Unit S2", address: "210 Fairview Ave N" },
     };
     const m = meta[propertyId] ?? meta[PROP.pioneer]!;
+    const utilitiesRaw = sub?.rooms[0]?.utilitiesEstimate?.trim();
     return demoLeaseAgreementHtml({
       residentName,
-      propertyTitle: m.title,
+      propertyTitle: sub?.buildingName ?? m.title,
       unitLabel: m.unit,
-      address: m.address,
+      address: sub?.address ?? `${m.address}, Seattle, WA`,
+      cityStateZip: sub?.zip ? `Seattle, WA ${sub.zip}` : "Seattle, WA 98101",
       rentLabel,
       startLabel: dateLabel(startDays),
       endLabel: dateLabel(endDays),
+      leaseTermLabel: "12-Month",
+      securityDeposit: sub?.securityDeposit,
+      moveInFee: sub?.moveInFee,
+      utilitiesLabel: utilitiesRaw
+        ? utilitiesRaw.includes("/")
+          ? utilitiesRaw
+          : `${utilitiesRaw.startsWith("$") ? utilitiesRaw : `$${utilitiesRaw}`} / month estimated`
+        : undefined,
+      houseRules: sub?.houseRulesText,
+      houseOverview: sub?.houseOverview,
+      amenitiesText: sub?.amenitiesText,
+      parkingLabel: sub?.parkingMonthly?.trim()
+        ? `${sub.parkingMonthly}/month reserved parking available on the listing`
+        : undefined,
+      petPolicyLabel: sub?.petFriendly
+        ? "Pets may be permitted subject to prior written approval, pet registration, and applicable deposit."
+        : undefined,
     });
   };
   const signatures = (

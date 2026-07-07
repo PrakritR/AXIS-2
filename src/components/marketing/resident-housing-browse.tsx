@@ -223,15 +223,15 @@ function BrowseManualFilters({
   const budgetLabel = budgetActive ? `$${budget.toLocaleString()}` : "Any";
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+    <div className="min-w-0 space-y-4">
+      <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-5">
         <ResidentHousingFieldBlock label="Move-in date">
           <input
             type="date"
             value={moveIn}
             onChange={(e) => setMoveIn(e.target.value)}
             data-attr="resident-browse-move-in"
-            className={`${RESIDENT_HOUSING_INPUT_CLS} min-w-0`}
+            className={`${RESIDENT_HOUSING_INPUT_CLS} hero-search-date-input min-w-0 max-w-full`}
           />
         </ResidentHousingFieldBlock>
         <ResidentHousingFieldBlock label="Move-out date">
@@ -240,7 +240,7 @@ function BrowseManualFilters({
             value={moveOut}
             onChange={(e) => setMoveOut(e.target.value)}
             data-attr="resident-browse-move-out"
-            className={`${RESIDENT_HOUSING_INPUT_CLS} min-w-0`}
+            className={`${RESIDENT_HOUSING_INPUT_CLS} hero-search-date-input min-w-0 max-w-full`}
           />
         </ResidentHousingFieldBlock>
         <ResidentHousingFieldBlock label="Room type">
@@ -421,7 +421,7 @@ export function ResidentHousingBrowse() {
 
   return (
     <div className="w-full">
-      <div className="mb-6 rounded-2xl border border-border/50 bg-background px-3 py-3 sm:px-4 sm:mb-8">
+      <div className="mb-6 min-w-0 rounded-2xl border border-border/50 bg-background px-3 py-3 sm:px-4 sm:mb-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">

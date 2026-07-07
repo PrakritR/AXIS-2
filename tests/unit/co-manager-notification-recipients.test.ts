@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  resolvePropertyLeadRecipientIds,
   resolvePropertyScopedManagerRecipientIds,
 } from "@/lib/co-manager-notification-recipients.server";
 
@@ -50,5 +51,40 @@ describe("resolvePropertyScopedManagerRecipientIds", () => {
         channel: "inbox",
       }),
     ).resolves.toEqual(["owner-1", "co-1"]);
+  });
+
+  it("unions inbox and calendar co-managers for property leads", async () => {
+    const linkRows = [
+      {
+        invitee_user_id: "co-inbox",
+        assigned_property_ids: ["prop-a"],
+        property_co_manager_permissions: { "prop-a": { inbox: true } },
+      },
+      {
+        invitee_user_id: "co-calendar",
+        assigned_property_ids: ["prop-a"],
+        property_co_manager_permissions: { "prop-a": { calendar: true } },
+      },
+      {
+        invitee_user_id: "co-both",
+        assigned_property_ids: ["prop-a"],
+        property_co_manager_permissions: { "prop-a": { inbox: true, calendar: true } },
+      },
+    ];
+    const db = {
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn(async () => ({ data: linkRows, error: null })),
+          })),
+        })),
+      })),
+    } as unknown as Parameters<typeof resolvePropertyLeadRecipientIds>[0];
+
+    const result = await resolvePropertyLeadRecipientIds(db, {
+      ownerManagerUserId: "owner-1",
+      propertyId: "prop-a",
+    });
+    expect(result.sort()).toEqual(["co-both", "co-calendar", "co-inbox", "owner-1"]);
   });
 });

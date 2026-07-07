@@ -5,7 +5,7 @@
 import { resolveAppOrigin } from "@/lib/app-url";
 import {
   resolveManagerRecipientProfiles,
-  resolvePropertyScopedManagerRecipientIds,
+  resolvePropertyLeadRecipientIds,
 } from "@/lib/co-manager-notification-recipients.server";
 import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
@@ -166,10 +166,9 @@ export async function notifyManagerTourRequest(
   const subject = TOUR_REQUEST_MANAGER_SUBJECT;
   const text = buildTourRequestManagerBody(ctx);
 
-  const recipientIds = await resolvePropertyScopedManagerRecipientIds(db, {
+  const recipientIds = await resolvePropertyLeadRecipientIds(db, {
     ownerManagerUserId: managerUserId,
     propertyId,
-    channel: "calendar",
   });
   const recipients = await resolveManagerRecipientProfiles(db, recipientIds);
   if (recipients.length === 0) return { ok: false, error: "Manager email not found." };

@@ -442,7 +442,7 @@ export function ManagerPayments() {
         <div className="flex min-w-0 flex-col items-stretch gap-2">
           <div className="flex items-center justify-end gap-2">
             <PortalStripeConnectPanel
-              basePath="/portal"
+              basePath={portalBase}
               variant="header"
               onConnectDone={() => setBankLinkBanner(true)}
             />

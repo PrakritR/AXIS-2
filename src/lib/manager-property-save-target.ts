@@ -39,6 +39,24 @@ function submissionForPendingEdit(row: ManagerPendingPropertyRow): ManagerListin
   return normalizeManagerListingSubmissionV1(raw);
 }
 
+export type LeaseConfigFields = Pick<
+  ManagerListingSubmissionV1,
+  "leaseConfigMode" | "leaseCustomKind" | "customLeaseTerms" | "leaseTemplateDocUrl" | "leaseTemplateDocName"
+>;
+
+export type ApplicationConfigFields = Pick<
+  ManagerListingSubmissionV1,
+  "disabledStandardApplicationKeys" | "customApplicationFields" | "applicationConfigMode"
+>;
+
+export function applicationConfigFieldsFromSubmission(sub: ManagerListingSubmissionV1): ApplicationConfigFields {
+  return {
+    disabledStandardApplicationKeys: sub.disabledStandardApplicationKeys ?? [],
+    customApplicationFields: sub.customApplicationFields ?? [],
+    applicationConfigMode: sub.applicationConfigMode ?? "standard",
+  };
+}
+
 export function persistManagerListingSubmission(
   saveTarget: ManagerPropertySaveTarget,
   managerUserId: string,
@@ -51,6 +69,60 @@ export function persistManagerListingSubmission(
     return updateExtraListingFromSubmission(saveTarget.saveId, managerUserId, next);
   }
   return updateRequestChangeProperty(saveTarget.saveId, managerUserId, next);
+}
+
+/** Apply the same lease configuration fields to each property id (demo + live). */
+export function persistLeaseConfigToPropertyIds(
+  managerUserId: string,
+  propertyIds: string[],
+  leaseFields: LeaseConfigFields,
+): { saved: number; failed: number } {
+  let saved = 0;
+  let failed = 0;
+  for (const propertyId of propertyIds) {
+    const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
+    if (!hit) {
+      failed += 1;
+      continue;
+    }
+    const next: ManagerListingSubmissionV1 = {
+      ...hit.sub,
+      ...leaseFields,
+    };
+    if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) {
+      saved += 1;
+    } else {
+      failed += 1;
+    }
+  }
+  return { saved, failed };
+}
+
+/** Apply the same application question config to each property id (demo + live). */
+export function persistApplicationConfigToPropertyIds(
+  managerUserId: string,
+  propertyIds: string[],
+  configFields: ApplicationConfigFields,
+): { saved: number; failed: number } {
+  let saved = 0;
+  let failed = 0;
+  for (const propertyId of propertyIds) {
+    const hit = resolveManagerListingSubmissionForPropertyId(managerUserId, propertyId);
+    if (!hit) {
+      failed += 1;
+      continue;
+    }
+    const next: ManagerListingSubmissionV1 = {
+      ...hit.sub,
+      ...configFields,
+    };
+    if (persistManagerListingSubmission(hit.saveTarget, managerUserId, next)) {
+      saved += 1;
+    } else {
+      failed += 1;
+    }
+  }
+  return { saved, failed };
 }
 
 export function resolveManagerListingSubmissionForPropertyId(

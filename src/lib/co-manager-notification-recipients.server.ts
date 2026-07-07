@@ -66,6 +66,21 @@ export async function resolvePropertyScopedManagerRecipientIds(
   return [...recipientIds];
 }
 
+/** Owner + co-managers with inbox or calendar access — used for property leads and tours. */
+export async function resolvePropertyLeadRecipientIds(
+  db: ServiceClient,
+  input: {
+    ownerManagerUserId: string;
+    propertyId?: string | null;
+  },
+): Promise<string[]> {
+  const [inboxIds, calendarIds] = await Promise.all([
+    resolvePropertyScopedManagerRecipientIds(db, { ...input, channel: "inbox" }),
+    resolvePropertyScopedManagerRecipientIds(db, { ...input, channel: "calendar" }),
+  ]);
+  return [...new Set([...inboxIds, ...calendarIds])];
+}
+
 /** Resolve manager profile emails for inbox/email delivery fan-out. */
 export async function resolveManagerRecipientProfiles(
   db: ServiceClient,

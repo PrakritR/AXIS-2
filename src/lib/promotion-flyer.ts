@@ -374,6 +374,25 @@ export function composeFallbackFlyerCopy(inputs: PromotionInputs, propertyLabel:
   };
 }
 
+/** Map AI flyer copy back into editable draft fields. */
+export function applyFlyerCopyToDraftFields<T extends {
+  headline: string;
+  sellingPoints: string;
+  promo: string;
+  cta: string;
+  contact: string;
+}>(draft: T, copy: FlyerCopy): T {
+  const contactFromClosing = copy.closingLine.replace(/^Contact us:\s*/i, "").trim();
+  return {
+    ...draft,
+    headline: copy.headline.trim() || draft.headline,
+    sellingPoints: copy.sellingPoints.length ? copy.sellingPoints.join("\n") : draft.sellingPoints,
+    promo: copy.promoLine.trim() || draft.promo,
+    cta: copy.ctaText.trim() || draft.cta,
+    contact: contactFromClosing || draft.contact,
+  };
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")

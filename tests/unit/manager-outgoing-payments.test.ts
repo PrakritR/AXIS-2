@@ -1,6 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { buildManagerOutgoingPaymentRows } from "@/lib/manager-outgoing-payments";
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildManagerOutgoingPaymentRows,
+  deleteManagerOutgoingExpense,
+  readManagerOutgoingExpenses,
+  syncManagerOutgoingExpensesFromServer,
+} from "@/lib/manager-outgoing-payments";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+
+vi.mock("@/lib/demo/demo-session", () => ({
+  isDemoModeActive: vi.fn(() => false),
+}));
 
 describe("buildManagerOutgoingPaymentRows", () => {
   it("includes pending vendor work orders and paid expenses", () => {
@@ -89,5 +99,45 @@ describe("buildManagerOutgoingPaymentRows", () => {
     expect(expenseRow?.paidViaChannel).toBe("zelle");
     expect(expenseRow?.statusLabel).toBe("Paid · Zelle");
     expect(rows.some((row) => row.id === "work-order-paid-wo-paid")).toBe(false);
+  });
+});
+
+describe("deleteManagerOutgoingExpense", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("removes a locally cached expense", async () => {
+    window.sessionStorage.setItem(
+      "axis:manager-outgoing-expenses:v1",
+      JSON.stringify([
+        {
+          id: "exp-local",
+          categoryCode: "other_expense",
+          categoryLabel: "Other",
+          amountCents: 1000,
+          expenseDate: "2026-06-01",
+        },
+      ]),
+    );
+
+    expect(deleteManagerOutgoingExpense("exp-local")).toBe(true);
+    expect(readManagerOutgoingExpenses().some((row) => row.id === "exp-local")).toBe(false);
+  });
+
+  it("keeps demo tombstones across sync", async () => {
+    const { isDemoModeActive } = await import("@/lib/demo/demo-session");
+    vi.mocked(isDemoModeActive).mockReturnValue(true);
+
+    await syncManagerOutgoingExpensesFromServer(true);
+    expect(readManagerOutgoingExpenses().some((row) => row.id === "demo-exp-6")).toBe(true);
+
+    expect(deleteManagerOutgoingExpense("demo-exp-6")).toBe(true);
+    expect(readManagerOutgoingExpenses().some((row) => row.id === "demo-exp-6")).toBe(false);
+
+    await syncManagerOutgoingExpensesFromServer(true);
+    expect(readManagerOutgoingExpenses().some((row) => row.id === "demo-exp-6")).toBe(false);
+
+    vi.mocked(isDemoModeActive).mockReturnValue(false);
   });
 });

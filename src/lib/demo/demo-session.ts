@@ -12,6 +12,9 @@
  * `isDemoModeActive()` is derived from the pathname so the demo session is on
  * exactly and only under `/demo` — there is no ordering race with panel mount
  * effects, and it can never leak into a real signed-in portal session.
+ *
+ * Guided tour state (`demo-guided.ts`, key `axis_demo_guided_state_v1`) uses the
+ * same pathname gate — production `/portal` routes never read demo localStorage.
  */
 
 export type DemoPortalRole = "manager" | "resident" | "vendor";

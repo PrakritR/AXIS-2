@@ -20,8 +20,8 @@ const NATIVE_APP_ALLOWED_PREFIXES = [
   "/vendor",
 ] as const;
 
-/** Public pages reachable from inside the app (e.g. admin "Contact us" link). */
-const NATIVE_APP_ALLOWED_EXACT = ["/contact"] as const;
+/** Public pages reachable from inside the app (auth legal footers, admin contact, etc.). */
+const NATIVE_APP_ALLOWED_EXACT = ["/contact", "/tos", "/privacy"] as const;
 
 export function isNativeAppAllowedPath(pathname: string): boolean {
   if (!pathname.startsWith("/")) return false;

@@ -5,6 +5,8 @@ import {
   enrichPromotionInputsFromListing,
   extractPromotionListingFacts,
   formatPromotionListingContext,
+  buildPromotionDraftAutofill,
+  enrichPromotionDraftFromListing,
 } from "@/lib/promotion-listing-context";
 import { composeFallbackPromotionText } from "@/lib/promotion-text";
 import type { PromotionInputs } from "@/lib/promotion-flyer";
@@ -93,5 +95,41 @@ describe("promotion-listing-context", () => {
     const copy = composeFallbackPromotionText(enriched, "Magnolia House — Capitol Hill", "listing_blurb");
     expect(copy.body).toContain("furnished private rooms");
     expect(copy.hook).toContain("Magnolia House");
+  });
+
+  it("buildPromotionDraftAutofill maps listing fields to draft sources", () => {
+    const source = buildPromotionDraftAutofill(listing, { managerContact: "leasing@example.com" });
+    expect(source.propertyLabel).toContain("Furnished Rooms on Capitol Hill");
+    expect(source.address).toBe("123 Magnolia Ave, Seattle, WA");
+    expect(source.price).toBe("From $950/mo");
+    expect(source.headline).toContain("Bright furnished");
+    expect(source.sellingPoints).toContain("4 bed · 2 bath");
+    expect(source.customDetails).toContain("furnished private rooms");
+    expect(source.cta).toBe("Schedule a tour");
+    expect(source.contact).toBe("leasing@example.com");
+  });
+
+  it("enrichPromotionDraftFromListing only fills empty draft fields", () => {
+    const enriched = enrichPromotionDraftFromListing(
+      {
+        propertyLabel: "My custom label",
+        address: "",
+        headline: "",
+        sellingPoints: "Rooftop deck",
+        customDetails: "",
+        price: "",
+        promo: "",
+        cta: "",
+        contact: "",
+        images: [],
+      },
+      listing,
+      { managerContact: "manager@example.com" },
+    );
+    expect(enriched.propertyLabel).toBe("My custom label");
+    expect(enriched.sellingPoints).toBe("Rooftop deck");
+    expect(enriched.address).toBe("123 Magnolia Ave, Seattle, WA");
+    expect(enriched.price).toBe("From $950/mo");
+    expect(enriched.contact).toBe("manager@example.com");
   });
 });

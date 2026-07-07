@@ -28,9 +28,11 @@ import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-
 import {
   ManagerServiceRequestDetail,
   managerServiceRequestBucket,
-  managerServiceRequestPricingSummary,
   type ManagerServiceRequestBucket,
 } from "@/components/portal/manager-service-request-detail";
+import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
+import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { ManagerCreateServiceRequestModal } from "@/components/portal/manager-create-service-request-modal";
 import { ManagerCreateWorkOrderModal } from "@/components/portal/manager-create-work-order-modal";
 import {
@@ -41,18 +43,19 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
 import { TabNav } from "@/components/ui/tabs";
 import {
+  PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableColGroup,
   PortalDataTableEmpty,
+  portalTableColumnPercents,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 
@@ -151,6 +154,32 @@ export function ManagerAllServicesPanel({
     return rows;
   }, [serviceRequests, propertyFilter]);
 
+  const residentUnitByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of readManagerApplicationRows()) {
+      if (!applicationVisibleToPortalUser(row, userId)) continue;
+      const email = row.email?.trim().toLowerCase();
+      const propertyId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
+      if (!email || !propertyId) continue;
+      const roomLabel =
+        row.manualResidentDetails?.roomNumber?.trim() ||
+        getRoomChoiceLabel(row.assignedRoomChoice?.trim() || row.application?.roomChoice1?.trim() || "")
+          .split(" · ")[0]
+          ?.trim() ||
+        "";
+      if (roomLabel) map.set(`${email}|${propertyId}`, roomLabel);
+    }
+    return map;
+  }, [userId, dataTick]);
+
+  const resolveRequestPropertyLabel = (req: ServiceRequest) =>
+    req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
+      ? propertyOptions.find((p) => p.id === req.propertyId)!.label
+      : "—";
+
+  const resolveRequestUnit = (req: ServiceRequest) =>
+    residentUnitByKey.get(`${req.residentEmail.trim().toLowerCase()}|${req.propertyId.trim()}`) ?? "";
+
   const bucketedRequests = useMemo(
     () =>
       filteredRequests
@@ -191,14 +220,10 @@ export function ManagerAllServicesPanel({
   );
 
   const renderRequestDetail = (req: ServiceRequest) => {
-    const propertyLabel =
-      req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
-        ? propertyOptions.find((p) => p.id === req.propertyId)!.label
-        : "—";
     return (
       <ManagerServiceRequestDetail
         req={req}
-        propertyLabel={propertyLabel}
+        propertyLabel={resolveRequestPropertyLabel(req)}
         onUpdated={() => setDataTick((t) => t + 1)}
         onApproved={() => setReqBucket("approved")}
         onDenied={() => setReqBucket("denied")}
@@ -303,27 +328,24 @@ export function ManagerAllServicesPanel({
             {bucketedRequests.map((req) => {
               const id = `request-${req.id}`;
               const isExpanded = expandedId === id;
-              const propertyLabel =
-                req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
-                  ? propertyOptions.find((p) => p.id === req.propertyId)!.label
-                  : "—";
-              const summary = managerServiceRequestPricingSummary(req);
+              const propertyLabel = resolveRequestPropertyLabel(req);
+              const unit = resolveRequestUnit(req);
               return (
                 <div key={`req-mobile-${req.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full gap-2 text-left"
                     onClick={() => setExpandedId(isExpanded ? null : id)}
                     aria-expanded={isExpanded}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-foreground">{req.offerName}</p>
+                      <PortalTableInlineExpand expanded={isExpanded} className="font-semibold text-foreground">
+                        <span className="truncate">{req.offerName}</span>
+                      </PortalTableInlineExpand>
                       <p className="mt-0.5 truncate text-xs text-muted">
-                        {[req.residentName || req.residentEmail, propertyLabel].filter(Boolean).join(" · ")}
+                        {[propertyLabel, unit].filter(Boolean).join(" · ")}
                       </p>
-                      <p className="mt-0.5 truncate text-[11px] text-muted/90">{summary}</p>
                     </div>
-                    <PortalTableExpandChevron expanded={isExpanded} />
                   </button>
                   {isExpanded ? (
                     <div className="mt-3 border-t border-border pt-3">{renderRequestDetail(req)}</div>
@@ -334,23 +356,20 @@ export function ManagerAllServicesPanel({
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
+                <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Type</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
                   </tr>
                 </thead>
                 <tbody>
             {bucketedRequests.map((req) => {
               const id = `request-${req.id}`;
               const isExpanded = expandedId === id;
+              const propertyLabel = resolveRequestPropertyLabel(req);
+              const unit = resolveRequestUnit(req);
               return (
                   <Fragment key={`req-${req.id}`}>
                     <tr
@@ -358,20 +377,17 @@ export function ManagerAllServicesPanel({
                       onClick={createPortalRowExpandClick(() => setExpandedId(isExpanded ? null : id))}
                       aria-expanded={isExpanded}
                     >
-                      <td className={PORTAL_TABLE_TD}>Request</td>
-                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
-                      <td className={PORTAL_TABLE_TD}>{req.residentName || req.residentEmail}</td>
-                      <td className={PORTAL_TABLE_TD}>
-                        {req.propertyId && propertyOptions.find((p) => p.id === req.propertyId)
-                          ? propertyOptions.find((p) => p.id === req.propertyId)!.label
-                          : "—"}
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                        <PortalTableInlineExpand expanded={isExpanded}>{req.offerName}</PortalTableInlineExpand>
                       </td>
-                      <td className={PORTAL_TABLE_TD}>{managerServiceRequestPricingSummary(req)}</td>
-                      <PortalTableExpandCell expanded={isExpanded} />
+                      <td className={PORTAL_TABLE_TD}>
+                        <span className="text-foreground">{propertyLabel}</span>
+                        {unit ? <span className="text-muted"> · {unit}</span> : null}
+                      </td>
                     </tr>
                     {isExpanded ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
                           {renderRequestDetail(req)}
                         </td>
                       </tr>

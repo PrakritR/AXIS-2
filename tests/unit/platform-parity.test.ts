@@ -48,6 +48,14 @@ describe("platform parity (web + native WebView)", () => {
     expect(isNativeAppAllowedPath("/contact")).toBe(true);
   });
 
+  it("auth legal pages are in-app routes reachable from auth footers on native", () => {
+    for (const path of ["/tos", "/privacy"] as const) {
+      expect(isInAppPath(path)).toBe(true);
+      expect(isNativeDeepLinkPath(path)).toBe(true);
+      expect(isNativeAppAllowedPath(path)).toBe(true);
+    }
+  });
+
   it("resident free-tier ids match manager-access gating", () => {
     for (const id of RESIDENT_FREE_TIER_SECTION_IDS) {
       expect(RESIDENT_FREE_MANAGER_SECTIONS.has(id)).toBe(true);

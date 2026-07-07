@@ -12,7 +12,7 @@ import { proPortal } from "@/lib/portals/pro";
 import { vendorPortal } from "@/lib/portals/vendor";
 import { RESIDENT_APPROVED_PORTAL_SECTIONS, RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import type { PortalDefinition, PortalSection } from "@/lib/portal-types";
-import { closeAxisAssistant, sendAxisAssistantPrompt } from "@/lib/axis-assistant/open-store";
+import { closeAxisAssistant } from "@/lib/axis-assistant/open-store";
 import {
   DEMO_NAVIGATE_EVENT,
   getDemoRole,
@@ -21,10 +21,24 @@ import {
   type DemoPortalRole,
 } from "@/lib/demo/demo-session";
 import { DEMO_PORTAL_SCROLL_ID } from "@/lib/portal-layout-classes";
-import { seedDemoPortalData } from "@/lib/demo/demo-seed";
+import {
+  advanceGuidedDemoStep,
+  exitGuidedDemoTour,
+  getDemoGuidedState,
+  getGuidedDemoStep,
+  getGuidedStepDef,
+  GUIDED_DEMO_STEP_COUNT,
+  hydrateDemoGuidedState,
+  isGuidedDemoActive,
+  isGuidedVendorUnlocked,
+  pauseGuidedDemoTour,
+  resumeGuidedDemoTour,
+  startGuidedDemoTour,
+  subscribeDemoGuidedState,
+} from "@/lib/demo/demo-guided";
+import { reseedDemoPortalForGuidedStep, seedDemoIdleData, seedDemoPortalData } from "@/lib/demo/demo-seed";
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
 import { DemoFrameAssistant } from "@/components/demo/demo-frame-assistant";
-import { DemoShowcaseOverlay, type ShowcaseKind } from "@/components/demo/demo-showcase-overlay";
 
 /** App routes a reused portal panel might try to navigate to. In the demo these
  * must never reach the real (auth-gated) router — either they map to an in-demo
@@ -63,45 +77,6 @@ const ROLES: { id: DemoPortalRole; label: string }[] = [
   { id: "vendor", label: "Vendor" },
 ];
 
-/** Sections the auto-play tour steps through (sidebar order, minus Settings). */
-function tourSections(def: PortalDefinition): string[] {
-  return def.sections.map((s) => s.section).filter((s) => s !== "profile" && s !== "relationships");
-}
-
-const TOUR_PROMPTS = [
-  "Who is late on rent right now?",
-  "How many leases are awaiting signature?",
-];
-
-type Step =
-  | { type: "section"; section: string }
-  | { type: "showcase"; kind: ShowcaseKind }
-  | { type: "assistant"; prompt: string };
-
-/** How long each step is held on screen (ms). */
-const STEP_DELAY: Record<Step["type"], number> = {
-  section: 2600,
-  showcase: 6600,
-  assistant: 9000,
-};
-
-/**
- * Build the ordered auto-play script: walk every tour section in registry order,
- * and right after the relevant tab, drop in a scripted showcase that demonstrates
- * a real flow working — creating a listing (after Properties) and a rent payment
- * clearing (after Payments) — then finish with a couple of live assistant asks.
- */
-function buildSteps(def: PortalDefinition): Step[] {
-  const steps: Step[] = [];
-  for (const section of tourSections(def)) {
-    steps.push({ type: "section", section });
-    if (section === "properties") steps.push({ type: "showcase", kind: "listing" });
-    if (section === "payments") steps.push({ type: "showcase", kind: "payment" });
-  }
-  for (const prompt of TOUR_PROMPTS) steps.push({ type: "assistant", prompt });
-  return steps;
-}
-
 function PlayIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
@@ -127,8 +102,18 @@ function RestartIcon() {
 
 export function DemoPortalShell() {
   useLayoutEffect(() => {
+    hydrateDemoGuidedState();
     seedDemoPortalData();
   }, []);
+
+  const guidedState = useSyncExternalStore(
+    subscribeDemoGuidedState,
+    getDemoGuidedState,
+    () => ({ mode: "idle" as const, step: 0 as const, paused: false }),
+  );
+  const guidedActive = guidedState.mode === "guided" && guidedState.step > 0;
+  const guidedStep = guidedActive ? guidedState.step : 0;
+  const stepDef = getGuidedStepDef(guidedStep);
 
   const role = useSyncExternalStore(subscribeDemoRole, getDemoRole, () => "manager" as const);
   const def = useMemo(() => definitionForRole(role), [role]);
@@ -208,72 +193,67 @@ export function DemoPortalShell() {
     return () => window.removeEventListener(DEMO_NAVIGATE_EVENT, handler);
   }, [navigateInDemo]);
 
-  // --- Run demo auto-play ----------------------------------------------------
-  const steps: Step[] = useMemo(() => buildSteps(def), [def]);
-
-  const [running, setRunning] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
-  // The scripted feature demo (listing / payment) currently overlaying the frame.
-  const [showcase, setShowcase] = useState<ShowcaseKind | null>(null);
+  const navigateToGuidedStep = useCallback(
+    (step: number) => {
+      const defn = getGuidedStepDef(step as ReturnType<typeof getGuidedDemoStep>);
+      if (!defn) return;
+      setDemoRole(defn.role);
+      selectSection(defn.section, defn.tab ?? def.sections.find((s) => s.section === defn.section)?.tabs[0]?.id ?? null);
+    },
+    [def, selectSection],
+  );
 
   const switchRole = useCallback(
     (next: DemoPortalRole) => {
-      setRunning(false);
-      setStepIndex(0);
-      setShowcase(null);
+      if (guidedActive && next === "vendor" && !isGuidedVendorUnlocked()) return;
       closeAxisAssistant();
       setDemoRole(next);
       setSection("dashboard");
       setTab(null);
     },
-    [],
+    [guidedActive],
   );
 
   useEffect(() => {
-    if (!running) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear any showcase overlay when the tour stops
-      setShowcase(null);
-      return;
-    }
-    const step = steps[stepIndex];
-    if (!step) {
-      setRunning(false);
-      return;
-    }
-    if (step.type === "section") {
-      setShowcase(null);
-      const firstTab = def.sections.find((s) => s.section === step.section)?.tabs[0]?.id ?? null;
-      selectSection(step.section, firstTab);
-    } else if (step.type === "showcase") {
-      // Keep the underlying panel (Properties / Payments) and overlay the demo.
-      setShowcase(step.kind);
-    } else {
-      setShowcase(null);
-      sendAxisAssistantPrompt(step.prompt);
-    }
-    const id = window.setTimeout(() => setStepIndex((i) => i + 1), STEP_DELAY[step.type]);
-    return () => window.clearTimeout(id);
-  }, [running, stepIndex, steps, def, selectSection]);
+    if (!guidedActive || !stepDef || guidedState.paused) return;
+    navigateToGuidedStep(guidedStep);
+  }, [guidedActive, guidedStep, guidedState.paused, navigateToGuidedStep, stepDef]);
 
   const startTour = useCallback(() => {
     closeAxisAssistant();
-    selectSection("dashboard", null);
-    setStepIndex(0);
-    setRunning(true);
-  }, [selectSection]);
+    startGuidedDemoTour();
+    reseedDemoPortalForGuidedStep();
+    navigateToGuidedStep(1);
+  }, [navigateToGuidedStep]);
 
-  const pauseTour = useCallback(() => setRunning(false), []);
-  const resumeTour = useCallback(() => setRunning(true), []);
-  const restartTour = useCallback(() => {
-    setRunning(false);
+  const exitTour = useCallback(() => {
     closeAxisAssistant();
+    exitGuidedDemoTour();
+    seedDemoIdleData();
+    setDemoRole("manager");
     selectSection("dashboard", null);
-    setStepIndex(0);
-    // Re-arm on the next tick so the effect re-runs from the top.
-    window.setTimeout(() => setRunning(true), 60);
   }, [selectSection]);
 
-  const finished = stepIndex >= steps.length;
+  const nextStep = useCallback(() => {
+    const advanced = advanceGuidedDemoStep();
+    if (!advanced) {
+      exitTour();
+      return;
+    }
+    reseedDemoPortalForGuidedStep();
+    navigateToGuidedStep(getGuidedDemoStep());
+  }, [exitTour, navigateToGuidedStep]);
+
+  const pauseTour = useCallback(() => pauseGuidedDemoTour(), []);
+  const resumeTour = useCallback(() => resumeGuidedDemoTour(), []);
+  const restartTour = useCallback(() => {
+    closeAxisAssistant();
+    startGuidedDemoTour();
+    reseedDemoPortalForGuidedStep();
+    navigateToGuidedStep(1);
+  }, [navigateToGuidedStep]);
+
+  const finished = guidedActive && guidedStep >= GUIDED_DEMO_STEP_COUNT;
 
   return (
     <PortalContainerProvider container={frameEl}>
@@ -281,52 +261,100 @@ export function DemoPortalShell() {
       {/* Controls bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card p-1 text-sm">
-          {ROLES.map((r) => (
+          {ROLES.map((r) => {
+            const vendorLocked = guidedActive && r.id === "vendor" && !isGuidedVendorUnlocked();
+            return (
             <button
               key={r.id}
               type="button"
               onClick={() => switchRole(r.id)}
+              disabled={vendorLocked}
+              title={vendorLocked ? "Vendor view unlocks at step 10 of the guided tour" : undefined}
               data-attr={`demo-role-${r.id}`}
               className={cn(
                 "rounded-full px-3.5 py-1.5 font-medium transition",
                 role === r.id ? "bg-primary text-white shadow-sm" : "text-muted hover:text-foreground",
+                vendorLocked && "cursor-not-allowed opacity-40",
               )}
               aria-pressed={role === r.id}
             >
               {r.label}
             </button>
-          ))}
+            );
+          })}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="hidden text-xs text-muted sm:inline">Interactive demo — click anything</span>
-          {!running ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {guidedActive && stepDef ? (
+            <div className="flex min-w-0 flex-col gap-0.5 sm:mr-2">
+              <span className="text-xs font-semibold text-foreground">
+                Step {guidedStep} of {GUIDED_DEMO_STEP_COUNT}: {stepDef.title}
+              </span>
+              <span className="hidden max-w-md truncate text-xs text-muted sm:inline">{stepDef.hint}</span>
+            </div>
+          ) : (
+            <span className="hidden text-xs text-muted sm:inline">Interactive demo — click anything</span>
+          )}
+          {!guidedActive ? (
             <button
               type="button"
-              onClick={finished || stepIndex === 0 ? startTour : resumeTour}
+              onClick={startTour}
               data-attr="demo-run"
               className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
               style={{ background: "var(--btn-primary)" }}
             >
               <PlayIcon />
-              {stepIndex === 0 || finished ? "Run demo" : "Resume"}
+              Run demo
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={pauseTour}
-              data-attr="demo-pause"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-accent/60"
-            >
-              <PauseIcon />
-              Pause
-            </button>
+            <>
+              {guidedState.paused ? (
+                <button
+                  type="button"
+                  onClick={resumeTour}
+                  data-attr="demo-resume"
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                  style={{ background: "var(--btn-primary)" }}
+                >
+                  <PlayIcon />
+                  Resume
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={pauseTour}
+                  data-attr="demo-pause"
+                  className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-accent/60"
+                >
+                  <PauseIcon />
+                  Pause
+                </button>
+              )}
+              {!finished ? (
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  data-attr="demo-next-step"
+                  className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15"
+                >
+                  Next step
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={exitTour}
+                data-attr="demo-exit"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium text-muted transition hover:bg-accent/60 hover:text-foreground"
+              >
+                Exit tour
+              </button>
+            </>
           )}
           <button
             type="button"
-            onClick={restartTour}
+            onClick={guidedActive ? restartTour : startTour}
             data-attr="demo-restart"
-            aria-label="Restart demo"
+            aria-label={guidedActive ? "Restart guided tour" : "Run demo"}
             className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium text-muted transition hover:bg-accent/60 hover:text-foreground"
           >
             <RestartIcon />
@@ -471,15 +499,9 @@ export function DemoPortalShell() {
               tab row (TabNav / status pills) in its page-shell header, and those
               tab clicks are intercepted (onFrameClickCapture / DEMO_NAVIGATE_EVENT)
               to switch the demo tab. A strip here would duplicate that row. */}
-          <DemoSectionRenderer key={`${role}:${section}`} role={role} section={section} tab={tab} meta={meta} />
+          <DemoSectionRenderer key={`${role}:${section}:${guidedStep}`} role={role} section={section} tab={tab} meta={meta} />
         </div>
 
-        {/* Scripted feature demo (listing / payment), overlaid within the frame */}
-        {showcase ? <DemoShowcaseOverlay kind={showcase} /> : null}
-
-        {/* In-demo, portal-scoped Axis Assistant — pinned bottom-right INSIDE the
-            frame, exactly where it lives in the real property portal. Answers
-            questions about this demo portfolio via the sandboxed demo-chat. */}
         <DemoFrameAssistant />
       </div>
     </div>

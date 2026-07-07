@@ -5,6 +5,10 @@ import Image from "next/image";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import {
+  ListingDetailCollapsibleSection,
+  ListingDetailCollapsibleSimpleSection,
+} from "@/components/marketing/listing-detail-collapsible-section";
 import { ListingStickySubnav } from "@/components/marketing/listing-detail-subnav";
 import { ListingLocationBlock } from "@/components/marketing/listing-location-block";
 import {
@@ -21,15 +25,10 @@ import {
   useListingPreviewNewTab,
 } from "@/components/marketing/listing-preview-context";
 import { listingFallbackMapCenter } from "@/lib/listing-map";
+import { buildTourContactHref } from "@/lib/manager-property-links";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import type { MockProperty } from "@/data/types";
 import { DEFAULT_LISTING_HOUSE_RULES_FALLBACK, type ListingRichContent } from "@/data/listing-rich-content";
-
-const sectionScroll =
-  "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+9.5rem))]";
-
-const listingSectionCard =
-  "rounded-2xl border border-border bg-card shadow-sm backdrop-blur-sm";
 
 function filterSidebarQuickFacts(
   facts: { label: string; value: string }[],
@@ -46,44 +45,12 @@ function filterSidebarQuickFacts(
   });
 }
 
-function ListingSection({
-  id,
-  title,
-  eyebrow,
-  headerAside,
-  children,
-  className = "",
-}: {
-  id?: string;
-  title: string;
-  eyebrow?: string;
-  headerAside?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section id={id} className={`${sectionScroll} ${className}`}>
-      <div className={`${listingSectionCard} p-5 sm:p-7`}>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            {eyebrow ? (
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p>
-            ) : null}
-            <h2 className={`font-bold tracking-tight text-foreground ${eyebrow ? "mt-1 text-xl sm:text-2xl" : "text-xl sm:text-2xl"}`}>
-              {title}
-            </h2>
-          </div>
-          {headerAside}
-        </div>
-        <div className="mt-5 sm:mt-6">{children}</div>
-      </div>
-    </section>
-  );
-}
+const listingSectionScroll =
+  "scroll-mt-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+9.5rem))]";
 
 function ListingSubsection({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
   return (
-    <div id={id} className={`${id ? sectionScroll : ""} border-t border-border/60 pt-8 first:border-0 first:pt-0`}>
+    <div id={id} className={`${id ? listingSectionScroll : ""} border-t border-border/60 pt-8 first:border-0 first:pt-0`}>
       <h3 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">{title}</h3>
       <div className="mt-4 md:overflow-x-auto">{children}</div>
     </div>
@@ -190,58 +157,72 @@ const primaryCtaClass =
 const secondaryCtaClass =
   "btn-metallic mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full py-3 text-sm font-semibold text-foreground outline-none transition hover:-translate-y-[1px] active:translate-y-0";
 
-function Sidebar({
+function ListingPricingCtaCard({
   property,
   rich,
-  roomCount,
   className = "",
 }: {
   property: MockProperty;
   rich: ListingRichContent;
-  roomCount: number;
   className?: string;
 }) {
   const primaryPrice = rich.estimatedMonthlyTotalLabel ?? rich.startingRentLabel;
   const showsEstimatedTotal = Boolean(rich.estimatedMonthlyTotalLabel);
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
+  const tourHref = buildTourContactHref(property.id);
+
+  return (
+    <Card className={`overflow-hidden border-border bg-card p-0 shadow-sm backdrop-blur-xl ${className}`}>
+      <div className="border-b border-border/60 bg-gradient-to-br from-primary/8 via-transparent to-transparent px-5 py-5 sm:px-6 sm:py-6">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
+          {showsEstimatedTotal ? "Estimated monthly from" : "Base rent from"}
+        </p>
+        <p className="mt-1 text-3xl font-bold tracking-tight text-primary sm:text-4xl">{primaryPrice}</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          {showsEstimatedTotal
+            ? `Rent + utilities estimate. Base rent ${rich.startingRentLabel}.`
+            : "Before utilities and other fees."}
+        </p>
+      </div>
+      <div className="px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+        <Link
+          href={tourHref}
+          data-attr="listing-schedule-tour"
+          className={`${primaryCtaClass} min-h-[48px] mt-0`}
+          {...newTabProps}
+        >
+          Schedule a tour
+        </Link>
+        <Link
+          href={buildRentalApplyHref({ propertyId: property.id })}
+          data-attr="listing-apply-online"
+          className={secondaryCtaClass}
+          {...newTabProps}
+        >
+          Apply online
+        </Link>
+      </div>
+    </Card>
+  );
+}
+
+function Sidebar({
+  property,
+  rich,
+  className = "",
+}: {
+  property: MockProperty;
+  rich: ListingRichContent;
+  className?: string;
+}) {
   const sidebarFacts = filterSidebarQuickFacts(rich.quickFacts, property);
   return (
     <aside
       className={`order-2 space-y-5 lg:sticky lg:top-[var(--listing-sticky-stack,calc(env(safe-area-inset-top,0px)+7.5rem))] lg:self-start ${className}`}
     >
-      <Card className="overflow-hidden border-border bg-card p-0 shadow-sm backdrop-blur-xl">
-        <div className="border-b border-border/60 bg-gradient-to-br from-primary/8 via-transparent to-transparent px-6 py-6">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
-            {showsEstimatedTotal ? "Estimated monthly from" : "Base rent from"}
-          </p>
-          <p className="mt-1 text-4xl font-bold tracking-tight text-primary">{primaryPrice}</p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            {showsEstimatedTotal
-              ? `Rent + utilities estimate. Base rent ${rich.startingRentLabel}.`
-              : "Before utilities and other fees."}
-          </p>
-        </div>
-        <div className="px-6 pb-6 pt-4">
-          <Link
-            href={`/rent/tours-contact?propertyId=${encodeURIComponent(property.id)}`}
-            data-attr="listing-schedule-tour"
-            className={`${primaryCtaClass} min-h-[48px] mt-0`}
-            {...newTabProps}
-          >
-            Schedule a tour
-          </Link>
-          <Link
-            href={buildRentalApplyHref({ propertyId: property.id })}
-            data-attr="listing-apply-online"
-            className={secondaryCtaClass}
-            {...newTabProps}
-          >
-            Apply online
-          </Link>
-        </div>
-      </Card>
+      <ListingPricingCtaCard property={property} rich={rich} className="hidden lg:block" />
       {sidebarFacts.length > 0 ? (
-        <Card className="border-border bg-card p-5 shadow-sm backdrop-blur-xl sm:p-6">
+        <Card className="hidden border-border bg-card p-5 shadow-sm backdrop-blur-xl sm:p-6 md:block [html[data-native]_&]:!hidden">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">At a glance</p>
           <ul className="mt-3 divide-y divide-border/50 text-sm">
             {sidebarFacts.map((q) => (
@@ -254,38 +235,6 @@ function Sidebar({
         </Card>
       ) : null}
     </aside>
-  );
-}
-
-function HouseRulesSection({ rulesBody }: { rulesBody: string | null }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <section id="house-rules" className={sectionScroll}>
-      <div className={`${listingSectionCard} p-5 sm:p-7`}>
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">House rules</h2>
-          {rulesBody ? (
-            <button
-              type="button"
-              onClick={() => setOpen((v) => !v)}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-border bg-accent/35 px-4 py-1.5 text-sm font-semibold text-foreground transition hover:bg-accent/50"
-            >
-              {open ? "Hide" : "View"}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
-                <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-              </svg>
-            </button>
-          ) : null}
-        </div>
-        {!rulesBody ? (
-          <p className="mt-4 text-sm leading-relaxed text-muted">
-            No house rules were added to this listing yet.
-          </p>
-        ) : open ? (
-          <p className="mt-5 whitespace-pre-wrap text-sm leading-relaxed text-muted">{rulesBody}</p>
-        ) : null}
-      </div>
-    </section>
   );
 }
 
@@ -346,11 +295,15 @@ export function ListingDetailSections({
 
         <div className={`order-4 ${previewModal ? "mt-6" : "mt-6 lg:mt-8"}`}>
           {!previewModal ? <ListingStickySubnav className="mb-4 lg:mb-6" /> : null}
+          {!previewModal ? (
+            <ListingPricingCtaCard property={property} rich={rich} className="mb-6 lg:hidden" />
+          ) : null}
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] lg:gap-10">
             <div className="order-1 space-y-8 lg:space-y-10">
-              <ListingSection
+              <ListingDetailCollapsibleSection
                 id="floor-plans"
                 title={rich.floorPlansSectionTitle ?? "Floor plans"}
+                dataAttrToggle="listing-floor-plans-toggle"
                 headerAside={
                   roomCount > 0 ? (
                     <span className="rounded-full border border-border bg-accent/35 px-3 py-1 text-xs font-semibold text-foreground listing-detail-surface">
@@ -374,48 +327,67 @@ export function ListingDetailSections({
                 <ListingSubsection title="Shared spaces" id="listing-shared">
                   <SharedTableInteractive rows={rich.sharedSpaces} listingPropertyId={property.id} />
                 </ListingSubsection>
-              </ListingSection>
+              </ListingDetailCollapsibleSection>
 
-              <ListingSection id="lease-basics" title="Lease basics">
+              <ListingDetailCollapsibleSection
+                id="lease-basics"
+                title="Lease basics"
+                dataAttrToggle="listing-lease-basics-toggle"
+              >
                 <LeaseBasicsTableInteractive rows={rich.leaseBasics} listingPropertyId={property.id} />
-              </ListingSection>
+              </ListingDetailCollapsibleSection>
 
-              <ListingSection id="amenities" title="Amenities" eyebrow="Building & neighborhood">
+              <ListingDetailCollapsibleSection
+                id="amenities"
+                title="Amenities"
+                eyebrow="Building & neighborhood"
+                dataAttrToggle="listing-amenities-toggle"
+              >
                 <AmenitiesTableInteractive rows={rich.amenities} listingPropertyId={property.id} />
-              </ListingSection>
+              </ListingDetailCollapsibleSection>
 
-              <section id="bundles" className={sectionScroll}>
-                <div className={`${listingSectionCard} p-5 sm:p-7`}>
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Packages</p>
-                      <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground sm:text-2xl">Bundles & leasing</h2>
-                    </div>
-                    <span className="rounded-full border border-border bg-accent/35 px-3 py-1 text-xs font-semibold text-foreground listing-detail-surface">
-                      {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <div className="mt-5">
-                    <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} />
-                  </div>
-                  <div className="mt-6 rounded-xl border border-border/60 bg-accent/25 p-4 listing-detail-surface sm:p-5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Lease lengths</p>
-                    <p className="mt-2 text-sm leading-relaxed text-muted">{formatBoldSegments(rich.bundlesText)}</p>
-                  </div>
+              <ListingDetailCollapsibleSection
+                id="bundles"
+                title="Bundles & leasing"
+                eyebrow="Packages"
+                dataAttrToggle="listing-bundles-toggle"
+                headerAside={
+                  <span className="rounded-full border border-border bg-accent/35 px-3 py-1 text-xs font-semibold text-foreground listing-detail-surface">
+                    {rich.bundleCards.length} package{rich.bundleCards.length === 1 ? "" : "s"}
+                  </span>
+                }
+              >
+                <BundleTableInteractive rows={rich.bundleCards} listingPropertyId={property.id} />
+                <div className="mt-6 rounded-xl border border-border/60 bg-accent/25 p-4 listing-detail-surface sm:p-5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Lease lengths</p>
+                  <p className="mt-2 text-sm leading-relaxed text-muted">{formatBoldSegments(rich.bundlesText)}</p>
                 </div>
-              </section>
+              </ListingDetailCollapsibleSection>
 
-              <HouseRulesSection rulesBody={houseRulesDisplay} />
+              <ListingDetailCollapsibleSimpleSection
+                id="house-rules"
+                title="House rules"
+                hasContent={Boolean(houseRulesDisplay)}
+                emptyMessage="No house rules were added to this listing yet."
+                dataAttrToggle="listing-house-rules-toggle"
+              >
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{houseRulesDisplay}</p>
+              </ListingDetailCollapsibleSimpleSection>
 
-              <section id="location" className={sectionScroll}>
+              <ListingDetailCollapsibleSection
+                id="location"
+                title="Location"
+                dataAttrToggle="listing-location-toggle"
+              >
                 <ListingLocationBlock
                   {...listingFallbackMapCenter(property)}
                   address={property.address}
+                  embedded
                 />
-              </section>
+              </ListingDetailCollapsibleSection>
             </div>
 
-            <Sidebar property={property} rich={rich} roomCount={roomCount} className="lg:order-2" />
+            <Sidebar property={property} rich={rich} className="lg:order-2" />
           </div>
         </div>
       </div>

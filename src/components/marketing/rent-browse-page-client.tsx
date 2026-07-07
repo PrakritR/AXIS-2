@@ -1,21 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMemo } from "react";
 import { ResidentHousingBrowse } from "@/components/marketing/resident-housing-browse";
 import { PublicPageAuthFooter } from "@/components/marketing/public-page-auth-footer";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
+import { portalNavClick } from "@/lib/portal-nav-client";
 import { residentCreateAccountHref, residentSignInHref } from "@/lib/resident-public-nav";
 
 function authCreateResidentPath() {
-  return "/auth/create-account";
+  return "/auth/create-account?mode=create&role=resident";
 }
 
 export function RentBrowsePageClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const fromAuth = searchParams.get("from") === "auth";
   const { isNative } = useIsNativeApp();
   const backHref = fromAuth || isNative ? authCreateResidentPath() : "/";
+  const onBackClick = useMemo(
+    () =>
+      isNative === true
+        ? portalNavClick(router, backHref, { preferFullNavigation: true })
+        : undefined,
+    [backHref, isNative, router],
+  );
 
   return (
     <div className="native-auth-screen min-h-[100dvh] px-4 py-5 [html[data-native]_&]:pt-[max(1rem,env(safe-area-inset-top))] [html[data-native]_&]:pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:py-8">
@@ -23,6 +33,8 @@ export function RentBrowsePageClient() {
         {isNative === true && (
           <Link
             href={backHref}
+            onClick={onBackClick}
+            data-attr="resident-browse-back"
             className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:opacity-90"
           >
             ← Back

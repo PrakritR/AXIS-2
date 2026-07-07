@@ -10,20 +10,24 @@ import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-f
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
 import { ManagerPropertyHouseDetailsPanel } from "@/components/portal/manager-property-house-details-panel";
 import { ManagerPropertyServiceOptionsPanel } from "@/components/portal/manager-property-service-options-panel";
+import { ManagerPropertyLeasePanel } from "@/components/portal/manager-property-lease-panel";
 import { ManagerPropertyPromotionPanel } from "@/components/portal/manager-property-promotion-panel";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableColGroup,
   PortalDataTableEmpty,
+  PORTAL_TABLE_DETAIL_CELL,
+  PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PORTAL_MOBILE_CARD_CLASS,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
+  portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
@@ -190,7 +194,8 @@ function ManagerPropertyInlineDetails({
   );
 
   const displaySub = portalSub?.sub ?? null;
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [previewEditorOpen, setPreviewEditorOpen] = useState(false);
+  const [listingEditorOpen, setListingEditorOpen] = useState(false);
 
   const managerSubmission = useMemo(
     () => (row ? displaySub ?? submissionForAdminRow(row) : null),
@@ -219,8 +224,48 @@ function ManagerPropertyInlineDetails({
 
   if (!row || !mock || !managerSubmission) return null;
 
-  const actionBtnClass = "w-full rounded-full";
+  const actionBtnClass = "rounded-full";
+  const sectionHeaderBtn = "h-8 rounded-full px-3 text-xs";
   const canEditListing = Boolean(displaySub && portalSub);
+
+  const openFullListingEditor = () => setListingEditorOpen(true);
+  const openPreviewEditor = () => setPreviewEditorOpen(true);
+
+  const listingFormProps = portalSub
+    ? {
+        onClose: () => {
+          setPreviewEditorOpen(false);
+          setListingEditorOpen(false);
+        },
+        onSubmitted: () => {
+          setPreviewEditorOpen(false);
+          setListingEditorOpen(false);
+          onUpdated();
+        },
+        showToast,
+        skuTier: null as string | null,
+        propCountBeforeSubmit: 0,
+        initialSubmission: portalSub.sub,
+        noteKey,
+        editPendingId: portalSub.saveMode === "pending" ? portalSub.saveId : null,
+        editListingId: portalSub.saveMode === "listing" ? portalSub.saveId : null,
+        editRequestChangeId: portalSub.saveMode === "requestChange" ? portalSub.saveId : null,
+      }
+    : null;
+
+  const editDeleteGroup = canEditListing ? (
+    <div className="ml-auto flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        className={actionBtnClass}
+        data-attr="listing-edit-full"
+        onClick={openFullListingEditor}
+      >
+        Edit
+      </Button>
+    </div>
+  ) : null;
 
   const footer = (
     <div className="flex flex-col gap-3">
@@ -240,35 +285,65 @@ function ManagerPropertyInlineDetails({
               This listing was edited and is pending admin re-approval. Edit sections below.
             </p>
           ) : null}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <Button
-              type="button"
-              variant="outline"
-              className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-              onClick={() => {
-                if (row.adminRefId.startsWith("mgr-")) {
-                  if (!window.confirm("Permanently delete this listing from your catalog?")) return;
-                  deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(row.adminRefId, managerUserId)));
-                  return;
-                }
-                if (!window.confirm("Delete this pending submission? You can create a new listing later.")) return;
-                deferCatalogMutation(() =>
-                  run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId)),
-                );
-              }}
-            >
-              {row.adminRefId.startsWith("mgr-") ? "Delete listing" : "Delete submission"}
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {canEditListing ? (
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={actionBtnClass}
+                  data-attr="listing-edit-full"
+                  onClick={openFullListingEditor}
+                >
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                  data-attr="listing-delete"
+                  onClick={() => {
+                    if (row.adminRefId.startsWith("mgr-")) {
+                      if (!window.confirm("Permanently delete this listing from your catalog?")) return;
+                      deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(row.adminRefId, managerUserId)));
+                      return;
+                    }
+                    if (!window.confirm("Delete this pending submission? You can create a new listing later.")) return;
+                    deferCatalogMutation(() =>
+                      run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId)),
+                    );
+                  }}
+                >
+                  {row.adminRefId.startsWith("mgr-") ? "Delete listing" : "Delete submission"}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                data-attr="listing-delete"
+                onClick={() => {
+                  if (!window.confirm("Delete this pending submission? You can create a new listing later.")) return;
+                  deferCatalogMutation(() =>
+                    run("Submission deleted.", deletePendingSubmissionForManager(row.adminRefId, managerUserId)),
+                  );
+                }}
+              >
+                Delete submission
+              </Button>
+            )}
           </div>
         </>
       ) : null}
 
       {bucket === 1 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
             className={actionBtnClass}
+            data-attr="listing-move-to-pending"
             onClick={() =>
               deferCatalogMutation(() =>
                 run("Returned to pending — you can edit and resubmit.", returnRequestChangeToPending(row.adminRefId, managerUserId)),
@@ -277,6 +352,7 @@ function ManagerPropertyInlineDetails({
           >
             Move to pending & revise
           </Button>
+          {editDeleteGroup}
         </div>
       ) : null}
 
@@ -285,7 +361,8 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className={actionBtnClass}
+            className={`${actionBtnClass} w-full`}
+            data-attr="listing-send-to-prospect"
             onClick={() => onSendToProspect?.(listingId)}
           >
             Send to prospect
@@ -293,7 +370,8 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className={actionBtnClass}
+            className={`${actionBtnClass} w-full`}
+            data-attr="listing-copy-apply-link"
             onClick={() => {
               void (async () => {
                 const url = buildManagerApplyUrl(window.location.origin, { propertyId: listingId });
@@ -307,7 +385,8 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className={actionBtnClass}
+            className={`${actionBtnClass} w-full`}
+            data-attr="listing-copy-tour-link"
             onClick={() => {
               void (async () => {
                 const url = buildManagerTourUrl(window.location.origin, listingId);
@@ -321,33 +400,49 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className={actionBtnClass}
+            className={`${actionBtnClass} w-full`}
+            data-attr="listing-unlist"
             onClick={() =>
               deferCatalogMutation(() => run("Listing unlisted.", unlistManagerListing(listingId, managerUserId)))
             }
           >
             Unlist
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            onClick={() => {
-              if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
-              deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId)));
-            }}
-          >
-            Delete listing
-          </Button>
+          {canEditListing ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className={`${actionBtnClass} w-full`}
+                data-attr="listing-edit-full"
+                onClick={openFullListingEditor}
+              >
+                Edit
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={`${actionBtnClass} w-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                data-attr="listing-delete"
+                onClick={() => {
+                  if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
+                  deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId)));
+                }}
+              >
+                Delete listing
+              </Button>
+            </>
+          ) : null}
         </div>
       ) : null}
 
       {bucket === 3 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
             className={actionBtnClass}
+            data-attr="listing-relist"
             onClick={() => {
               deferCatalogMutation(() => {
                 const id = listAdminRow(row, managerUserId);
@@ -362,28 +457,58 @@ function ManagerPropertyInlineDetails({
           >
             Relist property
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-            onClick={() => {
-              if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
-              deferCatalogMutation(() =>
-                run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
-              );
-            }}
-          >
-            Delete from queue
-          </Button>
+          {canEditListing ? (
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className={actionBtnClass}
+                data-attr="listing-edit-full"
+                onClick={openFullListingEditor}
+              >
+                Edit
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+                data-attr="listing-delete"
+                onClick={() => {
+                  if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
+                  deferCatalogMutation(() =>
+                    run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
+                  );
+                }}
+              >
+                Delete from queue
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${actionBtnClass} ml-auto border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              data-attr="listing-delete"
+              onClick={() => {
+                if (!window.confirm("Remove this unlisted property from your queue permanently?")) return;
+                deferCatalogMutation(() =>
+                  run("Removed from queue.", deleteUnlistedManagerProperty(row.adminRefId, managerUserId)),
+                );
+              }}
+            >
+              Delete from queue
+            </Button>
+          )}
         </div>
       ) : null}
 
       {bucket === 4 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
             className={actionBtnClass}
+            data-attr="listing-restore-pending"
             onClick={() =>
               deferCatalogMutation(() =>
                 run("Restored to pending approval.", restoreRejectedToPending(row.adminRefId, managerUserId)),
@@ -395,7 +520,8 @@ function ManagerPropertyInlineDetails({
           <Button
             type="button"
             variant="outline"
-            className={`${actionBtnClass} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            className={`${actionBtnClass} ml-auto border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            data-attr="listing-delete"
             onClick={() =>
               deferCatalogMutation(() => run("Property removed.", removeRejectedProperty(row.adminRefId, managerUserId)))
             }
@@ -424,11 +550,11 @@ function ManagerPropertyInlineDetails({
             <Button
               type="button"
               variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              data-attr="listing-edit"
+              className={sectionHeaderBtn}
+              data-attr="listing-preview-edit"
               onClick={(e) => {
                 e.stopPropagation();
-                setEditorOpen(true);
+                openPreviewEditor();
               }}
             >
               Edit
@@ -464,6 +590,20 @@ function ManagerPropertyInlineDetails({
         showToast={showToast}
       />
 
+      <ManagerPropertyLeasePanel
+        sub={managerSubmission}
+        saveTarget={houseSaveTarget}
+        managerUserId={managerUserId}
+        onUpdated={onUpdated}
+        showToast={showToast}
+        propertyHint={{
+          buildingName: mock.buildingName || mock.title,
+          unitLabel: mock.unitLabel,
+          rentLabel: mock.rentLabel,
+        }}
+        demoMode={isDemoModeActive()}
+      />
+
       <ManagerPropertyServiceOptionsPanel
         sub={managerSubmission}
         saveTarget={houseSaveTarget}
@@ -476,22 +616,12 @@ function ManagerPropertyInlineDetails({
         <ManagerPropertyPromotionPanel listingId={listingId} showToast={showToast} onUpdated={onUpdated} />
       ) : null}
 
-      {editorOpen && portalSub ? (
-        <ManagerAddListingForm
-          onClose={() => setEditorOpen(false)}
-          onSubmitted={() => {
-            setEditorOpen(false);
-            onUpdated();
-          }}
-          showToast={showToast}
-          skuTier={null}
-          propCountBeforeSubmit={0}
-          initialSubmission={portalSub.sub}
-          noteKey={noteKey}
-          editPendingId={portalSub.saveMode === "pending" ? portalSub.saveId : null}
-          editListingId={portalSub.saveMode === "listing" ? portalSub.saveId : null}
-          editRequestChangeId={portalSub.saveMode === "requestChange" ? portalSub.saveId : null}
-        />
+      {previewEditorOpen && listingFormProps ? (
+        <ManagerAddListingForm {...listingFormProps} wizardScope="preview" />
+      ) : null}
+
+      {listingEditorOpen && listingFormProps ? (
+        <ManagerAddListingForm {...listingFormProps} wizardScope="full" />
       ) : null}
     </div>
   );
@@ -603,12 +733,14 @@ export function ManagerHousePropertiesPanel({
                 <div key={rowKey} className={PORTAL_MOBILE_CARD_CLASS}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left"
+                    className="flex w-full gap-2 text-left"
                     onClick={() => setExpandedRowKey(expanded ? null : rowKey)}
                     aria-expanded={expanded}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground">{row.buildingName}</p>
+                      <PortalTableInlineExpand expanded={expanded} className="font-medium text-foreground">
+                        <span className="truncate">{row.buildingName}</span>
+                      </PortalTableInlineExpand>
                       <p className="mt-0.5 text-xs leading-relaxed text-muted">
                         {row.address}
                         {row.zip ? `, ${row.zip}` : ""}
@@ -618,7 +750,6 @@ export function ManagerHousePropertiesPanel({
                         ba · {row.neighborhood}
                       </p>
                     </div>
-                    <PortalTableExpandChevron expanded={expanded} />
                   </button>
                   {expanded ? (
                     <div className="mt-3 border-t border-border pt-3">
@@ -631,14 +762,12 @@ export function ManagerHousePropertiesPanel({
           </div>
           <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
+                <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Summary</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -655,10 +784,10 @@ export function ManagerHousePropertiesPanel({
                           )}
                           aria-expanded={expanded}
                         >
-                          <td className={PORTAL_TABLE_TD}>
-                            <p className="font-medium text-foreground">
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                            <PortalTableInlineExpand expanded={expanded}>
                               {row.buildingName}
-                            </p>
+                            </PortalTableInlineExpand>
                             <p className="mt-0.5 text-xs leading-relaxed text-muted">
                               {row.address}
                               {row.zip ? `, ${row.zip}` : ""}
@@ -670,11 +799,10 @@ export function ManagerHousePropertiesPanel({
                               ba · {row.neighborhood}
                             </p>
                           </td>
-                          <PortalTableExpandCell expanded={expanded} />
                         </tr>
                         {expanded ? (
-                          <tr key={`${rowKey}-details`} className="border-b border-border">
-                            <td colSpan={3} className="bg-accent/30/40 px-4 py-4">
+                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                            <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderRowDetail(sourceBucket, row, rowKey)}
                             </td>
                           </tr>

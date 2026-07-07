@@ -39,8 +39,10 @@ export function AppleSignInButton({
 }) {
   const { showToast } = useAppUi();
   const [busy, setBusy] = useState(false);
+  const [available, setAvailable] = useState(isAppleSignInAvailable);
 
   useEffect(() => {
+    setAvailable(isAppleSignInAvailable());
     logAppleSignInUnavailableDevHint();
   }, []);
 
@@ -55,7 +57,7 @@ export function AppleSignInButton({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [busy]);
 
-  if (!isAppleSignInAvailable()) return null;
+  if (!available) return null;
 
   const signInWithApple = async () => {
     setBusy(true);

@@ -2,74 +2,92 @@
 
 import { type ReactNode } from "react";
 import {
+  PORTAL_MOBILE_CARD_CLASS,
   PortalDataTableEmpty,
-  PortalMobileSummaryCard,
+  PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
+import { PromotionEntryEditableTitle } from "@/components/portal/promotion-entry-title";
 import {
-  promotionAssetBoxTitle,
-  promotionAssetKindLabel,
+  promotionAssetKindIndices,
+  promotionAssetListTitle,
   type PromotionAsset,
 } from "@/lib/promotion-assets";
-
-function formatAssetDate(iso: string): string {
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "—";
-  return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
 
 export function PromotionAssetStack({
   assets,
   expandedId,
   onToggleExpand,
   renderExpanded,
-  showPropertyName = true,
+  renderHeaderActions,
+  onSaveTitle,
   emptyMessage = "No promotions yet.",
 }: {
   assets: PromotionAsset[];
   expandedId: string | null;
   onToggleExpand: (id: string) => void;
-  renderExpanded: (asset: PromotionAsset) => ReactNode;
-  showPropertyName?: boolean;
+  renderExpanded: (asset: PromotionAsset, indexWithinKind: number) => ReactNode;
+  renderHeaderActions?: (asset: PromotionAsset, indexWithinKind: number) => ReactNode;
+  onSaveTitle?: (asset: PromotionAsset, title: string, indexWithinKind: number) => void;
   emptyMessage?: string;
 }) {
   if (assets.length === 0) {
     return <PortalDataTableEmpty message={emptyMessage} icon="data" />;
   }
 
-  const kindIndex = new Map<string, number>();
+  const kindIndices = promotionAssetKindIndices(assets);
 
   return (
     <div className="space-y-2">
       {assets.map((asset) => {
-        const kindKey = `${asset.row.id}::${asset.kind}`;
-        const indexWithinKind = kindIndex.get(kindKey) ?? 0;
-        kindIndex.set(kindKey, indexWithinKind + 1);
-
+        const indexWithinKind = kindIndices.get(asset.id) ?? 0;
         const isOpen = expandedId === asset.id;
-        const title = showPropertyName
-          ? asset.propertyLabel
-          : promotionAssetBoxTitle(asset, indexWithinKind);
-        const subtitle = showPropertyName ? asset.subtitle : promotionAssetKindLabel(asset.kind);
-        const meta = `Created ${formatAssetDate(asset.createdAt)}`;
+        const fallbackTitle = promotionAssetListTitle(asset, indexWithinKind);
+        const storedTitle =
+          asset.kind === "flyer"
+            ? (asset.flyerEntry?.title ?? "")
+            : (asset.textEntry?.title ?? "");
 
         return (
-          <PortalMobileSummaryCard
-            key={asset.id}
-            title={title}
-            subtitle={subtitle}
-            meta={meta}
-            expanded={isOpen}
-            onClick={() => onToggleExpand(asset.id)}
-            badge={
-              showPropertyName ? (
-                <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted">
-                  {promotionAssetKindLabel(asset.kind)}
-                </span>
-              ) : undefined
-            }
-          >
-            {isOpen ? renderExpanded(asset) : null}
-          </PortalMobileSummaryCard>
+          <div key={asset.id} className={PORTAL_MOBILE_CARD_CLASS}>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                onClick={() => onToggleExpand(asset.id)}
+                aria-expanded={isOpen}
+                data-attr="promotion-row"
+              >
+                <PortalTableInlineExpand expanded={isOpen} className="text-sm font-semibold text-foreground">
+                  {onSaveTitle ? (
+                    <PromotionEntryEditableTitle
+                      value={storedTitle}
+                      fallback={fallbackTitle}
+                      onSave={(title) => onSaveTitle(asset, title, indexWithinKind)}
+                      className="text-sm font-semibold normal-case tracking-normal text-foreground"
+                      inputClassName="text-sm normal-case tracking-normal"
+                    />
+                  ) : (
+                    <span className="truncate">{fallbackTitle}</span>
+                  )}
+                </PortalTableInlineExpand>
+              </button>
+              {renderHeaderActions ? (
+                <div
+                  className="flex shrink-0 flex-wrap items-center justify-end gap-1.5"
+                  data-portal-row-ignore
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  {renderHeaderActions(asset, indexWithinKind)}
+                </div>
+              ) : null}
+            </div>
+            {isOpen ? (
+              <div className="mt-3 border-t border-border pt-3">
+                {renderExpanded(asset, indexWithinKind)}
+              </div>
+            ) : null}
+          </div>
         );
       })}
     </div>

@@ -11,6 +11,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import type { CosignerSubmission } from "@/lib/cosigner-submissions-storage";
 import { buildApplicationPdf } from "@/lib/manager-application-pdf";
+import { buildBackgroundCheckReportHtml } from "@/lib/background-check-report-html";
 
 function bytesToPdfDataUrl(bytes: Uint8Array): string {
   let binary = "";
@@ -64,4 +65,72 @@ export async function buildDemoReceiptPdfDataUrl(input: {
   line("Sample receipt generated for the Axis interactive demo.", regular, 9, muted);
 
   return bytesToPdfDataUrl(await pdf.save());
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Screening / background-check report as a locally-built PDF data URL for `/demo`. */
+export async function buildDemoBackgroundCheckPdfDataUrl(row: DemoApplicantRow): Promise<string> {
+  const bg = row.backgroundCheck;
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([612, 792]);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const ink = rgb(0.13, 0.15, 0.19);
+  const muted = rgb(0.42, 0.45, 0.52);
+
+  let y = 716;
+  const line = (text: string, font = regular, size = 11, color = ink) => {
+    const maxWidth = 468;
+    let chunk = text;
+    while (chunk.length > 0) {
+      let slice = chunk.length;
+      while (slice > 0 && font.widthOfTextAtSize(chunk.slice(0, slice), size) > maxWidth) slice -= 1;
+      if (slice === 0) slice = 1;
+      page.drawText(chunk.slice(0, slice), { x: 72, y, size, font, color });
+      chunk = chunk.slice(slice).trimStart();
+      y -= size + 10;
+      if (y < 72) break;
+    }
+  };
+
+  line("BACKGROUND CHECK REPORT", bold, 18);
+  line("Axis Housing · Demo screening record", regular, 10, muted);
+  y -= 8;
+  line(`Applicant: ${row.name || "Applicant"}`);
+  line(`Axis ID: ${row.id}`);
+  if (bg) {
+    line(`Status: ${bg.status}`);
+    line(`Result: ${bg.result ?? "Pending"}`);
+    line(`Package: ${bg.packageSlug}`);
+    if (bg.orderedAt) line(`Ordered: ${new Date(bg.orderedAt).toLocaleDateString()}`);
+    if (bg.completedAt) line(`Completed: ${new Date(bg.completedAt).toLocaleDateString()}`);
+  }
+  y -= 8;
+  const summary = stripHtml(buildBackgroundCheckReportHtml(row));
+  if (summary) {
+    line("Report summary", bold, 12);
+    line(summary.slice(0, 2400), regular, 9, muted);
+  }
+  line("Sample report generated for the Axis interactive demo.", regular, 9, muted);
+
+  return bytesToPdfDataUrl(await pdf.save());
+}
+
+/** Trigger a browser download of the demo screening PDF. */
+export async function downloadDemoBackgroundCheckPdf(row: DemoApplicantRow): Promise<void> {
+  const url = await buildDemoBackgroundCheckPdfDataUrl(row);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `screening-report-${row.id}.pdf`;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }

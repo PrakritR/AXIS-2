@@ -19,6 +19,7 @@ export async function POST(req: Request) {
       residentName?: string;
       chargeTitle?: string;
       balanceDue?: string;
+      dueDate?: string;
       propertyLabel?: string;
       managerName?: string;
     };
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
     const residentName = String(body.residentName ?? "Resident").trim();
     const chargeTitle = String(body.chargeTitle ?? "outstanding charge").trim();
     const balanceDue = String(body.balanceDue ?? "").trim();
+    const dueDate = String(body.dueDate ?? "").trim();
     const propertyLabel = String(body.propertyLabel ?? "").trim();
     const managerName = String(body.managerName ?? "Your property manager").trim();
 
@@ -39,12 +41,12 @@ export async function POST(req: Request) {
 
     if (skipExternalEmail) {
       // Demo email — still deliver to portal inbox, just skip real email
-      await deliverToPortalInbox({ db: createSupabaseServiceRoleClient(), userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, propertyLabel, managerName });
+      await deliverToPortalInbox({ db: createSupabaseServiceRoleClient(), userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
       return NextResponse.json({ ok: true, skipped: true, reason: "Skipped external delivery; portal inbox updated." });
     }
 
     const subject = `Payment reminder: ${chargeTitle}`;
-    const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, propertyLabel, managerName });
+    const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
 
     // 1. Send real email via Resend
     let emailSent = false;
@@ -63,7 +65,7 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
 
     // 2. Deliver to resident's Axis portal inbox
-    await deliverToPortalInbox({ db, userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, propertyLabel, managerName });
+    await deliverToPortalInbox({ db, userId: user.id, managerEmail: user.email ?? "", residentEmail, residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
 
     // 3. Log to outbound mail records
     const outboundId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -109,12 +111,14 @@ function buildReminderBody({
   residentName,
   chargeTitle,
   balanceDue,
+  dueDate,
   propertyLabel,
   managerName,
 }: {
   residentName: string;
   chargeTitle: string;
   balanceDue: string;
+  dueDate: string;
   propertyLabel: string;
   managerName: string;
 }): string {
@@ -124,6 +128,7 @@ function buildReminderBody({
     `This is a friendly reminder that your ${chargeTitle} payment is outstanding.`,
   ];
   if (balanceDue) lines.push(`Amount due: ${balanceDue}`);
+  if (dueDate) lines.push(`Due date: ${dueDate}`);
   if (propertyLabel) lines.push(`Property: ${propertyLabel}`);
   lines.push(
     "",
@@ -145,6 +150,7 @@ async function deliverToPortalInbox({
   residentName,
   chargeTitle,
   balanceDue,
+  dueDate,
   propertyLabel,
   managerName,
 }: {
@@ -155,11 +161,12 @@ async function deliverToPortalInbox({
   residentName: string;
   chargeTitle: string;
   balanceDue: string;
+  dueDate: string;
   propertyLabel: string;
   managerName: string;
 }) {
   const subject = `Payment reminder: ${chargeTitle}`;
-  const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, propertyLabel, managerName });
+  const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 6);
   const residentLower = residentEmail.toLowerCase();

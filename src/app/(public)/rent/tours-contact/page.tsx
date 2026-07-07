@@ -19,6 +19,14 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
+import type { Session } from "@supabase/supabase-js";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  residentCreateAccountHref,
+  residentSignInHref,
+} from "@/lib/resident-public-nav";
+import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { buildTourContactHref } from "@/lib/manager-property-links";
 import {
   PropertySearchPicker,
   type PropertySearchOption,
@@ -115,9 +123,18 @@ function openSlotIndicesForDateStr(availability: Set<string>, dateStr: string): 
 export default function ToursContactPage() {
   const { showToast } = useAppUi();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<Tab>("tour");
+  const tabFromUrl = searchParams.get("tab")?.trim().toLowerCase();
+  const initialTab: Tab = tabFromUrl === "message" ? "message" : "tour";
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [extrasTick, setExtrasTick] = useState(0);
   const linkedPropertyId = searchParams.get("propertyId")?.trim() ?? "";
+  const nextPath = searchParams.get("next")?.trim() ?? "";
+  const tourReturnPath = linkedPropertyId ? buildTourContactHref(linkedPropertyId) : "/rent/tours-contact";
+  const returnAfterAuth = nextPath.startsWith("/") ? nextPath : tourReturnPath;
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     const on = () => setExtrasTick((n) => n + 1);
@@ -166,6 +183,7 @@ export default function ToursContactPage() {
             ) : (
               <TourFlow
                 property={linkedProperty}
+                returnAfterAuth={returnAfterAuth}
                 onSuccess={() => showToast("Tour booked.")}
               />
             )
@@ -181,7 +199,12 @@ export default function ToursContactPage() {
               />
             </div>
           ) : (
-            <MessageFlow propertyId={linkedProperty.id} propertyTitle={linkedProperty.title} onSuccess={() => showToast("Message sent.")} />
+            <MessageFlow
+              propertyId={linkedProperty.id}
+              propertyTitle={linkedProperty.title}
+              propertyAddress={linkedProperty.address}
+              onSuccess={() => showToast("Message sent.")}
+            />
           )}
         </div>
       </div>
@@ -191,15 +214,18 @@ export default function ToursContactPage() {
 
 function TourFlow({
   property,
+  returnAfterAuth,
   onSuccess,
 }: {
   property: MockProperty;
+  returnAfterAuth: string;
   onSuccess: () => void;
 }) {
   const { showToast } = useAppUi();
   const [step, setStep] = useState<TourStep>(1);
   const [maxStepReached, setMaxStepReached] = useState<TourStep>(1);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedContact, setSubmittedContact] = useState<{ name: string; email: string } | null>(null);
   const [tick, setTick] = useState(0);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const selectedRoomLabel = useMemo(
@@ -277,6 +303,11 @@ function TourFlow({
   ];
 
   if (submitted) {
+    const createAccountHref = submittedContact?.email
+      ? residentCreateAccountHref(returnAfterAuth, { email: submittedContact.email })
+      : residentCreateAccountHref(returnAfterAuth);
+    const signInHref = residentSignInHref(returnAfterAuth);
+
     return (
       <div className="mt-4 rounded-3xl border border-emerald-200/80 bg-card p-7 shadow-sm">
         <div className="rounded-2xl border px-5 py-5 portal-banner-success">
@@ -294,11 +325,36 @@ function TourFlow({
           </p>
         </div>
 
+        <div className="mt-5 rounded-2xl border border-border bg-accent/25 px-5 py-4">
+          <p className="text-sm font-semibold text-foreground">Save your tour in Axis</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted">
+            Create a free resident account to track this tour, message your manager, and apply when you are ready.
+            No account is required to book a tour.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href={createAccountHref}
+              data-attr="tour-success-create-account"
+              className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+            >
+              Create account
+            </Link>
+            <Link
+              href={signInHref}
+              data-attr="tour-success-sign-in"
+              className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
+            >
+              Sign in
+            </Link>
+          </div>
+        </div>
+
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => {
               setSubmitted(false);
+              setSubmittedContact(null);
               setStep(1);
               setMaxStepReached(1);
               setSelectedRoomKey(null);
@@ -310,8 +366,9 @@ function TourFlow({
             Request another tour
           </button>
           <Link
-            href={`/rent/apply?propertyId=${encodeURIComponent(property.id)}`}
-            className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
+            href={buildRentalApplyHref({ propertyId: property.id })}
+            data-attr="tour-success-apply"
+            className="rounded-full border border-primary/30 bg-primary/10 px-5 py-2 text-sm font-semibold text-primary hover:bg-primary/15"
           >
             Apply for this property
           </Link>
@@ -439,6 +496,7 @@ function TourFlow({
             year={calYear}
             submitting={bookingTour}
             fieldErrors={fieldErrors}
+            returnAfterAuth={returnAfterAuth}
             onFieldChange={(key) =>
               setFieldErrors((prev) => {
                 if (!(key in prev)) return prev;
@@ -524,6 +582,7 @@ function TourFlow({
                 return;
               }
               setSubmitted(true);
+              setSubmittedContact({ name: name.trim(), email: email.trim() });
               onSuccess();
             }}
           />
@@ -772,12 +831,14 @@ function Step2({
 
 function Step3({
   property, roomLabel, day, slotIndex, month, year, submitting, onSubmit, fieldErrors, onFieldChange,
+  returnAfterAuth,
 }: {
   property: MockProperty; roomLabel: string; day: number | null; slotIndex: number | null;
   month: number;
   year: number;
   submitting: boolean;
   fieldErrors: Record<string, string>;
+  returnAfterAuth: string;
   onFieldChange: (key: string) => void;
   onSubmit: (payload: { name: string; email: string; phone: string; notes: string }) => void | Promise<void>;
 }) {
@@ -785,6 +846,26 @@ function Step3({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const signInHref = residentSignInHref(returnAfterAuth);
+  const createAccountHref = residentCreateAccountHref(returnAfterAuth);
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createSupabaseBrowserClient();
+    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
+      const { session } = result.data;
+      if (cancelled || !session?.user) return;
+      const user = session.user;
+      const meta = user.user_metadata as { full_name?: string; name?: string } | undefined;
+      const profileName = meta?.full_name?.trim() || meta?.name?.trim() || "";
+      const profileEmail = user.email?.trim() || "";
+      if (profileName) setName((prev) => prev || profileName);
+      if (profileEmail) setEmail((prev) => prev || profileEmail);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -794,6 +875,14 @@ function Step3({
           {MONTHS[month]} {day}, {year} · {slotIndex != null ? formatAvailabilitySlotLabel(slotIndex) : ""}
         </p>
       </div>
+
+      <p className="text-sm leading-relaxed text-muted">
+        No account is required to book a tour. Add your contact details below, or{" "}
+        <Link href={signInHref} data-attr="tour-step-sign-in" className="font-semibold text-primary hover:underline">
+          sign in
+        </Link>{" "}
+        if you already have one.
+      </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name *" fieldKey="name" error={fieldErrors.name}>
@@ -836,9 +925,21 @@ function Step3({
         onClick={() => onSubmit({ name, email, phone, notes })}
         className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
+        data-attr="tour-book-submit"
       >
         {submitting ? "Booking..." : "Book tour"}
       </button>
+
+      <p className="text-center text-xs text-muted">
+        Prefer to create an account first?{" "}
+        <Link
+          href={email.trim() ? residentCreateAccountHref(returnAfterAuth, { email: email.trim() }) : createAccountHref}
+          data-attr="tour-step-create-account"
+          className="font-semibold text-primary hover:underline"
+        >
+          Create a resident account
+        </Link>
+      </p>
     </div>
   );
 }
@@ -846,10 +947,12 @@ function Step3({
 function MessageFlow({
   propertyId,
   propertyTitle,
+  propertyAddress,
   onSuccess,
 }: {
   propertyId: string;
   propertyTitle?: string;
+  propertyAddress?: string;
   onSuccess: () => void;
 }) {
   const { showToast } = useAppUi();
@@ -917,6 +1020,12 @@ function MessageFlow({
 
   return (
     <div className="mt-4 space-y-3">
+      {propertyTitle ? (
+        <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
+          <p className="font-semibold text-foreground">{propertyTitle}</p>
+          {propertyAddress ? <p className="mt-1 text-muted">{propertyAddress}</p> : null}
+        </div>
+      ) : null}
       <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
         <h2 className="text-base font-bold text-foreground">Topic</h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">
@@ -990,6 +1099,7 @@ function MessageFlow({
         type="button"
         onClick={handleSend}
         disabled={submitting}
+        data-attr="property-lead-message-send"
         className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(0,122,255,0.28)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-alt))" }}
       >

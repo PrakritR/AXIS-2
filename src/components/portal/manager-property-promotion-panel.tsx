@@ -11,9 +11,15 @@ import {
   draftWithPropertyKey,
   type PromotionDraft,
 } from "@/components/portal/manager-promotion";
-import { PromotionFlyerPreview, downloadPromotionFlyer } from "@/components/portal/promotion-flyer-preview";
+import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
+import {
+  PromotionFlyerAssetDetail,
+  PromotionFlyerHeaderActions,
+  PromotionTextAssetDetail,
+  PromotionTextHeaderActions,
+} from "@/components/portal/promotion-asset-detail";
+import { PromotionNewChooserModal } from "@/components/portal/promotion-new-chooser-modal";
 import { PromotionTextGenerateModal } from "@/components/portal/promotion-text-generate-modal";
-import { PromotionTextCopyButton, PromotionTextPreview } from "@/components/portal/promotion-text-preview";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
 import { syncPropertyPipelineFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
@@ -26,28 +32,55 @@ import {
   readManagerPromotionRows,
   syncManagerPromotionsFromServer,
   upsertManagerPromotion,
+  deleteManagerPromotionRow,
 } from "@/lib/manager-promotions-storage";
-import { normalizePromotionTemplate, PROMOTION_TONE_OPTIONS, type ManagerPromotionRow } from "@/lib/promotion-flyer";
-import { PROMOTION_TEXT_FORMAT_OPTIONS, type PromotionTextFormat } from "@/lib/promotion-text";
+import {
+  flattenPromotionAssets,
+  makePromotionAssetId,
+  nextPromotionAssetDefaultTitle,
+  sortPromotionAssets,
+  type PromotionAsset,
+  type PromotionAssetKind,
+} from "@/lib/promotion-assets";
+import {
+  FLYER_IMAGE_LIMIT,
+  normalizePromotionTemplate,
+  PROMOTION_TEMPLATE_DEFAULT,
+  PROMOTION_TONE_OPTIONS,
+  readFlyerEntries,
+  type FlyerEntry,
+  type ManagerPromotionRow,
+} from "@/lib/promotion-flyer";
+import {
+  buildFlyerEntryFromDraft,
+  buildTextEntryFromCopy,
+  removeFlyerEntryFromRow,
+  removeTextEntryFromRow,
+  syncPromotionRowLegacy,
+  updateFlyerEntryOnRow,
+  updateTextEntryOnRow,
+} from "@/lib/promotion-row-ops";
+import { type PromotionTextEntry, type PromotionTextFormat } from "@/lib/promotion-text";
 
-function rowToDraft(row: ManagerPromotionRow): PromotionDraft {
+function flyerEntryToDraft(row: ManagerPromotionRow, entry: FlyerEntry, listingId: string): PromotionDraft {
   return {
-    propertyKey: row.propertyId ?? "",
+    propertyKey: listingId,
     propertyLabel: row.propertyLabel,
-    address: row.inputs.address ?? "",
-    title: row.title,
-    headline: row.inputs.headline,
-    sellingPoints: row.inputs.sellingPoints,
-    customDetails: row.inputs.customDetails,
-    price: row.inputs.price,
-    promo: row.inputs.promo,
-    cta: row.inputs.cta,
-    contact: row.inputs.contact,
-    theme: row.theme,
-    flyerSize: row.flyerSize,
-    template: normalizePromotionTemplate(row.template),
-    tone: row.inputs.tone || PROMOTION_TONE_OPTIONS[0]!,
-    images: row.inputs.images ?? [],
+    address: entry.inputs.address ?? "",
+    title: entry.title,
+    headline: entry.inputs.headline,
+    sellingPoints: entry.inputs.sellingPoints,
+    customDetails: entry.inputs.customDetails,
+    price: entry.inputs.price,
+    promo: entry.inputs.promo,
+    cta: entry.inputs.cta,
+    contact: entry.inputs.contact,
+    theme: entry.theme,
+    flyerSize: entry.flyerSize,
+    template: normalizePromotionTemplate(entry.template),
+    tone: entry.inputs.tone || PROMOTION_TONE_OPTIONS[0]!,
+    aiPrompt: "",
+    images: entry.inputs.images ?? [],
   };
 }
 
@@ -60,18 +93,19 @@ export function ManagerPropertyPromotionPanel({
   showToast: (m: string) => void;
   onUpdated?: () => void;
 }) {
-  const { userId, ready: authReady } = useManagerUserId();
+  const { userId, email: managerEmail, ready: authReady } = useManagerUserId();
   const [tick, setTick] = useState(0);
   const [propertyTick, setPropertyTick] = useState(0);
+  const [showChooser, setShowChooser] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<PromotionDraft>(EMPTY_DRAFT);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [generatingText, setGeneratingText] = useState(false);
-  const [showTextModal, setShowTextModal] = useState(false);
-  const [previewEpoch, setPreviewEpoch] = useState(0);
-  const [flyerExpanded, setFlyerExpanded] = useState(true);
-  const [textExpanded, setTextExpanded] = useState(false);
+  const [generatingTextId, setGeneratingTextId] = useState<string | null>(null);
+  const [textModalAssetId, setTextModalAssetId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sectionExpanded, setSectionExpanded] = useState(true);
 
   useEffect(() => {
     if (!authReady) return;
@@ -95,50 +129,62 @@ export function ManagerPropertyPromotionPanel({
     return buildManagerPromotionPropertyOptions(userId);
   }, [userId, propertyTick]);
 
-  const promotion = useMemo(() => {
+  const autofillOpts = useMemo(() => ({ managerContact: managerEmail ?? "" }), [managerEmail]);
+
+  const propertyId = listingId.trim();
+
+  const assets = useMemo(() => {
     void tick;
-    const id = listingId.trim();
-    if (!id) return null;
-    return (
-      readManagerPromotionRows()
-        .filter((row) => row.propertyId === id)
-        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0] ?? null
-    );
-  }, [listingId, tick]);
+    if (!propertyId) return [];
+    const rows = readManagerPromotionRows().filter((row) => row.propertyId === propertyId);
+    return sortPromotionAssets(flattenPromotionAssets(rows), "newest");
+  }, [propertyId, tick]);
 
-  useEffect(() => {
-    setFlyerExpanded(true);
-  }, [promotion?.id, promotion?.updatedAt]);
-
-  const openForm = useCallback(() => {
-    if (promotion) {
-      setDraft(rowToDraft(promotion));
-      setEditingId(promotion.id);
-    } else {
-      setDraft(draftWithPropertyKey(EMPTY_DRAFT, listingId, listings));
-      setEditingId(null);
-    }
+  const openFlyerForm = useCallback(() => {
+    setEditingRowId(null);
+    setEditingEntryId(null);
+    setDraft(draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts));
     setShowForm(true);
-  }, [listingId, listings, promotion]);
+  }, [listings, propertyId, autofillOpts]);
+
+  const openEditFlyer = useCallback(
+    (row: ManagerPromotionRow, entryId: string) => {
+      const entry = readFlyerEntries(row).find((e) => e.id === entryId);
+      if (!entry) return;
+      setDraft(flyerEntryToDraft(row, entry, propertyId));
+      setEditingRowId(row.id);
+      setEditingEntryId(entryId);
+      setShowForm(true);
+    },
+    [propertyId],
+  );
 
   const closeForm = useCallback(() => {
     setShowForm(false);
-    setEditingId(null);
+    setEditingRowId(null);
+    setEditingEntryId(null);
     setDraft(EMPTY_DRAFT);
-    setPreviewEpoch((n) => n + 1);
   }, []);
+
+  function onChooseNewKind(kind: PromotionAssetKind) {
+    setShowChooser(false);
+    if (kind === "flyer") {
+      openFlyerForm();
+      return;
+    }
+    setTextModalAssetId("__new__");
+  }
 
   async function generate() {
     const label = draft.propertyLabel.trim();
-    const title = draft.title.trim() || draft.headline.trim() || label || "Untitled promotion";
+    const entryTitle = draft.title.trim() || nextPromotionAssetDefaultTitle(assets, "flyer");
     if (!label && !draft.headline.trim()) {
       showToast("Add a property/listing or a headline first.");
       return;
     }
-    const propertyId = listingId.trim() || null;
-    const editing = editingId ? readManagerPromotionRows().find((p) => p.id === editingId) ?? null : null;
+    const editingRow = editingRowId ? readManagerPromotionRows().find((p) => p.id === editingRowId) ?? null : null;
     setGenerating(true);
-    if (editing) {
+    if (editingRow) {
       track("promotion_regenerated", { theme: draft.theme, template: draft.template });
     } else {
       track("promotion_generation_started", {
@@ -150,196 +196,328 @@ export function ManagerPropertyPromotionPanel({
     }
     try {
       const inputs = draftInputs(draft);
-      const { copy, source } = await generateFlyerCopy(inputs, label, propertyId);
+      const { copy, source } = await generateFlyerCopy(inputs, label, {
+        propertyId,
+        extraInstructions: draft.aiPrompt,
+      });
       if (source === "forbidden") {
         showToast("You can only create flyers for your own properties.");
         return;
       }
       const now = new Date().toISOString();
-      upsertManagerPromotion({
-        id: editing?.id ?? makePromotionId(),
-        managerUserId: editing?.managerUserId ?? userId ?? null,
-        propertyId,
-        propertyLabel: label,
-        title,
-        theme: draft.theme,
-        flyerSize: draft.flyerSize,
-        template: draft.template,
-        status: "generated",
-        inputs,
-        copy,
-        textCopy: editing?.textCopy ?? null,
-        createdAt: editing?.createdAt ?? now,
-        updatedAt: now,
-      });
+      let savedRow: ManagerPromotionRow;
+      let entryId: string;
+
+      if (editingRow && editingEntryId) {
+        entryId = editingEntryId;
+        savedRow = updateFlyerEntryOnRow(editingRow, editingEntryId, {
+          title: entryTitle,
+          copy,
+          inputs,
+          theme: draft.theme,
+          flyerSize: draft.flyerSize,
+          template: draft.template,
+        });
+      } else {
+        const entry = buildFlyerEntryFromDraft({
+          title: entryTitle,
+          copy,
+          inputs,
+          theme: draft.theme,
+          flyerSize: draft.flyerSize,
+          template: draft.template,
+          now,
+        });
+        entryId = entry.id;
+        savedRow = syncPromotionRowLegacy({
+          id: makePromotionId(),
+          managerUserId: userId ?? null,
+          propertyId,
+          propertyLabel: label,
+          title: entryTitle,
+          theme: draft.theme,
+          flyerSize: draft.flyerSize,
+          template: draft.template,
+          status: "generated",
+          inputs,
+          copy,
+          textCopy: null,
+          flyerCopies: [entry],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      upsertManagerPromotion({ ...savedRow, updatedAt: now });
       closeForm();
       setTick((n) => n + 1);
+      setExpandedId(makePromotionAssetId(savedRow.id, "flyer", entryId));
       onUpdated?.();
       showToast(
-        editing
+        editingRow
           ? "Flyer updated."
           : source === "ai"
             ? "Flyer generated."
             : "Flyer generated (offline copy).",
       );
     } catch {
-      showToast(editing ? "Could not update the flyer. Try again." : "Could not generate the flyer. Try again.");
+      showToast(editingRow ? "Could not update the flyer. Try again." : "Could not generate the flyer. Try again.");
     } finally {
       setGenerating(false);
     }
   }
 
-  async function generateText(opts: {
-    format: PromotionTextFormat;
-    tone: string;
-    extraInstructions: string;
-  }) {
-    if (!promotion) return;
-    setGeneratingText(true);
+  async function createOrRegenerateText(
+    opts: { format: PromotionTextFormat; tone: string; extraInstructions: string; images: string[] },
+    asset: PromotionAsset | null,
+  ) {
+    if (asset?.textEntry) {
+      setGeneratingTextId(asset.textEntry.id);
+      try {
+        const inputs = {
+          ...asset.row.inputs,
+          tone: opts.tone.trim() || asset.row.inputs.tone,
+          images: opts.images.slice(0, FLYER_IMAGE_LIMIT),
+        };
+        const { copy, source } = await generatePromotionTextCopy(
+          inputs,
+          asset.row.propertyLabel,
+          opts.format,
+          { propertyId: asset.row.propertyId, extraInstructions: opts.extraInstructions },
+        );
+        if (source === "forbidden") {
+          showToast("You can only create promotions for your own properties.");
+          return;
+        }
+        upsertManagerPromotion(
+          updateTextEntryOnRow({ ...asset.row, inputs }, asset.textEntry.id, {
+            copy,
+            updatedAt: new Date().toISOString(),
+          }),
+        );
+        setTextModalAssetId(null);
+        setTick((n) => n + 1);
+        onUpdated?.();
+        showToast(source === "ai" ? "Promotion text generated." : "Promotion text generated (offline copy).");
+      } catch {
+        showToast("Could not generate promotion text.");
+      } finally {
+        setGeneratingTextId(null);
+      }
+      return;
+    }
+
+    const base = draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts);
+    const label = base.propertyLabel.trim() || base.headline.trim() || "Untitled promotion";
+    const entryTitle = nextPromotionAssetDefaultTitle(assets, "text");
+    setGeneratingTextId("__new__");
     try {
-      const inputs = { ...promotion.inputs, tone: opts.tone.trim() || promotion.inputs.tone };
-      const { copy, source } = await generatePromotionTextCopy(inputs, promotion.propertyLabel, opts.format, {
-        propertyId: promotion.propertyId,
+      const inputs = draftInputs({
+        ...base,
+        tone: opts.tone.trim() || base.tone,
+        images: opts.images,
+      });
+      const { copy, source } = await generatePromotionTextCopy(inputs, label, opts.format, {
+        propertyId,
         extraInstructions: opts.extraInstructions,
       });
       if (source === "forbidden") {
         showToast("You can only create promotions for your own properties.");
         return;
       }
-      upsertManagerPromotion({
-        ...promotion,
+      const now = new Date().toISOString();
+      const entry = buildTextEntryFromCopy(copy, entryTitle, now);
+      const row = syncPromotionRowLegacy({
+        id: makePromotionId(),
+        managerUserId: userId ?? null,
+        propertyId,
+        propertyLabel: label,
+        title: entryTitle,
+        theme: "cobalt",
+        flyerSize: "letter",
+        template: PROMOTION_TEMPLATE_DEFAULT,
+        status: "generated",
         inputs,
+        copy: null,
         textCopy: copy,
-        updatedAt: new Date().toISOString(),
+        textCopies: [entry],
+        createdAt: now,
+        updatedAt: now,
       });
-      setShowTextModal(false);
+      upsertManagerPromotion(row);
+      setTextModalAssetId(null);
+      setExpandedId(makePromotionAssetId(row.id, "text", entry.id));
       setTick((n) => n + 1);
       onUpdated?.();
-      showToast(source === "ai" ? "Promotion text generated." : "Promotion text generated (offline copy).");
+      showToast(source === "ai" ? "Promotion text created." : "Promotion text created (offline copy).");
     } catch {
       showToast("Could not generate promotion text.");
     } finally {
-      setGeneratingText(false);
+      setGeneratingTextId(null);
     }
   }
 
-  if (!listingId.trim()) return null;
+  function saveAssetTitle(asset: PromotionAsset, title: string) {
+    if (asset.kind === "flyer" && asset.flyerEntry) {
+      upsertManagerPromotion(updateFlyerEntryOnRow(asset.row, asset.flyerEntry.id, { title }));
+    } else if (asset.kind === "text" && asset.textEntry) {
+      upsertManagerPromotion(updateTextEntryOnRow(asset.row, asset.textEntry.id, { title }));
+    }
+    setTick((n) => n + 1);
+    onUpdated?.();
+  }
 
-  const hasFlyer = Boolean(promotion?.copy);
-  const textFormatLabel = promotion?.textCopy
-    ? PROMOTION_TEXT_FORMAT_OPTIONS.find((o) => o.id === promotion.textCopy?.format)?.label
-    : null;
+  function saveTextEntry(row: ManagerPromotionRow, entry: PromotionTextEntry) {
+    upsertManagerPromotion(updateTextEntryOnRow(row, entry.id, entry));
+    setTick((n) => n + 1);
+    onUpdated?.();
+  }
+
+  function deleteAsset(asset: PromotionAsset) {
+    if (asset.kind === "flyer" && asset.flyerEntry) {
+      const next = removeFlyerEntryFromRow(asset.row, asset.flyerEntry.id);
+      if (next) upsertManagerPromotion(next);
+      else deleteManagerPromotionRow(asset.row.id);
+    } else if (asset.kind === "text" && asset.textEntry) {
+      const next = removeTextEntryFromRow(asset.row, asset.textEntry.id);
+      if (next) upsertManagerPromotion(next);
+      else deleteManagerPromotionRow(asset.row.id);
+    }
+    if (expandedId === asset.id) setExpandedId(null);
+    setTick((n) => n + 1);
+    onUpdated?.();
+    showToast("Promotion deleted.");
+  }
+
+  if (!propertyId) return null;
+
+  const textModalAsset =
+    textModalAssetId && textModalAssetId !== "__new__"
+      ? assets.find((a) => a.id === textModalAssetId) ?? null
+      : null;
+
+  const renderHeaderActions = (asset: PromotionAsset, _indexWithinKind: number) => {
+    if (asset.kind === "flyer") {
+      return (
+        <PromotionFlyerHeaderActions
+          asset={asset}
+          onEdit={openEditFlyer}
+          onDelete={(_row, entryId) => {
+            const flyerAsset = assets.find(
+              (a) => a.row.id === asset.row.id && a.flyerEntry?.id === entryId,
+            );
+            if (flyerAsset) deleteAsset(flyerAsset);
+          }}
+          canDelete
+        />
+      );
+    }
+
+    return (
+      <PromotionTextHeaderActions
+        asset={asset}
+        onEdit={(row, entryId) =>
+          setTextModalAssetId(makePromotionAssetId(row.id, "text", entryId))
+        }
+        onDelete={(row, entryId) => {
+          const textAsset = assets.find((a) => a.row.id === row.id && a.textEntry?.id === entryId);
+          if (textAsset) deleteAsset(textAsset);
+        }}
+        editing={generatingTextId === asset.textEntry?.id}
+        showToast={showToast}
+      />
+    );
+  };
+
+  const renderExpanded = (asset: PromotionAsset, _indexWithinKind: number) => {
+    if (asset.kind === "flyer") {
+      return <PromotionFlyerAssetDetail asset={asset} />;
+    }
+
+    return (
+      <PromotionTextAssetDetail
+        asset={asset}
+        onSave={saveTextEntry}
+        showToast={showToast}
+      />
+    );
+  };
 
   return (
     <>
       <PortalCollapsibleSection
-        title="Promotion flyer"
-        expanded={hasFlyer ? flyerExpanded : true}
-        onExpandedChange={hasFlyer ? setFlyerExpanded : undefined}
-        collapsible={hasFlyer}
+        title="Promotion"
+        expanded={sectionExpanded}
+        onExpandedChange={setSectionExpanded}
+        collapsible={assets.length > 0}
+        className="mt-4"
         toggleDataAttr="promotion-section-toggle"
         headerActions={
-          <>
-            {hasFlyer ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 rounded-full px-3 text-xs"
-                data-attr="promotion-flyer-download"
-                onClick={() => downloadPromotionFlyer(promotion!)}
-              >
-                Download
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              data-attr="manager-property-create-flyer"
-              onClick={openForm}
-            >
-              {hasFlyer ? "Edit flyer" : "Create flyer"}
-            </Button>
-          </>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={() => setShowChooser(true)}
+            data-attr="manager-property-new-promotion"
+          >
+            New promotion
+          </Button>
         }
-        contentClassName="min-w-0 max-w-full overflow-x-auto px-4 py-3"
+        contentClassName="px-4 py-3"
       >
-        {hasFlyer ? (
-          <PromotionFlyerPreview
-            key={`${promotion!.id}-${promotion!.updatedAt}-${previewEpoch}`}
-            promotion={promotion!}
-            embedded
-          />
-        ) : null}
+        <PromotionAssetStack
+          assets={assets}
+          expandedId={expandedId}
+          onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+          onSaveTitle={saveAssetTitle}
+          renderHeaderActions={renderHeaderActions}
+          renderExpanded={renderExpanded}
+          emptyMessage="No promotions for this property yet."
+        />
       </PortalCollapsibleSection>
 
-      <PortalCollapsibleSection
-        title="Promotion text"
-        subtitle={textFormatLabel ?? "Generate copy for social, email, or SMS"}
-        expanded={hasFlyer ? textExpanded : true}
-        onExpandedChange={hasFlyer ? setTextExpanded : undefined}
-        collapsible={hasFlyer}
-        className="mt-4"
-        toggleDataAttr="promotion-text-section-toggle"
-        headerActions={
-          hasFlyer ? (
-            <>
-              {promotion?.textCopy ? (
-                <PromotionTextCopyButton
-                  copy={promotion.textCopy}
-                  className="h-8 rounded-full px-3 text-xs"
-                  onCopied={() => showToast("Copied to clipboard.")}
-                />
-              ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 rounded-full px-3 text-xs"
-                data-attr="promotion-text-generate-open"
-                onClick={() => setShowTextModal(true)}
-                disabled={!promotion}
-              >
-                {promotion?.textCopy ? "Regenerate text" : "Generate text"}
-              </Button>
-            </>
-          ) : null
-        }
-        contentClassName="min-w-0 max-w-full overflow-x-auto px-4 py-3"
-      >
-        {promotion?.textCopy ? (
-          <PromotionTextPreview copy={promotion.textCopy} />
-        ) : hasFlyer ? (
-          <p className="text-sm text-muted">
-            Generate channel-ready copy using the same property facts as your flyer.
-          </p>
-        ) : null}
-      </PortalCollapsibleSection>
+      <PromotionNewChooserModal
+        open={showChooser}
+        onClose={() => setShowChooser(false)}
+        onChoose={onChooseNewKind}
+      />
 
       <PromotionTextGenerateModal
-        open={showTextModal}
-        onClose={() => setShowTextModal(false)}
-        busy={generatingText}
-        initialFormat={promotion?.textCopy?.format}
-        initialTone={promotion?.inputs.tone}
-        onGenerate={(opts) => void generateText(opts)}
+        open={textModalAssetId !== null}
+        onClose={() => {
+          setTextModalAssetId(null);
+        }}
+        busy={generatingTextId !== null}
+        initialFormat={textModalAsset?.textEntry?.copy.format}
+        initialTone={
+          textModalAsset?.row.inputs.tone ??
+          draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts).tone
+        }
+        initialImages={
+          textModalAsset?.row.inputs.images ??
+          draftWithPropertyKey(EMPTY_DRAFT, propertyId, listings, autofillOpts).images
+        }
+        onGenerate={(opts) => {
+          void createOrRegenerateText(opts, textModalAsset);
+        }}
       />
 
       <Modal
         open={showForm}
-        title={editingId ? "Edit flyer" : "Create flyer"}
+        title={editingEntryId ? "Edit flyer" : "New flyer"}
         onClose={closeForm}
         panelClassName="max-w-2xl"
-      >
-        {promotion?.copy && editingId ? (
-          <div className="mb-4 min-w-0">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted">Current flyer</p>
-            <PromotionFlyerPreview
-              key={`modal-${promotion.id}-${promotion.updatedAt}`}
-              promotion={promotion}
-              embedded
-            />
+        footer={
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
+              {generating ? "Generating…" : editingEntryId ? "Update flyer" : "Generate flyer"}
+            </Button>
+            <Button type="button" variant="outline" onClick={closeForm}>
+              Cancel
+            </Button>
           </div>
-        ) : null}
+        }
+      >
         <PromotionForm
           draft={draft}
           setDraft={setDraft}
@@ -347,14 +525,6 @@ export function ManagerPropertyPromotionPanel({
           onSelectProperty={() => {}}
           hidePropertyPicker
         />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button type="button" onClick={() => void generate()} disabled={generating} data-attr="promotion-generate">
-            {generating ? "Generating…" : editingId ? "Update flyer" : "Generate flyer"}
-          </Button>
-          <Button type="button" variant="outline" onClick={closeForm}>
-            Cancel
-          </Button>
-        </div>
       </Modal>
     </>
   );

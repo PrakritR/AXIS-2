@@ -4,8 +4,24 @@
  */
 
 import type { MockProperty } from "@/data/types";
+import { cleanPropertyDisplayName } from "@/lib/manager-property-links";
 import { isEntireHomeListing } from "@/lib/manager-listing-submission";
-import type { PromotionInputs } from "@/lib/promotion-flyer";
+import { sanitizeFlyerImages, type PromotionInputs } from "@/lib/promotion-flyer";
+
+export type PromotionDraftAutofillFields = {
+  propertyLabel: string;
+  address: string;
+  headline: string;
+  sellingPoints: string;
+  customDetails: string;
+  price: string;
+  promo: string;
+  cta: string;
+  contact: string;
+  images: string[];
+};
+
+const DEFAULT_PROMOTION_CTA = "Schedule a tour";
 
 export type PromotionListingFacts = {
   propertyName: string;
@@ -30,6 +46,79 @@ function splitLineList(text: string): string[] {
     .split(/\r?\n|,/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function firstBundlePromo(property: MockProperty): string {
+  const promo = (property.listingSubmission?.bundles ?? [])
+    .map((b) => b.promo?.trim())
+    .find(Boolean);
+  return promo ?? "";
+}
+
+function promotionPropertyLabel(property: MockProperty): string {
+  const name = cleanPropertyDisplayName(property);
+  const place = property.neighborhood.trim() || property.address.trim();
+  return place ? `${name} — ${place}` : name;
+}
+
+/** Source-field mapping for property → promotion draft autofill. */
+export function buildPromotionDraftAutofill(
+  property: MockProperty,
+  opts?: { managerContact?: string },
+): PromotionDraftAutofillFields {
+  const facts = extractPromotionListingFacts(property);
+  const inputs = enrichPromotionInputsFromListing(
+    {
+      headline: "",
+      sellingPoints: "",
+      price: "",
+      promo: "",
+      cta: DEFAULT_PROMOTION_CTA,
+      contact: opts?.managerContact?.trim() ?? "",
+      tone: "",
+      address: "",
+      customDetails: "",
+    },
+    property,
+  );
+  const images = sanitizeFlyerImages(property.listingSubmission?.housePhotoDataUrls ?? []);
+
+  return {
+    propertyLabel: promotionPropertyLabel(property),
+    address: inputs.address ?? facts.address,
+    headline: inputs.headline,
+    sellingPoints: inputs.sellingPoints,
+    customDetails: inputs.customDetails,
+    price: inputs.price,
+    promo: firstBundlePromo(property),
+    cta: DEFAULT_PROMOTION_CTA,
+    contact: opts?.managerContact?.trim() ?? "",
+    images,
+  };
+}
+
+/** Fill empty promotion draft fields from listing data (never overwrites manager edits). */
+export function enrichPromotionDraftFromListing<T extends PromotionDraftAutofillFields>(
+  draft: T,
+  property: MockProperty | null | undefined,
+  opts?: { managerContact?: string },
+): T {
+  if (!property) return draft;
+  const source = buildPromotionDraftAutofill(property, opts);
+  const fill = (current: string, next: string) => (current.trim() ? current : next);
+  return {
+    ...draft,
+    propertyLabel: fill(draft.propertyLabel, source.propertyLabel),
+    address: fill(draft.address, source.address),
+    headline: fill(draft.headline, source.headline),
+    sellingPoints: fill(draft.sellingPoints, source.sellingPoints),
+    customDetails: fill(draft.customDetails, source.customDetails),
+    price: fill(draft.price, source.price),
+    promo: fill(draft.promo, source.promo),
+    cta: fill(draft.cta, source.cta),
+    contact: fill(draft.contact, source.contact),
+    images: draft.images.length ? draft.images : source.images.length ? source.images : draft.images,
+  };
 }
 
 export function extractPromotionListingFacts(property: MockProperty): PromotionListingFacts {

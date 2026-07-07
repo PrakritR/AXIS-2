@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 import { AxisLogoMark } from "@/components/brand/axis-logo";
 import { AuthRoleIcon, type AuthRoleIconName } from "@/components/auth/auth-role-icons";
@@ -6,6 +6,31 @@ import { detectNativePlatformSync } from "@/lib/native/detect-native";
 
 export const AUTH_TERMS_HREF = "/tos";
 export const AUTH_PRIVACY_HREF = "/privacy";
+
+const authPublicLinkClass =
+  "font-semibold text-primary/90 underline-offset-2 hover:text-primary hover:underline";
+
+/**
+ * Public marketing/legal links from auth screens — on native, use full navigation so
+ * NativeAppGate and the WebView route stack stay in sync (same pattern as portal cross-nav).
+ */
+export function AuthPublicLink({
+  href,
+  onClick,
+  ...props
+}: ComponentProps<typeof Link>) {
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    onClick?.(event);
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (!detectNativePlatformSync()) return;
+    event.preventDefault();
+    const target = typeof href === "string" ? href : href.pathname ?? "/";
+    window.location.assign(target);
+  };
+
+  return <Link href={href} onClick={handleClick} {...props} />;
+}
 
 /** Enrollio-style consent copy under auth CTAs — links to public Terms and Privacy pages. */
 export function AuthLegalConsent({
@@ -18,26 +43,26 @@ export function AuthLegalConsent({
   const lead = action === "create" ? "By creating an account, you agree to our" : "By continuing, you agree to our";
   return (
     <p
-      className={`auth-legal-consent whitespace-nowrap text-center text-[9px] leading-tight tracking-tight text-muted sm:text-[10px] ${className}`.trim()}
+      className={`auth-legal-consent text-center text-[9px] leading-snug tracking-tight text-muted sm:text-[10px] ${className}`.trim()}
     >
       {lead}{" "}
-      <Link
+      <AuthPublicLink
         href={AUTH_TERMS_HREF}
-        className="font-semibold text-primary/90 underline-offset-2 hover:text-primary hover:underline"
+        className={authPublicLinkClass}
         data-attr="auth-terms-link"
         aria-label="Terms of Service"
       >
         Terms
-      </Link>{" "}
+      </AuthPublicLink>{" "}
       and{" "}
-      <Link
+      <AuthPublicLink
         href={AUTH_PRIVACY_HREF}
-        className="font-semibold text-primary/90 underline-offset-2 hover:text-primary hover:underline"
+        className={authPublicLinkClass}
         data-attr="auth-privacy-link"
         aria-label="Privacy Policy"
       >
         Privacy
-      </Link>
+      </AuthPublicLink>
       .
     </p>
   );

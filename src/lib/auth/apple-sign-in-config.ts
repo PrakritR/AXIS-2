@@ -8,7 +8,7 @@ export const APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE =
   "Apple sign-in is not enabled in Supabase. Enable Authentication → Providers → Apple, set Client IDs to com.axisseattlehousing.app, and leave Secret Key blank for native iOS.";
 
 export const APPLE_SIGN_IN_WEB_ENV_MESSAGE =
-  "Apple sign-in is hidden on web until NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=true (after Apple is enabled in Supabase). See docs/apple-sign-in-setup.md.";
+  "Apple sign-in is disabled on web (NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false). See docs/apple-sign-in-setup.md.";
 
 export function supabaseAppleOAuthRedirectUri(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, "");
@@ -16,18 +16,24 @@ export function supabaseAppleOAuthRedirectUri(): string {
   return `${url}/auth/v1/callback`;
 }
 
-/** Explicit opt-in for web OAuth — native iOS always shows Apple when Google is offered (App Store 4.8). */
+/** Legacy opt-in flag — still honored when explicitly true. */
 export function isAppleSignInEnabledInEnv(): boolean {
   return process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED === "true";
+}
+
+/** Explicit opt-out for web OAuth — native iOS always shows Apple when Google is offered (App Store 4.8). */
+export function isAppleSignInDisabledOnWeb(): boolean {
+  return process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED === "false";
 }
 
 /** Whether the Apple button should render in the current shell. */
 export function isAppleSignInAvailable(): boolean {
   if (detectNativePlatformSync() === "ios") return true;
-  return isAppleSignInEnabledInEnv();
+  if (isAppleSignInDisabledOnWeb()) return false;
+  return true;
 }
 
-/** Dev-only console hint when Apple is hidden on web. */
+/** Dev-only console hint when Apple is explicitly hidden on web. */
 export function logAppleSignInUnavailableDevHint(): void {
   if (process.env.NODE_ENV === "production") return;
   if (typeof window === "undefined") return;

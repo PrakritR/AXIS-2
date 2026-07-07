@@ -949,7 +949,7 @@ html {
   color-scheme: light;
 }
 
-.hero-search-panel input[type="date"].hero-search-date-input {
+input[type="date"].hero-search-date-input {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -957,7 +957,7 @@ html {
   box-sizing: border-box;
 }
 
-.hero-search-panel input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
+input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   min-width: 0;
   text-align: left;
 }

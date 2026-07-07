@@ -24,6 +24,7 @@ export type ManagerExpenseSnapshot = {
 
 export const MANAGER_OUTGOING_PAYMENTS_EVENT = "axis:manager-outgoing-payments";
 const SESSION_KEY = "axis:manager-outgoing-expenses:v1";
+const DELETED_DEMO_EXPENSES_KEY = "axis:manager-outgoing-expenses-deleted:v1";
 const SYNC_TTL_MS = 15_000;
 
 let memoryExpenses: ManagerExpenseSnapshot[] = [];
@@ -92,15 +93,28 @@ function writeSession(expenses: ManagerExpenseSnapshot[]) {
   }
 }
 
-export function readManagerOutgoingExpenses(): ManagerExpenseSnapshot[] {
-  hydrateFromSession();
-  return [...memoryExpenses];
+function readDeletedDemoExpenseIds(): Set<string> {
+  if (!canUseStorage()) return new Set();
+  try {
+    const raw = window.sessionStorage.getItem(DELETED_DEMO_EXPENSES_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
 }
 
-export async function syncManagerOutgoingExpensesFromServer(force = false): Promise<ManagerExpenseSnapshot[]> {
-  hydrateFromSession();
-  if (isDemoModeActive()) {
-    const demo = demoExpenseRows().map((row) => ({
+function writeDeletedDemoExpenseIds(ids: Set<string>) {
+  if (!canUseStorage()) return;
+  window.sessionStorage.setItem(DELETED_DEMO_EXPENSES_KEY, JSON.stringify([...ids]));
+}
+
+function mapDemoExpenseRows(): ManagerExpenseSnapshot[] {
+  const deleted = readDeletedDemoExpenseIds();
+  return demoExpenseRows()
+    .filter((row) => !deleted.has(row.id))
+    .map((row) => ({
       id: row.id,
       propertyId: null,
       propertyName: row.property,
@@ -111,6 +125,42 @@ export async function syncManagerOutgoingExpensesFromServer(force = false): Prom
       memo: row.memo,
       vendorId: null,
     }));
+}
+
+export function deleteManagerOutgoingExpense(expenseId: string): boolean {
+  const id = expenseId.trim();
+  if (!id) return false;
+  hydrateFromSession();
+
+  const hadLocal = memoryExpenses.some((expense) => expense.id === id);
+  if (hadLocal) {
+    writeSession(memoryExpenses.filter((expense) => expense.id !== id));
+  }
+
+  if (isDemoModeActive()) {
+    const deleted = readDeletedDemoExpenseIds();
+    const isBuiltInDemo = demoExpenseRows().some((row) => row.id === id);
+    if (!hadLocal && !isBuiltInDemo) return false;
+    deleted.add(id);
+    writeDeletedDemoExpenseIds(deleted);
+    if (!hadLocal) {
+      writeSession(mapDemoExpenseRows());
+    }
+    return true;
+  }
+
+  return hadLocal;
+}
+
+export function readManagerOutgoingExpenses(): ManagerExpenseSnapshot[] {
+  hydrateFromSession();
+  return [...memoryExpenses];
+}
+
+export async function syncManagerOutgoingExpensesFromServer(force = false): Promise<ManagerExpenseSnapshot[]> {
+  hydrateFromSession();
+  if (isDemoModeActive()) {
+    const demo = mapDemoExpenseRows();
     writeSession(demo);
     return demo;
   }

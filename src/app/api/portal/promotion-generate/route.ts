@@ -55,9 +55,10 @@ const SYSTEM_PROMPT = [
   '{"headline": string (<=8 words), "subheadline": string (<=16 words), "sellingPoints": string[] (3-5 punchy items, <=10 words each), "promoLine": string (short offer line or ""), "ctaText": string (<=6 words), "closingLine": string (<=18 words, may include the contact info)}',
 ].join("\n");
 
-function buildUserPrompt(inputs: PromotionInputs, propertyLabel: string): string {
+function buildUserPrompt(inputs: PromotionInputs, propertyLabel: string, extraInstructions: string): string {
   const points = parseSellingPoints(inputs.sellingPoints);
   return [
+    extraInstructions.trim() ? `Extra manager notes: ${extraInstructions.trim()}` : "",
     `Property / listing: ${propertyLabel || "(unspecified)"}`,
     `Address: ${inputs.address || "(none)"}`,
     `Manager's headline idea: ${inputs.headline || "(none)"}`,
@@ -70,7 +71,9 @@ function buildUserPrompt(inputs: PromotionInputs, propertyLabel: string): string
     `Tone: ${inputs.tone || "Warm & welcoming"}`,
     "",
     "Write the flyer copy now as the JSON object.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function parseCopy(text: string, inputs: PromotionInputs, propertyLabel: string): FlyerCopy {
@@ -105,9 +108,11 @@ export async function POST(req: Request) {
       inputs?: Record<string, unknown>;
       propertyLabel?: unknown;
       propertyId?: unknown;
+      extraInstructions?: unknown;
     };
     const inputs = normalizeInputs(body.inputs ?? {});
     const propertyLabel = clean(body.propertyLabel);
+    const extraInstructions = clean(body.extraInstructions);
 
     // When the flyer is tied to a saved property, the manager must own (or be an
     // assigned co-manager of) it — never trust a client-supplied propertyId.
@@ -127,7 +132,7 @@ export async function POST(req: Request) {
     }
 
     const model = TIER_MODELS.standard;
-    const userPrompt = buildUserPrompt(inputs, propertyLabel);
+    const userPrompt = buildUserPrompt(inputs, propertyLabel, extraInstructions);
 
     const result = await traceAgentTurn(
       ctx,

@@ -42,11 +42,15 @@ export function ManagerOutgoingPaymentDetail({
   workOrder,
   vendor,
   onPaid,
+  onDelete,
+  deleteBusy = false,
 }: {
   row: DemoManagerOutgoingPaymentRow;
   workOrder?: DemoManagerWorkOrderRow;
   vendor?: ManagerVendorRow | null;
   onPaid?: () => void;
+  onDelete?: () => void;
+  deleteBusy?: boolean;
 }) {
   const { showToast } = useAppUi();
   const payable = Boolean(row.workOrderId && row.bucket !== "paid");
@@ -205,13 +209,29 @@ export function ManagerOutgoingPaymentDetail({
           type="button"
           variant="outline"
           className={PORTAL_DETAIL_BTN}
-          onClick={() => {
+          onClick={(event) => {
+            event.stopPropagation();
             void navigator.clipboard?.writeText(row.amountLabel);
             showToast("Amount copied.");
           }}
         >
           Copy amount
         </Button>
+        {onDelete ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={`${PORTAL_DETAIL_BTN} text-danger`}
+            disabled={deleteBusy}
+            data-attr="outgoing-payment-delete"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+          >
+            {deleteBusy ? "Deleting…" : "Delete"}
+          </Button>
+        ) : null}
       </PortalTableDetailActions>
 
       <Modal open={payConfirmOpen} onClose={() => setPayConfirmOpen(false)} title="Confirm vendor payment">

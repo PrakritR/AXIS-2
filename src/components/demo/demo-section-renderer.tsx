@@ -6,7 +6,8 @@ import { useMemo } from "react";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { ResidentMoveInResolvedView } from "@/components/portal/resident-move-in-view";
-import { demoApplications, demoProperties } from "@/lib/demo/demo-data";
+import { demoProperties } from "@/lib/demo/demo-data";
+import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
 import type { DemoPortalRole } from "@/lib/demo/demo-session";
 import {
   DEMO_MANAGER_EMAIL,
@@ -209,7 +210,11 @@ export function DemoSectionRenderer({
 function ResidentMoveInDemo() {
   const resolved = useMemo(() => {
     const propertiesById = Object.fromEntries(demoProperties().map((p) => [p.id, p]));
-    return resolveResidentMoveInFromApplications(DEMO_RESIDENT_EMAIL, demoApplications(), propertiesById);
+    return resolveResidentMoveInFromApplications(
+      DEMO_RESIDENT_EMAIL,
+      readManagerApplicationRows(),
+      propertiesById,
+    );
   }, []);
 
   return (

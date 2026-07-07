@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
-import { ManagerApplicationQuestionsEditorModal, applicationQuestionTypeLabel } from "@/components/portal/manager-application-questions-editor-modal";
+import { PortalEditRow } from "@/components/portal/portal-edit-row";
+import {
+  ManagerApplicationQuestionsEditorModal,
+  applicationQuestionTypeLabel,
+} from "@/components/portal/manager-application-questions-editor-modal";
 import {
   normalizeCustomApplicationFields,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
-import {
-  persistManagerListingSubmission,
-  type ManagerPropertySaveTarget,
-} from "@/lib/manager-property-save-target";
+import { persistManagerListingSubmission } from "@/lib/manager-property-save-target";
 import {
   listingApplicationIsCustomized,
   removeListingApplicationField,
@@ -32,6 +34,17 @@ function shortenOptions(options: string[], max = 3): string {
   return `${options.slice(0, max).join(" / ")} +${options.length - max} more`;
 }
 
+function questionSubtitle(field: ResolvedApplicationField): string {
+  return [
+    applicationQuestionTypeLabel(field.type),
+    field.required ? "Required" : "Optional",
+    field.type === "select" && field.options.length > 0 ? shortenOptions(field.options) : null,
+    field.isStandard ? "Built-in" : "Custom",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /**
  * Per-property application editor — custom questions applicants answer in the
  * rental application (Additional details step). Stored on the listing submission
@@ -50,24 +63,28 @@ export function ManagerPropertyApplicationQuestionsPanel({
   onUpdated: () => void;
   showToast: (m: string) => void;
 }) {
-  const [modalOpen, setModalOpen] = useState(false);
+  const [listModalOpen, setListModalOpen] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingField, setEditingField] = useState<ResolvedApplicationField | null>(null);
 
   const applicationFields = useMemo(
     () => resolveListingApplicationFields(sub, normalizeCustomApplicationFields),
     [sub],
   );
   const hasPreview = applicationFields.length > 0;
-  const customized = listingApplicationIsCustomized(sub);
-
-  useEffect(() => {
-    setExpandedSections({});
-  }, [applicationFields.length, customized]);
 
   if (!saveTarget || !managerUserId) return null;
 
-  const closeModal = () => setModalOpen(false);
+  const openEdit = (field: ResolvedApplicationField) => {
+    setEditingField(field);
+    setEditOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditingField(null);
+  };
 
   const removeField = (field: ResolvedApplicationField) => {
     const patch = removeListingApplicationField(sub, field);
@@ -94,7 +111,7 @@ export function ManagerPropertyApplicationQuestionsPanel({
             variant="outline"
             className="h-8 rounded-full px-3 text-xs"
             data-attr="application-questions-add"
-            onClick={() => setModalOpen(true)}
+            onClick={() => setListModalOpen(true)}
           >
             Edit application
           </Button>
@@ -102,55 +119,30 @@ export function ManagerPropertyApplicationQuestionsPanel({
         contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
       >
         {hasPreview ? (
-          <div className="space-y-4">
+          <div className="space-y-2">
             {RENTAL_APPLICATION_SECTIONS.map((section) => {
               const sectionQuestions = applicationFields.filter(
                 (f) => (f.section ?? "additional") === section.id,
               );
               if (sectionQuestions.length === 0) return null;
               return (
-                <PortalCollapsibleSection
-                  key={section.id}
-                  title={section.title}
-                  titleVariant="label"
-                  subtitle={`${sectionQuestions.length} question${sectionQuestions.length === 1 ? "" : "s"}`}
-                  expanded={expandedSections[section.id] ?? false}
-                  onExpandedChange={(open) =>
-                    setExpandedSections((prev) => ({ ...prev, [section.id]: open }))
-                  }
-                  toggleDataAttr={`application-preview-section-${section.id}`}
-                  surfaceMuted={false}
-                  contentClassName="space-y-2 pt-0"
-                >
+                <div key={section.id} className="space-y-2">
+                  <p className="px-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">
+                    {section.title}
+                  </p>
                   {sectionQuestions.map((field) => (
-                    <div
+                    <PortalEditRow
                       key={field.id}
-                      className="flex gap-2 rounded-xl border border-border bg-accent/15 px-3 py-2.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium leading-snug text-foreground">{field.label}</p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {applicationQuestionTypeLabel(field.type)}
-                          {field.required ? " · Required" : " · Optional"}
-                          {field.type === "select" && field.options.length > 0
-                            ? ` · ${shortenOptions(field.options)}`
-                            : ""}
-                          {field.isStandard ? " · Built-in" : " · Custom"}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 text-sm font-bold text-rose-800 portal-danger-outline hover:bg-rose-50"
-                        data-attr="application-question-remove-one"
-                        title={`Remove ${field.label}`}
-                        aria-label={`Remove ${field.label}`}
-                        onClick={() => removeField(field)}
-                      >
-                        ×
-                      </button>
-                    </div>
+                      title={field.label}
+                      subtitle={questionSubtitle(field)}
+                      clickDataAttr={`application-preview-edit-${field.id}`}
+                      onClick={() => openEdit(field)}
+                      onRemove={() => removeField(field)}
+                      removeTitle={`Remove ${field.label}`}
+                      removeDataAttr="application-question-remove-one"
+                    />
                   ))}
-                </PortalCollapsibleSection>
+                </div>
               );
             })}
           </div>
@@ -158,11 +150,22 @@ export function ManagerPropertyApplicationQuestionsPanel({
       </PortalCollapsibleSection>
 
       <ManagerApplicationQuestionsEditorModal
-        open={modalOpen}
+        open={listModalOpen}
         sub={sub}
         saveTarget={saveTarget}
         managerUserId={managerUserId}
-        onClose={closeModal}
+        onClose={() => setListModalOpen(false)}
+        onSaved={onUpdated}
+        showToast={showToast}
+      />
+
+      <ApplicationQuestionEditModal
+        open={editOpen}
+        field={editingField}
+        sub={sub}
+        saveTarget={saveTarget}
+        managerUserId={managerUserId}
+        onClose={closeEdit}
         onSaved={onUpdated}
         showToast={showToast}
       />

@@ -2,7 +2,7 @@
 
 Axis uses **Capacitor** (not Expo). Native iOS sign-in exchanges an Apple `identityToken` with Supabase via `signInWithIdToken`; Safari/desktop uses Supabase OAuth redirect.
 
-Gating: `isAppleSignInAvailable()` in `src/lib/auth/apple-sign-in-config.ts` — **iOS app always shows Apple** when Google is offered (App Store 4.8); **web hides the button** until `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=true`.
+Gating: `isAppleSignInAvailable()` in `src/lib/auth/apple-sign-in-config.ts` — **iOS app always shows Apple** when Google is offered (App Store 4.8); **web shows Apple by default** alongside Google. Set `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false` to hide on web. Misconfigured Supabase Apple OAuth surfaces a toast via `probeSupabaseAppleOAuthUrl` instead of a raw JSON error page.
 
 ## Native iOS checklist
 
@@ -45,7 +45,7 @@ com.axisseattlehousing.app://auth/callback/**
 | 1 | Supabase → Authentication → Providers → **Apple** | Enable + configure web OAuth (Services ID + secret — see below) |
 | 2 | Supabase → Authentication → URL configuration → **Redirect URLs** | Add HTTPS callbacks (see below) |
 | 3 | Apple Developer → **Services ID** | Domains + return URL = Supabase callback |
-| 4 | `.env.local` | `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=true` (after Steps 1–3) |
+| 4 | `.env.local` | Optional: `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false` to hide the web button |
 
 **Supabase Apple provider (web OAuth):**
 
@@ -83,14 +83,14 @@ If redirect URLs are missing, Supabase may fall back to **Site URL** (e.g. `http
 3. Add Services ID to Supabase **Client IDs**
 4. Generate rotating **Secret Key** in Supabase from your Apple `.p8` key
 
-**Environment variable:**
+**Environment variable (optional):**
 
 ```bash
-# .env.local — only after Apple is enabled and web OAuth is configured in Supabase.
-NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=true
+# .env.local — only set to hide Apple on web. Shown by default on sign-in and create-account.
+# NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false
 ```
 
-Without this, web **hides** "Continue with Apple" (Google is unaffected). The app also probes the Supabase authorize URL before redirect; if Apple is disabled you get a toast instead of a raw JSON error page.
+Web **shows** "Continue with Apple" on `/auth/sign-in` and `/auth/create-account` by default. The app probes the Supabase authorize URL before redirect; if Apple is disabled you get a toast instead of a raw JSON error page.
 
 **Flow:** `startAppleSignIn` → `signInWithOAuth({ provider: 'apple' })` → probe authorize URL → redirect to Apple.
 
@@ -106,7 +106,7 @@ If you see:
 
 Apple is **not enabled** in this Supabase project. Complete the checklist for your surface (native vs web) above.
 
-On **web**, the button stays hidden until `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=true`. If you enabled the env var but not Supabase, the probe shows a setup toast instead of this page.
+On **web**, the button is shown by default. Set `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=false` to hide it. If Apple is not configured in Supabase, the probe shows a setup toast instead of this page.
 
 ## Test
 
@@ -120,9 +120,8 @@ If you see `"SignInWithApple" plugin is not implemented on ios`, the installed a
 
 **Web**
 
-1. Set `NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED=true` in `.env.local` and restart `next dev`
-2. Confirm Apple provider + redirect URLs in Supabase
-3. Open `/auth/sign-in` on laptop — **Continue with Apple** should appear and complete OAuth
+1. Confirm Apple provider + redirect URLs in Supabase
+2. Open `/auth/sign-in` on laptop — **Continue with Apple** should appear next to Google and complete OAuth
 
 ## App Store 4.8
 

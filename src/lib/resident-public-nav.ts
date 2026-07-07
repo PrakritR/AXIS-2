@@ -3,9 +3,20 @@
 export const RESIDENT_BROWSE_PATH = "/rent/browse";
 export const RESIDENT_APPLICATIONS_PATH = "/resident/applications";
 
-export function residentCreateAccountHref(nextPath = RESIDENT_APPLICATIONS_PATH): string {
+/** Resident create-account → public browse (no auth required). */
+export function residentBrowseFromAuthHref(): string {
+  return `${RESIDENT_BROWSE_PATH}?from=auth`;
+}
+
+export function residentCreateAccountHref(
+  nextPath = RESIDENT_APPLICATIONS_PATH,
+  opts?: { email?: string },
+): string {
   const next = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
-  return `/auth/create-account?role=resident&next=${encodeURIComponent(next)}`;
+  const q = new URLSearchParams({ role: "resident", next });
+  const email = opts?.email?.trim().toLowerCase();
+  if (email) q.set("email", email);
+  return `/auth/create-account?${q.toString()}`;
 }
 
 export function residentSignInHref(nextPath = RESIDENT_APPLICATIONS_PATH): string {

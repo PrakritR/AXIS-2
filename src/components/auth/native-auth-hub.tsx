@@ -29,7 +29,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { isNativeOAuthInProgress } from "@/lib/native/open-url";
 import { getNativeInfo } from "@/lib/native/push-client";
-import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
+import { portalNavClick } from "@/lib/portal-nav-client";
+import { residentBrowseFromAuthHref } from "@/lib/resident-public-nav";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
@@ -377,6 +378,12 @@ function NativeAuthHubInner({
     requestAnimationFrame(scrollAuthMainToTop);
   }, [router, signInHref]);
 
+  const browseHomesHref = residentBrowseFromAuthHref();
+  const onBrowseHomesClick = useMemo(
+    () => portalNavClick(router, browseHomesHref, { preferFullNavigation: true }),
+    [browseHomesHref, router],
+  );
+
   const layoutMode: AuthLayoutMode = isCreate ? "create-compact" : "sign-in";
 
   if (checkingSession) {
@@ -492,7 +499,7 @@ function NativeAuthHubInner({
         </div>
       </AuthCard>
 
-      <div className="native-auth-hub-footer mt-5 space-y-3 text-center text-[12px]">
+      <div className="native-auth-hub-footer relative z-10 mt-5 space-y-3 text-center text-[12px]">
         {mode === "sign-in" ? (
           <p className="text-muted">
             Don&apos;t have an account?{" "}
@@ -542,7 +549,8 @@ function NativeAuthHubInner({
         {isCreate && role === "resident" ? (
           <p>
             <Link
-              href={`${RESIDENT_BROWSE_PATH}?from=auth`}
+              href={browseHomesHref}
+              onClick={onBrowseHomesClick}
               data-attr="resident-browse-homes"
               className="text-sm font-semibold text-primary hover:opacity-90"
             >

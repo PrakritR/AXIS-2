@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { PortalEditRow } from "@/components/portal/portal-edit-row";
+import { ServiceOfferingEditModal } from "@/components/portal/service-offering-edit-modal";
 import {
   createManagerListingServiceOption,
   LISTING_SERVICE_QUICK_ADDS,
@@ -19,6 +20,15 @@ type ServiceOptionsSaveTarget =
   | { mode: "listing"; saveId: string }
   | { mode: "requestChange"; saveId: string }
   | null;
+
+function serviceOfferSubtitle(offer: ManagerListingServiceOption): string {
+  const parts = [
+    offer.price,
+    offer.deposit ? `Deposit ${offer.deposit}` : null,
+    !offer.available ? "Unavailable" : null,
+  ].filter(Boolean);
+  return parts.join(" · ") || "No price set";
+}
 
 /**
  * Per-property services editor — the amenity/add-on catalog (parking, storage,
@@ -38,19 +48,28 @@ export function ManagerPropertyServiceOptionsPanel({
   onUpdated: () => void;
   showToast: (m: string) => void;
 }) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
-  const [rows, setRows] = useState<ManagerListingServiceOption[]>([]);
-  const [previewExpanded, setPreviewExpanded] = useState(true);
+  const [listModalOpen, setListModalOpen] = useState(false);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<ManagerListingServiceOption | null>(null);
+  const [isNewOffer, setIsNewOffer] = useState(false);
 
   const offers = sub.serviceRequestOptions ?? [];
   const hasPreview = offers.length > 0;
 
-  useEffect(() => {
-    setPreviewExpanded(true);
-  }, [offers.length]);
-
   if (!saveTarget || !managerUserId) return null;
+
+  const openEdit = (offer: ManagerListingServiceOption | null, isNew: boolean) => {
+    setEditingOffer(offer);
+    setIsNewOffer(isNew);
+    setEditOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditingOffer(null);
+    setIsNewOffer(false);
+  };
 
   const removeSingleOffer = (offerId: string) => {
     const nextOffers = offers.filter((o) => o.id !== offerId);
@@ -63,72 +82,21 @@ export function ManagerPropertyServiceOptionsPanel({
     onUpdated();
   };
 
-  const openModal = () => {
-    setEditingOfferId(null);
-    setRows(offers.map((o) => ({ ...o })));
-    setModalOpen(true);
-  };
-
-  const openEditModal = (offer: ManagerListingServiceOption) => {
-    setEditingOfferId(offer.id);
-    setRows([{ ...offer }]);
-    setModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setModalOpen(false);
-    setEditingOfferId(null);
-  };
-
-  const patchRow = (id: string, patch: Partial<ManagerListingServiceOption>) =>
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-
-  const removeRow = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
-
-  const addRow = () => setRows((prev) => [createManagerListingServiceOption(), ...prev]);
+  const openListModal = () => setListModalOpen(true);
+  const closeListModal = () => setListModalOpen(false);
 
   const addQuickAdd = (preset: (typeof LISTING_SERVICE_QUICK_ADDS)[number]) => {
-    setRows((prev) => {
-      if (prev.some((r) => r.name.trim().toLowerCase() === preset.name.toLowerCase())) return prev;
-      const pricing = resolveServiceOfferPricing({ name: preset.name, price: preset.price, deposit: preset.deposit });
-      return [
-        {
-          ...createManagerListingServiceOption(preset.name, preset.description),
-          price: pricing.price,
-          deposit: pricing.deposit,
-        },
-        ...prev,
-      ];
-    });
-  };
-
-  const save = () => {
-    const normalized = rows.map((r) => ({
-      ...r,
-      name: r.name.trim(),
-      description: r.description.trim(),
-      price: r.price.trim(),
-      deposit: r.deposit.trim(),
-    }));
-    const nextOffers = editingOfferId
-      ? (() => {
-          const updated = normalized[0];
-          if (!updated?.name) return null;
-          return offers.map((o) => (o.id === editingOfferId ? updated : o));
-        })()
-      : normalized.filter((r) => r.name);
-    if (!nextOffers) {
-      showToast("Service name is required.");
+    if (offers.some((o) => o.name.trim().toLowerCase() === preset.name.toLowerCase())) {
+      showToast(`${preset.name} is already on this listing.`);
       return;
     }
-    const next: ManagerListingSubmissionV1 = { ...sub, serviceRequestOptions: nextOffers };
-    if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not save services.");
-      return;
-    }
-    showToast(editingOfferId ? "Service updated." : "Services saved.");
-    closeModal();
-    onUpdated();
+    const pricing = resolveServiceOfferPricing({ name: preset.name, price: preset.price, deposit: preset.deposit });
+    const row = {
+      ...createManagerListingServiceOption(preset.name, preset.description),
+      price: pricing.price,
+      deposit: pricing.deposit,
+    };
+    openEdit(row, true);
   };
 
   return (
@@ -145,57 +113,33 @@ export function ManagerPropertyServiceOptionsPanel({
             variant="outline"
             className="h-8 rounded-full px-3 text-xs"
             data-attr="service-options-add"
-            onClick={openModal}
+            onClick={openListModal}
           >
             {hasPreview ? "Edit services" : "Add"}
           </Button>
         }
-        contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain"
+        contentClassName="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain px-4 py-3"
       >
-        {hasPreview
-          ? offers.map((offer) => (
-              <div
+        {hasPreview ? (
+          <div className="space-y-2">
+            {offers.map((offer) => (
+              <PortalEditRow
                 key={offer.id}
-                className="flex items-start justify-between gap-3 border-t border-border px-4 py-3 first:border-t-0"
-              >
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 rounded-lg text-left transition hover:bg-accent/20"
-                  data-attr="service-option-edit"
-                  onClick={() => openEditModal(offer)}
-                >
-                  <p className="text-sm font-medium text-foreground">{offer.name}</p>
-                  {offer.description ? (
-                    <p className="mt-0.5 line-clamp-2 text-xs text-muted">{offer.description}</p>
-                  ) : null}
-                  <p className="mt-0.5 text-xs text-muted">
-                    {[offer.price, offer.deposit ? `Deposit ${offer.deposit}` : null].filter(Boolean).join(" · ") ||
-                      "No price set"}
-                  </p>
-                </button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 shrink-0 rounded-full px-3 text-xs border-rose-200 text-rose-800 portal-danger-outline"
-                  data-attr="service-option-remove-one"
-                  title={`Remove ${offer.name}`}
-                  onClick={() => removeSingleOffer(offer.id)}
-                >
-                  Remove
-                </Button>
-              </div>
-            ))
-          : null}
+                title={offer.name}
+                subtitle={serviceOfferSubtitle(offer)}
+                clickDataAttr={`service-preview-edit-${offer.id}`}
+                onClick={() => openEdit(offer, false)}
+                onRemove={() => removeSingleOffer(offer.id)}
+                removeTitle={`Remove ${offer.name}`}
+                removeDataAttr="service-option-remove-one"
+              />
+            ))}
+          </div>
+        ) : null}
       </PortalCollapsibleSection>
 
-      <Modal
-        open={modalOpen}
-        title={editingOfferId ? "Edit service" : "Services"}
-        onClose={closeModal}
-        panelClassName="max-w-2xl"
-      >
-        <div className="space-y-4">
-          {!editingOfferId ? (
+      <Modal open={listModalOpen} title="Services" onClose={closeListModal} panelClassName="max-w-2xl">
+        <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             {LISTING_SERVICE_QUICK_ADDS.map((preset) => (
               <Button
@@ -209,95 +153,51 @@ export function ManagerPropertyServiceOptionsPanel({
               </Button>
             ))}
           </div>
-          ) : null}
-          {rows.map((row) => (
-            <div key={row.id} className="space-y-3 rounded-xl border border-border bg-accent/20 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">Offering</p>
-                <div className="flex items-center gap-2">
-                  <label className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-border text-primary"
-                      checked={row.available}
-                      onChange={(e) => patchRow(row.id, { available: e.target.checked })}
-                    />
-                    Available
-                  </label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-7 rounded-full px-2 text-xs border-rose-200 text-rose-800 portal-danger-outline"
-                    title="Remove offering"
-                    onClick={() => removeRow(row.id)}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">Name</p>
-                <Input
-                  value={row.name}
-                  onChange={(e) => patchRow(row.id, { name: e.target.value })}
-                  placeholder="e.g. Parking spot"
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">Description</p>
-                <Input
-                  value={row.description}
-                  onChange={(e) => patchRow(row.id, { description: e.target.value })}
-                  placeholder="What the resident gets"
-                  className="mt-1"
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Price</p>
-                  <Input
-                    value={row.price}
-                    onChange={(e) => patchRow(row.id, { price: e.target.value })}
-                    placeholder="e.g. $25/mo"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Deposit</p>
-                  <Input
-                    value={row.deposit}
-                    onChange={(e) => patchRow(row.id, { deposit: e.target.value })}
-                    placeholder="e.g. $100"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-          {!editingOfferId ? (
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="rounded-full" onClick={addRow}>
-                + Add offering
-              </Button>
-            </div>
-          ) : null}
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+
+          {offers.length === 0 ? (
+            <p className="text-sm text-muted">No offerings yet. Use a quick-add chip or add one below.</p>
+          ) : (
+            offers.map((offer) => (
+              <PortalEditRow
+                key={offer.id}
+                title={offer.name.trim() || "Untitled offering"}
+                subtitle={serviceOfferSubtitle(offer)}
+                clickDataAttr={`service-offering-edit-${offer.id}`}
+                onClick={() => openEdit(offer, false)}
+                onRemove={() => removeSingleOffer(offer.id)}
+                removeTitle="Remove offering"
+                removeDataAttr="service-option-remove"
+              />
+            ))
+          )}
+
           <Button
             type="button"
-            variant="primary"
+            variant="outline"
             className="rounded-full"
-            data-attr="service-options-save"
-            onClick={save}
+            onClick={() => openEdit(null, true)}
           >
-            Save
+            + Add offering
           </Button>
-          <Button type="button" variant="outline" className="rounded-full" onClick={closeModal}>
-            Cancel
+        </div>
+        <div className="mt-4">
+          <Button type="button" variant="outline" className="rounded-full" onClick={closeListModal}>
+            Close
           </Button>
         </div>
       </Modal>
+
+      <ServiceOfferingEditModal
+        open={editOpen}
+        offering={editingOffer}
+        isNew={isNewOffer}
+        sub={sub}
+        saveTarget={saveTarget}
+        managerUserId={managerUserId}
+        onClose={closeEdit}
+        onSaved={onUpdated}
+        showToast={showToast}
+      />
     </>
   );
 }

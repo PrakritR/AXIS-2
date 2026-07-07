@@ -17,6 +17,7 @@ export function Modal({
   title,
   onClose,
   children,
+  footer,
   panelClassName,
   stackClassName,
   dense = false,
@@ -25,6 +26,8 @@ export function Modal({
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
+  /** Sticky footer below the scrollable body (action buttons, etc.). */
+  footer?: ReactNode;
   /** Width / layout overrides merged onto the default glass panel shell. */
   panelClassName?: string;
   /** Override z-index stacking for nested modals (e.g. inside listing form overlay). */
@@ -61,7 +64,7 @@ export function Modal({
         className="modal-overlay fixed inset-0"
         onClick={onClose}
       />
-      <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-8">
+      <div className="relative z-[71] flex min-h-full items-start justify-center px-2 py-4 sm:px-4 sm:py-6">
         <div
           ref={panelRef}
           className={cn(MODAL_PANEL_CLASS, "min-h-0", panelClassName)}
@@ -95,6 +98,16 @@ export function Modal({
           <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", dense ? "pt-2" : "pt-4")}>
             {children}
           </div>
+          {footer ? (
+            <div
+              className={cn(
+                "shrink-0 border-t border-border",
+                dense ? "mt-2 pt-2" : "mt-4 pt-4",
+              )}
+            >
+              {footer}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>,

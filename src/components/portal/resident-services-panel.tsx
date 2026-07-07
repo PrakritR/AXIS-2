@@ -15,20 +15,22 @@ import {
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import {
+  PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableColGroup,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalMobileSummaryCard,
   PortalTableDetailActions,
-  PortalTableExpandCell,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
+  portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
 import { PillTabs, TabNav } from "@/components/ui/tabs";
 import { PreferredArrivalField } from "@/components/portal/preferred-arrival-field";
@@ -131,6 +133,21 @@ function priorityClass(p: string) {
   if (x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   if (x === "medium") return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-muted ring-1 ring-border";
+}
+
+function isSetWorkOrderCost(cost: string | undefined): boolean {
+  const trimmed = cost?.trim() ?? "";
+  return trimmed !== "" && trimmed !== "—";
+}
+
+function displayWorkOrderCost(cost: string | undefined): string {
+  return isSetWorkOrderCost(cost) ? (cost ?? "") : "—";
+}
+
+function displayServiceRequestCost(req: ServiceRequest): string {
+  if (req.price?.trim()) return req.price.trim();
+  if (req.priceLimit?.trim()) return req.priceLimit.trim();
+  return "—";
 }
 
 export function formatDate(iso: string) {
@@ -1033,6 +1050,7 @@ export function ResidentServicesPanel({
               <PortalMobileSummaryCard
                 key={rowId}
                 title={req.offerName}
+                trailing={<span className="text-xs text-muted">{displayServiceRequestCost(req)}</span>}
                 expanded={expanded}
                 onClick={() => setExpandedId((c) => (c === rowId ? null : rowId))}
               >
@@ -1049,18 +1067,18 @@ export function ResidentServicesPanel({
         </div>
         <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
             <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className="w-full table-fixed border-collapse text-left text-sm">
+              <table className={PORTAL_DATA_TABLE}>
+                <PortalDataTableColGroup percents={portalTableColumnPercents(2)} />
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRequests.map((req) => {
                     const rowId = `request-${req.id}`;
+                    const isExpanded = expandedId === rowId;
                     return (
                       <Fragment key={rowId}>
                         <tr
@@ -1068,12 +1086,14 @@ export function ResidentServicesPanel({
                           onClick={createPortalRowExpandClick(() =>
                             setExpandedId((c) => (c === rowId ? null : rowId)),
                           )}
-                          aria-expanded={expandedId === rowId}
+                          aria-expanded={isExpanded}
                         >
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{req.offerName}</td>
-                          <PortalTableExpandCell expanded={expandedId === rowId} />
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                            <PortalTableInlineExpand expanded={isExpanded}>{req.offerName}</PortalTableInlineExpand>
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>{displayServiceRequestCost(req)}</td>
                         </tr>
-                        {expandedId === rowId ? (
+                        {isExpanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
                             <td colSpan={2} className={PORTAL_TABLE_DETAIL_CELL}>
                               <ServiceRequestCard
@@ -1123,6 +1143,13 @@ export function ResidentServicesPanel({
                   <PortalMobileSummaryCard
                     key={row.id}
                     title={row.title}
+                    subtitle={row.description ? row.description : undefined}
+                    badge={
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
+                        {row.priority}
+                      </span>
+                    }
+                    trailing={<span className="text-xs text-muted">{displayWorkOrderCost(row.cost)}</span>}
                     expanded={expanded}
                     onClick={() => setExpandedId((c) => (c === row.id ? null : row.id))}
                   >
@@ -1141,31 +1168,41 @@ export function ResidentServicesPanel({
             </div>
             <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
               <div className={PORTAL_DATA_TABLE_SCROLL}>
-                <table className="w-full table-fixed border-collapse text-left text-sm">
+                <table className={PORTAL_DATA_TABLE}>
+                  <PortalDataTableColGroup percents={portalTableColumnPercents(3)} />
                   <thead>
                     <tr className={PORTAL_TABLE_HEAD_ROW}>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                      <th className={PORTAL_TABLE_EXPAND_TH}>
-                        <span className="sr-only">Expand</span>
-                      </th>
+                      <th className={`${MANAGER_TABLE_TH} text-left`}>Priority</th>
+                      <th className={`${MANAGER_TABLE_TH} text-left`}>Cost</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {rows.map((row) => {
+                      const isExpanded = expandedId === row.id;
+                      return (
                       <Fragment key={row.id}>
                         <tr
                           className={PORTAL_TABLE_TR_EXPANDABLE}
                           onClick={createPortalRowExpandClick(() =>
                             setExpandedId((c) => (c === row.id ? null : row.id)),
                           )}
-                          aria-expanded={expandedId === row.id}
+                          aria-expanded={isExpanded}
                         >
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                          <PortalTableExpandCell expanded={expandedId === row.id} />
+                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                            <PortalTableInlineExpand expanded={isExpanded}>{row.title}</PortalTableInlineExpand>
+                            <p className="mt-0.5 text-[11px] font-normal text-muted line-clamp-1">{row.description}</p>
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>
+                              {row.priority}
+                            </span>
+                          </td>
+                          <td className={PORTAL_TABLE_TD}>{displayWorkOrderCost(row.cost)}</td>
                         </tr>
-                        {expandedId === row.id ? (
+                        {isExpanded ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={2} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
+                            <td colSpan={3} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
                               <WorkOrderDetail
                                 row={row}
                                 onEdit={() => openWorkOrderEdit(row)}
@@ -1177,7 +1214,8 @@ export function ResidentServicesPanel({
                           </tr>
                         ) : null}
                       </Fragment>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>

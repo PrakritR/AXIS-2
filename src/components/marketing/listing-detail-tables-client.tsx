@@ -17,6 +17,7 @@ import {
   listingLinkTargetProps,
   useListingPreviewNewTab,
 } from "@/components/marketing/listing-preview-context";
+import { buildPropertyMessageHref } from "@/lib/manager-property-links";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
@@ -317,11 +318,13 @@ function ListingModalCta({
   href,
   label,
   variant,
+  dataAttr,
   newTabProps,
 }: {
   href: string;
   label: string;
   variant: "primary" | "secondary";
+  dataAttr?: string;
   newTabProps: ReturnType<typeof listingLinkTargetProps>;
 }) {
   const className =
@@ -329,7 +332,7 @@ function ListingModalCta({
       ? "flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary py-3 text-sm font-semibold text-white shadow-[0_4px_20px_rgba(47,107,255,0.28)] transition hover:opacity-95"
       : "flex min-h-[48px] w-full items-center justify-center rounded-full border border-border bg-card py-3 text-sm font-semibold text-foreground transition hover:bg-accent/30";
   return (
-    <Link href={href} className="flex-1" {...newTabProps}>
+    <Link href={href} className="flex-1" data-attr={dataAttr} {...newTabProps}>
       <span className={className}>{label}</span>
     </Link>
   );
@@ -340,14 +343,26 @@ function ListingModalActions({
   secondary,
   newTabProps,
 }: {
-  primary: { href: string; label: string };
-  secondary: { href: string; label: string };
+  primary: { href: string; label: string; dataAttr?: string };
+  secondary: { href: string; label: string; dataAttr?: string };
   newTabProps: ReturnType<typeof listingLinkTargetProps>;
 }) {
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row">
-      <ListingModalCta href={primary.href} label={primary.label} variant="primary" newTabProps={newTabProps} />
-      <ListingModalCta href={secondary.href} label={secondary.label} variant="secondary" newTabProps={newTabProps} />
+      <ListingModalCta
+        href={primary.href}
+        label={primary.label}
+        variant="primary"
+        dataAttr={primary.dataAttr}
+        newTabProps={newTabProps}
+      />
+      <ListingModalCta
+        href={secondary.href}
+        label={secondary.label}
+        variant="secondary"
+        dataAttr={secondary.dataAttr}
+        newTabProps={newTabProps}
+      />
     </div>
   );
 }
@@ -404,7 +419,7 @@ function ListingDetailModal({
   const stop = useCallback((e: React.MouseEvent) => e.stopPropagation(), []);
   const isClient = useIsClient();
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
-  const toursContactHref = `/rent/tours-contact?propertyId=${encodeURIComponent(listingPropertyId)}`;
+  const messageContactHref = buildPropertyMessageHref(listingPropertyId);
 
   useEffect(() => {
     if (!state) return;
@@ -555,8 +570,9 @@ function ListingDetailModal({
                         roomPrice: state.room.price,
                       }),
                       label: "Apply for this room",
+                      dataAttr: "listing-apply-room",
                     }}
-                    secondary={{ href: toursContactHref, label: "Ask a question" }}
+                    secondary={{ href: messageContactHref, label: "Ask a question", dataAttr: "listing-ask-question" }}
                   />
                 </>
               );
@@ -592,8 +608,12 @@ function ListingDetailModal({
             </ListingModalSection>
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: toursContactHref, label: "Ask about layout" }}
-              secondary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
+              primary={{ href: messageContactHref, label: "Ask about layout", dataAttr: "listing-ask-about-layout" }}
+              secondary={{
+                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
+                label: "Apply",
+                dataAttr: "listing-apply-online",
+              }}
             />
           </ListingModalBody>
         ) : null}
@@ -618,8 +638,12 @@ function ListingDetailModal({
             />
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: toursContactHref, label: "Ask about this bathroom" }}
-              secondary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
+              primary={{ href: messageContactHref, label: "Ask about this bathroom", dataAttr: "listing-ask-about-bathroom" }}
+              secondary={{
+                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
+                label: "Apply",
+                dataAttr: "listing-apply-online",
+              }}
             />
           </ListingModalBody>
         ) : null}
@@ -642,8 +666,12 @@ function ListingDetailModal({
             </ListingModalSection>
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
-              secondary={{ href: toursContactHref, label: "Ask a question" }}
+              primary={{
+                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
+                label: "Apply",
+                dataAttr: "listing-apply-online",
+              }}
+              secondary={{ href: messageContactHref, label: "Ask a question", dataAttr: "listing-ask-question" }}
             />
           </ListingModalBody>
         ) : null}
@@ -667,8 +695,16 @@ function ListingDetailModal({
             </ListingModalSection>
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
-              secondary={{ href: toursContactHref, label: "Ask about lease terms" }}
+              primary={{
+                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
+                label: "Apply",
+                dataAttr: "listing-apply-online",
+              }}
+              secondary={{
+                href: messageContactHref,
+                label: "Ask about lease terms",
+                dataAttr: "listing-ask-about-lease",
+              }}
             />
           </ListingModalBody>
         ) : null}
@@ -706,8 +742,12 @@ function ListingDetailModal({
             <p className="text-xs text-muted">Confirm availability, utilities, and final rent with leasing before applying.</p>
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply for this bundle" }}
-              secondary={{ href: toursContactHref, label: "Ask a question" }}
+              primary={{
+                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
+                label: "Apply for this bundle",
+                dataAttr: "listing-apply-bundle",
+              }}
+              secondary={{ href: messageContactHref, label: "Ask a question", dataAttr: "listing-ask-question" }}
             />
           </ListingModalBody>
         ) : null}
@@ -722,8 +762,12 @@ function ListingDetailModal({
             </ListingModalSection>
             <ListingModalActions
               newTabProps={newTabProps}
-              primary={{ href: toursContactHref, label: "Ask a question" }}
-              secondary={{ href: buildRentalApplyHref({ propertyId: listingPropertyId }), label: "Apply" }}
+              primary={{ href: messageContactHref, label: "Ask a question", dataAttr: "listing-ask-question" }}
+              secondary={{
+                href: buildRentalApplyHref({ propertyId: listingPropertyId }),
+                label: "Apply",
+                dataAttr: "listing-apply-online",
+              }}
             />
           </ListingModalBody>
         ) : null}

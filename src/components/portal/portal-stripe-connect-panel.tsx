@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { openStripeConnectOnboarding } from "@/lib/stripe-connect-onboarding-client";
@@ -52,12 +54,15 @@ export function PortalStripeConnectPanel({
   onConnectDone?: () => void;
 }) {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const handledConnectParam = useRef(false);
   const resolvedReturnPath = returnPath ?? `${basePath}/payments`;
+  const payoutsPath = `${basePath}/payments/payouts`;
 
   const loadStatus = useCallback(async () => {
     if (isDemoModeActive()) {
@@ -119,7 +124,7 @@ export function PortalStripeConnectPanel({
     });
   }, [loadStatus, onConnectDone, resolvedReturnPath, showToast]);
 
-  const startConnect = useCallback(async () => {
+  const startConnect = useCallback(async (): Promise<boolean> => {
     setBusy(true);
     setActionError(null);
     const opened = await openStripeConnectOnboarding({
@@ -133,7 +138,26 @@ export function PortalStripeConnectPanel({
     });
     if (opened) setActionError(null);
     setBusy(false);
+    return opened;
   }, [apiBase, showToast]);
+
+  const openBankManagement = useCallback(() => {
+    if (isDemoModeActive()) {
+      setManageOpen(true);
+      return;
+    }
+    router.push(payoutsPath);
+  }, [payoutsPath, router]);
+
+  const handleLinkedBankClick = useCallback(() => {
+    if (isDemoModeActive()) {
+      openBankManagement();
+      return;
+    }
+    void startConnect().then((opened) => {
+      if (!opened) openBankManagement();
+    });
+  }, [openBankManagement, startConnect]);
 
   const ready =
     status &&
@@ -142,6 +166,19 @@ export function PortalStripeConnectPanel({
     !status.demo;
 
   const blockingError = actionError ?? status?.stripeError ?? null;
+
+  const bankManageModal = (
+    <Modal open={manageOpen} title="Bank account" onClose={() => setManageOpen(false)}>
+      <PortalStripeConnectPanel
+        basePath={basePath}
+        variant="embedded"
+        apiBase={apiBase}
+        returnPath={returnPath}
+        dataAttrPrefix={dataAttrPrefix}
+        onConnectDone={onConnectDone}
+      />
+    </Modal>
+  );
 
   if (variant === "header") {
     if (status?.demo) return null;
@@ -157,17 +194,21 @@ export function PortalStripeConnectPanel({
 
     if (ready) {
       return (
-        <Button
-          type="button"
-          variant="outline"
-          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
-          disabled={busy}
-          onClick={() => void startConnect()}
-          data-attr={`${dataAttrPrefix}-linked`}
-          title={blockingError ?? "Open Stripe to view or update your linked bank account"}
-        >
-          {busy ? "Opening…" : "Bank linked"}
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN} portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] hover:opacity-90`}
+            disabled={busy}
+            onClick={handleLinkedBankClick}
+            data-attr={`${dataAttrPrefix}-linked`}
+            aria-label="Manage linked bank account"
+            title={blockingError ?? "View or update your linked bank account"}
+          >
+            {busy ? "Opening…" : "Bank linked"}
+          </Button>
+          {bankManageModal}
+        </>
       );
     }
 
@@ -204,33 +245,40 @@ export function PortalStripeConnectPanel({
     const statusLabel = ready ? "Bank linked" : status?.connected ? "Finish bank setup" : "Bank not linked";
 
     return (
-      <div className="flex h-9 w-full min-w-0 max-w-full items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:w-auto sm:rounded-full">
-        <span
-          className={`flex min-h-9 min-w-0 flex-1 items-center truncate rounded-full px-4 py-1.5 text-sm font-semibold sm:min-w-[7.5rem] sm:flex-none ${
-            ready
-              ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-              : blockingError
-                ? "text-rose-700 dark:text-rose-400"
-                : "text-muted"
-          }`}
-          title={blockingError ?? statusLabel}
-        >
-          {blockingError ? "Bank error" : statusLabel}
-        </span>
-        <button
-          type="button"
-          data-attr={`${dataAttrPrefix}-link`}
-          className={`flex min-h-9 shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 disabled:opacity-60 ${
-            ready
-              ? "border border-border bg-card/80 text-foreground shadow-[var(--shadow-sm)] hover:border-primary/30"
-              : "btn-cobalt hover:opacity-90"
-          }`}
-          disabled={busy}
-          onClick={() => void startConnect()}
-        >
-          {busy ? "Opening…" : ready ? "Update" : "Link"}
-        </button>
-      </div>
+      <>
+        <div className="flex h-9 w-full min-w-0 max-w-full items-center gap-1 rounded-2xl border border-border bg-accent/30 p-1 sm:w-auto sm:rounded-full">
+          <button
+            type="button"
+            className={`flex min-h-9 min-w-0 flex-1 items-center truncate rounded-full px-4 py-1.5 text-sm font-semibold transition hover:opacity-90 sm:min-w-[7.5rem] sm:flex-none ${
+              ready
+                ? "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
+                : blockingError
+                  ? "text-rose-700 dark:text-rose-400"
+                  : "text-muted"
+            }`}
+            title={blockingError ?? statusLabel}
+            disabled={busy}
+            onClick={() => (ready ? handleLinkedBankClick() : void startConnect())}
+            data-attr={ready ? `${dataAttrPrefix}-linked` : undefined}
+          >
+            {blockingError ? "Bank error" : statusLabel}
+          </button>
+          <button
+            type="button"
+            data-attr={`${dataAttrPrefix}-link`}
+            className={`flex min-h-9 shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-150 disabled:opacity-60 ${
+              ready
+                ? "border border-border bg-card/80 text-foreground shadow-[var(--shadow-sm)] hover:border-primary/30"
+                : "btn-cobalt hover:opacity-90"
+            }`}
+            disabled={busy}
+            onClick={() => (ready ? handleLinkedBankClick() : void startConnect())}
+          >
+            {busy ? "Opening…" : ready ? "Update" : "Link"}
+          </button>
+        </div>
+        {ready ? bankManageModal : null}
+      </>
     );
   }
 

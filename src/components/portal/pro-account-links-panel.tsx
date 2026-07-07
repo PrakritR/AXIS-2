@@ -19,11 +19,10 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
-  PortalTableExpandCell,
+  PortalTableInlineExpand,
   PortalTableDetailActions,
   PORTAL_DETAIL_BTN,
   createPortalRowExpandClick,
@@ -1413,9 +1412,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Manager</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Role</th>
                       <th className={`${MANAGER_TABLE_TH} text-left`}>Properties</th>
-                      <th className={PORTAL_TABLE_EXPAND_TH}>
-                        <span className="sr-only">Expand</span>
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1429,7 +1425,12 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                           aria-expanded={expandedLinkId === "__self__"}
                         >
                           <td className={PORTAL_TABLE_TD}>
-                            <p className="font-medium text-foreground">You</p>
+                            <PortalTableInlineExpand
+                              expanded={expandedLinkId === "__self__"}
+                              className="font-medium text-foreground"
+                            >
+                              You
+                            </PortalTableInlineExpand>
                             <p className="mt-0.5 text-xs text-muted">Main manager</p>
                           </td>
                           <td className={PORTAL_TABLE_TD}>
@@ -1439,11 +1440,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                             <span className="tabular-nums">{ownedProperties.length}</span>
                             <span className="text-muted"> owned</span>
                           </td>
-                          <PortalTableExpandCell expanded={expandedLinkId === "__self__"} />
                         </tr>
                         {expandedLinkId === "__self__" ? (
                           <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                            <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                               {renderSelfDetail()}
                             </td>
                           </tr>
@@ -1465,7 +1465,12 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                 aria-expanded={expandedLinkId === inv.id}
                               >
                                 <td className={PORTAL_TABLE_TD}>
-                                  <p className="font-medium text-foreground">{inv.linkedDisplayName ?? inv.linkedAxisId}</p>
+                                  <PortalTableInlineExpand
+                                    expanded={expandedLinkId === inv.id}
+                                    className="font-medium text-foreground"
+                                  >
+                                    {inv.linkedDisplayName ?? inv.linkedAxisId}
+                                  </PortalTableInlineExpand>
                                   <p className="mt-0.5 font-mono text-xs text-muted">{inv.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
@@ -1489,11 +1494,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                     <span>linked</span>
                                   </button>
                                 </td>
-                                <PortalTableExpandCell expanded={expandedLinkId === inv.id} />
                               </tr>
                               {expandedLinkId === inv.id ? (
                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                  <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                                  <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                                     {renderInviteDetail(inv)}
                                   </td>
                                 </tr>
@@ -1512,7 +1516,12 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                 aria-expanded={expandedLinkId === r.id}
                               >
                                 <td className={PORTAL_TABLE_TD}>
-                                  <p className="font-medium text-foreground">{r.linkedDisplayName ?? r.linkedAxisId}</p>
+                                  <PortalTableInlineExpand
+                                    expanded={expandedLinkId === r.id}
+                                    className="font-medium text-foreground"
+                                  >
+                                    {r.linkedDisplayName ?? r.linkedAxisId}
+                                  </PortalTableInlineExpand>
                                   <p className="mt-0.5 font-mono text-xs text-muted">{r.linkedAxisId}</p>
                                 </td>
                                 <td className={PORTAL_TABLE_TD}>
@@ -1534,11 +1543,10 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                                     <span>linked</span>
                                   </button>
                                 </td>
-                                <PortalTableExpandCell expanded={expandedLinkId === r.id} />
                               </tr>
                               {expandedLinkId === r.id ? (
                                 <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                  <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                                  <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                                     {renderLocalRowDetail(r)}
                                   </td>
                                 </tr>

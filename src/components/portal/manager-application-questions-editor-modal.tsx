@@ -2,25 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { ApplicationQuestionEditModal } from "@/components/portal/application-question-edit-modal";
 import { Modal } from "@/components/ui/modal";
-import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { PortalCollapsibleEditRow } from "@/components/portal/portal-collapsible-edit-row";
+import { PortalEditRow } from "@/components/portal/portal-edit-row";
 import {
   CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS,
-  customApplicationFieldKeyFromLabel,
-  emptyCustomApplicationField,
   normalizeCustomApplicationFields,
-  type ManagerCustomApplicationField,
   type ManagerCustomApplicationFieldType,
   type ManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import {
+  applicationConfigFieldsFromSubmission,
+  persistApplicationConfigToPropertyIds,
   persistManagerListingSubmission,
   type ManagerPropertySaveTarget,
 } from "@/lib/manager-property-save-target";
 import {
-  addListingApplicationField,
-  patchListingApplicationField,
   removeListingApplicationField,
   resolveListingApplicationFields,
   restoreDefaultApplicationConfig,
@@ -28,40 +26,72 @@ import {
 } from "@/lib/rental-application/application-field-catalog";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 
-function parseOptionsText(raw: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const part of raw.split(/[\n,]/)) {
-    const t = part.trim();
-    if (!t || seen.has(t.toLowerCase())) continue;
-    seen.add(t.toLowerCase());
-    out.push(t);
-  }
-  return out;
-}
-
 function typeLabel(type: ManagerCustomApplicationFieldType): string {
   return CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.find((o) => o.id === type)?.label ?? type;
 }
 
 export { typeLabel as applicationQuestionTypeLabel };
 
-type DraftConfig = {
-  disabledStandardApplicationKeys: string[];
-  customApplicationFields: ManagerCustomApplicationField[];
-};
-
-function draftFromSubmission(sub: ManagerListingSubmissionV1): DraftConfig {
-  return {
-    disabledStandardApplicationKeys: [...(sub.disabledStandardApplicationKeys ?? [])],
-    customApplicationFields: normalizeCustomApplicationFields(sub.customApplicationFields),
-  };
+function applyFieldRemovals(
+  sub: ManagerListingSubmissionV1,
+  fields: ResolvedApplicationField[],
+): ManagerListingSubmissionV1 {
+  return fields.reduce(
+    (acc, field) => ({ ...acc, ...removeListingApplicationField(acc, field) }),
+    sub,
+  );
 }
 
-function applicationConfigModeFromDraft(draft: DraftConfig): "standard" | "custom" {
-  return draft.disabledStandardApplicationKeys.length > 0 || draft.customApplicationFields.length > 0
-    ? "custom"
-    : "standard";
+function questionSubtitle(field: ResolvedApplicationField): string {
+  return `${field.isStandard ? "Built-in" : "Custom"} · ${typeLabel(field.type)}${field.required ? " · Required" : " · Optional"}`;
+}
+
+function persistApplicationConfig({
+  next,
+  saveTarget,
+  propertyIds,
+  managerUserId,
+  showToast,
+  singleSuccessMessage,
+}: {
+  next: ManagerListingSubmissionV1;
+  saveTarget?: ManagerPropertySaveTarget;
+  propertyIds?: string[];
+  managerUserId: string;
+  showToast: (m: string) => void;
+  singleSuccessMessage: string;
+}): boolean {
+  const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
+  if (bulkIds.length > 0) {
+    const { saved, failed } = persistApplicationConfigToPropertyIds(
+      managerUserId,
+      bulkIds,
+      applicationConfigFieldsFromSubmission(next),
+    );
+    if (saved === 0) {
+      showToast("Could not save application settings.");
+      return false;
+    }
+    if (failed > 0) {
+      showToast(`Updated application for ${saved} properties (${failed} could not be saved).`);
+    } else if (saved === 1) {
+      showToast(singleSuccessMessage);
+    } else {
+      showToast(`Updated application for ${saved} properties`);
+    }
+    return true;
+  }
+
+  if (!saveTarget) {
+    showToast("Could not save application settings.");
+    return false;
+  }
+  if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
+    showToast("Could not save application settings.");
+    return false;
+  }
+  showToast(singleSuccessMessage);
+  return true;
 }
 
 /** Shared application-question editor — same modal used on property details and Applications. */
@@ -70,6 +100,7 @@ export function ManagerApplicationQuestionsEditorModal({
   title = "Application",
   sub,
   saveTarget,
+  propertyIds,
   managerUserId,
   onClose,
   onSaved,
@@ -78,266 +109,213 @@ export function ManagerApplicationQuestionsEditorModal({
   open: boolean;
   title?: string;
   sub: ManagerListingSubmissionV1;
-  saveTarget: ManagerPropertySaveTarget;
+  saveTarget?: ManagerPropertySaveTarget;
+  /** When set, each save applies the same application config to every id (bulk edit). */
+  propertyIds?: string[];
   managerUserId: string;
   onClose: () => void;
   onSaved: () => void;
   showToast: (m: string) => void;
 }) {
-  const [draft, setDraft] = useState<DraftConfig>(() => draftFromSubmission(sub));
-  const [optionsDrafts, setOptionsDrafts] = useState<Record<string, string>>({});
-  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
+  const [localSub, setLocalSub] = useState(sub);
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingField, setEditingField] = useState<ResolvedApplicationField | null>(null);
+  const [isNewField, setIsNewField] = useState(false);
+  const [newFieldSectionId, setNewFieldSectionId] = useState("additional");
 
   useEffect(() => {
     if (!open) return;
-    setDraft(draftFromSubmission(sub));
-    setOptionsDrafts({});
-    setRowErrors({});
-    setExpandedSections({});
-    setExpandedQuestions({});
+    setLocalSub(sub);
+    setExpandedSectionId(null);
+    setEditOpen(false);
+    setEditingField(null);
+    setIsNewField(false);
   }, [open, sub]);
 
+  const bulkIds = propertyIds?.filter((id) => id.trim()) ?? [];
+  const isBulkSave = bulkIds.length > 0;
+
   const applicationFields = useMemo(
-    () => resolveListingApplicationFields(draft, normalizeCustomApplicationFields),
-    [draft],
+    () => resolveListingApplicationFields(localSub, normalizeCustomApplicationFields),
+    [localSub],
   );
 
-  const patchField = (field: ResolvedApplicationField, patch: Partial<ManagerCustomApplicationField>) => {
-    setDraft((prev) => ({ ...prev, ...patchListingApplicationField(prev, field, patch) }));
-    setRowErrors((prev) => {
-      if (!prev[field.id]) return prev;
-      const next = { ...prev };
-      delete next[field.id];
-      return next;
-    });
+  const openEdit = (field: ResolvedApplicationField) => {
+    setEditingField(field);
+    setIsNewField(false);
+    setEditOpen(true);
+  };
+
+  const openAdd = (sectionId: string) => {
+    setEditingField(null);
+    setIsNewField(true);
+    setNewFieldSectionId(sectionId);
+    setEditOpen(true);
+    setExpandedSectionId(sectionId);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditingField(null);
+    setIsNewField(false);
   };
 
   const removeField = (field: ResolvedApplicationField) => {
-    setDraft((prev) => ({ ...prev, ...removeListingApplicationField(prev, field) }));
-    setRowErrors((prev) => {
-      if (!prev[field.id]) return prev;
-      const next = { ...prev };
-      delete next[field.id];
-      return next;
-    });
+    const next: ManagerListingSubmissionV1 = { ...localSub, ...removeListingApplicationField(localSub, field) };
+    if (
+      !persistApplicationConfig({
+        next,
+        saveTarget,
+        propertyIds: isBulkSave ? bulkIds : undefined,
+        managerUserId,
+        showToast,
+        singleSuccessMessage: "Question removed.",
+      })
+    ) {
+      return;
+    }
+    setLocalSub(next);
+    onSaved();
   };
 
-  const addField = (section: string) => {
-    setDraft((prev) => ({ ...prev, ...addListingApplicationField(prev, emptyCustomApplicationField(section)) }));
+  const removeSection = (sectionId: string) => {
+    const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === sectionId);
+    if (sectionQuestions.length === 0) return;
+    const next = applyFieldRemovals(localSub, sectionQuestions);
+    if (
+      !persistApplicationConfig({
+        next,
+        saveTarget,
+        propertyIds: isBulkSave ? bulkIds : undefined,
+        managerUserId,
+        showToast,
+        singleSuccessMessage: "Section questions removed.",
+      })
+    ) {
+      return;
+    }
+    setLocalSub(next);
+    if (expandedSectionId === sectionId) setExpandedSectionId(null);
+    onSaved();
   };
 
   const restoreDefaults = () => {
-    setDraft(draftFromSubmission({ ...sub, ...restoreDefaultApplicationConfig() }));
-    setOptionsDrafts({});
-    setRowErrors({});
-  };
-
-  const questionOptionsText = (field: ResolvedApplicationField): string =>
-    optionsDrafts[field.id] ?? field.options.join(", ");
-
-  const setQuestionOptionsText = (field: ResolvedApplicationField, text: string) => {
-    setOptionsDrafts((d) => ({ ...d, [field.id]: text }));
-    patchField(field, { options: parseOptionsText(text) });
-  };
-
-  const save = () => {
-    const errors: Record<string, string> = {};
-    const usedKeys = new Set<string>();
-    for (const field of applicationFields) {
-      if (!field.isStandard) {
-        const label = field.label.trim();
-        if (!label) {
-          errors[field.id] = "Question label is required.";
-          continue;
-        }
-        if (field.type === "select" && field.options.length === 0) {
-          errors[field.id] = "Add at least one dropdown option (comma-separated).";
-          continue;
-        }
-        const key = field.key.trim() || customApplicationFieldKeyFromLabel(label, usedKeys);
-        if (usedKeys.has(key)) {
-          errors[field.id] = "Duplicate question — rename or remove one of the copies.";
-          continue;
-        }
-        usedKeys.add(key);
-      }
-    }
-    if (Object.keys(errors).length > 0) {
-      setRowErrors(errors);
-      const nextSections = { ...expandedSections };
-      const nextQuestions = { ...expandedQuestions };
-      for (const fieldId of Object.keys(errors)) {
-        nextQuestions[fieldId] = true;
-        const field = applicationFields.find((f) => f.id === fieldId);
-        const sectionId = field?.section ?? "additional";
-        nextSections[sectionId] = true;
-      }
-      setExpandedSections(nextSections);
-      setExpandedQuestions(nextQuestions);
-      showToast("Fix the highlighted questions before saving.");
+    const next: ManagerListingSubmissionV1 = { ...localSub, ...restoreDefaultApplicationConfig() };
+    if (
+      !persistApplicationConfig({
+        next,
+        saveTarget,
+        propertyIds: isBulkSave ? bulkIds : undefined,
+        managerUserId,
+        showToast,
+        singleSuccessMessage: "Application restored to Axis defaults.",
+      })
+    ) {
       return;
     }
+    setLocalSub(next);
+    setExpandedSectionId(null);
+    onSaved();
+  };
 
-    const next: ManagerListingSubmissionV1 = {
-      ...sub,
-      disabledStandardApplicationKeys: draft.disabledStandardApplicationKeys,
-      customApplicationFields: draft.customApplicationFields,
-      applicationConfigMode: applicationConfigModeFromDraft(draft),
-    };
-    if (!persistManagerListingSubmission(saveTarget, managerUserId, next)) {
-      showToast("Could not save application questions.");
-      return;
-    }
-    showToast("Application saved.");
-    onClose();
+  const onQuestionSaved = (next: ManagerListingSubmissionV1) => {
+    setLocalSub(next);
     onSaved();
   };
 
   return (
-    <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl">
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted">
-            {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on this application
+    <>
+      <Modal open={open} title={title} onClose={onClose} panelClassName="max-w-2xl">
+        {isBulkSave ? (
+          <p className="mb-4 text-sm text-muted">
+            These settings apply to all {bulkIds.length} selected properties. Existing per-property differences are
+            replaced when you save changes.
           </p>
-          <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={restoreDefaults}>
-            Restore Axis defaults
+        ) : null}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted">
+              {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on this application
+            </p>
+            <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={restoreDefaults}>
+              Restore Axis defaults
+            </Button>
+          </div>
+
+          {RENTAL_APPLICATION_SECTIONS.map((section) => {
+            const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === section.id);
+            const sectionExpanded = expandedSectionId === section.id;
+            return (
+              <PortalCollapsibleEditRow
+                key={section.id}
+                title={section.title}
+                titleVariant="label"
+                subtitle={
+                  sectionQuestions.length === 0
+                    ? "No questions in this section"
+                    : `${sectionQuestions.length} question${sectionQuestions.length === 1 ? "" : "s"}`
+                }
+                expanded={sectionExpanded}
+                onExpandedChange={(next) => setExpandedSectionId(next ? section.id : null)}
+                toggleDataAttr={`application-section-toggle-${section.id}`}
+                onRemove={sectionQuestions.length > 0 ? () => removeSection(section.id) : undefined}
+                removeTitle={`Remove all questions in ${section.title}`}
+                removeDataAttr="application-section-remove"
+                headerActions={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-7 rounded-full px-2.5 text-xs"
+                    data-attr="application-questions-add"
+                    onClick={() => openAdd(section.id)}
+                  >
+                    + Add question
+                  </Button>
+                }
+              >
+                {sectionQuestions.length === 0 ? (
+                  <p className="text-sm text-muted">No questions in this section yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {sectionQuestions.map((field) => (
+                      <PortalEditRow
+                        key={field.id}
+                        title={field.label.trim() || "Untitled question"}
+                        subtitle={questionSubtitle(field)}
+                        clickDataAttr={`application-question-edit-${field.id}`}
+                        onClick={() => openEdit(field)}
+                        onRemove={() => removeField(field)}
+                        removeTitle="Remove question"
+                        removeDataAttr="application-question-remove"
+                      />
+                    ))}
+                  </div>
+                )}
+              </PortalCollapsibleEditRow>
+            );
+          })}
+        </div>
+        <div className="mt-4">
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Close
           </Button>
         </div>
+      </Modal>
 
-        {RENTAL_APPLICATION_SECTIONS.map((section) => {
-          const sectionQuestions = applicationFields.filter((f) => (f.section ?? "additional") === section.id);
-          return (
-            <PortalCollapsibleSection
-              key={section.id}
-              title={section.title}
-              titleVariant="label"
-              subtitle={
-                sectionQuestions.length === 0
-                  ? "No questions in this section"
-                  : `${sectionQuestions.length} question${sectionQuestions.length === 1 ? "" : "s"}`
-              }
-              expanded={expandedSections[section.id] ?? false}
-              onExpandedChange={(open) =>
-                setExpandedSections((prev) => ({ ...prev, [section.id]: open }))
-              }
-              toggleDataAttr={`application-section-toggle-${section.id}`}
-              surfaceMuted={false}
-              contentClassName="space-y-3 pt-0"
-              headerActions={
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-7 rounded-full px-2.5 text-xs"
-                  data-attr="application-questions-add"
-                  onClick={() => {
-                    addField(section.id);
-                    setExpandedSections((prev) => ({ ...prev, [section.id]: true }));
-                  }}
-                >
-                  + Add question
-                </Button>
-              }
-            >
-              {sectionQuestions.length === 0 ? (
-                <p className="text-sm text-muted">No questions in this section yet.</p>
-              ) : (
-                sectionQuestions.map((field) => (
-                  <PortalCollapsibleSection
-                    key={field.id}
-                    title={field.label.trim() || "Untitled question"}
-                    subtitle={`${field.isStandard ? "Built-in" : "Custom"} · ${typeLabel(field.type)}${field.required ? " · Required" : " · Optional"}`}
-                    expanded={expandedQuestions[field.id] ?? false}
-                    onExpandedChange={(open) =>
-                      setExpandedQuestions((prev) => ({ ...prev, [field.id]: open }))
-                    }
-                    toggleDataAttr={`application-question-toggle-${field.id}`}
-                    surfaceMuted={false}
-                    className={rowErrors[field.id] ? "border-red-300 ring-2 ring-red-100" : ""}
-                    contentClassName="space-y-3 pt-0"
-                    headerActions={
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 text-sm font-bold text-rose-800 portal-danger-outline hover:bg-rose-50"
-                        title="Remove question"
-                        aria-label="Remove question"
-                        onClick={() => removeField(field)}
-                      >
-                        ×
-                      </button>
-                    }
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Question</p>
-                      <Input
-                        value={field.label}
-                        onChange={(e) => patchField(field, { label: e.target.value })}
-                        placeholder="e.g. Do you smoke?"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Answer type</p>
-                        <Select
-                          value={field.type}
-                          onChange={(e) =>
-                            patchField(field, { type: e.target.value as ManagerCustomApplicationFieldType })
-                          }
-                          className="mt-1"
-                        >
-                          {CUSTOM_APPLICATION_FIELD_TYPE_OPTIONS.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </Select>
-                      </div>
-                      <label className="flex cursor-pointer items-center gap-2 self-end rounded-xl border border-border bg-card px-3 py-2.5">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border text-primary"
-                          checked={field.required}
-                          onChange={(e) => patchField(field, { required: e.target.checked })}
-                        />
-                        <span className="text-sm font-medium text-foreground">Required</span>
-                      </label>
-                    </div>
-                    {field.type === "select" ? (
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Dropdown options</p>
-                        <Input
-                          value={questionOptionsText(field)}
-                          onChange={(e) => setQuestionOptionsText(field, e.target.value)}
-                          placeholder="Comma-separated, e.g. Yes, No, Occasionally"
-                          className="mt-1"
-                        />
-                      </div>
-                    ) : null}
-                    {rowErrors[field.id] ? <p className="text-sm text-red-600">{rowErrors[field.id]}</p> : null}
-                  </PortalCollapsibleSection>
-                ))
-              )}
-            </PortalCollapsibleSection>
-          );
-        })}
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="primary"
-          className="rounded-full"
-          data-attr="application-questions-save"
-          onClick={save}
-        >
-          Save
-        </Button>
-        <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
-          Cancel
-        </Button>
-      </div>
-    </Modal>
+      <ApplicationQuestionEditModal
+        open={editOpen}
+        field={editingField}
+        isNew={isNewField}
+        sectionId={newFieldSectionId}
+        sub={localSub}
+        saveTarget={saveTarget}
+        propertyIds={isBulkSave ? bulkIds : undefined}
+        managerUserId={managerUserId}
+        onClose={closeEdit}
+        onSaved={onQuestionSaved}
+        showToast={showToast}
+      />
+    </>
   );
 }

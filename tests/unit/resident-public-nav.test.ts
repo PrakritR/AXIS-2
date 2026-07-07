@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  residentBrowseFromAuthHref,
   residentCreateAccountHref,
   residentPortalPublicHref,
   residentSignInHref,
 } from "@/lib/resident-public-nav";
+
+describe("residentBrowseFromAuthHref", () => {
+  it("points at public browse with auth return marker", () => {
+    expect(residentBrowseFromAuthHref()).toBe("/rent/browse?from=auth");
+  });
+});
 
 describe("residentPortalPublicHref", () => {
   it("sends signed-in residents to the portal", () => {

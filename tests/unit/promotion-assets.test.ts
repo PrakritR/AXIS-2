@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   flattenPromotionAssets,
   makePromotionAssetId,
-  promotionAssetBoxTitle,
+  nextPromotionAssetDefaultTitle,
+  promotionAssetListTitle,
   sortPromotionAssets,
 } from "@/lib/promotion-assets";
 import { createFlyerEntry, type ManagerPromotionRow } from "@/lib/promotion-flyer";
@@ -158,6 +159,38 @@ describe("promotion-assets", () => {
       "2026-06-01T12:00:00.000Z",
     );
     const asset = flattenPromotionAssets([baseRow({ flyerCopies: [flyer] })])[0]!;
-    expect(promotionAssetBoxTitle(asset, 0)).toBe("Spring flyer");
+    expect(promotionAssetListTitle(asset, 0)).toBe("Spring flyer");
+  });
+
+  it("numbers assets globally by kind in list order", () => {
+    const flyer = createFlyerEntry(
+      {
+        title: "",
+        copy: {
+          headline: "Flyer headline",
+          subheadline: "",
+          sellingPoints: [],
+          promoLine: "",
+          ctaText: "",
+          closingLine: "",
+        },
+        template: "showcase",
+        theme: "cobalt",
+        flyerSize: "letter",
+        inputs,
+      },
+      "2026-06-02T12:00:00.000Z",
+    );
+    const text = createPromotionTextEntry(
+      composeFallbackPromotionText(inputs, "Alpha Lofts", "listing_blurb"),
+      "",
+      "2026-06-03T12:00:00.000Z",
+    );
+    const assets = sortPromotionAssets(
+      flattenPromotionAssets([baseRow({ flyerCopies: [flyer], textCopies: [text] })]),
+      "newest",
+    );
+    expect(promotionAssetListTitle(assets[0]!, 0)).toMatch(/^Text /);
+    expect(promotionAssetListTitle(assets[1]!, 0)).toBe("Flyer 1");
   });
 });

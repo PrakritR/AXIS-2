@@ -21,9 +21,21 @@ export function buildManagerApplyUrl(origin: string, params: ManagerApplyLinkPar
   return `${base}${path}`;
 }
 
-export function buildTourContactHref(propertyId: string): string {
+export function buildTourContactHref(
+  propertyId: string,
+  opts?: { next?: string },
+): string {
   const id = propertyId.trim();
-  return `/rent/tours-contact?propertyId=${encodeURIComponent(id)}`;
+  const q = new URLSearchParams({ propertyId: id });
+  const next = opts?.next?.trim();
+  if (next?.startsWith("/")) q.set("next", next);
+  return `/rent/tours-contact?${q.toString()}`;
+}
+
+export function buildPropertyMessageHref(propertyId: string): string {
+  const id = propertyId.trim();
+  const q = new URLSearchParams({ propertyId: id, tab: "message" });
+  return `/rent/tours-contact?${q.toString()}`;
 }
 
 export function buildManagerTourUrl(origin: string, propertyId: string): string {

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
@@ -20,7 +21,6 @@ import {
   PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_CARD_CLASS,
   PORTAL_TABLE_DETAIL_CELL,
   PORTAL_TABLE_DETAIL_ROW,
@@ -460,7 +460,7 @@ export function ManagerApplications() {
       <PortalTableDetailActions placement="top">
         {row.bucket === "pending" ? (
           <>
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN_PRIMARY} onClick={() => setApprovePreviewRow(row)}>
+            <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={() => setApprovePreviewRow(row)}>
               Approve
             </Button>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
@@ -508,7 +508,8 @@ export function ManagerApplications() {
             disabled={propertyOptions.length === 0}
             title={propertyOptions.length === 0 ? "Add a property before editing its application" : undefined}
           >
-            Edit application
+            Edit
+            <ChevronDown className="h-4 w-4 text-muted" aria-hidden />
           </Button>
           <Button
             type="button"

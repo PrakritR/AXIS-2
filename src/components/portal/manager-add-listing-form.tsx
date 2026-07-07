@@ -7,6 +7,7 @@ import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { LeaseConfigForm, readLeaseTemplateFile } from "@/components/portal/lease-config-form";
 import {
   submitManagerPendingPropertyToServer,
   updateExtraListingFromSubmissionOnServer,
@@ -604,6 +605,17 @@ const LISTING_FORM_STEPS = [
   { id: "finish",      label: "Submit",         icon: "✅" },
 ] as const;
 
+/** Public listing preview tabs — home through pricing plus sidebar quick facts. */
+export const LISTING_PREVIEW_STEP_IDS = ["home", "rooms", "bathrooms", "spaces", "lease", "finish"] as const;
+
+export type ListingWizardScope = "full" | "preview";
+
+export function listingWizardStepIndices(scope: ListingWizardScope): number[] {
+  if (scope === "full") return LISTING_FORM_STEPS.map((_, i) => i);
+  const previewIds = new Set<string>(LISTING_PREVIEW_STEP_IDS);
+  return LISTING_FORM_STEPS.map((step, i) => (previewIds.has(step.id) ? i : -1)).filter((i) => i >= 0);
+}
+
 const LISTING_STEP_COUNT = LISTING_FORM_STEPS.length;
 
 const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], string> = {
@@ -618,9 +630,6 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   leasedoc:    "Use the Axis standard generated lease, or provide your own lease terms or template for this property.",
   finish:      "Sidebar quick facts and final submit.",
 };
-
-/** Max uploaded lease template size (PDF). Kept small: stored via the listing media bucket. */
-const LEASE_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
 
 /** Reads a file and returns a compressed JPEG data URL. Falls back to raw data URL for non-image files. */
 /** Yields control back to the browser so it can paint/handle input before heavy work. */
@@ -938,6 +947,7 @@ export function ManagerAddListingForm({
   editRequestChangeId = null,
   initialSubmission = null,
   noteKey = null,
+  wizardScope = "full",
 }: {
   onClose: () => void;
   onSubmitted: () => void;
@@ -953,6 +963,8 @@ export function ManagerAddListingForm({
   initialSubmission?: ManagerListingSubmissionV1 | null;
   /** Stable key for legacy localStorage house-detail notes, used to backfill houseDescription/houseRulesText if empty on the submission. */
   noteKey?: string | null;
+  /** `preview` limits steps to public listing marketing content (floor plans, lease basics, amenities, etc.). */
+  wizardScope?: ListingWizardScope;
 }) {
   const [sub, setSub] = useState<ManagerListingSubmissionV1>(() => {
     const base = initialSubmission ? normalizeManagerListingSubmissionV1(initialSubmission) : createDefaultListingSubmission();
@@ -1026,8 +1038,13 @@ export function ManagerAddListingForm({
   const roomFloorLabelsForPlans = useMemo(() => uniqueRoomFloorLabels(sub.rooms), [sub.rooms]);
 
   const isEditMode = Boolean(editPendingId ?? editListingId ?? editRequestChangeId);
-  const lastStepIndex = LISTING_STEP_COUNT - 1;
+  const wizardSteps = useMemo(() => listingWizardStepIndices(wizardScope), [wizardScope]);
+  const lastStepIndex = wizardSteps[wizardSteps.length - 1] ?? LISTING_STEP_COUNT - 1;
+  const visibleStepPosition = Math.max(0, wizardSteps.indexOf(stepIndex));
+  const visibleStepCount = wizardSteps.length;
   const isFinalStep = stepIndex === lastStepIndex;
+  const isPreviewWizard = wizardScope === "preview";
+  const wizardTitlePrefix = isPreviewWizard ? "Edit preview" : isEditMode ? "Edit listing" : "New listing";
 
   // Revoke all object URLs on unmount.
   useEffect(() => {
@@ -1163,13 +1180,17 @@ export function ManagerAddListingForm({
         setSub(applied.sub);
       }
     }
-    setStepIndex((s) => Math.min(s + 1, lastStepIndex));
-    setMaxStepReached((m) => Math.max(m, stepIndex + 1));
+    const pos = wizardSteps.indexOf(stepIndex);
+    if (pos < 0 || pos >= wizardSteps.length - 1) return;
+    const nextIdx = wizardSteps[pos + 1]!;
+    setStepIndex(nextIdx);
+    setMaxStepReached((m) => Math.max(m, nextIdx));
   };
 
   const goPrev = () => {
     setStepFieldErrors({});
-    setStepIndex((s) => Math.max(0, s - 1));
+    const pos = wizardSteps.indexOf(stepIndex);
+    if (pos > 0) setStepIndex(wizardSteps[pos - 1]!);
   };
 
   const setRoom = (i: number, patch: Partial<ManagerRoomSubmission>) => {
@@ -1268,33 +1289,15 @@ export function ManagerAddListingForm({
     setExpandedListingItems((prev) => new Set([...prev, ...toExpand]));
   }, [stepFieldErrors, stepIndex, sub.rooms, sub.bathrooms, sub.sharedSpaces, applicationFields]);
 
-  // ── Lease step (custom lease terms / uploaded template) ───────────────────
-  const leaseMode: "standard" | "custom" = sub.leaseConfigMode ?? "standard";
-  const leaseKind: "terms" | "document" = sub.leaseCustomKind === "document" ? "document" : "terms";
-
   const onPickLeaseTemplateDoc = (file: File | null) => {
-    if (!file) return;
-    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-    if (!isPdf) {
-      showToast("Upload the lease template as a PDF.");
-      return;
-    }
-    if (file.size > LEASE_TEMPLATE_MAX_BYTES) {
-      showToast("Lease template is too large — keep it under 8 MB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : null;
-      if (!dataUrl) {
-        showToast("Could not read that file. Try again.");
-        return;
-      }
-      clearListingFieldError("leaseTemplateDoc");
-      setSub((s) => ({ ...s, leaseTemplateDocUrl: dataUrl, leaseTemplateDocName: file.name }));
-    };
-    reader.onerror = () => showToast("Could not read that file. Try again.");
-    reader.readAsDataURL(file);
+    readLeaseTemplateFile(
+      file,
+      (dataUrl, fileName) => {
+        clearListingFieldError("leaseTemplateDoc");
+        setSub((s) => ({ ...s, leaseTemplateDocUrl: dataUrl, leaseTemplateDocName: fileName }));
+      },
+      showToast,
+    );
   };
 
   const addRoom = () => {
@@ -2023,7 +2026,14 @@ export function ManagerAddListingForm({
   };
 
   const submitListing = async () => {
-    const invalid = firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 8);
+    const invalid = (() => {
+      if (!isPreviewWizard) return firstInvalidListingStep(sub, { isEditMode, entireHomeRent }, 8);
+      for (const i of wizardSteps) {
+        const errors = validateListingWizardStep(i, sub, { isEditMode, entireHomeRent });
+        if (Object.keys(errors).length > 0) return { stepIndex: i, errors };
+      }
+      return null;
+    })();
     if (invalid) {
       setStepIndex(invalid.stepIndex);
       setMaxStepReached((m) => Math.max(m, invalid.stepIndex));
@@ -2166,10 +2176,10 @@ export function ManagerAddListingForm({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
-                Step {stepIndex + 1} of {LISTING_STEP_COUNT}
+                Step {visibleStepPosition + 1} of {visibleStepCount}
               </p>
               <p className="mt-1 text-lg font-bold tracking-tight text-foreground sm:text-xl">
-                {isEditMode ? "Edit listing" : "New listing"} · {LISTING_FORM_STEPS[stepIndex]?.label}
+                {wizardTitlePrefix} · {LISTING_FORM_STEPS[stepIndex]?.label}
               </p>
             </div>
             <button
@@ -2185,9 +2195,10 @@ export function ManagerAddListingForm({
           {/* Step pills — jump only to steps already reached via Continue */}
           <div className="-mx-0 mt-4 overflow-x-auto [-webkit-overflow-scrolling:touch]">
             <div className="flex min-w-max gap-1.5">
-              {LISTING_FORM_STEPS.map((step, i) => {
+              {wizardSteps.map((i, pillPos) => {
+                const step = LISTING_FORM_STEPS[i]!;
                 const reachable = canNavigateToWizardStep(i, maxStepReached);
-                const completed = i < stepIndex;
+                const completed = pillPos < visibleStepPosition;
                 return (
                 <button
                   key={step.id}
@@ -2207,7 +2218,7 @@ export function ManagerAddListingForm({
                   <span className={`inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
                     completed ? "bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed-fg)]" : i === stepIndex ? "bg-primary/10 text-primary" : reachable ? "bg-accent/30 text-muted" : "bg-accent/30 text-muted"
                   }`}>
-                    {completed ? "✓" : i + 1}
+                    {completed ? "✓" : pillPos + 1}
                   </span>
                   {step.label}
                 </button>
@@ -2220,7 +2231,7 @@ export function ManagerAddListingForm({
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-accent/30">
             <div
               className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-              style={{ width: `${((stepIndex + 1) / LISTING_STEP_COUNT) * 100}%` }}
+              style={{ width: `${((visibleStepPosition + 1) / visibleStepCount) * 100}%` }}
             />
           </div>
 
@@ -4614,143 +4625,24 @@ export function ManagerAddListingForm({
 
           {/* ── Step 8: Lease ── */}
           {stepIndex === 8 ? (
-          <FormSection
-            id="edit-leasedoc"
-            title="Lease"
-            description="Choose how the lease document is created when you place a resident at this property."
-          >
-            <div className="space-y-6">
-              <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-card p-4">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-border text-primary"
-                  data-attr="listing-lease-standard-toggle"
-                  checked={leaseMode === "standard"}
-                  onChange={(e) => {
-                    setStepFieldErrors({});
-                    setSub((s) => ({ ...s, leaseConfigMode: e.target.checked ? "standard" : "custom" }));
-                  }}
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-foreground">Use Axis standard system</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    Axis generates a complete room-rental lease from the approved application and this listing — rent,
-                    deposits, house rules, and local disclosures included. Uncheck to add your own lease terms or upload
-                    a lease template.
-                  </span>
-                </span>
-              </label>
-
-              {leaseMode === "custom" ? (
-                <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {([
-                      {
-                        kind: "terms" as const,
-                        title: "Add custom lease information",
-                        detail: "Write the clauses you want. Axis adds them to the generated lease as an addendum.",
-                      },
-                      {
-                        kind: "document" as const,
-                        title: "Upload a lease template (PDF)",
-                        detail: "Your document becomes the lease text. Axis adds a placement summary and e-signatures.",
-                      },
-                    ]).map((opt) => (
-                      <button
-                        key={opt.kind}
-                        type="button"
-                        data-attr={`listing-lease-kind-${opt.kind}`}
-                        onClick={() => setSub((s) => ({ ...s, leaseCustomKind: opt.kind }))}
-                        className={`rounded-2xl border p-4 text-left transition ${
-                          leaseKind === opt.kind
-                            ? "border-primary bg-primary/10 ring-1 ring-primary/25"
-                            : "border-border bg-card hover:border-primary/30"
-                        }`}
-                      >
-                        <p className="text-sm font-semibold text-foreground">{opt.title}</p>
-                        <p className="mt-1 text-xs leading-relaxed text-muted">{opt.detail}</p>
-                      </button>
-                    ))}
-                  </div>
-
-                  {leaseKind === "terms" ? (
-                    <div data-wizard-field="customLeaseTerms">
-                      <FieldLabel hint="One clause per paragraph. These appear in the generated lease as “Additional Provisions from Property Manager”." required>
-                        Custom lease information
-                      </FieldLabel>
-                      <textarea
-                        rows={8}
-                        value={sub.customLeaseTerms ?? ""}
-                        onChange={(e) => {
-                          clearListingFieldError("customLeaseTerms");
-                          setSub((s) => ({ ...s, customLeaseTerms: e.target.value }));
-                        }}
-                        placeholder={"e.g. Parking: one assigned spot in the rear lot is included.\n\nSmoking is prohibited everywhere on the property, including balconies."}
-                        className={wizardFieldErrorClass(
-                          Boolean(stepFieldErrors.customLeaseTerms),
-                          "w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20",
-                        )}
-                      />
-                      <StepFieldError msg={stepFieldErrors.customLeaseTerms} />
-                    </div>
-                  ) : (
-                    <div data-wizard-field="leaseTemplateDoc">
-                      <FieldLabel hint="PDF up to 8 MB. Used as the lease document for every placement at this property." required>
-                        Lease template
-                      </FieldLabel>
-                      {sub.leaseTemplateDocUrl ? (
-                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3.5 py-3">
-                          <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                            📄 {sub.leaseTemplateDocName?.trim() || "Lease template.pdf"}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            {!sub.leaseTemplateDocUrl.startsWith("data:") ? (
-                              <a
-                                href={sub.leaseTemplateDocUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs font-semibold text-primary hover:underline"
-                              >
-                                View
-                              </a>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="text-xs font-semibold text-rose-600 hover:underline"
-                              onClick={() =>
-                                setSub((s) => ({ ...s, leaseTemplateDocUrl: null, leaseTemplateDocName: "" }))
-                              }
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <label
-                          className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-dashed px-4 py-8 text-center transition hover:border-primary/40 ${
-                            stepFieldErrors.leaseTemplateDoc ? "border-red-400 ring-2 ring-red-100" : "border-border bg-accent/20"
-                          }`}
-                        >
-                          <input
-                            type="file"
-                            accept="application/pdf,.pdf"
-                            className="hidden"
-                            data-attr="listing-lease-template-upload"
-                            onChange={(e) => {
-                              onPickLeaseTemplateDoc(e.target.files?.[0] ?? null);
-                              e.target.value = "";
-                            }}
-                          />
-                          <span className="text-sm font-semibold text-foreground">Upload lease template (PDF)</span>
-                          <span className="text-xs text-muted">Click to choose a file · up to 8 MB</span>
-                        </label>
-                      )}
-                      <StepFieldError msg={stepFieldErrors.leaseTemplateDoc} />
-                    </div>
-                  )}
-                </div>
-              ) : null}
-            </div>
+          <FormSection id="edit-leasedoc" title="Lease">
+            <LeaseConfigForm
+              variant="wizard"
+              dataAttrPrefix="listing"
+              draft={{
+                leaseConfigMode: sub.leaseConfigMode,
+                leaseCustomKind: sub.leaseCustomKind,
+                customLeaseTerms: sub.customLeaseTerms,
+                leaseTemplateDocUrl: sub.leaseTemplateDocUrl,
+                leaseTemplateDocName: sub.leaseTemplateDocName,
+              }}
+              onDraftChange={(patch) => setSub((s) => ({ ...s, ...patch }))}
+              onStandardToggle={() => setStepFieldErrors({})}
+              onCustomTermsChange={() => clearListingFieldError("customLeaseTerms")}
+              onPickLeaseTemplateDoc={onPickLeaseTemplateDoc}
+              customTermsError={stepFieldErrors.customLeaseTerms ?? null}
+              leaseTemplateError={stepFieldErrors.leaseTemplateDoc ?? null}
+            />
           </FormSection>
           ) : null}
 
@@ -4817,7 +4709,7 @@ export function ManagerAddListingForm({
               <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={onClose} disabled={busy}>
                 Close
               </Button>
-              {stepIndex > 0 ? (
+              {visibleStepPosition > 0 ? (
                 <Button type="button" variant="outline" className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]" onClick={goPrev} disabled={busy}>
                   Back
                 </Button>
@@ -4826,11 +4718,25 @@ export function ManagerAddListingForm({
             <div className="flex flex-wrap justify-end gap-2">
               {!isFinalStep ? (
                 <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={goNext} disabled={busy}>
-                  {stepIndex === lastStepIndex - 1 ? "Review & submit →" : "Continue"}
+                  {visibleStepPosition === visibleStepCount - 2
+                    ? isPreviewWizard
+                      ? "Review & save →"
+                      : "Review & submit →"
+                    : "Continue"}
                 </Button>
               ) : (
                 <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={() => void submitListing()} disabled={busy}>
-                  {busy ? (isEditMode ? "Submitting changes…" : "Submitting listing…") : isEditMode ? "Submit changes" : "Submit listing"}
+                  {busy
+                    ? isPreviewWizard
+                      ? "Saving preview…"
+                      : isEditMode
+                        ? "Submitting changes…"
+                        : "Submitting listing…"
+                    : isPreviewWizard
+                      ? "Save preview"
+                      : isEditMode
+                        ? "Submit changes"
+                        : "Submit listing"}
                 </Button>
               )}
             </div>

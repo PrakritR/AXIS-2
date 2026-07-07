@@ -3,12 +3,14 @@
  */
 
 import {
+  defaultFlyerEntryTitle,
   flyerEntryDisplayTitle,
   readFlyerEntries,
   type FlyerEntry,
   type ManagerPromotionRow,
 } from "@/lib/promotion-flyer";
 import {
+  defaultPromotionTextEntryTitle,
   PROMOTION_TEXT_FORMAT_OPTIONS,
   promotionTextEntryDisplayTitle,
   readPromotionTextEntries,
@@ -126,5 +128,36 @@ export function promotionAssetBoxTitle(asset: PromotionAsset, indexWithinKind: n
 
 /** Kind badge label for stacked cards. */
 export function promotionAssetKindLabel(kind: PromotionAssetKind): string {
-  return kind === "flyer" ? "Flyer" : "Promotion text";
+  return kind === "flyer" ? "Flyer" : "Text";
+}
+
+/** Default numbered label for the next asset of a kind (1-based sequence). */
+export function nextPromotionAssetDefaultTitle(
+  assets: PromotionAsset[],
+  kind: PromotionAssetKind,
+): string {
+  const count = assets.filter((a) => a.kind === kind).length;
+  return kind === "flyer" ? defaultFlyerEntryTitle(count + 1) : defaultPromotionTextEntryTitle(count + 1);
+}
+
+/** Per-kind sequence numbers for a sorted asset list (Flyer 1, Text 1, Flyer 2, …). */
+export function promotionAssetKindIndices(assets: PromotionAsset[]): Map<string, number> {
+  const counts: Record<PromotionAssetKind, number> = { flyer: 0, text: 0 };
+  const indices = new Map<string, number>();
+  for (const asset of assets) {
+    const index = counts[asset.kind]++;
+    indices.set(asset.id, index);
+  }
+  return indices;
+}
+
+/** List-row title: manager label when set, otherwise numbered Flyer N / Text N. */
+export function promotionAssetListTitle(asset: PromotionAsset, indexWithinKind: number): string {
+  if (asset.kind === "flyer" && asset.flyerEntry) {
+    return flyerEntryDisplayTitle(asset.flyerEntry, indexWithinKind);
+  }
+  if (asset.kind === "text" && asset.textEntry) {
+    return promotionTextEntryDisplayTitle(asset.textEntry, indexWithinKind);
+  }
+  return promotionAssetKindLabel(asset.kind);
 }

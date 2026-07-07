@@ -66,8 +66,68 @@ export function PromotionTextCopyButton({
 }
 
 /**
+ * Read-only promotion text body with double-click inline editing (auto-saves on blur).
+ */
+export function PromotionTextEntryBody({
+  entry,
+  onSave,
+  showToast,
+}: {
+  entry: PromotionTextEntry;
+  onSave: (entry: PromotionTextEntry) => void;
+  showToast?: (message: string) => void;
+}) {
+  const formatLabel =
+    PROMOTION_TEXT_FORMAT_OPTIONS.find((o) => o.id === entry.copy.format)?.label ?? "Promotion text";
+  const [editing, setEditing] = useState(false);
+  const [plain, setPlain] = useState(() => formatPromotionTextPlain(entry.copy));
+
+  useEffect(() => {
+    setPlain(formatPromotionTextPlain(entry.copy));
+    setEditing(false);
+  }, [entry.id, entry.updatedAt, entry.copy]);
+
+  function commit() {
+    setEditing(false);
+    if (plain === formatPromotionTextPlain(entry.copy)) return;
+    onSave({
+      ...entry,
+      copy: promotionTextFromPlain(plain, entry.copy),
+      updatedAt: new Date().toISOString(),
+    });
+    showToast?.("Text saved.");
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <p className="border-b border-border px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+        {formatLabel}
+      </p>
+      {editing ? (
+        <Textarea
+          autoFocus
+          className="min-h-[12rem] resize-y rounded-none border-0 bg-accent/10 px-4 py-3 text-sm leading-relaxed shadow-none focus-visible:ring-0"
+          value={plain}
+          onChange={(e) => setPlain(e.target.value)}
+          onBlur={commit}
+          aria-label={`Edit ${formatLabel}`}
+        />
+      ) : (
+        <pre
+          className="m-0 cursor-text whitespace-pre-wrap px-4 py-3 text-sm leading-relaxed text-foreground"
+          title="Double-click to edit"
+          onDoubleClick={() => setEditing(true)}
+        >
+          {plain || "Double-click to add text."}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+/**
  * One promotion text rendered as a collapsible "dropdown box": the format label
- * and Copy / Regenerate / Delete buttons sit in the header; the body shows the
+ * and Copy / Edit / Delete buttons sit in the header; the body shows the
  * text read-only until you double-click it, which opens an inline editor that
  * auto-saves on blur.
  */
@@ -158,11 +218,11 @@ export function PromotionTextEntryEditor({
               type="button"
               variant="outline"
               className="h-8 rounded-full px-3 text-xs"
-              data-attr="promotion-text-regenerate-entry"
+              data-attr="promotion-text-edit"
               disabled={regenerating}
               onClick={() => onRegenerate(entry.id)}
             >
-              {regenerating ? "Regenerating…" : "Regenerate"}
+              {regenerating ? "Editing…" : "Edit"}
             </Button>
           ) : null}
           <button

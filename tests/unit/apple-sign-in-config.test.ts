@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   APPLE_SIGN_IN_SUPABASE_SETUP_MESSAGE,
   isAppleSignInAvailable,
+  isAppleSignInDisabledOnWeb,
   isAppleSignInEnabledInEnv,
   probeSupabaseAppleOAuthUrl,
 } from "@/lib/auth/apple-sign-in-config";
@@ -38,9 +39,14 @@ describe("apple-sign-in-config", () => {
   it("isAppleSignInAvailable is true on native iOS regardless of env", () => {
     detectNative.mockReturnValue("ios");
     expect(isAppleSignInAvailable()).toBe(true);
+    process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED = "false";
+    expect(isAppleSignInAvailable()).toBe(true);
   });
 
-  it("isAppleSignInAvailable on web follows env flag", () => {
+  it("isAppleSignInAvailable on web is true by default and opt-out via env", () => {
+    expect(isAppleSignInAvailable()).toBe(true);
+    process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED = "false";
+    expect(isAppleSignInDisabledOnWeb()).toBe(true);
     expect(isAppleSignInAvailable()).toBe(false);
     process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED = "true";
     expect(isAppleSignInAvailable()).toBe(true);

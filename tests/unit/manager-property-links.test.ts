@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildManagerApplyUrl, buildManagerTourUrl, buildTourContactHref } from "@/lib/manager-property-links";
+import { buildManagerApplyUrl, buildManagerTourUrl, buildPropertyMessageHref, buildTourContactHref } from "@/lib/manager-property-links";
 
 describe("manager-property-links", () => {
   const origin = "https://app.example.com";
@@ -21,12 +21,24 @@ describe("manager-property-links", () => {
   });
 
   it("builds relative tour contact href with encoded property id", () => {
-    expect(buildTourContactHref("mgr house 1")).toBe("/rent/tours-contact?propertyId=mgr%20house%201");
+    expect(buildTourContactHref("mgr house 1")).toBe("/rent/tours-contact?propertyId=mgr+house+1");
+  });
+
+  it("builds message contact href with message tab", () => {
+    expect(buildPropertyMessageHref("mgr house 1")).toBe(
+      "/rent/tours-contact?propertyId=mgr+house+1&tab=message",
+    );
+  });
+
+  it("builds tour contact href with optional next path", () => {
+    expect(buildTourContactHref("mgr-1", { next: "/rent/apply?propertyId=mgr-1" })).toBe(
+      "/rent/tours-contact?propertyId=mgr-1&next=%2Frent%2Fapply%3FpropertyId%3Dmgr-1",
+    );
   });
 
   it("builds tour URL with encoded property id", () => {
     const url = buildManagerTourUrl(origin, "mgr house 1");
-    expect(url).toBe("https://app.example.com/rent/tours-contact?propertyId=mgr%20house%201");
+    expect(url).toBe("https://app.example.com/rent/tours-contact?propertyId=mgr+house+1");
   });
 
   it("strips trailing slash from origin", () => {

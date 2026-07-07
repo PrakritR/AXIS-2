@@ -51,6 +51,10 @@ function isPaidRow(row: DemoManagerPaymentLedgerRow): boolean {
   return row.statusLabel === "Paid" || row.balanceDue === "$0.00";
 }
 
+function isRemindableRow(row: DemoManagerPaymentLedgerRow): boolean {
+  return !isPaidRow(row) && Boolean(row.residentEmail?.trim());
+}
+
 function dueDateDisplayToInputValue(display: string): string {
   const stripped = display.replace(/^(by|before)\s+/i, "").trim();
   const parsed = new Date(stripped);
@@ -99,6 +103,10 @@ export function ManagerPaymentsLedgerPanel({
     [rows, selectedIds],
   );
   const singleSelectedRow = selectedRows.length === 1 ? selectedRows[0]! : null;
+  const remindableSelectedRows = useMemo(
+    () => selectedRows.filter(isRemindableRow),
+    [selectedRows],
+  );
   const showSelection = rows.length > 0;
   const allSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
   const rowIdsKey = useMemo(() => rows.map((row) => row.id).join(","), [rows]);
@@ -300,6 +308,7 @@ export function ManagerPaymentsLedgerPanel({
       `This is a friendly reminder that your ${chargeTitle} payment is outstanding.`,
     ];
     if (row.balanceDue) lines.push(`Amount due: ${row.balanceDue}`);
+    if (row.dueDate) lines.push(`Due date: ${row.dueDate}`);
     if (row.propertyName) lines.push(`Property: ${row.propertyName}`);
     lines.push(
       "",
@@ -311,6 +320,65 @@ export function ManagerPaymentsLedgerPanel({
       "Axis Portal",
     );
     setReminderPreview({ row, subject, body: lines.join("\n") });
+  };
+
+  const sendReminderForRow = async (
+    row: DemoManagerPaymentLedgerRow,
+  ): Promise<{ ok: boolean; skipped?: boolean }> => {
+    const email = row.residentEmail?.trim();
+    if (!email) return { ok: false };
+    try {
+      const res = await fetch("/api/portal/send-payment-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          residentEmail: email,
+          residentName: row.residentName,
+          chargeTitle: row.chargeTitle,
+          balanceDue: row.balanceDue,
+          dueDate: row.dueDate,
+          propertyLabel: row.propertyName,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean };
+      return { ok: Boolean(data.ok), skipped: data.skipped };
+    } catch {
+      return { ok: false };
+    }
+  };
+
+  const sendBulkReminders = async () => {
+    const targets = remindableSelectedRows;
+    if (targets.length === 0) {
+      if (selectedRows.some((row) => !isPaidRow(row))) {
+        showToast("No email on file for selected resident(s).");
+      }
+      return;
+    }
+    setSendingReminderId("bulk");
+    let ok = 0;
+    let skipped = 0;
+    for (const row of targets) {
+      const result = await sendReminderForRow(row);
+      if (result.ok) {
+        ok += 1;
+        if (result.skipped) skipped += 1;
+      }
+    }
+    setSendingReminderId(null);
+    setSelectedIds(new Set());
+    if (ok === 0) {
+      showToast("Could not send reminder. Please try again.");
+      return;
+    }
+    if (skipped === ok) {
+      showToast(ok === 1 ? "Reminder sent to portal inbox (demo email — no real email sent)." : `Sent ${ok} reminders to portal inbox (demo email — no real email sent).`);
+    } else if (skipped > 0) {
+      showToast(`Sent ${ok} reminder${ok === 1 ? "" : "s"} (${skipped} via portal inbox only).`);
+    } else {
+      showToast(ok === 1 ? "Reminder sent to resident via email and portal inbox." : `Sent ${ok} reminders via email and portal inbox.`);
+    }
   };
 
   const doSendReminder = async (skipMessage: boolean) => {
@@ -325,28 +393,14 @@ export function ManagerPaymentsLedgerPanel({
     setReminderPreview(null);
     setSendingReminderId(row.id);
     try {
-      const res = await fetch("/api/portal/send-payment-reminder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          residentEmail: email,
-          residentName: row.residentName,
-          chargeTitle: row.chargeTitle,
-          balanceDue: row.balanceDue,
-          propertyLabel: row.propertyName,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean };
-      if (data.skipped) {
+      const result = await sendReminderForRow(row);
+      if (result.skipped) {
         showToast("Reminder sent to portal inbox (demo email — no real email sent).");
-      } else if (data.ok) {
+      } else if (result.ok) {
         showToast("Reminder sent to resident via email and portal inbox.");
       } else {
         showToast("Could not send reminder. Please try again.");
       }
-    } catch {
-      showToast("Could not send reminder. Please try again.");
     } finally {
       setSendingReminderId(null);
     }
@@ -525,21 +579,21 @@ export function ManagerPaymentsLedgerPanel({
           {selectedRows.some((row) => !isPaidRow(row)) ? (
             <Button
               type="button"
-              variant="outline"
+              variant={remindableSelectedRows.length > 0 ? "primary" : "outline"}
               className={PORTAL_DETAIL_BTN}
-              disabled={
-                Boolean(sendingReminderId) ||
-                selectedRows.length !== 1 ||
-                (singleSelectedRow ? isPaidRow(singleSelectedRow) : false)
+              disabled={Boolean(sendingReminderId) || remindableSelectedRows.length === 0}
+              data-attr="payments-send-reminder"
+              title={
+                remindableSelectedRows.length === 0
+                  ? "Selected payments have no resident email on file."
+                  : undefined
               }
-              title={selectedRows.length !== 1 ? "Select one payment to send a reminder." : undefined}
               onClick={() => {
-                const row = singleSelectedRow;
-                if (!row) {
-                  showToast("Select one payment to send a reminder.");
+                if (remindableSelectedRows.length === 1) {
+                  openReminderPreview(remindableSelectedRows[0]!);
                   return;
                 }
-                openReminderPreview(row);
+                void sendBulkReminders();
               }}
             >
               {sendingReminderId ? "Sending…" : "Send reminder"}
