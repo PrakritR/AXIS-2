@@ -543,8 +543,30 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "payments") {
-    if (tabParts?.length) notFound();
-    return <ResidentPaymentsPanel />;
+    const allowedTabs = meta.tabs.map((t) => t.id);
+    if (!tabParts?.length) {
+      redirect(`${def.basePath}/payments/pending`);
+    }
+    if (tabParts.length > 1) notFound();
+    const payTab = tabParts[0]!;
+    if (!allowedTabs.includes(payTab)) notFound();
+    if (payTab === "balance" || payTab === "statements") {
+      const financialTab = payTab === "balance" ? "summary" : "statements";
+      return (
+        <ResidentFinancialsPanel
+          tabId={financialTab}
+          basePath={`${def.basePath}/payments`}
+          tabs={[
+            { id: "pending", label: "Pending", href: `${def.basePath}/payments/pending` },
+            { id: "paid", label: "Paid", href: `${def.basePath}/payments/paid` },
+            { id: "balance", label: "Balance", href: `${def.basePath}/payments/balance` },
+            { id: "statements", label: "Statements", href: `${def.basePath}/payments/statements` },
+          ]}
+          activePaymentsTab={payTab}
+        />
+      );
+    }
+    return <ResidentPaymentsPanel tabId={payTab} basePath={def.basePath} />;
   }
 
   if (kind === "resident" && section === "financials") {

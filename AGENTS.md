@@ -619,6 +619,32 @@ back to Download.
 - Manager Library: expiration date on upload/edit, status pills (All / Expired / Expiring ≤30d / ≤90d), expiry column + compliance banner.
 - Manager Dashboard: top banner linking to library with `?expiry=` filter when expired or ≤30d count > 0.
 
+# Documents module (Phase 4: auto-filing)
+
+**Lib** — `src/lib/documents/document-auto-file.server.ts`: `autoFileDocumentToLibrary()` (service-role upload); opt-in per category via `manager_automation_settings.document_auto_file` jsonb (`lease`, `invoice`, `application`, `expense_receipt`).
+
+**Hooks** — call from portal write paths when settings enabled (lease fully signed, work order paid, etc.). Server-side only; never client-trusted storage paths.
+
+# Documents module (Phase 5: versioning)
+
+Library list excludes superseded rows (`superseded_by_document_id is null` on list query). Upload-new-version links prior row → new row via `superseded_by_document_id` on the old document.
+
+# Documents module (Phase 6: templates)
+
+**Schema** — `manager_document_templates` in `20260712140000_documents_advanced.sql`.
+
+**API** — `GET/POST /api/manager-document-templates`; `applyMergeFields` in `document-templates.ts` for filled HTML.
+
+# Documents module (Phase 7: e-signature foundation)
+
+**Schema** — `manager_documents.signature_status`, `signed_at`, `signature_requested_at`.
+
+**API** — `POST /api/manager-documents/[id]/request-signature` (inbox notice to resident; full signing reuses lease-signing flow in a later slice).
+
+# Resident payments + financials merge (§9.3)
+
+**Payments** section uses URL tabs: `pending`, `paid`, `balance`, `statements` (`PAYMENTS_TABS` in `resident-sections.ts`). Balance/statements render `ResidentFinancialsPanel`; `/resident/financials` redirects to `/resident/payments/pending`.
+
 # Financials Phase 4: vendor portal invoicing
 
 **This phase is ADDITIVE on top of the already-shipped vendor portal (Vendor

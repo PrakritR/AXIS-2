@@ -23,10 +23,12 @@ export function ResidentFinancialsPanel({
     { id: "summary", label: "Summary" },
     { id: "statements", label: "Rent statements" },
   ],
+  activePaymentsTab,
 }: {
   tabId: string;
   basePath?: string;
-  tabs?: ReadonlyArray<{ id: string; label: string }>;
+  tabs?: ReadonlyArray<{ id: string; label: string; href?: string }>;
+  activePaymentsTab?: string;
 }) {
   const [balanceReport, setBalanceReport] = useState<ReportResult | null>(null);
   const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
@@ -83,21 +85,27 @@ export function ResidentFinancialsPanel({
   const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
 
   return (
-    <ManagerPortalPageShell title="Finances" subtitle="Your current balance, payment history, and rent statements.">
+    <ManagerPortalPageShell title="Payments" subtitle="Your current balance, payment history, and rent statements.">
       <div className="mb-4 flex flex-wrap gap-2">
-        {tabsList.map((tab) => (
+        {tabsList.map((tab) => {
+          const href = tab.href ?? `${basePath}/financials/${tab.id}`;
+          const active = activePaymentsTab
+            ? activePaymentsTab === tab.id || (activePaymentsTab === "balance" && tab.id === "summary")
+            : tabId === tab.id;
+          return (
           <Link
             key={tab.id}
-            href={`${basePath}/financials/${tab.id}`}
+            href={href}
             className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-              tabId === tab.id
+              active
                 ? "bg-foreground text-background"
                 : "border border-border bg-card text-foreground/80 hover:bg-accent/40"
             }`}
           >
             {tab.label}
           </Link>
-        ))}
+          );
+        })}
       </div>
 
       {tabId === "summary" ? (

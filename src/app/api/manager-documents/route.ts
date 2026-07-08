@@ -43,6 +43,7 @@ export async function GET(req: Request) {
     .select(DOCUMENT_SELECT_COLUMNS)
     .eq("manager_user_id", auth.userId)
     .is("deleted_at", null)
+    .is("superseded_by_document_id", null)
     .order("created_at", { ascending: false })
     .limit(500);
 

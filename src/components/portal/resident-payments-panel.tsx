@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { TabNav } from "@/components/ui/tabs";
 import { useSearchParams, useRouter } from "next/navigation";
 import { track } from "@/lib/analytics/track-client";
 import { Button } from "@/components/ui/button";
@@ -113,7 +114,13 @@ function formatUsd(cents: number): string {
 
 type PaymentStatusBucket = "overdue" | "pending" | "paid";
 
-export function ResidentPaymentsPanel() {
+export function ResidentPaymentsPanel({
+  tabId = "pending",
+  basePath = "/resident",
+}: {
+  tabId?: string;
+  basePath?: string;
+}) {
   const { showToast } = useAppUi();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -133,7 +140,9 @@ export function ResidentPaymentsPanel() {
     [paymentMethodOptions],
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [bucket, setBucket] = useState<PaymentStatusBucket>("pending");
+  const [bucket, setBucket] = useState<PaymentStatusBucket>(
+    tabId === "paid" ? "paid" : "pending",
+  );
   const [bucketTouched, setBucketTouched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [paymentMethod, setPaymentMethod] = useState<ResidentPayMethod>("ach");
@@ -815,6 +824,22 @@ export function ResidentPaymentsPanel() {
     return formatUsd(cents);
   }, [confirmCharges]);
 
+  useEffect(() => {
+    if (tabId === "paid" || tabId === "pending") {
+      setBucket(tabId === "paid" ? "paid" : "pending");
+    }
+  }, [tabId]);
+
+  const paymentTabItems = useMemo(
+    () => [
+      { id: "pending", label: "Pending", href: `${basePath}/payments/pending` },
+      { id: "paid", label: "Paid", href: `${basePath}/payments/paid` },
+      { id: "balance", label: "Balance", href: `${basePath}/payments/balance` },
+      { id: "statements", label: "Statements", href: `${basePath}/payments/statements` },
+    ],
+    [basePath],
+  );
+
   return (
     <>
     <ManagerPortalPageShell
@@ -867,16 +892,19 @@ export function ResidentPaymentsPanel() {
         ) : null
       }
       filterRow={
-        <ManagerPortalFilterRow>
-          <ManagerPortalStatusPills
-            tabs={[...statusTabs]}
-            activeId={bucket}
-            onChange={(id) => {
-              setBucketTouched(true);
-              setBucket(id as PaymentStatusBucket);
-            }}
-          />
-        </ManagerPortalFilterRow>
+        <>
+          <TabNav activeId={tabId} items={paymentTabItems} />
+          <ManagerPortalFilterRow>
+            <ManagerPortalStatusPills
+              tabs={[...statusTabs]}
+              activeId={bucket}
+              onChange={(id) => {
+                setBucketTouched(true);
+                setBucket(id as PaymentStatusBucket);
+              }}
+            />
+          </ManagerPortalFilterRow>
+        </>
       }
     >
       {!paymentsUnlocked ? (

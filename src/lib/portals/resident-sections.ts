@@ -39,6 +39,13 @@ const DOCUMENTS_TABS = [
   { id: "other", label: "Other documents" },
 ] as const;
 
+const PAYMENTS_TABS = [
+  { id: "pending", label: "Pending" },
+  { id: "paid", label: "Paid" },
+  { id: "balance", label: "Balance" },
+  { id: "statements", label: "Statements" },
+] as const;
+
 /** Sidebar during application phase (before lease is approved): Application + Settings only. */
 export const RESIDENT_APPLICATION_PHASE_PORTAL_SECTIONS: PortalSection[] = [
   { section: "applications", label: "Application", tabs: [] },
@@ -53,7 +60,7 @@ export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
-  { section: "payments", label: "Payments", tabs: [] },
+  { section: "payments", label: "Payments", tabs: [...PAYMENTS_TABS] },
   { section: "move-in", label: "Move-in", tabs: [] },
   { section: "inbox", label: "Inbox", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
@@ -65,7 +72,7 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "dashboard", label: "Dashboard", tabs: [] },
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },
-  { section: "payments", label: "Payments", tabs: [] },
+  { section: "payments", label: "Payments", tabs: [...PAYMENTS_TABS] },
   { section: "move-in", label: "Move-in", tabs: [] },
   { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
   { section: "inbox", label: "Inbox", tabs: [...INBOX_TABS] },
