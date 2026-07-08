@@ -27,6 +27,7 @@ import {
   PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
+import { triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
@@ -95,7 +96,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const searchParams = useSearchParams();
 
   const [documents, setDocuments] = useState<ManagerDocumentDTO[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!demo);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [scopeFilter, setScopeFilter] = useState<string>("");
@@ -1042,6 +1043,29 @@ function PreviewModal({ doc, onClose }: { doc: ManagerDocumentDTO | null; onClos
   const { showToast } = useAppUi();
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = useCallback(async () => {
+    if (!doc) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/manager-documents/${doc.id}/signed-url?download=1`, { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Download failed.");
+      const fileRes = await fetch(data.url as string);
+      if (!fileRes.ok) throw new Error("Download failed.");
+      const blob = await fileRes.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      triggerDocumentDownload(objectUrl, (data.fileName as string | undefined) ?? doc.displayName);
+      // Revoke on the next tick — some browsers abort the save if the object URL
+      // is released in the same task as the anchor click.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Download failed.");
+    } finally {
+      setDownloading(false);
+    }
+  }, [doc, showToast]);
 
   useEffect(() => {
     if (!doc) {
@@ -1079,13 +1103,16 @@ function PreviewModal({ doc, onClose }: { doc: ManagerDocumentDTO | null; onClos
       footer={
         doc ? (
           <div className="flex justify-end gap-2">
-            <a
-              href={`/api/manager-documents/${doc.id}/signed-url?download=1`}
-              className={`inline-flex h-10 items-center rounded-full border border-border bg-card px-4 text-sm font-medium text-foreground hover:bg-accent/40 ${PORTAL_DETAIL_BTN}`}
+            <Button
+              type="button"
+              variant="outline"
+              className={PORTAL_DETAIL_BTN}
+              onClick={() => void handleDownload()}
+              disabled={downloading}
               data-attr="document-download"
             >
-              Download
-            </a>
+              {downloading ? "Downloading…" : "Download"}
+            </Button>
           </div>
         ) : null
       }

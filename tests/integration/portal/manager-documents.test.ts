@@ -184,7 +184,7 @@ describe("manager-documents API ownership", () => {
     expect(signed).toHaveLength(1);
   });
 
-  it("redirects to the signed URL when download=1 so plain anchors work", async () => {
+  it("returns the signed URL and file name when download=1 so the client can blob-download", async () => {
     const rows: DocRow[] = [
       { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "A", mime_type: "application/pdf", deleted_at: null },
     ];
@@ -194,8 +194,10 @@ describe("manager-documents API ownership", () => {
     const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url?download=1`), {
       params: Promise.resolve({ id: DOC_ID }),
     });
-    expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toContain("manager/mgr-owner/a.pdf");
+    const { status, data } = await parseJsonResponse<{ url?: string; fileName?: string }>(res);
+    expect(status).toBe(200);
+    expect(data.url).toContain("manager/mgr-owner/a.pdf");
+    expect(data.fileName).toBe("A.pdf");
     expect(signed).toHaveLength(1);
   });
 
@@ -209,7 +211,9 @@ describe("manager-documents API ownership", () => {
     const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url?download=1`), {
       params: Promise.resolve({ id: DOC_ID }),
     });
-    expect(res.status).toBe(302);
+    const { status, data } = await parseJsonResponse<{ fileName?: string }>(res);
+    expect(status).toBe(200);
+    expect(data.fileName).toBe("signed-lease-2026.pdf");
     expect(signed[0]!.options?.download).toBe("signed-lease-2026.pdf");
   });
 
@@ -223,7 +227,9 @@ describe("manager-documents API ownership", () => {
     const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url?download=1`), {
       params: Promise.resolve({ id: DOC_ID }),
     });
-    expect(res.status).toBe(302);
+    const { status, data } = await parseJsonResponse<{ fileName?: string }>(res);
+    expect(status).toBe(200);
+    expect(data.fileName).toBe("Lease Agreement.pdf");
     expect(signed[0]!.options?.download).toBe("Lease Agreement.pdf");
   });
 
@@ -259,6 +265,22 @@ describe("manager-documents API ownership", () => {
     );
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(404);
+    expect(rows[0]!.display_name).toBe("Original");
+  });
+
+  it("rename rejects a whitespace-only name with 400 and leaves the row untouched", async () => {
+    const rows: DocRow[] = [
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "p", display_name: "Original", mime_type: "application/pdf", deleted_at: null },
+    ];
+    const { client } = mockDb(rows);
+    asManager("mgr-owner", client);
+
+    const res = await RENAME(
+      jsonRequest(`http://t/api/manager-documents/${DOC_ID}`, { method: "PATCH", body: { displayName: "   " } }),
+      { params: Promise.resolve({ id: DOC_ID }) },
+    );
+    const { status } = await parseJsonResponse(res);
+    expect(status).toBe(400);
     expect(rows[0]!.display_name).toBe("Original");
   });
 

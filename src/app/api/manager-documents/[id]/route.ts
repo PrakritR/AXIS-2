@@ -78,7 +78,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-  if (typeof body.displayName === "string") update.display_name = sanitizeDisplayName(body.displayName);
+  // A blank/whitespace rename is rejected rather than silently renamed to the
+  // "Untitled document" fallback, which would look like data loss to the manager.
+  if (typeof body.displayName === "string") {
+    const cleaned = sanitizeDisplayName(body.displayName, "");
+    if (!cleaned) return NextResponse.json({ error: "Name cannot be empty." }, { status: 400 });
+    update.display_name = cleaned;
+  }
   if (typeof body.category === "string" && isDocumentCategory(body.category)) update.category = body.category;
 
   const prevRow = existing as ManagerDocumentRow;

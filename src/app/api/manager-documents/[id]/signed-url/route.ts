@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getReportsAuthContext, assertManagerFinancialsAccess } from "@/lib/reports/auth";
 import { UUID_PATTERN } from "@/lib/documents/manager-documents";
-import { createManagerDocumentSignedUrl } from "@/lib/documents/document-signed-url.server";
+import { createManagerDocumentSignedUrl, resolveDownloadName } from "@/lib/documents/document-signed-url.server";
 import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 
 export const runtime = "nodejs";
@@ -42,6 +42,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const signed = await createManagerDocumentSignedUrl(auth.db, row, download);
   if ("error" in signed) return NextResponse.json({ error: signed.error }, { status: 500 });
 
-  if (download) return NextResponse.redirect(signed.signedUrl, 302);
-  return NextResponse.json({ url: signed.signedUrl, mimeType: row.mime_type, displayName: row.display_name });
+  // Always JSON — the client fetches the signed URL and saves it as a blob so a
+  // download behaves the same in the browser and inside the Capacitor WebView
+  // (a 302 to storage would open a new tab in the native shell).
+  return NextResponse.json({
+    url: signed.signedUrl,
+    mimeType: row.mime_type,
+    displayName: row.display_name,
+    ...(download ? { fileName: resolveDownloadName(row) } : {}),
+  });
 }
