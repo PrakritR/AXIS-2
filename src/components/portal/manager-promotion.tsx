@@ -260,23 +260,6 @@ export function ManagerPromotion() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!isDemoModeActive()) return;
-    const onAutofill = (e: Event) => {
-      const detail = (e as CustomEvent<{ propertyId?: string; generateAfter?: boolean }>).detail;
-      const pid = detail?.propertyId?.trim() || listings[0]?.id;
-      if (!pid) return;
-      setDraft(draftWithPropertyKey(EMPTY_DRAFT, pid, listings, autofillOpts));
-      setShowChooser(false);
-      setShowForm(true);
-      setEditingRowId(null);
-      setEditingEntryId(null);
-      if (detail?.generateAfter) setDemoPromotionGeneratePending(true);
-    };
-    window.addEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
-    return () => window.removeEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
-  }, [listings, autofillOpts]);
-
   const promotions = useMemo(() => {
     void tick;
     return readManagerPromotionRows();
@@ -293,6 +276,23 @@ export function ManagerPromotion() {
   }, [userId, propertyTick]);
 
   const autofillOpts = useMemo(() => ({ managerContact: managerEmail ?? "" }), [managerEmail]);
+
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    const onAutofill = (e: Event) => {
+      const detail = (e as CustomEvent<{ propertyId?: string; generateAfter?: boolean }>).detail;
+      const pid = detail?.propertyId?.trim() || listings[0]?.id;
+      if (!pid) return;
+      setDraft(draftWithPropertyKey(EMPTY_DRAFT, pid, listings, autofillOpts));
+      setShowChooser(false);
+      setShowForm(true);
+      setEditingRowId(null);
+      setEditingEntryId(null);
+      if (detail?.generateAfter) setDemoPromotionGeneratePending(true);
+    };
+    window.addEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
+    return () => window.removeEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
+  }, [listings, autofillOpts]);
 
   const openChooser = useCallback(() => {
     setShowChooser(true);
