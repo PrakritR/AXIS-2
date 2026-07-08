@@ -32,7 +32,7 @@ export function ListingPublicPreviewModal({
     <>
       <button type="button" className="modal-overlay fixed inset-0 z-[75]" aria-label="Close preview" onClick={onClose} />
       <div
-        className="modal-panel fixed left-1/2 top-3 z-[76] flex max-h-[calc(100vh-1.5rem)] w-[min(100%-1rem,72rem)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-border shadow-[0_24px_80px_-20px_rgba(15,23,42,0.35)]"
+        className="modal-panel fixed left-1/2 top-1/2 z-[76] flex max-h-[calc(100vh-1.5rem)] w-[min(100%-1rem,72rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border shadow-[0_24px_80px_-20px_rgba(15,23,42,0.35)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="listing-preview-title"

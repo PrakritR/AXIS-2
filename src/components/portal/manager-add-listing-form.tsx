@@ -2202,7 +2202,7 @@ export function ManagerAddListingForm({
 
   return createPortal(
     <div
-      className="modal-overlay fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
+      className="modal-overlay fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <form

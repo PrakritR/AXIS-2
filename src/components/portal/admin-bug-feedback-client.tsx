@@ -49,7 +49,7 @@ const STATUS_OPTIONS: { value: BugFeedbackStatus; label: string }[] = [
   { value: "completed", label: "Completed" },
 ];
 
-type RoleFilter = "managers" | "residents" | "vendors";
+type StatusFilter = "all" | BugFeedbackStatus;
 type SortFilter = "newest" | "oldest" | "status";
 
 function feedbackStatusClass(status: BugFeedbackStatus) {
@@ -84,7 +84,7 @@ function sortFeedbackRows(rows: PortalBugFeedbackRow[], sort: SortFilter): Porta
 export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolean }) {
   const { showToast } = useAppUi();
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
-  const [roleFilter, setRoleFilter] = useState<RoleFilter>("managers");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortFilter, setSortFilter] = useState<SortFilter>("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -108,18 +108,51 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
   }, [refresh]);
 
   const { managerRows, residentRows, vendorRows } = useMemo(() => groupBugFeedbackForAdmin(rows), [rows]);
-  const sourceRows =
-    roleFilter === "managers" ? managerRows : roleFilter === "residents" ? residentRows : vendorRows;
-  const visibleRows = useMemo(() => sortFeedbackRows(sourceRows, sortFilter), [sourceRows, sortFilter]);
 
-  const roleTabs = useMemo(
-    () => [
-      { id: "managers" as const, label: "Managers", count: managerRows.length },
-      { id: "residents" as const, label: "Residents", count: residentRows.length },
-      { id: "vendors" as const, label: "Vendors", count: vendorRows.length },
-    ],
-    [managerRows.length, residentRows.length, vendorRows.length],
+  const prepareGroup = useCallback(
+    (groupRows: PortalBugFeedbackRow[]) => {
+      const filtered =
+        statusFilter === "all" ? groupRows : groupRows.filter((r) => r.status === statusFilter);
+      return sortFeedbackRows(filtered, sortFilter);
+    },
+    [statusFilter, sortFilter],
   );
+
+  const groups = useMemo(
+    () => [
+      { id: "managers" as const, label: "Managers", singular: "manager", rows: prepareGroup(managerRows) },
+      { id: "residents" as const, label: "Residents", singular: "resident", rows: prepareGroup(residentRows) },
+      { id: "vendors" as const, label: "Vendors", singular: "vendor", rows: prepareGroup(vendorRows) },
+    ],
+    [managerRows, residentRows, vendorRows, prepareGroup],
+  );
+
+  const statusTabs = useMemo(
+    () => [
+      { id: "all" as const, label: "All", count: rows.length, dataAttr: "admin-feedback-status-all" },
+      {
+        id: "open" as const,
+        label: "Open",
+        count: rows.filter((r) => r.status === "open").length,
+        dataAttr: "admin-feedback-status-open",
+      },
+      {
+        id: "in_progress" as const,
+        label: "In progress",
+        count: rows.filter((r) => r.status === "in_progress").length,
+        dataAttr: "admin-feedback-status-in-progress",
+      },
+      {
+        id: "completed" as const,
+        label: "Completed",
+        count: rows.filter((r) => r.status === "completed").length,
+        dataAttr: "admin-feedback-status-completed",
+      },
+    ],
+    [rows],
+  );
+
+  const hasAnyFeedback = rows.length > 0;
 
   const applySchema = async () => {
     setApplyingSchema(true);
@@ -208,10 +241,10 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
   const filterRow = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <ManagerPortalStatusPills
-        tabs={roleTabs}
-        activeId={roleFilter}
+        tabs={statusTabs}
+        activeId={statusFilter}
         onChange={(id) => {
-          setRoleFilter(id as RoleFilter);
+          setStatusFilter(id as StatusFilter);
           setExpandedId(null);
         }}
       />
@@ -229,6 +262,107 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
         </Select>
       </label>
     </div>
+  );
+
+  const renderGroupTable = (groupRows: PortalBugFeedbackRow[]) => (
+    <>
+      <div className="space-y-2 lg:hidden">
+        {groupRows.map((row) => {
+          const open = expandedId === row.id;
+          return (
+            <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+              >
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      From {row.reporterName || row.reporterEmail} · {formatWhen(row.createdAt)}
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
+                  >
+                    {feedbackStatusLabel(row.status)}
+                  </span>
+                </div>
+              </button>
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={PORTAL_DETAIL_BTN}
+                  onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                >
+                  {open ? "Less" : "Details"}
+                </Button>
+              </div>
+              {open ? <div className={PORTAL_MOBILE_DETAIL_EXPAND}>{renderRowDetail(row)}</div> : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
+        <div className={PORTAL_DATA_TABLE_SCROLL}>
+          <table className={PORTAL_DATA_TABLE}>
+            <thead>
+              <tr className={PORTAL_TABLE_HEAD_ROW}>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupRows.map((row) => {
+                const open = expandedId === row.id;
+                return (
+                  <Fragment key={row.id}>
+                    <tr
+                      className={PORTAL_TABLE_TR_EXPANDABLE}
+                      onClick={createPortalRowExpandClick(() =>
+                        setExpandedId((cur) => (cur === row.id ? null : row.id)),
+                      )}
+                      aria-expanded={open}
+                    >
+                      <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
+                        {formatWhen(row.createdAt)}
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <p className="font-medium text-foreground">{row.reporterName || row.reporterEmail}</p>
+                        <p className="text-xs text-muted">
+                          {roleGroupLabelForFeedback(row.reporterRole)} · {row.reporterEmail}
+                        </p>
+                      </td>
+                      <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                        <PortalTableInlineExpand expanded={open}>{row.title}</PortalTableInlineExpand>
+                      </td>
+                      <td className={PORTAL_TABLE_TD}>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
+                        >
+                          {feedbackStatusLabel(row.status)}
+                        </span>
+                      </td>
+                    </tr>
+                    {open ? (
+                      <tr className={PORTAL_TABLE_DETAIL_ROW}>
+                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                          {renderRowDetail(row)}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   );
 
   const content = (
@@ -278,116 +412,30 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
         </div>
       ) : null}
 
-      {visibleRows.length === 0 ? (
-        <PortalDataTableEmpty
-          icon="feedback"
-          message={
-            roleFilter === "managers"
-              ? "No manager feedback yet."
-              : roleFilter === "residents"
-                ? "No resident feedback yet."
-                : "No vendor feedback yet."
-          }
-        />
+      {!hasAnyFeedback ? (
+        <PortalDataTableEmpty icon="feedback" message="No feedback yet." />
       ) : (
-        <>
-          <div className="space-y-2 lg:hidden">
-            {visibleRows.map((row) => {
-              const open = expandedId === row.id;
-              return (
-                <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <button
-                    type="button"
-                    className="w-full text-left"
-                    onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                  >
-                    <div className="flex items-start justify-between gap-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
-                        <p className="mt-0.5 truncate text-xs text-muted">
-                          From {row.reporterName || row.reporterEmail} · {formatWhen(row.createdAt)}
-                        </p>
-                      </div>
-                      <span
-                        className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
-                      >
-                        {feedbackStatusLabel(row.status)}
-                      </span>
-                    </div>
-                  </button>
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={PORTAL_DETAIL_BTN}
-                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                    >
-                      {open ? "Less" : "Details"}
-                    </Button>
-                  </div>
-                  {open ? <div className={PORTAL_MOBILE_DETAIL_EXPAND}>{renderRowDetail(row)}</div> : null}
-                </div>
-              );
-            })}
-          </div>
-          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-            <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className={PORTAL_DATA_TABLE}>
-                <thead>
-                  <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>From</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Title</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map((row) => {
-                    const open = expandedId === row.id;
-                    return (
-                      <Fragment key={row.id}>
-                        <tr
-                          className={PORTAL_TABLE_TR_EXPANDABLE}
-                          onClick={createPortalRowExpandClick(() =>
-                            setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                          )}
-                          aria-expanded={open}
-                        >
-                          <td className={`${PORTAL_TABLE_TD} whitespace-nowrap text-xs text-muted`}>
-                            {formatWhen(row.createdAt)}
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <p className="font-medium text-foreground">{row.reporterName || row.reporterEmail}</p>
-                            <p className="text-xs text-muted">
-                              {roleGroupLabelForFeedback(row.reporterRole)} · {row.reporterEmail}
-                            </p>
-                          </td>
-                          <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                            <PortalTableInlineExpand expanded={open}>{row.title}</PortalTableInlineExpand>
-                          </td>
-                          <td className={PORTAL_TABLE_TD}>
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
-                            >
-                              {feedbackStatusLabel(row.status)}
-                            </span>
-                          </td>
-                        </tr>
-                        {open ? (
-                          <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                            <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
-                              {renderRowDetail(row)}
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <section key={group.id} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">{group.label}</h2>
+                <span className="rounded-full bg-accent/50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted">
+                  {group.rows.length}
+                </span>
+              </div>
+              {group.rows.length === 0 ? (
+                <p className="text-sm text-muted">
+                  {statusFilter === "all"
+                    ? `No ${group.singular} feedback yet.`
+                    : `No ${group.singular} feedback matching this filter.`}
+                </p>
+              ) : (
+                renderGroupTable(group.rows)
+              )}
+            </section>
+          ))}
+        </div>
       )}
     </>
   );

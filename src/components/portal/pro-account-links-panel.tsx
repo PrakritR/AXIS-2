@@ -23,7 +23,6 @@ import {
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
   PortalTableInlineExpand,
-  PortalTableDetailActions,
   PORTAL_DETAIL_BTN,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
@@ -175,7 +174,7 @@ function AddPropertyToCoManager({
 }) {
   const unassigned = propertyOptions.filter((option) => !assignedPropertyIds.includes(option.id));
   if (unassigned.length === 0) {
-    return <p className="text-xs text-muted">All of your properties are already assigned to this co-manager.</p>;
+    return null;
   }
   return (
     <div className="flex flex-wrap items-end gap-2">
@@ -1077,19 +1076,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     return (
       <>
         {!readOnly ? (
-          <PortalTableDetailActions placement="top">
-            <Button
-              type="button"
-              variant="outline"
-              className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-              onClick={() => void removeLink(inv.id)}
-            >
-              Remove access
-            </Button>
-          </PortalTableDetailActions>
-        ) : null}
-
-        {!readOnly ? (
           <div className="mt-4">
             <AddPropertyToCoManager
               linkId={inv.id}
@@ -1121,17 +1107,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
 
   const renderLocalRowDetail = (r: ProRelationshipRecord) => (
     <>
-      <PortalTableDetailActions placement="top">
-        <Button
-          type="button"
-          variant="outline"
-          className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-          onClick={() => removeLink(r.id)}
-        >
-          Remove access
-        </Button>
-      </PortalTableDetailActions>
-
       <div className="mt-4">
         <AddPropertyToCoManager
           linkId={r.id}

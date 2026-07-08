@@ -64,7 +64,7 @@ export function Modal({
         className="modal-overlay fixed inset-0"
         onClick={onClose}
       />
-      <div className="relative z-[71] flex min-h-full items-start justify-center px-2 py-4 sm:px-4 sm:py-6">
+      <div className="relative z-[71] flex min-h-full items-center justify-center px-2 py-4 sm:px-4 sm:py-6">
         <div
           ref={panelRef}
           className={cn(MODAL_PANEL_CLASS, "min-h-0", panelClassName)}
