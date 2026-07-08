@@ -17,6 +17,8 @@ import {
 
 export const runtime = "nodejs";
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // GET /api/manager-documents — list the signed-in manager's live documents,
 // with optional filters. Soft-deleted rows are always excluded.
 export async function GET(req: Request) {
@@ -41,7 +43,7 @@ export async function GET(req: Request) {
 
   if (category && isDocumentCategory(category)) query = query.eq("category", category);
   if (propertyId) query = query.eq("property_id", propertyId);
-  if (search) query = query.ilike("display_name", `%${search.replace(/[%_]/g, (m) => `\\${m}`)}%`);
+  if (search) query = query.ilike("display_name", `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
 
   // Scope-kind filters map to "which polymorphic column is set".
   if (scope === "manager") {
@@ -113,6 +115,11 @@ export async function POST(req: Request) {
   const category = rawCategory && isDocumentCategory(rawCategory) ? rawCategory : "other";
   const displayName = sanitizeDisplayName(str("displayName") ?? file.name, file.name || "Untitled document");
 
+  const residentUserId = str("residentUserId");
+  if (residentUserId && !UUID_PATTERN.test(residentUserId)) {
+    return NextResponse.json({ error: "residentUserId must be a UUID." }, { status: 400 });
+  }
+
   const { error: uploadError } = await auth.db.storage
     .from(MANAGER_DOCUMENTS_BUCKET)
     .upload(storagePath, bytes, { contentType: mime, upsert: false });
@@ -130,7 +137,7 @@ export async function POST(req: Request) {
     property_id: str("propertyId"),
     unit_label: str("unitLabel"),
     lease_id: str("leaseId"),
-    resident_user_id: str("residentUserId"),
+    resident_user_id: residentUserId,
     resident_email: str("residentEmail")?.toLowerCase() ?? null,
     vendor_id: str("vendorId"),
     work_order_id: str("workOrderId"),

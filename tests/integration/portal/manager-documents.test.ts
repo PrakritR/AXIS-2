@@ -34,6 +34,7 @@ function mockDb(rows: DocRow[]) {
   const removed: string[][] = [];
   const signed: { path: string }[] = [];
   const inserted: Record<string, unknown>[] = [];
+  const uploaded: string[] = [];
 
   function tableApi() {
     const filters: Record<string, unknown> = {};
@@ -109,7 +110,10 @@ function mockDb(rows: DocRow[]) {
     from: () => tableApi(),
     storage: {
       from: () => ({
-        upload: async () => ({ error: null }),
+        upload: async (path: string) => {
+          uploaded.push(path);
+          return { error: null };
+        },
         remove: async (paths: string[]) => {
           removed.push(paths);
           return { error: null };
@@ -121,7 +125,7 @@ function mockDb(rows: DocRow[]) {
       }),
     },
   };
-  return { client, removed, signed, inserted };
+  return { client, removed, signed, inserted, uploaded };
 }
 
 function asManager(userId: string, client: unknown) {
@@ -176,6 +180,21 @@ describe("manager-documents API ownership", () => {
     const { status, data } = await parseJsonResponse<{ url?: string }>(res);
     expect(status).toBe(200);
     expect(data.url).toContain("manager/mgr-owner/a.pdf");
+    expect(signed).toHaveLength(1);
+  });
+
+  it("redirects to the signed URL when download=1 so plain anchors work", async () => {
+    const rows: DocRow[] = [
+      { id: "doc-1", manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "A", mime_type: "application/pdf", deleted_at: null },
+    ];
+    const { client, signed } = mockDb(rows);
+    asManager("mgr-owner", client);
+
+    const res = await SIGNED_URL(jsonRequest("http://t/api/manager-documents/doc-1/signed-url?download=1"), {
+      params: Promise.resolve({ id: "doc-1" }),
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("manager/mgr-owner/a.pdf");
     expect(signed).toHaveLength(1);
   });
 
@@ -268,6 +287,37 @@ describe("manager-documents API ownership", () => {
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(415);
     expect(inserted).toHaveLength(0);
+  });
+
+  it("upload rejects a malformed residentUserId with 400 before uploading bytes", async () => {
+    const { client, inserted, uploaded } = mockDb([]);
+    asManager("mgr-a", client);
+
+    const form = new FormData();
+    form.set("file", new File([new Uint8Array([1, 2, 3, 4])], "lease.pdf", { type: "application/pdf" }));
+    form.set("residentUserId", "not-a-uuid");
+    const req = new Request("http://t/api/manager-documents", { method: "POST", body: form });
+
+    const res = await UPLOAD(req);
+    const { status } = await parseJsonResponse(res);
+    expect(status).toBe(400);
+    expect(uploaded).toHaveLength(0);
+    expect(inserted).toHaveLength(0);
+  });
+
+  it("upload accepts a valid residentUserId", async () => {
+    const { client, inserted } = mockDb([]);
+    asManager("mgr-a", client);
+
+    const form = new FormData();
+    form.set("file", new File([new Uint8Array([1, 2, 3, 4])], "lease.pdf", { type: "application/pdf" }));
+    form.set("residentUserId", "8f7e6d5c-4b3a-4c2d-9e1f-0a1b2c3d4e5f");
+    const req = new Request("http://t/api/manager-documents", { method: "POST", body: form });
+
+    const res = await UPLOAD(req);
+    const { status } = await parseJsonResponse(res);
+    expect(status).toBe(201);
+    expect(inserted[0]!.resident_user_id).toBe("8f7e6d5c-4b3a-4c2d-9e1f-0a1b2c3d4e5f");
   });
 
   it("upload stores an owned row with manager_user_id from auth, not the client", async () => {
