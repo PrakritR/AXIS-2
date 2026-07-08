@@ -1,10 +1,3 @@
-import {
-  DEMO_VENDOR_EMAIL,
-  DEMO_VENDOR_NAME,
-  DEMO_VENDOR_USER_ID,
-  isDemoModeActive,
-} from "@/lib/demo/demo-session";
-import { demoWorkOrderBids } from "@/lib/demo/demo-data";
 import type { WorkOrderBid } from "@/lib/work-order-bids";
 
 export const WORK_ORDER_BIDS_EVENT = "axis:work-order-bids";
@@ -53,12 +46,7 @@ export function seedDemoWorkOrderBids(bids: WorkOrderBid[]): void {
 
 export function readWorkOrderBids(workOrderId?: string): WorkOrderBid[] {
   hydrateBidsFromSession();
-  const rows =
-    memoryBids.length > 0
-      ? memoryBids
-      : isDemoModeActive()
-        ? demoWorkOrderBids()
-        : [];
+  const rows = memoryBids;
   if (!workOrderId?.trim()) return rows;
   return rows.filter((b) => b.workOrderId === workOrderId);
 }
@@ -74,19 +62,24 @@ export function upsertWorkOrderBid(input: {
   proposedTime?: string | null;
   note?: string | null;
   status?: WorkOrderBid["status"];
+  vendorName?: string;
+  vendorEmail?: string;
 }): WorkOrderBid {
   hydrateBidsFromSession();
   const now = new Date().toISOString();
-  const vendorUserId = input.vendorUserId?.trim() || DEMO_VENDOR_USER_ID;
+  const vendorUserId = input.vendorUserId?.trim();
+  if (!vendorUserId) {
+    throw new Error("vendorUserId is required");
+  }
   const idx = memoryBids.findIndex((b) => b.workOrderId === input.workOrderId && b.vendorUserId === vendorUserId);
   const existing = idx >= 0 ? memoryBids[idx]! : null;
   const next: WorkOrderBid = {
-    id: existing?.id ?? `demo-bid-${input.workOrderId}`,
+    id: existing?.id ?? `bid-${input.workOrderId}-${vendorUserId}`,
     workOrderId: input.workOrderId,
     vendorUserId,
-    vendorDirectoryId: input.vendorDirectoryId ?? existing?.vendorDirectoryId ?? "demo-vendor-1",
-    vendorName: DEMO_VENDOR_NAME,
-    vendorEmail: DEMO_VENDOR_EMAIL,
+    vendorDirectoryId: input.vendorDirectoryId ?? existing?.vendorDirectoryId ?? null,
+    vendorName: input.vendorName ?? existing?.vendorName ?? "Vendor",
+    vendorEmail: input.vendorEmail ?? existing?.vendorEmail ?? "",
     quoteMode: input.quoteMode ?? existing?.quoteMode ?? "upfront",
     consultationVisitAt:
       input.consultationVisitAt !== undefined ? input.consultationVisitAt : (existing?.consultationVisitAt ?? null),

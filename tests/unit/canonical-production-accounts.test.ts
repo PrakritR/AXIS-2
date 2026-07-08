@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import {
   assertProductionProjectUrl,
   assertProductionSeedGate,
+  isProductionSupabaseProjectUrl,
   PRODUCTION_SUPABASE_PROJECT_REF,
   PROD_DEMO_MANAGER_EMAIL,
 } from "../../tests/helpers/canonical-production-accounts.mjs";
@@ -33,6 +34,11 @@ describe("canonical-production-accounts", () => {
 
   it("assertProductionProjectUrl rejects the dev/test project", () => {
     expect(() => assertProductionProjectUrl(`https://${DEV_REF}.supabase.co`)).toThrow(/production/i);
+  });
+
+  it("isProductionSupabaseProjectUrl detects the production project", () => {
+    expect(isProductionSupabaseProjectUrl(`https://${PRODUCTION_SUPABASE_PROJECT_REF}.supabase.co`)).toBe(true);
+    expect(isProductionSupabaseProjectUrl(`https://${DEV_REF}.supabase.co`)).toBe(false);
   });
 
   it("assertProductionSeedGate requires ALLOW_PRODUCTION_SEED=1", () => {

@@ -173,6 +173,11 @@ export function getDemoGuidedState(): DemoGuidedPersisted {
   return memoryState;
 }
 
+/** Stable SSR snapshot for useSyncExternalStore — must return the same reference every call. */
+export function getDemoGuidedServerSnapshot(): DemoGuidedPersisted {
+  return DEFAULT_STATE;
+}
+
 export function isGuidedDemoActive(): boolean {
   return getDemoGuidedState().mode === "guided" && getDemoGuidedState().step > 0;
 }

@@ -128,7 +128,11 @@ mirrored.
 
 ## Production demo seed (live site only)
 
-The public `/demo` route is a client-side localStorage sandbox — it never writes
+> **Prefer a separate demo Supabase project** for the public `/demo` sandbox — see
+> [Demo Supabase project](#demo-supabase-project) below. The production seed below
+> is legacy: it writes `@axis.local` accounts into the **production** database.
+
+The public `/demo` route uses client-side localStorage by default — it never writes
 to Supabase. To exercise **real** signed-in portals on the production deployment
 (manager / resident / vendor), run the one-shot CLI seed against the production
 project:
@@ -164,6 +168,50 @@ site after seeding:
 Password: value of `AXIS_PROD_DEMO_PASSWORD`. Re-run the seed anytime to refresh
 relative dates and upsert rows — it only touches the demo manager scope plus
 those three accounts.
+
+## Demo Supabase project
+
+The public `/demo` sandbox can use a **third** Supabase project, isolated from
+production and dev/test. Set these in Vercel **Production** scope:
+
+| Variable | Scope | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_DEMO_SUPABASE_URL` | Public | Demo project API URL |
+| `NEXT_PUBLIC_DEMO_SUPABASE_ANON_KEY` | Public | Demo project anon key |
+| `DEMO_SUPABASE_URL` | Server | Same URL (server-side reads) |
+| `DEMO_SUPABASE_SERVICE_ROLE_KEY` | Server | Demo project service role |
+| `AXIS_DEMO_SEED_PASSWORD` | Server | Password for `@axis.local` demo accounts |
+
+When the demo env vars are unset, `/demo` falls back to browser localStorage seed
+data (no network). `/demo` nav and the landing-page demo CTA are enabled on
+production by default; set `NEXT_PUBLIC_AXIS_PUBLIC_DEMO_ENABLED=false` to hide them.
+
+Seed the demo project (never production):
+
+```bash
+# Apply the same migrations to the demo project first (supabase link + db:push)
+ALLOW_DEMO_SEED=1 AXIS_DEMO_SEED_PASSWORD='your-demo-password' \
+  node --env-file=.env.local scripts/seed-demo-supabase.mjs
+# or: ALLOW_DEMO_SEED=1 AXIS_DEMO_SEED_PASSWORD='…' npm run seed:demo
+```
+
+Guards:
+
+- `assertDemoProjectNotProduction` — refuses when the demo URL matches
+  `AXIS_PROD_SUPABASE_REF`
+- `assertDemoSupabaseIsolated` (runtime) — server paths refuse a demo URL that
+  equals `NEXT_PUBLIC_SUPABASE_URL`
+- `assertDemoSeedGate` — requires `ALLOW_DEMO_SEED=1`
+
+Demo accounts (same `@axis.local` emails as the local sandbox):
+
+| Role | Email |
+|---|---|
+| Manager | `alex.morgan@axis.local` |
+| Resident | `jordan.lee@axis.local` |
+| Vendor | `cascade.mechanical@axis.local` |
+
+Password: value of `AXIS_DEMO_SEED_PASSWORD`.
 
 ## A note on MCP
 

@@ -1,5 +1,3 @@
-import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { demoVendorPayouts } from "@/lib/demo/demo-data";
 import type { VendorPayout } from "@/lib/vendor-payouts";
 
 export const VENDOR_PAYOUTS_EVENT = "axis:vendor-payouts";
@@ -48,7 +46,5 @@ export function seedDemoVendorPayouts(payouts: VendorPayout[]): void {
 
 export function readVendorPayouts(): VendorPayout[] {
   hydratePayoutsFromSession();
-  if (memoryPayouts.length > 0) return memoryPayouts;
-  if (isDemoModeActive()) return demoVendorPayouts();
-  return [];
+  return memoryPayouts;
 }

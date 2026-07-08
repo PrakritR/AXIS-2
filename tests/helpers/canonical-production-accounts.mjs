@@ -20,38 +20,34 @@ export const PROD_DEMO_RESIDENT_NAME = "Jordan Lee";
 export const PROD_DEMO_VENDOR_NAME = "Cascade Mechanical";
 
 /**
- * Workflow-seed applicants for production (@axis.local). Keep in sync with
- * scripts/seed-demo-manager-workflow.mjs buildApplicants() when that list changes.
+ * Previously used by production workflow seed — no longer populated.
+ * @axis.local accounts are not seeded into production Supabase.
  */
-export const PROD_WORKFLOW_RESIDENT_EMAILS = [
-  ["Maya", "Chen"],
-  ["Liam", "Novak"],
-  ["Ava", "Rossi"],
-  ["Noah", "Park"],
-  ["Sofia", "Diaz"],
-  ["Diego", "Morales"],
-  ["Grace", "Hall"],
-  ["Owen", "Bennett"],
-  ["Ethan", "Wright"],
-  ["Olivia", "Brooks"],
-  ["Isabella", "Nguyen"],
-  ["Mason", "Clark"],
-  ["Lucas", "Kim"],
-  ["Chloe", "Adams"],
-].map(([first, last]) => `${first}.${last}.seed@axis.local`.toLowerCase());
+export const PROD_WORKFLOW_RESIDENT_EMAILS = [];
+
+export function supabaseProjectRef(url) {
+  try {
+    return new URL(url).hostname.split(".")[0] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function productionSupabaseProjectRef() {
+  return process.env.AXIS_PROD_SUPABASE_REF?.trim() || PRODUCTION_SUPABASE_PROJECT_REF;
+}
+
+export function isProductionSupabaseProjectUrl(url) {
+  return supabaseProjectRef(url) === productionSupabaseProjectRef();
+}
 
 /**
  * Abort unless the Supabase URL points at the production project. Inverse of
  * assertTestProjectUrl in canonical-test-accounts.mjs.
  */
 export function assertProductionProjectUrl(url) {
-  const requiredRef = process.env.AXIS_PROD_SUPABASE_REF?.trim() || PRODUCTION_SUPABASE_PROJECT_REF;
-  let ref = "";
-  try {
-    ref = new URL(url).hostname.split(".")[0] ?? "";
-  } catch {
-    ref = "";
-  }
+  const requiredRef = productionSupabaseProjectRef();
+  const ref = supabaseProjectRef(url);
   if (ref !== requiredRef) {
     throw new Error(
       `Refusing production seed on ${url}: expected the production Supabase project (${requiredRef}). ` +
@@ -75,5 +71,27 @@ export function assertProductionSeedGate() {
     throw new Error(
       "Production seed blocked: set AXIS_PRODUCTION_SEED_KEY (server-only secret in Vercel Production scope).",
     );
+  }
+}
+
+/**
+ * Abort when the demo seed target is the production project. Demo must use a
+ * separate Supabase project (NEXT_PUBLIC_DEMO_SUPABASE_URL / DEMO_SUPABASE_URL).
+ */
+export function assertDemoProjectNotProduction(url) {
+  const requiredRef = productionSupabaseProjectRef();
+  const ref = supabaseProjectRef(url);
+  if (ref === requiredRef) {
+    throw new Error(
+      `Refusing demo seed on production project (${requiredRef}). ` +
+        `Point DEMO_SUPABASE_URL at a separate demo Supabase project.`,
+    );
+  }
+}
+
+/** Fail-closed gate for scripts/seed-demo-supabase.mjs. */
+export function assertDemoSeedGate() {
+  if (process.env.ALLOW_DEMO_SEED?.trim() !== "1") {
+    throw new Error("Demo seed blocked: set ALLOW_DEMO_SEED=1 to confirm you intend to write to the demo project.");
   }
 }

@@ -24,6 +24,7 @@ import { DEMO_PORTAL_SCROLL_ID } from "@/lib/portal-layout-classes";
 import {
   advanceGuidedDemoStep,
   exitGuidedDemoTour,
+  getDemoGuidedServerSnapshot,
   getDemoGuidedState,
   getGuidedDemoStep,
   getGuidedStepDef,
@@ -109,7 +110,7 @@ export function DemoPortalShell() {
   const guidedState = useSyncExternalStore(
     subscribeDemoGuidedState,
     getDemoGuidedState,
-    () => ({ mode: "idle" as const, step: 0 as const, paused: false }),
+    getDemoGuidedServerSnapshot,
   );
   const guidedActive = guidedState.mode === "guided" && guidedState.step > 0;
   const guidedStep = guidedActive ? guidedState.step : 0;

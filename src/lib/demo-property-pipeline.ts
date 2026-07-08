@@ -3,7 +3,6 @@ import {
   isDemoModeActive,
   resolveManagerScopeUserId,
 } from "@/lib/demo/demo-session";
-import { demoProperties } from "@/lib/demo/demo-data";
 import type { MockProperty } from "@/data/types";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
@@ -513,13 +512,24 @@ export function readExtraListingsPublic(): MockProperty[] {
   return [...byPropertyKey.values()];
 }
 
+/** Demo sandbox listings — lazy-loaded so API routes do not hard-depend on demo-data. */
+function readDemoSeedProperties(): MockProperty[] {
+  if (!isDemoModeActive()) return [];
+  try {
+    const { demoProperties } = require("@/lib/demo/demo-data") as typeof import("@/lib/demo/demo-data");
+    return demoProperties();
+  } catch {
+    return [];
+  }
+}
+
 /** Listed properties for one manager (portal). Falls back to demo seed data in `/demo`. */
 export function readScopedExtraListings(userId: string | null): MockProperty[] {
   const scopeUserId = resolveManagerScopeUserId(userId);
   if (!scopeUserId) return [];
   const stored = readExtraListingsForUser(scopeUserId);
   if (stored.length > 0) return stored;
-  if (isDemoModeActive() && scopeUserId === DEMO_MANAGER_USER_ID) return demoProperties();
+  if (isDemoModeActive() && scopeUserId === DEMO_MANAGER_USER_ID) return readDemoSeedProperties();
   return stored;
 }
 

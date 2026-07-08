@@ -20,28 +20,8 @@ export const TEST_SUPABASE_PROJECT_REF = "emstjswhotsnyksqhqyf";
  */
 export const PRODUCTION_ADMIN_EMAIL = "prakritramachandran@gmail.com";
 
-/**
- * Residents created by scripts/seed-demo-manager-workflow.mjs
- * (`<first>.<last>.seed@example.com`, only approved applicants get accounts).
- * Pending/rejected applicants are listed too so a bucket change there never
- * requires touching this file.
- */
-export const DEMO_WORKFLOW_RESIDENT_EMAILS = [
-  ["Maya", "Chen"],
-  ["Liam", "Novak"],
-  ["Ava", "Rossi"],
-  ["Noah", "Park"],
-  ["Sofia", "Diaz"],
-  ["Diego", "Morales"],
-  ["Grace", "Hall"],
-  ["Owen", "Bennett"],
-  ["Ethan", "Wright"],
-  ["Olivia", "Brooks"],
-  ["Isabella", "Nguyen"],
-  ["Mason", "Clark"],
-  ["Lucas", "Kim"],
-  ["Chloe", "Adams"],
-].map(([first, last]) => `${first}.${last}.seed@example.com`.toLowerCase());
+/** Workflow seed removed — no bulk fictional residents in the test DB. */
+export const DEMO_WORKFLOW_RESIDENT_EMAILS = [];
 
 /**
  * Abort unless the Supabase URL points at the dedicated test project. Both
