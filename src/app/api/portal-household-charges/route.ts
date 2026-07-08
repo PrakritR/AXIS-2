@@ -13,7 +13,7 @@ import {
   loadManagerAutomationSettings,
 } from "@/lib/payment-automation-settings";
 import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
-import { reconcileDuplicateHouseholdChargeRecords, syncDedupedCharges } from "@/lib/reports/ledger-sync";
+import { reconcileDuplicateChargeList, syncDedupedCharges } from "@/lib/reports/ledger-sync";
 
 export const runtime = "nodejs";
 
@@ -170,10 +170,13 @@ export async function POST(req: Request) {
       if (rows.length > 0) {
         const { error } = await db.from("portal_household_charge_records").upsert(rows, { onConflict: "id" });
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-        await reconcileDuplicateHouseholdChargeRecords(
-          db,
-          user.role === "admin" ? undefined : user.id,
-        ).catch(() => undefined);
+        const ownedCharges = normalizedCharges
+          .filter((c) => c.id)
+          .map((c) => ({
+            ...(c as unknown as HouseholdCharge),
+            managerUserId: user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id,
+          }));
+        await reconcileDuplicateChargeList(db, ownedCharges).catch(() => undefined);
         for (const c of normalizedCharges) {
           if (!c.id) continue;
           const chargeId = String(c.id);
@@ -187,7 +190,7 @@ export async function POST(req: Request) {
             await restoreFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
           }
         }
-        await syncDedupedCharges(db, normalizedCharges.filter((c) => c.id) as unknown as HouseholdCharge[]);
+        await syncDedupedCharges(db, ownedCharges);
       }
     }
 

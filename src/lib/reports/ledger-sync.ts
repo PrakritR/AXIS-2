@@ -83,7 +83,6 @@ async function fetchAllChargeRecords(
     let query = db
       .from("portal_household_charge_records")
       .select("manager_user_id, row_data")
-      .order("updated_at", { ascending: false })
       .order("id", { ascending: true })
       .range(offset, offset + CHARGE_SWEEP_PAGE_SIZE - 1);
     if (managerUserId) query = query.eq("manager_user_id", managerUserId);
@@ -96,22 +95,35 @@ async function fetchAllChargeRecords(
   }
 }
 
-/** Removes duplicate application-fee charge rows and their ledger entries (prevents doubled income). */
-export async function reconcileDuplicateHouseholdChargeRecords(
+/**
+ * Removes duplicate application-fee charge rows and their ledger entries
+ * (prevents doubled income) among the given charges — no table scan, so it is
+ * safe on hot per-mutation paths where the caller already holds the charge
+ * list.
+ */
+export async function reconcileDuplicateChargeList(
   db: SupabaseClient,
-  managerUserId?: string,
+  charges: (HouseholdCharge | null)[],
 ): Promise<{ removedChargeIds: string[] }> {
-  const data = await fetchAllChargeRecords(db, managerUserId);
-
-  const raw = data
-    .map((row) => row.row_data as HouseholdCharge)
-    .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
+  const raw = charges.filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
   const duplicateIds = duplicateHouseholdChargeIds(raw);
   if (duplicateIds.length === 0) return { removedChargeIds: [] };
 
   await removeLedgerEntriesForChargeIds(db, duplicateIds);
   await removeDuplicateHouseholdChargeRecords(db, duplicateIds);
   return { removedChargeIds: duplicateIds };
+}
+
+/** Removes duplicate application-fee charge rows and their ledger entries (prevents doubled income). */
+export async function reconcileDuplicateHouseholdChargeRecords(
+  db: SupabaseClient,
+  managerUserId?: string,
+): Promise<{ removedChargeIds: string[] }> {
+  const data = await fetchAllChargeRecords(db, managerUserId);
+  return reconcileDuplicateChargeList(
+    db,
+    data.map((row) => row.row_data as HouseholdCharge | null),
+  );
 }
 
 type LedgerEntryRow = {

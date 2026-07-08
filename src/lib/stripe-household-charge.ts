@@ -92,7 +92,9 @@ export async function markHouseholdChargePaidFromStripeSession(
     if (row.status === "paid" || charge.status === "paid") {
       alreadyPaid = true;
       marked += 1;
-      await syncLedgerPaymentEntry(db, charge, charge.paidAt, session.id);
+      await syncLedgerPaymentEntry(db, charge, charge.paidAt, session.id).catch((err) => {
+        console.error("[stripe-household-charge] ledger heal for already-paid charge failed", err);
+      });
       continue;
     }
 

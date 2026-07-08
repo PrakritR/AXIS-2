@@ -29,22 +29,30 @@ export async function markApplicationFeePaidFromStripeSession(
   const { data: rows, error } = await db
     .from("portal_household_charge_records")
     .select("id, row_data, status")
-    .eq("resident_email", residentEmail)
-    .eq("status", "pending");
+    .eq("resident_email", residentEmail);
 
   if (error || !rows?.length) return { ok: false };
 
-  const match = rows.find((row) => {
+  const candidates = rows.filter((row) => {
     const charge = row.row_data as HouseholdCharge | null;
     if (!charge || charge.kind !== "application_fee") return false;
     return charge.propertyId === propertyId;
   });
 
+  const match =
+    candidates.find((row) => row.status === "pending") ??
+    candidates.find((row) => {
+      const charge = row.row_data as HouseholdCharge;
+      return row.status === "paid" || charge.status === "paid";
+    });
+
   if (!match) return { ok: false };
 
   const charge = match.row_data as HouseholdCharge;
   if (match.status === "paid" || charge.status === "paid") {
-    await syncLedgerPaymentEntry(db, charge, charge.paidAt, session.id);
+    await syncLedgerPaymentEntry(db, charge, charge.paidAt, session.id).catch((err) => {
+      console.error("[stripe-application-fee] ledger heal for already-paid charge failed", err);
+    });
     return { ok: true, chargeId: match.id as string, alreadyPaid: true };
   }
 
