@@ -81,7 +81,12 @@ export const submitVendorInvoiceTool = defineTool({
         .describe(
           "Manager to bill. May be omitted when the vendor has exactly one linked manager; with multiple links it is required.",
         ),
-      workOrderId: z.string().optional().describe("Optional work order this invoice bills for."),
+      workOrderId: z
+        .string()
+        .optional()
+        .describe(
+          "Optional work order this invoice bills for. Must be one of the vendor's own work orders for the billed manager.",
+        ),
       invoiceNumber: z.string().optional(),
       lineItems: z
         .array(
@@ -111,6 +116,23 @@ export const submitVendorInvoiceTool = defineTool({
       : links[0];
     if (!target) throw new Error("You are not linked to that manager.");
 
+    // A supplied work-order id must reference a work order owned by the billed
+    // manager and assigned to this vendor — never trust a model-supplied id to
+    // link an invoice to another manager's job.
+    const workOrderId = input.workOrderId?.trim() || null;
+    if (workOrderId) {
+      const { data: workOrder } = await ctx.db
+        .from("portal_work_order_records")
+        .select("id")
+        .eq("id", workOrderId)
+        .eq("manager_user_id", target.managerUserId)
+        .eq("vendor_user_id", ctx.userId)
+        .maybeSingle();
+      if (!workOrder) {
+        throw new Error("Work order not found — it must be one of your own work orders for this manager.");
+      }
+    }
+
     const lineItems: VendorInvoiceLineItem[] = normalizeLineItems(input.lineItems);
     if (lineItems.length === 0) throw new Error("At least one line item is required.");
     const subtotalCents = sumLineItemsCents(lineItems);
@@ -126,7 +148,7 @@ export const submitVendorInvoiceTool = defineTool({
       action: "submit_vendor_invoice",
       tool_name: "submit_vendor_invoice",
       input_summary: {
-        workOrderId: input.workOrderId?.trim() || null,
+        workOrderId,
         lineItems: lineItems.length,
         totalCents,
       },
@@ -140,7 +162,7 @@ export const submitVendorInvoiceTool = defineTool({
         manager_user_id: target.managerUserId,
         vendor_user_id: ctx.userId,
         vendor_id: target.id,
-        work_order_id: input.workOrderId?.trim() || null,
+        work_order_id: workOrderId,
         invoice_number: input.invoiceNumber?.trim() || null,
         line_items: lineItems,
         subtotal_cents: subtotalCents,
@@ -159,7 +181,7 @@ export const submitVendorInvoiceTool = defineTool({
       invoice_id: data.id as string,
       total_cents: totalCents,
       line_items: lineItems.length,
-      has_work_order: Boolean(input.workOrderId?.trim()),
+      has_work_order: Boolean(workOrderId),
     });
 
     return { invoice: summarizeInvoice(data) };

@@ -76,6 +76,10 @@ class FakeQuery {
     return Promise.resolve({ data: this.apply().slice(from, to + 1), error: null });
   }
 
+  maybeSingle() {
+    return Promise.resolve({ data: this.apply()[0] ?? null, error: null });
+  }
+
   // Thenable: `await query` resolves to the filtered rows.
   then<T>(resolve: (v: { data: FakeRecord[]; error: null }) => T) {
     return Promise.resolve({ data: this.apply(), error: null }).then(resolve);

@@ -16,10 +16,13 @@ the vendor-financials AI tools, and a self-service-W-9 flag.
 `submitted → approved / rejected → scheduled → paid`. **`bill_id` is nullable
 with NO FK yet** — Phase 5's `manager_bills` doesn't exist at this point in the
 sequence; Phase 5 adds `references manager_bills(id)` when it lands, so an
-approved invoice can become a bill with no schema rework. RLS mirrors
-`vendor_payouts` / `work_order_bids`: vendor `FOR ALL` owner
-(`vendor_user_id = auth.uid()`), manager `FOR SELECT` (denormalized
-`manager_user_id`). Real writes go through service-role routes.
+approved invoice can become a bill with no schema rework. RLS mirrors the
+hardened `vendor_payouts` / `work_order_bids` split: vendor `FOR SELECT` only
+(`vendor_user_id = auth.uid()` —
+`20260710130000_vendor_invoices_vendor_select_only.sql` replaced the original
+`FOR ALL` owner policy, which would have let a vendor's own client bypass the
+status flow), manager `FOR SELECT` (denormalized `manager_user_id`). Real
+writes go through service-role routes.
 
 **We did NOT create a `vendor_payout_accounts` table** (the plan named one).
 Phase 3 already generalized Connect via `profiles.stripe_connect_account_id` +
@@ -28,7 +31,10 @@ duplicate infrastructure. Reuse the shipped pattern.
 
 **Routes.** Vendor: `GET/POST /api/vendor/invoices` (list own / submit — total
 is recomputed server-side from line items via `sumLineItemsCents`, never trusted
-from the body). Manager: `PATCH /api/vendor/invoices/[id]/decision`
+from the body; a supplied `workOrderId` must resolve to a
+`portal_work_order_records` row owned by the billed manager AND assigned to the
+submitting vendor, else the submit is a 400 — same never-trust-client-ids rule
+as the bids route). Manager: `PATCH /api/vendor/invoices/[id]/decision`
 (approve/reject/schedule/paid, scoped to invoices billed to `auth.userId`).
 The decision route enforces the status flow via
 `canTransitionVendorInvoice` (`src/lib/vendor-invoices.ts`): `submitted →

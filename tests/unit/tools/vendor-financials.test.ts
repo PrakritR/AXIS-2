@@ -138,6 +138,66 @@ describe("vendor invoice scoping", () => {
       }),
     ).rejects.toThrow(/multiple managers/i);
   });
+
+  it("submit_vendor_invoice rejects a work order id that does not exist", async () => {
+    const ctx = makeManagerRowsCtx(
+      {
+        manager_vendor_records: [
+          {
+            id: "dir-1",
+            manager_user_id: "manager_a",
+            vendor_user_id: "vendor_a",
+            row_data: { id: "dir-1", name: "Vendor A" },
+          } as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number],
+        ],
+      },
+      { userId: "vendor_a", roles: ["vendor"] },
+    );
+    await expect(
+      submitVendorInvoiceTool.handler(ctx, {
+        workOrderId: "wo-missing",
+        lineItems: [{ description: "Labor", quantity: 1, unitAmountCents: 5000 }],
+      }),
+    ).rejects.toThrow(/work order not found/i);
+  });
+
+  it("submit_vendor_invoice rejects a work order owned by another manager or vendor", async () => {
+    const ctx = makeManagerRowsCtx(
+      {
+        manager_vendor_records: [
+          {
+            id: "dir-1",
+            manager_user_id: "manager_a",
+            vendor_user_id: "vendor_a",
+            row_data: { id: "dir-1", name: "Vendor A" },
+          } as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number],
+        ],
+        portal_work_order_records: [
+          {
+            id: "wo-foreign",
+            manager_user_id: "manager_b",
+            vendor_user_id: "vendor_a",
+            row_data: {},
+          } as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number],
+          {
+            id: "wo-unassigned",
+            manager_user_id: "manager_a",
+            vendor_user_id: "vendor_b",
+            row_data: {},
+          } as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number],
+        ],
+      },
+      { userId: "vendor_a", roles: ["vendor"] },
+    );
+    for (const workOrderId of ["wo-foreign", "wo-unassigned"]) {
+      await expect(
+        submitVendorInvoiceTool.handler(ctx, {
+          workOrderId,
+          lineItems: [{ description: "Labor", quantity: 1, unitAmountCents: 5000 }],
+        }),
+      ).rejects.toThrow(/work order not found/i);
+    }
+  });
 });
 
 describe("vendor invoice status transitions", () => {

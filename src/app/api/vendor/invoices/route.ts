@@ -88,6 +88,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "You are not linked to that manager." }, { status: 403 });
     }
 
+    // A supplied work-order id must reference a work order owned by the billed
+    // manager and assigned to this vendor — never trust a client-supplied id to
+    // link an invoice to another manager's job.
+    const workOrderId = body.workOrderId?.trim() || null;
+    if (workOrderId) {
+      const { data: workOrder } = await db
+        .from("portal_work_order_records")
+        .select("id")
+        .eq("id", workOrderId)
+        .eq("manager_user_id", target.managerUserId)
+        .eq("vendor_user_id", userId)
+        .maybeSingle();
+      if (!workOrder) {
+        return NextResponse.json(
+          { error: "Work order not found — it must be one of your own work orders for this manager." },
+          { status: 400 },
+        );
+      }
+    }
+
     const lineItems = normalizeLineItems(body.lineItems);
     if (lineItems.length === 0) {
       return NextResponse.json({ error: "At least one line item is required." }, { status: 400 });
@@ -103,7 +123,7 @@ export async function POST(req: Request) {
         manager_user_id: target.managerUserId,
         vendor_user_id: userId,
         vendor_id: target.id,
-        work_order_id: body.workOrderId?.trim() || null,
+        work_order_id: workOrderId,
         invoice_number: body.invoiceNumber?.trim() || null,
         line_items: lineItems,
         subtotal_cents: subtotalCents,
@@ -124,7 +144,7 @@ export async function POST(req: Request) {
       invoice_id: data.id as string,
       total_cents: totalCents,
       line_items: lineItems.length,
-      has_work_order: Boolean(body.workOrderId?.trim()),
+      has_work_order: Boolean(workOrderId),
     });
 
     return NextResponse.json({ invoice: mapVendorInvoiceRow(data) });
