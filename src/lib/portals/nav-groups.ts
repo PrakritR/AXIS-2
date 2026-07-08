@@ -33,9 +33,9 @@ export function isHiddenFromMobileNav(_kind: PortalKind, section: string): boole
 const PRO_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
   { id: "portfolio", label: "Portfolio", sections: ["properties", "leases"] },
-  { id: "leasing", label: "Leasing", sections: ["applications", "residents"] },
+  { id: "leasing", label: "Leasing", sections: ["applications", "calendar", "residents"] },
   { id: "finances", label: "Finances", sections: ["payments", "financials", "documents"] },
-  { id: "operations", label: "Operations", sections: ["calendar", "services", "inbox"] },
+  { id: "operations", label: "Operations", sections: ["services", "inbox"] },
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
   { id: "account", label: null, sections: ["profile"] },

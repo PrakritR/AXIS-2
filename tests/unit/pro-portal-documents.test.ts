@@ -28,16 +28,17 @@ describe("pro portal documents section", () => {
     expect(financials?.tabs.map((t) => t.id)).toEqual(["income", "expenses"]);
   });
 
-  it("orders residents before leases before payments, then feedback before profile", () => {
+  it("orders portfolio → leasing → finances → operations, then feedback before profile", () => {
     const sections = proPortal.sections.map((s) => s.section);
-    expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("leases"));
-    expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("payments"));
-    expect(sections.indexOf("documents")).toBeGreaterThan(sections.indexOf("payments"));
-    expect(sections.indexOf("inbox")).toBe(sections.indexOf("documents") + 1);
-    expect(sections.indexOf("services")).toBe(sections.indexOf("inbox") + 1);
-    expect(sections.indexOf("financials")).toBe(sections.indexOf("services") + 1);
-    expect(sections.indexOf("relationships")).toBe(sections.indexOf("financials") + 1);
-    expect(sections.indexOf("bugs-feedback")).toBeGreaterThan(sections.indexOf("relationships"));
+    expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("applications"));
+    expect(sections.indexOf("applications")).toBeLessThan(sections.indexOf("calendar"));
+    expect(sections.indexOf("calendar")).toBeLessThan(sections.indexOf("residents"));
+    expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("payments"));
+    expect(sections.indexOf("payments")).toBeLessThan(sections.indexOf("financials"));
+    expect(sections.indexOf("financials")).toBeLessThan(sections.indexOf("documents"));
+    expect(sections.indexOf("documents")).toBeLessThan(sections.indexOf("services"));
+    expect(sections.indexOf("services")).toBeLessThan(sections.indexOf("inbox"));
+    expect(sections.indexOf("relationships")).toBeLessThan(sections.indexOf("bugs-feedback"));
     expect(sections.indexOf("profile")).toBe(sections.indexOf("bugs-feedback") + 1);
     expect(sections).not.toContain("plan");
   });

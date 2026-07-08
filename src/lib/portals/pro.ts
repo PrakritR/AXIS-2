@@ -9,8 +9,13 @@ export const proPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    { section: "calendar", label: "Calendar", tabs: [] },
+    {
+      section: "leases",
+      label: "Leases",
+      tabs: [],
+    },
     { section: "applications", label: "Applications", tabs: [] },
+    { section: "calendar", label: "Calendar", tabs: [] },
     {
       section: "residents",
       label: "Residents",
@@ -20,14 +25,17 @@ export const proPortal: PortalDefinition = {
       ],
     },
     {
-      section: "leases",
-      label: "Leases",
-      tabs: [],
-    },
-    {
       section: "payments",
       label: "Payments",
       tabs: [],
+    },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [
+        { id: "income", label: "Income" },
+        { id: "expenses", label: "Expenses" },
+      ],
     },
     {
       section: "documents",
@@ -43,17 +51,6 @@ export const proPortal: PortalDefinition = {
       ],
     },
     {
-      section: "inbox",
-      label: "Inbox",
-      tabs: [
-        { id: "unopened", label: "Unopened" },
-        { id: "opened", label: "Opened" },
-        { id: "schedule", label: "Schedule" },
-        { id: "sent", label: "Sent" },
-        { id: "trash", label: "Trash" },
-      ],
-    },
-    {
       section: "services",
       label: "Services",
       tabs: [
@@ -63,11 +60,14 @@ export const proPortal: PortalDefinition = {
       ],
     },
     {
-      section: "financials",
-      label: "Finances",
+      section: "inbox",
+      label: "Inbox",
       tabs: [
-        { id: "income", label: "Income" },
-        { id: "expenses", label: "Expenses" },
+        { id: "unopened", label: "Unopened" },
+        { id: "opened", label: "Opened" },
+        { id: "schedule", label: "Schedule" },
+        { id: "sent", label: "Sent" },
+        { id: "trash", label: "Trash" },
       ],
     },
     {
@@ -85,15 +85,15 @@ export const proPortal: PortalDefinition = {
 export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: "/portal/dashboard" },
   { label: "Properties", path: "/portal/properties" },
-  { label: "Calendar", path: "/portal/calendar" },
-  { label: "Applications", path: "/portal/applications" },
-  { label: "Residents", path: "/portal/residents/current" },
   { label: "Leases", path: "/portal/leases" },
+  { label: "Applications", path: "/portal/applications" },
+  { label: "Calendar", path: "/portal/calendar" },
+  { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },
+  { label: "Finances", path: "/portal/financials/income" },
+  { label: "Documents", path: "/portal/documents/applications" },
   { label: "Services", path: "/portal/services/requests" },
   { label: "Inbox", path: "/portal/inbox/unopened" },
-  { label: "Documents", path: "/portal/documents/applications" },
-  { label: "Finances", path: "/portal/financials/income" },
   { label: "Co-managers", path: "/portal/relationships" },
   { label: "Promotion", path: "/portal/promotion" },
   { label: "Feedback", path: "/portal/bugs-feedback" },

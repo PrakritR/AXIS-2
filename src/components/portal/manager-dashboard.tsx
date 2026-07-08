@@ -223,64 +223,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     >
       <div className={PORTAL_DASHBOARD_STACK}>
 
-        {/* ── Calendar & applications ── */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-
-          {/* Pending tours */}
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Pending tour requests"
-              href={`${BASE}/calendar`}
-              linkLabel="Calendar →"
-            />
-            <PortalDashboardPreviewList
-              items={pendingTours}
-              href={`${BASE}/calendar`}
-              emptyMessage="No pending tour requests right now."
-              keyForItem={(tour) => tour.id}
-              renderRow={(tour) => (
-                <PortalDashboardCompactRow
-                  title={tour.label}
-                  subtitle={[tour.propertyTitle || "—", fmt(tour.start)].filter(Boolean).join(" · ")}
-                  badge={
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                      Pending
-                    </span>
-                  }
-                />
-              )}
-            />
-          </div>
-
-          {/* Pending applications */}
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Pending applications"
-              href={`${BASE}/applications`}
-              linkLabel="Applications →"
-            />
-            <PortalDashboardPreviewList
-              items={pendingApps}
-              href={`${BASE}/applications`}
-              emptyMessage="No pending applications — you're all caught up."
-              keyForItem={(app) => app.id}
-              renderRow={(app: DemoApplicantRow) => (
-                <PortalDashboardCompactRow
-                  title={app.name || app.email || "Unknown"}
-                  subtitle={app.property || "—"}
-                  badge={
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                      {app.stage || "Pending"}
-                    </span>
-                  }
-                />
-              )}
-            />
-          </div>
-
-        </div>
-
-        {/* ── Leases & payments ── */}
+        {/* Portfolio + Leasing */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader
@@ -306,6 +249,59 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
                       }`}
                     >
                       {lease.status === "Manager Signature Pending" ? "Your signature" : "Resident signing"}
+                    </span>
+                  }
+                />
+              )}
+            />
+          </div>
+
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
+              title="Pending applications"
+              href={`${BASE}/applications`}
+              linkLabel="Applications →"
+            />
+            <PortalDashboardPreviewList
+              items={pendingApps}
+              href={`${BASE}/applications`}
+              emptyMessage="No pending applications — you're all caught up."
+              keyForItem={(app) => app.id}
+              renderRow={(app: DemoApplicantRow) => (
+                <PortalDashboardCompactRow
+                  title={app.name || app.email || "Unknown"}
+                  subtitle={app.property || "—"}
+                  badge={
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                      {app.stage || "Pending"}
+                    </span>
+                  }
+                />
+              )}
+            />
+          </div>
+        </div>
+
+        {/* Leasing (tours) + Finances */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <PortalDashboardSectionHeader
+              title="Pending tour requests"
+              href={`${BASE}/calendar`}
+              linkLabel="Calendar →"
+            />
+            <PortalDashboardPreviewList
+              items={pendingTours}
+              href={`${BASE}/calendar`}
+              emptyMessage="No pending tour requests right now."
+              keyForItem={(tour) => tour.id}
+              renderRow={(tour) => (
+                <PortalDashboardCompactRow
+                  title={tour.label}
+                  subtitle={[tour.propertyTitle || "—", fmt(tour.start)].filter(Boolean).join(" · ")}
+                  badge={
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                      Pending
                     </span>
                   }
                 />
@@ -358,7 +354,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
           </div>
         </div>
 
-        {/* ── Services & inbox ── */}
+        {/* Operations */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader
