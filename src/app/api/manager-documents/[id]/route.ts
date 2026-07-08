@@ -5,6 +5,7 @@ import {
   isDocumentCategory,
   mapDocumentRow,
   sanitizeDisplayName,
+  UUID_PATTERN,
   type ManagerDocumentRow,
 } from "@/lib/documents/manager-documents";
 
@@ -18,6 +19,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   const gate = await assertManagerFinancialsAccess(auth);
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+  if (!UUID_PATTERN.test(id)) return NextResponse.json({ error: "Document not found." }, { status: 404 });
 
   const body = (await req.json().catch(() => ({}))) as { displayName?: unknown; category?: unknown };
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -53,6 +55,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   const gate = await assertManagerFinancialsAccess(auth);
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+  if (!UUID_PATTERN.test(id)) return NextResponse.json({ error: "Document not found." }, { status: 404 });
 
   const { data, error } = await auth.db
     .from("manager_documents")

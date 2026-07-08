@@ -36,6 +36,8 @@ export function isDocumentCategory(value: unknown): value is ManagerDocumentCate
   return typeof value === "string" && (DOCUMENT_CATEGORIES as readonly string[]).includes(value);
 }
 
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Allowlist of accepted content types → canonical file extension. Enforced at
 // the upload API and mirrored by the bucket's allowed_mime_types.
 export const DOCUMENT_MIME_EXTENSIONS: Record<string, string> = {

@@ -12,12 +12,11 @@ import {
   isDocumentCategory,
   mapDocumentRow,
   sanitizeDisplayName,
+  UUID_PATTERN,
   type ManagerDocumentRow,
 } from "@/lib/documents/manager-documents";
 
 export const runtime = "nodejs";
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // GET /api/manager-documents — list the signed-in manager's live documents,
 // with optional filters. Soft-deleted rows are always excluded.
