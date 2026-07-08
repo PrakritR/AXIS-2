@@ -50,13 +50,31 @@ describe("payment-automation-settings", () => {
     expect(DEFAULT_MANAGER_AUTOMATION_SETTINGS.overdueDailyStartDays).toBe(1);
   });
 
-  it("migrates legacy post-due day 1 to daily overdue", () => {
+  it("migrates legacy post-due day 1 to daily overdue when not explicitly disabled", () => {
     const settings = normalizeManagerAutomationSettings({
       postDueReminderDays: [1],
-      overdueDailyEnabled: false,
     });
     expect(settings.postDueReminderDays).toEqual([]);
     expect(settings.overdueDailyEnabled).toBe(true);
     expect(settings.overdueDailyStartDays).toBe(1);
+  });
+
+  it("preserves an explicitly stored overdueDailyEnabled: false, even with legacy day-1 data", () => {
+    const settings = normalizeManagerAutomationSettings({
+      postDueReminderDays: [1],
+      overdueDailyEnabled: false,
+    });
+    expect(settings.overdueDailyEnabled).toBe(false);
+  });
+
+  it("preserves an explicitly stored overdueDailyEnabled: true", () => {
+    const settings = normalizeManagerAutomationSettings({ overdueDailyEnabled: true });
+    expect(settings.overdueDailyEnabled).toBe(true);
+  });
+
+  it("defaults overdueDailyEnabled to false when no setting was ever saved", () => {
+    expect(normalizeManagerAutomationSettings(null).overdueDailyEnabled).toBe(false);
+    expect(normalizeManagerAutomationSettings(undefined).overdueDailyEnabled).toBe(false);
+    expect(normalizeManagerAutomationSettings({}).overdueDailyEnabled).toBe(false);
   });
 });

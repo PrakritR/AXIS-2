@@ -180,8 +180,7 @@ function normalizeTemplate(raw: unknown, fallback: ReminderTemplate): ReminderTe
 
 export function normalizeManagerAutomationSettings(raw: unknown): ManagerAutomationSettings {
   const base = DEFAULT_MANAGER_AUTOMATION_SETTINGS;
-  if (!raw || typeof raw !== "object") return base;
-  const row = raw as Record<string, unknown>;
+  const row = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const templatesRaw = row.templates && typeof row.templates === "object" ? (row.templates as Record<string, unknown>) : {};
 
   const visibilityMode = row.scheduleVisibilityMode === "all" ? "all" : "days_before_send";
@@ -191,14 +190,17 @@ export function normalizeManagerAutomationSettings(raw: unknown): ManagerAutomat
   );
 
   let postDueReminderDays = normalizePostDueDays(row.postDueReminderDays);
-  let overdueDailyEnabled = row.overdueDailyEnabled !== false;
+  // Opt-in: an explicitly saved value (true or false) always wins. No saved
+  // setting at all defaults to disabled, not enabled.
+  let overdueDailyEnabled = row.overdueDailyEnabled === true;
   let overdueDailyStartDays = Math.max(
     0,
     Math.min(30, Math.round(Number(row.overdueDailyStartDays ?? base.overdueDailyStartDays) || base.overdueDailyStartDays)),
   );
 
-  // Legacy one-time "1 day after due" → daily overdue starting day 1.
-  if (postDueReminderDays.includes(1)) {
+  // Legacy one-time "1 day after due" → daily overdue starting day 1, unless
+  // the manager explicitly turned overdue-daily off.
+  if (postDueReminderDays.includes(1) && row.overdueDailyEnabled !== false) {
     overdueDailyEnabled = true;
     overdueDailyStartDays = Math.min(overdueDailyStartDays, 1);
     postDueReminderDays = postDueReminderDays.filter((d) => d !== 1);
