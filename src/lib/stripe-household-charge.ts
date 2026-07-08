@@ -92,6 +92,7 @@ export async function markHouseholdChargePaidFromStripeSession(
     if (row.status === "paid" || charge.status === "paid") {
       alreadyPaid = true;
       marked += 1;
+      await syncLedgerPaymentEntry(db, charge, charge.paidAt, session.id);
       continue;
     }
 

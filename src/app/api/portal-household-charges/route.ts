@@ -13,8 +13,7 @@ import {
   loadManagerAutomationSettings,
 } from "@/lib/payment-automation-settings";
 import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
-import { reconcileDuplicateHouseholdChargeRecords } from "@/lib/reports/ledger-sync";
-import { syncLedgerChargeEntry } from "@/lib/reports/ledger-sync";
+import { reconcileDuplicateHouseholdChargeRecords, syncDedupedCharges } from "@/lib/reports/ledger-sync";
 
 export const runtime = "nodejs";
 
@@ -187,8 +186,8 @@ export async function POST(req: Request) {
           } else if (nextStatus === "pending" && prevStatus === "paid") {
             await restoreFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
           }
-          await syncLedgerChargeEntry(db, c as HouseholdCharge);
         }
+        await syncDedupedCharges(db, normalizedCharges.filter((c) => c.id) as unknown as HouseholdCharge[]);
       }
     }
 

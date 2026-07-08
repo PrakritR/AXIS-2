@@ -256,7 +256,11 @@ export async function GET(req: Request) {
             },
             { onConflict: "id" },
           );
-          await syncLedgerChargeEntry(db, lateFeeCharge).catch(() => undefined);
+          await syncLedgerChargeEntry(db, lateFeeCharge).catch((e: unknown) => {
+            const reason = e instanceof Error ? e.message : String(e);
+            console.error(`[send-payment-reminders] ledger sync failed for late fee ${lateFeeId}: ${reason}`);
+            errors.push(`Ledger sync failed for late fee ${lateFeeId}: ${reason}`);
+          });
 
           existingLateFeeSources.add(charge.id);
           lateFeesCreated++;

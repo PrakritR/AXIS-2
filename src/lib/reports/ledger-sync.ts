@@ -69,22 +69,41 @@ async function removeDuplicateHouseholdChargeRecords(db: SupabaseClient, chargeI
   throwIfLedgerError(error);
 }
 
+const CHARGE_SWEEP_PAGE_SIZE = 1000;
+
+type ChargeSweepRow = { manager_user_id: string | null; row_data: unknown };
+
+/** Pages through every matching charge record so sweeps never silently truncate. */
+async function fetchAllChargeRecords(
+  db: SupabaseClient,
+  managerUserId?: string,
+): Promise<ChargeSweepRow[]> {
+  const rows: ChargeSweepRow[] = [];
+  for (let offset = 0; ; offset += CHARGE_SWEEP_PAGE_SIZE) {
+    let query = db
+      .from("portal_household_charge_records")
+      .select("manager_user_id, row_data")
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(offset, offset + CHARGE_SWEEP_PAGE_SIZE - 1);
+    if (managerUserId) query = query.eq("manager_user_id", managerUserId);
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as ChargeSweepRow[];
+    rows.push(...page);
+    if (page.length < CHARGE_SWEEP_PAGE_SIZE) return rows;
+  }
+}
+
 /** Removes duplicate application-fee charge rows and their ledger entries (prevents doubled income). */
 export async function reconcileDuplicateHouseholdChargeRecords(
   db: SupabaseClient,
   managerUserId?: string,
 ): Promise<{ removedChargeIds: string[] }> {
-  let query = db
-    .from("portal_household_charge_records")
-    .select("id, row_data")
-    .order("updated_at", { ascending: false })
-    .limit(2000);
-  if (managerUserId) query = query.eq("manager_user_id", managerUserId);
+  const data = await fetchAllChargeRecords(db, managerUserId);
 
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const raw = (data ?? [])
+  const raw = data
     .map((row) => row.row_data as HouseholdCharge)
     .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
   const duplicateIds = duplicateHouseholdChargeIds(raw);
@@ -214,7 +233,7 @@ export async function syncLedgerPaymentEntry(
  * INSERT for new rows and a single batched UPSERT for changed rows — a fixed
  * ~3 round-trips regardless of volume.
  */
-async function syncDedupedCharges(
+export async function syncDedupedCharges(
   db: SupabaseClient,
   rawCharges: HouseholdCharge[],
 ): Promise<number> {
@@ -277,20 +296,9 @@ export async function backfillLedgerFromCharges(
 ): Promise<{ synced: number; removedDuplicates: number }> {
   const { removedChargeIds } = await reconcileDuplicateHouseholdChargeRecords(db, managerUserId);
 
-  let query = db
-    .from("portal_household_charge_records")
-    .select("manager_user_id, row_data")
-    .order("updated_at", { ascending: false })
-    .limit(2000);
+  const data = await fetchAllChargeRecords(db, managerUserId);
 
-  if (managerUserId) {
-    query = query.eq("manager_user_id", managerUserId);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const raw = (data ?? [])
+  const raw = data
     .map((record) => normalizeChargeOwner(record.row_data as HouseholdCharge | null, record.manager_user_id))
     .filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
   const synced = await syncDedupedCharges(db, raw);

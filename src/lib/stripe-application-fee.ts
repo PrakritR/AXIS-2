@@ -44,6 +44,7 @@ export async function markApplicationFeePaidFromStripeSession(
 
   const charge = match.row_data as HouseholdCharge;
   if (match.status === "paid" || charge.status === "paid") {
+    await syncLedgerPaymentEntry(db, charge, charge.paidAt, session.id);
     return { ok: true, chargeId: match.id as string, alreadyPaid: true };
   }
 

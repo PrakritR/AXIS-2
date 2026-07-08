@@ -26,19 +26,19 @@ describe("reconcileDuplicateHouseholdChargeRecords", () => {
     const chargeDeleteIn = vi.fn().mockResolvedValue({ error: null });
     const eqManager = vi.fn().mockResolvedValue({
       data: [
-        { id: fallback.id, row_data: fallback },
-        { id: canonical.id, row_data: canonical },
+        { manager_user_id: "mgr-1", row_data: fallback },
+        { manager_user_id: "mgr-1", row_data: canonical },
       ],
       error: null,
     });
-    const order = vi.fn().mockReturnValue({ eq: eqManager, limit: vi.fn().mockReturnValue({ eq: eqManager }) });
-    const select = vi.fn().mockReturnValue({ order, eq: eqManager });
+    const chargeQuery: Record<string, unknown> = { eq: eqManager };
+    chargeQuery.order = vi.fn().mockReturnValue(chargeQuery);
+    chargeQuery.range = vi.fn().mockReturnValue(chargeQuery);
+    const select = vi.fn().mockReturnValue(chargeQuery);
     const from = vi.fn((table: string) => {
       if (table === "portal_household_charge_records") {
         return {
           select,
-          order,
-          eq: vi.fn().mockReturnValue({ order, limit: vi.fn().mockReturnValue({ eq: eqManager }) }),
           delete: vi.fn().mockReturnValue({ in: chargeDeleteIn }),
         };
       }
