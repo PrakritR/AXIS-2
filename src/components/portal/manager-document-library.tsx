@@ -91,33 +91,43 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
 
-  const load = useCallback(async () => {
-    if (demo) {
-      setDocuments([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (categoryFilter) params.set("category", categoryFilter);
-      if (scopeFilter) params.set("scope", scopeFilter);
-      if (propertyFilter) params.set("propertyId", propertyFilter);
-      if (search.trim()) params.set("q", search.trim());
-      const res = await fetch(`/api/manager-documents?${params}`, { credentials: "include" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to load documents.");
-      setDocuments((data.documents as ManagerDocumentDTO[]) ?? []);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to load documents.");
-    } finally {
-      setLoading(false);
-    }
-  }, [demo, categoryFilter, scopeFilter, propertyFilter, search, showToast]);
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      if (demo) {
+        setDocuments([]);
+        return;
+      }
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (categoryFilter) params.set("category", categoryFilter);
+        if (scopeFilter) params.set("scope", scopeFilter);
+        if (propertyFilter) params.set("propertyId", propertyFilter);
+        if (search.trim()) params.set("q", search.trim());
+        const res = await fetch(`/api/manager-documents?${params}`, { credentials: "include", signal });
+        const data = await res.json();
+        if (signal?.aborted) return;
+        if (!res.ok) throw new Error(data.error ?? "Failed to load documents.");
+        setDocuments((data.documents as ManagerDocumentDTO[]) ?? []);
+      } catch (e) {
+        if (signal?.aborted) return;
+        showToast(e instanceof Error ? e.message : "Failed to load documents.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [demo, categoryFilter, scopeFilter, propertyFilter, search, showToast],
+  );
 
-  // Debounce so typing in search doesn't fire a request per keystroke.
+  // Debounce so typing in search doesn't fire a request per keystroke; abort
+  // superseded requests so a slow stale response can't overwrite fresh results.
   useEffect(() => {
-    const t = setTimeout(() => void load(), 250);
-    return () => clearTimeout(t);
+    const controller = new AbortController();
+    const t = setTimeout(() => void load(controller.signal), 250);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [load]);
 
   const handleDelete = useCallback(

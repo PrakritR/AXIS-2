@@ -20,9 +20,14 @@ type DocRow = {
   manager_user_id: string;
   storage_path: string;
   display_name: string;
+  original_filename?: string | null;
   mime_type: string;
   deleted_at: string | null;
 };
+
+// The [id] routes 404 on non-UUID ids before touching the DB, so test rows use
+// a real UUID.
+const DOC_ID = "11111111-1111-4111-8111-111111111111";
 
 /**
  * A minimal Supabase-shaped mock. `manager_documents` queries chain
@@ -32,7 +37,7 @@ type DocRow = {
  */
 function mockDb(rows: DocRow[]) {
   const removed: string[][] = [];
-  const signed: { path: string }[] = [];
+  const signed: { path: string; options?: { download?: string | boolean } }[] = [];
   const inserted: Record<string, unknown>[] = [];
   const uploaded: string[] = [];
 
@@ -118,8 +123,8 @@ function mockDb(rows: DocRow[]) {
           removed.push(paths);
           return { error: null };
         },
-        createSignedUrl: async (path: string) => {
-          signed.push({ path });
+        createSignedUrl: async (path: string, _ttl: number, options?: { download?: string | boolean }) => {
+          signed.push({ path, options });
           return { data: { signedUrl: `https://signed.example/${path}` }, error: null };
         },
       }),
@@ -143,8 +148,8 @@ describe("manager-documents API ownership", () => {
 
   it("rejects an unauthenticated signed-url request with 401", async () => {
     vi.mocked(getReportsAuthContext).mockResolvedValue(null);
-    const res = await SIGNED_URL(jsonRequest("http://t/api/manager-documents/doc-1/signed-url"), {
-      params: Promise.resolve({ id: "doc-1" }),
+    const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url`), {
+      params: Promise.resolve({ id: DOC_ID }),
     });
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(401);
@@ -152,13 +157,13 @@ describe("manager-documents API ownership", () => {
 
   it("returns 404 (not another manager's URL) when the doc belongs to a different manager", async () => {
     const rows: DocRow[] = [
-      { id: "doc-1", manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "A", mime_type: "application/pdf", deleted_at: null },
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "A", mime_type: "application/pdf", deleted_at: null },
     ];
     const { client, signed } = mockDb(rows);
     asManager("mgr-intruder", client); // different manager
 
-    const res = await SIGNED_URL(jsonRequest("http://t/api/manager-documents/doc-1/signed-url"), {
-      params: Promise.resolve({ id: "doc-1" }),
+    const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url`), {
+      params: Promise.resolve({ id: DOC_ID }),
     });
     const { status, data } = await parseJsonResponse<{ error?: string }>(res);
     expect(status).toBe(404);
@@ -169,13 +174,13 @@ describe("manager-documents API ownership", () => {
 
   it("mints a signed URL for the owning manager", async () => {
     const rows: DocRow[] = [
-      { id: "doc-1", manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "A", mime_type: "application/pdf", deleted_at: null },
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "A", mime_type: "application/pdf", deleted_at: null },
     ];
     const { client, signed } = mockDb(rows);
     asManager("mgr-owner", client);
 
-    const res = await SIGNED_URL(jsonRequest("http://t/api/manager-documents/doc-1/signed-url"), {
-      params: Promise.resolve({ id: "doc-1" }),
+    const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url`), {
+      params: Promise.resolve({ id: DOC_ID }),
     });
     const { status, data } = await parseJsonResponse<{ url?: string }>(res);
     expect(status).toBe(200);
@@ -185,29 +190,76 @@ describe("manager-documents API ownership", () => {
 
   it("redirects to the signed URL when download=1 so plain anchors work", async () => {
     const rows: DocRow[] = [
-      { id: "doc-1", manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "A", mime_type: "application/pdf", deleted_at: null },
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "A", mime_type: "application/pdf", deleted_at: null },
     ];
     const { client, signed } = mockDb(rows);
     asManager("mgr-owner", client);
 
-    const res = await SIGNED_URL(jsonRequest("http://t/api/manager-documents/doc-1/signed-url?download=1"), {
-      params: Promise.resolve({ id: "doc-1" }),
+    const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url?download=1`), {
+      params: Promise.resolve({ id: DOC_ID }),
     });
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toContain("manager/mgr-owner/a.pdf");
     expect(signed).toHaveLength(1);
   });
 
+  it("downloads under the original filename when one is stored", async () => {
+    const rows: DocRow[] = [
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/a.pdf", display_name: "Lease Agreement", original_filename: "signed-lease-2026.pdf", mime_type: "application/pdf", deleted_at: null },
+    ];
+    const { client, signed } = mockDb(rows);
+    asManager("mgr-owner", client);
+
+    const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url?download=1`), {
+      params: Promise.resolve({ id: DOC_ID }),
+    });
+    expect(res.status).toBe(302);
+    expect(signed[0]!.options?.download).toBe("signed-lease-2026.pdf");
+  });
+
+  it("appends the storage-path extension when there is no original filename", async () => {
+    const rows: DocRow[] = [
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "manager/mgr-owner/abc123.pdf", display_name: "Lease Agreement", original_filename: null, mime_type: "application/pdf", deleted_at: null },
+    ];
+    const { client, signed } = mockDb(rows);
+    asManager("mgr-owner", client);
+
+    const res = await SIGNED_URL(jsonRequest(`http://t/api/manager-documents/${DOC_ID}/signed-url?download=1`), {
+      params: Promise.resolve({ id: DOC_ID }),
+    });
+    expect(res.status).toBe(302);
+    expect(signed[0]!.options?.download).toBe("Lease Agreement.pdf");
+  });
+
+  it("returns 404 for a malformed document id instead of a DB error", async () => {
+    const { client, signed } = mockDb([]);
+    asManager("mgr-owner", client);
+    const params = { params: Promise.resolve({ id: "not-a-uuid" }) };
+
+    const signedRes = await SIGNED_URL(jsonRequest("http://t/api/manager-documents/not-a-uuid/signed-url"), params);
+    expect(signedRes.status).toBe(404);
+    expect(signed).toHaveLength(0);
+
+    const renameRes = await RENAME(
+      jsonRequest("http://t/api/manager-documents/not-a-uuid", { method: "PATCH", body: { displayName: "X" } }),
+      params,
+    );
+    expect(renameRes.status).toBe(404);
+
+    const deleteRes = await SOFT_DELETE(jsonRequest("http://t/api/manager-documents/not-a-uuid", { method: "DELETE" }), params);
+    expect(deleteRes.status).toBe(404);
+  });
+
   it("rename returns 404 for a mismatched manager and leaves the row untouched", async () => {
     const rows: DocRow[] = [
-      { id: "doc-1", manager_user_id: "mgr-owner", storage_path: "p", display_name: "Original", mime_type: "application/pdf", deleted_at: null },
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "p", display_name: "Original", mime_type: "application/pdf", deleted_at: null },
     ];
     const { client } = mockDb(rows);
     asManager("mgr-intruder", client);
 
     const res = await RENAME(
-      jsonRequest("http://t/api/manager-documents/doc-1", { method: "PATCH", body: { displayName: "Hacked" } }),
-      { params: Promise.resolve({ id: "doc-1" }) },
+      jsonRequest(`http://t/api/manager-documents/${DOC_ID}`, { method: "PATCH", body: { displayName: "Hacked" } }),
+      { params: Promise.resolve({ id: DOC_ID }) },
     );
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(404);
@@ -216,14 +268,14 @@ describe("manager-documents API ownership", () => {
 
   it("rename succeeds for the owning manager", async () => {
     const rows: DocRow[] = [
-      { id: "doc-1", manager_user_id: "mgr-owner", storage_path: "p", display_name: "Original", mime_type: "application/pdf", deleted_at: null },
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "p", display_name: "Original", mime_type: "application/pdf", deleted_at: null },
     ];
     const { client } = mockDb(rows);
     asManager("mgr-owner", client);
 
     const res = await RENAME(
-      jsonRequest("http://t/api/manager-documents/doc-1", { method: "PATCH", body: { displayName: "Renamed" } }),
-      { params: Promise.resolve({ id: "doc-1" }) },
+      jsonRequest(`http://t/api/manager-documents/${DOC_ID}`, { method: "PATCH", body: { displayName: "Renamed" } }),
+      { params: Promise.resolve({ id: DOC_ID }) },
     );
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(200);
@@ -232,13 +284,13 @@ describe("manager-documents API ownership", () => {
 
   it("soft-delete returns 404 for a mismatched manager and does not delete", async () => {
     const rows: DocRow[] = [
-      { id: "doc-1", manager_user_id: "mgr-owner", storage_path: "p", display_name: "A", mime_type: "application/pdf", deleted_at: null },
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "p", display_name: "A", mime_type: "application/pdf", deleted_at: null },
     ];
     const { client } = mockDb(rows);
     asManager("mgr-intruder", client);
 
-    const res = await SOFT_DELETE(jsonRequest("http://t/api/manager-documents/doc-1", { method: "DELETE" }), {
-      params: Promise.resolve({ id: "doc-1" }),
+    const res = await SOFT_DELETE(jsonRequest(`http://t/api/manager-documents/${DOC_ID}`, { method: "DELETE" }), {
+      params: Promise.resolve({ id: DOC_ID }),
     });
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(404);
@@ -247,13 +299,13 @@ describe("manager-documents API ownership", () => {
 
   it("soft-delete sets deleted_at for the owning manager", async () => {
     const rows: DocRow[] = [
-      { id: "doc-1", manager_user_id: "mgr-owner", storage_path: "p", display_name: "A", mime_type: "application/pdf", deleted_at: null },
+      { id: DOC_ID, manager_user_id: "mgr-owner", storage_path: "p", display_name: "A", mime_type: "application/pdf", deleted_at: null },
     ];
     const { client } = mockDb(rows);
     asManager("mgr-owner", client);
 
-    const res = await SOFT_DELETE(jsonRequest("http://t/api/manager-documents/doc-1", { method: "DELETE" }), {
-      params: Promise.resolve({ id: "doc-1" }),
+    const res = await SOFT_DELETE(jsonRequest(`http://t/api/manager-documents/${DOC_ID}`, { method: "DELETE" }), {
+      params: Promise.resolve({ id: DOC_ID }),
     });
     const { status } = await parseJsonResponse(res);
     expect(status).toBe(200);
@@ -262,7 +314,7 @@ describe("manager-documents API ownership", () => {
 
   it("list only returns the requesting manager's own live documents", async () => {
     const rows: DocRow[] = [
-      { id: "doc-1", manager_user_id: "mgr-a", storage_path: "p1", display_name: "Mine", mime_type: "application/pdf", deleted_at: null },
+      { id: DOC_ID, manager_user_id: "mgr-a", storage_path: "p1", display_name: "Mine", mime_type: "application/pdf", deleted_at: null },
       { id: "doc-2", manager_user_id: "mgr-b", storage_path: "p2", display_name: "Theirs", mime_type: "application/pdf", deleted_at: null },
       { id: "doc-3", manager_user_id: "mgr-a", storage_path: "p3", display_name: "Deleted", mime_type: "application/pdf", deleted_at: "2026-01-01T00:00:00Z" },
     ];
