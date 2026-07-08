@@ -215,11 +215,6 @@ export function DemoPortalShell() {
     [guidedActive],
   );
 
-  useEffect(() => {
-    if (!guidedActive || !stepDef || guidedState.paused) return;
-    navigateToGuidedStep(guidedStep);
-  }, [guidedActive, guidedStep, guidedState.paused, navigateToGuidedStep, stepDef]);
-
   const startTour = useCallback(() => {
     closeAxisAssistant();
     startGuidedDemoTour();
@@ -247,12 +242,11 @@ export function DemoPortalShell() {
 
   const pauseTour = useCallback(() => pauseGuidedDemoTour(), []);
   const resumeTour = useCallback(() => resumeGuidedDemoTour(), []);
-  const restartTour = useCallback(() => {
-    closeAxisAssistant();
-    startGuidedDemoTour();
-    reseedDemoPortalForGuidedStep();
-    navigateToGuidedStep(1);
-  }, [navigateToGuidedStep]);
+
+  useEffect(() => {
+    if (!guidedActive || !stepDef || guidedState.paused) return;
+    navigateToGuidedStep(guidedStep);
+  }, [guidedActive, guidedStep, guidedState.paused, navigateToGuidedStep, stepDef]);
 
   const finished = guidedActive && guidedStep >= GUIDED_DEMO_STEP_COUNT;
 
@@ -353,7 +347,7 @@ export function DemoPortalShell() {
           )}
           <button
             type="button"
-            onClick={guidedActive ? restartTour : startTour}
+            onClick={startTour}
             data-attr="demo-restart"
             aria-label={guidedActive ? "Restart guided tour" : "Run demo"}
             className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium text-muted transition hover:bg-accent/60 hover:text-foreground"
