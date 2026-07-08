@@ -28,6 +28,7 @@ import {
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
+import { PortalSharedDocumentsTable } from "@/components/portal/portal-shared-documents-table";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import {
@@ -86,11 +87,15 @@ export function VendorDocumentsPanel({
   const [expandedKind, setExpandedKind] = useState<VendorDocumentKind | null>(null);
   const [unlinked, setUnlinked] = useState(false);
 
-  const activeSection = vendorDocumentSectionForTab(tabId) ?? vendorDocumentSectionForTab("tax");
   const tabItems = useMemo(
-    () => VENDOR_DOCUMENT_TABS.map((tab) => ({ id: tab.id, label: tab.label, href: `${basePath}/documents/${tab.id}` })),
+    () => [
+      ...VENDOR_DOCUMENT_TABS.map((tab) => ({ id: tab.id, label: tab.label, href: `${basePath}/documents/${tab.id}` })),
+      { id: "shared", label: "From managers", href: `${basePath}/documents/shared` },
+    ],
     [basePath],
   );
+
+  const activeSection = tabId === "shared" ? null : vendorDocumentSectionForTab(tabId) ?? vendorDocumentSectionForTab("tax");
 
   const loadDocuments = useCallback(async () => {
     if (demo) {
@@ -283,7 +288,15 @@ export function VendorDocumentsPanel({
         </p>
       ) : null}
 
-      {loading ? (
+      {tabId === "shared" ? (
+        <PortalSharedDocumentsTable
+          listUrl="/api/vendor/shared-documents"
+          signedUrlBase="/api/vendor/shared-documents"
+          emptyMessage="No documents shared with you yet."
+          demoMessage="Documents from managers appear here after they share files from their library."
+          demo={demo}
+        />
+      ) : loading ? (
         <p className="text-sm text-muted">Loading documents…</p>
       ) : rows.length === 0 ? (
         <PortalDataTableEmpty message="No document types in this tab yet." icon="document" />

@@ -26,6 +26,7 @@ import {
   triggerDocumentDownload,
   type AddDocumentMode,
 } from "@/components/portal/resident-other-documents";
+import { PortalSharedDocumentsTable } from "@/components/portal/portal-shared-documents-table";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -603,6 +604,16 @@ export function ResidentDocumentsPanel({
       {tabId === "lease" ? <SignedLeaseDocumentsTable /> : null}
 
       {tabId === "receipts" ? <RentReceiptsTab /> : null}
+
+      {tabId === "shared" ? (
+        <PortalSharedDocumentsTable
+          listUrl="/api/resident/shared-documents"
+          signedUrlBase="/api/resident/shared-documents"
+          emptyMessage="No documents shared with you yet."
+          demoMessage="Shared documents appear after your manager shares files from their library."
+          demo={isDemoModeActive()}
+        />
+      ) : null}
 
       {tabId === "other" ? (
         <ResidentOtherDocumentsTable uploads={uploads} loading={uploadsLoading} onRemove={onRemoveUpload} />

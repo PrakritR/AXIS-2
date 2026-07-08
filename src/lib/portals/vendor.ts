@@ -36,6 +36,7 @@ export const vendorPortal: PortalDefinition = {
         { id: "tax", label: "Tax & income" },
         { id: "insurance", label: "Insurance" },
         { id: "licensing", label: "Business & licensing" },
+        { id: "shared", label: "From managers" },
       ],
     },
     { section: "profile", label: "Settings", tabs: [] },

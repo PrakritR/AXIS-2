@@ -513,6 +513,23 @@ Capacitor WebView) — no new bucket/camera plumbing needed. Preview is a signed
 `<iframe>` (pdf) / `<img>` (image) in the shared `Modal`; non-inline types fall
 back to Download.
 
+# Documents module (Phase 2: sharing & visibility)
+
+**Goal:** Managers can share library files with residents or vendors; recipients see them in their own Documents portal under a **Shared** tab.
+
+**Schema** — uses existing `visibility` column (`manager|resident|vendor`). Migration `20260711130000_manager_documents_sharing.sql` adds RLS read policies: `manager_documents_resident_read` (visibility resident + `resident_user_id` or email match) and `manager_documents_vendor_read` (visibility vendor + `vendor_id` linked to `manager_vendor_records.vendor_user_id`).
+
+**API**
+- Manager upload/PATCH accept `visibility`, `residentEmail`, `vendorId` with `validateDocumentVisibilityScope` + vendor ownership check (`document-scope.server.ts`).
+- `GET /api/resident/shared-documents` + `GET /api/resident/shared-documents/[id]/signed-url` — `assertResidentFinancialsAccess`, list via `document-access.ts`.
+- `GET /api/vendor/shared-documents` + `GET /api/vendor/shared-documents/[id]/signed-url` — `assertVendorFinancialsAccess`.
+- Sharing triggers `deliverPortalInboxMessage` + server `document_shared` PostHog event (`document-share-notify.server.ts`).
+
+**UI**
+- Manager Library: visibility picker on upload/edit (`ManagerDocumentLibrary`), vendor dropdown from manager vendor directory.
+- Resident Documents: **Shared with you** tab (`portal-shared-documents-table.tsx`).
+- Vendor Documents: **From managers** tab (same shared table component).
+
 # Financials Phase 4: vendor portal invoicing
 
 **This phase is ADDITIVE on top of the already-shipped vendor portal (Vendor

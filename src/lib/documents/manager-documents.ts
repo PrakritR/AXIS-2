@@ -36,7 +36,41 @@ export function isDocumentCategory(value: unknown): value is ManagerDocumentCate
   return typeof value === "string" && (DOCUMENT_CATEGORIES as readonly string[]).includes(value);
 }
 
+export const DOCUMENT_VISIBILITY_VALUES = ["manager", "resident", "vendor"] as const;
+export type ManagerDocumentVisibility = (typeof DOCUMENT_VISIBILITY_VALUES)[number];
+
+export const DOCUMENT_VISIBILITY_LABELS: Record<ManagerDocumentVisibility, string> = {
+  manager: "Manager only",
+  resident: "Share with resident",
+  vendor: "Share with vendor",
+};
+
+export function isDocumentVisibility(value: unknown): value is ManagerDocumentVisibility {
+  return typeof value === "string" && (DOCUMENT_VISIBILITY_VALUES as readonly string[]).includes(value);
+}
+
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type DocumentVisibilityValidationInput = {
+  visibility: ManagerDocumentVisibility;
+  residentUserId?: string | null;
+  residentEmail?: string | null;
+  vendorId?: string | null;
+};
+
+/** Returns a user-facing error when visibility and scope columns disagree. */
+export function validateDocumentVisibilityScope(input: DocumentVisibilityValidationInput): string | null {
+  if (input.visibility === "manager") return null;
+  if (input.visibility === "resident") {
+    const uid = (input.residentUserId ?? "").trim();
+    const email = (input.residentEmail ?? "").trim().toLowerCase();
+    if (!uid && !email) return "Choose a resident email to share with.";
+    if (uid && !UUID_PATTERN.test(uid)) return "residentUserId must be a UUID.";
+    return null;
+  }
+  if (!(input.vendorId ?? "").trim()) return "Choose a vendor to share with.";
+  return null;
+}
 
 // Allowlist of accepted content types → canonical file extension. Enforced at
 // the upload API and mirrored by the bucket's allowed_mime_types.
@@ -131,7 +165,7 @@ export type ManagerDocumentDTO = {
   category: ManagerDocumentCategory;
   scope: ManagerDocumentScope;
   scopeKind: DocumentScopeKind;
-  visibility: string;
+  visibility: ManagerDocumentVisibility;
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -170,7 +204,7 @@ export function mapDocumentRow(row: ManagerDocumentRow): ManagerDocumentDTO {
       workOrderId: row.work_order_id,
     },
     scopeKind: documentScopeKind(row),
-    visibility: row.visibility,
+    visibility: isDocumentVisibility(row.visibility) ? row.visibility : "manager",
     expiresAt: row.expires_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

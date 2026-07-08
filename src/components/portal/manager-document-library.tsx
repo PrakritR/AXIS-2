@@ -32,10 +32,14 @@ import {
   DOCUMENT_CATEGORIES,
   DOCUMENT_CATEGORY_LABELS,
   DOCUMENT_UPLOAD_ACCEPT,
+  DOCUMENT_VISIBILITY_LABELS,
+  DOCUMENT_VISIBILITY_VALUES,
   MAX_DOCUMENT_BYTES,
   type ManagerDocumentCategory,
   type ManagerDocumentDTO,
+  type ManagerDocumentVisibility,
 } from "@/lib/documents/manager-documents";
+import { MANAGER_VENDORS_EVENT, syncManagerVendorsFromServer, type ManagerVendorRow } from "@/lib/manager-vendors-storage";
 
 const SCOPE_FILTERS: { id: string; label: string }[] = [
   { id: "", label: "All scopes" },
@@ -88,8 +92,17 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<ManagerDocumentDTO | null>(null);
   const [previewTarget, setPreviewTarget] = useState<ManagerDocumentDTO | null>(null);
+  const [vendorRows, setVendorRows] = useState<ManagerVendorRow[]>([]);
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
+
+  useEffect(() => {
+    if (demo) return;
+    void syncManagerVendorsFromServer().then(setVendorRows);
+    const onVendors = () => void syncManagerVendorsFromServer({ force: true }).then(setVendorRows);
+    window.addEventListener(MANAGER_VENDORS_EVENT, onVendors);
+    return () => window.removeEventListener(MANAGER_VENDORS_EVENT, onVendors);
+  }, [demo]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -189,9 +202,9 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         variant="outline"
         className={PORTAL_DETAIL_BTN}
         onClick={() => setRenameTarget(doc)}
-        data-attr="document-rename"
+        data-attr="document-edit"
       >
-        Rename
+        Edit
       </Button>
       <Button
         type="button"
@@ -216,6 +229,10 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         <div className="flex gap-2">
           <dt className="font-medium text-foreground/70">Size</dt>
           <dd>{formatBytes(doc.sizeBytes)}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="font-medium text-foreground/70">Visibility</dt>
+          <dd>{DOCUMENT_VISIBILITY_LABELS[doc.visibility]}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="font-medium text-foreground/70">Scope</dt>
@@ -342,6 +359,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Visibility</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Scope</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Size</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Uploaded</th>
@@ -365,13 +383,18 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
                         <td className={PORTAL_TABLE_TD}>
                           <Badge tone="neutral">{DOCUMENT_CATEGORY_LABELS[doc.category]}</Badge>
                         </td>
+                        <td className={PORTAL_TABLE_TD}>
+                          <Badge tone={doc.visibility === "manager" ? "neutral" : "info"}>
+                            {DOCUMENT_VISIBILITY_LABELS[doc.visibility]}
+                          </Badge>
+                        </td>
                         <td className={`${PORTAL_TABLE_TD} truncate`}>{scopeSummary(doc)}</td>
                         <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{formatBytes(doc.sizeBytes)}</td>
                         <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{formatDate(doc.createdAt)}</td>
                       </tr>
                       {expandedId === doc.id ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={5} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderDetail(doc)}
                           </td>
                         </tr>
@@ -389,16 +412,18 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         propertyOptions={propertyOptions}
+        vendorRows={vendorRows.filter((v) => v.active !== false)}
         onUploaded={(doc) => {
           setDocuments((cur) => [doc, ...cur]);
           setUploadOpen(false);
         }}
       />
 
-      <RenameModal
+      <EditDocumentModal
         doc={renameTarget}
+        vendorRows={vendorRows.filter((v) => v.active !== false)}
         onClose={() => setRenameTarget(null)}
-        onRenamed={(updated) => {
+        onSaved={(updated) => {
           setDocuments((cur) => cur.map((d) => (d.id === updated.id ? updated : d)));
           setRenameTarget(null);
         }}
@@ -413,11 +438,13 @@ function UploadModal({
   open,
   onClose,
   propertyOptions,
+  vendorRows,
   onUploaded,
 }: {
   open: boolean;
   onClose: () => void;
   propertyOptions: { id: string; label: string }[];
+  vendorRows: { id: string; name: string }[];
   onUploaded: (doc: ManagerDocumentDTO) => void;
 }) {
   const { showToast } = useAppUi();
@@ -426,6 +453,9 @@ function UploadModal({
   const [displayName, setDisplayName] = useState("");
   const [category, setCategory] = useState<ManagerDocumentCategory>("other");
   const [propertyId, setPropertyId] = useState("");
+  const [visibility, setVisibility] = useState<ManagerDocumentVisibility>("manager");
+  const [residentEmail, setResidentEmail] = useState("");
+  const [vendorId, setVendorId] = useState("");
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -435,6 +465,9 @@ function UploadModal({
       setDisplayName("");
       setCategory("other");
       setPropertyId("");
+      setVisibility("manager");
+      setResidentEmail("");
+      setVendorId("");
       setDragging(false);
       setBusy(false);
     }
@@ -468,7 +501,10 @@ function UploadModal({
       form.set("file", file);
       form.set("displayName", displayName.trim() || file.name);
       form.set("category", category);
+      form.set("visibility", visibility);
       if (propertyId) form.set("propertyId", propertyId);
+      if (visibility === "resident" && residentEmail.trim()) form.set("residentEmail", residentEmail.trim());
+      if (visibility === "vendor" && vendorId) form.set("vendorId", vendorId);
       const res = await fetch("/api/manager-documents", { method: "POST", body: form, credentials: "include" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Upload failed.");
@@ -567,26 +603,86 @@ function UploadModal({
             </div>
           ) : null}
         </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-foreground/70" htmlFor="doc-visibility">
+            Visibility
+          </label>
+          <Select
+            id="doc-visibility"
+            value={visibility}
+            onChange={(e) => setVisibility(e.target.value as ManagerDocumentVisibility)}
+            data-attr="document-visibility"
+          >
+            {DOCUMENT_VISIBILITY_VALUES.map((v) => (
+              <option key={v} value={v}>
+                {DOCUMENT_VISIBILITY_LABELS[v]}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        {visibility === "resident" ? (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-foreground/70" htmlFor="doc-resident-email">
+              Resident email
+            </label>
+            <Input
+              id="doc-resident-email"
+              type="email"
+              value={residentEmail}
+              onChange={(e) => setResidentEmail(e.target.value)}
+              placeholder="resident@example.com"
+            />
+          </div>
+        ) : null}
+
+        {visibility === "vendor" ? (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-foreground/70" htmlFor="doc-vendor">
+              Vendor
+            </label>
+            <Select id="doc-vendor" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+              <option value="">Select vendor…</option>
+              {vendorRows.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
       </div>
     </Modal>
   );
 }
 
-function RenameModal({
+function EditDocumentModal({
   doc,
+  vendorRows,
   onClose,
-  onRenamed,
+  onSaved,
 }: {
   doc: ManagerDocumentDTO | null;
+  vendorRows: { id: string; name: string }[];
   onClose: () => void;
-  onRenamed: (doc: ManagerDocumentDTO) => void;
+  onSaved: (doc: ManagerDocumentDTO) => void;
 }) {
   const { showToast } = useAppUi();
   const [name, setName] = useState("");
+  const [category, setCategory] = useState<ManagerDocumentCategory>("other");
+  const [visibility, setVisibility] = useState<ManagerDocumentVisibility>("manager");
+  const [residentEmail, setResidentEmail] = useState("");
+  const [vendorId, setVendorId] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setName(doc?.displayName ?? "");
+    if (!doc) return;
+    setName(doc.displayName);
+    setCategory(doc.category);
+    setVisibility(doc.visibility);
+    setResidentEmail(doc.scope.residentEmail ?? "");
+    setVendorId(doc.scope.vendorId ?? "");
   }, [doc]);
 
   const submit = async () => {
@@ -602,14 +698,20 @@ function RenameModal({
         method: "PATCH",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ displayName: trimmed }),
+        body: JSON.stringify({
+          displayName: trimmed,
+          category,
+          visibility,
+          residentEmail: visibility === "resident" ? residentEmail.trim() || null : null,
+          vendorId: visibility === "vendor" ? vendorId || null : null,
+        }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Rename failed.");
-      showToast("Document renamed.");
-      onRenamed(data.document as ManagerDocumentDTO);
+      if (!res.ok) throw new Error(data.error ?? "Save failed.");
+      showToast(visibility === "manager" ? "Document updated." : "Document updated and shared.");
+      onSaved(data.document as ManagerDocumentDTO);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Rename failed.");
+      showToast(e instanceof Error ? e.message : "Save failed.");
     } finally {
       setBusy(false);
     }
@@ -619,20 +721,54 @@ function RenameModal({
     <Modal
       open={Boolean(doc)}
       onClose={onClose}
-      title="Rename document"
+      title="Edit document"
       dense
       footer={
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy} data-attr="document-rename-submit">
+          <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy} data-attr="document-edit-submit">
             {busy ? "Saving…" : "Save"}
           </Button>
         </div>
       }
     >
-      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Document name" autoFocus />
+      <div className="space-y-3">
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Document name" autoFocus />
+        <Select value={category} onChange={(e) => setCategory(e.target.value as ManagerDocumentCategory)}>
+          {DOCUMENT_CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {DOCUMENT_CATEGORY_LABELS[c]}
+            </option>
+          ))}
+        </Select>
+        <Select value={visibility} onChange={(e) => setVisibility(e.target.value as ManagerDocumentVisibility)}>
+          {DOCUMENT_VISIBILITY_VALUES.map((v) => (
+            <option key={v} value={v}>
+              {DOCUMENT_VISIBILITY_LABELS[v]}
+            </option>
+          ))}
+        </Select>
+        {visibility === "resident" ? (
+          <Input
+            type="email"
+            value={residentEmail}
+            onChange={(e) => setResidentEmail(e.target.value)}
+            placeholder="resident@example.com"
+          />
+        ) : null}
+        {visibility === "vendor" ? (
+          <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+            <option value="">Select vendor…</option>
+            {vendorRows.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
+      </div>
     </Modal>
   );
 }

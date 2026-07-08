@@ -10,11 +10,16 @@ import {
   extensionForMime,
   isAllowedDocumentMime,
   isDocumentCategory,
+  isDocumentVisibility,
   mapDocumentRow,
   sanitizeDisplayName,
   UUID_PATTERN,
+  validateDocumentVisibilityScope,
   type ManagerDocumentRow,
+  type ManagerDocumentVisibility,
 } from "@/lib/documents/manager-documents";
+import { managerOwnsVendorDirectoryRow, resolveResidentUserIdByEmail } from "@/lib/documents/document-scope.server";
+import { notifyDocumentShared } from "@/lib/documents/document-share-notify.server";
 
 export const runtime = "nodejs";
 
@@ -118,6 +123,29 @@ export async function POST(req: Request) {
   if (residentUserId && !UUID_PATTERN.test(residentUserId)) {
     return NextResponse.json({ error: "residentUserId must be a UUID." }, { status: 400 });
   }
+  const residentEmail = str("residentEmail")?.toLowerCase() ?? null;
+  const vendorId = str("vendorId");
+  const rawVisibility = str("visibility");
+  const visibility: ManagerDocumentVisibility =
+    rawVisibility && isDocumentVisibility(rawVisibility) ? rawVisibility : "manager";
+
+  const scopeError = validateDocumentVisibilityScope({
+    visibility,
+    residentUserId,
+    residentEmail,
+    vendorId,
+  });
+  if (scopeError) return NextResponse.json({ error: scopeError }, { status: 400 });
+
+  if (visibility === "vendor" && vendorId) {
+    const owns = await managerOwnsVendorDirectoryRow(auth.db, auth.userId, vendorId);
+    if (!owns) return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
+  }
+
+  let resolvedResidentUserId = residentUserId;
+  if (visibility === "resident" && !resolvedResidentUserId && residentEmail) {
+    resolvedResidentUserId = await resolveResidentUserIdByEmail(auth.db, residentEmail);
+  }
 
   const { error: uploadError } = await auth.db.storage
     .from(MANAGER_DOCUMENTS_BUCKET)
@@ -136,10 +164,11 @@ export async function POST(req: Request) {
     property_id: str("propertyId"),
     unit_label: str("unitLabel"),
     lease_id: str("leaseId"),
-    resident_user_id: residentUserId,
-    resident_email: str("residentEmail")?.toLowerCase() ?? null,
-    vendor_id: str("vendorId"),
+    resident_user_id: resolvedResidentUserId,
+    resident_email: residentEmail,
+    vendor_id: visibility === "vendor" ? vendorId : null,
     work_order_id: str("workOrderId"),
+    visibility,
     uploaded_by: auth.userId,
   };
 
@@ -156,6 +185,22 @@ export async function POST(req: Request) {
   }
 
   const document = mapDocumentRow(data as ManagerDocumentRow);
-  track("document_uploaded", auth.userId, { category: document.category, scope_kind: document.scopeKind });
+  track("document_uploaded", auth.userId, { category: document.category, scope_kind: document.scopeKind, visibility: document.visibility });
+
+  if (visibility === "resident" || visibility === "vendor") {
+    const { data: profile } = await auth.db.from("profiles").select("full_name, email").eq("id", auth.userId).maybeSingle();
+    await notifyDocumentShared(auth.db, {
+      managerUserId: auth.userId,
+      managerEmail: auth.email,
+      managerName: String(profile?.full_name ?? "Your property manager"),
+      documentId: document.id,
+      documentName: document.displayName,
+      visibility,
+      residentUserId: resolvedResidentUserId,
+      residentEmail,
+      vendorId,
+    });
+  }
+
   return NextResponse.json({ document }, { status: 201 });
 }

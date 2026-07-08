@@ -35,6 +35,7 @@ const DOCUMENTS_TABS = [
   { id: "application", label: "Application" },
   { id: "lease", label: "Lease" },
   { id: "receipts", label: "Rent receipts" },
+  { id: "shared", label: "Shared with you" },
   { id: "other", label: "Other documents" },
 ] as const;
 
