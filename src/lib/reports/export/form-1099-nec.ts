@@ -1,5 +1,13 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { formatTinForDisplay } from "@/lib/reports/tin-crypto";
+import {
+  createPdfTheme,
+  drawDocumentHeader,
+  drawHighlightLine,
+  drawInfoBlock,
+  drawStandardFooter,
+  drawText,
+  PDF_PAGE,
+} from "@/lib/reports/export/pdf-theme";
 
 export type Form1099NecInput = {
   taxYear: number;
@@ -26,50 +34,70 @@ export type Form1099NecInput = {
   nonemployeeCompensationCents: number;
 };
 
+const CONTENT_WIDTH = PDF_PAGE.width - PDF_PAGE.margin * 2;
+
 export async function build1099NecPdf(input: Form1099NecInput): Promise<Uint8Array> {
-  const pdf = await PDFDocument.create();
-  const page = pdf.addPage([612, 792]);
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const margin = 54;
-  let y = 720;
+  const theme = await createPdfTheme();
+  const { pdf, regular } = theme;
+  const page = pdf.addPage([PDF_PAGE.width, PDF_PAGE.height]);
+  let y = drawDocumentHeader(page, theme, {
+    title: `Form 1099-NEC — ${input.taxYear}`,
+    subtitle: "Copy B — For Recipient",
+    contentWidth: CONTENT_WIDTH,
+  });
+  y -= 4;
 
-  const draw = (text: string, size: number, font = regular) => {
-    page.drawText(text, { x: margin, y, size, font, color: rgb(0.1, 0.1, 0.1) });
-    y -= size + 10;
-  };
-
-  draw(`Form 1099-NEC — ${input.taxYear}`, 16, bold);
-  draw("Copy B — For Recipient", 11, bold);
-  y -= 8;
-
-  draw("PAYER", 12, bold);
-  draw(input.payer.name, 11);
-  draw(input.payer.addressLine1, 11);
-  if (input.payer.addressLine2) draw(input.payer.addressLine2, 11);
-  draw(`${input.payer.city}, ${input.payer.state} ${input.payer.zip}`, 11);
-  draw(
-    `${input.payer.tinType.toUpperCase()}: ${formatTinForDisplay(input.payer.tin, input.payer.tinType)}`,
-    11,
-  );
-  y -= 8;
-
-  draw("RECIPIENT", 12, bold);
-  draw(input.recipient.name, 11);
-  draw(input.recipient.addressLine1, 11);
-  if (input.recipient.addressLine2) draw(input.recipient.addressLine2, 11);
-  draw(`${input.recipient.city}, ${input.recipient.state} ${input.recipient.zip}`, 11);
-  draw(
-    `${input.recipient.tinType.toUpperCase()}: ${formatTinForDisplay(input.recipient.tin, input.recipient.tinType)}`,
-    11,
-  );
+  y = drawInfoBlock(page, theme, {
+    label: "Payer",
+    lines: [
+      input.payer.name,
+      input.payer.addressLine1,
+      input.payer.addressLine2 ?? "",
+      `${input.payer.city}, ${input.payer.state} ${input.payer.zip}`,
+      `${input.payer.tinType.toUpperCase()}: ${formatTinForDisplay(input.payer.tin, input.payer.tinType)}`,
+    ],
+    x: PDF_PAGE.margin,
+    y,
+    width: CONTENT_WIDTH,
+  });
   y -= 12;
 
-  const amount = (input.nonemployeeCompensationCents / 100).toFixed(2);
-  draw("Box 1 — Nonemployee compensation", 12, bold);
-  draw(`$${amount}`, 14, bold);
+  y = drawInfoBlock(page, theme, {
+    label: "Recipient",
+    lines: [
+      input.recipient.name,
+      input.recipient.addressLine1,
+      input.recipient.addressLine2 ?? "",
+      `${input.recipient.city}, ${input.recipient.state} ${input.recipient.zip}`,
+      `${input.recipient.tinType.toUpperCase()}: ${formatTinForDisplay(input.recipient.tin, input.recipient.tinType)}`,
+    ],
+    x: PDF_PAGE.margin,
+    y,
+    width: CONTENT_WIDTH,
+  });
   y -= 16;
-  draw("This is not an official IRS form. Download for your records and file via your accountant.", 9);
 
+  const amount = (input.nonemployeeCompensationCents / 100).toFixed(2);
+  y = drawHighlightLine(page, theme, {
+    label: "Box 1 — Nonemployee compensation",
+    value: `$${amount}`,
+    x: PDF_PAGE.margin,
+    y,
+    width: CONTENT_WIDTH,
+  });
+  y -= 14;
+
+  drawText(
+    page,
+    "This is not an official IRS form. Download for your records and file via your accountant.",
+    PDF_PAGE.margin,
+    y,
+    9,
+    regular,
+    undefined,
+    CONTENT_WIDTH,
+  );
+
+  drawStandardFooter(theme, CONTENT_WIDTH);
   return pdf.save();
 }

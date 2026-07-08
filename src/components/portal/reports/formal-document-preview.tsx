@@ -2,6 +2,7 @@
 
 import { Fragment } from "react";
 import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
 import type { OccupancyReport, PropertyRentReceiptDocument, RentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import type { ReportResult } from "@/lib/reports/types";
 
@@ -444,15 +445,9 @@ export function OccupancyDocumentView({ report }: { report: OccupancyReport }) {
                       <td className="px-4 py-2.5 text-right tabular-nums text-[#0f172a]">{unit.daysAvailable}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums font-medium text-[#0f172a]">{unit.occupancyPct}%</td>
                       <td className="px-4 py-2.5">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            unit.status === "occupied"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-amber-100 text-amber-700"
-                          }`}
-                        >
+                        <Badge tone={unit.status === "occupied" ? "confirmed" : "pending"}>
                           {unit.status === "occupied" ? "Occupied" : "Vacant"}
-                        </span>
+                        </Badge>
                       </td>
                     </tr>
                   ))}
