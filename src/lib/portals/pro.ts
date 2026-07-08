@@ -64,6 +64,9 @@ export const proPortal: PortalDefinition = {
         { id: "payout-history", label: "Payout history" },
         { id: "trust-account-balance", label: "Trust account" },
         { id: "financial-diagnostics", label: "Diagnostics" },
+        { id: "ap-aging", label: "AP aging" },
+        { id: "budget-vs-actual", label: "Budget" },
+        { id: "owner-statement", label: "Owner statement" },
       ],
     },
     {

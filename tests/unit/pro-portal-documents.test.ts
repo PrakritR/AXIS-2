@@ -36,6 +36,9 @@ describe("pro portal documents section", () => {
       "payout-history",
       "trust-account-balance",
       "financial-diagnostics",
+      "ap-aging",
+      "budget-vs-actual",
+      "owner-statement",
     ]);
   });
 

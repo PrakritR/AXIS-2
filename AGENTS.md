@@ -503,6 +503,32 @@ Phase 3 excludes non-income accounts properly.
 
 **Deploy:** `npm run db:push` for `security_deposit_ledger` + bank tables before sub-ledger writes succeed.
 
+# Financials Phase 5: AP bills, budgets, owner statements
+
+**Schema** — `supabase/migrations/20260712120000_manager_bills_ap.sql`: `manager_bills`, `manager_budgets`, `manager_property_owners`, `manager_reserve_policies`, `manager_owner_distributions`; `vendor_invoices.bill_id` FK to `manager_bills`.
+
+**Lib** — `src/lib/manager-bills.ts` + `manager-bills.server.ts`: create/approve/pay bills (paid bills write `manager_expense_entries` + GL), `createBillFromVendorInvoice` on invoice approve.
+
+**GL** — `postGlBillApproved` (DR expense / CR AP), `postGlBillPaid` (DR AP / CR cash) in `gl-posting.ts`.
+
+**API** — `GET/POST /api/manager-bills`, `PATCH /api/manager-bills/[id]` (`approve`/`pay`/`void`).
+
+**Reports** — `queryApAging`, `queryBudgetVsActual`, `queryOwnerStatement` in `ap-reports.ts`; Finances tabs **AP aging**, **Budget**, **Owner statement**.
+
+**PostHog:** `bill_created`, `bill_approved`, `bill_paid` (server).
+
+# Financials Phase 6: receivables completeness
+
+**Schema** — `supabase/migrations/20260712130000_receivables_phase6.sql`: `manager_billing_settings`, `manager_payment_plans`, `manager_late_fee_waivers`.
+
+**Charge status** — `HouseholdCharge.status` extended: `pending|partially_paid|paid|cancelled|refunded|failed` + optional `paidAmountCents`; `applyPartialPaymentCents` in `nsf-fees.ts`.
+
+**NSF** — `payment_intent.payment_failed` webhook marks charge `failed` and `createNsfFeeForFailedPayment` when `manager_billing_settings.nsfFeeEnabled` (default $35).
+
+**Settings** — `src/lib/manager-billing-settings.ts` (`paymentApplicationOrder`, NSF toggle/amount).
+
+**Deploy:** `npm run db:push` for Phase 5+6 tables before bill/NSF paths succeed.
+
 # Documents module (Phase 1: document library foundation)
 
 A general-purpose, manager-owned document store distinct from the ephemeral

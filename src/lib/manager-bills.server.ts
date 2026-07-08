@@ -1,0 +1,189 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ManagerBill } from "@/lib/manager-bills";
+import { mapManagerBillRow, MANAGER_BILL_SELECT } from "@/lib/manager-bills";
+import { postGlBillApproved, postGlBillPaid, postGlExpenseEntry, postGlRefundEntry } from "@/lib/reports/gl-posting";
+
+export type CreateManagerBillInput = {
+  managerUserId: string;
+  description: string;
+  amountCents: number;
+  dueDate?: string | null;
+  vendorId?: string | null;
+  workOrderId?: string | null;
+  propertyId?: string | null;
+  vendorInvoiceId?: string | null;
+  categoryCode?: string;
+  status?: "draft" | "pending_approval" | "approved";
+};
+
+export async function createManagerBill(db: SupabaseClient, input: CreateManagerBillInput): Promise<ManagerBill> {
+  if (input.amountCents <= 0) throw new Error("Bill amount must be positive.");
+
+  const now = new Date().toISOString();
+  const { data, error } = await db
+    .from("manager_bills")
+    .insert({
+      manager_user_id: input.managerUserId,
+      description: input.description.trim(),
+      amount_cents: input.amountCents,
+      due_date: input.dueDate?.slice(0, 10) ?? null,
+      vendor_id: input.vendorId ?? null,
+      work_order_id: input.workOrderId ?? null,
+      property_id: input.propertyId ?? null,
+      vendor_invoice_id: input.vendorInvoiceId ?? null,
+      category_code: input.categoryCode ?? "maintenance",
+      status: input.status ?? "pending_approval",
+      updated_at: now,
+    })
+    .select(MANAGER_BILL_SELECT)
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Bill create failed");
+  return mapManagerBillRow(data as Record<string, unknown>);
+}
+
+export async function approveManagerBill(
+  db: SupabaseClient,
+  managerUserId: string,
+  billId: string,
+  approvedBy: string,
+): Promise<ManagerBill> {
+  const bill = await loadBill(db, managerUserId, billId);
+  if (!bill) throw new Error("Bill not found.");
+  if (bill.status !== "draft" && bill.status !== "pending_approval") {
+    throw new Error("Bill cannot be approved from current status.");
+  }
+
+  const now = new Date().toISOString();
+  const { data, error } = await db
+    .from("manager_bills")
+    .update({ status: "approved", approved_at: now, approved_by: approvedBy, updated_at: now })
+    .eq("id", billId)
+    .eq("manager_user_id", managerUserId)
+    .select(MANAGER_BILL_SELECT)
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Approve failed");
+
+  await postGlBillApproved(db, {
+    managerUserId,
+    billId,
+    amountCents: bill.amountCents,
+    entryDate: now.slice(0, 10),
+    propertyId: bill.propertyId,
+    vendorId: bill.vendorId,
+    categoryCode: bill.categoryCode,
+    memo: bill.description,
+  });
+
+  return mapManagerBillRow(data as Record<string, unknown>);
+}
+
+export async function payManagerBill(
+  db: SupabaseClient,
+  managerUserId: string,
+  billId: string,
+): Promise<ManagerBill> {
+  const bill = await loadBill(db, managerUserId, billId);
+  if (!bill) throw new Error("Bill not found.");
+  if (bill.status !== "approved" && bill.status !== "scheduled") {
+    throw new Error("Bill must be approved before payment.");
+  }
+
+  const now = new Date().toISOString();
+  const expenseDate = now.slice(0, 10);
+
+  const { data: expense, error: expenseError } = await db
+    .from("manager_expense_entries")
+    .insert({
+      manager_user_id: managerUserId,
+      property_id: bill.propertyId,
+      vendor_id: bill.vendorId,
+      category_code: bill.categoryCode,
+      amount_cents: bill.amountCents,
+      expense_date: expenseDate,
+      memo: `Bill paid — ${bill.description}`,
+      source_work_order_id: bill.workOrderId,
+      updated_at: now,
+    })
+    .select("id")
+    .single();
+  if (expenseError || !expense?.id) throw new Error(expenseError?.message ?? "Expense create failed");
+
+  const expenseId = String(expense.id);
+  await postGlExpenseEntry(db, {
+    managerUserId,
+    expenseId,
+    categoryCode: bill.categoryCode,
+    amountCents: bill.amountCents,
+    entryDate: expenseDate,
+    propertyId: bill.propertyId,
+    vendorId: bill.vendorId ?? undefined,
+    memo: bill.description,
+  });
+
+  await postGlBillPaid(db, {
+    managerUserId,
+    billId,
+    amountCents: bill.amountCents,
+    entryDate: expenseDate,
+    categoryCode: bill.categoryCode,
+    propertyId: bill.propertyId,
+    vendorId: bill.vendorId,
+    memo: bill.description,
+  });
+
+  const { data, error } = await db
+    .from("manager_bills")
+    .update({
+      status: "paid",
+      paid_at: now,
+      paid_expense_entry_id: expenseId,
+      updated_at: now,
+    })
+    .eq("id", billId)
+    .eq("manager_user_id", managerUserId)
+    .select(MANAGER_BILL_SELECT)
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Bill pay update failed");
+
+  return mapManagerBillRow(data as Record<string, unknown>);
+}
+
+async function loadBill(db: SupabaseClient, managerUserId: string, billId: string): Promise<ManagerBill | null> {
+  const { data, error } = await db
+    .from("manager_bills")
+    .select(MANAGER_BILL_SELECT)
+    .eq("id", billId)
+    .eq("manager_user_id", managerUserId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapManagerBillRow(data as Record<string, unknown>) : null;
+}
+
+export async function createBillFromVendorInvoice(
+  db: SupabaseClient,
+  managerUserId: string,
+  invoiceId: string,
+): Promise<ManagerBill | null> {
+  const { data: invoice, error } = await db
+    .from("vendor_invoices")
+    .select("id, vendor_id, work_order_id, total_cents, memo, bill_id, status")
+    .eq("id", invoiceId)
+    .eq("manager_user_id", managerUserId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!invoice || invoice.bill_id || invoice.status !== "approved") return null;
+
+  const bill = await createManagerBill(db, {
+    managerUserId,
+    description: String(invoice.memo ?? "Vendor invoice").trim() || "Vendor invoice",
+    amountCents: Number(invoice.total_cents),
+    vendorId: String(invoice.vendor_id),
+    workOrderId: invoice.work_order_id ? String(invoice.work_order_id) : null,
+    vendorInvoiceId: invoiceId,
+    status: "approved",
+  });
+
+  await db.from("vendor_invoices").update({ bill_id: bill.id, updated_at: new Date().toISOString() }).eq("id", invoiceId);
+  return bill;
+}

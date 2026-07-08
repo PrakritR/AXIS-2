@@ -78,7 +78,7 @@ const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
   "rent-receipts": "income-documents",
   "rental-days": "income-documents",
 };
-const FINANCIALS_TABS = ["income", "expenses", "trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement", "payout-history", "trust-account-balance", "financial-diagnostics"] as const;
+const FINANCIALS_TABS = ["income", "expenses", "trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement", "payout-history", "trust-account-balance", "financial-diagnostics", "ap-aging", "budget-vs-actual", "owner-statement"] as const;
 
 const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash"] as const;
 

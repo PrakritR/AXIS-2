@@ -23,6 +23,11 @@ import {
   queryTrustAccountBalance,
   queryFinancialDiagnostics,
 } from "@/lib/reports/queries/gl-reports";
+import {
+  queryApAging,
+  queryBudgetVsActual,
+  queryOwnerStatement,
+} from "@/lib/reports/queries/ap-reports";
 
 function defaultDateRange(from?: string, to?: string): { from: string; to: string } {
   const now = new Date();
@@ -1037,6 +1042,12 @@ export async function runManagerReport(
       return queryTrustAccountBalance(db, managerUserId, filters);
     case "financial-diagnostics":
       return queryFinancialDiagnostics(db, managerUserId, filters);
+    case "ap-aging":
+      return queryApAging(db, managerUserId, filters);
+    case "budget-vs-actual":
+      return queryBudgetVsActual(db, managerUserId, filters);
+    case "owner-statement":
+      return queryOwnerStatement(db, managerUserId, filters);
     default:
       return null;
   }

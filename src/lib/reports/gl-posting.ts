@@ -368,6 +368,49 @@ export async function postGlReclassifyDeposit(
   });
 }
 
+export type GlBillInput = {
+  managerUserId: string;
+  billId: string;
+  amountCents: number;
+  entryDate: string;
+  categoryCode: string;
+  propertyId?: string | null;
+  vendorId?: string | null;
+  memo?: string | null;
+};
+
+export async function postGlBillApproved(db: SupabaseClient, input: GlBillInput): Promise<string | null> {
+  if (input.amountCents <= 0) return null;
+  return insertJournalEntry(db, {
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+    entryDate: input.entryDate,
+    memo: input.memo ?? `Bill approved ${input.billId}`,
+    sourceType: "bill",
+    sourceId: `bill-approve:${input.billId}`,
+    lines: [
+      { accountCode: input.categoryCode, debitCents: input.amountCents, creditCents: 0, propertyId: input.propertyId, vendorId: input.vendorId, memo: input.memo },
+      { accountCode: AP_ACCOUNT, debitCents: 0, creditCents: input.amountCents, propertyId: input.propertyId, vendorId: input.vendorId, memo: input.memo },
+    ],
+  });
+}
+
+export async function postGlBillPaid(db: SupabaseClient, input: GlBillInput): Promise<string | null> {
+  if (input.amountCents <= 0) return null;
+  return insertJournalEntry(db, {
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+    entryDate: input.entryDate,
+    memo: input.memo ?? `Bill paid ${input.billId}`,
+    sourceType: "bill",
+    sourceId: `bill-pay:${input.billId}`,
+    lines: [
+      { accountCode: AP_ACCOUNT, debitCents: input.amountCents, creditCents: 0, propertyId: input.propertyId, vendorId: input.vendorId, memo: input.memo },
+      { accountCode: "operating_cash", debitCents: 0, creditCents: input.amountCents, propertyId: input.propertyId, vendorId: input.vendorId, memo: input.memo },
+    ],
+  });
+}
+
 export type GlRefundInput = {
   managerUserId: string;
   sourceChargeId: string;

@@ -1,8 +1,10 @@
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { connectAccountTransfersActive } from "@/lib/stripe-connect";
+import { createNsfFeeForFailedPayment } from "@/lib/nsf-fees";
 import { postGlRefundEntry } from "@/lib/reports/gl-posting";
 import { syncLedgerRefundEntry } from "@/lib/reports/ledger-sync";
+import type { HouseholdCharge } from "@/lib/household-charges";
 
 export async function resolveUserIdByConnectAccountId(
   db: SupabaseClient,
@@ -201,19 +203,28 @@ export async function handlePaymentIntentFailed(
   for (const chargeId of ids) {
     const { data: row } = await db
       .from("portal_household_charge_records")
-      .select("id, row_data, status")
+      .select("id, row_data, status, manager_user_id")
       .eq("id", chargeId)
       .maybeSingle();
     if (!row || row.status === "paid") continue;
-    const charge = row.row_data as Record<string, unknown> | null;
+    const charge = row.row_data as HouseholdCharge | null;
     if (!charge) continue;
+
     await db.from("portal_household_charge_records").upsert(
       {
         id: chargeId,
-        row_data: { ...charge, stripePaymentStatus: "failed", stripePaymentFailedAt: now },
+        manager_user_id: row.manager_user_id,
+        resident_email: charge.residentEmail?.trim().toLowerCase() ?? "",
+        status: "failed",
+        row_data: { ...charge, status: "failed", stripePaymentStatus: "failed", stripePaymentFailedAt: now },
         updated_at: now,
       },
       { onConflict: "id" },
     );
+
+    const managerUserId = String(row.manager_user_id ?? charge.managerUserId ?? "");
+    if (managerUserId) {
+      await createNsfFeeForFailedPayment(db, charge, managerUserId).catch(() => undefined);
+    }
   }
 }

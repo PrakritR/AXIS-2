@@ -359,6 +359,9 @@ const FINANCE_TABS = [
   { id: "payout-history", label: "Payout history" },
   { id: "trust-account-balance", label: "Trust account" },
   { id: "financial-diagnostics", label: "Diagnostics" },
+  { id: "ap-aging", label: "AP aging" },
+  { id: "budget-vs-actual", label: "Budget" },
+  { id: "owner-statement", label: "Owner statement" },
 ] as const;
 
 const LEDGER_TAB_IDS = new Set([
@@ -369,6 +372,9 @@ const LEDGER_TAB_IDS = new Set([
   "payout-history",
   "trust-account-balance",
   "financial-diagnostics",
+  "ap-aging",
+  "budget-vs-actual",
+  "owner-statement",
 ]);
 
 const TAB_TO_REPORT: Record<string, string> = {
@@ -381,6 +387,9 @@ const TAB_TO_REPORT: Record<string, string> = {
   "payout-history": "payout-history",
   "trust-account-balance": "trust-account-balance",
   "financial-diagnostics": "financial-diagnostics",
+  "ap-aging": "ap-aging",
+  "budget-vs-actual": "budget-vs-actual",
+  "owner-statement": "owner-statement",
 };
 
 const DEFAULT_SORT: Record<string, { key: string; dir: "asc" | "desc" }> = {
@@ -393,6 +402,9 @@ const DEFAULT_SORT: Record<string, { key: string; dir: "asc" | "desc" }> = {
   "payout-history": { key: "date", dir: "desc" },
   "trust-account-balance": { key: "line", dir: "asc" },
   "financial-diagnostics": { key: "severity", dir: "asc" },
+  "ap-aging": { key: "dueDate", dir: "asc" },
+  "budget-vs-actual": { key: "category", dir: "asc" },
+  "owner-statement": { key: "line", dir: "asc" },
 };
 
 function defaultFilters(): ReportFilterState {

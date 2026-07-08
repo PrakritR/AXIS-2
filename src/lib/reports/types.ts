@@ -64,6 +64,9 @@ export const MANAGER_REPORT_IDS = [
   "payout-history",
   "trust-account-balance",
   "financial-diagnostics",
+  "ap-aging",
+  "budget-vs-actual",
+  "owner-statement",
 ] as const;
 
 export const RESIDENT_REPORT_IDS = ["resident-balance", "resident-ledger"] as const;

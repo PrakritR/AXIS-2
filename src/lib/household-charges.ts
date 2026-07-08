@@ -75,7 +75,8 @@ export type HouseholdCharge = {
   title: string;
   amountLabel: string;
   balanceLabel: string;
-  status: "pending" | "paid";
+  status: "pending" | "partially_paid" | "paid" | "cancelled" | "refunded" | "failed";
+  paidAmountCents?: number;
   paidAt?: string;
   /** Snapshot of Zelle / SMS contact from listing when charge was created */
   zelleContactSnapshot?: string;

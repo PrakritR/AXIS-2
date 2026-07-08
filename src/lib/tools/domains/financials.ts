@@ -22,6 +22,11 @@ import {
   queryTrustAccountBalance,
   queryFinancialDiagnostics,
 } from "@/lib/reports/queries/gl-reports";
+import {
+  queryApAging,
+  queryBudgetVsActual,
+  queryOwnerStatement,
+} from "@/lib/reports/queries/ap-reports";
 
 /**
  * Financial reports the agent may run. The numbers are computed by these query
@@ -47,6 +52,9 @@ const REPORTS = {
   payout_history: queryPayoutHistory,
   trust_account_balance: queryTrustAccountBalance,
   financial_diagnostics: queryFinancialDiagnostics,
+  ap_aging: queryApAging,
+  budget_vs_actual: queryBudgetVsActual,
+  owner_statement: queryOwnerStatement,
 } as const satisfies Record<
   string,
   (db: AgentContext["db"], managerUserId: string, filters: ManagerReportFilters) => Promise<ReportResult>

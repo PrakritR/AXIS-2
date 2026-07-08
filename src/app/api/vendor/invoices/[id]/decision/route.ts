@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
 import { track } from "@/lib/analytics/posthog";
 import { mapVendorInvoiceRow, VENDOR_INVOICE_SELECT, type VendorInvoiceStatus } from "@/lib/vendor-invoices";
+import { createBillFromVendorInvoice } from "@/lib/manager-bills.server";
 
 export const runtime = "nodejs";
 
@@ -69,6 +70,10 @@ export async function PATCH(
         status,
         total_cents: existing.total_cents as number,
       });
+    }
+
+    if (status === "approved") {
+      await createBillFromVendorInvoice(auth.db, auth.userId, id).catch(() => undefined);
     }
 
     return NextResponse.json({ invoice: mapVendorInvoiceRow(data) });
