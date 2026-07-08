@@ -1,0 +1,29 @@
+import { NextResponse } from "next/server";
+import { getReportsAuthContext, assertManagerFinancialsAccess } from "@/lib/reports/auth";
+import { summarizeDocumentExpiration } from "@/lib/documents/document-expiration";
+
+export const runtime = "nodejs";
+
+/** GET /api/manager-documents/expiration-summary — counts for dashboard / compliance banner. */
+export async function GET() {
+  const auth = await getReportsAuthContext({ preferRole: "manager" });
+  if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const gate = await assertManagerFinancialsAccess(auth);
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+
+  const { data, error } = await auth.db
+    .from("manager_documents")
+    .select("expires_at")
+    .eq("manager_user_id", auth.userId)
+    .is("deleted_at", null)
+    .not("expires_at", "is", null)
+    .limit(2000);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const summary = summarizeDocumentExpiration(
+    (data ?? []).map((row) => ({ expiresAt: (row as { expires_at: string | null }).expires_at })),
+  );
+
+  return NextResponse.json({ summary });
+}

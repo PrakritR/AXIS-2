@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalFilterRow,
+  ManagerPortalStatusPills,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
 import {
@@ -39,6 +40,16 @@ import {
   type ManagerDocumentDTO,
   type ManagerDocumentVisibility,
 } from "@/lib/documents/manager-documents";
+import {
+  documentExpirationBucket,
+  documentMatchesExpiryFilter,
+  expirationBadgeTone,
+  expirationBucketLabel,
+  formatExpiryDate,
+  suggestedExpiryDateInput,
+  summarizeDocumentExpiration,
+} from "@/lib/documents/document-expiration";
+import { useSearchParams } from "next/navigation";
 import { MANAGER_VENDORS_EVENT, syncManagerVendorsFromServer, type ManagerVendorRow } from "@/lib/manager-vendors-storage";
 
 const SCOPE_FILTERS: { id: string; label: string }[] = [
@@ -80,6 +91,7 @@ function isImageMime(mime: string): boolean {
 export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
+  const searchParams = useSearchParams();
 
   const [documents, setDocuments] = useState<ManagerDocumentDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -87,6 +99,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [scopeFilter, setScopeFilter] = useState<string>("");
   const [propertyFilter, setPropertyFilter] = useState<string>("");
+  const [expiryFilter, setExpiryFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -95,6 +108,34 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
   const [vendorRows, setVendorRows] = useState<ManagerVendorRow[]>([]);
 
   const propertyOptions = useMemo(() => buildManagerPropertyFilterOptions(userId), [userId]);
+
+  useEffect(() => {
+    const q = searchParams.get("expiry") ?? "";
+    setExpiryFilter(q);
+  }, [searchParams]);
+
+  const expirySummary = useMemo(() => summarizeDocumentExpiration(documents), [documents]);
+
+  const filteredDocuments = useMemo(
+    () => documents.filter((d) => documentMatchesExpiryFilter(d.expiresAt, expiryFilter)),
+    [documents, expiryFilter],
+  );
+
+  const expiryPills = useMemo(() => {
+    let expiring30 = 0;
+    let expiring90 = 0;
+    for (const doc of documents) {
+      const bucket = documentExpirationBucket(doc.expiresAt);
+      if (bucket === "within30") expiring30 += 1;
+      if (bucket === "within30" || bucket === "within60" || bucket === "within90") expiring90 += 1;
+    }
+    return [
+      { id: "", label: "All", count: documents.length },
+      { id: "expired", label: "Expired", count: expirySummary.expired, alert: expirySummary.expired > 0 },
+      { id: "expiring30", label: "Expiring ≤30d", count: expiring30, alert: expiring30 > 0 },
+      { id: "expiring90", label: "Expiring ≤90d", count: expiring90 },
+    ];
+  }, [documents, expirySummary.expired]);
 
   useEffect(() => {
     if (demo) return;
@@ -242,14 +283,56 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
           <dt className="font-medium text-foreground/70">Uploaded</dt>
           <dd>{formatDate(doc.createdAt)}</dd>
         </div>
+        <div className="flex gap-2">
+          <dt className="font-medium text-foreground/70">Expires</dt>
+          <dd>
+            {doc.expiresAt ? (
+              <Badge tone={expirationBadgeTone(documentExpirationBucket(doc.expiresAt))}>
+                {formatExpiryDate(doc.expiresAt)}
+              </Badge>
+            ) : (
+              "—"
+            )}
+          </dd>
+        </div>
       </dl>
     </>
   );
 
-  const empty = !loading && documents.length === 0;
+  const empty = !loading && filteredDocuments.length === 0;
+
+  const complianceBanner =
+    !demo && (expirySummary.expired > 0 || expirySummary.within30 > 0) ? (
+      <div
+        className={`rounded-2xl border px-4 py-3 text-sm ${
+          expirySummary.expired > 0
+            ? "border-red-200 bg-red-50 text-red-900"
+            : "border-amber-200 bg-amber-50 text-amber-950"
+        }`}
+        role="status"
+      >
+        <p className="font-medium">
+          {expirySummary.expired > 0
+            ? `${expirySummary.expired} document${expirySummary.expired === 1 ? "" : "s"} expired`
+            : `${expirySummary.within30} document${expirySummary.within30 === 1 ? "" : "s"} expiring within 30 days`}
+          {expirySummary.expired > 0 && expirySummary.within30 > 0
+            ? ` · ${expirySummary.within30} expiring within 30 days`
+            : ""}
+        </p>
+        <p className="mt-0.5 text-xs opacity-90">Review renewals and update expiration dates in your library.</p>
+      </div>
+    ) : null;
 
   return (
     <div className="space-y-4">
+      {complianceBanner}
+      <ManagerPortalStatusPills
+        tabs={expiryPills}
+        activeId={expiryFilter}
+        onChange={setExpiryFilter}
+        activeTone="primary"
+        compact
+      />
       <ManagerPortalFilterRow>
         <Input
           type="search"
@@ -318,12 +401,19 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
           icon="document"
         />
       ) : empty ? (
-        <PortalDataTableEmpty message="No documents yet. Upload a file to start your library." icon="document" />
+        <PortalDataTableEmpty
+          message={
+            documents.length > 0
+              ? "No documents match this expiration filter."
+              : "No documents yet. Upload a file to start your library."
+          }
+          icon="document"
+        />
       ) : (
         <>
           {/* Mobile cards */}
           <div className="space-y-2 lg:hidden">
-            {documents.map((doc) => {
+            {filteredDocuments.map((doc) => {
               const expanded = expandedId === doc.id;
               return (
                 <div key={doc.id} className={PORTAL_MOBILE_CARD_CLASS}>
@@ -342,7 +432,14 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
                           {scopeSummary(doc)} · {formatBytes(doc.sizeBytes)}
                         </p>
                       </div>
-                      <Badge tone="neutral">{DOCUMENT_CATEGORY_LABELS[doc.category]}</Badge>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge tone="neutral">{DOCUMENT_CATEGORY_LABELS[doc.category]}</Badge>
+                        {doc.expiresAt ? (
+                          <Badge tone={expirationBadgeTone(documentExpirationBucket(doc.expiresAt))}>
+                            {expirationBucketLabel(documentExpirationBucket(doc.expiresAt))}
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
                   </button>
                   {expanded ? <div className="mt-3 border-t border-border pt-3">{renderDetail(doc)}</div> : null}
@@ -362,11 +459,12 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Visibility</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Scope</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Size</th>
+                    <th className={`${MANAGER_TABLE_TH} text-left`}>Expires</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Uploaded</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {documents.map((doc) => (
+                  {filteredDocuments.map((doc) => (
                     <Fragment key={doc.id}>
                       <tr
                         className={PORTAL_TABLE_TR_EXPANDABLE}
@@ -390,11 +488,20 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
                         </td>
                         <td className={`${PORTAL_TABLE_TD} truncate`}>{scopeSummary(doc)}</td>
                         <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{formatBytes(doc.sizeBytes)}</td>
+                        <td className={PORTAL_TABLE_TD}>
+                          {doc.expiresAt ? (
+                            <Badge tone={expirationBadgeTone(documentExpirationBucket(doc.expiresAt))}>
+                              {formatExpiryDate(doc.expiresAt)}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
                         <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{formatDate(doc.createdAt)}</td>
                       </tr>
                       {expandedId === doc.id ? (
                         <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
+                          <td colSpan={7} className={PORTAL_TABLE_DETAIL_CELL}>
                             {renderDetail(doc)}
                           </td>
                         </tr>
@@ -456,6 +563,7 @@ function UploadModal({
   const [visibility, setVisibility] = useState<ManagerDocumentVisibility>("manager");
   const [residentEmail, setResidentEmail] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -468,10 +576,17 @@ function UploadModal({
       setVisibility("manager");
       setResidentEmail("");
       setVendorId("");
+      setExpiresAt("");
       setDragging(false);
       setBusy(false);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const suggested = suggestedExpiryDateInput(category);
+    if (suggested && !expiresAt) setExpiresAt(suggested);
+  }, [category, open, expiresAt]);
 
   const pickFile = useCallback((f: File | null | undefined) => {
     if (!f) return;
@@ -505,6 +620,7 @@ function UploadModal({
       if (propertyId) form.set("propertyId", propertyId);
       if (visibility === "resident" && residentEmail.trim()) form.set("residentEmail", residentEmail.trim());
       if (visibility === "vendor" && vendorId) form.set("vendorId", vendorId);
+      if (expiresAt.trim()) form.set("expiresAt", expiresAt.trim());
       const res = await fetch("/api/manager-documents", { method: "POST", body: form, credentials: "include" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Upload failed.");
@@ -586,6 +702,18 @@ function UploadModal({
                 </option>
               ))}
             </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-foreground/70" htmlFor="doc-expires">
+              Expiration (optional)
+            </label>
+            <Input
+              id="doc-expires"
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+              data-attr="document-expires-at"
+            />
           </div>
           {propertyOptions.length > 0 ? (
             <div className="space-y-1">
@@ -674,6 +802,7 @@ function EditDocumentModal({
   const [visibility, setVisibility] = useState<ManagerDocumentVisibility>("manager");
   const [residentEmail, setResidentEmail] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -683,6 +812,7 @@ function EditDocumentModal({
     setVisibility(doc.visibility);
     setResidentEmail(doc.scope.residentEmail ?? "");
     setVendorId(doc.scope.vendorId ?? "");
+    setExpiresAt(doc.expiresAt ? doc.expiresAt.slice(0, 10) : "");
   }, [doc]);
 
   const submit = async () => {
@@ -704,6 +834,7 @@ function EditDocumentModal({
           visibility,
           residentEmail: visibility === "resident" ? residentEmail.trim() || null : null,
           vendorId: visibility === "vendor" ? vendorId || null : null,
+          expiresAt: expiresAt.trim() || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -768,6 +899,18 @@ function EditDocumentModal({
             ))}
           </Select>
         ) : null}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-foreground/70" htmlFor="edit-doc-expires">
+            Expiration
+          </label>
+          <Input
+            id="edit-doc-expires"
+            type="date"
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+            data-attr="document-edit-expires-at"
+          />
+        </div>
       </div>
     </Modal>
   );

@@ -13,6 +13,7 @@ import {
 } from "@/lib/documents/manager-documents";
 import { managerOwnsVendorDirectoryRow, resolveResidentUserIdByEmail } from "@/lib/documents/document-scope.server";
 import { notifyDocumentShared } from "@/lib/documents/document-share-notify.server";
+import { parseExpiresAtInput } from "@/lib/documents/document-expiration";
 
 export const runtime = "nodejs";
 
@@ -65,6 +66,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (residentUserId !== undefined) update.resident_user_id = residentUserId;
   if (residentEmail !== undefined) update.resident_email = residentEmail;
   if (vendorId !== undefined) update.vendor_id = vendorId;
+
+  if (body.expiresAt === null || body.expiresAt === "") {
+    update.expires_at = null;
+  } else if (typeof body.expiresAt === "string") {
+    const parsed = parseExpiresAtInput(body.expiresAt);
+    if (!parsed) return NextResponse.json({ error: "expiresAt must be YYYY-MM-DD." }, { status: 400 });
+    update.expires_at = parsed;
+  }
 
   if (nextVisibility === "manager") {
     update.resident_user_id = null;

@@ -530,6 +530,21 @@ back to Download.
 - Resident Documents: **Shared with you** tab (`portal-shared-documents-table.tsx`).
 - Vendor Documents: **From managers** tab (same shared table component).
 
+# Documents module (Phase 3: expiration & compliance)
+
+**Goal:** Surface `expires_at` on library uploads, filter/banner for expiring docs, and daily manager inbox reminders.
+
+**Lib** — `src/lib/documents/document-expiration.ts`: bucket helpers (`expired` / `within30` / `within60` / `within90`), category defaults (`insurance` + `inspection` → +1 year on upload when no date supplied), `summarizeDocumentExpiration` for banners.
+
+**API**
+- Manager POST/PATCH accept `expiresAt` (`YYYY-MM-DD` or null to clear); POST auto-fills default expiry for insurance/inspection categories.
+- `GET /api/manager-documents/expiration-summary` — `{ expired, within30, within60, within90 }` counts for dashboard banner.
+- `GET /api/cron/send-document-expiration-reminders` — daily cron (Vercel `0 8 * * *`); inbox message to manager for docs expiring within 30 days, deduped via `portal_outbound_mail_records` id `doc_expiry_reminder_<docId>_<date>`.
+
+**UI**
+- Manager Library: expiration date on upload/edit, status pills (All / Expired / Expiring ≤30d / ≤90d), expiry column + compliance banner.
+- Manager Dashboard: top banner linking to library with `?expiry=` filter when expired or ≤30d count > 0.
+
 # Financials Phase 4: vendor portal invoicing
 
 **This phase is ADDITIVE on top of the already-shipped vendor portal (Vendor

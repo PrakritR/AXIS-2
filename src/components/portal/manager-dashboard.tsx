@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import {
@@ -67,6 +68,8 @@ import {
 } from "@/components/portal/portal-metrics";
 import { isSubmittedPendingApplicationRow } from "@/lib/rental-application/in-progress-application";
 import { formatPacificDateTime } from "@/lib/pacific-time";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import type { DocumentExpirationSummary } from "@/lib/documents/document-expiration";
 
 const BASE = "/portal";
 
@@ -89,6 +92,20 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
   const [nowMs] = useState(() => Date.now());
+  const [docExpirySummary, setDocExpirySummary] = useState<DocumentExpirationSummary | null>(null);
+
+  useEffect(() => {
+    if (!authReady || !userId || isDemoModeActive()) {
+      setDocExpirySummary(null);
+      return;
+    }
+    void fetch("/api/manager-documents/expiration-summary", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.summary) setDocExpirySummary(data.summary as DocumentExpirationSummary);
+      })
+      .catch(() => setDocExpirySummary(null));
+  }, [authReady, userId, tick]);
 
   useEffect(() => {
     if (!authReady || !userId) {
@@ -249,6 +266,13 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       ? `No listings pending review — ${livePropertyCount} live ${livePropertyCount === 1 ? "property" : "properties"}.`
       : "No listings pending review.";
 
+  const showDocExpiryBanner =
+    docExpirySummary && (docExpirySummary.expired > 0 || docExpirySummary.within30 > 0);
+  const docExpiryHref =
+    docExpirySummary && docExpirySummary.expired > 0
+      ? `${BASE}/documents/library?expiry=expired`
+      : `${BASE}/documents/library?expiry=expiring30`;
+
   return (
     <ManagerPortalPageShell
       title="Dashboard"
@@ -256,6 +280,25 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
+        {showDocExpiryBanner ? (
+          <Link
+            href={docExpiryHref}
+            className={`block rounded-2xl border px-4 py-3 text-sm transition-opacity hover:opacity-90 ${
+              docExpirySummary!.expired > 0
+                ? "border-red-200 bg-red-50 text-red-900"
+                : "border-amber-200 bg-amber-50 text-amber-950"
+            }`}
+            data-attr="dashboard-document-expiry-banner"
+          >
+            <p className="font-medium">
+              Document compliance
+              {docExpirySummary!.expired > 0
+                ? ` · ${docExpirySummary!.expired} expired`
+                : ` · ${docExpirySummary!.within30} expiring within 30 days`}
+            </p>
+            <p className="mt-0.5 text-xs opacity-90">Open your document library to review renewals →</p>
+          </Link>
+        ) : null}
         <div className="space-y-3 [html[data-native]_&]:space-y-2">
           <DashboardGroupLabel>Leasing</DashboardGroupLabel>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">

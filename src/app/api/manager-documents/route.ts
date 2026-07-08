@@ -20,6 +20,7 @@ import {
 } from "@/lib/documents/manager-documents";
 import { managerOwnsVendorDirectoryRow, resolveResidentUserIdByEmail } from "@/lib/documents/document-scope.server";
 import { notifyDocumentShared } from "@/lib/documents/document-share-notify.server";
+import { defaultExpiryIsoForCategory, parseExpiresAtInput } from "@/lib/documents/document-expiration";
 
 export const runtime = "nodejs";
 
@@ -147,6 +148,15 @@ export async function POST(req: Request) {
     resolvedResidentUserId = await resolveResidentUserIdByEmail(auth.db, residentEmail);
   }
 
+  const rawExpiresAt = str("expiresAt");
+  let expiresAt: string | null = null;
+  if (rawExpiresAt) {
+    expiresAt = parseExpiresAtInput(rawExpiresAt);
+    if (!expiresAt) return NextResponse.json({ error: "expiresAt must be YYYY-MM-DD." }, { status: 400 });
+  } else {
+    expiresAt = defaultExpiryIsoForCategory(category);
+  }
+
   const { error: uploadError } = await auth.db.storage
     .from(MANAGER_DOCUMENTS_BUCKET)
     .upload(storagePath, bytes, { contentType: mime, upsert: false });
@@ -169,6 +179,7 @@ export async function POST(req: Request) {
     vendor_id: visibility === "vendor" ? vendorId : null,
     work_order_id: str("workOrderId"),
     visibility,
+    expires_at: expiresAt,
     uploaded_by: auth.userId,
   };
 
