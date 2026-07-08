@@ -119,6 +119,9 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [contactTick, setContactTick] = useState(0);
+  // Threads marked read while viewing "Unopened" stay listed until the tab is
+  // switched or the page is refreshed; they only move to "Opened" on reset.
+  const [retainedIds, setRetainedIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     persistInboxRef.current = false;
@@ -176,22 +179,28 @@ export function ManagerInbox({ tabId }: { tabId: string }) {
 
   const rowsForTab = useMemo(() => {
     let filtered: InboxThread[];
-    if (tabId === "unopened") filtered = local.filter((t) => t.folder === "inbox" && t.unread);
+    if (tabId === "unopened")
+      filtered = local.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
     else if (tabId === "opened") filtered = local.filter((t) => t.folder === "inbox" && !t.unread);
     else if (tabId === "sent") filtered = local.filter((t) => t.folder === "sent");
     else if (tabId === "trash") filtered = local.filter((t) => t.folder === "trash");
     else filtered = [];
 
     return [...filtered].sort((a, b) => threadTimestamp(b) - threadTimestamp(a));
-  }, [local, tabId]);
+  }, [local, tabId, retainedIds]);
+
+  // Returning to Unopened (or refreshing) shows the true unread set.
+  useEffect(() => {
+    setRetainedIds(new Set());
+  }, [tabId]);
 
   const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
   const threadSelection = useInboxRowSelection(threadRowIds);
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
-    setExpandedId((e) => (e === id ? null : e));
-    showToast("Marked as read.");
+    setRetainedIds((prev) => new Set(prev).add(id));
+    showToast("Marked as read — moves to Opened after refresh.");
   };
 
   const bodyById = useMemo(() => {

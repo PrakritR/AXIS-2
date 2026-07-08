@@ -97,6 +97,9 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   const persistInboxRef = useRef(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  // Threads marked read while viewing "Unopened" stay listed until the tab is
+  // switched or the page is refreshed; they only move to "Opened" on reset.
+  const [retainedIds, setRetainedIds] = useState<Set<string>>(() => new Set());
   // Individually-selectable recipients (this resident's own manager[s] + co-managers),
   // scoped server-side by /api/portal/inbox-eligible-contacts.
   const [eligibleContacts, setEligibleContacts] = useState<InboxScopedContact[]>([]);
@@ -207,12 +210,18 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
   );
 
   const rowsForTab = useMemo(() => {
-    if (tabId === "unopened") return local.filter((t) => t.folder === "inbox" && t.unread);
+    if (tabId === "unopened")
+      return local.filter((t) => t.folder === "inbox" && (t.unread || retainedIds.has(t.id)));
     if (tabId === "opened") return local.filter((t) => t.folder === "inbox" && !t.unread);
     if (tabId === "sent") return local.filter((t) => t.folder === "sent");
     if (tabId === "trash") return local.filter((t) => t.folder === "trash");
     return [];
-  }, [local, tabId]);
+  }, [local, tabId, retainedIds]);
+
+  // Returning to Unopened (or refreshing) shows the true unread set.
+  useEffect(() => {
+    setRetainedIds(new Set());
+  }, [tabId]);
 
   const threadRowIds = useMemo(() => rowsForTab.map((t) => t.id), [rowsForTab]);
   const threadSelection = useInboxRowSelection(threadRowIds);
@@ -250,7 +259,8 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
 
   const markRead = (id: string) => {
     setLocal((prev) => prev.map((t) => (t.id === id && t.folder === "inbox" ? { ...t, unread: false } : t)));
-    showToast("Marked as read — view in Opened tab.");
+    setRetainedIds((prev) => new Set(prev).add(id));
+    showToast("Marked as read — moves to Opened after refresh.");
   };
 
   const markUnread = useCallback(

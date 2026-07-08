@@ -334,6 +334,9 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   const [tick, setTick] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  // Messages marked read while viewing "Unopened" stay listed here until the tab
+  // is switched or the page is refreshed; they only move to "Opened" on reset.
+  const [retainedIds, setRetainedIds] = useState<Set<string>>(() => new Set());
   const [recipients, setRecipients] = useState<{ managers: Recipient[]; residents: Recipient[] }>({
     managers: [],
     residents: [],
@@ -383,12 +386,19 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
   }, [tick]);
 
   const rows = useMemo(() => {
-    if (tabId === "unopened") return all.filter((m) => m.folder === "inbox" && !m.read);
+    if (tabId === "unopened")
+      return all.filter((m) => m.folder === "inbox" && (!m.read || retainedIds.has(m.id)));
     if (tabId === "opened") return all.filter((m) => m.folder === "inbox" && m.read);
     if (tabId === "sent") return all.filter((m) => m.folder === "sent");
     if (tabId === "trash") return all.filter((m) => m.folder === "trash");
     return [] as InboxMessage[];
-  }, [all, tabId]);
+  }, [all, tabId, retainedIds]);
+
+  // Reset the "keep read messages listed" retention whenever the tab changes,
+  // so returning to Unopened (or refreshing) shows the true unread set.
+  useEffect(() => {
+    setRetainedIds(new Set());
+  }, [tabId]);
 
   const folderCounts = useMemo(() => {
     return {
@@ -412,14 +422,15 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
 
   const tableRows = useMemo(() => toAdminTableRows(rows, tabId), [rows, tabId]);
 
+  // Opening a message no longer marks it read — reading keeps it in Unopened.
   const toggleExpand = (id: string) => {
-    const opening = expandedId !== id;
-    setExpandedId(opening ? id : null);
-    if (opening) {
-      const row = rows.find((r) => r.id === id);
-      if (row && row.folder === "inbox" && !row.read) {
-        if (markInboxMessageRead(row.id)) setTick((t) => t + 1);
-      }
+    setExpandedId((cur) => (cur === id ? null : id));
+  };
+
+  const markRead = (id: string) => {
+    if (markInboxMessageRead(id)) {
+      setRetainedIds((prev) => new Set(prev).add(id));
+      setTick((t) => t + 1);
     }
   };
 
@@ -494,6 +505,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
           <PortalInboxMessageTable
             rows={tableRows}
             primaryPartyHeader={fromOrToHeader}
+            onMarkRead={tabId === "unopened" ? markRead : undefined}
             getDetailBody={(row) => bodyById[row.id]}
             getThreadMessages={(row) => {
               const message = rows.find((r) => r.id === row.id);

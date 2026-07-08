@@ -24,10 +24,11 @@ import {
   readBugFeedbackRows,
   syncBugFeedbackFromServer,
   updateBugFeedbackRow,
+  type BugFeedbackReporterRole,
   type BugFeedbackStatus,
   type PortalBugFeedbackRow,
 } from "@/lib/portal-bug-feedback";
-import { groupBugFeedbackForAdmin, roleGroupLabelForFeedback, feedbackStatusLabel } from "@/lib/portal-bug-feedback-utils";
+import { roleGroupLabelForFeedback, feedbackStatusLabel } from "@/lib/portal-bug-feedback-utils";
 
 function formatWhen(iso: string) {
   try {
@@ -51,6 +52,15 @@ const STATUS_OPTIONS: { value: BugFeedbackStatus; label: string }[] = [
 
 type StatusFilter = "all" | BugFeedbackStatus;
 type SortFilter = "newest" | "oldest" | "status";
+type PortalFilter = "all" | "managers" | "residents" | "vendors" | "admin";
+
+/** Map a reporter role to the portal it came from (for the source filter). */
+function portalForRole(role: BugFeedbackReporterRole): Exclude<PortalFilter, "all"> {
+  if (role === "resident") return "residents";
+  if (role === "vendor") return "vendors";
+  if (role === "admin") return "admin";
+  return "managers";
+}
 
 function feedbackStatusClass(status: BugFeedbackStatus) {
   switch (status) {
@@ -84,6 +94,7 @@ function sortFeedbackRows(rows: PortalBugFeedbackRow[], sort: SortFilter): Porta
 export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolean }) {
   const { showToast } = useAppUi();
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
+  const [portalFilter, setPortalFilter] = useState<PortalFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortFilter, setSortFilter] = useState<SortFilter>("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -107,49 +118,70 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
     return () => window.removeEventListener(ADMIN_UI_EVENT, onRefresh);
   }, [refresh]);
 
-  const { managerRows, residentRows, vendorRows } = useMemo(() => groupBugFeedbackForAdmin(rows), [rows]);
-
-  const prepareGroup = useCallback(
-    (groupRows: PortalBugFeedbackRow[]) => {
-      const filtered =
-        statusFilter === "all" ? groupRows : groupRows.filter((r) => r.status === statusFilter);
-      return sortFeedbackRows(filtered, sortFilter);
-    },
-    [statusFilter, sortFilter],
+  const portalRows = useMemo(
+    () => (portalFilter === "all" ? rows : rows.filter((r) => portalForRole(r.reporterRole) === portalFilter)),
+    [rows, portalFilter],
   );
 
-  const groups = useMemo(
+  const visibleRows = useMemo(() => {
+    const filtered = statusFilter === "all" ? portalRows : portalRows.filter((r) => r.status === statusFilter);
+    return sortFeedbackRows(filtered, sortFilter);
+  }, [portalRows, statusFilter, sortFilter]);
+
+  const portalTabs = useMemo(
     () => [
-      { id: "managers" as const, label: "Managers", singular: "manager", rows: prepareGroup(managerRows) },
-      { id: "residents" as const, label: "Residents", singular: "resident", rows: prepareGroup(residentRows) },
-      { id: "vendors" as const, label: "Vendors", singular: "vendor", rows: prepareGroup(vendorRows) },
+      { id: "all" as const, label: "All", count: rows.length, dataAttr: "admin-feedback-portal-all" },
+      {
+        id: "managers" as const,
+        label: "Managers",
+        count: rows.filter((r) => portalForRole(r.reporterRole) === "managers").length,
+        dataAttr: "admin-feedback-portal-managers",
+      },
+      {
+        id: "residents" as const,
+        label: "Residents",
+        count: rows.filter((r) => portalForRole(r.reporterRole) === "residents").length,
+        dataAttr: "admin-feedback-portal-residents",
+      },
+      {
+        id: "vendors" as const,
+        label: "Vendors",
+        count: rows.filter((r) => portalForRole(r.reporterRole) === "vendors").length,
+        dataAttr: "admin-feedback-portal-vendors",
+      },
+      {
+        id: "admin" as const,
+        label: "Admin",
+        count: rows.filter((r) => portalForRole(r.reporterRole) === "admin").length,
+        dataAttr: "admin-feedback-portal-admin",
+      },
     ],
-    [managerRows, residentRows, vendorRows, prepareGroup],
+    [rows],
   );
 
   const statusTabs = useMemo(
     () => [
-      { id: "all" as const, label: "All", count: rows.length, dataAttr: "admin-feedback-status-all" },
+      { id: "all" as const, label: "All", count: portalRows.length, dataAttr: "admin-feedback-status-all" },
       {
         id: "open" as const,
         label: "Open",
-        count: rows.filter((r) => r.status === "open").length,
+        count: portalRows.filter((r) => r.status === "open").length,
         dataAttr: "admin-feedback-status-open",
       },
       {
         id: "in_progress" as const,
         label: "In progress",
-        count: rows.filter((r) => r.status === "in_progress").length,
+        count: portalRows.filter((r) => r.status === "in_progress").length,
         dataAttr: "admin-feedback-status-in-progress",
       },
       {
         id: "completed" as const,
         label: "Completed",
-        count: rows.filter((r) => r.status === "completed").length,
+        count: portalRows.filter((r) => r.status === "completed").length,
         dataAttr: "admin-feedback-status-completed",
       },
     ],
-    [rows],
+    [portalRows],
   );
 
   const hasAnyFeedback = rows.length > 0;
@@ -239,35 +271,47 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
   );
 
   const filterRow = (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ManagerPortalStatusPills
+          tabs={portalTabs}
+          activeId={portalFilter}
+          activeTone="primary"
+          onChange={(id) => {
+            setPortalFilter(id as PortalFilter);
+            setExpandedId(null);
+          }}
+        />
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <span className="shrink-0 font-medium">Sort</span>
+          <Select
+            value={sortFilter}
+            onChange={(e) => setSortFilter(e.target.value as SortFilter)}
+            className="h-9 min-w-[10rem] rounded-full bg-card text-sm"
+            aria-label="Sort feedback"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="status">Status</option>
+          </Select>
+        </label>
+      </div>
       <ManagerPortalStatusPills
         tabs={statusTabs}
         activeId={statusFilter}
+        compact
         onChange={(id) => {
           setStatusFilter(id as StatusFilter);
           setExpandedId(null);
         }}
       />
-      <label className="flex items-center gap-2 text-sm text-muted">
-        <span className="shrink-0 font-medium">Sort</span>
-        <Select
-          value={sortFilter}
-          onChange={(e) => setSortFilter(e.target.value as SortFilter)}
-          className="h-9 min-w-[10rem] rounded-full bg-card text-sm"
-          aria-label="Sort feedback"
-        >
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="status">Status</option>
-        </Select>
-      </label>
     </div>
   );
 
-  const renderGroupTable = (groupRows: PortalBugFeedbackRow[]) => (
+  const renderTable = (tableRows: PortalBugFeedbackRow[]) => (
     <>
       <div className="space-y-2 lg:hidden">
-        {groupRows.map((row) => {
+        {tableRows.map((row) => {
           const open = expandedId === row.id;
           return (
             <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
@@ -308,6 +352,7 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className={PORTAL_DATA_TABLE}>
+            <PortalDataTableColGroup percents={portalTableColumnPercents(4, [16, 30, 36, 18])} />
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>When</th>
@@ -317,7 +362,7 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
               </tr>
             </thead>
             <tbody>
-              {groupRows.map((row) => {
+              {tableRows.map((row) => {
                 const open = expandedId === row.id;
                 return (
                   <Fragment key={row.id}>
@@ -414,28 +459,10 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
 
       {!hasAnyFeedback ? (
         <PortalDataTableEmpty icon="feedback" message="No feedback yet." />
+      ) : visibleRows.length === 0 ? (
+        <PortalDataTableEmpty icon="feedback" message="No feedback matching these filters." />
       ) : (
-        <div className="space-y-8">
-          {groups.map((group) => (
-            <section key={group.id} className="space-y-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-foreground">{group.label}</h2>
-                <span className="rounded-full bg-accent/50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted">
-                  {group.rows.length}
-                </span>
-              </div>
-              {group.rows.length === 0 ? (
-                <p className="text-sm text-muted">
-                  {statusFilter === "all"
-                    ? `No ${group.singular} feedback yet.`
-                    : `No ${group.singular} feedback matching this filter.`}
-                </p>
-              ) : (
-                renderGroupTable(group.rows)
-              )}
-            </section>
-          ))}
-        </div>
+        renderTable(visibleRows)
       )}
     </>
   );
