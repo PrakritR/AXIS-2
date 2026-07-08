@@ -7,6 +7,7 @@ import {
   resolveExpenseTaxDeductible,
   SYSTEM_CHART_ACCOUNTS,
 } from "@/lib/reports/categories";
+import { postGlExpenseEntry } from "@/lib/reports/gl-posting";
 
 export const runtime = "nodejs";
 
@@ -105,6 +106,18 @@ export async function POST(req: Request) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (data?.id) {
+      await postGlExpenseEntry(auth.db, {
+        managerUserId: auth.userId,
+        expenseId: String(data.id),
+        categoryCode,
+        amountCents,
+        entryDate: body.expenseDate.trim(),
+        propertyId: body.propertyId?.trim() || null,
+        vendorId: body.vendorId?.trim() || null,
+        memo: body.memo?.trim() || null,
+      });
+    }
     track("expense_created", auth.userId, {
       category_code: categoryCode,
       tax_deductible: taxDeductible,

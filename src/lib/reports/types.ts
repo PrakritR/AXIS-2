@@ -57,6 +57,10 @@ export const MANAGER_REPORT_IDS = [
   "lease-expiration",
   "vendor-spend",
   "1099-candidates",
+  "trial-balance",
+  "balance-sheet",
+  "general-ledger",
+  "cash-flow-statement",
 ] as const;
 
 export const RESIDENT_REPORT_IDS = ["resident-balance", "resident-ledger"] as const;

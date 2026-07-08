@@ -150,7 +150,14 @@ describe("pro portal documents section", () => {
   it("finances tabs are income and expenses", () => {
     const financials = proPortal.sections.find((s) => s.section === "financials");
     expect(financials?.label).toBe("Finances");
-    expect(financials?.tabs.map((t) => t.id)).toEqual(["income", "expenses"]);
+    expect(financials?.tabs.map((t) => t.id)).toEqual([
+      "income",
+      "expenses",
+      "trial-balance",
+      "balance-sheet",
+      "general-ledger",
+      "cash-flow-statement",
+    ]);
   });
 
   it("services tabs are requests, work orders, and vendors", () => {

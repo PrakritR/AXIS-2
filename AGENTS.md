@@ -455,6 +455,20 @@ stops new deposits from miscategorizing. `queryIncomeStatement` still sums all p
 ledger entries, so a paid deposit shows as a visible "Security Deposits Held" line until
 Phase 3 excludes non-income accounts properly.
 
+# Financials Phase 1: double-entry GL
+
+**Additive layer on top of `ledger_entries` / `manager_expense_entries`** — existing income-statement/delinquency queries are unchanged; Balance Sheet / Trial Balance / General Ledger read the new GL tables.
+
+**Schema** — `supabase/migrations/20260712090000_gl_journal.sql`: `gl_journal_entries` (source_type + source_id idempotency key) + `gl_journal_lines` (account_code, debit_cents, credit_cents). `ledger_entries.gl_journal_entry_id` links cash-event rows to their journal.
+
+**Posting** — `src/lib/reports/gl-posting.ts`: idempotent `postGlChargeEntry` (DR AR / CR income or liability), `postGlPaymentEntry` (DR operating or trust cash / CR AR), `postGlExpenseEntry` (DR expense / CR operating cash). Wired next to `syncLedgerChargeEntry`/`syncLedgerPaymentEntry` in `ledger-sync.ts`, `/api/expenses` POST, and `createExpensesFromWorkOrder`.
+
+**Reports** — `src/lib/reports/queries/gl-reports.ts`: `queryTrialBalance`, `queryBalanceSheet`, `queryGeneralLedger`, `queryCashFlowStatement` (simplified bank-account view). Registered in `MANAGER_REPORT_IDS`, `runManagerReport`, Finances portal tabs, and `run_financial_report` AI tool.
+
+**Historical repair** — `POST /api/admin/backfill-gl` (admin-gated) sweeps existing ledger + expense rows through the posting service once per environment; never on page load.
+
+**Deploy:** `npm run db:push` for `gl_journal_*` tables before GL posting will succeed in dev/staging/production.
+
 # Documents module (Phase 1: document library foundation)
 
 A general-purpose, manager-owned document store distinct from the ephemeral

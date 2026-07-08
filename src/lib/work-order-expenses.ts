@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { isCategoryDeductible, WORK_ORDER_CATEGORY_TO_EXPENSE, type WorkOrderCategory } from "@/lib/reports/categories";
+import { postGlExpenseEntry } from "@/lib/reports/gl-posting";
 
 export type WorkOrderCompleteInput = {
   workOrderId: string;
@@ -43,7 +44,19 @@ export async function createExpensesFromWorkOrder(
       .select("id")
       .single();
     if (error) throw new Error(error.message);
-    if (data?.id) ids.push(String(data.id));
+    if (data?.id) {
+      ids.push(String(data.id));
+      await postGlExpenseEntry(db, {
+        managerUserId,
+        expenseId: String(data.id),
+        categoryCode: laborCategory,
+        amountCents: input.vendorCostCents,
+        entryDate: expenseDate,
+        propertyId: input.propertyId?.trim() || null,
+        vendorId: input.vendorId?.trim() || null,
+        memo: memoBase,
+      });
+    }
   }
 
   if (input.materialsCostCents && input.materialsCostCents > 0) {
@@ -64,7 +77,19 @@ export async function createExpensesFromWorkOrder(
       .select("id")
       .single();
     if (error) throw new Error(error.message);
-    if (data?.id) ids.push(String(data.id));
+    if (data?.id) {
+      ids.push(String(data.id));
+      await postGlExpenseEntry(db, {
+        managerUserId,
+        expenseId: String(data.id),
+        categoryCode: "materials",
+        amountCents: input.materialsCostCents,
+        entryDate: expenseDate,
+        propertyId: input.propertyId?.trim() || null,
+        vendorId: input.vendorId?.trim() || null,
+        memo: input.materialsMemo?.trim() || `${memoBase} — materials`,
+      });
+    }
   }
 
   return ids;

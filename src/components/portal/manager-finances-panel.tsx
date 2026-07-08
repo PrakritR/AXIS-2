@@ -64,6 +64,7 @@ function parseMoneyAmount(raw: unknown): number {
 }
 
 function filterFinanceReport(report: ReportResult, tabId: string, rowFilters: RowFilterState): ReportResult {
+  if (LEDGER_TAB_IDS.has(tabId)) return report;
   let rows = report.rows;
   if (tabId === "income") {
     if (rowFilters.resident) rows = rows.filter((row) => String(row.resident ?? "") === rowFilters.resident);
@@ -351,16 +352,30 @@ function FinancesRowFilters({
 const FINANCE_TABS = [
   { id: "income", label: "Income" },
   { id: "expenses", label: "Expenses" },
+  { id: "trial-balance", label: "Trial balance" },
+  { id: "balance-sheet", label: "Balance sheet" },
+  { id: "general-ledger", label: "General ledger" },
+  { id: "cash-flow-statement", label: "Cash flow" },
 ] as const;
+
+const LEDGER_TAB_IDS = new Set(["trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement"]);
 
 const TAB_TO_REPORT: Record<string, string> = {
   income: "rent-receipts",
   expenses: "expenses",
+  "trial-balance": "trial-balance",
+  "balance-sheet": "balance-sheet",
+  "general-ledger": "general-ledger",
+  "cash-flow-statement": "cash-flow-statement",
 };
 
 const DEFAULT_SORT: Record<string, { key: string; dir: "asc" | "desc" }> = {
   income: { key: "date", dir: "desc" },
   expenses: { key: "date", dir: "desc" },
+  "trial-balance": { key: "account", dir: "asc" },
+  "balance-sheet": { key: "account", dir: "asc" },
+  "general-ledger": { key: "date", dir: "asc" },
+  "cash-flow-statement": { key: "line", dir: "asc" },
 };
 
 function defaultFilters(): ReportFilterState {
@@ -646,11 +661,11 @@ export function ManagerFinancesPanel({
         <PortalSectionPrimaryButton onClick={openAddIncome} data-attr="finances-add-income">
           Add income
         </PortalSectionPrimaryButton>
-      ) : (
+      ) : tabId === "expenses" ? (
         <PortalSectionPrimaryButton onClick={openAddExpense} data-attr="finances-add-expense">
           Add expense
         </PortalSectionPrimaryButton>
-      )}
+      ) : null}
     </div>
   );
 
@@ -677,12 +692,14 @@ export function ManagerFinancesPanel({
           loading={loading}
           showRunButton={false}
           trailing={
-            <FinancesRowFilters
-              tabId={tabId}
-              report={report}
-              rowFilters={rowFilters}
-              onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
-            />
+            LEDGER_TAB_IDS.has(tabId) ? null : (
+              <FinancesRowFilters
+                tabId={tabId}
+                report={report}
+                rowFilters={rowFilters}
+                onChange={(next) => setRowFilters((current) => ({ ...current, ...next }))}
+              />
+            )
           }
         />
 

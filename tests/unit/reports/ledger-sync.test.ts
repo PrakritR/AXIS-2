@@ -57,7 +57,11 @@ describe("reconcileDuplicateHouseholdChargeRecords", () => {
 
 describe("syncLedgerChargeEntry", () => {
   it("throws when ledger insert fails", async () => {
-    const insert = vi.fn().mockResolvedValue({ error: { message: "insert denied" } });
+    const insert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data: null, error: { message: "insert denied" } }),
+      }),
+    });
     const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
     const eq2 = vi.fn().mockReturnValue({ maybeSingle });
     const eq1 = vi.fn().mockReturnValue({ eq: eq2 });

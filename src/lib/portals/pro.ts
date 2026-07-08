@@ -57,6 +57,10 @@ export const proPortal: PortalDefinition = {
       tabs: [
         { id: "income", label: "Income" },
         { id: "expenses", label: "Expenses" },
+        { id: "trial-balance", label: "Trial balance" },
+        { id: "balance-sheet", label: "Balance sheet" },
+        { id: "general-ledger", label: "General ledger" },
+        { id: "cash-flow-statement", label: "Cash flow" },
       ],
     },
     {

@@ -5,6 +5,7 @@ import {
   duplicateHouseholdChargeIds,
 } from "@/lib/household-charges";
 import { categoryCodeForChargeKind } from "@/lib/reports/categories";
+import { postGlChargeEntry, postGlPaymentEntry } from "@/lib/reports/gl-posting";
 import { dollarsToCents } from "@/lib/reports/money";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
@@ -169,7 +170,7 @@ function buildPaymentLedgerRow(
   };
 }
 
-async function upsertLedgerEntryRow(db: SupabaseClient, row: LedgerEntryRow): Promise<void> {
+async function upsertLedgerEntryRow(db: SupabaseClient, row: LedgerEntryRow): Promise<string | null> {
   const { data: existing } = await db
     .from("ledger_entries")
     .select("id")
@@ -180,9 +181,37 @@ async function upsertLedgerEntryRow(db: SupabaseClient, row: LedgerEntryRow): Pr
   if (existing?.id) {
     const { error } = await db.from("ledger_entries").update(row).eq("id", existing.id);
     throwIfLedgerError(error);
+    return String(existing.id);
+  }
+
+  const { data, error } = await db.from("ledger_entries").insert(row).select("id").single();
+  throwIfLedgerError(error);
+  return data?.id ? String(data.id) : null;
+}
+
+async function mirrorGlForLedgerRow(
+  db: SupabaseClient,
+  row: LedgerEntryRow,
+  ledgerEntryId: string | null,
+): Promise<void> {
+  if (!row.manager_user_id || !row.source_charge_id || row.amount_cents <= 0) return;
+
+  const glBase = {
+    managerUserId: row.manager_user_id,
+    sourceChargeId: row.source_charge_id,
+    categoryCode: row.category_code,
+    amountCents: row.amount_cents,
+    entryDate: row.posted_date ?? new Date().toISOString().slice(0, 10),
+    propertyId: row.property_id,
+    residentUserId: row.resident_user_id,
+    description: row.description,
+    linkLedgerEntryId: ledgerEntryId,
+  };
+
+  if (row.entry_type === "payment") {
+    await postGlPaymentEntry(db, glBase);
   } else {
-    const { error } = await db.from("ledger_entries").insert(row);
-    throwIfLedgerError(error);
+    await postGlChargeEntry(db, glBase);
   }
 }
 
@@ -191,7 +220,10 @@ export async function syncLedgerChargeEntry(
   charge: HouseholdCharge,
 ): Promise<void> {
   const row = buildChargeLedgerRow(charge);
-  if (row) await upsertLedgerEntryRow(db, row);
+  if (row) {
+    const ledgerEntryId = await upsertLedgerEntryRow(db, row);
+    await mirrorGlForLedgerRow(db, row, ledgerEntryId);
+  }
 
   if (charge.status === "paid") {
     await syncLedgerPaymentEntry(db, charge, charge.paidAt);
@@ -205,7 +237,10 @@ export async function syncLedgerPaymentEntry(
   stripeCheckoutSessionId?: string | null,
 ): Promise<void> {
   const row = buildPaymentLedgerRow(charge, paidAt, stripeCheckoutSessionId);
-  if (row) await upsertLedgerEntryRow(db, row);
+  if (row) {
+    const ledgerEntryId = await upsertLedgerEntryRow(db, row);
+    await mirrorGlForLedgerRow(db, row, ledgerEntryId);
+  }
 }
 
 /**

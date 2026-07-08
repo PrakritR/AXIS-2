@@ -14,6 +14,12 @@ import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
 import { resolveDocumentScope } from "@/lib/reports/parse-filters";
 import type { DocumentScope, ManagerReportFilters, ReportResult } from "@/lib/reports/types";
 import { parseMoneyAmount } from "@/lib/parse-money";
+import {
+  queryBalanceSheet,
+  queryCashFlowStatement,
+  queryGeneralLedger,
+  queryTrialBalance,
+} from "@/lib/reports/queries/gl-reports";
 
 function defaultDateRange(from?: string, to?: string): { from: string; to: string } {
   const now = new Date();
@@ -997,6 +1003,14 @@ export async function runManagerReport(
       return queryVendorSpend(db, managerUserId, filters);
     case "1099-candidates":
       return query1099Candidates(db, managerUserId, filters);
+    case "trial-balance":
+      return queryTrialBalance(db, managerUserId, filters);
+    case "balance-sheet":
+      return queryBalanceSheet(db, managerUserId, filters);
+    case "general-ledger":
+      return queryGeneralLedger(db, managerUserId, filters);
+    case "cash-flow-statement":
+      return queryCashFlowStatement(db, managerUserId, filters);
     default:
       return null;
   }
