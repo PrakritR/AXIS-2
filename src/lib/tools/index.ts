@@ -14,6 +14,11 @@ import { listPropertiesTool } from "./domains/properties";
 import { listInboxThreadsTool } from "./domains/inbox";
 import { listCalendarEventsTool, listScheduledMessagesTool } from "./domains/calendar";
 import { listServiceRequestsTool } from "./domains/services";
+import {
+  listVendorInvoicesTool,
+  listVendorPayoutsTool,
+  submitVendorInvoiceTool,
+} from "./domains/vendor-financials";
 
 export const agentRegistry = buildRegistry([
   getOverdueChargesTool,
@@ -30,6 +35,18 @@ export const agentRegistry = buildRegistry([
   listCalendarEventsTool,
   listScheduledMessagesTool,
   listServiceRequestsTool,
+]);
+
+/**
+ * Vendor-scoped registry, kept separate from the manager `agentRegistry` so the
+ * manager agent never inherits vendor-scoped tools (and vice-versa). It is
+ * consumed by the vendor agent surface; every tool here scopes to
+ * `vendor_user_id = ctx.userId`. No W-9 / TIN-bearing tool appears in either map.
+ */
+export const vendorAgentRegistry = buildRegistry([
+  listVendorInvoicesTool,
+  submitVendorInvoiceTool,
+  listVendorPayoutsTool,
 ]);
 
 export { resolveAgentContext, type AgentContext } from "./context";

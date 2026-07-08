@@ -22,9 +22,15 @@ export type ReportsAuthContext =
       userId: string;
       email: string;
       db: ReturnType<typeof createSupabaseServiceRoleClient>;
+    }
+  | {
+      role: "vendor";
+      userId: string;
+      email: string;
+      db: ReturnType<typeof createSupabaseServiceRoleClient>;
     };
 
-export type ReportsPreferRole = "manager" | "resident";
+export type ReportsPreferRole = "manager" | "resident" | "vendor";
 
 function hasManagerRole(roles: string[]): boolean {
   return roles.some((r) => r === "manager" || r === "owner" || r === "pro");
@@ -32,6 +38,10 @@ function hasManagerRole(roles: string[]): boolean {
 
 function hasResidentRole(roles: string[]): boolean {
   return roles.includes("resident");
+}
+
+function hasVendorRole(roles: string[]): boolean {
+  return roles.includes("vendor");
 }
 
 export async function getReportsAuthContext(options?: {
@@ -67,9 +77,17 @@ export async function getReportsAuthContext(options?: {
   if (preferRole === "manager" && hasManagerRole(allRoles)) {
     return { role: "manager", userId: user.id, email, db };
   }
+  if (preferRole === "vendor" && hasVendorRole(allRoles)) {
+    return { role: "vendor", userId: user.id, email, db };
+  }
 
   if (hasManagerRole(allRoles)) {
     return { role: "manager", userId: user.id, email, db };
+  }
+  // A vendor with no manager/resident role resolves to the vendor context so
+  // vendor-scoped financial reads work; a dual-role user still prefers manager.
+  if (hasVendorRole(allRoles) && !hasResidentRole(allRoles)) {
+    return { role: "vendor", userId: user.id, email, db };
   }
   return { role: "resident", userId: user.id, email, db };
 }
@@ -89,6 +107,22 @@ export async function assertManagerFinancialsAccess(ctx: ReportsAuthContext): Pr
 export async function assertResidentFinancialsAccess(ctx: ReportsAuthContext): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   if (ctx.role === "admin") return { ok: true };
   if (ctx.role !== "resident") {
+    return { ok: false, status: 403, error: "Forbidden." };
+  }
+  return { ok: true };
+}
+
+/**
+ * Gate for vendor-scoped financial reads (invoices, payouts). A vendor only ever
+ * sees their own rows: every vendor report query filters by
+ * `vendor_user_id = ctx.userId`, and `ctx.userId` is the authenticated user id —
+ * never model- or client-supplied — so cross-vendor access is structurally
+ * impossible. This role-gate rejects any non-vendor caller (a manager/resident
+ * cannot reach vendor invoice/payout reports); admins pass for support access.
+ */
+export async function assertVendorFinancialsAccess(ctx: ReportsAuthContext): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  if (ctx.role === "admin") return { ok: true };
+  if (ctx.role !== "vendor") {
     return { ok: false, status: 403, error: "Forbidden." };
   }
   return { ok: true };

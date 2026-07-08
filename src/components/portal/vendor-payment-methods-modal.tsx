@@ -206,6 +206,7 @@ export function VendorPaymentMethodsModal({
                 returnPath="/vendor/payments"
                 dataAttrPrefix="vendor-stripe-connect"
                 variant="embedded"
+                analyticsScope="vendor"
               />
             </div>
           ) : null}
