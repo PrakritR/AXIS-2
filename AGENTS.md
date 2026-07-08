@@ -449,3 +449,61 @@ liability sub-ledger, GL posting, and historical reclassification are Phase 3
 stops new deposits from miscategorizing. `queryIncomeStatement` still sums all payment
 ledger entries, so a paid deposit shows as a visible "Security Deposits Held" line until
 Phase 3 excludes non-income accounts properly.
+
+# Documents module (Phase 1: document library foundation)
+
+A general-purpose, manager-owned document store distinct from the ephemeral
+generated tax/financial PDFs. Only the manager-level Library ships this phase;
+resident/vendor sharing, auto-filing, templates, e-signature, and
+compliance/expiration reminders are later phases (`docs`/scope prompt Part 2 §3-7).
+
+**Data model** — `public.manager_documents`
+(`supabase/migrations/20260711120000_manager_documents.sql`): file metadata
+(`display_name`, `original_filename`, `mime_type`, `size_bytes`, `checksum`,
+unique `storage_path`), `category` check-constrained to
+`lease|insurance|tax|notice|invoice|inspection|photo|other`, and **polymorphic
+scope** columns matching the loosely-typed identifier convention used across
+`ledger_entries`/`manager_expense_entries` — nullable `property_id text`,
+`unit_label text`, `lease_id text`, `resident_user_id uuid`, `resident_email
+text`, `vendor_id text`, `work_order_id text` (a row with none set is
+manager-level; these are app-level ids, NOT DB FKs — there is no `units`
+table). Forward-provisioned columns whose UI lands later: `visibility`
+(`manager|resident|vendor`, only `manager` used now — Phase 2), `expires_at`
+(Phase 3 compliance), `superseded_by_document_id` self-ref (versioning),
+`uploaded_by`, `deleted_at` (soft delete). RLS is the
+`manager_expense_entries_owner` pattern: one `manager_documents_owner` policy
+`for all using (manager_user_id = auth.uid())` — no resident/vendor policies yet.
+
+**Storage** — PRIVATE bucket `manager-documents` (25 MB limit, MIME allowlist:
+pdf, jpeg/png/webp/gif/heic, docx/xlsx/doc/xls). Paths are namespaced
+`manager/<manager_user_id>/...`. **Never public**: this is the first
+`createSignedUrl` use in the codebase (all prior storage is public
+`getPublicUrl`). Bytes are reachable only via a server-minted short-lived
+signed URL AFTER an ownership check. A defense-in-depth
+`manager_documents_owner_objects` storage.objects policy scopes by
+`(storage.foldername(name))[2] = auth.uid()::text`, but real access is
+service-role.
+
+**API** (`src/app/api/manager-documents/`) — every route gates on
+`getReportsAuthContext({ preferRole: "manager" })` + `assertManagerFinancialsAccess`
+(already tier-gates the `"documents"` section) and scopes every query by
+`manager_user_id = auth.userId`; `manager_user_id`/`uploaded_by` come from the
+authenticated context, never the request body. `route.ts` = GET (list/filter by
+category/scope/property/search, excludes soft-deleted) + POST (multipart upload,
+validates MIME+size, sha256 checksum, rolls back the storage object if the row
+insert fails). `[id]/route.ts` = PATCH rename/recategorize + DELETE soft-delete.
+`[id]/signed-url/route.ts` = GET signed URL (`?download=1` for a download
+disposition). Shared types/constants/mappers live in
+`src/lib/documents/manager-documents.ts`.
+
+**UI** — new **Library** tab (the first tab, also the section's default landing)
+on the manager Documents page: `ManagerDocumentLibrary`
+(`src/components/portal/manager-document-library.tsx`), rendered by
+`manager-documents-panel.tsx`. Adding/removing a Documents tab id still requires
+editing THREE in-sync lists: `DOCUMENT_TABS` (panel), the `documents` section
+`tabs` in `src/lib/portals/pro.ts`, and `DOCUMENTS_TABS` in
+`src/lib/render-portal-section.tsx` (+ the default-redirect target there). Upload
+uses a hidden `<input type="file">` (drag-drop on web, native picker in the
+Capacitor WebView) — no new bucket/camera plumbing needed. Preview is a signed-URL
+`<iframe>` (pdf) / `<img>` (image) in the shared `Modal`; non-inline types fall
+back to Download.
