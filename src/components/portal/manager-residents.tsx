@@ -30,6 +30,7 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PortalTableDetailActions,
+  PortalTableInlineExpand,
   PortalTableExpandCell,
   PortalTableExpandChevron,
   createPortalRowExpandClick,
@@ -2682,12 +2683,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
               aria-expanded={selectedId === res.id}
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-foreground">{res.name || "—"}</p>
+                <PortalTableInlineExpand expanded={selectedId === res.id} className="truncate font-semibold text-foreground">
+                  {res.name || "—"}
+                </PortalTableInlineExpand>
                 {housingLabel ? (
                   <p className="mt-0.5 truncate text-xs text-muted">{housingLabel}</p>
                 ) : null}
               </div>
-              <PortalTableExpandChevron expanded={selectedId === res.id} />
             </button>
             {selectedId === res.id && selected ? (
               <div className="mt-3 border-t border-border pt-3">{residentDetailPanel}</div>
@@ -2707,9 +2709,6 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-in</th>
                   <th className={`${MANAGER_TABLE_TH} text-left`}>Move-out</th>
-                  <th className={PORTAL_TABLE_EXPAND_TH}>
-                    <span className="sr-only">Expand</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -2723,18 +2722,19 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                       aria-expanded={selectedId === res.id}
                     >
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        {res.name || "—"}
+                        <PortalTableInlineExpand expanded={selectedId === res.id}>
+                          {res.name || "—"}
+                        </PortalTableInlineExpand>
                       </td>
                       <td className={PORTAL_TABLE_TD}>{res.email}</td>
                       <td className={PORTAL_TABLE_TD}>{res.propertyLabel || "—"}</td>
                       <td className={PORTAL_TABLE_TD}>{res.roomLabel || "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseStart ? shortDateLabel(res.leaseStart) : "—"}</td>
                       <td className={`${PORTAL_TABLE_TD} tabular-nums`}>{res.leaseEnd ? shortDateLabel(res.leaseEnd) : "—"}</td>
-                      <PortalTableExpandCell expanded={selectedId === res.id} />
                     </tr>
                     {selectedId === res.id && selected ? (
                       <tr>
-                        <td colSpan={7} className="bg-accent/30 px-4 py-5">
+                        <td colSpan={6} className="bg-accent/30 px-4 py-5">
                           {residentDetailPanel}
                         </td>
                       </tr>

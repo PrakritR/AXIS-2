@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import { getAdminPreviewFromCookies, isAdminUser } from "@/lib/auth/admin-preview";
+import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
+import { getPortalAccessContext } from "@/lib/auth/portal-access";
+import { requireVendorApiAccess } from "@/lib/auth/vendor-api-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { VendorAvailabilityRule } from "@/lib/vendor-availability";
@@ -37,7 +41,7 @@ function toJson(rule: RuleRecord): VendorAvailabilityRule {
   };
 }
 
-async function sessionActor(db: Db) {
+async function sessionManagerActor(db: Db) {
   const auth = await createSupabaseServerClient();
   const {
     data: { user },
@@ -46,6 +50,27 @@ async function sessionActor(db: Db) {
   const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
   const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
   return { userId: user.id, role };
+}
+
+/** Resolve the vendor auth user whose availability is being read or written. */
+async function resolveVendorSelfUserId(): Promise<{ userId: string } | { status: 401 | 403 }> {
+  const access = await requireVendorApiAccess();
+  if (access.ok) {
+    const effectiveId = await getEffectiveUserIdForPortal("vendor");
+    return { userId: effectiveId ?? access.actor.userId };
+  }
+
+  const ctx = await getPortalAccessContext();
+  if (!ctx.user) return { status: 401 };
+  if (await isAdminUser(ctx.user.id)) {
+    const preview = await getAdminPreviewFromCookies();
+    const effectiveId = await getEffectiveUserIdForPortal("vendor");
+    if (preview?.portal === "vendor" && effectiveId) {
+      return { userId: effectiveId };
+    }
+  }
+
+  return { status: access.status };
 }
 
 /** Manager -> the vendor_user_id of a directory row they own, or null if unresolvable/unlinked. */
@@ -62,24 +87,25 @@ async function resolveManagerOwnedVendorUserId(db: Db, managerUserId: string, ve
 export async function GET(req: Request) {
   try {
     const db = createSupabaseServiceRoleClient();
-    const actor = await sessionActor(db);
-    if (!actor) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-
     const url = new URL(req.url);
     const vendorId = url.searchParams.get("vendorId")?.trim();
     const wantsPreferences = url.searchParams.get("preferences") === "1";
 
     let vendorUserId: string | null;
     if (vendorId) {
-      // A manager reading a specific vendor's availability — must own that vendor relationship.
+      const actor = await sessionManagerActor(db);
+      if (!actor) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
       if (actor.role !== "manager" && actor.role !== "pro") {
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
       vendorUserId = await resolveManagerOwnedVendorUserId(db, actor.userId, vendorId);
       if (!vendorUserId) return NextResponse.json(wantsPreferences ? { preferences: { timingRank: normalizeFlexibleTimingRank(null) } } : { rules: [] });
     } else {
-      if (actor.role !== "vendor") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-      vendorUserId = actor.userId;
+      const resolved = await resolveVendorSelfUserId();
+      if ("status" in resolved) {
+        return NextResponse.json({ error: resolved.status === 401 ? "Unauthorized." : "Forbidden." }, { status: resolved.status });
+      }
+      vendorUserId = resolved.userId;
     }
 
     if (wantsPreferences) {
@@ -114,9 +140,11 @@ function validMinuteRange(startMinute: unknown, endMinute: unknown): { start: nu
 export async function POST(req: Request) {
   try {
     const db = createSupabaseServiceRoleClient();
-    const actor = await sessionActor(db);
-    if (!actor) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    if (actor.role !== "vendor") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    const resolved = await resolveVendorSelfUserId();
+    if ("status" in resolved) {
+      return NextResponse.json({ error: resolved.status === 401 ? "Unauthorized." : "Forbidden." }, { status: resolved.status });
+    }
+    const vendorUserId = resolved.userId;
 
     const body = (await req.json().catch(() => ({}))) as {
       action?: "upsert-weekly" | "upsert-block" | "upsert-open" | "upsert-event" | "delete" | "save-preferences";
@@ -130,7 +158,7 @@ export async function POST(req: Request) {
     };
 
     if (body.action === "save-preferences") {
-      await writeVendorFlexiblePreferencesForServer(db, actor.userId, {
+      await writeVendorFlexiblePreferencesForServer(db, vendorUserId, {
         timingRank: normalizeFlexibleTimingRank(body.timingRank),
       });
       return NextResponse.json({ ok: true });
@@ -139,7 +167,7 @@ export async function POST(req: Request) {
     if (body.action === "delete") {
       const id = body.id?.trim();
       if (!id) return NextResponse.json({ error: "Rule id required." }, { status: 400 });
-      const { error } = await db.from("vendor_availability_rules").delete().eq("id", id).eq("vendor_user_id", actor.userId);
+      const { error } = await db.from("vendor_availability_rules").delete().eq("id", id).eq("vendor_user_id", vendorUserId);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });
     }
@@ -154,7 +182,7 @@ export async function POST(req: Request) {
 
       const now = new Date().toISOString();
       const row = {
-        vendor_user_id: actor.userId,
+        vendor_user_id: vendorUserId,
         kind: "weekly" as const,
         weekday,
         specific_date: null,
@@ -164,7 +192,7 @@ export async function POST(req: Request) {
         updated_at: now,
       };
       const query = body.id
-        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", actor.userId)
+        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", vendorUserId)
         : db.from("vendor_availability_rules").insert(row);
       const { data, error } = await query
         .select("id, vendor_user_id, kind, weekday, specific_date, start_minute, end_minute, note")
@@ -183,7 +211,7 @@ export async function POST(req: Request) {
 
       const now = new Date().toISOString();
       const row = {
-        vendor_user_id: actor.userId,
+        vendor_user_id: vendorUserId,
         kind: "block" as const,
         weekday: null,
         specific_date: specificDate,
@@ -193,7 +221,7 @@ export async function POST(req: Request) {
         updated_at: now,
       };
       const query = body.id
-        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", actor.userId)
+        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", vendorUserId)
         : db.from("vendor_availability_rules").insert(row);
       const { data, error } = await query
         .select("id, vendor_user_id, kind, weekday, specific_date, start_minute, end_minute, note")
@@ -212,7 +240,7 @@ export async function POST(req: Request) {
 
       const now = new Date().toISOString();
       const row = {
-        vendor_user_id: actor.userId,
+        vendor_user_id: vendorUserId,
         kind: "open" as const,
         weekday: null,
         specific_date: specificDate,
@@ -222,7 +250,7 @@ export async function POST(req: Request) {
         updated_at: now,
       };
       const query = body.id
-        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", actor.userId)
+        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", vendorUserId)
         : db.from("vendor_availability_rules").insert(row);
       const { data, error } = await query
         .select("id, vendor_user_id, kind, weekday, specific_date, start_minute, end_minute, note")
@@ -243,7 +271,7 @@ export async function POST(req: Request) {
 
       const now = new Date().toISOString();
       const row = {
-        vendor_user_id: actor.userId,
+        vendor_user_id: vendorUserId,
         kind: "event" as const,
         weekday: null,
         specific_date: specificDate,
@@ -253,7 +281,7 @@ export async function POST(req: Request) {
         updated_at: now,
       };
       const query = body.id
-        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", actor.userId)
+        ? db.from("vendor_availability_rules").update(row).eq("id", body.id).eq("vendor_user_id", vendorUserId)
         : db.from("vendor_availability_rules").insert(row);
       const { data, error } = await query
         .select("id, vendor_user_id, kind, weekday, specific_date, start_minute, end_minute, note")

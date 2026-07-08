@@ -16,4 +16,13 @@ describe("portalSwitchTargets", () => {
     const targets = portalSwitchTargets("pro", ["manager", "resident"]);
     expect(targets).toEqual([{ role: "resident", label: "Switch to Resident portal" }]);
   });
+
+  it("offers vendor portal from resident when user is also a vendor", () => {
+    const targets = portalSwitchTargets("resident", ["resident", "manager", "admin", "vendor"]);
+    expect(targets).toEqual([
+      { role: "manager", label: "Switch to Property portal" },
+      { role: "admin", label: "Switch to Admin portal" },
+      { role: "vendor", label: "Switch to Vendor portal" },
+    ]);
+  });
 });

@@ -24,6 +24,9 @@
  * Reference implementation for column names / row shapes:
  * scripts/seed-demo-manager-workflow.mjs
  */
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import {
   assertTestProjectUrl,
@@ -51,6 +54,10 @@ const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID ?? "AXIS-TESTRSID";
 const vendorEmail = (process.env.E2E_VENDOR_EMAIL ?? "vendor@test.axis.local").toLowerCase();
 const vendorPassword = process.env.E2E_VENDOR_PASSWORD ?? "TestVendor123!";
 const PRIMARY_RESIDENT_NAME = "Alex Rivera";
+const CANONICAL_DEMO_MANAGER_NAME = "Demo Manager";
+const CANONICAL_DEMO_VENDOR_NAME = "Cascade Mechanical";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
@@ -88,7 +95,12 @@ const NOW = new Date();
 const isoDate = (d) => d.toISOString().slice(0, 10);
 const daysFromNow = (n) => new Date(NOW.getTime() + n * 86400000);
 
-async function ensureUser(email, password, role, { managerId = null, metadata = {}, onlyRole = false } = {}) {
+async function ensureUser(
+  email,
+  password,
+  role,
+  { managerId = null, metadata = {}, onlyRole = false, fullName = null } = {},
+) {
   const { data: created, error: createErr } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -121,7 +133,7 @@ async function ensureUser(email, password, role, { managerId = null, metadata = 
         email,
         role,
         ...(managerId ? { manager_id: managerId } : {}),
-        full_name: email.split("@")[0],
+        full_name: fullName ?? email.split("@")[0],
       },
       { onConflict: "id" },
     ),
@@ -163,7 +175,11 @@ try {
       .maybeSingle();
     if (managerProfile?.manager_id?.trim()) managerId = managerProfile.manager_id.trim();
   }
-  const managerUserId = await ensureUser(managerEmail, managerPassword, "manager", { managerId, onlyRole: true });
+  const managerUserId = await ensureUser(managerEmail, managerPassword, "manager", {
+    managerId,
+    onlyRole: true,
+    fullName: CANONICAL_DEMO_MANAGER_NAME,
+  });
 
   // Paid-tier purchase (FREE100 waiver = authorized paid access without Stripe; see
   // manager-tier-sync.ts) so tier-gated manager tabs (Financials/Documents/Services/
@@ -199,571 +215,7 @@ try {
   // screening (src/lib/screening/charge-manager.ts) — succeed in test mode.
   await ensureManagerStripeCustomer(stripe, supabase, { email: managerEmail, userId: managerUserId });
 
-  // Stable id + upsert so repeated e2e runs reuse ONE well-formed record for the
-  // shared demo manager instead of accumulating raw-id "Seed Property <ts>" rows.
-  // property_data is a full MockProperty INCLUDING a listingSubmission (v:1) — the
-  // lease generator (generated-lease.ts / build-lease-html.ts) reads rooms, fees,
-  // shared spaces, house rules, and lease terms from it; without it generated
-  // leases render "—" and "[ROOM NUMBER]" placeholders. Address stays in San
-  // Francisco — a supported lease jurisdiction (lease-jurisdiction.ts).
-  const propertyId = "mgr-test-e2e";
-  const propertyName = "SoMa Loft House";
-  const propertyAddress = "847 Brannan St, San Francisco, CA 94103";
-  const monthlyRent = 2500;
-  const listingSubmission = {
-    v: 1,
-    buildingName: propertyName,
-    address: propertyAddress,
-    zip: "94103",
-    neighborhood: "SoMa",
-    homeStructureNote: "3-story townhouse",
-    listingPlaceCategoryId: "private_room",
-    tagline: "Bright shared townhouse near downtown transit.",
-    petFriendly: true,
-    houseOverview:
-      "A bright, fully furnished 3-room shared townhouse in SoMa with a modern kitchen, fast Wi-Fi, in-unit laundry, and a shared rooftop deck. Two blocks from Muni and Caltrain.",
-    houseRulesText:
-      "Quiet hours 10pm–8am. No smoking anywhere on the premises. Overnight guests limited to 3 nights per week. Clean shared spaces after use.",
-    housePhotoDataUrls: [],
-    allowedLeaseTerms: ["12 months"],
-    leaseTermsBody: "Available lease lengths: 12 months.",
-    applicationFee: "$50",
-    securityDeposit: "$2,500",
-    moveInFee: "$250",
-    paymentAtSigningIncludes: ["security_deposit", "move_in_fee"],
-    houseCostsDetail: "",
-    parkingMonthly: "",
-    hoaMonthly: "",
-    otherMonthlyFees: "",
-    sharedSpaces: [
-      {
-        id: "shared-kitchen",
-        name: "Kitchen",
-        location: "Main floor",
-        detail: "Full kitchen with dishwasher, shared by all residents.",
-        amenitiesText: "Refrigerator\nDishwasher\nGas range",
-        photoDataUrls: [],
-        videoDataUrl: null,
-        roomAccessIds: ["room-1", "room-2", "room-3"],
-      },
-      {
-        id: "shared-living",
-        name: "Living room",
-        location: "Main floor",
-        detail: "Furnished living room with smart TV.",
-        amenitiesText: "Sofa\nSmart TV",
-        photoDataUrls: [],
-        videoDataUrl: null,
-        roomAccessIds: ["room-1", "room-2", "room-3"],
-      },
-    ],
-    amenitiesText: "In-unit laundry\nFast Wi-Fi\nFurnished rooms\nRooftop deck",
-    rooms: [
-      {
-        id: "room-1",
-        name: "Room 1",
-        floor: "2nd floor",
-        monthlyRent,
-        availability: "Now",
-        moveInAvailableDate: isoDate(NOW),
-        moveInInstructions: "Lockbox at front door; code shared after signing.",
-        manualUnavailableRanges: [],
-        detail: "Queen bed, desk, and closet; south-facing window.",
-        furnishing: "Fully furnished",
-        roomAmenitiesText: "South-facing window\nCloset\nHeating",
-        photoDataUrls: [],
-        videoDataUrl: null,
-        utilitiesEstimate: "$150",
-        prorateMethod: "auto",
-      },
-      {
-        id: "room-2",
-        name: "Room 2",
-        floor: "2nd floor",
-        monthlyRent: 2400,
-        availability: "Now",
-        moveInAvailableDate: isoDate(NOW),
-        moveInInstructions: "Lockbox at front door; code shared after signing.",
-        manualUnavailableRanges: [],
-        detail: "Full bed and desk; faces the courtyard.",
-        furnishing: "Fully furnished",
-        roomAmenitiesText: "Courtyard view\nCloset",
-        photoDataUrls: [],
-        videoDataUrl: null,
-        utilitiesEstimate: "$150",
-        prorateMethod: "auto",
-      },
-      {
-        id: "room-3",
-        name: "Room 3",
-        floor: "3rd floor",
-        monthlyRent: 2300,
-        availability: "Now",
-        moveInAvailableDate: isoDate(NOW),
-        moveInInstructions: "Lockbox at front door; code shared after signing.",
-        manualUnavailableRanges: [],
-        detail: "Cozy top-floor room with skylight.",
-        furnishing: "Fully furnished",
-        roomAmenitiesText: "Skylight\nCloset",
-        photoDataUrls: [],
-        videoDataUrl: null,
-        utilitiesEstimate: "$150",
-        prorateMethod: "auto",
-      },
-    ],
-    bathrooms: [
-      {
-        id: "bath-hall",
-        name: "Hall bath",
-        location: "2nd floor",
-        amenitiesText: "Shower\nToilet\nBathtub",
-        photoDataUrls: [],
-        videoDataUrl: null,
-        shower: true,
-        toilet: true,
-        bathtub: true,
-        assignedRoomIds: ["room-1", "room-2"],
-        accessKindByRoomId: { "room-1": "shared", "room-2": "shared" },
-      },
-      {
-        id: "bath-upper",
-        name: "Upper bath",
-        location: "3rd floor",
-        amenitiesText: "Shower\nToilet",
-        photoDataUrls: [],
-        videoDataUrl: null,
-        shower: true,
-        toilet: true,
-        bathtub: false,
-        assignedRoomIds: ["room-3"],
-        accessKindByRoomId: { "room-3": "ensuite" },
-      },
-    ],
-    bundles: [
-      {
-        id: "mgr-test-e2e-bundle-multi",
-        label: "Two or more rooms",
-        price: "$4,700/mo",
-        strikethrough: "",
-        promo: "Combine any two or more bedrooms on one lease.",
-        roomsLine: "Example: Room 3 + Room 2",
-        includedRoomIds: ["room-3", "room-2"],
-      },
-    ],
-    quickFacts: [],
-  };
-
-  await must(
-    supabase.from("manager_property_records").upsert(
-      {
-        id: propertyId,
-        manager_user_id: managerUserId,
-        status: "live",
-        property_data: {
-          id: propertyId,
-          title: propertyName,
-          tagline: listingSubmission.tagline,
-          address: propertyAddress,
-          zip: "94103",
-          neighborhood: "SoMa",
-          beds: 3,
-          baths: 2,
-          rentLabel: "$2,300–$2,500 / mo",
-          available: "Now",
-          petFriendly: true,
-          buildingId: `${propertyId}-bld`,
-          buildingName: propertyName,
-          unitLabel: "3 rooms",
-          managerUserId,
-          adminPublishLive: true,
-          listingSubmission,
-        },
-        row_data: {
-          id: propertyId,
-          status: "live",
-          name: propertyName,
-          buildingName: propertyName,
-          address: propertyAddress,
-          testRunId,
-        },
-      },
-      { onConflict: "id" },
-    ),
-    "manager_property_records",
-  );
-
-  // ── Resident account ──────────────────────────────────────────────────────
-  const residentUserId = await ensureUser(residentEmail, residentPassword, "resident", {
-    onlyRole: true,
-    metadata: { axis_id: residentAxisId },
-  });
-
-  // Approved application linking resident to manager (idempotent: stable id +
-  // upsert). The record id is the resident's axis id — the app treats them as the
-  // same value. Includes a full nested `application` (RentalWizardFormState) so
-  // generated leases carry real names, income, references, dates, and fees.
-  const roomChoice = `${propertyId}::room-1`; // "<propertyId>::<listingRoomId>" (parseRoomChoiceValue)
-  const leaseStart = isoDate(daysFromNow(10));
-  const leaseEnd = isoDate(daysFromNow(375));
-  const application = {
-    fullLegalName: PRIMARY_RESIDENT_NAME,
-    email: residentEmail,
-    phone: "(415) 555-0134",
-    dateOfBirth: "1996-04-18",
-    ssn: "000-00-0000",
-    driversLicense: "CA-DL-7738201",
-    employer: "Bay Area Tech Co.",
-    jobTitle: "Software Engineer",
-    employerAddress: "500 Howard St, San Francisco, CA",
-    employmentStart: "2022-02-01",
-    supervisorName: "Dana Wells",
-    supervisorPhone: "(415) 555-0133",
-    monthlyIncome: "9500",
-    annualIncome: "114000",
-    notEmployed: false,
-    otherIncome: "",
-    occupancyCount: "1",
-    pets: "None",
-    currentStreet: "88 Maple Court",
-    currentCity: "San Francisco",
-    currentState: "CA",
-    currentZip: "94110",
-    currentMoveIn: "2023-06-01",
-    currentMoveOut: "",
-    currentLandlordName: "Mission Property Mgmt",
-    currentLandlordPhone: "(415) 555-0190",
-    currentReasonLeaving: "Relocating closer to work",
-    noPreviousAddress: false,
-    prevStreet: "4102 Oak Glen Dr",
-    prevCity: "Oakland",
-    prevState: "CA",
-    prevZip: "94601",
-    prevMoveIn: "2021-01-15",
-    prevMoveOut: "2023-05-30",
-    prevLandlordName: "Sunset Property Mgmt",
-    prevLandlordPhone: "(510) 555-0177",
-    prevReasonLeaving: "Lease ended",
-    ref1Name: "Priya Nair",
-    ref1Phone: "(415) 555-0166",
-    ref1Relationship: "Former colleague",
-    ref2Name: "Marcus Lee",
-    ref2Phone: "(415) 555-0188",
-    ref2Relationship: "Friend",
-    criminalHistory: "no",
-    criminalDetails: "",
-    evictionHistory: "no",
-    evictionDetails: "",
-    bankruptcyHistory: "no",
-    bankruptcyDetails: "",
-    hasCosigner: "no",
-    applyingAsGroup: "no",
-    groupId: "",
-    groupRole: null,
-    groupSize: "",
-    propertyId,
-    rentalType: "standard",
-    leaseTerm: "12 months",
-    leaseStart,
-    leaseEnd,
-    roomChoice1: roomChoice,
-    roomChoice2: "",
-    roomChoice3: "",
-    shortTermCheckInTime: "",
-    shortTermCheckOutTime: "",
-    managerRentOverride: String(monthlyRent),
-    managerUtilitiesOverride: "150",
-    managerSecurityDepositOverride: String(monthlyRent),
-    managerMoveInFeeOverride: "250",
-    managerOtherCostLabel: "",
-    managerOtherCostAmount: "",
-    __signedRentLabel: `$${monthlyRent.toFixed(2)} / month`,
-    consentTruth: true,
-    consentCredit: true,
-    dateSigned: isoDate(daysFromNow(-2)),
-    digitalSignature: PRIMARY_RESIDENT_NAME,
-    applicationFeePayChannel: "stripe",
-    applicationFeeAcknowledged: true,
-    applicationFeeZelleSentConfirmed: false,
-  };
-
-  // Remove the legacy record (pre-axis-id primary key) so the resident has ONE application.
-  await must(supabase.from("manager_application_records").delete().eq("id", "test-app-e2e"), "delete legacy application");
-
-  await must(
-    supabase.from("manager_application_records").upsert(
-      {
-        id: residentAxisId,
-        manager_user_id: managerUserId,
-        resident_email: residentEmail,
-        property_id: propertyId,
-        assigned_property_id: propertyId,
-        row_data: {
-          id: residentAxisId,
-          axisId: residentAxisId,
-          bucket: "approved",
-          stage: "Approved - placed",
-          detail: "Approved for Room 1",
-          email: residentEmail,
-          name: PRIMARY_RESIDENT_NAME,
-          property: propertyName,
-          application,
-          backgroundCheck: {
-            provider: "checkr",
-            candidateId: `seed-cand-${residentAxisId.toLowerCase()}`,
-            reportId: `seed-report-${residentAxisId.toLowerCase()}`,
-            packageSlug: "test_pro_criminal",
-            status: "complete",
-            result: "clear",
-            assessment: "eligible",
-            orderedAt: daysFromNow(-2).toISOString(),
-            completedAt: daysFromNow(-1).toISOString(),
-            simulated: true,
-          },
-          backgroundCheckStatus: "passed",
-          managerUserId,
-          propertyId,
-          assignedPropertyId: propertyId,
-          assignedRoomChoice: roomChoice,
-          signedMonthlyRent: monthlyRent,
-          testRunId,
-        },
-      },
-      { onConflict: "id" },
-    ),
-    "manager_application_records",
-  );
-
-  // Resident profile: manager_id holds the resident's axis id (the app's own
-  // convention — provision-approved-resident.ts) and application_approved unlocks
-  // the full resident portal.
-  await must(
-    supabase.from("profiles").upsert(
-      {
-        id: residentUserId,
-        email: residentEmail,
-        role: "resident",
-        manager_id: residentAxisId,
-        full_name: PRIMARY_RESIDENT_NAME,
-        application_approved: true,
-      },
-      { onConflict: "id" },
-    ),
-    "profiles(resident)",
-  );
-
-  // Household rent charge (idempotent: stable id + upsert). Columns + row_data
-  // shape mirror seed-demo-manager-workflow.mjs / household-charges.ts.
-  const chargeId = "test-charge-e2e";
-  const rentMonthLabel = isoDate(NOW).slice(0, 7);
-  await must(
-    supabase.from("portal_household_charge_records").upsert(
-      {
-        id: chargeId,
-        manager_user_id: managerUserId,
-        resident_user_id: residentUserId,
-        resident_email: residentEmail,
-        property_id: propertyId,
-        kind: "rent",
-        status: "pending",
-        row_data: {
-          id: chargeId,
-          kind: "rent",
-          title: `Rent — ${rentMonthLabel}`,
-          status: "pending",
-          createdAt: NOW.toISOString(),
-          propertyId,
-          amountLabel: `$${monthlyRent.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-          balanceLabel: `$${monthlyRent.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-          // Within 7 days — pending charges further out are hidden by
-          // shouldDisplayChargeInPayments (household-charges.ts).
-          dueDateLabel: isoDate(daysFromNow(3)),
-          residentName: PRIMARY_RESIDENT_NAME,
-          residentEmail,
-          residentUserId,
-          managerUserId,
-          propertyLabel: propertyName,
-          applicationId: residentAxisId,
-          blocksLeaseUntilPaid: false,
-          axisPaymentsEnabledSnapshot: true,
-          testRunId,
-        },
-      },
-      { onConflict: "id" },
-    ),
-    "portal_household_charge_records",
-  );
-
-  // Tour / schedule record for manager (idempotent: stable id + upsert).
-  const tourId = "test-tour-e2e";
-  const tourStart = daysFromNow(7).toISOString();
-  const tourEnd = new Date(daysFromNow(7).getTime() + 60 * 60 * 1000).toISOString();
-  await must(
-    supabase.from("portal_schedule_records").upsert(
-      {
-        id: tourId,
-        manager_user_id: managerUserId,
-        record_type: "event",
-        starts_at: tourStart,
-        ends_at: tourEnd,
-        row_data: {
-          id: tourId,
-          title: "Test Tour",
-          type: "tour",
-          propertyId,
-          managerUserId,
-          testRunId,
-        },
-      },
-      { onConflict: "id" },
-    ),
-    "portal_schedule_records",
-  );
-
-  // ── Vendor account, linked to the test manager ────────────────────────────
-  // Vendor-only role (never manager) so signing in lands straight in the vendor
-  // portal, matching manager/resident being single-role above.
-  const vendorUserId = await ensureUser(vendorEmail, vendorPassword, "vendor", { onlyRole: true });
-
-  const vendorDirectoryId = "test-vendor-e2e";
-  await must(
-    supabase.from("manager_vendor_records").upsert(
-      {
-        id: vendorDirectoryId,
-        manager_user_id: managerUserId,
-        vendor_user_id: vendorUserId,
-        row_data: {
-          id: vendorDirectoryId,
-          managerUserId,
-          name: "Test Vendor Co",
-          trade: "General maintenance",
-          trades: ["General maintenance", "Plumbing"],
-          phone: "(206) 555-0111",
-          email: vendorEmail,
-          notes: "",
-          active: true,
-        },
-        updated_at: NOW.toISOString(),
-      },
-      { onConflict: "id" },
-    ),
-    "manager_vendor_records(vendor)",
-  );
-
-  // A scheduled work order assigned to the vendor so it has work to see on sign-in.
-  const vendorWorkOrderId = "test-workorder-vendor-e2e";
-  await must(
-    supabase.from("portal_work_order_records").upsert(
-      {
-        id: vendorWorkOrderId,
-        manager_user_id: managerUserId,
-        resident_email: residentEmail,
-        property_id: propertyId,
-        assigned_property_id: propertyId,
-        vendor_user_id: vendorUserId,
-        row_data: {
-          id: vendorWorkOrderId,
-          propertyName,
-          unit: "Room 1",
-          title: "Leaky kitchen faucet",
-          priority: "normal",
-          status: "Scheduled",
-          bucket: "scheduled",
-          description: "Resident reports a slow drip under the kitchen sink.",
-          scheduled: isoDate(daysFromNow(5)),
-          scheduledAtIso: daysFromNow(5).toISOString(),
-          cost: "",
-          residentName: PRIMARY_RESIDENT_NAME,
-          residentEmail,
-          propertyId,
-          assignedPropertyId: propertyId,
-          managerUserId,
-          vendorId: vendorDirectoryId,
-          vendorName: "Test Vendor Co",
-          vendorAssignedAt: NOW.toISOString(),
-          category: "plumbing",
-          testRunId,
-        },
-        updated_at: NOW.toISOString(),
-      },
-      { onConflict: "id" },
-    ),
-    "portal_work_order_records(vendor)",
-  );
-
-  // Completed + paid HVAC job so the vendor Payments tab shows a real dollar amount
-  // (not "—") when vendorCostCents/materialsCostCents are mirrored on the row.
-  const vendorCompletedHvacId = "test-workorder-vendor-completed-hvac";
-  await must(
-    supabase.from("portal_work_order_records").upsert(
-      {
-        id: vendorCompletedHvacId,
-        manager_user_id: managerUserId,
-        resident_email: residentEmail,
-        property_id: propertyId,
-        assigned_property_id: propertyId,
-        vendor_user_id: vendorUserId,
-        row_data: {
-          id: vendorCompletedHvacId,
-          propertyName,
-          unit: "Room 1",
-          title: "HVAC seasonal tune-up",
-          priority: "normal",
-          status: "Completed",
-          bucket: "completed",
-          description: "Annual HVAC maintenance before summer heat.",
-          scheduled: isoDate(daysFromNow(-10)),
-          scheduledAtIso: daysFromNow(-10).toISOString(),
-          cost: "$330.00",
-          vendorCostCents: 28500,
-          materialsCostCents: 4500,
-          automationStatus: "paid",
-          paidAt: daysFromNow(-2).toISOString(),
-          completedAt: daysFromNow(-3).toISOString(),
-          residentName: PRIMARY_RESIDENT_NAME,
-          residentEmail,
-          propertyId,
-          assignedPropertyId: propertyId,
-          managerUserId,
-          vendorId: vendorDirectoryId,
-          vendorName: "Test Vendor Co",
-          vendorAssignedAt: daysFromNow(-12).toISOString(),
-          category: "hvac",
-          workDoneSummary: "Seasonal tune-up and filter replacement.",
-          testRunId,
-        },
-        updated_at: NOW.toISOString(),
-      },
-      { onConflict: "id" },
-    ),
-    "portal_work_order_records(vendor completed hvac)",
-  );
-
-  await must(
-    supabase.from("vendor_payouts").upsert(
-      {
-        id: "00000000-0000-4000-8000-000000000e2e",
-        manager_user_id: managerUserId,
-        vendor_user_id: vendorUserId,
-        work_order_id: vendorCompletedHvacId,
-        amount_cents: 28500,
-        stripe_transfer_id: "tr_test_payout_hvac_e2e",
-        status: "paid",
-        failure_reason: null,
-        created_at: daysFromNow(-2).toISOString(),
-        updated_at: daysFromNow(-2).toISOString(),
-      },
-      { onConflict: "work_order_id" },
-    ),
-    "vendor_payouts(vendor completed hvac)",
-  );
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // Coherent browse catalog: every home shown by the public browse/apply flow
-  // is manager-owned, fully listed (listingSubmission v:1), and has at least
-  // one application and one lease. Split across two managers for realism.
-  // ══════════════════════════════════════════════════════════════════════════
-
-  // ── Second test manager ────────────────────────────────────────────────────
+  // ── Second test manager (public browse catalog) ────────────────────────────
   const manager2Email = (process.env.E2E_MANAGER2_EMAIL ?? "manager2@test.axis.local").toLowerCase();
   const manager2Password = process.env.E2E_MANAGER2_PASSWORD ?? "TestManager123!";
   const existingManager2User = managerList?.users?.find((u) => u.email?.toLowerCase() === manager2Email);
@@ -805,6 +257,66 @@ try {
     );
   }
   await ensureManagerStripeCustomer(stripe, supabase, { email: manager2Email, userId: manager2UserId });
+
+  // ── Canonical demo / E2E resident + vendor (mirror /demo idle portfolio) ───
+  const residentUserId = await ensureUser(residentEmail, residentPassword, "resident", {
+    onlyRole: true,
+    metadata: { axis_id: residentAxisId },
+    fullName: PRIMARY_RESIDENT_NAME,
+  });
+
+  const vendorUserId = await ensureUser(vendorEmail, vendorPassword, "vendor", {
+    onlyRole: true,
+    fullName: CANONICAL_DEMO_VENDOR_NAME,
+  });
+
+  async function cleanLegacyDemoManagerPortfolio(uid) {
+    const tables = [
+      "manager_property_records",
+      "manager_application_records",
+      "portal_household_charge_records",
+      "portal_recurring_rent_profile_records",
+      "portal_lease_pipeline_records",
+      "portal_work_order_records",
+      "manager_vendor_records",
+      "manager_promotion_records",
+      "portal_service_request_records",
+      "portal_schedule_records",
+    ];
+    for (const table of tables) {
+      await must(supabase.from(table).delete().eq("manager_user_id", uid), `clean ${table}`);
+    }
+    await must(
+      supabase.from("portal_inbox_thread_records").delete().eq("owner_user_id", uid),
+      "clean manager inbox",
+    );
+    await must(supabase.from("work_order_bids").delete().eq("manager_user_id", uid), "clean work_order_bids");
+    await must(supabase.from("vendor_payouts").delete().eq("manager_user_id", uid), "clean vendor_payouts");
+  }
+
+  await cleanLegacyDemoManagerPortfolio(managerUserId);
+
+  const portfolioScript = path.join(__dirname, "seed-canonical-demo-portfolio.ts");
+  const portfolioResult = spawnSync("npx", ["--yes", "tsx", portfolioScript], {
+    env: {
+      ...process.env,
+      SEED_MANAGER_USER_ID: managerUserId,
+      SEED_RESIDENT_USER_ID: residentUserId,
+      SEED_VENDOR_USER_ID: vendorUserId,
+      SEED_RESIDENT_AXIS_ID: residentAxisId,
+      SEED_MANAGER_EMAIL: managerEmail,
+    },
+    stdio: "inherit",
+  });
+  if (portfolioResult.status !== 0) {
+    throw new Error(`seed-canonical-demo-portfolio failed (exit ${portfolioResult.status ?? "unknown"})`);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Coherent browse catalog on manager2@: every home shown by the public
+  // browse/apply flow is fully listed and has applications + leases.
+  // manager@test.axis.local carries the /demo idle portfolio only (see above).
+  // ══════════════════════════════════════════════════════════════════════════
 
   // ── Catalog properties (all Seattle — a supported lease jurisdiction) ─────
   const usd = (n) => `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
@@ -984,7 +496,7 @@ try {
       structureNote: "2-story craftsman",
       petFriendly: true,
       deposit: 1150,
-      ownerUserId: managerUserId,
+      ownerUserId: manager2UserId,
       rooms: [
         room(1, "2nd floor", 1150, "Queen bed and desk; south-facing window.", {
           roomAmenitiesText: "South-facing window\nCloset\nHeating",
@@ -1009,7 +521,7 @@ try {
       structureNote: "2-story house with deck",
       petFriendly: true,
       deposit: 1250,
-      ownerUserId: managerUserId,
+      ownerUserId: manager2UserId,
       rooms: [
         room(1, "2nd floor", 1250, "Corner room with two windows.", {
           roomAmenitiesText: "Two windows\nCorner layout\nCloset",
@@ -1037,7 +549,7 @@ try {
       structureNote: "3-story house with rooftop deck",
       petFriendly: true,
       deposit: 1300,
-      ownerUserId: managerUserId,
+      ownerUserId: manager2UserId,
       rooms: [
         room(1, "3rd floor", 1300, "Top-floor room with skyline view.", {
           roomAmenitiesText: "Skylight\nSkyline view\nCloset",
@@ -1068,7 +580,7 @@ try {
       structureNote: "Top-floor loft in a converted warehouse",
       petFriendly: false,
       deposit: 2100,
-      ownerUserId: managerUserId,
+      ownerUserId: manager2UserId,
       rooms: [
         {
           id: "room-1",
@@ -1185,7 +697,7 @@ try {
   // Each references a canonical seeded property id so the SAME property shows
   // in the Calendar and the Properties tab — never a dangling/foreign id.
   const catalogTours = [
-    { id: "test-tour-fir", propId: "mgr-test-fir", managerUserId, title: "Fir Lofts Tour", daysOut: 3 },
+    { id: "test-tour-fir", propId: "mgr-test-fir", managerUserId: manager2UserId, title: "Fir Lofts Tour", daysOut: 3 },
     { id: "test-tour-cedar", propId: "mgr-test-cedar", managerUserId: manager2UserId, title: "Cedar Flat 2B Tour", daysOut: 5 },
   ];
   for (const tour of catalogTours) {
@@ -1546,162 +1058,15 @@ try {
     };
   });
 
-  // The primary E2E resident's own lease: fully signed (an ACTIVE lease), so the
-  // resident Documents tab has a signed lease to show (fullySigned gates it —
-  // see resident-documents-panel.tsx) and Payments reflects a real ongoing tenancy.
-  const primaryLeaseGenIso = daysFromNow(-4).toISOString();
-  const primaryLeaseSentIso = daysFromNow(-3).toISOString();
-  const primaryLeaseResSignIso = daysFromNow(-2).toISOString();
-  const primaryLeaseMgrSignIso = daysFromNow(-1).toISOString();
-  let primaryLeaseHtml;
-  try {
-    primaryLeaseHtml = buildSeedLeaseHtml({
-      application,
-      propertyData: {
-        id: propertyId,
-        title: propertyName,
-        address: propertyAddress,
-        managerUserId,
-        listingSubmission,
-      },
-      monthlyRent,
-    });
-  } catch (err) {
-    console.error(`buildSeedLeaseHtml failed for primary resident: ${err.message}`);
-    primaryLeaseHtml =
-      `<section class="lease-doc"><h1>Residential Lease Agreement</h1>` +
-      `<p><strong>Tenant:</strong> ${PRIMARY_RESIDENT_NAME}</p><p><strong>Premises:</strong> ${propertyName} · Room 1</p>` +
-      `<p><strong>Monthly Rent:</strong> $${monthlyRent.toFixed(2)}</p><p><strong>Term:</strong> 12 months</p>` +
-      `<p>This agreement is generated from the approved rental application.</p></section>`;
-  }
-  leaseRows.push({
-    id: `lease_app_${residentAxisId}`,
-    manager_user_id: managerUserId,
-    resident_user_id: residentUserId,
-    resident_email: residentEmail,
-    property_id: propertyId,
-    status: "signed",
-    row_data: {
-      id: `lease_app_${residentAxisId}`,
-      residentName: PRIMARY_RESIDENT_NAME,
-      residentEmail,
-      unit: `${propertyName} · Room 1`,
-      updated: "just now",
-      pdfVersion: 2,
-      versionNumber: 2,
-      notes: "Created from approved application.",
-      updatedAtIso: NOW.toISOString(),
-      axisId: residentAxisId,
-      propertyId,
-      managerUserId,
-      residentUserId,
-      roomChoice,
-      signedRentLabel: `$${monthlyRent.toFixed(2)} / month`,
-      application,
-      generatedHtml: primaryLeaseHtml,
-      generatedAtIso: primaryLeaseGenIso,
-      managerUploadedPdf: null,
-      thread: [],
-      managerSignature: { name: "Test Manager", signedAtIso: primaryLeaseMgrSignIso, role: "manager" },
-      residentSignature: { name: PRIMARY_RESIDENT_NAME, signedAtIso: primaryLeaseResSignIso, role: "resident" },
-      signatureName: PRIMARY_RESIDENT_NAME,
-      signedAtIso: primaryLeaseResSignIso,
-      residentSignedAt: primaryLeaseResSignIso,
-      managerSignedAt: primaryLeaseMgrSignIso,
-      adminReviewRequestedAt: null,
-      sentToResidentAt: primaryLeaseSentIso,
-      fullySignedAt: primaryLeaseMgrSignIso,
-      voidedAt: null,
-      bucket: "signed",
-      status: "Fully Signed",
-      stageLabel: "Signed",
-      currentActorRole: "system",
-      testRunId,
-    },
-    updated_at: NOW.toISOString(),
-  });
-  await must(supabase.from("portal_lease_pipeline_records").upsert(leaseRows, { onConflict: "id" }), "portal_lease_pipeline_records(catalog)");
-
-  // ── Resident payment history: some paid (income history), one due soon ────
-  const priorRentCharges = [1, 2].map((monthsBack) => {
-    const monthDate = new Date(NOW.getFullYear(), NOW.getMonth() - monthsBack, 15, 12, 0, 0);
-    const id = `test-charge-e2e-paid-${monthsBack}`;
-    const monthLabel = isoDate(monthDate).slice(0, 7);
-    return {
-      id,
-      manager_user_id: managerUserId,
-      resident_user_id: residentUserId,
-      resident_email: residentEmail,
-      property_id: propertyId,
-      kind: "rent",
-      status: "paid",
-      row_data: {
-        id,
-        kind: "rent",
-        title: `Rent — ${monthLabel}`,
-        status: "paid",
-        createdAt: monthDate.toISOString(),
-        paidAt: monthDate.toISOString(),
-        propertyId,
-        amountLabel: `$${monthlyRent.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-        balanceLabel: "$0.00",
-        dueDateLabel: isoDate(monthDate),
-        residentName: PRIMARY_RESIDENT_NAME,
-        residentEmail,
-        residentUserId,
-        managerUserId,
-        propertyLabel: propertyName,
-        applicationId: residentAxisId,
-        blocksLeaseUntilPaid: false,
-        axisPaymentsEnabledSnapshot: true,
-        testRunId,
-      },
-      updated_at: NOW.toISOString(),
-    };
-  });
-  await must(
-    supabase.from("portal_household_charge_records").upsert(priorRentCharges, { onConflict: "id" }),
-    "portal_household_charge_records(paid history)",
-  );
-
-  // ── Resident service/amenity request (Services tab) ───────────────────────
-  const serviceRequestId = "test-service-request-e2e";
-  await must(
-    supabase.from("portal_service_request_records").upsert(
-      {
-        id: serviceRequestId,
-        manager_user_id: managerUserId,
-        resident_email: residentEmail,
-        property_id: propertyId,
-        status: "pending",
-        row_data: {
-          id: serviceRequestId,
-          offerId: "test-offer-storage",
-          offerName: "Extra storage bin",
-          offerDescription: "A lockable storage bin in the basement.",
-          price: "$25.00",
-          deposit: "$50.00",
-          residentEmail,
-          residentName: PRIMARY_RESIDENT_NAME,
-          managerUserId,
-          propertyId,
-          returnByDate: "",
-          notes: "Would like the bin closest to the stairs if possible.",
-          requestedAt: daysFromNow(-1).toISOString(),
-          status: "pending",
-          servicePaid: false,
-          depositPaid: false,
-          testRunId,
-        },
-        updated_at: NOW.toISOString(),
-      },
-      { onConflict: "id" },
-    ),
-    "portal_service_request_records",
-  );
-
   // ── Cleanup: make every tab agree on the canonical catalog. ───────────────
-  const canonicalIds = new Set([propertyId, ...catalog.map((p) => p.id)]);
+  const demoPortfolioPropertyIds = [
+    "mgr-demo-pioneer",
+    "mgr-demo-cascade",
+    "mgr-demo-emerald",
+    "mgr-demo-lakeview",
+    "mgr-demo-ballard",
+  ];
+  const canonicalIds = new Set([...demoPortfolioPropertyIds, ...catalog.map((p) => p.id)]);
   const testManagerIds = [managerUserId, manager2UserId];
 
   // 1. Superseded property rows from older seeds — ANY status, not just live.
@@ -1945,18 +1310,13 @@ try {
       manager2UserId,
       manager2Id,
       manager2Email,
-      propertyId,
+      demoPortfolioPropertyIds,
       residentUserId,
       residentEmail,
       residentAxisId,
       applicationId: residentAxisId,
-      chargeId,
-      tourId,
       vendorUserId,
       vendorEmail,
-      vendorDirectoryId,
-      vendorWorkOrderId,
-      serviceRequestId,
       catalogTours: catalogTours.map((t) => t.id),
       catalogProperties: catalog.map((p) => p.id),
       catalogApplications: people.length,

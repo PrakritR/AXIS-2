@@ -713,7 +713,7 @@ export function VendorWorkOrdersPanel() {
 
   const emptyMessage =
     sorted.length === 0
-      ? "No work orders offered to you yet."
+      ? "No services offered to you yet."
       : tab === "quote"
         ? "Nothing needs a quote — new offers from your manager land here."
         : tab === "tour"
@@ -724,11 +724,9 @@ export function VendorWorkOrdersPanel() {
 
   return (
     <ManagerPortalPageShell
-      title="Work Orders"
+      title="Services"
       filterRow={
-        sorted.length > 0 ? (
-          <ManagerPortalStatusPills tabs={tabs} activeId={tab} onChange={(id) => setTab(id as VendorWorkOrderTab)} />
-        ) : null
+        <ManagerPortalStatusPills tabs={tabs} activeId={tab} onChange={(id) => setTab(id as VendorWorkOrderTab)} />
       }
     >
       {bidsSyncFailed || payoutsSyncFailed ? (
@@ -772,7 +770,7 @@ export function VendorWorkOrdersPanel() {
                 <PortalDataTableColGroup percents={portalTableColumnPercents(4)} />
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={MANAGER_TABLE_TH}>Work order</th>
+                    <th className={MANAGER_TABLE_TH}>Charge</th>
                     <th className={MANAGER_TABLE_TH}>Property</th>
                     <th className={MANAGER_TABLE_TH}>Scheduled visit</th>
                     <th className={MANAGER_TABLE_TH}>Status</th>
@@ -784,6 +782,7 @@ export function VendorWorkOrdersPanel() {
                     return (
                       <Fragment key={row.id}>
                         <tr
+                          id={`portal-work-order-${row.id}`}
                           className={PORTAL_TABLE_TR_EXPANDABLE}
                           onClick={createPortalRowExpandClick(() => (isExpanded ? setExpandedId(null) : openExpand(row)))}
                           aria-expanded={isExpanded}

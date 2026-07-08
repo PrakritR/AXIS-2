@@ -16,4 +16,8 @@ describe("resident application-phase route guard", () => {
     expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard")).toBe(false);
     expect(isResidentApplicationPhaseAllowedPath("/resident/lease")).toBe(false);
   });
+
+  it("allows dashboard after a completed application submission", () => {
+    expect(isResidentApplicationPhaseAllowedPath("/resident/dashboard", { allowDashboard: true })).toBe(true);
+  });
 });

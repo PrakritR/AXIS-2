@@ -110,9 +110,38 @@ describe("resident portal access state", () => {
     });
 
     expect(access.hasSubmittedApplication).toBe(true);
+    expect(access.hasCompletedApplicationSubmission).toBe(true);
     expect(access.isPreApplicationResident).toBe(false);
     expect(access.applicationApproved).toBe(false);
     expect(access.leaseAccessUnlocked).toBe(false);
     expect(residentPortalHomePath(access)).toBe("/resident/applications/apply");
+  });
+
+  it("does not treat in-progress drafts as completed submissions", async () => {
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(
+      makeDbMock({
+        applicationRows: [
+          {
+            updated_at: "2026-01-01T00:00:00Z",
+            row_data: {
+              id: "AXIS-DRAFT1",
+              email: "resident@example.com",
+              bucket: "pending",
+              stage: "In progress",
+              property: "Test House",
+            },
+          },
+        ],
+      }) as never,
+    );
+
+    const access = await loadResidentPortalAccessState({
+      userId: "user-1",
+      role: "resident",
+      email: "resident@example.com",
+    });
+
+    expect(access.hasSubmittedApplication).toBe(true);
+    expect(access.hasCompletedApplicationSubmission).toBe(false);
   });
 });

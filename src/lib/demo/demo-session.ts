@@ -19,15 +19,31 @@
 
 export type DemoPortalRole = "manager" | "resident" | "vendor";
 
+import {
+  CANONICAL_DEMO_GUIDED_EMAIL,
+  CANONICAL_DEMO_GUIDED_NAME,
+  CANONICAL_DEMO_MANAGER_EMAIL,
+  CANONICAL_DEMO_MANAGER_NAME,
+  CANONICAL_DEMO_RESIDENT_EMAIL,
+  CANONICAL_DEMO_RESIDENT_NAME,
+  CANONICAL_DEMO_VENDOR_EMAIL,
+  CANONICAL_DEMO_VENDOR_NAME,
+} from "@/lib/demo/demo-canonical-accounts";
+import { isGuidedDemoActive } from "@/lib/demo/demo-guided";
+
 export const DEMO_MANAGER_USER_ID = "demo-manager";
 export const DEMO_RESIDENT_USER_ID = "demo-resident";
 export const DEMO_VENDOR_USER_ID = "demo-vendor";
-export const DEMO_MANAGER_EMAIL = "alex.morgan@axis.local";
-export const DEMO_RESIDENT_EMAIL = "jordan.lee@axis.local";
-export const DEMO_VENDOR_EMAIL = "cascade.mechanical@axis.local";
-export const DEMO_MANAGER_NAME = "Alex Morgan";
-export const DEMO_RESIDENT_NAME = "Jordan Lee";
-export const DEMO_VENDOR_NAME = "Cascade Mechanical";
+/** Scoped user id for guided tour — maps to `testeverything@test.axis.local`. */
+export const DEMO_GUIDED_USER_ID = "demo-everything";
+export const DEMO_MANAGER_EMAIL = CANONICAL_DEMO_MANAGER_EMAIL;
+export const DEMO_RESIDENT_EMAIL = CANONICAL_DEMO_RESIDENT_EMAIL;
+export const DEMO_VENDOR_EMAIL = CANONICAL_DEMO_VENDOR_EMAIL;
+export const DEMO_GUIDED_EMAIL = CANONICAL_DEMO_GUIDED_EMAIL;
+export const DEMO_MANAGER_NAME = CANONICAL_DEMO_MANAGER_NAME;
+export const DEMO_RESIDENT_NAME = CANONICAL_DEMO_RESIDENT_NAME;
+export const DEMO_VENDOR_NAME = CANONICAL_DEMO_VENDOR_NAME;
+export const DEMO_GUIDED_NAME = CANONICAL_DEMO_GUIDED_NAME;
 
 export type DemoSessionSnapshot = { userId: string | null; email: string | null; ready: boolean };
 
@@ -86,15 +102,21 @@ export function subscribeDemoRole(listener: () => void): () => void {
 
 /** The synthetic session the portal hooks report for the active demo role. */
 export function demoSessionForRole(r: DemoPortalRole): DemoSessionSnapshot {
+  if (isGuidedDemoActive()) {
+    return { userId: DEMO_GUIDED_USER_ID, email: DEMO_GUIDED_EMAIL, ready: true };
+  }
   if (r === "resident") {
     return { userId: DEMO_RESIDENT_USER_ID, email: DEMO_RESIDENT_EMAIL, ready: true };
   }
   if (r === "vendor") {
     return { userId: DEMO_VENDOR_USER_ID, email: DEMO_VENDOR_EMAIL, ready: true };
   }
-  // The manager view uses the manager-scoped demo account so seeded manager
-  // data (charges, applications, leases…) is visible.
   return { userId: DEMO_MANAGER_USER_ID, email: DEMO_MANAGER_EMAIL, ready: true };
+}
+
+/** Manager-scoped demo user id — guided tour uses the everything test account. */
+export function resolveDemoManagerScopeUserId(): string {
+  return getDemoSessionSnapshot().userId ?? DEMO_MANAGER_USER_ID;
 }
 
 /** Current demo session snapshot (role-aware). */

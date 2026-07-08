@@ -2,14 +2,21 @@
 
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { ResidentMoveInResolvedView } from "@/components/portal/resident-move-in-view";
 import { demoProperties } from "@/lib/demo/demo-data";
 import { readManagerApplicationRows } from "@/lib/manager-applications-storage";
+import {
+  getDemoGuidedServerSnapshot,
+  getDemoGuidedState,
+  subscribeDemoGuidedState,
+} from "@/lib/demo/demo-guided";
 import type { DemoPortalRole } from "@/lib/demo/demo-session";
 import {
+  DEMO_GUIDED_EMAIL,
+  DEMO_GUIDED_NAME,
   DEMO_MANAGER_EMAIL,
   DEMO_MANAGER_NAME,
   DEMO_MANAGER_USER_ID,
@@ -17,6 +24,9 @@ import {
   DEMO_RESIDENT_NAME,
   DEMO_RESIDENT_USER_ID,
   DEMO_VENDOR_NAME,
+  demoSessionForRole,
+  getDemoRole,
+  subscribeDemoRole,
 } from "@/lib/demo/demo-session";
 import type { PortalSection } from "@/lib/portal-types";
 import { resolveResidentMoveInFromApplications } from "@/lib/resident-move-in-resolve";
@@ -70,6 +80,12 @@ function Placeholder({ title, message }: { title: string; message: string }) {
   );
 }
 
+function useDemoSession(role: DemoPortalRole) {
+  useSyncExternalStore(subscribeDemoGuidedState, getDemoGuidedState, getDemoGuidedServerSnapshot);
+  const activeRole = useSyncExternalStore(subscribeDemoRole, getDemoRole, () => "manager" as const);
+  return demoSessionForRole(activeRole ?? role);
+}
+
 export function DemoSectionRenderer({
   role,
   section,
@@ -81,6 +97,12 @@ export function DemoSectionRenderer({
   tab: string | null;
   meta: PortalSection | undefined;
 }): ReactNode {
+  const session = useDemoSession(role);
+  const managerUserId = session.userId ?? DEMO_MANAGER_USER_ID;
+  const managerDisplayName =
+    session.email === DEMO_GUIDED_EMAIL ? DEMO_GUIDED_NAME : DEMO_MANAGER_NAME;
+  const managerEmail = session.email ?? DEMO_MANAGER_EMAIL;
+
   const firstTab = meta?.tabs[0]?.id;
   const tabId = tab ?? firstTab ?? "index";
   const basePath = role === "resident" ? "/resident" : role === "vendor" ? "/vendor" : "/portal";
@@ -111,11 +133,11 @@ export function DemoSectionRenderer({
   if (role === "manager") {
     switch (section) {
       case "dashboard":
-        return <ManagerDashboard displayName={DEMO_MANAGER_NAME} />;
+        return <ManagerDashboard displayName={managerDisplayName} />;
       case "properties":
         return <ManagerProperties />;
       case "calendar":
-        return <PortalCalendar portal="manager" initialUserId={DEMO_MANAGER_USER_ID} />;
+        return <PortalCalendar portal="manager" initialUserId={managerUserId} />;
       case "applications":
         return <ManagerApplications />;
       case "residents":
@@ -138,7 +160,7 @@ export function DemoSectionRenderer({
       case "documents":
         return <ManagerDocumentsPanel tabId={tabId} basePath={basePath} />;
       case "relationships":
-        return <ProAccountLinksPanel userId={DEMO_MANAGER_USER_ID} />;
+        return <ProAccountLinksPanel userId={managerUserId} />;
       case "promotion":
         return <ManagerPromotion />;
       case "bugs-feedback":
@@ -149,8 +171,8 @@ export function DemoSectionRenderer({
           <PortalProfileClient
             variant="manager"
             portalKind="pro"
-            initialFullName={DEMO_MANAGER_NAME}
-            initialEmail={DEMO_MANAGER_EMAIL}
+            initialFullName={managerDisplayName}
+            initialEmail={managerEmail}
             initialPhone="(206) 555-0101"
             idLabel="Axis ID"
             idValue="AXIS-DEMO4821"
@@ -178,7 +200,7 @@ export function DemoSectionRenderer({
       // readManagerApplicationRows() are both demo-aware, so it renders the
       // seeded demoApplications() rows with no adapter needed (mirrors how
       // the manager switch above reuses ManagerApplications directly).
-      return <ResidentApplicationsPanel />;
+      return <ResidentApplicationsPanel applyMode={tab === "apply"} />;
     case "lease":
       // ResidentLeasePanel renders its own "Lease" page shell; wrapping it in a
       // second shell would stack the header twice.
@@ -194,7 +216,7 @@ export function DemoSectionRenderer({
     case "documents":
       return <ResidentDocumentsPanel tabId={tabId} basePath={basePath} tabs={meta?.tabs ?? []} />;
     case "bugs-feedback":
-      return <PortalBugFeedbackPanel reporterRole="resident" />;
+      return <ResidentProfilePanel />;
     case "profile":
       return <ResidentProfilePanel />;
     default:

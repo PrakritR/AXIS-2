@@ -7,12 +7,14 @@ import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
 import { PortalNavCountBadge } from "@/components/portal/portal-nav-count-badge";
 import { usePortalNavCounts } from "@/hooks/use-portal-nav-counts";
 import { PortalContainerProvider } from "@/components/ui/portal-container-context";
-import { groupNavItems } from "@/lib/portals/nav-groups";
+import { groupNavItems, isHiddenFromMobileNav } from "@/lib/portals/nav-groups";
+import { orderNativeBottomNavItems } from "@/lib/native/portal-bottom-nav";
 import { proPortal } from "@/lib/portals/pro";
 import { vendorPortal } from "@/lib/portals/vendor";
 import { RESIDENT_APPROVED_PORTAL_SECTIONS, RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 import type { PortalDefinition, PortalSection } from "@/lib/portal-types";
 import { closeAxisAssistant } from "@/lib/axis-assistant/open-store";
+import { DEMO_OPEN_RESIDENT_APPLY_EVENT } from "@/lib/demo/demo-playback";
 import {
   DEMO_NAVIGATE_EVENT,
   getDemoRole,
@@ -22,24 +24,22 @@ import {
 } from "@/lib/demo/demo-session";
 import { DEMO_PORTAL_SCROLL_ID } from "@/lib/portal-layout-classes";
 import {
-  advanceGuidedDemoStep,
   exitGuidedDemoTour,
   getDemoGuidedServerSnapshot,
   getDemoGuidedState,
   getGuidedDemoStep,
   getGuidedStepDef,
-  GUIDED_DEMO_STEP_COUNT,
   hydrateDemoGuidedState,
-  isGuidedDemoActive,
-  isGuidedVendorUnlocked,
-  pauseGuidedDemoTour,
-  resumeGuidedDemoTour,
   startGuidedDemoTour,
   subscribeDemoGuidedState,
 } from "@/lib/demo/demo-guided";
-import { reseedDemoPortalForGuidedStep, seedDemoIdleData, seedDemoPortalData } from "@/lib/demo/demo-seed";
+import type { DemoSegment } from "@/lib/demo/demo-segments";
+import { DEMO_SEGMENT_LABELS } from "@/lib/demo/demo-segments";
+import { seedDemoBlankData, seedDemoIdleData, seedDemoPortalIdleData } from "@/lib/demo/demo-seed";
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
 import { DemoFrameAssistant } from "@/components/demo/demo-frame-assistant";
+import { DemoCursorPlayback } from "@/components/demo/demo-cursor-playback";
+import { DemoSegmentPlayback } from "@/components/demo/demo-segment-playback";
 
 /** App routes a reused portal panel might try to navigate to. In the demo these
  * must never reach the real (auth-gated) router — either they map to an in-demo
@@ -85,13 +85,6 @@ function PlayIcon() {
     </svg>
   );
 }
-function PauseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-      <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-    </svg>
-  );
-}
 function RestartIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -104,7 +97,7 @@ function RestartIcon() {
 export function DemoPortalShell() {
   useLayoutEffect(() => {
     hydrateDemoGuidedState();
-    seedDemoPortalData();
+    void seedDemoPortalIdleData();
   }, []);
 
   const guidedState = useSyncExternalStore(
@@ -124,6 +117,12 @@ export function DemoPortalShell() {
     () => groupNavItems(def.kind, def.sections.map((s) => ({ section: s.section, meta: s }))),
     [def],
   );
+  const demoMobileStripSections = useMemo(() => {
+    const items = def.sections.map((s) => ({ section: s.section, meta: s }));
+    return orderNativeBottomNavItems(items, def.kind).filter(
+      (item) => !isHiddenFromMobileNav(def.kind, item.section),
+    );
+  }, [def]);
   // Match the real portal sidebar: the trailing unlabeled group (Settings) is
   // pushed to the bottom, separate from the groups above it.
   const firstTrailingGroupIdx = useMemo(
@@ -140,6 +139,7 @@ export function DemoPortalShell() {
 
   const [section, setSection] = useState<string>("dashboard");
   const [tab, setTab] = useState<string | null>(null);
+  const [selectedSegment, setSelectedSegment] = useState<DemoSegment>("overall");
   const meta: PortalSection | undefined = useMemo(
     () => def.sections.find((s) => s.section === section),
     [def, section],
@@ -160,9 +160,16 @@ export function DemoPortalShell() {
       const target = parseDemoTarget(href);
       if (target && def.sections.some((s) => s.section === target.section)) {
         selectSection(target.section, target.tab);
+        if (role === "resident" && target.section === "applications" && target.tab === "apply") {
+          const propertyId =
+            new URL(href, "http://demo.local").searchParams.get("propertyId")?.trim() || undefined;
+          window.dispatchEvent(
+            new CustomEvent(DEMO_OPEN_RESIDENT_APPLY_EVENT, { detail: { propertyId } }),
+          );
+        }
       }
     },
-    [def, selectSection],
+    [def, role, selectSection],
   );
 
   // The reused portal panels render real <Link>/<a> elements pointing at
@@ -194,33 +201,113 @@ export function DemoPortalShell() {
     return () => window.removeEventListener(DEMO_NAVIGATE_EVENT, handler);
   }, [navigateInDemo]);
 
-  const navigateToGuidedStep = useCallback(
-    (step: number) => {
-      const defn = getGuidedStepDef(step as ReturnType<typeof getGuidedDemoStep>);
-      if (!defn) return;
-      setDemoRole(defn.role);
-      selectSection(defn.section, defn.tab ?? def.sections.find((s) => s.section === defn.section)?.tabs[0]?.id ?? null);
+  const navigateToProperties = useCallback(() => {
+    setDemoRole("manager");
+    selectSection("properties", null);
+  }, [selectSection]);
+
+  const navigateToResidentDashboard = useCallback(() => {
+    setDemoRole("resident");
+    selectSection("dashboard", null);
+  }, [selectSection]);
+
+  const navigateToResidentApplications = useCallback(() => {
+    setDemoRole("resident");
+    selectSection("applications", null);
+  }, [selectSection]);
+
+  const navigateToManagerApplications = useCallback(() => {
+    setDemoRole("manager");
+    selectSection("applications", null);
+  }, [selectSection]);
+
+  const navigateToManagerLeases = useCallback(
+    (nextTab: string | null = null) => {
+      setDemoRole("manager");
+      selectSection("leases", nextTab);
     },
-    [def, selectSection],
+    [selectSection],
   );
 
-  const switchRole = useCallback(
-    (next: DemoPortalRole) => {
-      if (guidedActive && next === "vendor" && !isGuidedVendorUnlocked()) return;
-      closeAxisAssistant();
-      setDemoRole(next);
-      setSection("dashboard");
-      setTab(null);
+  const navigateToResidentLease = useCallback(() => {
+    setDemoRole("resident");
+    selectSection("lease", null);
+  }, [selectSection]);
+
+  const navigateToManagerPayments = useCallback(() => {
+    setDemoRole("manager");
+    selectSection("payments", null);
+  }, [selectSection]);
+
+  const navigateToResidentPayments = useCallback(() => {
+    setDemoRole("resident");
+    selectSection("payments", null);
+  }, [selectSection]);
+
+  const navigateToManagerServices = useCallback(
+    (nextTab: string | null = "work-orders") => {
+      setDemoRole("manager");
+      selectSection("services", nextTab);
     },
-    [guidedActive],
+    [selectSection],
   );
+
+  const navigateToResidentServices = useCallback(
+    (nextTab: string | null = "requests") => {
+      setDemoRole("resident");
+      selectSection("services", nextTab);
+    },
+    [selectSection],
+  );
+
+  const navigateToVendorWorkOrders = useCallback(() => {
+    setDemoRole("vendor");
+    selectSection("work-orders", null);
+  }, [selectSection]);
+
+  const navigateToManagerInbox = useCallback(
+    (nextTab: string | null = "unopened") => {
+      setDemoRole("manager");
+      selectSection("inbox", nextTab);
+    },
+    [selectSection],
+  );
+
+  const navigateToResidentInbox = useCallback(
+    (nextTab: string | null = "unopened") => {
+      setDemoRole("resident");
+      selectSection("inbox", nextTab);
+    },
+    [selectSection],
+  );
+
+  const navigateToManagerPromotion = useCallback(() => {
+    setDemoRole("manager");
+    selectSection("promotion", null);
+  }, [selectSection]);
 
   const startTour = useCallback(() => {
     closeAxisAssistant();
-    startGuidedDemoTour();
-    reseedDemoPortalForGuidedStep();
-    navigateToGuidedStep(1);
-  }, [navigateToGuidedStep]);
+    startGuidedDemoTour(selectedSegment);
+    if (selectedSegment === "overall" || selectedSegment === "leasing" || selectedSegment === "applications") {
+      navigateToProperties();
+    } else if (selectedSegment === "payments") {
+      navigateToManagerPayments();
+    } else if (selectedSegment === "inbox") {
+      navigateToManagerInbox("unopened");
+    } else if (selectedSegment === "promotion") {
+      navigateToManagerPromotion();
+    } else {
+      navigateToManagerServices("work-orders");
+    }
+  }, [
+    navigateToManagerInbox,
+    navigateToManagerPayments,
+    navigateToManagerPromotion,
+    navigateToManagerServices,
+    navigateToProperties,
+    selectedSegment,
+  ]);
 
   const exitTour = useCallback(() => {
     closeAxisAssistant();
@@ -230,25 +317,16 @@ export function DemoPortalShell() {
     selectSection("dashboard", null);
   }, [selectSection]);
 
-  const nextStep = useCallback(() => {
-    const advanced = advanceGuidedDemoStep();
-    if (!advanced) {
-      exitTour();
-      return;
-    }
-    reseedDemoPortalForGuidedStep();
-    navigateToGuidedStep(getGuidedDemoStep());
-  }, [exitTour, navigateToGuidedStep]);
-
-  const pauseTour = useCallback(() => pauseGuidedDemoTour(), []);
-  const resumeTour = useCallback(() => resumeGuidedDemoTour(), []);
-
-  useEffect(() => {
-    if (!guidedActive || !stepDef || guidedState.paused) return;
-    navigateToGuidedStep(guidedStep);
-  }, [guidedActive, guidedStep, guidedState.paused, navigateToGuidedStep, stepDef]);
-
-  const finished = guidedActive && guidedStep >= GUIDED_DEMO_STEP_COUNT;
+  const switchRole = useCallback(
+    (next: DemoPortalRole) => {
+      if (guidedActive) return;
+      closeAxisAssistant();
+      setDemoRole(next);
+      setSection("dashboard");
+      setTab(null);
+    },
+    [guidedActive],
+  );
 
   return (
     <PortalContainerProvider container={frameEl}>
@@ -256,34 +334,31 @@ export function DemoPortalShell() {
       {/* Controls bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card p-1 text-sm">
-          {ROLES.map((r) => {
-            const vendorLocked = guidedActive && r.id === "vendor" && !isGuidedVendorUnlocked();
-            return (
+          {ROLES.map((r) => (
             <button
               key={r.id}
               type="button"
               onClick={() => switchRole(r.id)}
-              disabled={vendorLocked}
-              title={vendorLocked ? "Vendor view unlocks at step 10 of the guided tour" : undefined}
+              disabled={guidedActive}
+              title={guidedActive ? "Finish or exit the demo to switch roles" : undefined}
               data-attr={`demo-role-${r.id}`}
               className={cn(
                 "rounded-full px-3.5 py-1.5 font-medium transition",
                 role === r.id ? "bg-primary text-white shadow-sm" : "text-muted hover:text-foreground",
-                vendorLocked && "cursor-not-allowed opacity-40",
+                guidedActive && role !== r.id && "cursor-not-allowed opacity-40",
               )}
               aria-pressed={role === r.id}
             >
               {r.label}
             </button>
-            );
-          })}
+          ))}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {guidedActive && stepDef ? (
             <div className="flex min-w-0 flex-col gap-0.5 sm:mr-2">
               <span className="text-xs font-semibold text-foreground">
-                Step {guidedStep} of {GUIDED_DEMO_STEP_COUNT}: {stepDef.title}
+                {stepDef.title}
               </span>
               <span className="hidden max-w-md truncate text-xs text-muted sm:inline">{stepDef.hint}</span>
             </div>
@@ -291,59 +366,42 @@ export function DemoPortalShell() {
             <span className="hidden text-xs text-muted sm:inline">Interactive demo — click anything</span>
           )}
           {!guidedActive ? (
-            <button
-              type="button"
-              onClick={startTour}
-              data-attr="demo-run"
-              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
-              style={{ background: "var(--btn-primary)" }}
-            >
-              <PlayIcon />
-              Run demo
-            </button>
-          ) : (
             <>
-              {guidedState.paused ? (
-                <button
-                  type="button"
-                  onClick={resumeTour}
-                  data-attr="demo-resume"
-                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
-                  style={{ background: "var(--btn-primary)" }}
+              <label className="hidden items-center gap-2 sm:flex">
+                <span className="sr-only">Demo segment</span>
+                <select
+                  value={selectedSegment}
+                  onChange={(e) => setSelectedSegment(e.target.value as DemoSegment)}
+                  data-attr="demo-segment-select"
+                  className="h-9 max-w-[11rem] rounded-full border border-border bg-card px-3 text-xs font-medium text-foreground"
                 >
-                  <PlayIcon />
-                  Resume
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={pauseTour}
-                  data-attr="demo-pause"
-                  className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-accent/60"
-                >
-                  <PauseIcon />
-                  Pause
-                </button>
-              )}
-              {!finished ? (
-                <button
-                  type="button"
-                  onClick={nextStep}
-                  data-attr="demo-next-step"
-                  className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15"
-                >
-                  Next step
-                </button>
-              ) : null}
+                  {(Object.entries(DEMO_SEGMENT_LABELS) as [DemoSegment, string][]).map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 type="button"
-                onClick={exitTour}
-                data-attr="demo-exit"
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium text-muted transition hover:bg-accent/60 hover:text-foreground"
+                onClick={startTour}
+                data-attr="demo-run"
+                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+                style={{ background: "var(--btn-primary)" }}
               >
-                Exit tour
+                <PlayIcon />
+                Run demo
               </button>
             </>
+          ) : (
+            <button
+              type="button"
+              onClick={exitTour}
+              data-attr="demo-exit"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium text-muted transition hover:bg-accent/60 hover:text-foreground"
+            >
+              Exit tour
+            </button>
           )}
           <button
             type="button"
@@ -363,6 +421,26 @@ export function DemoPortalShell() {
         onClickCapture={onFrameClickCapture}
         className="demo-portal-frame relative flex h-[min(85dvh,920px)] min-h-[70vh] overflow-hidden rounded-2xl border border-border bg-background shadow-[var(--shadow-lg,0_20px_60px_-30px_rgba(15,23,42,0.5))]"
       >
+        <DemoCursorPlayback container={frameEl} />
+        <DemoSegmentPlayback
+          frameEl={frameEl}
+          active={guidedActive}
+          setDemoRole={setDemoRole}
+          onNavigateProperties={navigateToProperties}
+          onNavigateResidentDashboard={navigateToResidentDashboard}
+          onNavigateResidentApplications={navigateToResidentApplications}
+          onNavigateManagerApplications={navigateToManagerApplications}
+          onNavigateManagerLeases={navigateToManagerLeases}
+          onNavigateResidentLease={navigateToResidentLease}
+          onNavigateManagerPayments={navigateToManagerPayments}
+          onNavigateResidentPayments={navigateToResidentPayments}
+          onNavigateManagerServices={navigateToManagerServices}
+          onNavigateResidentServices={navigateToResidentServices}
+          onNavigateVendorWorkOrders={navigateToVendorWorkOrders}
+          onNavigateManagerInbox={navigateToManagerInbox}
+          onNavigateResidentInbox={navigateToResidentInbox}
+          onNavigateManagerPromotion={navigateToManagerPromotion}
+        />
         {/* Sidebar */}
         <aside
           className={cn(
@@ -463,24 +541,24 @@ export function DemoPortalShell() {
         {/* Mobile section strip */}
         <div className="absolute inset-x-0 top-0 z-10 border-b border-border bg-background/95 backdrop-blur md:hidden">
           <nav className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Demo sections">
-            {def.sections
-              .filter((s) => s.section !== "profile")
-              .map((s) => {
-                const active = section === s.section;
-                return (
-                  <button
-                    key={s.section}
-                    type="button"
-                    onClick={() => selectSection(s.section, s.tabs[0]?.id ?? null)}
-                    className={cn(
-                      "inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition",
-                      active ? "bg-primary text-white" : "bg-accent/50 text-muted",
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
+            {demoMobileStripSections.map((item) => {
+              const active = section === item.section;
+              return (
+                <button
+                  key={item.section}
+                  type="button"
+                  data-mobile-strip-section={item.section}
+                  data-attr={`demo-nav-${item.section}`}
+                  onClick={() => selectSection(item.section, item.meta.tabs[0]?.id ?? null)}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-[14px] px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition",
+                    active ? "bg-primary text-white" : "bg-accent/50 text-muted",
+                  )}
+                >
+                  {item.meta.label}
+                </button>
+              );
+            })}
           </nav>
         </div>
 

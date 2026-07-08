@@ -26,11 +26,9 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PORTAL_TABLE_TD,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
+  PortalTableInlineExpand,
   createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
@@ -460,7 +458,7 @@ export function ManagerApplications() {
       <PortalTableDetailActions placement="top">
         {row.bucket === "pending" ? (
           <>
-            <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} onClick={() => setApprovePreviewRow(row)}>
+            <Button type="button" variant="primary" className={PORTAL_DETAIL_BTN} data-attr="application-approve" onClick={() => setApprovePreviewRow(row)}>
               Approve
             </Button>
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
@@ -571,13 +569,14 @@ export function ManagerApplications() {
                 aria-expanded={expanded}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-foreground">{row.name}</p>
+                  <PortalTableInlineExpand expanded={expanded} className="truncate font-semibold text-foreground">
+                    {row.name}
+                  </PortalTableInlineExpand>
                   <p className="mt-0.5 truncate text-xs text-muted">
                     {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
                   </p>
                   {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
                 </div>
-                <PortalTableExpandChevron expanded={expanded} />
               </button>
               {expanded ? (
                 <div className="mt-3 border-t border-border pt-3">{renderApplicationDetail(row)}</div>
@@ -594,9 +593,6 @@ export function ManagerApplications() {
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Applicant</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-                <th className={PORTAL_TABLE_EXPAND_TH}>
-                  <span className="sr-only">Expand</span>
-                </th>
               </tr>
             </thead>
             <tbody>
@@ -611,16 +607,17 @@ export function ManagerApplications() {
                       aria-expanded={expandedId === row.id}
                     >
                       <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                        <p className="font-medium leading-snug text-foreground">{row.name}</p>
+                        <PortalTableInlineExpand expanded={expandedId === row.id} className="font-medium leading-snug text-foreground">
+                          {row.name}
+                        </PortalTableInlineExpand>
                         {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{row.email}</p> : null}
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>
-                      <PortalTableExpandCell expanded={expandedId === row.id} />
                     </tr>
                     {expandedId === row.id ? (
                       <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                        <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                        <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                           {renderApplicationDetail(row)}
                         </td>
                       </tr>

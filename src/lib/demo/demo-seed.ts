@@ -2,8 +2,9 @@
  * Seeds the browser-local demo stores for the public `/demo` sandbox.
  *
  * Two modes (see `demo-guided.ts`):
- * - **idle** — empty portfolio (`buildDemoIdleSnapshot`).
- * - **guided** — cumulative story data through the current step (`buildDemoGuidedSnapshot`).
+ * - **idle** — rich portfolio (`buildDemoIdleSnapshot`), optionally overlaid from
+ *   the canonical test accounts via `/api/demo/portal-snapshot`.
+ * - **guided** — blank slate (`buildDemoBlankSnapshot`); autoplay creates data.
  *
  * Everything is written into each store's `seedDemo…` helper (never the server),
  * scoped to synthetic demo manager/resident ids. Real portal routes never call
@@ -34,9 +35,9 @@ import {
 } from "@/lib/demo-admin-scheduling";
 import { seedDemoUploadedOwnLeases } from "@/lib/resident-lease-upload";
 import {
-  DEMO_MANAGER_USER_ID,
   DEMO_RESIDENT_EMAIL,
   isDemoModeActive,
+  resolveDemoManagerScopeUserId,
 } from "@/lib/demo/demo-session";
 import {
   getDemoGuidedState,
@@ -44,16 +45,18 @@ import {
   isGuidedDemoActive,
 } from "@/lib/demo/demo-guided";
 import {
+  buildDemoBlankSnapshot,
   buildDemoGuidedSnapshot,
   buildDemoIdleSnapshot,
   type DemoDataSnapshot,
 } from "@/lib/demo/demo-guided-data";
 
 function applyDemoSnapshot(snapshot: DemoDataSnapshot): void {
-  seedDemoManagerProperties(DEMO_MANAGER_USER_ID, snapshot.properties);
-  seedDemoManagerApplicationRows(snapshot.applications, DEMO_MANAGER_USER_ID);
+  const managerScopeId = resolveDemoManagerScopeUserId();
+  seedDemoManagerProperties(managerScopeId, snapshot.properties);
+  seedDemoManagerApplicationRows(snapshot.applications, managerScopeId);
   seedDemoHouseholdCharges(snapshot.charges, snapshot.rentProfiles);
-  seedDemoLeasePipeline(snapshot.leases, DEMO_MANAGER_USER_ID);
+  seedDemoLeasePipeline(snapshot.leases, managerScopeId);
 
   const schedule = snapshot.schedule;
   seedDemoScheduleData({
@@ -61,7 +64,7 @@ function applyDemoSnapshot(snapshot: DemoDataSnapshot): void {
     partnerInquiries: schedule.partnerInquiries,
     availabilityByStorageKey: Object.fromEntries(
       Object.entries(schedule.availabilityByPropertyId).map(([propertyId, slots]) => [
-        managerPropertyAvailabilityStorageKey(DEMO_MANAGER_USER_ID, propertyId),
+        managerPropertyAvailabilityStorageKey(managerScopeId, propertyId),
         slots,
       ]),
     ),
@@ -111,4 +114,53 @@ export function reseedDemoPortalForGuidedStep(): void {
 export function seedDemoIdleData(): void {
   if (typeof window === "undefined" || !isDemoModeActive()) return;
   applyDemoSnapshot(buildDemoIdleSnapshot());
+}
+
+/** Clear every demo store for guided tour autoplay (blank slate). */
+export function seedDemoBlankData(): void {
+  if (typeof window === "undefined" || !isDemoModeActive()) return;
+  applyDemoSnapshot(buildDemoBlankSnapshot());
+}
+
+/** Apply a partial snapshot (segment demos). */
+export function applyDemoSnapshotForSegment(snapshot: DemoDataSnapshot): void {
+  if (typeof window === "undefined" || !isDemoModeActive()) return;
+  applyDemoSnapshot(snapshot);
+}
+
+/**
+ * Idle `/demo` mount: prefer DB mirror when available, else static demo-data.
+ */
+export async function seedDemoPortalIdleData(): Promise<void> {
+  if (typeof window === "undefined" || !isDemoModeActive()) return;
+  hydrateDemoGuidedState();
+  const { mode, step } = getDemoGuidedState();
+  if (mode === "guided" && step > 0) {
+    applyDemoSnapshot(buildDemoGuidedSnapshot(step));
+    return;
+  }
+  const mirrored = await seedDemoPortalDataFromMirror();
+  if (!mirrored) {
+    applyDemoSnapshot(buildDemoIdleSnapshot());
+  }
+}
+
+/**
+ * Overlay a read-only mirror from the canonical test accounts (production → demo).
+ * Falls back silently — use `seedDemoPortalIdleData` for mirror-first idle seeding.
+ */
+export async function seedDemoPortalDataFromMirror(): Promise<boolean> {
+  if (typeof window === "undefined" || !isDemoModeActive()) return false;
+  hydrateDemoGuidedState();
+  if (isGuidedDemoActive()) return false;
+  try {
+    const res = await fetch("/api/demo/portal-snapshot", { credentials: "same-origin" });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { source?: string; snapshot?: DemoDataSnapshot };
+    if (body.source !== "mirror" || !body.snapshot) return false;
+    applyDemoSnapshot(body.snapshot);
+    return true;
+  } catch {
+    return false;
+  }
 }

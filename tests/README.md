@@ -41,3 +41,20 @@ Configure these in your repository settings for CI:
 npm run test:seed
 npm run test:cleanup -- <testRunId>
 ```
+
+### Canonical demo portal accounts (`@test.axis.local`)
+
+`npm run test:seed` provisions three sandbox accounts that mirror the idle `/demo` portfolio (from `src/lib/demo/demo-data.ts`):
+
+| Role | Email | Password (default) |
+|------|-------|---------------------|
+| Manager | `manager@test.axis.local` | `TestManager123!` |
+| Resident | `resident@test.axis.local` | `TestResident123!` |
+| Vendor | `vendor@test.axis.local` | `TestVendor123!` |
+
+- **Signed-in portal** (`/portal`, `/resident`, `/vendor`) reads and writes these rows in the test Supabase project.
+- **`/demo`** loads the same data read-only via `/api/demo/portal-snapshot` (changes in demo stay in the browser; portal edits persist to the DB).
+- Local `.env` should point at the **same test Supabase project** as `.env.test` so the demo mirror works on `localhost`.
+- Re-run `npm run test:seed` after schema changes or when demo portfolio data drifts.
+
+Browse-catalog E2E properties live on `manager2@test.axis.local` so they do not collide with the demo manager portfolio.

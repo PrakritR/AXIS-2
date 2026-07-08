@@ -41,7 +41,7 @@ export function PortalTopBar({
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
 
   return (
-    <header className="hidden h-14 shrink-0 items-center justify-end border-b border-border bg-background px-5 lg:flex">
+    <header className="hidden h-14 shrink-0 items-center justify-end border-b border-border bg-background px-5 md:flex">
       <DropdownMenu>
         <DropdownMenuTrigger
           className="flex items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-2.5 text-foreground outline-none transition hover:bg-accent/70 focus-visible:ring-2 focus-visible:ring-primary/40"

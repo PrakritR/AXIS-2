@@ -108,9 +108,33 @@ function emptySnapshot(): DemoDataSnapshot {
   };
 }
 
-/** Idle explore mode — empty portfolio; guided tour builds data step-by-step. */
-export function buildDemoIdleSnapshot(): DemoDataSnapshot {
+/** Guided tour / Run demo — blank slate before autoplay creates a property. */
+export function buildDemoBlankSnapshot(): DemoDataSnapshot {
   return emptySnapshot();
+}
+
+/** Idle explore mode — rich cross-portal portfolio (static seed + mirror base). */
+export function buildDemoIdleSnapshot(): DemoDataSnapshot {
+  return {
+    properties: demoProperties(),
+    applications: demoApplications(),
+    charges: demoCharges(),
+    rentProfiles: demoRentProfiles(),
+    leases: demoLeases(),
+    workOrders: demoWorkOrders(),
+    workOrderBids: demoWorkOrderBids(),
+    vendorPayouts: demoVendorPayouts(),
+    vendors: demoVendors(),
+    promotions: demoPromotions(),
+    serviceRequests: demoServiceRequests(),
+    managerInbox: demoManagerInbox(),
+    residentInbox: demoResidentInbox(),
+    vendorInbox: demoVendorInbox(),
+    adminInbox: demoAdminInbox(),
+    bugFeedback: demoBugFeedback(),
+    schedule: demoSchedule(),
+    residentUploads: demoResidentUploads(),
+  };
 }
 
 const GUIDED_APP_ID = "AXIS-GUIDEDAPP1";
@@ -480,79 +504,14 @@ function guidedVendorInboxStep10(): PersistedInboxThread[] {
 }
 
 /**
- * Cumulative guided-story data after completing steps `1..through` (inclusive).
- * `through = 0` is fully empty — the state when the tour starts at step 1.
+ * Cumulative guided-story data — simplified demo only seeds empty portfolio;
+ * the autoplay creates the property through the real wizard.
  */
-export function buildDemoGuidedDataThrough(through: number): DemoDataSnapshot {
-  const base = emptySnapshot();
-  if (through < 1) return base;
-
-  base.properties = [guidedPioneerProperty()];
-  if (through < 2) return base;
-
-  base.applications = [guidedJordanApplicationPending()];
-  base.managerInbox = guidedManagerInboxStep3();
-  if (through < 3) return base;
-
-  base.applications = [guidedJordanApplicationApproved()];
-  if (through < 4) return base;
-
-  base.leases = [guidedJordanLeaseUnsigned()];
-  base.charges = guidedMoveInChargesPaid();
-  base.residentInbox = guidedResidentInboxStep4();
-  if (through < 5) return base;
-
-  base.leases = [guidedJordanLeaseSigned()];
-  base.rentProfiles = [
-    {
-      id: "demo-rent-guided",
-      residentEmail: DEMO_RESIDENT_EMAIL,
-      residentName: DEMO_RESIDENT_NAME,
-      residentUserId: DEMO_RESIDENT_USER_ID,
-      propertyId: PROP.pioneer,
-      propertyLabel: PROP_LABEL[PROP.pioneer] ?? "The Pioneer · 12A",
-      roomLabel: "Unit 12A",
-      managerUserId: DEMO_MANAGER_USER_ID,
-      monthlyRent: 2400,
-      dueDay: 1,
-      startMonth: isoDaysFromNow(0).slice(0, 7),
-      active: true,
-      updatedAt: isoDaysFromNow(-1),
-    },
-  ];
-  if (through < 6) return base;
-
-  base.charges = [...guidedMoveInChargesPaid(), guidedFirstMonthRentPending()];
-  if (through < 7) return base;
-
-  base.charges = [...guidedMoveInChargesPaid(), guidedFirstMonthRentPaid()];
-  if (through < 8) return base;
-
-  base.workOrders = [guidedKitchenSinkWorkOrder()];
-  if (through < 9) return base;
-
-  base.vendors = [guidedCascadeVendor()];
-  base.workOrders = [guidedVendorAssignedWorkOrder()];
-  if (through < 10) return base;
-
-  base.workOrders = [guidedVendorAssignedWorkOrder(), guidedMiniSplitCompleted()];
-  base.workOrderBids = [guidedVendorBid()];
-  base.vendorInbox = guidedVendorInboxStep10();
-  if (through < 11) return base;
-
-  base.promotions = demoPromotions().filter((p) => p.propertyId === PROP.pioneer);
-  base.residentUploads = demoResidentUploads();
-  base.serviceRequests = demoServiceRequests().filter((r) => r.residentEmail === DEMO_RESIDENT_EMAIL);
-  base.bugFeedback = [];
-  base.adminInbox = [];
-  base.schedule = demoSchedule();
-  void demoExpenseRows();
-
-  return base;
+export function buildDemoGuidedDataThrough(_through: number): DemoDataSnapshot {
+  return buildDemoBlankSnapshot();
 }
 
-/** Data for the current guided step (step 1 = empty start; step 11 includes docs). */
-export function buildDemoGuidedSnapshot(step: GuidedDemoStep): DemoDataSnapshot {
-  if (step >= 11) return buildDemoGuidedDataThrough(11);
-  return buildDemoGuidedDataThrough(Math.max(0, step - 1));
+/** Data for the current guided step — always empty at tour start. */
+export function buildDemoGuidedSnapshot(_step: GuidedDemoStep): DemoDataSnapshot {
+  return buildDemoBlankSnapshot();
 }

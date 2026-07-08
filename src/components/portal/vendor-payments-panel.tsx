@@ -1,37 +1,24 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  ManagerPortalFilterRow,
   ManagerPortalPageShell,
   ManagerPortalStatusPills,
-  MANAGER_TABLE_TH,
   PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import {
-  PORTAL_DATA_TABLE,
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
+  PORTAL_DETAIL_BTN_PRIMARY,
   PORTAL_MOBILE_DETAIL_EXPAND,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
   PortalDataTableEmpty,
   PortalTableDetailActions,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
-  PORTAL_DETAIL_BTN_PRIMARY,
 } from "@/components/portal/portal-data-table";
+import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
 import { VendorPaymentMethodsModal } from "@/components/portal/vendor-payment-methods-modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { CANONICAL_DEMO_MANAGER_NAME } from "@/lib/demo/demo-canonical-accounts";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import {
@@ -50,8 +37,8 @@ type VendorPaymentLedgerRow = {
   id: string;
   propertyName: string;
   workOrderTitle: string;
+  payeeLabel: string;
   amountLabel: string;
-  statusLabel: string;
   dateLabel: string;
   bucket: VendorPaymentBucket;
   payoutStatus: string | null;
@@ -94,18 +81,8 @@ function payoutStatusLabel(payout: VendorPayout | undefined): string | null {
   return null;
 }
 
-function statusTone(label: string) {
-  const l = label.toLowerCase();
-  if (l.includes("paid") || l.includes("sent")) {
-    return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  }
-  if (l.includes("overdue") || l.includes("failed")) {
-    return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  }
-  if (l.includes("pending") || l.includes("awaiting")) {
-    return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  }
-  return "bg-accent/30 text-foreground ring-1 ring-border";
+function managerPayeeLabel(row: DemoManagerWorkOrderRow): string {
+  return row.managerName?.trim() || CANONICAL_DEMO_MANAGER_NAME;
 }
 
 function toLedgerRow(row: DemoManagerWorkOrderRow, payout: VendorPayout | undefined): VendorPaymentLedgerRow | null {
@@ -114,13 +91,6 @@ function toLedgerRow(row: DemoManagerWorkOrderRow, payout: VendorPayout | undefi
 
   const amountCents = workOrderAmountCents(row);
   const payoutLabel = payoutStatusLabel(payout);
-
-  let statusLabel = "Awaiting payment";
-  if (bucket === "paid") {
-    statusLabel = payoutLabel ?? "Paid";
-  } else if (row.automationStatus === "vendor_marked_done") {
-    statusLabel = "Awaiting approval";
-  }
 
   const dateIso =
     bucket === "paid"
@@ -132,8 +102,8 @@ function toLedgerRow(row: DemoManagerWorkOrderRow, payout: VendorPayout | undefi
     id: row.id,
     propertyName: propertyLabel(row),
     workOrderTitle: row.title,
+    payeeLabel: managerPayeeLabel(row),
     amountLabel: amountCents > 0 ? formatMoney(amountCents) : row.cost || "—",
-    statusLabel,
     dateLabel,
     bucket,
     payoutStatus: payoutLabel,
@@ -179,13 +149,6 @@ function VendorPaymentExpandedDetail({
 
   return (
     <div className={PORTAL_MOBILE_DETAIL_EXPAND}>
-      <p className="mb-3 text-sm text-muted">
-        {bucket === "paid" ? "Paid" : "Updated"}:{" "}
-        <span className="font-semibold text-foreground">{row.dateLabel}</span>
-        {" · "}
-        Amount: <span className="font-semibold text-foreground">{row.amountLabel}</span>
-      </p>
-
       {paidChannel && bucket === "paid" ? (
         <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-confirmed-fg)]">
           <p className="text-xs font-semibold">Paid via {managerVendorPayMethodLabel(paidChannel)}</p>
@@ -238,9 +201,7 @@ function VendorPaymentExpandedDetail({
         </div>
       ) : null}
 
-      {row.payoutFailureReason ? (
-        <p className="mb-4 text-xs text-muted">{row.payoutFailureReason}</p>
-      ) : null}
+      {row.payoutFailureReason ? <p className="text-xs text-muted">{row.payoutFailureReason}</p> : null}
     </div>
   );
 }
@@ -256,6 +217,7 @@ export function VendorPaymentsPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [rowBusyId, setRowBusyId] = useState<string | null>(null);
   const [unlinked, setUnlinked] = useState(false);
   const [vendorProfile, setVendorProfile] = useState<ManagerVendorRow | null>(null);
   const [paymentMethodsOpen, setPaymentMethodsOpen] = useState(false);
@@ -333,6 +295,8 @@ export function VendorPaymentsPanel() {
       .filter((row): row is VendorPaymentLedgerRow => row !== null);
   }, [tick, payoutsByWorkOrderId]);
 
+  const ledgerById = useMemo(() => new Map(ledgerRows.map((row) => [row.id, row])), [ledgerRows]);
+
   const counts = useMemo(() => {
     const c: Record<VendorPaymentBucket, number> = { pending: 0, paid: 0 };
     for (const row of ledgerRows) c[row.bucket] += 1;
@@ -352,6 +316,19 @@ export function VendorPaymentsPanel() {
   const rowsForBucket = useMemo(
     () => ledgerRows.filter((row) => row.bucket === bucket),
     [ledgerRows, bucket],
+  );
+
+  const tableRows = useMemo<PortalPaymentTableRow[]>(
+    () =>
+      rowsForBucket.map((row) => ({
+        id: row.id,
+        charge: row.workOrderTitle,
+        property: row.propertyName,
+        payee: row.payeeLabel,
+        dueDate: row.dateLabel,
+        amount: row.amountLabel,
+      })),
+    [rowsForBucket],
   );
 
   const rowIdsKey = useMemo(() => rowsForBucket.map((row) => row.id).join(","), [rowsForBucket]);
@@ -379,6 +356,25 @@ export function VendorPaymentsPanel() {
     });
   }, [rowsForBucket]);
 
+  const runNotify = useCallback(
+    async (workOrderId: string, action: VendorPaymentNotifyAction) => {
+      setRowBusyId(workOrderId);
+      const result = await notifyVendorPayment(workOrderId, action, demo);
+      setRowBusyId(null);
+      if (!result.ok) {
+        showToast(result.error ?? "Could not complete that action.");
+        return false;
+      }
+      if (action === "report_paid") {
+        showToast("Marked paid — manager notified.");
+      } else {
+        showToast("Reminder sent.");
+      }
+      return true;
+    },
+    [demo, showToast],
+  );
+
   const runBulkNotify = useCallback(
     async (action: VendorPaymentNotifyAction) => {
       const ids = [...selectedIds];
@@ -404,16 +400,55 @@ export function VendorPaymentsPanel() {
     [demo, selectedIds, showToast],
   );
 
-  const filterRow = (
-    <ManagerPortalFilterRow>
-      <ManagerPortalStatusPills
-        compact
-        tabs={tabs}
-        activeId={bucket}
-        onChange={(id) => setBucket(id as VendorPaymentBucket)}
+  const renderExpandedActions = (tr: PortalPaymentTableRow) => {
+    const row = ledgerById.get(tr.id)!;
+    const busy = rowBusyId === row.id || bulkBusy;
+    if (bucket === "paid") return null;
+    return (
+      <PortalTableDetailActions>
+        <Button
+          type="button"
+          variant="primary"
+          className={PORTAL_DETAIL_BTN}
+          disabled={busy}
+          data-attr="vendor-payments-mark-paid"
+          onClick={(event) => {
+            event.stopPropagation();
+            void runNotify(row.id, "report_paid");
+          }}
+        >
+          {busy ? "Updating…" : "Mark as paid"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          disabled={busy}
+          data-attr="vendor-payments-send-reminder"
+          onClick={(event) => {
+            event.stopPropagation();
+            void runNotify(row.id, "send_reminder");
+          }}
+        >
+          {busy ? "Sending…" : "Send reminder"}
+        </Button>
+      </PortalTableDetailActions>
+    );
+  };
+
+  const renderExpandedDetail = (tr: PortalPaymentTableRow) => {
+    const row = ledgerById.get(tr.id)!;
+    const workOrder = workOrderById.get(row.id);
+    if (!workOrder) return null;
+    return (
+      <VendorPaymentExpandedDetail
+        row={row}
+        workOrder={workOrder}
+        vendorProfile={vendorProfile}
+        bucket={bucket}
       />
-    </ManagerPortalFilterRow>
-  );
+    );
+  };
 
   return (
     <ManagerPortalPageShell
@@ -429,8 +464,11 @@ export function VendorPaymentsPanel() {
           Payment methods
         </Button>
       }
-      filterRow={filterRow}
     >
+      <div className="mb-4">
+        <ManagerPortalStatusPills tabs={tabs} activeId={bucket} onChange={(id) => setBucket(id as VendorPaymentBucket)} />
+      </div>
+
       {unlinked ? (
         <p
           className="mb-4 rounded-xl border px-4 py-3 text-sm portal-banner-pending"
@@ -479,144 +517,24 @@ export function VendorPaymentsPanel() {
       {rowsForBucket.length === 0 ? (
         <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />
       ) : (
-        <>
-          <div className="space-y-2 lg:hidden">
-            {rowsForBucket.map((row) => {
-              const expanded = expandedId === row.id;
-              return (
-                <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-                  <div className="flex items-start gap-3">
-                    {showSelection ? (
-                      <input
-                        type="checkbox"
-                        className="mt-1 size-4 shrink-0 rounded border-border"
-                        checked={selectedIds.has(row.id)}
-                        onChange={() => toggleSelected(row.id)}
-                        aria-label={`Select ${row.workOrderTitle}`}
-                      />
-                    ) : null}
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
-                      onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                      aria-expanded={expanded}
-                    >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-foreground">{row.workOrderTitle}</p>
-                      <p className="mt-0.5 truncate text-xs text-muted">{row.propertyName}</p>
-                      <p className="mt-0.5 text-xs text-muted">{row.dateLabel}</p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <p className="text-base font-bold tabular-nums text-foreground">{row.amountLabel}</p>
-                      {bucket !== "paid" ? (
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}
-                        >
-                          {row.statusLabel}
-                        </span>
-                      ) : null}
-                      <PortalTableExpandChevron expanded={expanded} />
-                    </div>
-                  </button>
-                  </div>
-                  {expanded ? (
-                    <VendorPaymentExpandedDetail
-                      row={row}
-                      workOrder={workOrderById.get(row.id)!}
-                      vendorProfile={vendorProfile}
-                      bucket={bucket}
-                    />
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-            <div className={PORTAL_DATA_TABLE_SCROLL}>
-              <table className={PORTAL_DATA_TABLE}>
-                <thead>
-                  <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    {showSelection ? (
-                      <th className={`${MANAGER_TABLE_TH} w-10`}>
-                        <input
-                          type="checkbox"
-                          className="size-4 rounded border-border"
-                          checked={allSelected}
-                          onChange={toggleSelectAll}
-                          aria-label="Select all payments"
-                        />
-                      </th>
-                    ) : null}
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Work order</th>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                    <th className={`${MANAGER_TABLE_TH} text-right`}>Amount</th>
-                    {bucket !== "paid" ? (
-                      <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                    ) : null}
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>
-                      {bucket === "paid" ? "Paid" : "Updated"}
-                    </th>
-                    <th className={PORTAL_TABLE_EXPAND_TH}>
-                      <span className="sr-only">Expand</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rowsForBucket.map((row) => (
-                    <Fragment key={row.id}>
-                      <tr
-                        className={PORTAL_TABLE_TR_EXPANDABLE}
-                        onClick={createPortalRowExpandClick(() =>
-                          setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                        )}
-                        aria-expanded={expandedId === row.id}
-                      >
-                        {showSelection ? (
-                          <td className={PORTAL_TABLE_TD} onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              className="size-4 rounded border-border"
-                              checked={selectedIds.has(row.id)}
-                              onChange={() => toggleSelected(row.id)}
-                              aria-label={`Select ${row.workOrderTitle}`}
-                            />
-                          </td>
-                        ) : null}
-                        <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.workOrderTitle}</td>
-                        <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.propertyName}</td>
-                        <td className={`${PORTAL_TABLE_TD} text-right tabular-nums`}>{row.amountLabel}</td>
-                        {bucket !== "paid" ? (
-                          <td className={PORTAL_TABLE_TD}>
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone(row.statusLabel)}`}
-                            >
-                              {row.statusLabel}
-                            </span>
-                          </td>
-                        ) : null}
-                        <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.dateLabel}</td>
-                        <PortalTableExpandCell expanded={expandedId === row.id} />
-                      </tr>
-                      {expandedId === row.id ? (
-                        <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                          <td colSpan={(bucket === "paid" ? 5 : 6) + (showSelection ? 1 : 0)} className={PORTAL_TABLE_DETAIL_CELL}>
-                            <VendorPaymentExpandedDetail
-                              row={row}
-                              workOrder={workOrderById.get(row.id)!}
-                              vendorProfile={vendorProfile}
-                              bucket={bucket}
-                            />
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
+        <PortalPaymentsTable
+          rows={tableRows}
+          expandedId={expandedId}
+          onExpand={setExpandedId}
+          selection={
+            showSelection
+              ? {
+                  selectedIds,
+                  allSelected,
+                  onToggle: toggleSelected,
+                  onToggleAll: toggleSelectAll,
+                  selectLabel: (tr) => `Select ${tr.charge}`,
+                }
+              : undefined
+          }
+          renderExpandedActions={renderExpandedActions}
+          renderExpandedDetail={renderExpandedDetail}
+        />
       )}
       <VendorPaymentMethodsModal
         open={paymentMethodsOpen}

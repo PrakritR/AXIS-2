@@ -366,6 +366,7 @@ export function ManagerLeasesPipelinePanel({
                 type="button"
                 variant="outline"
                 className={PORTAL_DETAIL_BTN}
+                data-attr="lease-generate"
                 disabled={generatingRowId === row.id || !generationGate(row).ok}
                 title={generationGateTitle(row)}
                 onClick={() => runGenerateLease(row)}
@@ -398,6 +399,7 @@ export function ManagerLeasesPipelinePanel({
                 type="button"
                 variant="outline"
                 className={PORTAL_DETAIL_BTN}
+                data-attr="lease-manager-sign"
                 onClick={() => onManagerSign(row)}
                 disabled={!row.generatedHtml && !row.managerUploadedPdf?.dataUrl}
               >
@@ -442,6 +444,7 @@ export function ManagerLeasesPipelinePanel({
                   type="button"
                   variant="outline"
                   className={PORTAL_DETAIL_BTN}
+                  data-attr="lease-send-resident"
                   onClick={() => openSendLeasePreview(row)}
                   disabled={
                     sendingToResidentRowId === row.id ||
@@ -458,6 +461,7 @@ export function ManagerLeasesPipelinePanel({
                 type="button"
                 variant="outline"
                 className={PORTAL_DETAIL_BTN}
+                data-attr="lease-manager-sign"
                 onClick={() => onManagerSign(row)}
                 disabled={!residentHasSignedLease(row) || (!getLeaseDocumentHtml(row) && !row.managerUploadedPdf?.dataUrl)}
               >
@@ -571,7 +575,7 @@ export function ManagerLeasesPipelinePanel({
       />
       <div className="space-y-2 lg:hidden">
         {bucketRows.map((row) => (
-          <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+          <div key={row.id} id={`portal-lease-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
             <button
               type="button"
               className="flex w-full gap-2 text-left"
@@ -612,6 +616,7 @@ export function ManagerLeasesPipelinePanel({
                 <Fragment key={row.id}>
                   {/** current workflow status drives allowed actions; bucket only drives tab grouping */}
                   <tr
+                    id={`portal-lease-${row.id}`}
                     className={PORTAL_TABLE_TR_EXPANDABLE}
                     onClick={createPortalRowExpandClick(() =>
                       setExpandedId((cur) => (cur === row.id ? null : row.id)),

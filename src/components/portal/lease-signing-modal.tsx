@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useIsClient } from "@/hooks/use-is-client";
 import { usePortalContainer } from "@/components/ui/portal-container-context";
+import { DEMO_LEASE_SIGN_PREPARE_EVENT } from "@/lib/demo/demo-playback";
 import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
 import { formatPacificDateTime } from "@/lib/pacific-time";
 
@@ -29,6 +30,16 @@ export function LeaseSigningModal({
   const [agreed, setAgreed] = useState(false);
   const [signed, setSigned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const onPrepare = (e: Event) => {
+      const name = (e as CustomEvent<{ name?: string }>).detail?.name?.trim();
+      if (name) setSigName(name);
+      setAgreed(true);
+    };
+    window.addEventListener(DEMO_LEASE_SIGN_PREPARE_EVENT, onPrepare as EventListener);
+    return () => window.removeEventListener(DEMO_LEASE_SIGN_PREPARE_EVENT, onPrepare as EventListener);
+  }, []);
 
   const now = useMemo(
     () => formatPacificDateTime(new Date()),
@@ -112,6 +123,7 @@ export function LeaseSigningModal({
                     value={sigName}
                     onChange={(e) => setSigName(e.target.value)}
                     disabled={submitting}
+                    data-attr="lease-sign-name"
                     placeholder={signerName || signerRoleLabel}
                     className="mt-2 w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
                   />
@@ -136,6 +148,7 @@ export function LeaseSigningModal({
                     checked={agreed}
                     onChange={(e) => setAgreed(e.target.checked)}
                     disabled={submitting}
+                    data-attr="lease-sign-agree"
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary"
                   />
                   <span>
@@ -154,7 +167,13 @@ export function LeaseSigningModal({
               <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="button" className="rounded-full" disabled={!canSign || submitting} onClick={handleSign}>
+              <Button
+                type="button"
+                className="rounded-full"
+                data-attr="lease-sign-confirm"
+                disabled={!canSign || submitting}
+                onClick={handleSign}
+              >
                 {submitting ? "Signing..." : "Sign lease"}
               </Button>
             </div>

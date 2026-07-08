@@ -256,7 +256,9 @@ export async function renderPortalSection(
     return <ResidentApplicationsPanel />;
   }
   if (kind === "resident" && residentAccess && !residentAccess.leaseAccessUnlocked) {
-    if (section !== "applications" && section !== "profile") {
+    const allowDashboard =
+      section === "dashboard" && residentAccess.hasCompletedApplicationSubmission;
+    if (!allowDashboard && section !== "applications" && section !== "profile") {
       redirect(residentPortalHomePath(residentAccess));
     }
   }
@@ -537,21 +539,11 @@ export async function renderPortalSection(
   }
 
   if (kind === "resident" && section === "bugs-feedback") {
-    if (tabParts?.length) notFound();
-    return <PortalBugFeedbackPanel reporterRole="resident" />;
+    redirect(`${def.basePath}/profile`);
   }
 
   if (kind === "resident" && section === "payments") {
     if (tabParts?.length) notFound();
-    const paymentsEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
-    const paymentsLeaseSigned = paymentsEmail ? await loadResidentLeaseSignedStatus(paymentsEmail) : false;
-    if (!paymentsLeaseSigned) {
-      return (
-        <ManagerPortalPageShell title="Payments">
-          <PortalDataTableEmpty message="Available once your lease is signed" icon="lease" />
-        </ManagerPortalPageShell>
-      );
-    }
     return <ResidentPaymentsPanel />;
   }
 

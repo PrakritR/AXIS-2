@@ -973,6 +973,7 @@ export function ResidentServicesPanel({
           <Button
             type="button"
             className={`rounded-full ${PORTAL_HEADER_ACTION_BTN}`}
+            data-attr="resident-report-maintenance"
             disabled={!servicesUnlocked}
             onClick={() => {
               if (!servicesUnlocked) {
@@ -1287,7 +1288,13 @@ export function ResidentServicesPanel({
           ) : null}
         </div>
         <div className="mt-6 flex flex-wrap justify-start gap-2 border-t border-border pt-4">
-          <Button type="button" className="rounded-full" onClick={() => { void submitMaintenance(); }} disabled={maintenanceSubmitting}>
+          <Button
+            type="button"
+            className="rounded-full"
+            data-attr="resident-maintenance-submit"
+            onClick={() => { void submitMaintenance(); }}
+            disabled={maintenanceSubmitting}
+          >
             {maintenanceSubmitting ? "Submitting…" : "Submit"}
           </Button>
         </div>

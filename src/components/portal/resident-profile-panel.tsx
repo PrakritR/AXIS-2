@@ -208,7 +208,9 @@ export function ResidentProfilePanel() {
 
         <PortalChangePasswordPanel accountEmail={email} />
 
-        <PortalBugFeedbackPanel reporterRole="resident" embedded />
+        <div className="hidden md:block">
+          <PortalBugFeedbackPanel reporterRole="resident" embedded />
+        </div>
 
         <PortalSettingsExtras currentKind="resident" />
       </div>

@@ -172,6 +172,37 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
         </div>
 
         <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+          <SectionHeader title="Meetings" href="/admin/events" linkLabel="Meetings →" />
+          <PortalDashboardPreviewList
+            items={upcomingMeetings}
+            href="/admin/events"
+            emptyMessage={
+              pendingMeetingCount > 0
+                ? `${pendingMeetingCount} pending request${pendingMeetingCount === 1 ? "" : "s"} — no upcoming times on the calendar.`
+                : totalMeetings > 0
+                  ? "No upcoming meetings on the calendar."
+                  : "No meeting requests yet."
+            }
+            keyForItem={(m) => m.id}
+            renderRow={(m) => (
+              <PortalDashboardCompactRow
+                title={m.label}
+                subtitle={fmt(m.start)}
+                badge={
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      m.kind === "pending" ? "portal-badge-pending" : "portal-badge-success"
+                    }`}
+                  >
+                    {m.kind === "pending" ? "Pending" : "Confirmed"}
+                  </span>
+                }
+              />
+            )}
+          />
+        </div>
+
+        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
           <SectionHeader title="Inbox" href="/admin/inbox/unopened" linkLabel="Inbox →" />
           <PortalDashboardPreviewList
             items={inboxPreview}
@@ -204,37 +235,6 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
                 badge={
                   <span className="portal-badge-pending rounded-full px-2 py-0.5 text-[10px] font-semibold">
                     {row.status === "reviewing" ? "Reviewing" : "Open"}
-                  </span>
-                }
-              />
-            )}
-          />
-        </div>
-
-        <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Meetings" href="/admin/events" linkLabel="Meetings →" />
-          <PortalDashboardPreviewList
-            items={upcomingMeetings}
-            href="/admin/events"
-            emptyMessage={
-              pendingMeetingCount > 0
-                ? `${pendingMeetingCount} pending request${pendingMeetingCount === 1 ? "" : "s"} — no upcoming times on the calendar.`
-                : totalMeetings > 0
-                  ? "No upcoming meetings on the calendar."
-                  : "No meeting requests yet."
-            }
-            keyForItem={(m) => m.id}
-            renderRow={(m) => (
-              <PortalDashboardCompactRow
-                title={m.label}
-                subtitle={fmt(m.start)}
-                badge={
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      m.kind === "pending" ? "portal-badge-pending" : "portal-badge-success"
-                    }`}
-                  >
-                    {m.kind === "pending" ? "Pending" : "Confirmed"}
                   </span>
                 }
               />

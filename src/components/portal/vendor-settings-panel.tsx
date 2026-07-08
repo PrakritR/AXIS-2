@@ -6,6 +6,7 @@ import { Input, Select } from "@/components/ui/input";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
+import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { DEMO_VENDOR_EMAIL, DEMO_VENDOR_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
@@ -1045,6 +1046,8 @@ export function VendorSettingsPanel() {
         </PortalCollapsibleSection>
 
         <PortalBugFeedbackPanel reporterRole="vendor" embedded />
+
+        <PortalSettingsExtras currentKind="vendor" />
       </div>
     </ManagerPortalPageShell>
   );

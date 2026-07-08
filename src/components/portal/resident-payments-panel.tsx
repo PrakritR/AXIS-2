@@ -1,30 +1,20 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { track } from "@/lib/analytics/track-client";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { StripeEmbeddedCheckout } from "@/components/stripe-embedded-checkout";
-import { MANAGER_TABLE_TH, ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalFilterRow, ManagerPortalPageShell, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
 import {
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_EXPAND_TH,
-  PORTAL_TABLE_TD,
-  PortalTableExpandCell,
-  PortalTableExpandChevron,
-  createPortalRowExpandClick,
+  PORTAL_DETAIL_BTN,
+  PortalTableDetailActions,
 } from "@/components/portal/portal-data-table";
+import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { useNativePlatform } from "@/hooks/use-native-platform";
 import {
@@ -40,7 +30,14 @@ import {
 } from "@/lib/household-charges";
 import { syncManagerApplicationsFromServer } from "@/lib/manager-applications-storage";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
+import {
+  LEASE_PIPELINE_EVENT,
+  findLeaseForResidentEmail,
+  hasBothLeaseSignatures,
+  syncLeasePipelineFromServer,
+} from "@/lib/lease-pipeline-storage";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { CANONICAL_DEMO_MANAGER_NAME } from "@/lib/demo/demo-canonical-accounts";
 import { canPayHouseholdChargeWithAxisAch } from "@/lib/household-charge-payment-eligibility";
 import {
   residentPaymentMethodLabel,
@@ -114,13 +111,7 @@ function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-type PaymentStatusBucket = "pending" | "paid";
-
-function chargeStatusBadge(row: HouseholdCharge): { tone: "approved" | "overdue" | "pending"; label: string } {
-  if (row.status === "paid") return { tone: "approved", label: "Paid" };
-  const overdue = isHouseholdChargeOverdue(row);
-  return { tone: overdue ? "overdue" : "pending", label: overdue ? "Overdue" : "Pending" };
-}
+type PaymentStatusBucket = "overdue" | "pending" | "paid";
 
 export function ResidentPaymentsPanel() {
   const { showToast } = useAppUi();
@@ -143,6 +134,7 @@ export function ResidentPaymentsPanel() {
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bucket, setBucket] = useState<PaymentStatusBucket>("pending");
+  const [bucketTouched, setBucketTouched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [paymentMethod, setPaymentMethod] = useState<ResidentPayMethod>("ach");
   const [payConfirm, setPayConfirm] = useState<PayConfirmState | null>(null);
@@ -155,8 +147,17 @@ export function ResidentPaymentsPanel() {
   const [savedMethodsLoading, setSavedMethodsLoading] = useState(false);
   const [setupCheckout, setSetupCheckout] = useState<{ kind: "card" | "ach"; clientSecret: string } | null>(null);
   const [setupLoading, setSetupLoading] = useState<"card" | "ach" | null>(null);
+  const [leaseTick, setLeaseTick] = useState(0);
   const email = session.email?.trim() ?? null;
   const userId = session.userId;
+
+  const residentLeaseRow = useMemo(() => {
+    void leaseTick;
+    if (!email) return null;
+    return findLeaseForResidentEmail(email);
+  }, [email, leaseTick]);
+
+  const paymentsUnlocked = Boolean(residentLeaseRow && hasBothLeaseSignatures(residentLeaseRow));
 
   useEffect(() => {
     if (isStripeResidentPayMethod(paymentMethod) && !availablePaymentMethods.includes(paymentMethod)) {
@@ -276,11 +277,26 @@ export function ResidentPaymentsPanel() {
   }, [refresh]);
 
   useEffect(() => {
+    const onLease = () => setLeaseTick((t) => t + 1);
+    window.addEventListener(LEASE_PIPELINE_EVENT, onLease);
+    return () => window.removeEventListener(LEASE_PIPELINE_EVENT, onLease);
+  }, []);
+
+  useEffect(() => {
+    if (!paymentsUnlocked) {
+      setCheckout(null);
+      setPayConfirm(null);
+      setPaymentMethodModalOpen(false);
+    }
+  }, [paymentsUnlocked]);
+
+  useEffect(() => {
     if (!session.ready) return;
     if (session.userId && email) linkHouseholdChargesToResidentUser(email, session.userId);
     void (async () => {
       await syncManagerApplicationsFromServer({ force: true });
       await syncPropertyPipelineFromServer({ force: true });
+      await syncLeasePipelineFromServer();
       await syncHouseholdChargesFromServer(true, { skipReconcile: true });
     })().finally(refresh);
   }, [email, refresh, session.ready, session.userId]);
@@ -340,22 +356,57 @@ export function ResidentPaymentsPanel() {
   }, [charges]);
 
   const pendingRows = useMemo(() => rows.filter((c) => c.status === "pending"), [rows]);
-  const paidRows = useMemo(() => rows.filter((c) => c.status === "paid"), [rows]);
-  const rowsForBucket = useMemo(
-    () => (bucket === "pending" ? pendingRows : paidRows),
-    [bucket, pendingRows, paidRows],
+  const overdueRows = useMemo(
+    () => pendingRows.filter((c) => isHouseholdChargeOverdue(c)),
+    [pendingRows],
   );
+  const upcomingPendingRows = useMemo(
+    () => pendingRows.filter((c) => !isHouseholdChargeOverdue(c)),
+    [pendingRows],
+  );
+  const paidRows = useMemo(() => rows.filter((c) => c.status === "paid"), [rows]);
+  const rowsForBucket = useMemo(() => {
+    if (bucket === "overdue") return overdueRows;
+    if (bucket === "pending") return upcomingPendingRows;
+    return paidRows;
+  }, [bucket, overdueRows, upcomingPendingRows, paidRows]);
 
   const bucketCounts = useMemo(
-    () => ({ pending: pendingRows.length, paid: paidRows.length }),
-    [pendingRows.length, paidRows.length],
+    () => ({
+      overdue: overdueRows.length,
+      pending: upcomingPendingRows.length,
+      paid: paidRows.length,
+    }),
+    [overdueRows.length, upcomingPendingRows.length, paidRows.length],
   );
+
+  useEffect(() => {
+    if (bucketTouched || !email) return;
+    // Default tab is Pending.
+  }, [bucketTouched, email, overdueRows.length]);
 
   const statusTabs = useMemo(
     () =>
       [
-        { id: "pending" as const, label: "Pending", count: bucketCounts.pending },
-        { id: "paid" as const, label: "Paid", count: bucketCounts.paid },
+        {
+          id: "pending" as const,
+          label: "Pending",
+          count: bucketCounts.pending,
+          dataAttr: "resident-payments-tab-pending",
+        },
+        {
+          id: "overdue" as const,
+          label: "Overdue",
+          count: bucketCounts.overdue,
+          alert: bucketCounts.overdue > 0,
+          dataAttr: "resident-payments-tab-overdue",
+        },
+        {
+          id: "paid" as const,
+          label: "Paid",
+          count: bucketCounts.paid,
+          dataAttr: "resident-payments-tab-paid",
+        },
       ] as const,
     [bucketCounts],
   );
@@ -377,12 +428,6 @@ export function ResidentPaymentsPanel() {
       return next;
     });
   }, [rowsForBucket]);
-
-  const counts = useMemo(() => {
-    return {
-      overdue: charges.filter((c) => c.status === "pending" && isHouseholdChargeOverdue(c)).length,
-    };
-  }, [charges]);
 
   const loadCheckout = useCallback(
     async (chargeIds: string[], method: ResidentAxisPaymentMethod) => {
@@ -660,24 +705,11 @@ export function ResidentPaymentsPanel() {
                   : `Pay online (${residentPaymentMethodLabel(checkout.paymentMethod)})`,
               )
             ) : (
-              <>
-                {renderPaymentMethodPicker(
-                  rowPayIds
-                    .map((id) => charges.find((c) => c.id === id))
-                    .filter((c): c is HouseholdCharge => Boolean(c)),
-                )}
-                <div className="mt-3">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    className="rounded-full"
-                    data-attr="resident-payments-row-pay"
-                    onClick={() => openPayConfirm(rowPayIds, paymentMethod)}
-                  >
-                    Pay {row.balanceLabel}
-                  </Button>
-                </div>
-              </>
+              renderPaymentMethodPicker(
+                rowPayIds
+                  .map((id) => charges.find((c) => c.id === id))
+                  .filter((c): c is HouseholdCharge => Boolean(c)),
+              )
             )}
           </div>
         ) : !row.zelleContactSnapshot && !row.venmoContactSnapshot && !achPayable ? (
@@ -703,6 +735,67 @@ export function ResidentPaymentsPanel() {
 
   const showSelectCol = rowsForBucket.length > 0;
 
+  const chargeById = useMemo(() => new Map(charges.map((row) => [row.id, row])), [charges]);
+
+  const residentPayeeLabel = isDemoModeActive() ? CANONICAL_DEMO_MANAGER_NAME : "Property manager";
+
+  const tableRows = useMemo<PortalPaymentTableRow[]>(
+    () =>
+      rowsForBucket.map((row) => ({
+        id: row.id,
+        charge: row.title,
+        property: row.propertyLabel,
+        payee: residentPayeeLabel,
+        dueDate: chargeDueLabel(row),
+        amount: row.balanceLabel,
+      })),
+    [rowsForBucket, residentPayeeLabel],
+  );
+
+  const renderExpandedActions = (tr: PortalPaymentTableRow) => {
+    const row = chargeById.get(tr.id);
+    if (!row) return null;
+    const payable = isPayableHouseholdCharge(row);
+    const rowPayIds = filterChargesForPayMethod([row], paymentMethod).map((c) => c.id);
+    const manualReportable =
+      payable &&
+      rowPayIds.length > 0 &&
+      !isStripeResidentPayMethod(paymentMethod) &&
+      (paymentMethod === "zelle" || paymentMethod === "venmo");
+    return (
+      <PortalTableDetailActions>
+        {payable && rowPayIds.length > 0 ? (
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="resident-payments-row-pay"
+            onClick={(event) => {
+              event.stopPropagation();
+              openPayConfirm(rowPayIds, paymentMethod);
+            }}
+          >
+            Pay {row.balanceLabel}
+          </Button>
+        ) : null}
+        {manualReportable ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="resident-payments-report-sent"
+            onClick={(event) => {
+              event.stopPropagation();
+              openPayConfirm(rowPayIds, paymentMethod);
+            }}
+          >
+            Report sent
+          </Button>
+        ) : null}
+      </PortalTableDetailActions>
+    );
+  };
+
   const checkoutMethodOptions = useMemo(() => {
     const manualOptions = MANUAL_METHOD_OPTIONS.filter((option) =>
       availableManualChannels.includes(option.id),
@@ -727,7 +820,28 @@ export function ResidentPaymentsPanel() {
     <ManagerPortalPageShell
       title="Payments"
       titleAside={
-        unpaidPayableCharges.length > 0 ? (
+        !paymentsUnlocked ? (
+          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              disabled
+              onClick={() => showToast("Payments unlock after your lease is fully signed.")}
+            >
+              Payment method
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              disabled
+              onClick={() => showToast("Payments unlock after your lease is fully signed.")}
+            >
+              Pay all
+            </Button>
+          </div>
+        ) : unpaidPayableCharges.length > 0 ? (
           <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
             {unpaidAchCharges.length > 0 ? (
               <Button
@@ -757,19 +871,25 @@ export function ResidentPaymentsPanel() {
           <ManagerPortalStatusPills
             tabs={[...statusTabs]}
             activeId={bucket}
-            onChange={(id) => setBucket(id as PaymentStatusBucket)}
+            onChange={(id) => {
+              setBucketTouched(true);
+              setBucket(id as PaymentStatusBucket);
+            }}
           />
-          {counts.overdue > 0 ? (
-            <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--status-overdue-fg)_30%,transparent)] bg-[var(--status-overdue-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--status-overdue-fg)]">
-              <span aria-hidden className="size-1.5 rounded-full bg-current" />
-              {counts.overdue} overdue
-            </div>
-          ) : null}
         </ManagerPortalFilterRow>
       }
     >
+      {!paymentsUnlocked ? (
+        <div className="glass-card mb-4 rounded-2xl px-4 py-4 text-sm text-muted [html[data-native]_&]:hidden">
+          <p className="font-medium text-foreground">Payments unlock after your lease is fully signed</p>
+          <p className="mt-1">Rent, deposits, and online pay become available once you and your manager have both signed.</p>
+        </div>
+      ) : null}
+
       {!email ? (
         <p className="text-sm text-muted">Sign in to see your application fees, rent, and deposits.</p>
+      ) : !paymentsUnlocked ? (
+        <PortalDataTableEmpty icon="payment" message="No charges yet." />
       ) : (
         <>
           {showBulkCheckoutBar && checkout ? (
@@ -794,143 +914,39 @@ export function ResidentPaymentsPanel() {
           ) : rowsForBucket.length === 0 ? (
             <PortalDataTableEmpty
               icon="payment"
-              message="No payments in this tab yet."
+              message={
+                bucket === "overdue"
+                  ? "No overdue charges."
+                  : bucket === "pending"
+                    ? "No upcoming charges."
+                    : "No payments in this tab yet."
+              }
             />
           ) : (
-            <>
-              <div className="space-y-2 lg:hidden">
-                {rowsForBucket.map((row) => {
-                  const status = chargeStatusBadge(row);
-                  const expanded = expandedId === row.id;
-                  const toggleExpand = () =>
-                    setExpandedId((cur) => {
-                      const next = cur === row.id ? null : row.id;
-                      if (next !== cur && next) setCheckout(null);
-                      return next;
-                    });
-                  return (
-                    <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-                      <div className="flex items-start gap-2.5">
-                        {showSelectCol ? (
-                          <input
-                            type="checkbox"
-                            className="mt-1 size-4 shrink-0 rounded border-border"
-                            checked={selectedIds.has(row.id)}
-                            onChange={() => toggleSelected(row.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label={`Select ${row.title}`}
-                          />
-                        ) : null}
-                        <button
-                          type="button"
-                          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
-                          onClick={toggleExpand}
-                          aria-expanded={expanded}
-                        >
-                          <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-foreground">{row.title}</p>
-                              <p className="mt-0.5 truncate text-xs text-muted">{row.propertyLabel}</p>
-                              <p className="mt-0.5 truncate text-[11px] text-muted/90">
-                                Due {chargeDueLabel(row)} · {row.amountLabel}
-                              </p>
-                            </div>
-                            <Badge tone={status.tone}>{status.label}</Badge>
-                          </div>
-                          <PortalTableExpandChevron expanded={expanded} />
-                        </button>
-                      </div>
-                      {expanded ? (
-                        <div className="mt-2.5 border-t border-border pt-2.5 text-sm text-muted">
-                          {renderRowDetail(row)}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-                <div className={PORTAL_DATA_TABLE_SCROLL}>
-                  <table className="w-full table-fixed border-collapse text-left text-sm">
-                    <thead>
-                      <tr className={PORTAL_TABLE_HEAD_ROW}>
-                        {showSelectCol ? (
-                          <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
-                            <input
-                              type="checkbox"
-                              className="size-4 rounded border-border"
-                              checked={allBucketSelected}
-                              onChange={toggleSelectAllBucket}
-                              aria-label={`Select all ${bucket} charges`}
-                            />
-                          </th>
-                        ) : null}
-                        <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
-                        <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Property</th>
-                        <th className={`${MANAGER_TABLE_TH} text-left`}>Due</th>
-                        <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
-                        <th className={`${MANAGER_TABLE_TH} text-left hidden sm:table-cell`}>Balance</th>
-                        <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-                        <th className={PORTAL_TABLE_EXPAND_TH}>
-                          <span className="sr-only">Expand</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rowsForBucket.map((row) => {
-                        const status = chargeStatusBadge(row);
-                        const detailColSpan = showSelectCol ? 8 : 7;
-                        return (
-                          <Fragment key={row.id}>
-                            <tr
-                              className={PORTAL_TABLE_TR_EXPANDABLE}
-                              onClick={createPortalRowExpandClick(() =>
-                                setExpandedId((cur) => {
-                                  const next = cur === row.id ? null : row.id;
-                                  if (next !== cur && next) setCheckout(null);
-                                  return next;
-                                }),
-                              )}
-                              aria-expanded={expandedId === row.id}
-                            >
-                              {showSelectCol ? (
-                                <td className={PORTAL_TABLE_TD} onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    className="size-4 rounded border-border"
-                                    checked={selectedIds.has(row.id)}
-                                    onChange={() => toggleSelected(row.id)}
-                                    aria-label={`Select ${row.title}`}
-                                  />
-                                </td>
-                              ) : null}
-                              <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.title}</td>
-                              <td className={`${PORTAL_TABLE_TD} hidden sm:table-cell`}>{row.propertyLabel}</td>
-                              <td className={PORTAL_TABLE_TD}>{chargeDueLabel(row)}</td>
-                              <td className={`${PORTAL_TABLE_TD} tabular-nums text-foreground`}>{row.amountLabel}</td>
-                              <td className={`${PORTAL_TABLE_TD} tabular-nums font-semibold text-foreground hidden sm:table-cell`}>
-                                {row.balanceLabel}
-                              </td>
-                              <td className={PORTAL_TABLE_TD}>
-                                <Badge tone={status.tone}>{status.label}</Badge>
-                              </td>
-                              <PortalTableExpandCell expanded={expandedId === row.id} />
-                            </tr>
-                            {expandedId === row.id ? (
-                              <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                                <td colSpan={detailColSpan} className={`${PORTAL_TABLE_DETAIL_CELL} text-sm text-muted`}>
-                                  {renderRowDetail(row)}
-                                </td>
-                              </tr>
-                            ) : null}
-                          </Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
+            <PortalPaymentsTable
+              rows={tableRows}
+              expandedId={expandedId}
+              onExpand={(id) => {
+                setExpandedId(id);
+                if (id) setCheckout(null);
+              }}
+              selection={
+                showSelectCol
+                  ? {
+                      selectedIds,
+                      allSelected: allBucketSelected,
+                      onToggle: toggleSelected,
+                      onToggleAll: toggleSelectAllBucket,
+                      selectLabel: (tr) => `Select ${tr.charge}`,
+                    }
+                  : undefined
+              }
+              renderExpandedActions={renderExpandedActions}
+              renderExpandedDetail={(tr) => {
+                const row = chargeById.get(tr.id);
+                return row ? renderRowDetail(row) : null;
+              }}
+            />
           )}
         </>
       )}

@@ -264,6 +264,7 @@ export async function upsertApplicationRowToServerAwait(
   row: DemoApplicantRow,
 ): Promise<{ ok: boolean; error?: string }> {
   if (typeof window === "undefined") return { ok: false, error: "Not in browser." };
+  if (isDemoModeActive()) return { ok: true };
   try {
     const res = await fetch("/api/manager-applications", {
       method: "POST",

@@ -44,6 +44,9 @@ export function ManagerOutgoingPaymentDetail({
   onPaid,
   onDelete,
   deleteBusy = false,
+  hideActionBar = false,
+  payModalOpen,
+  onPayModalOpenChange,
 }: {
   row: DemoManagerOutgoingPaymentRow;
   workOrder?: DemoManagerWorkOrderRow;
@@ -51,6 +54,9 @@ export function ManagerOutgoingPaymentDetail({
   onPaid?: () => void;
   onDelete?: () => void;
   deleteBusy?: boolean;
+  hideActionBar?: boolean;
+  payModalOpen?: boolean;
+  onPayModalOpenChange?: (open: boolean) => void;
 }) {
   const { showToast } = useAppUi();
   const payable = Boolean(row.workOrderId && row.bucket !== "paid");
@@ -58,7 +64,9 @@ export function ManagerOutgoingPaymentDetail({
   const [paymentMethod, setPaymentMethod] = useState<ManagerVendorPayMethod>(
     () => defaultManagerVendorPayMethod(vendor) ?? "zelle",
   );
-  const [payConfirmOpen, setPayConfirmOpen] = useState(false);
+  const [payConfirmOpenInternal, setPayConfirmOpenInternal] = useState(false);
+  const payConfirmOpen = payModalOpen ?? payConfirmOpenInternal;
+  const setPayConfirmOpen = onPayModalOpenChange ?? setPayConfirmOpenInternal;
   const [manualSentConfirmed, setManualSentConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -204,6 +212,7 @@ export function ManagerOutgoingPaymentDetail({
         <p className="text-xs text-muted">Logged expense — no vendor payout action required.</p>
       ) : null}
 
+      {!hideActionBar ? (
       <PortalTableDetailActions>
         <Button
           type="button"
@@ -233,6 +242,7 @@ export function ManagerOutgoingPaymentDetail({
           </Button>
         ) : null}
       </PortalTableDetailActions>
+      ) : null}
 
       <Modal open={payConfirmOpen} onClose={() => setPayConfirmOpen(false)} title="Confirm vendor payment">
         <div className="space-y-4 text-sm">

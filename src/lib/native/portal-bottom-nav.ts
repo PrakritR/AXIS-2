@@ -16,17 +16,17 @@ export const NATIVE_BOTTOM_NAV_SLOT_LIMIT = NATIVE_BOTTOM_NAV_PRIMARY_LIMIT;
 export const NATIVE_BOTTOM_NAV_PRO_MANAGER_ORDER = [
   "dashboard",
   "properties",
-  "leases",
-  "applications",
   "calendar",
+  "applications",
+  "leases",
   "residents",
   "payments",
-  "financials",
-  "documents",
   "services",
   "inbox",
   "relationships",
   "promotion",
+  "financials",
+  "documents",
   "bugs-feedback",
 ] as const;
 
@@ -43,7 +43,6 @@ export const NATIVE_BOTTOM_NAV_RESIDENT_ORDER = [
   "services",
   "inbox",
   "documents",
-  "bugs-feedback",
 ] as const;
 
 /**
@@ -182,7 +181,10 @@ export function splitNativeBottomNavItems<T extends { section: string }>(
   const primarySections = new Set(primary.map((item) => item.section));
   // Settings is always reached via the mobile profile menu, never the bar or More sheet.
   const overflow = ordered.filter(
-    (item) => !primarySections.has(item.section) && item.section !== SETTINGS_SECTION,
+    (item) =>
+      !primarySections.has(item.section) &&
+      item.section !== SETTINGS_SECTION &&
+      (kind === "admin" || item.section !== "bugs-feedback"),
   );
   return { primary, overflow };
 }

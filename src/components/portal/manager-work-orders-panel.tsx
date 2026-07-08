@@ -951,6 +951,7 @@ export function ManagerWorkOrdersPanel({
                 return (
                   <Fragment key={row.id}>
                     <tr
+                      id={`portal-work-order-${row.id}`}
                       className={PORTAL_TABLE_TR_EXPANDABLE}
                       onClick={createPortalRowExpandClick(() =>
                         isExpanded ? setExpandedId(null) : openExpand(row),

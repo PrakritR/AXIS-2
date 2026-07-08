@@ -28,6 +28,7 @@ import {
   DEMO_RESIDENT_EMAIL,
   DEMO_RESIDENT_NAME,
   DEMO_RESIDENT_USER_ID,
+  DEMO_VENDOR_EMAIL,
   DEMO_VENDOR_NAME,
   DEMO_VENDOR_USER_ID,
 } from "@/lib/demo/demo-session";
@@ -39,6 +40,7 @@ export {
   DEMO_RESIDENT_EMAIL,
   DEMO_RESIDENT_NAME,
   DEMO_RESIDENT_USER_ID,
+  DEMO_VENDOR_EMAIL,
   DEMO_VENDOR_NAME,
   DEMO_VENDOR_USER_ID,
 };
@@ -333,8 +335,8 @@ export function demoApplications(): DemoApplicantRow[] {
           consentCredit: true,
         }),
       }),
-    mk("demo-app-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "Approved · lease sent", "approved",
-      "Lease sent — awaiting signature", {
+    mk("demo-app-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "Approved · active", "approved",
+      "Lease signed — move-in scheduled", {
         signedMonthlyRent: 2400,
         assignedRoomChoice: demoRoomChoice(PROP.pioneer),
         backgroundCheckStatus: "passed",
@@ -828,11 +830,16 @@ export function demoLeases(): LeasePipelineRow[] {
     // the document immediately (never "being prepared") with signing open —
     // the visitor signs as the resident, toggles roles, and countersigns as
     // the manager to complete it. A page refresh re-seeds and resets the flow.
-    mk("demo-lease-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "resident", "Resident Signature Pending", {
+    mk("demo-lease-4", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL, PROP.pioneer, "signed", "Fully Signed", {
       residentUserId: DEMO_RESIDENT_USER_ID,
       generatedHtml: leaseHtml(DEMO_RESIDENT_NAME, PROP.pioneer, "$2,400.00 per month", DEMO_LEASE_START_DAYS, DEMO_LEASE_END_DAYS),
       generatedAtIso: isoDaysFromNow(-3),
       sentToResidentAt: isoDaysFromNow(-2),
+      residentSignature: { role: "resident", name: DEMO_RESIDENT_NAME, signedAtIso: isoDaysFromNow(-1) },
+      managerSignature: { role: "manager", name: DEMO_MANAGER_NAME, signedAtIso: isoDaysFromNow(0) },
+      residentSignedAt: isoDaysFromNow(-1),
+      managerSignedAt: isoDaysFromNow(0),
+      fullySignedAt: isoDaysFromNow(0),
       signedRentLabel: "$2,400/mo",
       updated: dateLabel(-2),
       updatedAtIso: isoDaysFromNow(-2),
@@ -847,7 +854,7 @@ export function demoLeases(): LeasePipelineRow[] {
           id: "demo-lease-4-msg-1",
           at: isoDaysFromNow(-2),
           role: "manager",
-          body: "Hi Jordan — your lease is ready. Review and sign when you're ready.",
+          body: `Hi ${DEMO_RESIDENT_NAME.split(" ")[0]} — your lease is ready. Review and sign when you're ready.`,
         },
       ],
     }),
@@ -953,6 +960,15 @@ export function demoWorkOrders(): DemoManagerWorkOrderRow[] {
         vendorId: "demo-vendor-1",
         biddingOpen: true,
         biddingOpenedAt: isoDaysFromNow(-3),
+      }),
+    mk("demo-wo-12", PROP.cascade, "Ductless mini-split quote", "Medium", "Open", "open",
+      "Manager wants a ballpark for a new ductless unit before scheduling install.", {
+        residentName: "Omar Haddad",
+        category: "hvac",
+        vendorName: DEMO_VENDOR_NAME,
+        vendorId: "demo-vendor-1",
+        biddingOpen: true,
+        biddingOpenedAt: isoDaysFromNow(-0),
       }),
     mk("demo-wo-6", PROP.cascade, "Water heater flush", "Medium", "Completed", "completed",
       "Annual tank flush and anode check.", {
@@ -1122,7 +1138,7 @@ export function demoVendors(): ManagerVendorRow[] {
     ...extra,
   });
   return [
-    mk("demo-vendor-1", "Cascade Mechanical", "HVAC", "(206) 555-0142", "service@cascademech.example.com", {
+    mk("demo-vendor-1", DEMO_VENDOR_NAME, "HVAC", "(206) 555-0142", DEMO_VENDOR_EMAIL, {
       vendorPriority: "primary",
       insuranceProvider: "Evergreen Mutual",
       insuranceExpiresAt: isoDateOnly(120),
@@ -1358,7 +1374,7 @@ export function demoManagerInbox(): PersistedInboxThread[] {
       email: DEMO_RESIDENT_EMAIL,
       subject: "Kitchen sink still leaking",
       preview: "The leak under the sink is getting worse…",
-      body: "Hi,\n\nThe leak under the kitchen sink is getting worse. Could someone take a look this week?\n\nThanks,\nJordan",
+      body: `Hi,\n\nThe leak under the kitchen sink is getting worse. Could someone take a look this week?\n\nThanks,\n${DEMO_RESIDENT_NAME.split(" ")[0]}`,
       time: dateLabel(-1),
       unread: true,
     },
@@ -1401,8 +1417,8 @@ export function demoManagerInbox(): PersistedInboxThread[] {
       from: DEMO_MANAGER_NAME,
       email: DEMO_MANAGER_EMAIL,
       subject: "Welcome to The Pioneer",
-      preview: "Hi Jordan, welcome! Here are your move-in details…",
-      body: "Hi Jordan,\n\nWelcome to The Pioneer! Keys will be ready at the office after 3pm on your move-in day.\n\nBest,\nAlex",
+      preview: `Hi ${DEMO_RESIDENT_NAME.split(" ")[0]}, welcome! Here are your move-in details…`,
+      body: `Hi ${DEMO_RESIDENT_NAME.split(" ")[0]},\n\nWelcome to The Pioneer! Keys will be ready at the office after 3pm on your move-in day.\n\nBest,\n${DEMO_MANAGER_NAME.split(" ")[0]}`,
       time: dateLabel(-5),
       unread: false,
     },
@@ -1417,8 +1433,8 @@ export function demoResidentInbox(): PersistedInboxThread[] {
       from: DEMO_MANAGER_NAME,
       email: DEMO_MANAGER_EMAIL,
       subject: "Welcome to The Pioneer",
-      preview: "Hi Jordan, welcome! Here are your move-in details…",
-      body: "Hi Jordan,\n\nWelcome to The Pioneer! Keys will be ready at the office after 3pm on your move-in day.\n\nBest,\nAlex",
+      preview: `Hi ${DEMO_RESIDENT_NAME.split(" ")[0]}, welcome! Here are your move-in details…`,
+      body: `Hi ${DEMO_RESIDENT_NAME.split(" ")[0]},\n\nWelcome to The Pioneer! Keys will be ready at the office after 3pm on your move-in day.\n\nBest,\n${DEMO_MANAGER_NAME.split(" ")[0]}`,
       time: dateLabel(-5),
       unread: true,
     },
@@ -1429,7 +1445,7 @@ export function demoResidentInbox(): PersistedInboxThread[] {
       email: "billing@axis.local",
       subject: "Rent receipt — last month",
       preview: "Your payment of $2,400.00 was received. Thank you!",
-      body: "Hi Jordan,\n\nWe received your rent payment of $2,400.00. Thank you!\n\nAxis Payments",
+      body: `Hi ${DEMO_RESIDENT_NAME.split(" ")[0]},\n\nWe received your rent payment of $2,400.00. Thank you!\n\nAxis Payments`,
       time: dateLabel(-3),
       unread: false,
     },
@@ -1440,7 +1456,7 @@ export function demoResidentInbox(): PersistedInboxThread[] {
       email: DEMO_RESIDENT_EMAIL,
       subject: "Kitchen sink still leaking",
       preview: "The leak under the sink is getting worse…",
-      body: "Hi,\n\nThe leak under the kitchen sink is getting worse. Could someone take a look this week?\n\nThanks,\nJordan",
+      body: `Hi,\n\nThe leak under the kitchen sink is getting worse. Could someone take a look this week?\n\nThanks,\n${DEMO_RESIDENT_NAME.split(" ")[0]}`,
       time: dateLabel(-1),
       unread: false,
     },
@@ -1478,9 +1494,20 @@ export function demoVendorInbox(): PersistedInboxThread[] {
       email: DEMO_MANAGER_EMAIL,
       subject: "Payment sent — dishwasher install",
       preview: "Your payout for the Pioneer dishwasher job has been processed…",
-      body: `Hi ${DEMO_VENDOR_NAME},\n\nWe approved and paid the dishwasher install at ${PROP_LABEL[PROP.pioneer]}. $225.00 labor was transferred to your connected account.\n\nThanks,\nAlex`,
+      body: `Hi ${DEMO_VENDOR_NAME},\n\nWe approved and paid the dishwasher install at ${PROP_LABEL[PROP.pioneer]}. $225.00 labor was transferred to your connected account.\n\nThanks,\n${DEMO_MANAGER_NAME.split(" ")[0]}`,
       time: dateLabel(-4),
       unread: false,
+    },
+    {
+      id: "demo-vi-4",
+      folder: "inbox",
+      from: DEMO_MANAGER_NAME,
+      email: DEMO_MANAGER_EMAIL,
+      subject: "Work marked done — awaiting approval",
+      preview: "Your $175.00 invoice for mini-split cleaning is pending manager approval…",
+      body: `Hi ${DEMO_VENDOR_NAME},\n\nThe mini-split head cleaning at ${PROP_LABEL[PROP.lakeview]} is marked done. $175.00 labor is awaiting manager payout approval.\n\nThanks,\n${DEMO_MANAGER_NAME.split(" ")[0]}`,
+      time: dateLabel(-1),
+      unread: true,
     },
   ];
 }

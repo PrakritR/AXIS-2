@@ -14,7 +14,6 @@ export const RESIDENT_FREE_TIER_SECTION_IDS = [
   "payments",
   "move-in",
   "profile",
-  "bugs-feedback",
 ] as const;
 
 export type ResidentFreeTierSectionId = (typeof RESIDENT_FREE_TIER_SECTION_IDS)[number];
@@ -57,7 +56,6 @@ export const RESIDENT_LIMITED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "move-in", label: "Move-in", tabs: [] },
   { section: "inbox", label: "Inbox", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
-  { section: "bugs-feedback", label: "Feedback", tabs: [] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
 
@@ -71,7 +69,6 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
   { section: "inbox", label: "Inbox", tabs: [...INBOX_TABS] },
   { section: "documents", label: "Documents", tabs: [...DOCUMENTS_TABS] },
-  { section: "bugs-feedback", label: "Feedback", tabs: [] },
   { section: "profile", label: "Settings", tabs: [] },
 ];
 

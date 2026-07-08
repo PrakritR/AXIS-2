@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
@@ -692,12 +692,14 @@ export function ManagerHousePropertiesPanel({
     );
   }, [tick, scopeUserId, activeStage]);
 
+  const didAutoStageRef = useRef(false);
   useEffect(() => {
-    if (activeStage !== "pending") return;
-    if ((stageCounts.pending ?? 0) === 0 && (stageCounts.listed ?? 0) > 0) {
+    if (didAutoStageRef.current || !scopeUserId) return;
+    if (activeStage === "pending" && (stageCounts.pending ?? 0) === 0 && (stageCounts.listed ?? 0) > 0) {
       onStageChange("listed");
     }
-  }, [activeStage, stageCounts, onStageChange]);
+    didAutoStageRef.current = true;
+  }, [activeStage, onStageChange, scopeUserId, stageCounts]);
 
   if (!authReady) {
     return <p className="text-sm text-muted">Loading your properties…</p>;

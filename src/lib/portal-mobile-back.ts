@@ -21,12 +21,19 @@ function portalSectionParts(pathname: string, definition: PortalDefinition): str
 export function resolvePortalMobileBackTarget(
   pathname: string,
   definition: PortalDefinition,
+  searchParams?: Pick<URLSearchParams, "get"> | null,
 ): PortalMobileBackTarget | null {
   const sectionParts = portalSectionParts(pathname, definition);
   if (!sectionParts) return null;
 
   const section = sectionParts[0];
   if (!section || section === "dashboard") return null;
+
+  // Early rental-application steps hide the dashboard back affordance (browse link is in the wizard).
+  if (section === "applications" && sectionParts[1] === "apply") {
+    const wizardStep = Number(searchParams?.get("wizardStep") ?? "0");
+    if (wizardStep >= 1 && wizardStep <= 3) return null;
+  }
 
   const meta = definition.sections.find((entry) => entry.section === section);
   const tabId = sectionParts[1];

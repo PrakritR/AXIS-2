@@ -7,11 +7,24 @@
  * means 9am-5pm Pacific regardless of where the Node process runs.
  */
 
+import { isoDateOnly } from "@/lib/demo/demo-data";
+
 export type VendorAvailabilityRule =
   | { id: string; kind: "weekly"; weekday: number; startMinute: number; endMinute: number; note?: string | null }
   | { id: string; kind: "block"; specificDate: string; startMinute: number; endMinute: number; note?: string | null }
   | { id: string; kind: "open"; specificDate: string; startMinute: number; endMinute: number; note?: string | null }
   | { id: string; kind: "event"; specificDate: string; startMinute: number; endMinute: number; note?: string | null };
+
+/** Weekly hours + one-off dates for the /demo sandbox (Settings + Calendar). */
+export const DEMO_VENDOR_AVAILABILITY_RULES: VendorAvailabilityRule[] = [
+  { id: "demo-avail-mon", kind: "weekly", weekday: 1, startMinute: 8 * 60, endMinute: 17 * 60 },
+  { id: "demo-avail-tue", kind: "weekly", weekday: 2, startMinute: 8 * 60, endMinute: 17 * 60 },
+  { id: "demo-avail-wed", kind: "weekly", weekday: 3, startMinute: 8 * 60, endMinute: 17 * 60 },
+  { id: "demo-avail-thu", kind: "weekly", weekday: 4, startMinute: 8 * 60, endMinute: 17 * 60 },
+  { id: "demo-avail-fri", kind: "weekly", weekday: 5, startMinute: 8 * 60, endMinute: 15 * 60 },
+  { id: "demo-avail-block-1", kind: "block", specificDate: isoDateOnly(9), startMinute: 0, endMinute: 1440, note: "Company holiday" },
+  { id: "demo-avail-open-1", kind: "open", specificDate: isoDateOnly(6), startMinute: 10 * 60, endMinute: 14 * 60, note: "Saturday availability" },
+];
 
 /** Prefix for calendar meeting ids backed by a vendor `event` availability rule. */
 export const VENDOR_WORK_MEETING_ID_PREFIX = "vendor-work-";

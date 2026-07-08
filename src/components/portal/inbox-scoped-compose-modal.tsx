@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { DEMO_INBOX_COMPOSE_PREFILL_EVENT } from "@/lib/demo/demo-playback";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   broadcastStubForCategory,
   categoryForContactRole,
@@ -115,6 +117,25 @@ export function ScopedInboxComposeModal({
   const [scheduleLater, setScheduleLater] = useState(false);
   const [sendAt, setSendAt] = useState(defaultScheduleSendAt);
   const managerOnlyCompose = portal === "resident";
+
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    const onPrefill = (e: Event) => {
+      const detail = (e as CustomEvent<{ subject?: string; body?: string; residentEmail?: string }>).detail;
+      setSubject(detail?.subject?.trim() || "Lease renewal reminder");
+      setBody(
+        detail?.body?.trim() ||
+          "Hi — just a friendly reminder that your lease renewal paperwork is ready whenever you want to review it.",
+      );
+      const email = detail?.residentEmail?.trim().toLowerCase();
+      if (email) {
+        const hit = contacts.find((c) => c.email?.toLowerCase() === email);
+        if (hit) setContactIds(new Set([hit.id]));
+      }
+    };
+    window.addEventListener(DEMO_INBOX_COMPOSE_PREFILL_EVENT, onPrefill as EventListener);
+    return () => window.removeEventListener(DEMO_INBOX_COMPOSE_PREFILL_EVENT, onPrefill as EventListener);
+  }, [contacts]);
 
   useEffect(() => {
     if (!open) return;
@@ -586,7 +607,7 @@ export function ScopedInboxComposeModal({
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" variant="primary" className="rounded-full" onClick={submit}>
+          <Button type="button" variant="primary" className="rounded-full" data-attr="inbox-compose-send" onClick={submit}>
             {scheduleLater ? "Schedule message" : "Send"}
           </Button>
         </div>

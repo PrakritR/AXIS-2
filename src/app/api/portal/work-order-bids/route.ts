@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { getPortalAccessContext } from "@/lib/auth/portal-access";
+import { resolvePortalApiActorRole } from "@/lib/auth/vendor-api-access";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { resolveVendorNextAvailableSlot } from "@/lib/vendor-availability-server";
 import { buildVendorBidAcceptedEmail, buildVendorBidDeclinedEmail } from "@/lib/vendor-visit-email";
@@ -55,18 +56,14 @@ type BidJson = {
 };
 
 async function sessionActor(db: Db) {
-  const auth = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await auth.auth.getUser();
-  if (!user) return null;
-  const admin = await isAdminUser(user.id);
-  const { data: profile } = await db.from("profiles").select("email, role, full_name").eq("id", user.id).maybeSingle();
-  const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
+  const ctx = await getPortalAccessContext();
+  if (!ctx.user) return null;
+  const admin = await isAdminUser(ctx.user.id);
+  const role = resolvePortalApiActorRole(ctx);
   return {
-    userId: user.id,
-    email: (profile?.email ?? user.email ?? "").trim().toLowerCase(),
-    fullName: profile?.full_name?.trim() || "",
+    userId: ctx.user.id,
+    email: (ctx.profile?.email ?? ctx.user.email ?? "").trim().toLowerCase(),
+    fullName: ctx.profile?.full_name?.trim() || "",
     admin,
     role,
   };

@@ -6,6 +6,10 @@ import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import {
+  DEMO_LISTING_AUTOFILL_EVENT,
+  DEMO_LISTING_SUBMITTED_EVENT,
+} from "@/lib/demo/demo-playback";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { LeaseConfigForm, readLeaseTemplateFile } from "@/components/portal/lease-config-form";
@@ -977,6 +981,7 @@ export function ManagerAddListingForm({
     };
   });
   const [busy, setBusy] = useState(false);
+  const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [stepFieldErrors, setStepFieldErrors] = useState<Record<string, string>>({});
   const [maxStepReached, setMaxStepReached] = useState(() =>
@@ -1015,6 +1020,7 @@ export function ManagerAddListingForm({
   const isListingItemExpanded = (key: string) => expandedListingItems.has(key);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const submitListingRef = useRef<() => Promise<void>>(async () => {});
   // Object URLs for video preview (avoids putting huge base64 strings in <video src>).
   // Keyed by a stable id like "room-<id>", "bath-<id>", "space-<id>", "house".
   const [videoPreviewUrls, setVideoPreviewUrls] = useState<Record<string, string>>({});
@@ -1051,6 +1057,24 @@ export function ManagerAddListingForm({
     return () => {
       Object.values(videoPreviewUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
     };
+  }, []);
+
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    const onAutofill = (e: Event) => {
+      const detail = (e as CustomEvent<{ submission?: ManagerListingSubmissionV1; submitAfter?: boolean }>).detail;
+      const submission = detail?.submission;
+      if (!submission) return;
+      const normalized = normalizeManagerListingSubmissionV1(submission);
+      setSub(normalized);
+      setServiceOffers(normalized.serviceRequestOptions ?? []);
+      setMaxStepReached(LISTING_STEP_COUNT - 1);
+      setStepIndex(LISTING_STEP_COUNT - 1);
+      setStepFieldErrors({});
+      if (detail?.submitAfter) setDemoAutofillSubmitPending(true);
+    };
+    window.addEventListener(DEMO_LISTING_AUTOFILL_EVENT, onAutofill as EventListener);
+    return () => window.removeEventListener(DEMO_LISTING_AUTOFILL_EVENT, onAutofill as EventListener);
   }, []);
 
   const handleSaveService = () => {
@@ -2152,11 +2176,27 @@ export function ManagerAddListingForm({
         showToast("Could not submit listing.");
         return;
       }
+      if (isDemoModeActive()) {
+        window.dispatchEvent(new CustomEvent(DEMO_LISTING_SUBMITTED_EVENT, { detail: { id } }));
+      }
       onSubmitted();
     } finally {
       setBusy(false);
     }
   };
+  submitListingRef.current = submitListing;
+
+  useEffect(() => {
+    if (!demoAutofillSubmitPending || !isDemoModeActive()) return;
+    setDemoAutofillSubmitPending(false);
+    const body = scrollRef.current;
+    if (body && body.scrollHeight > body.clientHeight + 8) {
+      body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
+      window.setTimeout(() => void submitListingRef.current(), 560);
+      return;
+    }
+    void submitListingRef.current();
+  }, [demoAutofillSubmitPending, sub]);
 
   if (!mounted) return null;
 
@@ -4717,7 +4757,13 @@ export function ManagerAddListingForm({
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               {!isFinalStep ? (
-                <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={goNext} disabled={busy}>
+                <Button
+                  type="button"
+                  className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
+                  data-attr="listing-wizard-continue"
+                  onClick={goNext}
+                  disabled={busy}
+                >
                   {visibleStepPosition === visibleStepCount - 2
                     ? isPreviewWizard
                       ? "Review & save →"
@@ -4725,7 +4771,13 @@ export function ManagerAddListingForm({
                     : "Continue"}
                 </Button>
               ) : (
-                <Button type="button" className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]" onClick={() => void submitListing()} disabled={busy}>
+                <Button
+                  type="button"
+                  className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
+                  data-attr="listing-wizard-submit"
+                  onClick={() => void submitListing()}
+                  disabled={busy}
+                >
                   {busy
                     ? isPreviewWizard
                       ? "Saving preview…"

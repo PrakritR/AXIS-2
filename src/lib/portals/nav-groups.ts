@@ -28,12 +28,12 @@ export function isHiddenFromMobileNav(kind: PortalKind, section: string): boolea
 
 const PRO_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "portfolio", label: "Portfolio", sections: ["properties", "leases"] },
-  { id: "leasing", label: "Leasing", sections: ["applications", "calendar", "residents"] },
-  { id: "finances", label: "Finances", sections: ["payments", "financials", "documents"] },
+  { id: "leasing", label: "Leasing", sections: ["properties", "calendar", "applications", "leases"] },
+  { id: "tenancy", label: "Tenancy", sections: ["residents", "payments"] },
   { id: "operations", label: "Operations", sections: ["services", "inbox"] },
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
+  { id: "finances", label: "Finances", sections: ["financials", "documents"] },
   { id: "account", label: null, sections: ["profile"] },
 ];
 

@@ -7,7 +7,10 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
-import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import { ManagerPortalPageShell, ManagerPortalFilterRow, ManagerPortalStatusPills, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
+import {
+  PortalDataTableEmpty,
+} from "@/components/portal/portal-data-table";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
@@ -34,6 +37,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 
+type LeaseStatusTab = "signed" | "pending";
+
 /**
  * Self-contained resident Lease tab: review + sign the lease and download or
  * upload the document. General document uploads live in Documents › Other
@@ -48,6 +53,7 @@ export function ResidentLeasePanel() {
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
   const [residentAxisId, setResidentAxisId] = useState("");
+  const [tab, setTab] = useState<LeaseStatusTab>("pending");
   const email = session.email?.trim() || null;
 
   useEffect(() => {
@@ -119,9 +125,20 @@ export function ResidentLeasePanel() {
     return gatherLeaseGenerationContext();
   }, [pipelineRow]);
 
-  /** Both manager AND resident signatures present. */
   const leaseFullyExecuted = Boolean(pipelineRow && hasBothLeaseSignatures(pipelineRow));
   const leaseVisibleToResident = residentCanViewLeaseRow(pipelineRow) && leaseAuthorized;
+  const isPreparingLease = Boolean(email && (!pipelineRow || !leaseVisibleToResident));
+  const isPendingLease = Boolean(pipelineRow && leaseVisibleToResident && !leaseFullyExecuted);
+  const isSignedLease = Boolean(pipelineRow && leaseVisibleToResident && leaseFullyExecuted);
+
+  const leaseTabs = useMemo(
+    () =>
+      [
+        { id: "pending" as const, label: "Pending", count: isPreparingLease || isPendingLease ? 1 : 0 },
+        { id: "signed" as const, label: "Signed", count: isSignedLease ? 1 : 0 },
+      ] as const,
+    [isPendingLease, isPreparingLease, isSignedLease],
+  );
   const residentAlreadySigned = Boolean(pipelineRow?.residentSignature);
   const showSigningWorkflowActions = !leaseFullyExecuted && pipelineRow?.status !== "Fully Signed";
 
@@ -222,126 +239,57 @@ export function ResidentLeasePanel() {
     setPipelineTick((t) => t + 1);
   }, []);
 
-  if ((!pipelineRow || !leaseVisibleToResident) && email) {
-    const preparing = (
-      <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--glass-fill)] ring-1 ring-border">
-          <svg className="h-8 w-8 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-          </svg>
+  const preparingEmpty = (
+    <PortalDataTableEmpty
+      icon="lease"
+      message="Your lease is being prepared. Once your manager sends it, it will appear here for review and signature."
+    />
+  );
+
+  const renderPendingLeaseContent = () => {
+    if (!email) {
+      return <p className="text-sm text-muted">Sign in to view your lease.</p>;
+    }
+    if (isPreparingLease) {
+      return preparingEmpty;
+    }
+    if (!isPendingLease || !pipelineRow) {
+      return <PortalDataTableEmpty icon="lease" message="No pending leases." />;
+    }
+    return (
+      <>
+        <div className="mb-6">
+          <LeaseDocumentPreview
+            className="mt-0"
+            row={pipelineRow}
+            emptyHint="Your manager will generate or upload your lease here. When it's ready, the full agreement appears in this preview."
+          />
+          {pipelineRow.managerUploadedPdf?.dataUrl && pipelineRow.status === "Resident Signature Pending" ? (
+            <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-approved-fg)_25%,transparent)] p-4 text-sm text-[var(--status-approved-fg)]">
+              Sign in the portal to append an electronic signature page, or upload a manually signed PDF if you prefer.
+            </Card>
+          ) : null}
         </div>
-        <div>
-          <p className="text-lg font-bold text-foreground">Your lease is being prepared</p>
-          <p className="mt-1.5 max-w-sm text-sm text-muted">
-            Once your manager finalises and sends your lease to you, it will appear here ready for review and signature.
-          </p>
-        </div>
-        <p className="text-xs text-muted">Check back soon — this page updates automatically.</p>
-      </div>
+      </>
     );
-    return <ManagerPortalPageShell title="Lease">{preparing}</ManagerPortalPageShell>;
-  }
+  };
 
-  return (
-    <>
-      <input
-        ref={uploadRef}
-        type="file"
-        accept="application/pdf"
-        className="sr-only"
-        aria-hidden
-        onChange={(e) => void onUploadResidentPdf(e.target.files?.[0])}
-      />
-      {showSigningModal && pipelineRow ? (
-        <LeaseSigningModal
-          row={pipelineRow}
-          signerName={leaseCtx.application?.fullLegalName ?? pipelineRow.residentName ?? ""}
-          signerRoleLabel="Your full legal name"
-          agreementLabel="Residential Room Rental Agreement"
-          onSign={handleModalSign}
-          onClose={() => setShowSigningModal(false)}
-        />
-      ) : null}
-
-      <LeaseAmendMoveOutModal
-        open={showMoveOutModal}
-        onClose={() => setShowMoveOutModal(false)}
-        currentEnd={pipelineRow?.application?.leaseEnd ?? ""}
-        leaseStart={pipelineRow?.application?.leaseStart ?? ""}
-        checkUrl="/api/resident/check-move-out-availability"
-        amendUrl="/api/resident/extend-lease"
-        onSuccess={() => void handleMoveOutSuccess()}
-      />
-
-      <ManagerPortalPageShell
-        title="Lease"
-        titleAside={
-          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-            {leaseFullyExecuted ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                onClick={() => setShowMoveOutModal(true)}
-              >
-                Renew
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-              onClick={onDownloadLeasePackage}
-            >
-              Download
-            </Button>
-            {showSigningWorkflowActions && !residentAlreadySigned ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                  onClick={() => uploadRef.current?.click()}
-                  disabled={uploadingPdf}
-                >
-                  {uploadingPdf ? "Uploading..." : "Upload"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                  onClick={onSendToManager}
-                >
-                  Send to manager
-                </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
-                  onClick={() => onSignLease()}
-                >
-                  Sign lease
-                </Button>
-              </>
-            ) : null}
-          </div>
-        }
-      >
-        {leaseVisibleToResident && pipelineRow ? (
-          <div className="mb-6">
-            <LeaseDocumentPreview
-              className="mt-0"
-              row={pipelineRow}
-              emptyHint="Your manager will generate or upload your lease here. When it's ready, the full agreement appears in this preview."
-            />
-            {pipelineRow.managerUploadedPdf?.dataUrl && pipelineRow.status === "Resident Signature Pending" ? (
-              <Card className="glass-card mt-4 border-[color-mix(in_srgb,var(--status-approved-fg)_25%,transparent)] p-4 text-sm text-[var(--status-approved-fg)]">
-                Sign in the portal to append an electronic signature page, or upload a manually signed PDF if you prefer.
-              </Card>
-            ) : null}
-          </div>
-        ) : null}
-
+  const renderSignedLeaseContent = () => {
+    if (!email) {
+      return <p className="text-sm text-muted">Sign in to view your lease.</p>;
+    }
+    if (!isSignedLease || !pipelineRow) {
+      return <PortalDataTableEmpty icon="lease" message="No signed leases yet." />;
+    }
+    return (
+      <>
+        <div className="mb-6">
+          <LeaseDocumentPreview
+            className="mt-0"
+            row={pipelineRow}
+            emptyHint="Your signed lease will appear here."
+          />
+        </div>
         {upgradeBreakdown ? (
           <Card className="glass-card mt-6 border-border p-5">
             <p className="text-xs font-bold uppercase tracking-wide text-[var(--status-approved-fg)]">Upgrade to long-term rental</p>
@@ -395,6 +343,121 @@ export function ResidentLeasePanel() {
             </p>
           </Card>
         ) : null}
+      </>
+    );
+  };
+
+  const pendingTitleAside =
+    isPendingLease && pipelineRow ? (
+      <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          onClick={onDownloadLeasePackage}
+        >
+          Download
+        </Button>
+        {showSigningWorkflowActions && !residentAlreadySigned ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={() => uploadRef.current?.click()}
+              disabled={uploadingPdf}
+            >
+              {uploadingPdf ? "Uploading..." : "Upload"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              onClick={onSendToManager}
+            >
+              Send to manager
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+              data-attr="resident-sign-lease"
+              onClick={() => onSignLease()}
+            >
+              Sign lease
+            </Button>
+          </>
+        ) : null}
+      </div>
+    ) : null;
+
+  const signedTitleAside =
+    isSignedLease && pipelineRow ? (
+      <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          onClick={() => setShowMoveOutModal(true)}
+        >
+          Renew
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`}
+          onClick={onDownloadLeasePackage}
+        >
+          Download
+        </Button>
+      </div>
+    ) : null;
+
+  return (
+    <>
+      <input
+        ref={uploadRef}
+        type="file"
+        accept="application/pdf"
+        className="sr-only"
+        aria-hidden
+        onChange={(e) => void onUploadResidentPdf(e.target.files?.[0])}
+      />
+      {showSigningModal && pipelineRow ? (
+        <LeaseSigningModal
+          row={pipelineRow}
+          signerName={leaseCtx.application?.fullLegalName ?? pipelineRow.residentName ?? ""}
+          signerRoleLabel="Your full legal name"
+          agreementLabel="Residential Room Rental Agreement"
+          onSign={handleModalSign}
+          onClose={() => setShowSigningModal(false)}
+        />
+      ) : null}
+
+      <LeaseAmendMoveOutModal
+        open={showMoveOutModal}
+        onClose={() => setShowMoveOutModal(false)}
+        currentEnd={pipelineRow?.application?.leaseEnd ?? ""}
+        leaseStart={pipelineRow?.application?.leaseStart ?? ""}
+        checkUrl="/api/resident/check-move-out-availability"
+        amendUrl="/api/resident/extend-lease"
+        onSuccess={() => void handleMoveOutSuccess()}
+      />
+
+      <ManagerPortalPageShell
+        title="Lease"
+        titleAside={tab === "pending" ? pendingTitleAside : signedTitleAside}
+        filterRow={
+          <ManagerPortalFilterRow>
+            <ManagerPortalStatusPills
+              tabs={[...leaseTabs]}
+              activeId={tab}
+              onChange={(id) => setTab(id as LeaseStatusTab)}
+            />
+          </ManagerPortalFilterRow>
+        }
+      >
+        {tab === "pending" ? renderPendingLeaseContent() : renderSignedLeaseContent()}
       </ManagerPortalPageShell>
     </>
   );

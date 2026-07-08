@@ -98,7 +98,27 @@ vi.mock("@/lib/demo-admin-scheduling", () => ({
 }));
 
 vi.mock("@/lib/demo-admin-ui", () => ({ ADMIN_UI_EVENT: "admin-ui-changed" }));
-vi.mock("@/lib/demo-property-pipeline", () => ({ PROPERTY_PIPELINE_EVENT: "property-pipeline-changed" }));
+vi.mock("@/lib/demo-property-pipeline", () => ({
+  PROPERTY_PIPELINE_EVENT: "property-pipeline-changed",
+  syncPropertyPipelineFromServer: () => Promise.resolve(),
+  readPendingManagerPropertiesForUser: () => [
+    {
+      id: "prop-1",
+      submittedAt: "2026-06-28T00:00:00.000Z",
+      buildingName: "Elm Street Flats",
+      address: "100 Elm St",
+      zip: "98101",
+      neighborhood: "Capitol Hill",
+      unitLabel: "#2",
+      beds: 2,
+      baths: 1,
+      monthlyRent: 1250,
+      petFriendly: true,
+      tagline: "Bright corner unit",
+    },
+  ],
+  readScopedExtraListings: () => [{ id: "live-1" }],
+}));
 
 import { ManagerDashboard } from "@/components/portal/manager-dashboard";
 

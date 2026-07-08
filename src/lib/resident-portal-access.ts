@@ -7,6 +7,8 @@ export type ResidentPortalAccessState = {
   roleOk: boolean;
   /** True when any manager_application_records row exists for this resident email. */
   hasSubmittedApplication: boolean;
+  /** True when at least one application is past the in-progress draft stage. */
+  hasCompletedApplicationSubmission: boolean;
   /** Resident with no submitted application yet — Applications-only portal. */
   isPreApplicationResident: boolean;
   applicationApproved: boolean;
@@ -22,6 +24,7 @@ function emptyAccessState(managerSubscriptionTier: ManagerSubscriptionTier): Res
   return {
     roleOk: false,
     hasSubmittedApplication: false,
+    hasCompletedApplicationSubmission: false,
     isPreApplicationResident: false,
     applicationApproved: false,
     applicationId: null,
@@ -35,6 +38,10 @@ function emptyAccessState(managerSubscriptionTier: ManagerSubscriptionTier): Res
 
 function normalizeEmail(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function isInProgressApplicationStage(stage: string | null | undefined): boolean {
+  return stage?.trim().toLowerCase() === "in progress";
 }
 
 function readLatestApplication(
@@ -102,6 +109,15 @@ const loadResidentPortalAccessStateCached = cache(
 
     let latestApplication = readLatestApplication(applicationRows ?? [], email);
     let hasSubmittedApplication = (applicationRows ?? []).length > 0;
+    let hasCompletedApplicationSubmission = (applicationRows ?? []).some((record) => {
+      const row = record.row_data && typeof record.row_data === "object" && !Array.isArray(record.row_data)
+        ? (record.row_data as Record<string, unknown>)
+        : null;
+      const residentEmail = normalizeEmail(typeof row?.email === "string" ? row.email : null);
+      if (!row || residentEmail !== email) return false;
+      const stage = typeof row.stage === "string" ? row.stage : null;
+      return !isInProgressApplicationStage(stage);
+    });
     let applicationApproved = latestApplication.bucket === "approved";
 
     if ((!latestApplication.id || !applicationApproved) && userId) {
@@ -122,6 +138,9 @@ const loadResidentPortalAccessStateCached = cache(
         if (axisRecord?.row_data && typeof axisRecord.row_data === "object" && !Array.isArray(axisRecord.row_data)) {
           const axisRow = axisRecord.row_data as Record<string, unknown>;
           hasSubmittedApplication = true;
+          hasCompletedApplicationSubmission =
+            hasCompletedApplicationSubmission ||
+            !isInProgressApplicationStage(typeof axisRow.stage === "string" ? axisRow.stage : null);
           latestApplication = {
             id: typeof axisRow.id === "string" ? axisRow.id.trim() || null : null,
             bucket: typeof axisRow.bucket === "string" ? axisRow.bucket.trim().toLowerCase() || null : null,
@@ -143,6 +162,7 @@ const loadResidentPortalAccessStateCached = cache(
     return {
       roleOk,
       hasSubmittedApplication,
+      hasCompletedApplicationSubmission,
       isPreApplicationResident,
       applicationApproved,
       applicationId: latestApplication.id,

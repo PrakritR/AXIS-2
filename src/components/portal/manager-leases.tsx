@@ -27,11 +27,11 @@ import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-acces
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import { getPropertyById } from "@/lib/rental-application/data";
 
-const LEASE_LABELS: { id: ManagerLeaseTab; label: string }[] = [
-  { id: "manager", label: "Manager review" },
-  { id: "resident", label: "Resident signature pending" },
-  { id: "signed", label: "Manager signature pending" },
-  { id: "completed", label: "Signed" },
+const LEASE_LABELS: { id: ManagerLeaseTab; label: string; dataAttr: string }[] = [
+  { id: "manager", label: "Manager review", dataAttr: "leases-tab-manager" },
+  { id: "resident", label: "Resident signature pending", dataAttr: "leases-tab-resident" },
+  { id: "signed", label: "Manager signature pending", dataAttr: "leases-tab-signed" },
+  { id: "completed", label: "Signed", dataAttr: "leases-tab-completed" },
 ];
 
 export function ManagerLeases() {
@@ -148,7 +148,7 @@ export function ManagerLeases() {
 
   const counts = useMemo(() => countManagerLeaseTabs(rows), [rows]);
   const tabs = useMemo(
-    () => LEASE_LABELS.map(({ id, label }) => ({ id, label, count: counts[id] })),
+    () => LEASE_LABELS.map(({ id, label, dataAttr }) => ({ id, label, count: counts[id], dataAttr })),
     [counts],
   );
 

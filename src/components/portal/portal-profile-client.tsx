@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ManagerPortalPageShell, PORTAL_PAGE_TITLE, PORTAL_SECTION_SURFACE } from "@/components/portal/portal-metrics";
 import { PortalChangePasswordPanel } from "@/components/portal/portal-change-password-panel";
-import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
 import { PortalBugFeedbackPanel } from "@/components/portal/portal-bug-feedback-panel";
 import { PortalSettingsExtras } from "@/components/portal/portal-settings-extras";
 import { ManagerPlan } from "@/components/portal/manager-plan";
@@ -286,9 +285,6 @@ export function PortalProfileClient({
       </div>
       <div className="mt-6">
         <PortalSettingsExtras currentKind={portalKind} />
-      </div>
-      <div className="mt-6">
-        <AdminBugFeedbackClient embedded />
       </div>
     </div>
   );

@@ -66,6 +66,14 @@ import { RentalWizardStepBody } from "./rental-wizard-steps";
 import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
 import { RentalApplicationFinishPanel } from "@/components/marketing/rental-application-finish-panel";
 import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import { residentBrowseFromApplicationHref } from "@/lib/resident-public-nav";
+import { isDemoModeActive, DEMO_GUIDED_USER_ID } from "@/lib/demo/demo-session";
+import { buildDemoApplicationAutofill } from "@/lib/demo/demo-application-autofill";
+import {
+  DEMO_APPLICATION_SUBMITTED_EVENT,
+  DEMO_CLOSE_RESIDENT_APPLY_EVENT,
+  DEMO_RENTAL_AUTOFILL_EVENT,
+} from "@/lib/demo/demo-playback";
 
 const processedApplicationFeeSessions = new Set<string>();
 
@@ -76,6 +84,10 @@ export type RentalApplicationWizardProps = {
   mode?: RentalApplicationWizardMode;
   exitPath?: string;
   sessionEmail?: string;
+  /** Portal table layout — drops the standalone page chrome. */
+  layout?: "standalone" | "embedded";
+  /** Demo / embedded portal apply when URL search params are unavailable. */
+  linkedPropertyId?: string;
 };
 
 function makeNewApplicationId(): string {
@@ -122,6 +134,8 @@ export function RentalApplicationWizard({
   mode = "public",
   exitPath,
   sessionEmail,
+  layout = "standalone",
+  linkedPropertyId: linkedPropertyIdProp,
 }: RentalApplicationWizardProps) {
   return (
     <Suspense
@@ -134,6 +148,8 @@ export function RentalApplicationWizard({
         mode={mode}
         exitPath={exitPath}
         sessionEmail={sessionEmail}
+        layout={layout}
+        linkedPropertyId={linkedPropertyIdProp}
       />
     </Suspense>
   );
@@ -144,6 +160,8 @@ function RentalApplicationWizardInner({
   mode = "public",
   exitPath,
   sessionEmail,
+  layout = "standalone",
+  linkedPropertyId: linkedPropertyIdProp,
 }: RentalApplicationWizardProps) {
   const searchParams = useSearchParams();
   const [applicationPath, setApplicationPath] = useState<"signer" | "cosigner">("signer");
@@ -169,13 +187,36 @@ function RentalApplicationWizardInner({
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showAvailabilityWarnings, setShowAvailabilityWarnings] = useState(false);
+  const [demoAutofillSubmitPending, setDemoAutofillSubmitPending] = useState(false);
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const router = useRouter();
   const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
   const wizardApplyPath = rentalApplicationApplyPath(mode);
+  const browseHomesHref = residentBrowseFromApplicationHref(wizardApplyPath);
+
+  useEffect(() => {
+    if (mode !== "portal" || postSubmit || isDemoModeActive()) return;
+    const params = new URLSearchParams(searchParams.toString());
+    const prev = params.get("wizardStep");
+    if (step <= 3) {
+      const next = String(step);
+      if (prev === next) return;
+      params.set("wizardStep", next);
+    } else if (prev) {
+      params.delete("wizardStep");
+    } else {
+      return;
+    }
+    const qs = params.toString();
+    router.replace(qs ? `${wizardApplyPath}?${qs}` : wizardApplyPath, { scroll: false });
+  }, [mode, postSubmit, router, searchParams, step, wizardApplyPath]);
 
   const exitApplication = useCallback(() => {
+    if (isDemoModeActive()) {
+      window.dispatchEvent(new Event(DEMO_CLOSE_RESIDENT_APPLY_EVENT));
+      return;
+    }
     router.push(wizardExitPath);
   }, [router, wizardExitPath]);
 
@@ -189,7 +230,8 @@ function RentalApplicationWizardInner({
     ].join("|");
   }, [searchParams]);
 
-  const linkedPropertyId = searchParams.get("propertyId")?.trim() ?? "";
+  const linkedPropertyId =
+    linkedPropertyIdProp?.trim() || searchParams.get("propertyId")?.trim() || "";
 
   useEffect(() => {
     void syncPublicApprovedApplicationsFromServer().then(() => setOccupancySyncEpoch((n) => n + 1));
@@ -213,6 +255,30 @@ function RentalApplicationWizardInner({
     const on = () => setChargeTick((n) => n + 1);
     window.addEventListener(HOUSEHOLD_CHARGES_EVENT, on);
     return () => window.removeEventListener(HOUSEHOLD_CHARGES_EVENT, on);
+  }, []);
+
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    const onAutofill = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        propertyId?: string;
+        form?: RentalWizardFormState;
+        submitAfter?: boolean;
+      }>).detail;
+      const pid = detail?.propertyId?.trim();
+      if (!pid) return;
+      const next = detail?.form ?? buildDemoApplicationAutofill(pid);
+      setForm(next);
+      setMaxStepReached(RENTAL_WIZARD_STEP_COUNT);
+      setStep(detail?.submitAfter ? RENTAL_WIZARD_STEP_COUNT : 1);
+      setErrors({});
+      clearRentalWizardDraft();
+      saveRentalWizardDraft(next);
+      saveRentalWizardDraftAxisId(ensureRentalWizardAxisId());
+      if (detail?.submitAfter) setDemoAutofillSubmitPending(true);
+    };
+    window.addEventListener(DEMO_RENTAL_AUTOFILL_EVENT, onAutofill as EventListener);
+    return () => window.removeEventListener(DEMO_RENTAL_AUTOFILL_EVENT, onAutofill as EventListener);
   }, []);
 
   useEffect(() => {
@@ -513,7 +579,7 @@ function RentalApplicationWizardInner({
 
       let emailSent = false;
       const propertyTitle = (listing?.title?.trim() || pid.trim()) || undefined;
-      if (sync.ok && emailTrim.includes("@")) {
+      if (sync.ok && emailTrim.includes("@") && !isDemoModeActive()) {
         try {
           const res = await fetch("/api/portal/send-application-submitted", {
             method: "POST",
@@ -545,6 +611,12 @@ function RentalApplicationWizardInner({
       setSubmitting(false);
       if (mode === "portal" && sync.ok) {
         showToast("Application submitted.");
+        if (isDemoModeActive()) {
+          window.dispatchEvent(
+            new CustomEvent(DEMO_APPLICATION_SUBMITTED_EVENT, { detail: { axisId } }),
+          );
+          return;
+        }
         router.replace("/resident/applications");
         return;
       }
@@ -563,6 +635,12 @@ function RentalApplicationWizardInner({
     },
     [form, mode, router, showToast, submitting],
   );
+
+  useEffect(() => {
+    if (!demoAutofillSubmitPending || !isDemoModeActive()) return;
+    setDemoAutofillSubmitPending(false);
+    void finalizeApplicationSubmit(DEMO_GUIDED_USER_ID);
+  }, [demoAutofillSubmitPending, finalizeApplicationSubmit, form]);
 
   const primaryButtonLabel = useMemo(() => {
     if (step === 3) {
@@ -593,7 +671,7 @@ function RentalApplicationWizardInner({
   ]);
 
   useEffect(() => {
-    if (!draftReady) return;
+    if (!draftReady || isDemoModeActive()) return;
     const feeCheckout = searchParams.get("fee_checkout");
     if (feeCheckout === "cancel") {
       showToast("Checkout cancelled. You can try again when you are ready.");
@@ -680,6 +758,10 @@ function RentalApplicationWizardInner({
     if (step === 12) {
       if (!validateAllPrior()) return;
       void (async () => {
+        if (isDemoModeActive()) {
+          finalizeApplicationSubmit(feeStepUserId ?? DEMO_GUIDED_USER_ID);
+          return;
+        }
         let residentUserId: string | null = null;
         try {
           const supabase = createSupabaseBrowserClient();
@@ -850,12 +932,21 @@ function RentalApplicationWizardInner({
 
   const meta = STEP_META[step - 1];
   const progressPct = Math.round((step / RENTAL_WIZARD_STEP_COUNT) * 100);
+  const embedded = layout === "embedded";
 
   return (
-    <div className="rental-wizard mx-auto max-w-3xl px-4 py-5 sm:py-14">
-      <div className="rental-wizard-page-title text-center sm:text-left">
-        <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Rental application</h1>
-      </div>
+    <div
+      className={
+        embedded
+          ? "rental-wizard rental-wizard--embedded"
+          : "rental-wizard mx-auto max-w-3xl px-4 py-5 sm:py-14"
+      }
+    >
+      {!embedded ? (
+        <div className="rental-wizard-page-title text-center sm:text-left">
+          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-3xl md:text-4xl">Rental application</h1>
+        </div>
+      ) : null}
 
       {!linkedPropertyId && mode !== "portal" ? (
       <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:mt-6 sm:rounded-3xl sm:p-6">
@@ -908,7 +999,11 @@ function RentalApplicationWizardInner({
           />
         ) : (
           <div
-            className="rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11 [html[data-theme=dark]_&]:shadow-[0_24px_80px_-32px_rgba(0,0,0,0.55)] [html[data-theme=dark]_&]:ring-1 [html[data-theme=dark]_&]:ring-white/8"
+            className={
+              embedded
+                ? "rental-wizard-shell rounded-2xl border border-border bg-card p-4 sm:p-6"
+                : "rental-wizard-shell mt-4 rounded-2xl border border-border bg-card p-4 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.18)] sm:mt-8 sm:rounded-3xl sm:p-9 md:p-11 [html[data-theme=dark]_&]:shadow-[0_24px_80px_-32px_rgba(0,0,0,0.55)] [html[data-theme=dark]_&]:ring-1 [html[data-theme=dark]_&]:ring-white/8"
+            }
           >
             <div className="rental-wizard-step-header border-b border-border pb-4 sm:pb-6">
               <p className="rental-wizard-step-eyebrow text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70 sm:text-[11px]">
@@ -984,17 +1079,35 @@ function RentalApplicationWizardInner({
                 className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
                 onClick={handleBack}
               >
-                {step <= 1 ? "Exit application" : reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
+                {step <= 1
+                  ? embedded
+                    ? "Cancel"
+                    : "Exit application"
+                  : reviewReturnStep != null && reviewReturnStep === step
+                    ? "Back to review"
+                    : "Back"}
               </Button>
               <Button
                 type="button"
                 className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
+                data-attr="rental-wizard-continue"
                 onClick={handleContinue}
                 disabled={checkoutBusy || submitting}
               >
                 {submitting ? "Submitting…" : primaryButtonLabel}
               </Button>
             </div>
+            {step <= 3 ? (
+              <p className="rental-wizard-browse-homes mt-4 text-center text-sm">
+                <Link
+                  href={browseHomesHref}
+                  data-attr="rental-wizard-browse-homes"
+                  className="font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  Browse homes
+                </Link>
+              </p>
+            ) : null}
           </div>
         )
       ) : null}

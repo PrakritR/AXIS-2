@@ -9,13 +9,9 @@ export const proPortal: PortalDefinition = {
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },
     { section: "properties", label: "Properties", tabs: [] },
-    {
-      section: "leases",
-      label: "Leases",
-      tabs: [],
-    },
-    { section: "applications", label: "Applications", tabs: [] },
     { section: "calendar", label: "Calendar", tabs: [] },
+    { section: "applications", label: "Applications", tabs: [] },
+    { section: "leases", label: "Leases", tabs: [] },
     {
       section: "residents",
       label: "Residents",
@@ -28,27 +24,6 @@ export const proPortal: PortalDefinition = {
       section: "payments",
       label: "Payments",
       tabs: [],
-    },
-    {
-      section: "financials",
-      label: "Finances",
-      tabs: [
-        { id: "income", label: "Income" },
-        { id: "expenses", label: "Expenses" },
-      ],
-    },
-    {
-      section: "documents",
-      label: "Documents",
-      tabs: [
-        { id: "applications", label: "Applications" },
-        { id: "leases", label: "Leases" },
-        { id: "income-documents", label: "Income documents" },
-        { id: "expense-documents", label: "Expense documents" },
-        { id: "occupancy", label: "Occupancy" },
-        { id: "1099", label: "1099 forms" },
-        { id: "tax-summary", label: "Tax summary" },
-      ],
     },
     {
       section: "services",
@@ -76,6 +51,27 @@ export const proPortal: PortalDefinition = {
       tabs: [],
     },
     { section: "promotion", label: "Promotion", tabs: [] },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [
+        { id: "income", label: "Income" },
+        { id: "expenses", label: "Expenses" },
+      ],
+    },
+    {
+      section: "documents",
+      label: "Documents",
+      tabs: [
+        { id: "applications", label: "Applications" },
+        { id: "leases", label: "Leases" },
+        { id: "income-documents", label: "Income documents" },
+        { id: "expense-documents", label: "Expense documents" },
+        { id: "occupancy", label: "Occupancy" },
+        { id: "1099", label: "1099 forms" },
+        { id: "tax-summary", label: "Tax summary" },
+      ],
+    },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Settings", tabs: [] },
   ],
@@ -85,17 +81,17 @@ export const proPortal: PortalDefinition = {
 export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Dashboard", path: "/portal/dashboard" },
   { label: "Properties", path: "/portal/properties" },
-  { label: "Leases", path: "/portal/leases" },
-  { label: "Applications", path: "/portal/applications" },
   { label: "Calendar", path: "/portal/calendar" },
+  { label: "Applications", path: "/portal/applications" },
+  { label: "Leases", path: "/portal/leases" },
   { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },
-  { label: "Finances", path: "/portal/financials/income" },
-  { label: "Documents", path: "/portal/documents/applications" },
   { label: "Services", path: "/portal/services/requests" },
   { label: "Inbox", path: "/portal/inbox/unopened" },
   { label: "Co-managers", path: "/portal/relationships" },
   { label: "Promotion", path: "/portal/promotion" },
+  { label: "Finances", path: "/portal/financials/income" },
+  { label: "Documents", path: "/portal/documents/applications" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
   { label: "Settings", path: "/portal/profile" },
 ] as const;

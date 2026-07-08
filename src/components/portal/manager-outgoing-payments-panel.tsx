@@ -1,43 +1,24 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import { ManagerOutgoingPaymentDetail } from "@/components/portal/manager-outgoing-payment-detail";
 import {
-  PORTAL_DATA_TABLE, 
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR_EXPANDABLE,
   PortalDataTableEmpty,
   PortalTableDetailActions,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
+import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
 import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { deleteManagerOutgoingExpense } from "@/lib/manager-outgoing-payments";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { readManagerWorkOrderRows } from "@/lib/manager-work-orders-storage";
 
-function statusTone(label: string) {
-  const l = label.toLowerCase();
-  if (l.includes("paid")) return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  if (l.includes("overdue")) return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  if (l.includes("awaiting")) return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  return "bg-accent/30 text-foreground ring-1 ring-border";
-}
-
 export function ManagerOutgoingPaymentsPanel({
   rows,
-  activeBucket,
+  activeBucket: _activeBucket,
   vendorById,
   onRowsChanged,
 }: {
@@ -49,6 +30,7 @@ export function ManagerOutgoingPaymentsPanel({
   const { showToast } = useAppUi();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [payModalRowId, setPayModalRowId] = useState<string | null>(null);
 
   const workOrderById = useMemo(() => {
     const map = new Map<string, DemoManagerWorkOrderRow>();
@@ -56,16 +38,28 @@ export function ManagerOutgoingPaymentsPanel({
     return map;
   }, [rows]);
 
+  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
+
+  const tableRows = useMemo<PortalPaymentTableRow[]>(
+    () =>
+      rows.map((row) => ({
+        id: row.id,
+        charge: row.chargeTitle,
+        property: row.propertyName,
+        payee: row.payeeLabel,
+        dueDate: row.dueDate,
+        amount: row.amountLabel,
+      })),
+    [rows],
+  );
+
   const deleteExpense = async (row: DemoManagerOutgoingPaymentRow) => {
     if (!row.expenseEntryId) {
       showToast("This payment cannot be deleted.");
       return;
     }
     if (row.fromAxisFee) return;
-    if (
-      row.workOrderId &&
-      !row.fromExpense
-    ) {
+    if (row.workOrderId && !row.fromExpense) {
       showToast("Work-order expenses are managed from Services.");
       return;
     }
@@ -104,27 +98,49 @@ export function ManagerOutgoingPaymentsPanel({
   const canDeleteExpense = (row: DemoManagerOutgoingPaymentRow) =>
     Boolean(row.fromExpense && row.expenseEntryId && !row.fromAxisFee);
 
-  const renderExpenseActions = (row: DemoManagerOutgoingPaymentRow) => (
-    <PortalTableDetailActions>
-      {canDeleteExpense(row) ? (
-        <Button
-          type="button"
-          variant="outline"
-          className={`${PORTAL_DETAIL_BTN} text-danger`}
-          disabled={deletingId === row.id}
-          data-attr="outgoing-payment-delete"
-          onClick={(event) => {
-            event.stopPropagation();
-            void deleteExpense(row);
-          }}
-        >
-          {deletingId === row.id ? "Deleting…" : "Delete"}
-        </Button>
-      ) : null}
-    </PortalTableDetailActions>
-  );
+  const isPayableWorkOrder = (row: DemoManagerOutgoingPaymentRow) =>
+    Boolean(row.workOrderId && row.bucket !== "paid");
 
-  const renderDetail = (row: DemoManagerOutgoingPaymentRow) => {
+  const renderExpandedActions = (tr: PortalPaymentTableRow) => {
+    const row = rowById.get(tr.id)!;
+    const payable = isPayableWorkOrder(row);
+    return (
+      <PortalTableDetailActions>
+        {payable ? (
+          <Button
+            type="button"
+            variant="primary"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="manager-outgoing-payment-mark-paid"
+            onClick={(event) => {
+              event.stopPropagation();
+              setPayModalRowId(row.id);
+            }}
+          >
+            Mark as paid
+          </Button>
+        ) : null}
+        {canDeleteExpense(row) ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            disabled={deletingId === row.id}
+            data-attr="outgoing-payment-delete"
+            onClick={(event) => {
+              event.stopPropagation();
+              void deleteExpense(row);
+            }}
+          >
+            {deletingId === row.id ? "Deleting…" : "Delete"}
+          </Button>
+        ) : null}
+      </PortalTableDetailActions>
+    );
+  };
+
+  const renderExpandedDetail = (tr: PortalPaymentTableRow) => {
+    const row = rowById.get(tr.id)!;
     const workOrder = row.workOrderId ? workOrderById.get(row.workOrderId) : undefined;
     const vendor = row.vendorId ? vendorById?.get(row.vendorId) : undefined;
     if (row.workOrderId) {
@@ -133,7 +149,13 @@ export function ManagerOutgoingPaymentsPanel({
           row={row}
           workOrder={workOrder}
           vendor={vendor}
+          hideActionBar
+          payModalOpen={payModalRowId === row.id}
+          onPayModalOpenChange={(open) => {
+            if (!open) setPayModalRowId(null);
+          }}
           onPaid={() => {
+            setPayModalRowId(null);
             setExpandedId(null);
             onRowsChanged?.();
           }}
@@ -143,14 +165,11 @@ export function ManagerOutgoingPaymentsPanel({
       );
     }
     return (
-      <>
-        <p className="mb-3 text-sm text-muted">
-          Due: <span className="font-semibold text-foreground">{row.dueDate}</span>
-          {" · "}
-          Payee: <span className="font-semibold text-foreground">{row.payeeLabel}</span>
-        </p>
-        {renderExpenseActions(row)}
-      </>
+      <p className="text-sm text-muted">
+        Due: <span className="font-semibold text-foreground">{row.dueDate}</span>
+        {" · "}
+        Payee: <span className="font-semibold text-foreground">{row.payeeLabel}</span>
+      </p>
     );
   };
 
@@ -159,90 +178,12 @@ export function ManagerOutgoingPaymentsPanel({
   }
 
   return (
-    <>
-      <div className="space-y-2 lg:hidden">
-        {rows.map((row) => {
-          const expanded = expandedId === row.id;
-          return (
-            <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-              <button
-                type="button"
-                className="flex w-full gap-2 text-left"
-                onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                aria-expanded={expanded}
-              >
-                <div className="min-w-0 flex-1">
-                  <PortalTableInlineExpand expanded={expanded} className="truncate font-semibold text-foreground">
-                    {row.chargeTitle}
-                  </PortalTableInlineExpand>
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    {row.categoryLabel} · {row.payeeLabel}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted">{row.propertyName}</p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <p className="text-base font-bold tabular-nums text-foreground">{row.amountLabel}</p>
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}>
-                    {row.statusLabel}
-                  </span>
-                </div>
-              </button>
-              {expanded ? <div className="mt-3 border-t border-border pt-3">{renderDetail(row)}</div> : null}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-        <div className={PORTAL_DATA_TABLE_SCROLL}>
-          <table className={PORTAL_DATA_TABLE}>
-            <thead>
-              <tr className={PORTAL_TABLE_HEAD_ROW}>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Payee</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Description</th>
-                <th className={`${MANAGER_TABLE_TH} text-right`}>Amount</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>{activeBucket === "paid" ? "Paid" : "Due"}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <Fragment key={row.id}>
-                  <tr
-                    className={PORTAL_TABLE_TR_EXPANDABLE}
-                    aria-expanded={expandedId === row.id}
-                    onClick={createPortalRowExpandClick(() => setExpandedId((cur) => (cur === row.id ? null : row.id)))}
-                  >
-                    <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.propertyName}</td>
-                    <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.categoryLabel}</td>
-                    <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.payeeLabel}</td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <PortalTableInlineExpand expanded={expandedId === row.id}>{row.chargeTitle}</PortalTableInlineExpand>
-                    </td>
-                    <td className={`${PORTAL_TABLE_TD} text-right tabular-nums`}>{row.amountLabel}</td>
-                    <td className={PORTAL_TABLE_TD}>
-                      <div className="flex flex-col gap-1">
-                        <span>{row.dueDate}</span>
-                        <span className={`inline-flex w-fit rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone(row.statusLabel)}`}>
-                          {row.statusLabel}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedId === row.id ? (
-                    <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={6} className={PORTAL_TABLE_DETAIL_CELL}>
-                        {renderDetail(row)}
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
+    <PortalPaymentsTable
+      rows={tableRows}
+      expandedId={expandedId}
+      onExpand={setExpandedId}
+      renderExpandedActions={renderExpandedActions}
+      renderExpandedDetail={renderExpandedDetail}
+    />
   );
 }

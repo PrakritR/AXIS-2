@@ -1,16 +1,8 @@
 "use client";
 
-import { useLayoutEffect } from "react";
 import { DemoPortalShell } from "@/components/demo/demo-portal-shell";
-import { seedDemoPortalData } from "@/lib/demo/demo-seed";
 
 export function DemoPortalExperience() {
-  // Seed during layout effect so it always runs on the client after hydration.
-  // A useState initializer alone can run on the server (no-op) and skip re-run on hydrate.
-  useLayoutEffect(() => {
-    seedDemoPortalData();
-  }, []);
-
   return (
     <>
       <section className="mx-auto w-full max-w-6xl px-4 pt-8 text-center sm:pt-10">

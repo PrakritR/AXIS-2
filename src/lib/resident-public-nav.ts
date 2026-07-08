@@ -8,6 +8,13 @@ export function residentBrowseFromAuthHref(): string {
   return `${RESIDENT_BROWSE_PATH}?from=auth`;
 }
 
+/** In-portal application wizard → browse listings, then return to apply. */
+export function residentBrowseFromApplicationHref(returnPath = `${RESIDENT_APPLICATIONS_PATH}/apply`): string {
+  const next = returnPath.startsWith("/") ? returnPath : `${RESIDENT_APPLICATIONS_PATH}/apply`;
+  const q = new URLSearchParams({ from: "application", return: next });
+  return `${RESIDENT_BROWSE_PATH}?${q.toString()}`;
+}
+
 export function residentCreateAccountHref(
   nextPath = RESIDENT_APPLICATIONS_PATH,
   opts?: { email?: string },

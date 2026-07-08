@@ -5,6 +5,8 @@ import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { DEMO_INBOX_REPLY_PREFILL_EVENT } from "@/lib/demo/demo-playback";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_DATA_TABLE, 
@@ -216,6 +218,19 @@ export function PortalInboxMessageTable({
   const [replyDraftById, setReplyDraftById] = useState<Record<string, string>>({});
   const [replyBusyId, setReplyBusyId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    const onPrefill = (e: Event) => {
+      const detail = (e as CustomEvent<{ rowId?: string; text?: string }>).detail;
+      const rowId = detail?.rowId?.trim();
+      const text = detail?.text?.trim();
+      if (!rowId || !text) return;
+      setReplyDraftById((prev) => ({ ...prev, [rowId]: text }));
+    };
+    window.addEventListener(DEMO_INBOX_REPLY_PREFILL_EVENT, onPrefill as EventListener);
+    return () => window.removeEventListener(DEMO_INBOX_REPLY_PREFILL_EVENT, onPrefill as EventListener);
+  }, []);
+
   const renderExpandedContent = (row: PortalInboxTableRow, detailText: string | undefined, extra: ReactNode) => {
     const hasMarkRead = Boolean(!row.read && onMarkRead);
     return (
@@ -250,7 +265,7 @@ export function PortalInboxMessageTable({
         ) : null}
         <PortalTableDetailActions>
           {hasMarkRead ? (
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onMarkRead?.(row.id)}>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} data-attr="inbox-mark-read" onClick={() => onMarkRead?.(row.id)}>
               Mark read
             </Button>
           ) : null}
@@ -260,6 +275,7 @@ export function PortalInboxMessageTable({
               type="button"
               variant="outline"
               className={PORTAL_DETAIL_BTN}
+              data-attr="inbox-reply-send"
               disabled={replyBusyId === row.id || !(replyDraftById[row.id] ?? "").trim()}
               onClick={() => {
                 const text = (replyDraftById[row.id] ?? "").trim();
@@ -315,7 +331,7 @@ export function PortalInboxMessageTable({
         const extra = renderExtraActions?.(row);
 
         return (
-          <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
+          <div key={row.id} id={`portal-inbox-thread-${row.id}`} className={PORTAL_MOBILE_CARD_CLASS}>
             <div className="flex items-start gap-3">
               {renderRowCheckbox(row, "mt-1")}
               <button
@@ -412,6 +428,7 @@ export function PortalInboxMessageTable({
               return (
                 <Fragment key={row.id}>
                   <tr
+                    id={`portal-inbox-thread-${row.id}`}
                     className={rowExpandable ? PORTAL_TABLE_TR_EXPANDABLE : PORTAL_TABLE_TR}
                     onClick={
                       rowExpandable

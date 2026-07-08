@@ -17,8 +17,15 @@ export function RentBrowsePageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromAuth = searchParams.get("from") === "auth";
+  const fromApplication = searchParams.get("from") === "application";
+  const applicationReturn = searchParams.get("return")?.trim() ?? "";
   const { isNative } = useIsNativeApp();
-  const backHref = fromAuth || isNative ? authCreateResidentPath() : "/";
+  const backHref =
+    fromApplication && applicationReturn.startsWith("/")
+      ? applicationReturn
+      : fromAuth || isNative
+        ? authCreateResidentPath()
+        : "/";
   const onBackClick = useMemo(
     () =>
       isNative === true
@@ -30,14 +37,14 @@ export function RentBrowsePageClient() {
   return (
     <div className="native-auth-screen min-h-[100dvh] px-4 py-5 [html[data-native]_&]:pt-[max(1rem,env(safe-area-inset-top))] [html[data-native]_&]:pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:py-8">
       <div className="mx-auto w-full max-w-7xl">
-        {isNative === true && (
+        {(isNative === true || fromApplication) && (
           <Link
             href={backHref}
             onClick={onBackClick}
             data-attr="resident-browse-back"
             className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:opacity-90"
           >
-            ← Back
+            ← {fromApplication ? "Back to application" : "Back"}
           </Link>
         )}
 

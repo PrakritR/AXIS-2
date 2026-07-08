@@ -44,6 +44,8 @@ import {
   SERVICE_REQUESTS_EVENT,
   syncServiceRequestsFromServer,
 } from "@/lib/service-requests-storage";
+import type { DemoApplicantRow, DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import type { ServiceRequest } from "@/lib/service-requests-storage";
 import {
   countUnopenedPersistedInbox,
   loadPersistedInbox,
@@ -90,6 +92,37 @@ function StatusBadge({ label, tone }: { label: string; tone: string }) {
   );
 }
 
+function applicationStatusBadge(row: DemoApplicantRow): { label: string; tone: "emerald" | "amber" | "rose" | "slate" } {
+  if (row.bucket === "approved") return { label: "Approved", tone: "emerald" };
+  if (row.bucket === "rejected") return { label: "Rejected", tone: "rose" };
+  return { label: row.stage?.trim() || "Pending", tone: "amber" };
+}
+
+function applicationSubtitle(row: DemoApplicantRow): string {
+  const property = row.property?.trim() || row.application?.propertyId?.trim() || "";
+  const stage = row.stage?.trim();
+  if (property && stage) return `${property} · ${stage}`;
+  return property || stage || "Application";
+}
+
+type ServicePreviewItem =
+  | { kind: "request"; id: string; row: ServiceRequest }
+  | { kind: "work-order"; id: string; row: DemoManagerWorkOrderRow };
+
+function servicePreviewItems(
+  requests: ServiceRequest[],
+  workOrders: DemoManagerWorkOrderRow[],
+): ServicePreviewItem[] {
+  const items: ServicePreviewItem[] = [];
+  for (const row of requests.filter((r) => r.status === "pending" || r.status === "approved")) {
+    items.push({ kind: "request", id: `req-${row.id}`, row });
+  }
+  for (const row of workOrders.filter((r) => r.bucket === "open" || r.bucket === "scheduled")) {
+    items.push({ kind: "work-order", id: `wo-${row.id}`, row });
+  }
+  return items;
+}
+
 export function ResidentDashboard({
   applicationApproved = false,
   initialApplicationId = null,
@@ -105,6 +138,7 @@ export function ResidentDashboard({
   residentUserId?: string | null;
   managerSubscriptionTier?: "free" | "paid" | null;
 }) {
+  void initialApplicationId;
   void managerSubscriptionTier;
   const initialEmail = residentEmail.trim().toLowerCase();
   const session = usePortalSession({ userId: residentUserId, email: initialEmail || null });
@@ -112,10 +146,8 @@ export function ResidentDashboard({
   const canUseFullPortal = applicationApproved;
 
   const [appStatus, setAppStatus] = useState<AppStatus>(applicationApproved ? "approved" : "pending");
-  const [appStage, setAppStage] = useState(applicationApproved ? "Approved" : "Submitted");
   const [appProperty, setAppProperty] = useState<string | null>(null);
   const [appRoom, setAppRoom] = useState<string | null>(null);
-  const [appId, setAppId] = useState<string | null>(initialApplicationId);
 
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
@@ -185,16 +217,12 @@ export function ResidentDashboard({
 
         const finalBucket = applicationApproved && row.bucket === "pending" ? "approved" : row.bucket;
         setAppStatus(finalBucket);
-        setAppStage(row.stage?.trim() || finalBucket);
         setAppProperty(resolvedProperty);
         setAppRoom(resolvedRoom);
-        setAppId(row.id?.trim() || null);
       } else {
         setAppStatus("pending");
-        setAppStage("");
         setAppProperty(null);
         setAppRoom(null);
-        setAppId(null);
       }
     };
     apply();
@@ -206,7 +234,7 @@ export function ResidentDashboard({
       window.removeEventListener(MANAGER_APPLICATIONS_EVENT, apply);
       window.removeEventListener("storage", apply);
     };
-  }, [applicationApproved, email, initialApplicationId]);
+  }, [applicationApproved, email]);
 
   const data = useMemo(() => {
     void tick;
@@ -214,12 +242,17 @@ export function ResidentDashboard({
       return {
         leaseRow: null,
         lease: leaseBadge(null, appStatus === "approved"),
-        pendingRequests: 0,
-        pendingWorkOrders: 0,
         inbox: 0,
         inboxThreads: [] as ReturnType<typeof loadPersistedInbox>,
         pendingCharges: [] as ReturnType<typeof readChargesForResident>,
         applicationRows: [] as ReturnType<typeof applicationsForResidentEmail>,
+        workOrders: [] as DemoManagerWorkOrderRow[],
+        serviceRequests: [] as ServiceRequest[],
+        serviceItems: [] as ServicePreviewItem[],
+        openWorkOrderCount: 0,
+        scheduledWorkOrderCount: 0,
+        pendingRequestCount: 0,
+        approvedRequestCount: 0,
       };
     }
 
@@ -233,10 +266,13 @@ export function ResidentDashboard({
             (r as { requestType?: string }).requestType !== "service",
         )
       : [];
-    const pendingWorkOrders = workOrders.filter((r) => r.bucket === "open").length;
+    const openWorkOrderCount = workOrders.filter((r) => r.bucket === "open").length;
+    const scheduledWorkOrderCount = workOrders.filter((r) => r.bucket === "scheduled").length;
 
     const serviceRequests = email ? readServiceRequestsForResident(email) : [];
-    const pendingRequests = serviceRequests.filter((r) => r.status === "pending").length;
+    const pendingRequestCount = serviceRequests.filter((r) => r.status === "pending").length;
+    const approvedRequestCount = serviceRequests.filter((r) => r.status === "approved").length;
+    const serviceItems = servicePreviewItems(serviceRequests, workOrders);
 
     const inboxThreads = loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK)
       .filter((t) => t.folder === "inbox" && t.unread)
@@ -252,16 +288,42 @@ export function ResidentDashboard({
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
         return 0;
       });
-    return { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges, applicationRows: email ? applicationsForResidentEmail(email) : [] };
+    return {
+      leaseRow,
+      lease,
+      inbox,
+      inboxThreads,
+      pendingCharges,
+      applicationRows: email ? applicationsForResidentEmail(email) : [],
+      workOrders,
+      serviceRequests,
+      serviceItems,
+      openWorkOrderCount,
+      scheduledWorkOrderCount,
+      pendingRequestCount,
+      approvedRequestCount,
+    };
   }, [tick, email, appStatus, residentUserId, clientReady]);
 
-  const { leaseRow, lease, pendingRequests, pendingWorkOrders, inbox, inboxThreads, pendingCharges, applicationRows } = data;
+  const {
+    leaseRow,
+    lease,
+    inbox,
+    inboxThreads,
+    pendingCharges,
+    applicationRows,
+    serviceItems,
+    openWorkOrderCount,
+    scheduledWorkOrderCount,
+    pendingRequestCount,
+    approvedRequestCount,
+  } = data;
   const pendingApplicationCount = applicationRows.filter((r) => r.bucket === "pending").length;
+  const approvedApplicationCount = applicationRows.filter((r) => r.bucket === "approved").length;
 
   const welcomeName =
     displayName && displayName !== "Resident" ? displayName.split(/\s+/)[0] : null;
 
-  const moveInDateLabel = leaseRow?.application?.leaseStart?.trim() || null;
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
 
   return (
@@ -271,209 +333,242 @@ export function ResidentDashboard({
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
-        {appStatus === "approved" ? (
-          <>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader
-                  title="Applications"
-                  href={`${BASE}/applications`}
-                  linkLabel="Applications →"
-                />
-                {applicationRows.length === 0 ? (
-                  <p className="mt-4 text-sm text-muted">No applications yet.</p>
-                ) : (
-                  <div className="mt-4 flex flex-col items-start gap-2">
-                    <p className="text-sm font-semibold text-foreground">
-                      {applicationRows.length} application{applicationRows.length === 1 ? "" : "s"}
-                    </p>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+            <PortalDashboardSectionHeader
+              title="Applications"
+              href={`${BASE}/applications`}
+              linkLabel="Applications →"
+              badge={
+                pendingApplicationCount > 0 || approvedApplicationCount > 0 ? (
+                  <span className="flex flex-wrap items-center gap-1.5">
                     {pendingApplicationCount > 0 ? (
-                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                         {pendingApplicationCount} pending
                       </span>
                     ) : null}
-                  </div>
-                )}
-              </div>
-
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
-                <div className="mt-4 flex flex-col items-start gap-2 [html[data-native]_&]:mt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                  <StatusBadge label={lease.label} tone={lease.tone} />
-                  {leaseRow?.application?.leaseStart ? (
-                    <span className="text-xs leading-snug text-muted [html[data-native]_&]:text-[11px]">
-                      {leaseRow.application.leaseStart}
-                      {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted">No lease dates on file yet.</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader title="Move-in" href={`${BASE}/move-in`} linkLabel="Move-in →" />
-                {appProperty || appRoom || moveInDateLabel ? (
-                  <ul className="mt-3 space-y-2">
-                    {appProperty ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Property</p>
-                        <p className="mt-0.5 break-words text-sm font-semibold text-foreground">{appProperty}</p>
-                      </li>
-                    ) : null}
-                    {appRoom ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Room</p>
-                        <p className="mt-0.5 text-sm font-semibold text-foreground">{appRoom}</p>
-                      </li>
-                    ) : null}
-                    {moveInDateLabel ? (
-                      <li className="rounded-xl bg-accent/30 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Lease start</p>
-                        <p className="mt-0.5 text-sm font-semibold text-foreground">{moveInDateLabel}</p>
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <p className="mt-4 text-sm text-muted">Move-in details will appear once your placement is assigned.</p>
-                )}
-              </div>
-
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader
-                  title="Payments"
-                  href={`${BASE}/payments`}
-                  linkLabel="Payments →"
-                  badge={
-                    overdueChargeCount > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
-                        <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                        {overdueChargeCount} overdue
+                    {approvedApplicationCount > 0 ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                        {approvedApplicationCount} approved
                       </span>
-                    ) : null
-                  }
-                />
-                <PortalDashboardPreviewList
-                  items={pendingCharges}
-                  href={`${BASE}/payments`}
-                  emptyMessage="No outstanding charges."
-                  keyForItem={(charge) => charge.id}
-                  renderRow={(charge) => {
-                    const overdue = isHouseholdChargeOverdue(charge);
+                    ) : null}
+                  </span>
+                ) : null
+              }
+            />
+            <PortalDashboardPreviewList
+              items={applicationRows}
+              href={`${BASE}/applications`}
+              emptyMessage="No applications yet. Start your first application."
+              keyForItem={(row) => row.id}
+              renderRow={(row) => {
+                const badge = applicationStatusBadge(row);
+                return (
+                  <PortalDashboardCompactRow
+                    title={row.name?.trim() || "Application"}
+                    subtitle={applicationSubtitle(row)}
+                    badge={
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          badge.tone === "emerald"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : badge.tone === "rose"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {badge.label}
+                      </span>
+                    }
+                    stackBadge
+                  />
+                );
+              }}
+            />
+          </div>
+
+          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+            <PortalDashboardSectionHeader title="Lease" href={`${BASE}/lease`} linkLabel="Lease →" />
+            <div className="mt-4 flex flex-col items-start gap-2 [html[data-native]_&]:mt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+              <StatusBadge label={lease.label} tone={lease.tone} />
+              {leaseRow?.application?.leaseStart ? (
+                <span className="text-xs leading-snug text-muted [html[data-native]_&]:text-[11px]">
+                  {leaseRow.application.leaseStart}
+                  {leaseRow.application.leaseEnd ? ` → ${leaseRow.application.leaseEnd}` : ""}
+                </span>
+              ) : appProperty ? (
+                <span className="text-sm text-muted">{appProperty}{appRoom ? ` · ${appRoom}` : ""}</span>
+              ) : (
+                <span className="text-sm text-muted">No lease on file yet.</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+            <PortalDashboardSectionHeader
+              title="Payments"
+              href={`${BASE}/payments`}
+              linkLabel="Payments →"
+              badge={
+                overdueChargeCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                    {overdueChargeCount} overdue
+                  </span>
+                ) : pendingCharges.length > 0 ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                    {pendingCharges.length} pending
+                  </span>
+                ) : null
+              }
+            />
+            <PortalDashboardPreviewList
+              items={pendingCharges}
+              href={`${BASE}/payments`}
+              emptyMessage="No outstanding charges."
+              keyForItem={(charge) => charge.id}
+              renderRow={(charge) => {
+                const overdue = isHouseholdChargeOverdue(charge);
+                return (
+                  <PortalDashboardCompactRow
+                    title={charge.title || "Charge"}
+                    subtitle={formatCompactChargeLine(
+                      charge.title || "Charge",
+                      charge.balanceLabel,
+                      chargeDueLabel(charge),
+                      { omitBalance: true },
+                    )}
+                    badge={
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
+                          overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {overdue ? `${charge.balanceLabel} · Overdue` : charge.balanceLabel}
+                      </span>
+                    }
+                    stackBadge
+                  />
+                );
+              }}
+            />
+          </div>
+
+          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
+            <PortalDashboardSectionHeader
+              title="Services"
+              href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
+              linkLabel="Services →"
+              badge={
+                canUseFullPortal &&
+                (openWorkOrderCount > 0 ||
+                  scheduledWorkOrderCount > 0 ||
+                  pendingRequestCount > 0 ||
+                  approvedRequestCount > 0) ? (
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {openWorkOrderCount > 0 ? (
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-800">
+                        {openWorkOrderCount} open
+                      </span>
+                    ) : null}
+                    {scheduledWorkOrderCount > 0 ? (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
+                        {scheduledWorkOrderCount} scheduled
+                      </span>
+                    ) : null}
+                    {pendingRequestCount > 0 ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        {pendingRequestCount} request{pendingRequestCount === 1 ? "" : "s"}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null
+              }
+            />
+            {canUseFullPortal ? (
+              <PortalDashboardPreviewList
+                items={serviceItems}
+                href={`${BASE}/services/work-orders`}
+                emptyMessage="No open work orders or pending requests."
+                keyForItem={(item) => item.id}
+                renderRow={(item) => {
+                  if (item.kind === "request") {
+                    const status = item.row.status;
+                    const label = status === "approved" ? "Approved" : "Pending";
+                    const tone =
+                      status === "approved" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800";
+                    const propertyName = getPropertyById(item.row.propertyId)?.buildingName?.trim() || "";
                     return (
                       <PortalDashboardCompactRow
-                        title={charge.title || "Charge"}
-                        subtitle={formatCompactChargeLine(
-                          charge.title || "Charge",
-                          charge.balanceLabel,
-                          chargeDueLabel(charge),
-                          { omitBalance: true },
-                        )}
+                        title={item.row.offerName?.trim() || "Service request"}
+                        subtitle={propertyName || "Request"}
                         badge={
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
-                              overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
-                            }`}
-                          >
-                            {overdue ? `${charge.balanceLabel} · Overdue` : charge.balanceLabel}
-                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone}`}>{label}</span>
                         }
                         stackBadge
                       />
                     );
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader
-                  title="Services"
-                  href={canUseFullPortal ? `${BASE}/services/requests` : `${BASE}/services`}
-                  linkLabel="Services →"
-                />
-                {canUseFullPortal ? (
-                  pendingRequests + pendingWorkOrders === 0 ? (
-                    <p className="mt-4 text-sm text-muted">No pending service requests or work orders.</p>
-                  ) : (
-                    <ul className="mt-3 space-y-2">
-                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                        <span className="text-sm text-muted">Requests</span>
-                        {pendingRequests > 0 ? (
-                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                            {pendingRequests}
-                          </span>
-                        ) : (
-                          <span className="text-sm font-semibold text-muted">0</span>
-                        )}
-                      </li>
-                      <li className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
-                        <span className="text-sm text-muted">Work orders</span>
-                        {pendingWorkOrders > 0 ? (
-                          <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
-                            {pendingWorkOrders}
-                          </span>
-                        ) : (
-                          <span className="text-sm font-semibold text-muted">0</span>
-                        )}
-                      </li>
-                    </ul>
-                  )
-                ) : (
-                  <p className="mt-4 text-sm text-muted">Available on upgraded property plans.</p>
-                )}
-              </div>
-
-              <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-                <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
-                <PortalDashboardPreviewList
-                  items={inboxThreads}
-                  href={`${BASE}/inbox/unopened`}
-                  emptyMessage="No unread messages — inbox is clear."
-                  keyForItem={(thread) => thread.id}
-                  renderRow={(thread) => (
+                  }
+                  const bucketLabel = item.row.bucket === "scheduled" ? "Scheduled" : "Open";
+                  const bucketTone =
+                    item.row.bucket === "scheduled"
+                      ? "bg-sky-100 text-sky-800"
+                      : "bg-rose-100 text-rose-800";
+                  return (
                     <PortalDashboardCompactRow
-                      title={thread.from || "Unknown sender"}
-                      subtitle={thread.subject || thread.preview || "—"}
+                      title={item.row.title?.trim() || "Work order"}
+                      subtitle={[item.row.propertyName, item.row.unit].filter(Boolean).join(" · ") || "Maintenance"}
                       badge={
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                          Unread
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${bucketTone}`}>
+                          {bucketLabel}
                         </span>
                       }
+                      stackBadge
                     />
-                  )}
-                />
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-              <PortalDashboardSectionHeader title="Application" href={`${BASE}/applications`} linkLabel="Applications →" />
-              {appStage ? (
-                <>
-                  <p className="mt-4 text-sm font-semibold text-foreground">{appStage}</p>
-                  {appId ? <p className="mt-0.5 break-all text-xs font-mono text-muted">{appId}</p> : null}
-                  {appProperty ? <p className="mt-1 break-words text-xs text-muted">{appProperty}</p> : null}
-                </>
-              ) : (
-                <p className="mt-4 text-sm text-muted">No applications yet. Start your first application.</p>
-              )}
-            </div>
-            <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-              <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />
-              {inbox > 0 ? (
-                <p className="mt-4 text-sm font-semibold text-foreground">{inbox} unread message{inbox === 1 ? "" : "s"}</p>
-              ) : (
-                <p className="mt-4 text-sm text-muted">No unread messages.</p>
-              )}
-            </div>
+                  );
+                }}
+              />
+            ) : (
+              <p className="mt-4 text-sm text-muted">Available after your application is approved.</p>
+            )}
           </div>
-        )}
+        </div>
 
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+          <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0 lg:col-span-2`}>
+            <PortalDashboardSectionHeader
+              title="Inbox"
+              href={`${BASE}/inbox/unopened`}
+              linkLabel="Inbox →"
+              badge={
+                inbox > 0 ? (
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+                    {inbox} unread
+                  </span>
+                ) : null
+              }
+            />
+            <PortalDashboardPreviewList
+              items={inboxThreads}
+              href={`${BASE}/inbox/unopened`}
+              emptyMessage="No unread messages — inbox is clear."
+              keyForItem={(thread) => thread.id}
+              renderRow={(thread) => (
+                <PortalDashboardCompactRow
+                  title={thread.from || "Unknown sender"}
+                  subtitle={thread.subject || thread.preview || "—"}
+                  badge={
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+                      Unread
+                    </span>
+                  }
+                />
+              )}
+            />
+          </div>
+        </div>
       </div>
     </ManagerPortalPageShell>
   );

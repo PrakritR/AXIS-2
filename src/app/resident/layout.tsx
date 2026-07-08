@@ -64,7 +64,10 @@ export default async function ResidentLayout({ children }: { children: React.Rea
                 name={profile?.full_name ?? null}
                 email={profile?.email ?? null}
               />
-              <ResidentPreApplicationGuard leaseAccessUnlocked={access.leaseAccessUnlocked}>
+              <ResidentPreApplicationGuard
+                leaseAccessUnlocked={access.leaseAccessUnlocked}
+                hasCompletedApplicationSubmission={access.hasCompletedApplicationSubmission}
+              >
                 {children}
               </ResidentPreApplicationGuard>
             </div>

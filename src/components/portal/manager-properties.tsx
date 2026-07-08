@@ -20,6 +20,11 @@ import {
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
+import {
+  DEMO_OPEN_CREATE_LISTING_EVENT,
+  DEMO_PROPERTIES_STAGE_EVENT,
+  type DemoPropertiesStage,
+} from "@/lib/demo/demo-playback";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { adminKpiCounts } from "@/lib/demo-admin-property-inventory";
 import {
@@ -53,14 +58,20 @@ export function ManagerProperties() {
   const [portfolioTick, setPortfolioTick] = useState(0);
   const [shareListingOpen, setShareListingOpen] = useState(false);
   const [shareListingPropertyId, setShareListingPropertyId] = useState<string | undefined>();
+  const [demoStage, setDemoStage] = useState<ManagerStageKey>("pending");
 
-  const activeStage = managerStageFromParam(searchParams.get("status"));
+  const activeStage = isDemoModeActive()
+    ? demoStage
+    : managerStageFromParam(searchParams.get("status"));
 
   const setActiveStage = useCallback(
     (stage: ManagerStageKey) => {
+      if (isDemoModeActive()) {
+        setDemoStage(stage);
+        return;
+      }
       const next = new URLSearchParams(searchParams.toString());
-      if (stage === "pending") next.delete("status");
-      else next.set("status", stage);
+      next.set("status", stage);
       const query = next.toString();
       router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
@@ -169,6 +180,21 @@ export function ManagerProperties() {
     setWizardOpen(true);
   };
 
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    const onOpen = () => tryOpenAdd();
+    const onStage = (e: Event) => {
+      const stage = (e as CustomEvent<{ stage?: DemoPropertiesStage }>).detail?.stage;
+      if (stage) setActiveStage(stage);
+    };
+    window.addEventListener(DEMO_OPEN_CREATE_LISTING_EVENT, onOpen);
+    window.addEventListener(DEMO_PROPERTIES_STAGE_EVENT, onStage as EventListener);
+    return () => {
+      window.removeEventListener(DEMO_OPEN_CREATE_LISTING_EVENT, onOpen);
+      window.removeEventListener(DEMO_PROPERTIES_STAGE_EVENT, onStage as EventListener);
+    };
+  }, [setActiveStage]);
+
   const openShareListing = (listingId?: string) => {
     setShareListingPropertyId(listingId);
     setShareListingOpen(true);
@@ -186,7 +212,7 @@ export function ManagerProperties() {
       >
         Send
       </Button>
-      <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} onClick={tryOpenAdd}>
+      <Button type="button" variant="primary" className={`shrink-0 ${PORTAL_HEADER_ACTION_BTN}`} data-attr="manager-properties-create" onClick={tryOpenAdd}>
         Create
       </Button>
     </>
@@ -199,15 +225,19 @@ export function ManagerProperties() {
         titleAside={propertiesHeaderActions}
         filterRow={
           <ManagerPortalFilterRow>
-            <ManagerPortalStatusPills
-              tabs={MANAGER_STAGES.map((stage) => ({
-                id: stage.key,
-                label: stage.label,
-                count: stageCounts[stage.key],
-              }))}
-              activeId={activeStage}
-              onChange={(id) => setActiveStage(id as ManagerStageKey)}
-            />
+            <div className="min-w-0 w-full max-w-full">
+              <ManagerPortalStatusPills
+                compact
+                tabs={MANAGER_STAGES.map((stage) => ({
+                  id: stage.key,
+                  label: stage.label,
+                  count: stageCounts[stage.key],
+                  dataAttr: `manager-properties-tab-${stage.key}`,
+                }))}
+                activeId={activeStage}
+                onChange={(id) => setActiveStage(id as ManagerStageKey)}
+              />
+            </div>
           </ManagerPortalFilterRow>
         }
       >

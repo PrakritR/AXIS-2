@@ -86,12 +86,14 @@ describe("splitNativeBottomNavItems", () => {
       sectionIds(proPortal.sections).filter(
         (section) =>
           !(NATIVE_BOTTOM_NAV_PRO_MANAGER_PRIMARY as readonly string[]).includes(section) &&
-          section !== "profile",
+          section !== "profile" &&
+          section !== "bugs-feedback",
       ),
     );
     expect(overflow.map((item) => item.section)).toContain("dashboard");
     expect(overflow.map((item) => item.section)).toContain("services");
-    expect(primary.length + overflow.length).toBe(items.length - 1);
+    expect(overflow.map((item) => item.section)).not.toContain("bugs-feedback");
+    expect(primary.length + overflow.length).toBe(items.length - 2);
   });
 
   it("curates the resident bar (limited) to the primary set minus the missing 'services' section", () => {

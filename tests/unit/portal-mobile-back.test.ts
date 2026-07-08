@@ -35,6 +35,19 @@ describe("resolvePortalMobileBackTarget", () => {
     });
   });
 
+  it("hides dashboard back on early rental-application wizard steps", () => {
+    const params = new URLSearchParams({ wizardStep: "2" });
+    expect(resolvePortalMobileBackTarget("/resident/applications/apply", residentPortal, params)).toBeNull();
+  });
+
+  it("returns dashboard from apply after step 3", () => {
+    const params = new URLSearchParams({ wizardStep: "4" });
+    expect(resolvePortalMobileBackTarget("/resident/applications/apply", residentPortal, params)).toEqual({
+      href: "/resident/dashboard",
+      label: "Dashboard",
+    });
+  });
+
   it("returns first inbox tab from a deeper inbox tab", () => {
     expect(resolvePortalMobileBackTarget("/resident/inbox/sent", residentPortal)).toEqual({
       href: "/resident/inbox/unopened",

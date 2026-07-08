@@ -10,6 +10,11 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { track } from "@/lib/analytics/track-client";
+import {
+  DEMO_PROMOTION_AUTOFILL_EVENT,
+  DEMO_PROMOTION_GENERATED_EVENT,
+} from "@/lib/demo/demo-playback";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { PromotionAssetStack } from "@/components/portal/promotion-asset-list";
 import {
   PromotionFlyerAssetDetail,
@@ -236,6 +241,7 @@ export function ManagerPromotion() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sectionExpanded, setSectionExpanded] = useState(true);
   const [deepLinkPropertyId, setDeepLinkPropertyId] = useState<string | null>(null);
+  const [demoPromotionGeneratePending, setDemoPromotionGeneratePending] = useState(false);
 
   useEffect(() => {
     if (!authReady) return;
@@ -253,6 +259,23 @@ export function ManagerPromotion() {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, onProps);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isDemoModeActive()) return;
+    const onAutofill = (e: Event) => {
+      const detail = (e as CustomEvent<{ propertyId?: string; generateAfter?: boolean }>).detail;
+      const pid = detail?.propertyId?.trim() || listings[0]?.id;
+      if (!pid) return;
+      setDraft(draftWithPropertyKey(EMPTY_DRAFT, pid, listings, autofillOpts));
+      setShowChooser(false);
+      setShowForm(true);
+      setEditingRowId(null);
+      setEditingEntryId(null);
+      if (detail?.generateAfter) setDemoPromotionGeneratePending(true);
+    };
+    window.addEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
+    return () => window.removeEventListener(DEMO_PROMOTION_AUTOFILL_EVENT, onAutofill as EventListener);
+  }, [listings, autofillOpts]);
 
   const promotions = useMemo(() => {
     void tick;
@@ -422,7 +445,11 @@ export function ManagerPromotion() {
 
       upsertManagerPromotion({ ...savedRow, updatedAt: now });
       closeForm();
-      setExpandedId(makePromotionAssetId(savedRow.id, "flyer", entryId));
+      const assetId = makePromotionAssetId(savedRow.id, "flyer", entryId);
+      setExpandedId(assetId);
+      if (isDemoModeActive()) {
+        window.dispatchEvent(new CustomEvent(DEMO_PROMOTION_GENERATED_EVENT, { detail: { assetId } }));
+      }
       showToast(
         editingRow
           ? "Flyer updated."
@@ -556,6 +583,12 @@ export function ManagerPromotion() {
     if (editingRowId === asset.row.id) closeForm();
     showToast("Promotion deleted.");
   }
+
+  useEffect(() => {
+    if (!demoPromotionGeneratePending || !isDemoModeActive()) return;
+    setDemoPromotionGeneratePending(false);
+    void generate();
+  }, [demoPromotionGeneratePending, draft]);
 
   const textModalAsset =
     textModalAssetId && textModalAssetId !== "__new__"

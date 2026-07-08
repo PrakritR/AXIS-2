@@ -2,9 +2,12 @@
 
 import { User } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
+import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
+import { ResidentDashboardMark } from "@/components/portal/resident-dashboard-mark";
+import { useResidentHasCompletedApplicationSubmission } from "@/hooks/use-resident-submitted-applications";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,15 +61,22 @@ export function PortalMobileNavBar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const back = useMemo(() => resolvePortalMobileBackTarget(pathname, definition), [pathname, definition]);
+  const searchParams = useSearchParams();
+  const back = useMemo(
+    () => resolvePortalMobileBackTarget(pathname, definition, searchParams),
+    [pathname, definition, searchParams],
+  );
   const dashboardLabel = useMemo(
     () => portalDashboardMobileHeaderLabel(pathname, definition),
     [pathname, definition],
   );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
+  const residentHasSubmittedApplication = useResidentHasCompletedApplicationSubmission();
+  const showResidentDashboardMark =
+    definition.kind === "resident" && residentHasSubmittedApplication;
 
   return (
-    <div className="portal-mobile-nav-bar mb-3 flex w-full items-center justify-between gap-2 lg:hidden [html[data-native]_&]:mb-0">
+    <div className="portal-mobile-nav-bar mb-3 flex w-full items-center justify-between gap-2 md:hidden [html[data-native]_&]:mb-0">
       {back ? (
         <button
           type="button"
@@ -83,7 +93,8 @@ export function PortalMobileNavBar({
         </h1>
       ) : null}
 
-      <div className="shrink-0">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {showResidentDashboardMark ? <ResidentDashboardMark /> : null}
         <DropdownMenu>
           <DropdownMenuTrigger
             data-attr="portal-mobile-profile-menu"
@@ -105,6 +116,10 @@ export function PortalMobileNavBar({
                 Settings
               </Link>
             </DropdownMenuItem>
+
+            <div className="px-1">
+              <PortalRoleSwitcher currentKind={definition.kind} />
+            </div>
 
             <DropdownMenuSeparator />
 

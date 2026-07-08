@@ -51,35 +51,35 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
     expect(ordered).toEqual(sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS));
     expect(ordered.indexOf("move-in")).toBeLessThan(ordered.indexOf("services"));
     expect(ordered.indexOf("services")).toBeLessThan(ordered.indexOf("inbox"));
-    expect(ordered.indexOf("documents")).toBeLessThan(ordered.indexOf("bugs-feedback"));
+    expect(ordered.indexOf("documents")).toBeLessThan(ordered.indexOf("profile"));
   });
 });
 
-describe("pro portal nav grouping (portfolio → leasing → finances → operations → account)", () => {
+describe("pro portal nav grouping (leasing → tenancy → operations → marketing → team → finances → account)", () => {
   const sections = sectionIds(proPortal.sections);
-  const portfolioBlock = ["properties", "leases"];
-  const leasingBlock = ["applications", "calendar", "residents"];
-  const financesBlock = ["payments", "financials", "documents"];
+  const leasingBlock = ["properties", "calendar", "applications", "leases"];
+  const tenancyBlock = ["residents", "payments"];
   const operationsBlock = ["services", "inbox"];
+  const financesBlock = ["financials", "documents"];
 
-  it("places leases in portfolio before the leasing block", () => {
-    expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("applications"));
-    expect(sections.indexOf("applications")).toBeLessThan(sections.indexOf("calendar"));
-    expect(sections.indexOf("calendar")).toBeLessThan(sections.indexOf("residents"));
+  it("places leasing workflow contiguously after dashboard", () => {
+    expectContiguousBlock(sections, leasingBlock, "dashboard", "residents");
   });
 
-  it("groups portfolio and leasing blocks contiguously after dashboard", () => {
-    expectContiguousBlock(sections, portfolioBlock, "dashboard", "applications");
-    expectContiguousBlock(sections, leasingBlock, "leases", "payments");
+  it("groups tenancy after leasing", () => {
+    expectContiguousBlock(sections, tenancyBlock, "leases", "services");
   });
 
-  it("groups finances and operations before team sections", () => {
-    expectContiguousBlock(sections, financesBlock, "residents", "services");
-    expectContiguousBlock(sections, operationsBlock, "documents", "relationships");
+  it("groups operations before marketing", () => {
+    expectContiguousBlock(sections, operationsBlock, "payments", "relationships");
   });
 
-  it("places feedback after co-managers and before settings", () => {
-    expect(sections.slice(-4)).toEqual(["relationships", "promotion", "bugs-feedback", "profile"]);
+  it("groups finances after team sections", () => {
+    expectContiguousBlock(sections, financesBlock, "promotion", "bugs-feedback");
+  });
+
+  it("places feedback after finances and before settings", () => {
+    expect(sections.slice(-4)).toEqual(["financials", "documents", "bugs-feedback", "profile"]);
   });
 
   it("does not expose plan as a top-level nav section", () => {
@@ -87,14 +87,18 @@ describe("pro portal nav grouping (portfolio → leasing → finances → operat
   });
 
   it("free operational sections precede the finances block", () => {
-    expect(sections.slice(0, 7)).toEqual([
+    expect(sections.slice(0, 11)).toEqual([
       "dashboard",
       "properties",
-      "leases",
-      "applications",
       "calendar",
+      "applications",
+      "leases",
       "residents",
       "payments",
+      "services",
+      "inbox",
+      "relationships",
+      "promotion",
     ]);
   });
 });
@@ -102,9 +106,9 @@ describe("pro portal nav grouping (portfolio → leasing → finances → operat
 describe("resident portal nav grouping", () => {
   const freeIds = new Set<string>(RESIDENT_FREE_TIER_SECTION_IDS);
 
-  it("limited: groups locked sections between move-in and feedback", () => {
+  it("limited: groups locked sections after move-in", () => {
     const sections = sectionIds(RESIDENT_LIMITED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["inbox", "documents"], "move-in", "bugs-feedback");
+    expectContiguousBlock(sections, ["inbox", "documents"], "move-in", "profile");
     for (const id of ["inbox", "documents"]) {
       expect(freeIds.has(id)).toBe(false);
     }
@@ -112,13 +116,13 @@ describe("resident portal nav grouping", () => {
 
   it("approved: follows property-management block order after move-in", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expectContiguousBlock(sections, ["services", "inbox", "documents"], "move-in", "bugs-feedback");
+    expectContiguousBlock(sections, ["services", "inbox", "documents"], "move-in", "profile");
   });
 
   it("approved: mirrors pro free block then paid workspace pattern", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
     expect(sections.slice(0, 5)).toEqual(["dashboard", "applications", "lease", "payments", "move-in"]);
-    expect(sections.slice(-2)).toEqual(["bugs-feedback", "profile"]);
+    expect(sections.slice(-1)).toEqual(["profile"]);
   });
 });
 

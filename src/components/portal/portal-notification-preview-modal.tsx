@@ -81,6 +81,7 @@ export function PortalNotificationPreviewModal({
             type="checkbox"
             checked={skipMessage}
             onChange={(e) => setSkipMessage(e.target.checked)}
+            data-attr="portal-notification-skip-message"
             className="mt-0.5 h-4 w-4 rounded border-border text-primary"
           />
           <span className="text-muted">{skipMessageLabel}</span>
@@ -97,6 +98,7 @@ export function PortalNotificationPreviewModal({
             type="button"
             variant="primary"
             className="rounded-full"
+            data-attr="portal-notification-confirm"
             disabled={confirmBusy}
             onClick={() => onConfirm(skipMessage)}
           >

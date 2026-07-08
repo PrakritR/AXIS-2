@@ -10,7 +10,13 @@ import {
   syncScheduleRecordsFromServer,
 } from "@/lib/demo-admin-scheduling";
 import { ADMIN_UI_EVENT } from "@/lib/demo-admin-ui";
-import { PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
+import {
+  PROPERTY_PIPELINE_EVENT,
+  readPendingManagerPropertiesForUser,
+  readScopedExtraListings,
+  syncPropertyPipelineFromServer,
+  type ManagerPendingPropertyRow,
+} from "@/lib/demo-property-pipeline";
 import {
   chargeDueLabel,
   HOUSEHOLD_CHARGES_EVENT,
@@ -64,6 +70,14 @@ import { formatPacificDateTime } from "@/lib/pacific-time";
 
 const BASE = "/portal";
 
+function DashboardGroupLabel({ children }: { children: string }) {
+  return (
+    <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted/80 [html[data-native]_&]:text-[10px]">
+      {children}
+    </h2>
+  );
+}
+
 function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
@@ -83,6 +97,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     void Promise.allSettled([
       syncManagerApplicationsFromServer({ managerUserId: userId }),
       syncLeasePipelineFromServer(userId),
+      syncPropertyPipelineFromServer(),
       syncPersistedInboxFromServer(MANAGER_INBOX_STORAGE_KEY),
       syncHouseholdChargesFromServer(true),
       syncScheduleRecordsFromServer(),
@@ -189,6 +204,15 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       .filter((t) => Number.isFinite(t.startMs) && t.startMs >= cutoff)
       .sort((a, b) => a.startMs - b.startMs);
 
+    const pendingProperties = readPendingManagerPropertiesForUser(userId).sort(
+      (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
+    );
+    const livePropertyCount = readScopedExtraListings(userId).length;
+
+    const activeResidents = leases
+      .filter((l) => l.status === "Fully Signed")
+      .sort((a, b) => new Date(b.updatedAtIso).getTime() - new Date(a.updatedAtIso).getTime());
+
     return {
       pendingApps,
       pendingLeaseRows,
@@ -197,6 +221,9 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       serviceItems,
       pendingServiceCount,
       tours,
+      pendingProperties,
+      livePropertyCount,
+      activeResidents,
     };
   }, [tick, userId, nowMs]);
 
@@ -210,10 +237,17 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
     serviceItems,
     pendingServiceCount,
     tours,
+    pendingProperties,
+    livePropertyCount,
+    activeResidents,
   } = data;
 
   const pendingTours = tours.filter((t) => t.status === "pending");
   const overdueChargeCount = pendingCharges.filter((c) => isHouseholdChargeOverdue(c)).length;
+  const propertiesEmptyMessage =
+    pendingProperties.length === 0 && livePropertyCount > 0
+      ? `No listings pending review — ${livePropertyCount} live ${livePropertyCount === 1 ? "property" : "properties"}.`
+      : "No listings pending review.";
 
   return (
     <ManagerPortalPageShell
@@ -222,196 +256,254 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
-
-        {/* Portfolio + Leasing */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Leases pending signature"
-              href={`${BASE}/leases`}
-              linkLabel="Leases →"
-            />
-            <PortalDashboardPreviewList
-              items={pendingLeaseRows}
-              href={`${BASE}/leases`}
-              emptyMessage="No leases waiting for a signature."
-              keyForItem={(lease) => lease.id}
-              renderRow={(lease: LeasePipelineRow) => (
-                <PortalDashboardCompactRow
-                  title={lease.residentName || lease.residentEmail}
-                  subtitle={formatCompactPlacementLine(lease.unit || "—", lease.signedRentLabel)}
-                  badge={
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        lease.status === "Manager Signature Pending"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-amber-100 text-amber-800"
-                      }`}
-                    >
-                      {lease.status === "Manager Signature Pending" ? "Your signature" : "Resident signing"}
-                    </span>
-                  }
-                />
-              )}
-            />
-          </div>
-
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Pending applications"
-              href={`${BASE}/applications`}
-              linkLabel="Applications →"
-            />
-            <PortalDashboardPreviewList
-              items={pendingApps}
-              href={`${BASE}/applications`}
-              emptyMessage="No pending applications — you're all caught up."
-              keyForItem={(app) => app.id}
-              renderRow={(app: DemoApplicantRow) => (
-                <PortalDashboardCompactRow
-                  title={app.name || app.email || "Unknown"}
-                  subtitle={app.property || "—"}
-                  badge={
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                      {app.stage || "Pending"}
-                    </span>
-                  }
-                />
-              )}
-            />
-          </div>
-        </div>
-
-        {/* Leasing (tours) + Finances */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Pending tour requests"
-              href={`${BASE}/calendar`}
-              linkLabel="Calendar →"
-            />
-            <PortalDashboardPreviewList
-              items={pendingTours}
-              href={`${BASE}/calendar`}
-              emptyMessage="No pending tour requests right now."
-              keyForItem={(tour) => tour.id}
-              renderRow={(tour) => (
-                <PortalDashboardCompactRow
-                  title={tour.label}
-                  subtitle={[tour.propertyTitle || "—", fmt(tour.start)].filter(Boolean).join(" · ")}
-                  badge={
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                      Pending
-                    </span>
-                  }
-                />
-              )}
-            />
-          </div>
-
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Pending & overdue payments"
-              href={`${BASE}/payments`}
-              linkLabel="Payments →"
-              badge={
-                overdueChargeCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {overdueChargeCount} overdue
-                  </span>
-                ) : null
-              }
-            />
-            <PortalDashboardPreviewList
-              items={pendingCharges}
-              href={`${BASE}/payments`}
-              emptyMessage="No pending or overdue payments right now."
-              keyForItem={(charge) => charge.id}
-              renderRow={(charge) => {
-                const overdue = isHouseholdChargeOverdue(charge);
-                return (
+        <div className="space-y-3 [html[data-native]_&]:space-y-2">
+          <DashboardGroupLabel>Leasing</DashboardGroupLabel>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader
+                title="Properties"
+                href={`${BASE}/properties`}
+                linkLabel="Properties →"
+              />
+              <PortalDashboardPreviewList
+                items={pendingProperties}
+                href={`${BASE}/properties`}
+                emptyMessage={propertiesEmptyMessage}
+                keyForItem={(property) => property.id}
+                renderRow={(property: ManagerPendingPropertyRow) => (
                   <PortalDashboardCompactRow
-                    title={charge.residentName || charge.residentEmail}
-                    subtitle={formatCompactChargeLine(
-                      charge.title || "Charge",
-                      charge.balanceLabel,
-                      chargeDueLabel(charge),
+                    title={property.buildingName || property.address}
+                    subtitle={formatCompactPlacementLine(
+                      property.unitLabel || "—",
+                      property.monthlyRent ? `$${property.monthlyRent.toLocaleString()}/mo` : undefined,
                     )}
                     badge={
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {overdue ? "Overdue" : "Pending"}
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        Pending review
                       </span>
                     }
                   />
-                );
-              }}
-            />
+                )}
+              />
+            </div>
+
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader
+                title="Pending tour requests"
+                href={`${BASE}/calendar`}
+                linkLabel="Calendar →"
+              />
+              <PortalDashboardPreviewList
+                items={pendingTours}
+                href={`${BASE}/calendar`}
+                emptyMessage="No pending tour requests right now."
+                keyForItem={(tour) => tour.id}
+                renderRow={(tour) => (
+                  <PortalDashboardCompactRow
+                    title={tour.label}
+                    subtitle={[tour.propertyTitle || "—", fmt(tour.start)].filter(Boolean).join(" · ")}
+                    badge={
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        Pending
+                      </span>
+                    }
+                  />
+                )}
+              />
+            </div>
+
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader
+                title="Pending applications"
+                href={`${BASE}/applications`}
+                linkLabel="Applications →"
+              />
+              <PortalDashboardPreviewList
+                items={pendingApps}
+                href={`${BASE}/applications`}
+                emptyMessage="No pending applications — you're all caught up."
+                keyForItem={(app) => app.id}
+                renderRow={(app: DemoApplicantRow) => (
+                  <PortalDashboardCompactRow
+                    title={app.name || app.email || "Unknown"}
+                    subtitle={app.property || "—"}
+                    badge={
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        {app.stage || "Pending"}
+                      </span>
+                    }
+                  />
+                )}
+              />
+            </div>
+
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader
+                title="Leases pending signature"
+                href={`${BASE}/leases`}
+                linkLabel="Leases →"
+              />
+              <PortalDashboardPreviewList
+                items={pendingLeaseRows}
+                href={`${BASE}/leases`}
+                emptyMessage="No leases waiting for a signature."
+                keyForItem={(lease) => lease.id}
+                renderRow={(lease: LeasePipelineRow) => (
+                  <PortalDashboardCompactRow
+                    title={lease.residentName || lease.residentEmail}
+                    subtitle={formatCompactPlacementLine(lease.unit || "—", lease.signedRentLabel)}
+                    badge={
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          lease.status === "Manager Signature Pending"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {lease.status === "Manager Signature Pending" ? "Your signature" : "Resident signing"}
+                      </span>
+                    }
+                  />
+                )}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Operations */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Services"
-              href={`${BASE}/services/requests`}
-              linkLabel="Services →"
-              badge={
-                pendingServiceCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    {pendingServiceCount} pending
-                  </span>
-                ) : null
-              }
-            />
-            <PortalDashboardPreviewList
-              items={serviceItems}
-              href={`${BASE}/services/requests`}
-              emptyMessage="No pending service requests or work orders."
-              keyForItem={(item) => item.id}
-              renderRow={(item) => (
-                <PortalDashboardCompactRow
-                  title={item.title}
-                  subtitle={item.subtitle}
-                  badge={
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                      Pending
-                    </span>
-                  }
-                />
-              )}
-            />
-          </div>
+        <div className="space-y-3 [html[data-native]_&]:space-y-2">
+          <DashboardGroupLabel>Tenancy</DashboardGroupLabel>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader
+                title="Residents"
+                href={`${BASE}/residents/current`}
+                linkLabel="Residents →"
+              />
+              <PortalDashboardPreviewList
+                items={activeResidents}
+                href={`${BASE}/residents/current`}
+                emptyMessage="No current residents yet."
+                keyForItem={(lease) => lease.id}
+                renderRow={(lease: LeasePipelineRow) => (
+                  <PortalDashboardCompactRow
+                    title={lease.residentName || lease.residentEmail}
+                    subtitle={formatCompactPlacementLine(lease.unit || "—", lease.signedRentLabel)}
+                    badge={
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                        Active
+                      </span>
+                    }
+                  />
+                )}
+              />
+            </div>
 
-          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-            <PortalDashboardSectionHeader
-              title="Inbox"
-              href={`${BASE}/inbox/unopened`}
-              linkLabel="Inbox →"
-            />
-            <PortalDashboardPreviewList
-              items={inboxThreads}
-              href={`${BASE}/inbox/unopened`}
-              emptyMessage="No unread messages — inbox is clear."
-              keyForItem={(thread) => thread.id}
-              renderRow={(thread) => (
-                <PortalDashboardCompactRow
-                  title={thread.from || "Unknown sender"}
-                  subtitle={thread.subject || thread.preview || "—"}
-                  badge={
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
-                      Unread
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader
+                title="Pending & overdue payments"
+                href={`${BASE}/payments`}
+                linkLabel="Payments →"
+                badge={
+                  overdueChargeCount > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-overdue-fg)]">
+                      <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                      {overdueChargeCount} overdue
                     </span>
-                  }
-                />
-              )}
-            />
+                  ) : null
+                }
+              />
+              <PortalDashboardPreviewList
+                items={pendingCharges}
+                href={`${BASE}/payments`}
+                emptyMessage="No pending or overdue payments right now."
+                keyForItem={(charge) => charge.id}
+                renderRow={(charge) => {
+                  const overdue = isHouseholdChargeOverdue(charge);
+                  return (
+                    <PortalDashboardCompactRow
+                      title={charge.residentName || charge.residentEmail}
+                      subtitle={formatCompactChargeLine(
+                        charge.title || "Charge",
+                        charge.balanceLabel,
+                        chargeDueLabel(charge),
+                      )}
+                      badge={
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {overdue ? "Overdue" : "Pending"}
+                        </span>
+                      }
+                    />
+                  );
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3 [html[data-native]_&]:space-y-2">
+          <DashboardGroupLabel>Operations</DashboardGroupLabel>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader
+                title="Services"
+                href={`${BASE}/services/requests`}
+                linkLabel="Services →"
+                badge={
+                  pendingServiceCount > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[var(--status-pending-fg)]">
+                      <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                      {pendingServiceCount} pending
+                    </span>
+                  ) : null
+                }
+              />
+              <PortalDashboardPreviewList
+                items={serviceItems}
+                href={`${BASE}/services/requests`}
+                emptyMessage="No pending service requests or work orders."
+                keyForItem={(item) => item.id}
+                renderRow={(item) => (
+                  <PortalDashboardCompactRow
+                    title={item.title}
+                    subtitle={item.subtitle}
+                    badge={
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        Pending
+                      </span>
+                    }
+                  />
+                )}
+              />
+            </div>
+
+            <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+              <PortalDashboardSectionHeader
+                title="Inbox"
+                href={`${BASE}/inbox/unopened`}
+                linkLabel="Inbox →"
+              />
+              <PortalDashboardPreviewList
+                items={inboxThreads}
+                href={`${BASE}/inbox/unopened`}
+                emptyMessage="No unread messages — inbox is clear."
+                keyForItem={(thread) => thread.id}
+                renderRow={(thread) => (
+                  <PortalDashboardCompactRow
+                    title={thread.from || "Unknown sender"}
+                    subtitle={thread.subject || thread.preview || "—"}
+                    badge={
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800">
+                        Unread
+                      </span>
+                    }
+                  />
+                )}
+              />
+            </div>
           </div>
         </div>
       </div>

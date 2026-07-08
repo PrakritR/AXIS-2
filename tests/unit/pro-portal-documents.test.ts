@@ -28,16 +28,20 @@ describe("pro portal documents section", () => {
     expect(financials?.tabs.map((t) => t.id)).toEqual(["income", "expenses"]);
   });
 
-  it("orders portfolio → leasing → finances → operations, then feedback before profile", () => {
+  it("orders leasing → tenancy → operations → marketing → team → finances, then feedback before profile", () => {
     const sections = proPortal.sections.map((s) => s.section);
-    expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("applications"));
-    expect(sections.indexOf("applications")).toBeLessThan(sections.indexOf("calendar"));
-    expect(sections.indexOf("calendar")).toBeLessThan(sections.indexOf("residents"));
+    expect(sections.indexOf("properties")).toBeLessThan(sections.indexOf("calendar"));
+    expect(sections.indexOf("calendar")).toBeLessThan(sections.indexOf("applications"));
+    expect(sections.indexOf("applications")).toBeLessThan(sections.indexOf("leases"));
+    expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("residents"));
     expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("payments"));
-    expect(sections.indexOf("payments")).toBeLessThan(sections.indexOf("financials"));
-    expect(sections.indexOf("financials")).toBeLessThan(sections.indexOf("documents"));
-    expect(sections.indexOf("documents")).toBeLessThan(sections.indexOf("services"));
+    expect(sections.indexOf("payments")).toBeLessThan(sections.indexOf("services"));
     expect(sections.indexOf("services")).toBeLessThan(sections.indexOf("inbox"));
+    expect(sections.indexOf("inbox")).toBeLessThan(sections.indexOf("relationships"));
+    expect(sections.indexOf("relationships")).toBeLessThan(sections.indexOf("promotion"));
+    expect(sections.indexOf("promotion")).toBeLessThan(sections.indexOf("financials"));
+    expect(sections.indexOf("financials")).toBeLessThan(sections.indexOf("documents"));
+    expect(sections.indexOf("documents")).toBeLessThan(sections.indexOf("bugs-feedback"));
     expect(sections.indexOf("relationships")).toBeLessThan(sections.indexOf("bugs-feedback"));
     expect(sections.indexOf("profile")).toBe(sections.indexOf("bugs-feedback") + 1);
     expect(sections).not.toContain("plan");

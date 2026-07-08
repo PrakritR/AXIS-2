@@ -315,7 +315,11 @@ export function PortalSidebar({
   }, [navItems, definition.kind, navCounts, isSectionLocked]);
 
   const mobileTopStripItems = useMemo(
-    () => navItems.filter((s) => !isHiddenFromMobileNav(definition.kind, s.section)),
+    () =>
+      orderNativeBottomNavItems(
+        navItems.filter((s) => !isHiddenFromMobileNav(definition.kind, s.section)),
+        definition.kind,
+      ),
     [navItems, definition.kind],
   );
 

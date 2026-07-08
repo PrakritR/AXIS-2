@@ -1,26 +1,14 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
-  PORTAL_DATA_TABLE, 
-  PORTAL_DATA_TABLE_SCROLL,
-  PORTAL_DATA_TABLE_WRAP,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
-  PORTAL_MOBILE_CARD_CLASS,
-  PORTAL_TABLE_DETAIL_CELL,
-  PORTAL_TABLE_DETAIL_ROW,
-  PORTAL_TABLE_HEAD_ROW,
-  PORTAL_TABLE_TR_EXPANDABLE,
-  PORTAL_TABLE_TD,
   PortalTableDetailActions,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
 } from "@/components/portal/portal-data-table";
-import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
+import { PortalPaymentsTable, type PortalPaymentTableRow } from "@/components/portal/portal-payments-table";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { deleteManagerPaymentLedgerEntry, markManagerPaymentLedgerPaid, markManagerPaymentLedgerPending } from "@/lib/demo-manager-payment-ledger";
 import { deleteHouseholdCharge, markHouseholdChargePaid, markHouseholdChargePending, updateHouseholdChargeAmount } from "@/lib/household-charges";
@@ -34,14 +22,6 @@ import {
 } from "@/components/portal/payment-schedule-ui";
 import type { ScheduledPaymentMessage } from "@/lib/scheduled-payment-messages";
 import { manageableRemindersForCharge } from "@/lib/scheduled-payment-messages";
-
-function statusTone(label: string) {
-  const l = label.toLowerCase();
-  if (l.includes("paid")) return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  if (l.includes("overdue") || l.includes("partial")) return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  if (l.includes("soon")) return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-  return "bg-accent/30 text-foreground ring-1 ring-border";
-}
 
 function isMarkableAsPaid(row: DemoManagerPaymentLedgerRow): boolean {
   return row.statusLabel !== "Paid" && row.balanceDue !== "$0.00";
@@ -499,7 +479,7 @@ export function ManagerPaymentsLedgerPanel({
             {sendingReminderId === row.id ? "Sending…" : "Send reminder"}
           </Button>
           {row.householdChargeId ? (
-            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => onOpenReminderSettings?.()}>
+            <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setChargeRemindersRow(row)}>
               Auto reminders
             </Button>
           ) : null}
@@ -530,6 +510,21 @@ export function ManagerPaymentsLedgerPanel({
         Delete
       </Button>
     </PortalTableDetailActions>
+  );
+
+  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
+
+  const tableRows = useMemo<PortalPaymentTableRow[]>(
+    () =>
+      rows.map((row) => ({
+        id: row.id,
+        charge: row.chargeTitle,
+        property: row.propertyName,
+        payee: row.residentName,
+        dueDate: row.dueDate,
+        amount: row.balanceDue,
+      })),
+    [rows],
   );
 
   return (
@@ -641,166 +636,28 @@ export function ManagerPaymentsLedgerPanel({
         </PortalTableDetailActions>
       </div>
     ) : null}
-    <div className="space-y-2 lg:hidden">
-      {rows.map((row) => {
-        const reminders = row.householdChargeId
-          ? manageableRemindersForCharge(scheduledMessages, row.householdChargeId)
-          : [];
-        const activeReminders = reminders.filter((m) => m.status !== "cancelled");
-        const expanded = expandedId === row.id;
-        const propertyShort = stripPropertyRoomCountSuffix(row.propertyName || "");
-        return (
-          <div key={row.id} className={PORTAL_MOBILE_CARD_CLASS}>
-            <div className="flex items-start justify-between gap-3">
-              {showSelection ? (
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4 shrink-0 rounded border-border"
-                  checked={selectedIds.has(row.id)}
-                  onChange={() => toggleSelected(row.id)}
-                  aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
-                />
-              ) : null}
-              <div className="min-w-0 flex-1">
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-                  aria-expanded={expanded}
-                >
-                  <PortalTableInlineExpand expanded={expanded} className="truncate font-semibold text-foreground">
-                    {row.residentName}
-                  </PortalTableInlineExpand>
-                    <p className="mt-0.5 truncate text-xs text-muted">
-                      {row.chargeTitle}
-                      {row.roomNumber ? ` · Room ${row.roomNumber}` : ""}
-                    </p>
-                    {propertyShort ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{propertyShort}</p> : null}
-                    <p className="mt-0.5 text-xs text-muted">
-                      {editingRowId === row.id ? (
-                        <span className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <span className="flex items-center gap-1">
-                            <span className="text-muted">$</span>
-                            <Input
-                              className="h-7 w-20 rounded-lg px-2 py-0.5 text-xs tabular-nums"
-                              inputMode="decimal"
-                              value={editAmountDraft}
-                              onChange={(e) => setEditAmountDraft(e.target.value)}
-                              aria-label="Amount owed"
-                            />
-                          </span>
-                          <Input
-                            type="date"
-                            className="h-7 w-32 rounded-lg px-2 py-0.5 text-xs"
-                            value={editDueDateDraft}
-                            onChange={(e) => setEditDueDateDraft(e.target.value)}
-                            aria-label="Due date"
-                          />
-                        </span>
-                      ) : (
-                        <>Due {row.dueDate}</>
-                      )}
-                    </p>
-                </button>
-                {!isPaidRow(row) && reminders.length ? (
-                  <button
-                    type="button"
-                    className="mt-1 text-[11px] font-semibold text-primary"
-                    onClick={() => setChargeRemindersRow(row)}
-                  >
-                    Auto · {activeReminders.length > 0 ? activeReminders.length : "skipped"}
-                  </button>
-                ) : null}
-              </div>
-              <div className="shrink-0 text-right">
-                {editingRowId === row.id ? null : (
-                  <p className="text-base font-bold tabular-nums text-foreground">{row.balanceDue}</p>
-                )}
-                <span
-                  className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusTone(row.statusLabel)}`}
-                >
-                  {row.statusLabel}
-                </span>
-              </div>
-            </div>
-            {expanded ? (
-              <div className="mt-3 border-t border-border pt-3">
-                {renderDetailActions(row)}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-    <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
-      <div className={PORTAL_DATA_TABLE_SCROLL}>
-        <table className={PORTAL_DATA_TABLE}>
-          <thead>
-            <tr className={PORTAL_TABLE_HEAD_ROW}>
-              {showSelection ? (
-                <th className={`${MANAGER_TABLE_TH} w-10 text-left`}>
-                  <input
-                    type="checkbox"
-                    className="size-4 rounded border-border"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all payments"
-                  />
-                </th>
-              ) : null}
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Amount paid</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Amount owed</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Due date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <Fragment key={row.id}>
-                <tr
-                  className={PORTAL_TABLE_TR_EXPANDABLE}
-                  onClick={createPortalRowExpandClick(() =>
-                    setExpandedId((cur) => (cur === row.id ? null : row.id)),
-                  )}
-                  aria-expanded={expandedId === row.id}
-                >
-                  {showSelection ? (
-                    <td className={PORTAL_TABLE_TD} onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        className="size-4 rounded border-border"
-                        checked={selectedIds.has(row.id)}
-                        onChange={() => toggleSelected(row.id)}
-                        aria-label={`Select ${row.chargeTitle} for ${row.residentName}`}
-                      />
-                    </td>
-                  ) : null}
-                  <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.propertyName}</td>
-                  <td className={PORTAL_TABLE_TD}>Room {row.roomNumber}</td>
-                  <td className={PORTAL_TABLE_TD}>{row.residentName}</td>
-                  <td className={PORTAL_TABLE_TD}>
-                    <PortalTableInlineExpand expanded={expandedId === row.id}>{row.chargeTitle}</PortalTableInlineExpand>
-                  </td>
-                  <td className={`${PORTAL_TABLE_TD} tabular-nums text-muted`}>{row.amountPaid}</td>
-                  <td className={PORTAL_TABLE_TD}>{renderAmountOwedCell(row)}</td>
-                  <td className={`${PORTAL_TABLE_TD} text-muted`}>{renderDueDateCell(row)}</td>
-                </tr>
-                {expandedId === row.id ? (
-                  <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={showSelection ? 8 : 7} className={PORTAL_TABLE_DETAIL_CELL}>
-                      {renderDetailActions(row)}
-                    </td>
-                  </tr>
-                ) : null}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <PortalPaymentsTable
+      rows={tableRows}
+      expandedId={expandedId}
+      onExpand={setExpandedId}
+      selection={
+        showSelection
+          ? {
+              selectedIds,
+              allSelected,
+              onToggle: toggleSelected,
+              onToggleAll: toggleSelectAll,
+              selectLabel: (tr) => {
+                const row = rowById.get(tr.id);
+                return row ? `Select ${row.chargeTitle} for ${row.residentName}` : `Select ${tr.charge}`;
+              },
+            }
+          : undefined
+      }
+      renderDueDateCell={(tr) => renderDueDateCell(rowById.get(tr.id)!)}
+      renderAmountCell={(tr) => renderAmountOwedCell(rowById.get(tr.id)!)}
+      renderExpandedActions={(tr) => renderDetailActions(rowById.get(tr.id)!)}
+    />
     </>
   );
 }
