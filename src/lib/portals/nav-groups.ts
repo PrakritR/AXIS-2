@@ -30,14 +30,19 @@ export function isHiddenFromMobileNav(_kind: PortalKind, section: string): boole
   return section === "bugs-feedback";
 }
 
+/**
+ * Manager sidebar follows the property-management workflow:
+ * list property → schedule tours → review applications → sign leases →
+ * manage residents & collect rent → services & inbox → promotion → team → finances & documents.
+ */
 const PRO_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
-  { id: "portfolio", label: "Portfolio", sections: ["properties", "leases"] },
-  { id: "leasing", label: "Leasing", sections: ["applications", "residents"] },
-  { id: "finances", label: "Finances", sections: ["payments", "financials", "documents"] },
-  { id: "operations", label: "Operations", sections: ["calendar", "services", "inbox"] },
+  { id: "leasing", label: "Leasing", sections: ["properties", "calendar", "applications", "leases"] },
+  { id: "tenancy", label: "Tenancy", sections: ["residents", "payments"] },
+  { id: "operations", label: "Operations", sections: ["services", "inbox"] },
   { id: "marketing", label: "Marketing", sections: ["promotion"] },
   { id: "team", label: "Team", sections: ["relationships"] },
+  { id: "financials", label: "Financials", sections: ["financials", "documents"] },
   { id: "account", label: null, sections: ["profile"] },
 ];
 

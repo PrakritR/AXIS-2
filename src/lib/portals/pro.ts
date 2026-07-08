@@ -12,6 +12,11 @@ export const proPortal: PortalDefinition = {
     { section: "calendar", label: "Calendar", tabs: [] },
     { section: "applications", label: "Applications", tabs: [] },
     {
+      section: "leases",
+      label: "Leases",
+      tabs: [],
+    },
+    {
       section: "residents",
       label: "Residents",
       tabs: [
@@ -20,14 +25,43 @@ export const proPortal: PortalDefinition = {
       ],
     },
     {
-      section: "leases",
-      label: "Leases",
-      tabs: [],
-    },
-    {
       section: "payments",
       label: "Payments",
       tabs: [],
+    },
+    {
+      section: "services",
+      label: "Services",
+      tabs: [
+        { id: "requests", label: "Requests" },
+        { id: "work-orders", label: "Work orders" },
+        { id: "vendors", label: "Vendors" },
+      ],
+    },
+    {
+      section: "inbox",
+      label: "Inbox",
+      tabs: [
+        { id: "unopened", label: "Unopened" },
+        { id: "opened", label: "Opened" },
+        { id: "schedule", label: "Schedule" },
+        { id: "sent", label: "Sent" },
+        { id: "trash", label: "Trash" },
+      ],
+    },
+    { section: "promotion", label: "Promotion", tabs: [] },
+    {
+      section: "relationships",
+      label: "Co-managers",
+      tabs: [],
+    },
+    {
+      section: "financials",
+      label: "Finances",
+      tabs: [
+        { id: "income", label: "Income" },
+        { id: "expenses", label: "Expenses" },
+      ],
     },
     {
       section: "documents",
@@ -42,40 +76,6 @@ export const proPortal: PortalDefinition = {
         { id: "tax-summary", label: "Tax summary" },
       ],
     },
-    {
-      section: "inbox",
-      label: "Inbox",
-      tabs: [
-        { id: "unopened", label: "Unopened" },
-        { id: "opened", label: "Opened" },
-        { id: "schedule", label: "Schedule" },
-        { id: "sent", label: "Sent" },
-        { id: "trash", label: "Trash" },
-      ],
-    },
-    {
-      section: "services",
-      label: "Services",
-      tabs: [
-        { id: "requests", label: "Requests" },
-        { id: "work-orders", label: "Work orders" },
-        { id: "vendors", label: "Vendors" },
-      ],
-    },
-    {
-      section: "financials",
-      label: "Finances",
-      tabs: [
-        { id: "income", label: "Income" },
-        { id: "expenses", label: "Expenses" },
-      ],
-    },
-    {
-      section: "relationships",
-      label: "Co-managers",
-      tabs: [],
-    },
-    { section: "promotion", label: "Promotion", tabs: [] },
     { section: "bugs-feedback", label: "Feedback", tabs: [] },
     { section: "profile", label: "Settings", tabs: [] },
   ],
@@ -87,15 +87,15 @@ export const MANAGER_PORTAL_SMOKE_PATHS = [
   { label: "Properties", path: "/portal/properties" },
   { label: "Calendar", path: "/portal/calendar" },
   { label: "Applications", path: "/portal/applications" },
-  { label: "Residents", path: "/portal/residents/current" },
   { label: "Leases", path: "/portal/leases" },
+  { label: "Residents", path: "/portal/residents/current" },
   { label: "Payments", path: "/portal/payments" },
   { label: "Services", path: "/portal/services/requests" },
   { label: "Inbox", path: "/portal/inbox/unopened" },
-  { label: "Documents", path: "/portal/documents/applications" },
-  { label: "Finances", path: "/portal/financials/income" },
-  { label: "Co-managers", path: "/portal/relationships" },
   { label: "Promotion", path: "/portal/promotion" },
+  { label: "Co-managers", path: "/portal/relationships" },
+  { label: "Finances", path: "/portal/financials/income" },
+  { label: "Documents", path: "/portal/documents/applications" },
   { label: "Feedback", path: "/portal/bugs-feedback" },
   { label: "Settings", path: "/portal/profile" },
 ] as const;

@@ -55,34 +55,45 @@ describe("portal nav order parity (web registry = native bottom bar)", () => {
   });
 });
 
-describe("pro portal nav grouping (free → resident block → paid workspace → account → settings)", () => {
+describe("pro portal nav grouping (leasing pipeline → tenancy → ops → marketing → team → financials)", () => {
   const sections = sectionIds(proPortal.sections);
-  const residentBlock = ["residents", "leases", "payments"];
-  const paidBlock = ["documents", "inbox", "services", "financials", "relationships", "promotion"];
+  const leasingBlock = ["properties", "calendar", "applications", "leases"];
+  const tenancyBlock = ["residents", "payments"];
+  const opsBlock = ["services", "inbox"];
+  const backOfficeBlock = ["promotion", "relationships", "financials", "documents"];
 
-  it("places residents and leases before payments", () => {
-    expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("leases"));
-    expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("payments"));
+  it("places leases before residents (sign lease, then manage resident)", () => {
+    expect(sections.indexOf("leases")).toBeLessThan(sections.indexOf("residents"));
+    expect(sections.indexOf("residents")).toBeLessThan(sections.indexOf("payments"));
   });
 
-  it("groups resident block contiguously after applications", () => {
-    expectContiguousBlock(sections, residentBlock, "applications", "documents");
+  it("groups leasing pipeline contiguously after dashboard", () => {
+    expectContiguousBlock(sections, leasingBlock, "dashboard", "residents");
   });
 
-  it("groups paid sections contiguously between payments and feedback", () => {
-    expectContiguousBlock(sections, paidBlock, "payments", "bugs-feedback");
+  it("groups tenancy block contiguously between leases and services", () => {
+    expectContiguousBlock(sections, tenancyBlock, "leases", "services");
   });
 
-  it("places feedback after co-managers and before settings", () => {
-    expect(sections.slice(-4)).toEqual(["relationships", "promotion", "bugs-feedback", "profile"]);
+  it("groups operations block contiguously between payments and promotion", () => {
+    expectContiguousBlock(sections, opsBlock, "payments", "promotion");
+  });
+
+  it("groups marketing, team, and financials contiguously before feedback", () => {
+    expectContiguousBlock(sections, backOfficeBlock, "inbox", "bugs-feedback");
+  });
+
+  it("places feedback after back-office sections and before settings", () => {
+    expect(sections.indexOf("documents")).toBeLessThan(sections.indexOf("bugs-feedback"));
+    expect(sections.slice(-2)).toEqual(["bugs-feedback", "profile"]);
   });
 
   it("does not expose plan as a top-level nav section", () => {
     expect(sections).not.toContain("plan");
   });
 
-  it("free operational sections precede the resident block", () => {
-    expect(sections.slice(0, 5)).toEqual(["dashboard", "properties", "calendar", "applications", "residents"]);
+  it("free operational sections precede the tenancy block", () => {
+    expect(sections.slice(0, 5)).toEqual(["dashboard", "properties", "calendar", "applications", "leases"]);
   });
 });
 
