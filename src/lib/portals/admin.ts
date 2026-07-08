@@ -33,5 +33,6 @@ export const ADMIN_PORTAL_SMOKE_PATHS = [
   { label: "Meetings", path: "/admin/events" },
   { label: "Inbox", path: "/admin/inbox/unopened" },
   { label: "Accounts", path: "/admin/axis-users" },
+  { label: "Feedback", path: "/admin/bugs-feedback" },
   { label: "Settings", path: "/admin/profile" },
 ] as const;

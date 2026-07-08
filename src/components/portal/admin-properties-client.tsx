@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
@@ -56,13 +57,28 @@ import {
   type AdminPropertyRow,
 } from "@/lib/demo-admin-property-inventory";
 
-/** Admin property tabs — pending review (bucket 0) is handled outside this queue. */
+/** Admin property queue tabs — bucket 0 is pending admin review (approve / reject). */
 const KPI_TABS: { bucket: AdminPropertyBucketIndex; label: string }[] = [
+  { bucket: 0, label: "Pending review" },
   { bucket: 1, label: "Request change" },
   { bucket: 2, label: "Listed" },
   { bucket: 3, label: "Unlisted" },
   { bucket: 4, label: "Rejected" },
 ];
+
+const TAB_PARAM_BY_BUCKET: Record<AdminPropertyBucketIndex, string> = {
+  0: "pending",
+  1: "request-change",
+  2: "listed",
+  3: "unlisted",
+  4: "rejected",
+};
+
+function bucketFromTabParam(tab: string | null): AdminPropertyBucketIndex | null {
+  if (!tab) return null;
+  const entry = Object.entries(TAB_PARAM_BY_BUCKET).find(([, value]) => value === tab);
+  return entry ? (Number(entry[0]) as AdminPropertyBucketIndex) : null;
+}
 
 const EMPTY_COPY: Record<AdminPropertyBucketIndex, string> = {
   0: "No properties awaiting review.",
@@ -189,15 +205,27 @@ function AdminPropertyInlineDetails({
             <Button
               type="button"
               className="rounded-full"
-              onClick={() => {
+              data-attr="admin-property-approve"
+              onClick={async () => {
+                let ok = false;
+                let label = "Approved.";
                 if (row.adminRefId.startsWith("mgr-")) {
                   const id = row.listingId ?? row.adminRefId;
-                  const ok = republishManagerListingAfterReview(id);
-                  run(ok ? "Listing approved — live on Rent with Axis again." : "Could not publish listing.", ok);
+                  ok = republishManagerListingAfterReview(id);
+                  label = ok ? "Listing approved — live on Rent with Axis again." : "Could not publish listing.";
+                } else {
+                  const created = approvePendingManagerProperty(row.adminRefId);
+                  ok = Boolean(created);
+                  label = created ? `Approved and listed: ${created.title}` : "Could not approve — submission may have already been processed.";
+                }
+                if (!ok) {
+                  showToast(label);
                   return;
                 }
-                const created = approvePendingManagerProperty(row.adminRefId);
-                run(created ? `Approved and listed: ${created.title}` : "Approved.", Boolean(created));
+                showToast(label);
+                await syncPropertyPipelineFromServer({ force: true });
+                onUpdated();
+                onDismiss();
               }}
             >
               Approve
@@ -340,9 +368,15 @@ function AdminPropertyInlineDetails({
 
 export function AdminPropertiesClient() {
   const { showToast } = useAppUi();
-  const [activeKpi, setActiveKpi] = useState<AdminPropertyBucketIndex>(2);
+  const searchParams = useSearchParams();
+  const [activeKpi, setActiveKpi] = useState<AdminPropertyBucketIndex>(0);
   const [tick, setTick] = useState(0);
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fromUrl = bucketFromTabParam(searchParams.get("tab"));
+    if (fromUrl != null) setActiveKpi(fromUrl);
+  }, [searchParams]);
 
   useEffect(() => {
     // No mirror-back here: the sync just overwrote the local pipeline with the
@@ -350,6 +384,11 @@ export function AdminPropertiesClient() {
     // across every manager. Admin actions mirror individually at write time.
     void syncPropertyPipelineFromServer().then(() => {
       setTick((t) => t + 1);
+      const fromUrl = bucketFromTabParam(searchParams.get("tab"));
+      if (fromUrl == null) {
+        const [pendingCount] = adminKpiCounts();
+        if (pendingCount > 0) setActiveKpi(0);
+      }
     });
     const on = () => setTick((t) => t + 1);
     window.addEventListener(PROPERTY_PIPELINE_EVENT, on);
@@ -358,7 +397,7 @@ export function AdminPropertiesClient() {
       window.removeEventListener(PROPERTY_PIPELINE_EVENT, on);
       window.removeEventListener("storage", on);
     };
-  }, []);
+  }, [searchParams]);
 
   const kpiValues = useMemo(() => {
     void tick;
@@ -391,6 +430,12 @@ export function AdminPropertiesClient() {
         </ManagerPortalFilterRow>
       }
     >
+      {activeKpi === 0 && rows.length > 0 ? (
+        <p className="mb-3 text-sm text-muted">
+          Click a property row to preview the listing, then use <span className="font-medium text-foreground">Approve</span> or{" "}
+          <span className="font-medium text-foreground">Reject</span>.
+        </p>
+      ) : null}
       {rows.length === 0 ? (
         <div className={PORTAL_DATA_TABLE_WRAP}>
           <div className="flex flex-col items-center justify-center bg-accent/30/20 px-4 py-14 text-center sm:py-16">

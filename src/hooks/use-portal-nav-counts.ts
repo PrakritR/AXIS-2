@@ -32,6 +32,7 @@ import {
   MANAGER_INBOX_STORAGE_KEY,
   RESIDENT_INBOX_STORAGE_KEY,
 } from "@/lib/portal-inbox-storage";
+import { readBugFeedbackRows } from "@/lib/portal-bug-feedback";
 import { prefetchPortalData } from "@/lib/portal-data-store";
 import type { PortalKind } from "@/lib/portal-types";
 
@@ -81,10 +82,12 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const inboxUnread = readInboxMessages().filter((m) => m.folder === "inbox" && !m.read).length;
       const pendingMeetings = readPartnerInquiries().filter((r) => r.status === "pending" && r.kind !== "tour").length;
       const pendingTours = readPartnerInquiries().filter((r) => r.kind === "tour" && r.status === "pending").length;
+      const openFeedback = readBugFeedbackRows().filter((r) => r.status === "open" || r.status === "reviewing").length;
       return {
         properties: pendingProps,
         events: pendingMeetings + pendingTours,
         inbox: inboxUnread,
+        "bugs-feedback": openFeedback,
       };
     }
 

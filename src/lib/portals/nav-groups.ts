@@ -8,26 +8,22 @@ import type { PortalKind } from "@/lib/portal-types";
  *
  * `label: null` renders the items with no heading (Home row, trailing Settings).
  * `profile` (Settings) is the sole member of the trailing "account" group for
- * manager/pro and resident, so `PortalSidebar`'s `mt-auto` on the first
- * trailing group pins it alone to the sidebar's bottom corner. Feedback
- * (`bugs-feedback`) is left out of every portal's sidebar config on purpose —
- * it's reachable from inside the Settings page instead (see
- * `PortalBugFeedbackPanel` / `AdminBugFeedbackClient` `embedded` mode), not as
- * its own sidebar entry. The route/section itself is untouched so old links can
- * redirect to Settings.
+ * manager/pro/resident/vendor, so `PortalSidebar`'s `mt-auto` pins it to the
+ * bottom. Admin Feedback (`bugs-feedback`) is a standalone Operations item;
+ * manager/resident/vendor feedback stays inside Settings (embedded panel).
  */
 export type NavGroupConfig = { id: string; label: string | null; sections: string[] };
 
-/** Sections never rendered in the desktop sidebar (surfaced in the account menu or inside Settings instead). */
+/** Sections never rendered in the desktop sidebar for non-admin portals (Settings stays in account group). */
 export const SIDEBAR_EXCLUDED_SECTIONS = new Set<string>(["profile", "bugs-feedback"]);
 
 /**
- * Feedback is embedded inside the Settings page, matching the desktop sidebar
- * exclusion above — so it shouldn't appear as a separate destination in the
- * mobile top nav strip or the native "More" sheet either.
+ * Feedback is embedded inside Settings for manager/resident/vendor. Admin has a
+ * dedicated Feedback sidebar entry instead.
  */
-export function isHiddenFromMobileNav(_kind: PortalKind, section: string): boolean {
-  return section === "bugs-feedback";
+export function isHiddenFromMobileNav(kind: PortalKind, section: string): boolean {
+  if (section === "bugs-feedback") return kind !== "admin";
+  return false;
 }
 
 const PRO_GROUPS: NavGroupConfig[] = [
@@ -45,7 +41,7 @@ const ADMIN_GROUPS: NavGroupConfig[] = [
   { id: "home", label: null, sections: ["dashboard"] },
   { id: "portfolio", label: "Portfolio", sections: ["properties"] },
   { id: "people", label: "People", sections: ["axis-users"] },
-  { id: "operations", label: "Operations", sections: ["events", "inbox"] },
+  { id: "operations", label: "Operations", sections: ["events", "inbox", "bugs-feedback"] },
   { id: "account", label: null, sections: ["profile"] },
 ];
 

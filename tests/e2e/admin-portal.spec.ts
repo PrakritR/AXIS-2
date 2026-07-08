@@ -9,6 +9,7 @@ const ADMIN_SECTIONS = [
   { label: "Properties", path: "/admin/properties" },
   { label: "Events", path: "/admin/events" },
   { label: "Inbox", path: "/admin/inbox/unopened" },
+  { label: "Feedback", path: "/admin/bugs-feedback" },
   { label: "Settings", path: "/admin/profile" },
 ] as const;
 
@@ -49,15 +50,16 @@ test.describe("Admin portal", () => {
     }
   });
 
-  test("settings page loads with embedded feedback", async ({ page }) => {
+  test("settings page loads without embedded feedback panel", async ({ page }) => {
     await page.goto("/admin/profile");
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText("Feedback", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Feedback" })).toHaveCount(0);
   });
 
-  test("legacy bugs-feedback URL redirects to settings", async ({ page }) => {
+  test("feedback section loads as its own admin page", async ({ page }) => {
     await page.goto("/admin/bugs-feedback");
-    await expect(page).toHaveURL(/\/admin\/profile/);
+    await expect(page).toHaveURL(/\/admin\/bugs-feedback/);
+    await expect(page.getByRole("heading", { name: "Feedback" })).toBeVisible({ timeout: 15_000 });
   });
 
   test("properties section loads", async ({ page }) => {

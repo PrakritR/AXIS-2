@@ -116,7 +116,8 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
       .sort((a, b) => a.startMs - b.startMs);
 
     const pendingMeetingCount = pendingInquiryCount();
-    const totalMeetings = pendingMeetingCount + readPlannedEvents().filter((e) => e.kind !== "tour").length;
+    const confirmedMeetingCount = readPlannedEvents().filter((e) => e.kind !== "tour").length;
+    const totalMeetings = pendingMeetingCount + confirmedMeetingCount;
 
     return {
       pendingProps,
@@ -127,10 +128,9 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
       feedbackTotal,
       openFeedback,
       openFeedbackTotal: openFeedbackAll.length,
-      upcomingMeetings,
+      upcomingMeetings: upcomingMeetings.slice(0, 5),
       pendingMeetingCount,
       totalMeetings,
-      confirmedMeetings: confirmedMeetings.filter((m) => m.startMs >= cutoffMs).length,
     };
   }, [tick, cutoffMs]);
 
@@ -140,6 +140,8 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
     feedbackTotal,
     openFeedback,
     upcomingMeetings,
+    pendingMeetingCount,
+    totalMeetings,
   } = data;
 
   return (
@@ -151,10 +153,10 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
       <div className={PORTAL_DASHBOARD_STACK}>
         <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
         <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Properties pending review" href="/admin/properties" linkLabel="Properties →" />
+          <SectionHeader title="Properties pending review" href="/admin/properties?tab=pending" linkLabel="Properties →" />
           <PortalDashboardPreviewList
             items={pendingPropertyRows}
-            href="/admin/properties"
+            href="/admin/properties?tab=pending"
             emptyMessage="No properties waiting for admin review."
             keyForItem={(row) => row.adminRefId}
             renderRow={(row) => (
@@ -189,10 +191,10 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
         </div>
 
         <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Feedback" href="/admin/profile" linkLabel="Settings →" />
+          <SectionHeader title="Feedback" href="/admin/bugs-feedback" linkLabel="Feedback →" />
           <PortalDashboardPreviewList
             items={openFeedback}
-            href="/admin/profile"
+            href="/admin/bugs-feedback"
             emptyMessage={`No open feedback — ${feedbackTotal} submission${feedbackTotal === 1 ? "" : "s"} on file.`}
             keyForItem={(row) => row.id}
             renderRow={(row) => (
@@ -208,15 +210,19 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
             )}
           />
         </div>
-        </div>
 
-      {upcomingMeetings.length > 0 && (
         <div className={PORTAL_DASHBOARD_SECTION_CARD}>
-          <SectionHeader title="Upcoming meetings" href="/admin/events" linkLabel="Meetings →" />
+          <SectionHeader title="Meetings" href="/admin/events" linkLabel="Meetings →" />
           <PortalDashboardPreviewList
             items={upcomingMeetings}
             href="/admin/events"
-            emptyMessage="No upcoming meetings."
+            emptyMessage={
+              pendingMeetingCount > 0
+                ? `${pendingMeetingCount} pending request${pendingMeetingCount === 1 ? "" : "s"} — no upcoming times on the calendar.`
+                : totalMeetings > 0
+                  ? "No upcoming meetings on the calendar."
+                  : "No meeting requests yet."
+            }
             keyForItem={(m) => m.id}
             renderRow={(m) => (
               <PortalDashboardCompactRow
@@ -235,7 +241,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
             )}
           />
         </div>
-      )}
+        </div>
       </div>
     </ManagerPortalPageShell>
   );

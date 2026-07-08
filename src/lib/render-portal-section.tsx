@@ -12,6 +12,7 @@ import { AdminPropertiesClient } from "@/components/portal/admin-properties-clie
 import { AdminEventsClient } from "@/components/portal/admin-events-client";
 import { AdminProfileSection } from "@/components/portal/admin-profile-section";
 import { AdminInboxClient } from "@/components/portal/admin-inbox-client";
+import { AdminBugFeedbackClient } from "@/components/portal/admin-bug-feedback-client";
 import { ResidentDashboard } from "@/components/portal/resident-dashboard";
 import { ResidentMoveInPanel } from "@/components/portal/resident-move-in-panel";
 import { ResidentInboxPanel } from "@/components/portal/resident-inbox-panel";
@@ -345,7 +346,8 @@ export async function renderPortalSection(
   }
 
   if (kind === "admin" && section === "bugs-feedback") {
-    redirect(`${def.basePath}/profile`);
+    if (tabParts?.length) notFound();
+    return <AdminBugFeedbackClient />;
   }
 
   if (kind === "admin" && section === "events") {
