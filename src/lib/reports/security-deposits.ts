@@ -36,6 +36,27 @@ export type SecurityDepositLedgerRow = {
   itemization: SecurityDepositItemizationLine[];
 };
 
+export type DispositionSplit = {
+  refundCents: number;
+  withholdCents: number;
+  dispositionType: SecurityDepositDispositionType;
+};
+
+/**
+ * Compute a deposit disposition split from the amount held and the damages to
+ * withhold. The refund is always the remainder — the caller (tool/UI) supplies
+ * only the withheld/damages figure, never the refund, so the two can never
+ * disagree or exceed the held balance.
+ */
+export function computeDispositionSplit(amountHeldCents: number, withholdCents: number): DispositionSplit {
+  const held = Math.max(0, Math.round(amountHeldCents));
+  const withhold = Math.min(held, Math.max(0, Math.round(withholdCents)));
+  const refund = held - withhold;
+  const dispositionType: SecurityDepositDispositionType =
+    withhold === 0 ? "full_refund" : refund === 0 ? "full_withhold" : "itemized_partial";
+  return { refundCents: refund, withholdCents: withhold, dispositionType };
+}
+
 export type DisposeSecurityDepositInput = {
   managerUserId: string;
   depositId: string;

@@ -19,6 +19,7 @@ import {
   listVendorPayoutsTool,
   submitVendorInvoiceTool,
 } from "./domains/vendor-financials";
+import { managerFinancialsWriteTools } from "./domains/financials-write";
 
 export const agentRegistry = buildRegistry([
   getOverdueChargesTool,
@@ -48,5 +49,13 @@ export const vendorAgentRegistry = buildRegistry([
   submitVendorInvoiceTool,
   listVendorPayoutsTool,
 ]);
+
+/**
+ * Gated manager-financials WRITE tools (plan §7). Kept OUT of `agentRegistry` so
+ * the model loop (read-only) never receives them — they run only behind the
+ * explicit preview/confirm step, per the AGENTS.md write-gating contract. This
+ * registry exists so the write layer has a single typed source of truth.
+ */
+export const managerWriteRegistry = buildRegistry([...managerFinancialsWriteTools]);
 
 export { resolveAgentContext, type AgentContext } from "./context";

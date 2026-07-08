@@ -411,6 +411,37 @@ export async function postGlBillPaid(db: SupabaseClient, input: GlBillInput): Pr
   });
 }
 
+export type GlOwnerDistributionInput = {
+  managerUserId: string;
+  sourceId: string;
+  amountCents: number;
+  entryDate: string;
+  propertyId?: string | null;
+  memo?: string | null;
+};
+
+/** Pay an owner: DR owner's equity (draw) / CR operating cash. */
+export async function postGlOwnerDistribution(
+  db: SupabaseClient,
+  input: GlOwnerDistributionInput,
+): Promise<string | null> {
+  const amountCents = Math.max(0, Math.round(input.amountCents));
+  if (amountCents <= 0) return null;
+
+  return insertJournalEntry(db, {
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+    entryDate: input.entryDate,
+    memo: input.memo ?? "Owner distribution",
+    sourceType: "owner_distribution",
+    sourceId: input.sourceId,
+    lines: [
+      { accountCode: "owners_equity", debitCents: amountCents, creditCents: 0, propertyId: input.propertyId, memo: input.memo },
+      { accountCode: "operating_cash", debitCents: 0, creditCents: amountCents, propertyId: input.propertyId, memo: input.memo },
+    ],
+  });
+}
+
 export type GlRefundInput = {
   managerUserId: string;
   sourceChargeId: string;
