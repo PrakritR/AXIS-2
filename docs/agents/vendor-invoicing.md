@@ -30,9 +30,21 @@ duplicate infrastructure. Reuse the shipped pattern.
 is recomputed server-side from line items via `sumLineItemsCents`, never trusted
 from the body). Manager: `PATCH /api/vendor/invoices/[id]/decision`
 (approve/reject/schedule/paid, scoped to invoices billed to `auth.userId`).
+The decision route enforces the status flow via
+`canTransitionVendorInvoice` (`src/lib/vendor-invoices.ts`): `submitted →
+approved/rejected`, `approved → scheduled/paid`, `scheduled → paid`; `paid` and
+`rejected` are terminal, and a repeat of the current status is a 409 (so
+analytics never double-fire). A transition that omits `decisionNote` preserves
+the note recorded by the earlier decision rather than clearing it.
 Shared types/helpers live in `src/lib/vendor-invoices.ts` (incl.
 `vendorInvoiceBadgeTone`: submitted→pending, approved/scheduled→approved,
 paid→confirmed, rejected→overdue — the four shared `Badge` tones, no fifth).
+
+**Scope: single-manager-per-vendor billing.** When a vendor has multiple
+linked managers and no explicit `managerUserId` is supplied, the submit route
+and the `submit_vendor_invoice` tool refuse (409 / tool error) rather than
+silently billing the first link — the submit modal sends no `managerUserId`
+and surfaces that error verbatim. A manager picker is deferred to Phase 5.
 
 **UI.** Invoices are an `invoices` TAB added to the existing vendor `financials`
 section (not a new portal section) — `VendorFinancesPanel` (`tabId === "invoices"`)

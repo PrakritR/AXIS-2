@@ -13,7 +13,7 @@ import { readChargesForManager } from "@/lib/household-charges";
 import { readManagerOutgoingExpenses } from "@/lib/manager-outgoing-payments";
 import { centsToUsd } from "@/lib/reports/money";
 import { DEMO_MANAGER_USER_ID } from "@/lib/demo/demo-session";
-import { demoApplications, demoExpenseRows, demoProperties, PROP_LABEL } from "@/lib/demo/demo-data";
+import { demoApplications, demoProperties, PROP_LABEL } from "@/lib/demo/demo-data";
 
 function amountToCents(label: string): number {
   const n = Number.parseFloat(label.replace(/[^0-9.]/g, ""));

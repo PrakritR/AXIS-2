@@ -1,10 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { agentRegistry, vendorAgentRegistry } from "@/lib/tools";
-import { listVendorInvoicesTool, listVendorPayoutsTool } from "@/lib/tools/domains/vendor-financials";
 import {
+  listVendorInvoicesTool,
+  listVendorPayoutsTool,
+  submitVendorInvoiceTool,
+} from "@/lib/tools/domains/vendor-financials";
+import {
+  canTransitionVendorInvoice,
   normalizeLineItems,
   sumLineItemsCents,
   vendorInvoiceBadgeTone,
+  VENDOR_INVOICE_STATUSES,
 } from "@/lib/vendor-invoices";
 import { makeManagerRowsCtx } from "./fake-agent-ctx";
 
@@ -111,6 +117,48 @@ describe("vendor invoice scoping", () => {
     };
     expect(result.count).toBe(1);
     expect(result.payouts[0]?.id).toBe("p-a");
+  });
+
+  it("submit_vendor_invoice refuses to guess between multiple linked managers", async () => {
+    const link = (id: string, managerUserId: string) =>
+      ({
+        id,
+        manager_user_id: managerUserId,
+        vendor_user_id: "vendor_a",
+        row_data: { id, name: "Vendor A" },
+        updated_at: "2026-07-01T00:00:00Z",
+      }) as unknown as Parameters<typeof makeManagerRowsCtx>[0][string][number];
+    const ctx = makeManagerRowsCtx(
+      { manager_vendor_records: [link("dir-1", "manager_a"), link("dir-2", "manager_b")] },
+      { userId: "vendor_a", roles: ["vendor"] },
+    );
+    await expect(
+      submitVendorInvoiceTool.handler(ctx, {
+        lineItems: [{ description: "Labor", quantity: 1, unitAmountCents: 5000 }],
+      }),
+    ).rejects.toThrow(/multiple managers/i);
+  });
+});
+
+describe("vendor invoice status transitions", () => {
+  it("follows submitted → approved/rejected → scheduled → paid", () => {
+    expect(canTransitionVendorInvoice("submitted", "approved")).toBe(true);
+    expect(canTransitionVendorInvoice("submitted", "rejected")).toBe(true);
+    expect(canTransitionVendorInvoice("submitted", "paid")).toBe(false);
+    expect(canTransitionVendorInvoice("approved", "scheduled")).toBe(true);
+    expect(canTransitionVendorInvoice("approved", "paid")).toBe(true);
+    expect(canTransitionVendorInvoice("scheduled", "paid")).toBe(true);
+    expect(canTransitionVendorInvoice("scheduled", "rejected")).toBe(false);
+  });
+
+  it("treats paid and rejected as terminal and repeats as non-transitions", () => {
+    for (const to of VENDOR_INVOICE_STATUSES) {
+      expect(canTransitionVendorInvoice("paid", to)).toBe(false);
+      expect(canTransitionVendorInvoice("rejected", to)).toBe(false);
+    }
+    for (const status of VENDOR_INVOICE_STATUSES) {
+      expect(canTransitionVendorInvoice(status, status)).toBe(false);
+    }
   });
 });
 

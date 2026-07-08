@@ -71,6 +71,16 @@ export async function POST(req: Request) {
     if (links.length === 0) {
       return NextResponse.json({ error: "No linked manager found for this vendor account." }, { status: 400 });
     }
+    // Phase 4 scope: single-manager-per-vendor billing. With multiple linked
+    // managers and no explicit choice, fail loudly rather than guessing —
+    // the manager picker lands in Phase 5.
+    const linkedManagerIds = new Set(links.map((l) => l.managerUserId));
+    if (!body.managerUserId && linkedManagerIds.size > 1) {
+      return NextResponse.json(
+        { error: "Your account is linked to multiple managers; invoice submission supports one linked manager for now. Contact support." },
+        { status: 409 },
+      );
+    }
     const target = body.managerUserId
       ? links.find((l) => l.managerUserId === body.managerUserId)
       : links[0];

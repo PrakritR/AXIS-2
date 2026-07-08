@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
 import { track } from "@/lib/analytics/posthog";
-import { mapVendorInvoiceRow, VENDOR_INVOICE_SELECT, type VendorInvoiceStatus } from "@/lib/vendor-invoices";
+import {
+  canTransitionVendorInvoice,
+  mapVendorInvoiceRow,
+  VENDOR_INVOICE_SELECT,
+  type VendorInvoiceStatus,
+} from "@/lib/vendor-invoices";
 import { createBillFromVendorInvoice } from "@/lib/manager-bills.server";
 
 export const runtime = "nodejs";
@@ -11,7 +16,7 @@ export const runtime = "nodejs";
 const MANAGER_DECISIONS: Partial<Record<VendorInvoiceStatus, string | null>> = {
   approved: "vendor_invoice_approved",
   rejected: "vendor_invoice_rejected",
-  scheduled: "vendor_invoice_approved",
+  scheduled: null,
   paid: null,
 };
 
@@ -43,6 +48,14 @@ export async function PATCH(
     if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
     if (!existing) return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
 
+    const currentStatus = existing.status as VendorInvoiceStatus;
+    if (!canTransitionVendorInvoice(currentStatus, status)) {
+      return NextResponse.json(
+        { error: `Invoice is ${currentStatus}; it cannot be marked ${status}.` },
+        { status: 409 },
+      );
+    }
+
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = {
       status,
@@ -58,9 +71,16 @@ export async function PATCH(
       .update(patch)
       .eq("id", id)
       .eq("manager_user_id", auth.userId)
+      .eq("status", currentStatus)
       .select(VENDOR_INVOICE_SELECT)
-      .single();
+      .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) {
+      return NextResponse.json(
+        { error: "Invoice status changed while deciding — reload and try again." },
+        { status: 409 },
+      );
+    }
 
     const event = MANAGER_DECISIONS[status];
     if (event) {

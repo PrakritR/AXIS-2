@@ -69,6 +69,7 @@ export function PortalStripeConnectPanel({
   const [status, setStatus] = useState<ConnectStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const handledConnectParam = useRef(false);
+  const payoutSetupStartedThisSession = useRef(false);
   const payoutCompletedFired = useRef(false);
   const resolvedReturnPath = returnPath ?? `${basePath}/payments`;
   const payoutsPath = `${basePath}/payments/payouts`;
@@ -121,6 +122,7 @@ export function PortalStripeConnectPanel({
     if (q !== "done" && q !== "refresh") return;
     handledConnectParam.current = true;
     if (q === "done") {
+      if (analyticsScope === "vendor") payoutSetupStartedThisSession.current = true;
       showToast("Bank account linked. You're ready to receive resident payments.");
       onConnectDone?.();
     } else {
@@ -131,13 +133,22 @@ export function PortalStripeConnectPanel({
       if (q === "done") setActionError(null);
       void loadStatus();
     });
-  }, [loadStatus, onConnectDone, resolvedReturnPath, showToast]);
+  }, [analyticsScope, loadStatus, onConnectDone, resolvedReturnPath, showToast]);
 
   // Vendor payout-onboarding funnel: fire `payout_setup_completed` once when the
-  // vendor's Connect account first reaches payout-ready in this session. The
-  // eventual server-confirmed source is Phase 2's `account.updated` webhook.
+  // vendor's Connect account reaches payout-ready after a setup was started in
+  // this session (a `startConnect` click or a `?connect=done` return from
+  // Stripe) — an already-ready account merely loading its status is not a
+  // completion. The eventual server-confirmed source is Phase 2's
+  // `account.updated` webhook.
   useEffect(() => {
-    if (analyticsScope !== "vendor" || payoutCompletedFired.current || !status) return;
+    if (
+      analyticsScope !== "vendor" ||
+      payoutCompletedFired.current ||
+      !payoutSetupStartedThisSession.current ||
+      !status
+    )
+      return;
     const ready =
       status.connected &&
       Boolean(status.paymentReady ?? (status.transfersEnabled && status.payoutsEnabled));
@@ -150,7 +161,10 @@ export function PortalStripeConnectPanel({
   const startConnect = useCallback(async (): Promise<boolean> => {
     setBusy(true);
     setActionError(null);
-    if (analyticsScope === "vendor") track("payout_setup_started");
+    if (analyticsScope === "vendor") {
+      track("payout_setup_started");
+      payoutSetupStartedThisSession.current = true;
+    }
     const opened = await openStripeConnectOnboarding({
       apiBase,
       showToast: (message) => {

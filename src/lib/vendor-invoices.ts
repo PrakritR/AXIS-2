@@ -15,6 +15,24 @@ export const VENDOR_INVOICE_STATUSES = [
 
 export type VendorInvoiceStatus = (typeof VENDOR_INVOICE_STATUSES)[number];
 
+/**
+ * Legal status transitions: submitted → approved / rejected → scheduled → paid
+ * (scheduling is optional — approved may go straight to paid). `paid` and
+ * `rejected` are terminal, and repeating the current status is not a
+ * transition, so analytics never double-fire on repeat PATCHes.
+ */
+export const VENDOR_INVOICE_ALLOWED_TRANSITIONS: Record<VendorInvoiceStatus, readonly VendorInvoiceStatus[]> = {
+  submitted: ["approved", "rejected"],
+  approved: ["scheduled", "paid"],
+  scheduled: ["paid"],
+  paid: [],
+  rejected: [],
+};
+
+export function canTransitionVendorInvoice(from: VendorInvoiceStatus, to: VendorInvoiceStatus): boolean {
+  return (VENDOR_INVOICE_ALLOWED_TRANSITIONS[from] ?? []).includes(to);
+}
+
 export type VendorInvoiceLineItem = {
   description: string;
   quantity: number;

@@ -14,6 +14,7 @@ import { z } from "zod";
 import { defineTool } from "../registry";
 import type { AgentContext } from "../context";
 import { resolveOwnVendorRecords } from "@/lib/vendor-own-record";
+import { track } from "@/lib/analytics/posthog";
 import {
   mapVendorInvoiceRow,
   normalizeLineItems,
@@ -77,7 +78,9 @@ export const submitVendorInvoiceTool = defineTool({
       managerUserId: z
         .string()
         .optional()
-        .describe("Manager to bill. Defaults to the vendor's first linked manager when omitted."),
+        .describe(
+          "Manager to bill. May be omitted when the vendor has exactly one linked manager; with multiple links it is required.",
+        ),
       workOrderId: z.string().optional().describe("Optional work order this invoice bills for."),
       invoiceNumber: z.string().optional(),
       lineItems: z
@@ -97,6 +100,12 @@ export const submitVendorInvoiceTool = defineTool({
   handler: async (ctx: AgentContext, input) => {
     const links = await resolveOwnVendorRecords(ctx.db, ctx.userId);
     if (links.length === 0) throw new Error("No linked manager found for this vendor account.");
+    const linkedManagerIds = new Set(links.map((l) => l.managerUserId));
+    if (!input.managerUserId && linkedManagerIds.size > 1) {
+      throw new Error(
+        "This vendor account is linked to multiple managers; invoice submission supports one linked manager for now.",
+      );
+    }
     const target = input.managerUserId
       ? links.find((l) => l.managerUserId === input.managerUserId)
       : links[0];
@@ -109,6 +118,22 @@ export const submitVendorInvoiceTool = defineTool({
     const totalCents = subtotalCents + taxCents;
 
     const now = new Date().toISOString();
+    // Record the action before mutating state — a write tool never runs
+    // without an audit row (same contract as send_rent_reminder).
+    const { error: auditError } = await ctx.db.from("audit_log").insert({
+      actor_user_id: ctx.userId,
+      landlord_id: target.managerUserId,
+      action: "submit_vendor_invoice",
+      tool_name: "submit_vendor_invoice",
+      input_summary: {
+        workOrderId: input.workOrderId?.trim() || null,
+        lineItems: lineItems.length,
+        totalCents,
+      },
+      created_at: now,
+    });
+    if (auditError) throw new Error("Could not record the action; no invoice was submitted.");
+
     const { data, error } = await ctx.db
       .from("vendor_invoices")
       .insert({
@@ -129,6 +154,14 @@ export const submitVendorInvoiceTool = defineTool({
       .select(VENDOR_INVOICE_SELECT)
       .single();
     if (error) throw new Error(error.message);
+
+    track("vendor_invoice_submitted", ctx.userId, {
+      invoice_id: data.id as string,
+      total_cents: totalCents,
+      line_items: lineItems.length,
+      has_work_order: Boolean(input.workOrderId?.trim()),
+    });
+
     return { invoice: summarizeInvoice(data) };
   },
 });
