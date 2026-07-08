@@ -12,9 +12,14 @@ import {
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
+  PortalDataTableColGroup,
   PortalTableInlineExpand,
   createPortalRowExpandClick,
+  portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
+
+/** Charge, Property, Payee, Due date, Amount. */
+const PAYMENTS_COLUMN_WEIGHTS = [26, 20, 20, 18, 16] as const;
 
 export type PortalPaymentTableRow = {
   id: string;
@@ -111,6 +116,13 @@ export function PortalPaymentsTable({
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className={PORTAL_DATA_TABLE}>
+            <PortalDataTableColGroup
+              percents={
+                showSelection
+                  ? portalTableColumnPercents(6, [3, ...PAYMENTS_COLUMN_WEIGHTS])
+                  : portalTableColumnPercents(5, PAYMENTS_COLUMN_WEIGHTS)
+              }
+            />
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 {showSelection ? (
