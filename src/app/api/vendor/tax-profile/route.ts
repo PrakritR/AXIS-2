@@ -86,6 +86,7 @@ export async function PATCH(req: Request) {
       vendor_id: own.vendorId,
       manager_user_id: own.managerUserId,
       vendor_user_id: user.id,
+      submitted_by_vendor: true,
       legal_name: body.legalName?.trim() || null,
       business_name: body.businessName?.trim() || null,
       entity_type: body.entityType ?? null,
