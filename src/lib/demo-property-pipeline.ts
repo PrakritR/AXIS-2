@@ -1,8 +1,4 @@
-import {
-  DEMO_MANAGER_USER_ID,
-  isDemoModeActive,
-  resolveManagerScopeUserId,
-} from "@/lib/demo/demo-session";
+import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
 import type { MockProperty } from "@/data/types";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import type { PropertyPipelineSnapshot, ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";

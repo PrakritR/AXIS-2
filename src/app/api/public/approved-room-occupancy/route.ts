@@ -29,7 +29,6 @@ function publicApprovedRow(raw: unknown): DemoApplicantRow | null {
     propertyId,
     assignedPropertyId: text(row.assignedPropertyId) || undefined,
     assignedRoomChoice: roomChoice,
-    managerUserId: text(row.managerUserId) || undefined,
     manuallyAdded: Boolean(row.manuallyAdded),
     manualResidentDetails: {
       moveInDate: leaseStart || undefined,

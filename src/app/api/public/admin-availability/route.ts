@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { filterAdminUserIds } from "@/lib/auth/admin-role";
 import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
+import { publicAdminSchedulingHostLabel } from "@/lib/public-host-label";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -75,15 +76,21 @@ export async function GET() {
       ),
     ];
     const emailByAdminId = new Map<string, string>();
+    const labelByAdminId = new Map<string, string>();
     let adminRoleIds = new Set<string>();
     if (adminIds.length > 0) {
       const [{ data: profiles }, roleIds] = await Promise.all([
-        db.from("profiles").select("id, email").in("id", adminIds),
+        db.from("profiles").select("id, email, full_name").in("id", adminIds),
         filterAdminUserIds(db, adminIds),
       ]);
       adminRoleIds = roleIds;
-      for (const profile of (profiles ?? []) as { id?: string | null; email?: string | null }[]) {
-        if (profile.id && profile.email) emailByAdminId.set(profile.id, profile.email.trim().toLowerCase());
+      for (const profile of (profiles ?? []) as { id?: string | null; email?: string | null; full_name?: string | null }[]) {
+        if (profile.id) {
+          emailByAdminId.set(profile.id, profile.email?.trim().toLowerCase() ?? "");
+          if (profile.full_name?.trim()) {
+            labelByAdminId.set(profile.id, profile.full_name.trim());
+          }
+        }
       }
     }
 
@@ -144,7 +151,10 @@ export async function GET() {
       // Availability belongs to any admin-role account; legacy rows labeled with
       // the primary email stay valid even if their profile row is missing.
       if (!adminRoleIds.has(adminUserId) && storedLabel !== PRIMARY_ADMIN_EMAIL) continue;
-      const adminLabel = profileEmail || storedLabel || PRIMARY_ADMIN_EMAIL;
+      const adminLabel = publicAdminSchedulingHostLabel({
+        email: profileEmail || storedLabel || undefined,
+        fullName: labelByAdminId.get(adminUserId),
+      });
       const blocked = blockedByAdmin.get(adminUserId) ?? [];
 
       for (const slot of slots) {

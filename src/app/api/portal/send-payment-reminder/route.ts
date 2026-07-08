@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { isAdminUser } from "@/lib/auth/admin-preview";
+import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
 import { track } from "@/lib/analytics/posthog";
 import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@/lib/household-charges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -7,19 +9,40 @@ import { sendSms } from "@/lib/twilio";
 
 export const runtime = "nodejs";
 
-async function loadOwnedChargeForReminder(
+function canSendPaymentReminder(role: string | null | undefined): boolean {
+  return role === "admin" || role === "manager" || role === "owner" || role === "pro";
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+async function loadChargeForReminder(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
-  managerUserId: string,
+  userId: string,
   chargeId: string,
-): Promise<HouseholdCharge | null> {
+  admin: boolean,
+): Promise<{ charge: HouseholdCharge; managerUserId: string } | null> {
   const { data, error } = await db
     .from("portal_household_charge_records")
     .select("row_data, manager_user_id")
     .eq("id", chargeId)
     .maybeSingle();
   if (error || !data?.row_data) return null;
-  if (data.manager_user_id !== managerUserId) return null;
-  return data.row_data as HouseholdCharge;
+
+  const charge = data.row_data as HouseholdCharge;
+  const managerUserId = data.manager_user_id?.trim() || charge.managerUserId?.trim() || "";
+  if (admin || (managerUserId && managerUserId === userId)) {
+    return { charge, managerUserId };
+  }
+
+  const propertyId = charge.propertyId?.trim() ?? "";
+  if (propertyId) {
+    const linked = await collectLinkedPropertyIdsForUser(db, userId);
+    if (linked.has(propertyId)) return { charge, managerUserId };
+  }
+
+  return null;
 }
 
 export async function POST(req: Request) {
@@ -30,53 +53,46 @@ export async function POST(req: Request) {
     } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, error: "Not authenticated." }, { status: 401 });
 
-    const body = (await req.json().catch(() => ({}))) as {
-      chargeId?: string;
-      residentEmail?: string;
-      residentName?: string;
-      chargeTitle?: string;
-      balanceDue?: string;
-      dueDate?: string;
-      propertyLabel?: string;
-      managerName?: string;
-    };
+    const body = (await req.json().catch(() => ({}))) as { chargeId?: string };
 
     const db = createSupabaseServiceRoleClient();
+    const [{ data: requestor }, admin] = await Promise.all([
+      db.from("profiles").select("role, full_name, email, sms_from_number").eq("id", user.id).maybeSingle(),
+      isAdminUser(user.id),
+    ]);
+    if (!admin && !canSendPaymentReminder(requestor?.role)) {
+      return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 403 });
+    }
+
     const chargeId = String(body.chargeId ?? "").trim();
-    const ownedCharge = chargeId ? await loadOwnedChargeForReminder(db, user.id, chargeId) : null;
-    if (chargeId && !ownedCharge) {
+    if (!chargeId) {
+      return NextResponse.json({ ok: false, error: "chargeId is required." }, { status: 400 });
+    }
+
+    const loaded = await loadChargeForReminder(db, user.id, chargeId, admin);
+    if (!loaded) {
       return NextResponse.json({ ok: false, error: "Charge not found." }, { status: 404 });
     }
-    if (ownedCharge && !isUnpaidHouseholdCharge(ownedCharge)) {
+    const ownedCharge = loaded.charge;
+    if (!isUnpaidHouseholdCharge(ownedCharge)) {
       return NextResponse.json(
         { ok: false, error: "This charge is already paid. Reminders are not sent for paid charges.", code: "charge_paid" },
         { status: 409 },
       );
     }
 
-    const residentEmail = String(ownedCharge?.residentEmail ?? body.residentEmail ?? "").trim().toLowerCase();
-    const residentName = String(ownedCharge?.residentName ?? body.residentName ?? "Resident").trim();
-    const chargeTitle = String(ownedCharge?.title ?? body.chargeTitle ?? "outstanding charge").trim();
-    const balanceDue = String(ownedCharge?.balanceLabel ?? body.balanceDue ?? "").trim();
-    const dueDate = String(ownedCharge ? chargeDueLabel(ownedCharge) : body.dueDate ?? "").trim();
-    const propertyLabel = String(ownedCharge?.propertyLabel ?? body.propertyLabel ?? "").trim();
-
-    const { data: managerProfile } = await db
-      .from("profiles")
-      .select("full_name, email, sms_from_number")
-      .eq("id", user.id)
-      .maybeSingle();
+    const residentEmail = String(ownedCharge.residentEmail ?? "").trim().toLowerCase();
+    const residentName = String(ownedCharge.residentName ?? "Resident").trim();
+    const chargeTitle = String(ownedCharge.title ?? "outstanding charge").trim();
+    const balanceDue = String(ownedCharge.balanceLabel ?? "").trim();
+    const dueDate = String(chargeDueLabel(ownedCharge)).trim();
+    const propertyLabel = String(ownedCharge.propertyLabel ?? "").trim();
+    const managerProfile = requestor;
     const managerName =
-      managerProfile?.full_name?.trim() || managerProfile?.email?.trim() || String(body.managerName ?? "Your property manager").trim();
+      managerProfile?.full_name?.trim() || managerProfile?.email?.trim() || "Your property manager";
 
     if (!residentEmail || !residentEmail.includes("@")) {
       return NextResponse.json({ ok: false, error: "Valid resident email required." }, { status: 400 });
-    }
-    if (!ownedCharge && balanceDue === "$0.00") {
-      return NextResponse.json(
-        { ok: false, error: "This charge is already paid. Reminders are not sent for paid charges.", code: "charge_paid" },
-        { status: 409 },
-      );
     }
 
     const senderLower = (user.email ?? "").trim().toLowerCase();
@@ -96,7 +112,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (apiKey) {
       const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
-      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${messageBody.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via Axis portal by ${managerName}</p>`;
+      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${escapeHtmlText(messageBody)}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via Axis portal by ${escapeHtmlText(managerName)}</p>`;
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

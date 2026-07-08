@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  residentBrowseFromApplicationHref,
   residentBrowseFromAuthHref,
   residentCreateAccountHref,
   residentPortalPublicHref,
@@ -9,6 +10,14 @@ import {
 describe("residentBrowseFromAuthHref", () => {
   it("points at public browse with auth return marker", () => {
     expect(residentBrowseFromAuthHref()).toBe("/rent/browse?from=auth");
+  });
+});
+
+describe("residentBrowseFromApplicationHref", () => {
+  it("includes application return path for browse back navigation", () => {
+    expect(residentBrowseFromApplicationHref("/resident/applications/apply?propertyId=abc")).toBe(
+      "/rent/browse?from=application&return=%2Fresident%2Fapplications%2Fapply%3FpropertyId%3Dabc",
+    );
   });
 });
 

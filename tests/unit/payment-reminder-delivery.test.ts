@@ -9,7 +9,7 @@ vi.mock("@/lib/twilio", () => ({
 }));
 
 import { sendPushToUser } from "@/lib/push-notifications.server";
-import { deliverPaymentReminder } from "@/lib/payment-reminder-delivery";
+import { deliverPaymentReminder, reminderHtmlFromText } from "@/lib/payment-reminder-delivery";
 import type { HouseholdCharge } from "@/lib/household-charges";
 
 function makeCharge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
@@ -97,5 +97,12 @@ describe("deliverPaymentReminder", () => {
       url: "/resident/payments",
       data: { chargeId: "charge-1", slot: "3_days_before" },
     });
+  });
+
+  it("escapes HTML in reminder bodies", () => {
+    const html = reminderHtmlFromText("Hi <script>alert(1)</script>\nAmount & due");
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("Amount &amp; due");
+    expect(html).not.toContain("<script>");
   });
 });

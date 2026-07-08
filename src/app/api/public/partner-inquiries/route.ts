@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
+import {
+  adminHasPublishedSlot,
+  managerHasPublishedSlot,
+  managerMayHostPropertyTour,
+} from "@/lib/public-tour-booking-guard";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { notifyManagerTourRequest, notifyTenantTourRequestReceived } from "@/lib/tour-notification-delivery.server";
 
@@ -126,6 +132,10 @@ async function hasManagerTourConflict(
 
 export async function POST(req: Request) {
   try {
+    if (!rateLimit(`partner-inquiries:${clientIpFrom(req)}`, 30, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+    }
+
     const body = (await req.json()) as { row?: unknown };
     if (!isObject(body.row)) {
       return NextResponse.json({ error: "row required" }, { status: 400 });
@@ -151,7 +161,26 @@ export async function POST(req: Request) {
     if (textValue(row.kind) === "tour") {
       for (const window of requestedWindows) {
         const managerUserId = textValue(row.managerUserId) || textValue(window.adminUserId);
-        if (!managerUserId) continue;
+        const slotKey = textValue(window.slotKey);
+        const propertyId = textValue(row.propertyId);
+        if (!managerUserId) {
+          return NextResponse.json({ error: "A host is required for tour requests." }, { status: 400 });
+        }
+        if (!slotKey) {
+          return NextResponse.json({ error: "Tour time slot is required." }, { status: 400 });
+        }
+        if (propertyId) {
+          const mayHost = await managerMayHostPropertyTour(db, { managerUserId, propertyId });
+          const hasSlot = await managerHasPublishedSlot(db, { managerUserId, slotKey, propertyId });
+          if (!mayHost || !hasSlot) {
+            return NextResponse.json({ error: "That tour host or time is not available." }, { status: 403 });
+          }
+        } else {
+          const hasAdminSlot = await adminHasPublishedSlot(db, { adminUserId: managerUserId, slotKey });
+          if (!hasAdminSlot) {
+            return NextResponse.json({ error: "That meeting host or time is not available." }, { status: 403 });
+          }
+        }
         if (await hasManagerTourConflict(db, managerUserId, [window])) {
           return NextResponse.json(
             { error: "That manager already has a tour at this time. Please choose another time." },

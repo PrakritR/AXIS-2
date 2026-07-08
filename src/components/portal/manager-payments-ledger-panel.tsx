@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
-  PORTAL_DATA_TABLE, 
+  PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
+  PortalDataTableColGroup,
   PortalDataTableEmpty,
   PORTAL_DETAIL_BTN,
   PORTAL_MOBILE_CARD_CLASS,
@@ -19,6 +20,7 @@ import {
   PortalTableDetailActions,
   PortalTableInlineExpand,
   createPortalRowExpandClick,
+  portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
 import { stripPropertyRoomCountSuffix } from "@/lib/portal-mobile-preview";
 import type { DemoManagerPaymentLedgerRow, ManagerPaymentBucket } from "@/data/demo-portal";
@@ -69,6 +71,18 @@ function dueDateInputToLabel(iso: string): string {
   const d = new Date(year, month - 1, day, 12, 0, 0, 0);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function paymentPropertyUnitCell(row: DemoManagerPaymentLedgerRow) {
+  const property = stripPropertyRoomCountSuffix(row.propertyName || "");
+  const unit = row.roomNumber ? `Room ${row.roomNumber}` : "";
+  if (!property && !unit) return "—";
+  return (
+    <>
+      <span className="text-foreground">{property || unit}</span>
+      {property && unit ? <span className="text-muted"> · {unit}</span> : null}
+    </>
+  );
 }
 
 export function ManagerPaymentsLedgerPanel({
@@ -672,10 +686,10 @@ export function ManagerPaymentsLedgerPanel({
                     {row.residentName}
                   </PortalTableInlineExpand>
                     <p className="mt-0.5 truncate text-xs text-muted">
-                      {row.chargeTitle}
-                      {row.roomNumber ? ` · Room ${row.roomNumber}` : ""}
+                      {propertyShort}
+                      {row.roomNumber ? `${propertyShort ? " · " : ""}Room ${row.roomNumber}` : ""}
                     </p>
-                    {propertyShort ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{propertyShort}</p> : null}
+                    <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.chargeTitle}</p>
                     <p className="mt-0.5 text-xs text-muted">
                       {editingRowId === row.id ? (
                         <span className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -735,6 +749,13 @@ export function ManagerPaymentsLedgerPanel({
     <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
       <div className={PORTAL_DATA_TABLE_SCROLL}>
         <table className={PORTAL_DATA_TABLE}>
+          <PortalDataTableColGroup
+            percents={
+              showSelection
+                ? ["4%", ...portalTableColumnPercents(6).map((p) => `${(parseFloat(p) * 0.96).toFixed(4)}%`)]
+                : portalTableColumnPercents(6)
+            }
+          />
           <thead>
             <tr className={PORTAL_TABLE_HEAD_ROW}>
               {showSelection ? (
@@ -748,9 +769,8 @@ export function ManagerPaymentsLedgerPanel({
                   />
                 </th>
               ) : null}
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
-              <th className={`${MANAGER_TABLE_TH} text-left`}>Room</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
+              <th className={`${MANAGER_TABLE_TH} text-left`}>Property · Unit</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Charge</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount paid</th>
               <th className={`${MANAGER_TABLE_TH} text-left`}>Amount owed</th>
@@ -778,19 +798,18 @@ export function ManagerPaymentsLedgerPanel({
                       />
                     </td>
                   ) : null}
-                  <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>{row.propertyName}</td>
-                  <td className={PORTAL_TABLE_TD}>Room {row.roomNumber}</td>
-                  <td className={PORTAL_TABLE_TD}>{row.residentName}</td>
-                  <td className={PORTAL_TABLE_TD}>
-                    <PortalTableInlineExpand expanded={expandedId === row.id}>{row.chargeTitle}</PortalTableInlineExpand>
+                  <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
+                    <PortalTableInlineExpand expanded={expandedId === row.id}>{row.residentName}</PortalTableInlineExpand>
                   </td>
+                  <td className={PORTAL_TABLE_TD}>{paymentPropertyUnitCell(row)}</td>
+                  <td className={PORTAL_TABLE_TD}>{row.chargeTitle}</td>
                   <td className={`${PORTAL_TABLE_TD} tabular-nums text-muted`}>{row.amountPaid}</td>
                   <td className={PORTAL_TABLE_TD}>{renderAmountOwedCell(row)}</td>
                   <td className={`${PORTAL_TABLE_TD} text-muted`}>{renderDueDateCell(row)}</td>
                 </tr>
                 {expandedId === row.id ? (
                   <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                    <td colSpan={showSelection ? 8 : 7} className={PORTAL_TABLE_DETAIL_CELL}>
+                    <td colSpan={showSelection ? 7 : 6} className={PORTAL_TABLE_DETAIL_CELL}>
                       {renderDetailActions(row)}
                     </td>
                   </tr>

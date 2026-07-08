@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { FIELD_LABEL_CLASS } from "@/lib/ui-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
 
 type RegisterResponse = {
   error?: string;
@@ -101,7 +102,8 @@ export function VendorSignupForm({
         return;
       }
       if (signInData?.user) posthog.identify(signInData.user.id);
-      window.location.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : resolvedNext);
+      const fallback = body.redirectTo?.startsWith("/") ? body.redirectTo : resolvedNext;
+      await navigateAfterRoleSignup(fallback);
     } catch {
       setError("Could not create vendor account.");
     } finally {

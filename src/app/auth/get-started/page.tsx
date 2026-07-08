@@ -5,7 +5,9 @@ import { AuthOAuthLoading } from "@/components/auth/auth-oauth-loading";
 import { AuthBackLink, AuthPageHeader, AuthRoleStack } from "@/components/auth/auth-mobile-primitives";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { AUTH_PORTAL_PICKER_OPTIONS } from "@/lib/auth/auth-portal-picker-options";
 import { nativeAwarePath } from "@/lib/auth/native-auth-entry";
+import { navigateAfterRoleSignup } from "@/lib/auth/navigate-after-role-signup";
 import { isGetStartedDestination, resolvePostAuthDestination } from "@/lib/auth/resolve-post-auth-destination";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
@@ -13,9 +15,8 @@ import posthog from "posthog-js";
 import { Suspense, useEffect, useState } from "react";
 
 /**
- * Quick role chooser for a signed-in user we can't yet route to a portal (an unknown
- * Google login with no role, purchase, or application). We never silently create an
- * account here — the user explicitly picks how to get started.
+ * Portal chooser for a signed-in user with no portal role yet (new OAuth/email login).
+ * User picks Property, Resident, or Vendor — never silently provisioned.
  */
 function GetStartedContent() {
   const router = useRouter();
@@ -51,25 +52,46 @@ function GetStartedContent() {
       );
       return;
     }
-    // Resident: the user is already signed in — link them to their application by email
-    // (a pending/limited portal if no application matches yet). No Axis ID required.
-    try {
-      const res = await fetch("/api/auth/register-resident-oauth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({}),
-      });
-      const body = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        showToast(body.error ?? "Could not finish resident setup.");
+    if (id === "resident") {
+      try {
+        const res = await fetch("/api/auth/register-resident-oauth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({}),
+        });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          showToast(body.error ?? "Could not finish resident setup.");
+          setBusy(null);
+          return;
+        }
+        await navigateAfterRoleSignup("/resident/applications/apply");
+      } catch {
+        showToast("Network error. Try again.");
         setBusy(null);
-        return;
       }
-      window.location.replace(nativeAwarePath("/resident"));
-    } catch {
-      showToast("Network error. Try again.");
-      setBusy(null);
+      return;
+    }
+    if (id === "vendor") {
+      try {
+        const res = await fetch("/api/auth/register-vendor-oauth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({}),
+        });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          showToast(body.error ?? "Could not finish vendor setup.");
+          setBusy(null);
+          return;
+        }
+        await navigateAfterRoleSignup("/vendor/dashboard");
+      } catch {
+        showToast("Network error. Try again.");
+        setBusy(null);
+      }
     }
   };
 
@@ -97,28 +119,13 @@ function GetStartedContent() {
     <AuthCard>
       <AuthPageHeader
         showLogo
-        title="How do you want to use Axis?"
-        subtitle="Pick the option that fits you — you can add the other later."
+        title="Which portal is for you?"
+        subtitle="Pick one to get started. You can add the others later with the same email."
         accent={false}
       />
 
       <AuthRoleStack
-        options={[
-          {
-            id: "manager",
-            label: "Set up as a property manager",
-            hint: "List properties, screen applicants & collect rent",
-            icon: "manager",
-            tone: "blue",
-          },
-          {
-            id: "resident",
-            label: "I'm a resident with an application",
-            hint: "Use the email on your rental application",
-            icon: "resident",
-            tone: "steel",
-          },
-        ]}
+        options={AUTH_PORTAL_PICKER_OPTIONS}
         onSelect={(id) => void choose(id)}
         disabled={busy !== null}
         busyId={busy}

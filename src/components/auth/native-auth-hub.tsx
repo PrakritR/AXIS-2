@@ -89,7 +89,7 @@ function RoleToggle({
       {(
         [
           { id: "resident" as const, label: "Resident" },
-          { id: "manager" as const, label: "Manager" },
+          { id: "manager" as const, label: "Property" },
           { id: "vendor" as const, label: "Vendor" },
         ] as const
       ).map((opt) => (
@@ -172,7 +172,9 @@ function NativeAuthHubInner({
   const [failedSignInAttempts, setFailedSignInAttempts] = useState(0);
 
   const nextFromUrl = searchParams.get("next")?.trim() ?? "";
-  const signInIntent = parseOAuthSignInIntent(searchParams.get("intent"));
+  const signInIntent = parseOAuthSignInIntent(
+    searchParams.get("intent") ?? searchParams.get("role"),
+  );
   const signInNextPath = useMemo(
     () => resolveSignInNextPath(nextFromUrl, signInIntent),
     [nextFromUrl, signInIntent],

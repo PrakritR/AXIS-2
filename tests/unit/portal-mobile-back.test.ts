@@ -35,6 +35,10 @@ describe("resolvePortalMobileBackTarget", () => {
     });
   });
 
+  it("returns null on in-progress application apply route", () => {
+    expect(resolvePortalMobileBackTarget("/resident/applications/apply", residentPortal)).toBeNull();
+  });
+
   it("returns first inbox tab from a deeper inbox tab", () => {
     expect(resolvePortalMobileBackTarget("/resident/inbox/sent", residentPortal)).toEqual({
       href: "/resident/inbox/unopened",

@@ -449,3 +449,26 @@ liability sub-ledger, GL posting, and historical reclassification are Phase 3
 stops new deposits from miscategorizing. `queryIncomeStatement` still sums all payment
 ledger entries, so a paid deposit shows as a visible "Security Deposits Held" line until
 Phase 3 excludes non-income accounts properly.
+
+# `/demo` has two independent demo-data layers — don't confuse them
+
+**Layer 1 (Supabase-backed, removed):** `demo-config.ts`/`demo-service.ts`/`demo-browser.ts`
+and the public `demo-chat` agent API route once ran `/demo` against a *real*, separate
+Supabase project. That layer is gone — do not resurrect it.
+
+**Layer 2 (browser-local, current, still required):** `src/lib/demo/demo-session.ts`
+(`isDemoModeActive()`, the synthetic per-role session `usePortalSession()` returns on
+`/demo`, `resolveManagerScopeUserId()`), `demo-seed.ts` + `demo-guided.ts` +
+`demo-guided-data.ts` (idle = fully empty portfolio; the 11-step guided tour builds it up
+via `buildDemoGuidedDataThrough(step-1)` — note the off-by-one: a step's caption
+describes an action whose data lands on the *next* step) all still back `/demo` and must
+keep working. Several portal components (Finances, Documents, screening) additionally
+build their own report data from these local stores instead of hitting the real
+(auth-gated) `/api/reports/*`/`/api/screening/*` routes when `isDemoModeActive()` — losing
+that branch doesn't crash, it silently 401s against the real API and shows an empty/wrong
+state. `portal-nav-client.ts`'s demo-navigate-event dispatch is what keeps in-portal links
+from pushing to the real, auth-gated portal routes while inside `/demo`.
+
+When touching any file that branches on `isDemoModeActive()`, verify in a browser (all
+three roles, plus the guided tour) rather than assuming a removal is safe — a stale patch
+or partial refactor here fails silently (no build/lint/test error), not loudly.

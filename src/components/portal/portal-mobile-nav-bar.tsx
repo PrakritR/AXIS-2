@@ -64,6 +64,7 @@ export function PortalMobileNavBar({
     [pathname, definition],
   );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
+  const leadingSlot = back ?? dashboardLabel;
 
   return (
     <div className="portal-mobile-nav-bar mb-3 flex w-full items-center justify-between gap-2 lg:hidden [html[data-native]_&]:mb-0">
@@ -83,7 +84,7 @@ export function PortalMobileNavBar({
         </h1>
       ) : null}
 
-      <div className="shrink-0">
+      <div className={`shrink-0 ${leadingSlot ? "" : "ml-auto"}`}>
         <DropdownMenu>
           <DropdownMenuTrigger
             data-attr="portal-mobile-profile-menu"

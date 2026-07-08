@@ -58,7 +58,7 @@ export function AppUiProvider({ children }: { children: ReactNode }) {
   return (
     <AppUiContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px))] left-4 z-[60] flex flex-col gap-2 sm:bottom-[max(1rem,env(safe-area-inset-bottom,0px))] sm:left-auto sm:right-4 [html[data-native]_&]:bottom-[var(--portal-native-bottom-nav-inset)]">
+      <div className="pointer-events-none fixed bottom-[calc(max(1.25rem,env(safe-area-inset-bottom,0px))+3.5rem)] left-4 z-[65] flex flex-col gap-2 [html:has(.portal-shell)_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+4.25rem)] sm:left-auto sm:right-4 lg:bottom-[5.75rem] lg:[html:has(.portal-shell)_&]:bottom-[5.25rem]">
         {toasts.map((t) => (
           <div
             key={t.id}

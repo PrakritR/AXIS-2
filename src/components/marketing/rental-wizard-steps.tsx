@@ -119,6 +119,7 @@ export type WizardStepsProps = {
   step: number;
   form: RentalWizardFormState;
   errors: RentalWizardErrors;
+  mode?: "public" | "portal";
   propertyOptions: { value: string; label: string }[];
   propertyLocked?: boolean;
   emailLocked?: boolean;
@@ -258,7 +259,7 @@ function CustomQuestionField({
 }
 
 export function RentalWizardStepBody(p: WizardStepsProps) {
-  const { step, form, errors, propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
+  const { step, form, errors, mode = "public", propertyOptions, propertyLocked, patch, editFromReview, applicationFeeGate, occupancySyncEpoch, showAvailabilityWarnings } = p;
 
   const listingSub = (() => {
     const prop = getPropertyById(form.propertyId);
@@ -482,6 +483,19 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
                 <p className="mt-1 text-muted">{selectedProperty.address}</p>
               ) : null}
             </div>
+          ) : mode === "portal" ? (
+            selectedProperty ? (
+              <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
+                <p className="font-semibold text-foreground">{selectedProperty.title}</p>
+                {selectedProperty.address ? (
+                  <p className="mt-1 text-muted">{selectedProperty.address}</p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-muted">
+                Select a property using <span className="font-semibold text-foreground">Browse home</span> below.
+              </p>
+            )
           ) : (
           <div className={errors.propertyId ? "rounded-xl ring-2 ring-red-100" : ""}>
           <PropertySearchPicker

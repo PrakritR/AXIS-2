@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicSchedulingHostLabel } from "@/lib/public-host-label";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -121,19 +122,49 @@ export async function GET(req: Request) {
     const safeId = safePropertyId(propertyId);
     const db = createSupabaseServiceRoleClient();
 
-    const { data: propertyRows, error: propertyError } = await db
+    const { data: directPropertyRow, error: directPropertyError } = await db
       .from("manager_property_records")
-      .select("manager_user_id, status, property_data");
+      .select("manager_user_id, status, property_data")
+      .eq("id", propertyId)
+      .maybeSingle();
 
-    if (propertyError) return NextResponse.json({ error: propertyError.message }, { status: 500 });
+    if (directPropertyError) return NextResponse.json({ error: directPropertyError.message }, { status: 500 });
 
-    const propertyRecords = ((propertyRows ?? []) as PropertyRecordRow[])
-      .map((row) => ({
-        managerUserId: row.manager_user_id?.trim() ?? "",
-        status: row.status?.trim().toLowerCase() ?? "",
-        property: asObject(row.property_data),
-      }))
-      .filter((row): row is { managerUserId: string; status: string; property: Record<string, unknown> } => Boolean(row.managerUserId && row.property));
+    let propertyRecords: { managerUserId: string; status: string; property: Record<string, unknown> }[] = [];
+    if (directPropertyRow?.property_data && typeof directPropertyRow.property_data === "object") {
+      const managerUserId = directPropertyRow.manager_user_id?.trim() ?? "";
+      if (managerUserId) {
+        propertyRecords = [{
+          managerUserId,
+          status: directPropertyRow.status?.trim().toLowerCase() ?? "",
+          property: directPropertyRow.property_data as Record<string, unknown>,
+        }];
+      }
+    }
+
+    if (propertyRecords.length === 0 && requestedHouseKey !== "::") {
+      const { data: liveRows, error: propertyError } = await db
+        .from("manager_property_records")
+        .select("manager_user_id, status, property_data")
+        .eq("status", "live")
+        .limit(200);
+
+      if (propertyError) return NextResponse.json({ error: propertyError.message }, { status: 500 });
+
+      propertyRecords = ((liveRows ?? []) as PropertyRecordRow[])
+        .map((row) => ({
+          managerUserId: row.manager_user_id?.trim() ?? "",
+          status: row.status?.trim().toLowerCase() ?? "",
+          property: asObject(row.property_data),
+        }))
+        .filter((row): row is { managerUserId: string; status: string; property: Record<string, unknown> } =>
+          Boolean(row.managerUserId && row.property && propertyMatchKey(row.property) === requestedHouseKey),
+        );
+    }
+
+    if (propertyRecords.length === 0) {
+      return NextResponse.json({ slotHosts: {} }, { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } });
+    }
 
     const directMatches = propertyRecords.filter(({ property }) => {
       const id = textField(property, "id");
@@ -264,7 +295,10 @@ export async function GET(req: Request) {
       const { data: profiles } = await db.from("profiles").select("id, email, full_name").in("id", availabilityManagerIds);
       for (const profile of (profiles ?? []) as { id?: string | null; email?: string | null; full_name?: string | null }[]) {
         if (!profile.id) continue;
-        labelByManagerId.set(profile.id, profile.email?.trim() || profile.full_name?.trim() || "Property manager");
+        labelByManagerId.set(
+          profile.id,
+          publicSchedulingHostLabel({ email: profile.email, fullName: profile.full_name }),
+        );
       }
     }
 

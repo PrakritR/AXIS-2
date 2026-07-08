@@ -66,6 +66,8 @@ import { RentalWizardStepBody } from "./rental-wizard-steps";
 import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
 import { RentalApplicationFinishPanel } from "@/components/marketing/rental-application-finish-panel";
 import { canNavigateToWizardStep, nextWizardMaxReached } from "@/lib/wizard-step-nav";
+import { residentBrowseFromApplicationHref } from "@/lib/resident-public-nav";
+import { portalNavClick } from "@/lib/portal-nav-client";
 
 const processedApplicationFeeSessions = new Set<string>();
 
@@ -107,11 +109,6 @@ const STEP_META = [
   { n: 11, title: "Review" },
   { n: 12, title: "Application fee" },
 ] as const;
-
-function rentalApplicationExitPath(mode: RentalApplicationWizardMode, exitPath?: string): string {
-  if (exitPath?.startsWith("/")) return exitPath;
-  return mode === "portal" ? "/resident/applications" : "/auth/sign-in";
-}
 
 function rentalApplicationApplyPath(mode: RentalApplicationWizardMode): string {
   return mode === "portal" ? "/resident/applications/apply" : "/rent/apply";
@@ -172,12 +169,18 @@ function RentalApplicationWizardInner({
   /** Bumps after server sync so step 3 room dropdowns re-filter against approved occupancy. */
   const [occupancySyncEpoch, setOccupancySyncEpoch] = useState(0);
   const router = useRouter();
-  const wizardExitPath = rentalApplicationExitPath(mode, exitPath);
   const wizardApplyPath = rentalApplicationApplyPath(mode);
 
-  const exitApplication = useCallback(() => {
-    router.push(wizardExitPath);
-  }, [router, wizardExitPath]);
+  const browseHomesHref = useMemo(() => {
+    const qs = searchParams.toString();
+    const applyPath = qs ? `${wizardApplyPath}?${qs}` : wizardApplyPath;
+    return residentBrowseFromApplicationHref(applyPath);
+  }, [searchParams, wizardApplyPath]);
+
+  const onBrowseHomesClick = useMemo(
+    () => portalNavClick(router, browseHomesHref, { preferFullNavigation: true }),
+    [browseHomesHref, router],
+  );
 
   const listingPrefillKey = useMemo(() => {
     return [
@@ -825,10 +828,7 @@ function RentalApplicationWizardInner({
   };
 
   const handleBack = () => {
-    if (step <= 1) {
-      exitApplication();
-      return;
-    }
+    if (step <= 1) return;
     if (step === 12) {
       setStep(11);
       setErrors({});
@@ -958,6 +958,7 @@ function RentalApplicationWizardInner({
                 step={step}
                 form={form}
                 errors={errors}
+                mode={mode}
                 propertyOptions={propertyOptions}
                 propertyLocked={Boolean(linkedPropertyId && linkedProperty)}
                 emailLocked={mode === "portal" && Boolean(sessionEmail?.includes("@"))}
@@ -977,24 +978,42 @@ function RentalApplicationWizardInner({
               />
             </div>
 
-            <div className="rental-wizard-actions mt-8 flex flex-col-reverse gap-3 border-t border-border pt-6 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:pt-8">
+            <div
+              className={`rental-wizard-actions mt-8 flex flex-col gap-3 border-t border-border pt-6 sm:mt-10 sm:pt-8 ${
+                step > 1 ? "sm:flex-row sm:items-center sm:justify-between" : "sm:justify-end"
+              }`}
+            >
+              {step > 1 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="order-2 w-full min-h-[48px] sm:order-1 sm:w-auto sm:min-w-[120px]"
+                  onClick={handleBack}
+                >
+                  {reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
+                </Button>
+              ) : null}
               <Button
                 type="button"
-                variant="outline"
-                className="w-full min-h-[48px] sm:w-auto sm:min-w-[120px]"
-                onClick={handleBack}
-              >
-                {step <= 1 ? "Exit application" : reviewReturnStep != null && reviewReturnStep === step ? "Back to review" : "Back"}
-              </Button>
-              <Button
-                type="button"
-                className="w-full min-h-[48px] sm:w-auto sm:min-w-[200px]"
+                className="order-1 w-full min-h-[48px] sm:order-2 sm:w-auto sm:min-w-[200px]"
                 onClick={handleContinue}
                 disabled={checkoutBusy || submitting}
               >
                 {submitting ? "Submitting…" : primaryButtonLabel}
               </Button>
             </div>
+            {mode === "portal" && step <= 3 ? (
+              <p className="rental-wizard-browse-homes mt-5 text-center text-sm text-muted sm:mt-6">
+                <Link
+                  href={browseHomesHref}
+                  onClick={onBrowseHomesClick}
+                  data-attr="resident-apply-browse-homes"
+                  className="font-semibold text-primary hover:opacity-90"
+                >
+                  Browse home
+                </Link>
+              </p>
+            ) : null}
           </div>
         )
       ) : null}

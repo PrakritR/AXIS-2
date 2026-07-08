@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { notifyManagerPropertyLeadMessage } from "@/lib/property-lead-notification.server";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -20,15 +21,6 @@ async function resolveManagerForProperty(propertyId: string): Promise<{
     .maybeSingle();
 
   if (!data) {
-    const { data: rows } = await db.from("manager_property_records").select("id, manager_user_id, property_data, row_data, status").limit(500);
-    for (const row of rows ?? []) {
-      const pd = row.property_data as { id?: string; title?: string } | null;
-      const rd = row.row_data as { id?: string; title?: string } | null;
-      const candidateId = textField(pd?.id) || textField(rd?.id) || textField(row.id);
-      if (candidateId !== propertyId) continue;
-      const title = textField(pd?.title) || textField(rd?.title) || propertyId;
-      return { managerUserId: (row.manager_user_id as string | null) ?? null, propertyTitle: title };
-    }
     return { managerUserId: null, propertyTitle: propertyId };
   }
 
@@ -40,6 +32,10 @@ async function resolveManagerForProperty(propertyId: string): Promise<{
 
 export async function POST(req: Request) {
   try {
+    if (!rateLimit(`property-lead-message:${clientIpFrom(req)}`, 15, 60_000).ok) {
+      return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
+    }
+
     const body = (await req.json()) as {
       propertyId?: string;
       name?: string;

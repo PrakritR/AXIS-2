@@ -28,6 +28,11 @@ export function resolvePortalMobileBackTarget(
   const section = sectionParts[0];
   if (!section || section === "dashboard") return null;
 
+  // In-progress rental application — no top back arrow until submit (wizard has Exit application).
+  if (section === "applications" && sectionParts[1] === "apply") {
+    return null;
+  }
+
   const meta = definition.sections.find((entry) => entry.section === section);
   const tabId = sectionParts[1];
   const firstTabId = meta?.tabs[0]?.id;

@@ -342,7 +342,14 @@ describe("ACH checkout routes", () => {
         from: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              maybeSingle: vi.fn().mockResolvedValue({ data: { property_data: null }, error: null }),
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  manager_user_id: "mgr_1",
+                  status: "live",
+                  property_data: { listingSubmission: { v: 1, applicationFee: "50", axisPaymentsEnabled: true } },
+                },
+                error: null,
+              }),
             }),
           }),
         }),

@@ -1,7 +1,7 @@
 "use client";
 
 import { AuthCard } from "@/components/auth/auth-card";
-import { AuthBackLink, AuthPageHeader, AuthRoleStack } from "@/components/auth/auth-mobile-primitives";
+import { AuthBackLink, AuthPageHeader, AuthRoleStack, AuthAccountFooterLink } from "@/components/auth/auth-mobile-primitives";
 import { portalDashboardPath, type AuthRole } from "@/components/auth/portal-switcher";
 import type { AuthRoleIconName } from "@/components/auth/auth-role-icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -122,7 +122,12 @@ function ChoosePortalForm() {
 
   return (
     <AuthCard>
-      <AuthPageHeader showLogo title="Choose a portal" accent={false} />
+      <AuthPageHeader
+        showLogo
+        title="Choose a portal"
+        subtitle="Same email works for every portal. Switch anytime from Settings."
+        accent={false}
+      />
 
       {error ? <p className="mt-4 text-center text-sm text-rose-600">{error}</p> : null}
 
@@ -138,6 +143,10 @@ function ChoosePortalForm() {
           busyId={busy}
         />
       )}
+
+      <AuthAccountFooterLink href="/auth/create-account?mode=create">
+        Add another portal type
+      </AuthAccountFooterLink>
 
       <AuthBackLink onClick={() => void signOut()}>Sign out</AuthBackLink>
     </AuthCard>

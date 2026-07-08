@@ -17,31 +17,42 @@ export function RentBrowsePageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromAuth = searchParams.get("from") === "auth";
+  const fromApplication = searchParams.get("from") === "application";
+  const returnParam = searchParams.get("return")?.trim() ?? "";
+  const applicationBackHref = returnParam.startsWith("/")
+    ? returnParam
+    : "/resident/applications/apply";
   const { isNative } = useIsNativeApp();
-  const backHref = fromAuth || isNative ? authCreateResidentPath() : "/";
+  const backHref = fromApplication
+    ? applicationBackHref
+    : fromAuth || isNative
+      ? authCreateResidentPath()
+      : "/";
+  const showBrowseBack = fromApplication || isNative === true;
+  const backLabel = fromApplication ? "← Back to application" : "← Back";
   const onBackClick = useMemo(
     () =>
-      isNative === true
+      showBrowseBack
         ? portalNavClick(router, backHref, { preferFullNavigation: true })
         : undefined,
-    [backHref, isNative, router],
+    [backHref, showBrowseBack, router],
   );
 
   return (
     <div className="native-auth-screen min-h-[100dvh] px-4 py-5 [html[data-native]_&]:pt-[max(1rem,env(safe-area-inset-top))] [html[data-native]_&]:pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:py-8">
       <div className="mx-auto w-full max-w-7xl">
-        {isNative === true && (
+        {showBrowseBack ? (
           <Link
             href={backHref}
             onClick={onBackClick}
-            data-attr="resident-browse-back"
+            data-attr={fromApplication ? "resident-browse-back-application" : "resident-browse-back"}
             className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:opacity-90"
           >
-            ← Back
+            {backLabel}
           </Link>
-        )}
+        ) : null}
 
-        <header className={`text-center ${isNative === true ? "mt-4" : "mt-2"}`}>
+        <header className={`text-center ${showBrowseBack ? "mt-4" : "mt-2"}`}>
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             Browse homes
           </h1>
