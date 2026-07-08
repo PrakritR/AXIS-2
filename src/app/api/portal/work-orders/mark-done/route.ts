@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
-import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { notifyWorkOrderEvent } from "@/lib/work-order-notification.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -77,19 +77,20 @@ export async function POST(req: Request) {
       .eq("id", workOrderId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    await deliverPortalInboxMessage(db, {
+    await notifyWorkOrderEvent(db, {
+      event: "vendor_marked_done",
       senderUserId: actor.userId,
       senderEmail: actor.email,
-      fromName: actor.fullName || "Axis Portal",
+      senderName: actor.fullName || "Axis Portal",
       subject: `${rowData.title || "Work order"} marked done — approval needed`,
       text: `${actor.fullName || "Your vendor"} marked "${rowData.title || "the work order"}"${
         rowData.propertyName ? ` at ${rowData.propertyName}` : ""
       } as done.${note ? ` Note: ${note}` : ""} Review and approve payment in Work Orders.`,
+      title: rowData.title || "Work order",
+      propertyLabel: rowData.propertyName,
+      note,
       toUserIds: [workOrder.manager_user_id],
-      deliverToPortalInbox: true,
-      deliverViaEmail: false,
-      deliverViaSms: false,
-    }).catch(() => undefined);
+    });
 
     track("work_order_vendor_marked_done", actor.userId, { work_order_id: workOrderId });
     return NextResponse.json({ ok: true, workOrder: nextRowData });

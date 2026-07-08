@@ -5,6 +5,7 @@ import {
   managerCanAccessLeaseRecord,
   type LeaseScopeRecord,
 } from "@/lib/auth/manager-lease-scope";
+import { autoFileLeaseDocument, type AutoFileLeaseRow } from "@/lib/documents/document-auto-file-hooks.server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -141,13 +142,13 @@ export async function POST(req: Request) {
 
       const { data: existing, error: existingError } = await ctx.db
         .from("portal_lease_pipeline_records")
-        .select("id, manager_user_id, property_id")
+        .select("id, manager_user_id, property_id, row_data")
         .eq("id", id)
         .limit(1);
       if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
 
       const recordExists = Array.isArray(existing) && existing.length > 0;
-      const existingRecord = (existing ?? [])[0] as LeaseScopeRecord | undefined;
+      const existingRecord = (existing ?? [])[0] as (LeaseScopeRecord & { row_data?: Record<string, unknown> }) | undefined;
 
       if (recordExists && ctx.user.role !== "admin") {
         if (ctx.user.role === "resident") {
@@ -179,6 +180,15 @@ export async function POST(req: Request) {
 
       const { error } = await ctx.db.from("portal_lease_pipeline_records").upsert(record, { onConflict: "id" });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+      // Auto-file the signed lease into the document library on the transition
+      // into fully-signed (once), so repeated syncs of the same row don't
+      // duplicate. No-op unless the manager opted the "lease" category in.
+      const previouslySigned = Boolean((existingRecord?.row_data as { fullySignedAt?: unknown } | undefined)?.fullySignedAt);
+      const nowSigned = Boolean((normalized as { fullySignedAt?: unknown }).fullySignedAt);
+      if (nowSigned && !previouslySigned) {
+        await autoFileLeaseDocument(ctx.db, normalized as AutoFileLeaseRow).catch(() => undefined);
+      }
     }
 
     return NextResponse.json({ ok: true });

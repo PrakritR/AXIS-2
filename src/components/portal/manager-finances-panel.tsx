@@ -11,6 +11,7 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
+import { ManagerBillsPanel } from "@/components/portal/manager-bills-panel";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import {
   ReportExportButtons,
@@ -360,6 +361,7 @@ const FINANCE_TABS = [
   { id: "trust-account-balance", label: "Trust account" },
   { id: "financial-diagnostics", label: "Diagnostics" },
   { id: "ap-aging", label: "AP aging" },
+  { id: "bills", label: "Bills" },
   { id: "budget-vs-actual", label: "Budget" },
   { id: "owner-statement", label: "Owner statement" },
 ] as const;
@@ -684,7 +686,13 @@ export function ManagerFinancesPanel({
   const headerActions = (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
       {report && report.rows.length > 0 ? (
-        <ReportExportButtons reportId={reportId} query={query} formats={["csv"]} />
+        <ReportExportButtons
+          reportId={reportId}
+          query={query}
+          formats={tabId === "general-ledger" ? ["csv", "pdf", "quickbooks"] : ["csv"]}
+        />
+      ) : tabId === "general-ledger" ? (
+        <ReportExportButtons reportId={reportId} query={query} formats={["quickbooks"]} />
       ) : null}
       {tabId === "income" ? (
         <PortalSectionPrimaryButton onClick={openAddIncome} data-attr="finances-add-income">
@@ -708,6 +716,9 @@ export function ManagerFinancesPanel({
         </ManagerPortalFilterRow>
       }
     >
+      {tabId === "bills" ? (
+        <ManagerBillsPanel />
+      ) : (
       <div className="space-y-5">
         <ReportFilterBar
           showProperty
@@ -752,6 +763,7 @@ export function ManagerFinancesPanel({
           <PortalDataTableEmpty message="No finance entries yet." icon="finance" />
         )}
       </div>
+      )}
 
       <Modal open={expenseModal} onClose={() => setExpenseModal(false)} title="Add expense">
         <div className="grid gap-3 sm:grid-cols-2">

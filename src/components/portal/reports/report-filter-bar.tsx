@@ -137,7 +137,7 @@ export function ReportExportButtons({
 }: {
   reportId: string;
   query: string;
-  formats?: ("csv" | "pdf")[];
+  formats?: ("csv" | "pdf" | "quickbooks")[];
 }) {
   const base = `/api/reports/${reportId}/export?${query}`;
   return (
@@ -148,6 +148,15 @@ export function ReportExportButtons({
           className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
         >
           Export CSV
+        </a>
+      ) : null}
+      {formats.includes("quickbooks") ? (
+        <a
+          href={`${base}&format=quickbooks`}
+          className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
+          data-attr="export-quickbooks"
+        >
+          Export QuickBooks
         </a>
       ) : null}
       {formats.includes("pdf") ? (

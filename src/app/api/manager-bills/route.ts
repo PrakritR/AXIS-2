@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertManagerFinancialsCoManagerAccess } from "@/lib/auth/co-manager-access";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
 import { mapManagerBillRow, MANAGER_BILL_SELECT } from "@/lib/manager-bills";
 import { approveManagerBill, createManagerBill, payManagerBill } from "@/lib/manager-bills.server";
@@ -47,6 +48,9 @@ export async function POST(req: Request) {
       propertyId?: string;
       categoryCode?: string;
     };
+
+    const cm = await assertManagerFinancialsCoManagerAccess(auth.db, auth.userId, body.propertyId, auth.userId);
+    if (!cm.ok) return NextResponse.json({ error: cm.error }, { status: cm.status });
 
     const bill = await createManagerBill(auth.db, {
       managerUserId: auth.userId,

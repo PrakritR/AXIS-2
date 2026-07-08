@@ -5,6 +5,7 @@ import {
   getReportsAuthContext,
 } from "@/lib/reports/auth";
 import { reportToCsv } from "@/lib/reports/export/csv";
+import { buildQuickBooksJournalCsv } from "@/lib/reports/export/quickbooks-csv";
 import { reportToPdf } from "@/lib/reports/export/pdf";
 import { parseManagerReportFilters } from "@/lib/reports/parse-filters";
 import {
@@ -26,7 +27,8 @@ export async function GET(
     if (!auth) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
     const searchParams = new URL(req.url).searchParams;
-    const format = searchParams.get("format") === "pdf" ? "pdf" : "csv";
+    const formatParam = searchParams.get("format");
+    const format = formatParam === "pdf" ? "pdf" : formatParam === "quickbooks" ? "quickbooks" : "csv";
 
     let report;
     if (isResidentReport) {
@@ -63,6 +65,25 @@ export async function GET(
         headers: {
           "Content-Type": "application/pdf",
           "Content-Disposition": `${disposition}; filename="${filenameBase}.pdf"`,
+        },
+      });
+    }
+
+    if (format === "quickbooks") {
+      if (isResidentReport) {
+        return NextResponse.json({ error: "QuickBooks export is manager-only." }, { status: 400 });
+      }
+      const managerUserId =
+        auth.role === "admin" ? searchParams.get("managerUserId")?.trim() || auth.userId : auth.userId;
+      const qbCsv = await buildQuickBooksJournalCsv(
+        auth.db,
+        managerUserId,
+        parseManagerReportFilters(searchParams),
+      );
+      return new NextResponse(qbCsv, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${filenameBase}-quickbooks.csv"`,
         },
       });
     }

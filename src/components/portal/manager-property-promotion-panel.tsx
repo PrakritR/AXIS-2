@@ -75,6 +75,8 @@ function flyerEntryToDraft(row: ManagerPromotionRow, entry: FlyerEntry, listingI
     promo: entry.inputs.promo,
     cta: entry.inputs.cta,
     contact: entry.inputs.contact,
+    schedulingUrl: entry.inputs.schedulingUrl ?? "",
+    includeSchedulingLink: entry.inputs.includeSchedulingLink ?? true,
     theme: entry.theme,
     flyerSize: entry.flyerSize,
     template: normalizePromotionTemplate(entry.template),

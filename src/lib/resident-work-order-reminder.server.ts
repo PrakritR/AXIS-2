@@ -5,7 +5,7 @@ import {
   resolveManagerRecipientProfiles,
   resolvePropertyScopedManagerRecipientIds,
 } from "@/lib/co-manager-notification-recipients.server";
-import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { notifyWorkOrderEvent } from "@/lib/work-order-notification.server";
 import { residentBelongsToManager } from "@/lib/resident-manager-scope";
 import { buildResidentWorkOrderReminderEmail } from "@/lib/resident-work-order-reminder-email";
 import { RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS } from "@/lib/resident-work-order-reminder-email";
@@ -101,19 +101,18 @@ export async function deliverResidentWorkOrderReminder(
     workOrderId,
   });
 
-  const delivery = await deliverPortalInboxMessage(db, {
+  await notifyWorkOrderEvent(db, {
+    event: "reminder",
     senderUserId: input.residentUserId,
     senderEmail: residentEmail,
-    senderRole: "resident",
-    fromName: input.residentName || rowData.residentName || "Resident",
+    senderName: input.residentName || rowData.residentName || "Resident",
     subject,
     text,
+    title: rowData.title ?? "Maintenance request",
+    propertyLabel: rowData.propertyName,
     toUserIds: profiles.map((profile) => profile.userId),
-    deliverToPortalInbox: true,
     deliverViaEmail: true,
-    deliverViaSms: false,
   });
-  if (!delivery.ok) return delivery;
 
   const nextRow: DemoManagerWorkOrderRow = {
     ...rowData,
@@ -132,5 +131,5 @@ export async function deliverResidentWorkOrderReminder(
     { onConflict: "id" },
   );
 
-  return { ok: true, recipientCount: delivery.recipientCount };
+  return { ok: true, recipientCount: profiles.length };
 }

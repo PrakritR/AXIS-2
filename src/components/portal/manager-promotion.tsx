@@ -92,6 +92,8 @@ export type PromotionDraft = {
   promo: string;
   cta: string;
   contact: string;
+  schedulingUrl: string;
+  includeSchedulingLink: boolean;
   theme: PromotionTheme;
   flyerSize: FlyerSize;
   template: PromotionTemplate;
@@ -116,6 +118,8 @@ export const EMPTY_DRAFT: PromotionDraft = {
   promo: "",
   cta: "",
   contact: "",
+  schedulingUrl: "",
+  includeSchedulingLink: true,
   theme: "cobalt",
   flyerSize: "letter",
   template: PROMOTION_TEMPLATE_DEFAULT,
@@ -135,6 +139,8 @@ export function draftInputs(draft: PromotionDraft): PromotionInputs {
     tone: draft.tone.trim(),
     address: draft.address.trim(),
     customDetails: draft.customDetails.trim(),
+    schedulingUrl: draft.schedulingUrl.trim(),
+    includeSchedulingLink: draft.includeSchedulingLink,
     images: draft.images.slice(0, FLYER_IMAGE_LIMIT),
   };
 }
@@ -199,6 +205,8 @@ function flyerEntryToDraft(
     promo: entry.inputs.promo,
     cta: entry.inputs.cta,
     contact: entry.inputs.contact,
+    schedulingUrl: entry.inputs.schedulingUrl ?? "",
+    includeSchedulingLink: entry.inputs.includeSchedulingLink ?? true,
     theme: entry.theme,
     flyerSize: entry.flyerSize,
     template: normalizePromotionTemplate(entry.template),
@@ -275,7 +283,13 @@ export function ManagerPromotion() {
     return buildManagerPromotionPropertyOptions(userId);
   }, [userId, propertyTick]);
 
-  const autofillOpts = useMemo(() => ({ managerContact: managerEmail ?? "" }), [managerEmail]);
+  const autofillOpts = useMemo(
+    () => ({
+      managerContact: managerEmail ?? "",
+      appOrigin: typeof window !== "undefined" ? window.location.origin : "",
+    }),
+    [managerEmail],
+  );
 
   useEffect(() => {
     if (!isDemoModeActive()) return;
@@ -1015,6 +1029,24 @@ export function PromotionForm({
           onChange={(e) => setDraft((d) => ({ ...d, contact: e.target.value }))}
           placeholder="leasing@axis.com · (206) 555-0142"
         />
+      </div>
+      <div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+          <input
+            type="checkbox"
+            checked={draft.includeSchedulingLink}
+            onChange={(e) => setDraft((d) => ({ ...d, includeSchedulingLink: e.target.checked }))}
+          />
+          Include scheduling link in flyer &amp; text
+        </label>
+        {draft.includeSchedulingLink ? (
+          <Input
+            className="mt-1"
+            value={draft.schedulingUrl}
+            onChange={(e) => setDraft((d) => ({ ...d, schedulingUrl: e.target.value }))}
+            placeholder="https://…/rent/tours-contact?propertyId=…"
+          />
+        ) : null}
       </div>
       <div>
         <label className="text-xs font-semibold text-muted">Theme</label>

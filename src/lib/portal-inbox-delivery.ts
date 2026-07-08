@@ -74,6 +74,8 @@ export async function deliverPortalInboxMessage(
     deliverToPortalInbox?: boolean;
     deliverViaEmail?: boolean;
     deliverViaSms?: boolean;
+    /** When set, SMS uses this body instead of `text` (keeps inbox/email on the full message). */
+    smsText?: string;
     senderRole?: string;
   },
 ): Promise<{ ok: true; recipientCount: number } | { ok: false; error: string }> {
@@ -250,7 +252,8 @@ export async function deliverPortalInboxMessage(
       for (const recipient of recipients) {
         const recipientPhone = phoneByEmail.get(recipient.email) ?? "";
         if (!recipientPhone) continue;
-        const result = await sendSms(recipientPhone, `${subject}\n\n${text}`, smsFromNumber);
+        const smsBody = (opts.smsText ?? text).trim();
+        const result = await sendSms(recipientPhone, smsBody.length <= 320 ? smsBody : `${subject}\n\n${smsBody}`.slice(0, 320), smsFromNumber);
         if (result.sent) {
           const logId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
           await db.from("portal_outbound_mail_records").upsert(

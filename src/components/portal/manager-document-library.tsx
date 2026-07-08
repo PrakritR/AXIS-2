@@ -200,6 +200,28 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
     [showToast],
   );
 
+  const handleShareLink = useCallback(
+    async (doc: ManagerDocumentDTO) => {
+      try {
+        const res = await fetch(`/api/manager-documents/${doc.id}/share-link`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ expiresInDays: 7 }),
+        });
+        const data = (await res.json()) as { link?: { url?: string }; error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Failed to create share link.");
+        const url = data.link?.url ?? "";
+        if (!url) throw new Error("No share URL returned.");
+        await navigator.clipboard.writeText(url);
+        showToast("Share link copied (expires in 7 days).");
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Failed to create share link.");
+      }
+    },
+    [showToast],
+  );
+
   const propertyLabel = useCallback(
     (id: string | null | undefined) => propertyOptions.find((p) => p.id === id)?.label ?? id ?? "",
     [propertyOptions],
@@ -246,6 +268,15 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         data-attr="document-edit"
       >
         Edit
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_DETAIL_BTN}
+        onClick={() => void handleShareLink(doc)}
+        data-attr="document-share-link"
+      >
+        Share link
       </Button>
       <Button
         type="button"

@@ -61,6 +61,10 @@ export type PromotionInputs = {
    * AI copy route — embedded straight into the flyer HTML per template.
    */
   images?: string[];
+  /** Public tour/scheduling URL — embedded in flyer CTA and promotion text when set. */
+  schedulingUrl?: string;
+  /** When true, autofill and exports include the scheduling link. Defaults true when URL is set. */
+  includeSchedulingLink?: boolean;
 };
 
 /** AI-composed (or fallback-composed) flyer copy. Facts stay from inputs. */
@@ -418,7 +422,15 @@ type FlyerRenderContext = {
   closing: string;
   points: string[];
   address: string;
+  schedulingUrl: string;
 };
+
+function ctaBlockHtml(ctx: FlyerRenderContext, className = "cta-text"): string {
+  if (ctx.schedulingUrl) {
+    return `<a class="${className} cta-link" href="${escapeHtml(ctx.schedulingUrl)}" target="_blank" rel="noopener noreferrer">${ctx.cta}</a>`;
+  }
+  return `<div class="${className}">${ctx.cta}</div>`;
+}
 
 type TemplateRender = { css: string; body: string };
 
@@ -536,7 +548,7 @@ function renderShowcase(ctx: FlyerRenderContext): TemplateRender {
           ? `<div class="price-row">${ctx.price ? `<div><div class="price-label">Price</div><div class="price-value">${ctx.price}</div></div>` : ""}${ctx.promo ? `<div class="promo-chip">${ctx.promo}</div>` : ""}</div>`
           : ""
       }
-      <div class="cta"><div class="cta-text">${ctx.cta}</div><div class="cta-closing">${ctx.closing}</div></div>
+      <div class="cta">${ctaBlockHtml(ctx)}<div class="cta-closing">${ctx.closing}</div></div>
     </div>
     ${footerHtml(ctx)}
   </div>`;
@@ -659,7 +671,7 @@ function renderPhotoHero(ctx: FlyerRenderContext): TemplateRender {
       <ul class="points">${ctx.points.map((pt) => `<li><span class="dot" aria-hidden="true"></span><span>${pt}</span></li>`).join("")}</ul>
       ${ctx.price ? `<div class="price">${ctx.price}</div>` : ""}
       <div class="cta">
-        <div class="cta-text">${ctx.cta}</div>
+        ${ctaBlockHtml(ctx)}
         <div class="cta-closing">${ctx.closing}</div>
       </div>
     </div>
@@ -729,7 +741,7 @@ function renderSplit(ctx: FlyerRenderContext): TemplateRender {
         <p class="subheadline">${ctx.sub}</p>
         <div class="rule"></div>
         <ul class="points">${ctx.points.map((pt) => `<li><span class="check" aria-hidden="true">✓</span><span>${pt}</span></li>`).join("")}</ul>
-        <div class="cta"><div class="cta-text">${ctx.cta}</div><div class="cta-closing">${ctx.closing}</div></div>
+        <div class="cta">${ctaBlockHtml(ctx)}<div class="cta-closing">${ctx.closing}</div></div>
       </main>
     </div>
     ${footerHtml(ctx)}
@@ -795,7 +807,7 @@ function renderFeatureGrid(ctx: FlyerRenderContext): TemplateRender {
           ? `<div class="callout">${ctx.price ? `<div class="callout-price">${ctx.price}</div>` : ""}${ctx.promo ? `<div class="callout-promo">${ctx.promo}</div>` : ""}</div>`
           : ""
       }
-      <div class="cta"><div class="cta-text">${ctx.cta}</div><div class="cta-closing">${ctx.closing}</div></div>
+      <div class="cta">${ctaBlockHtml(ctx)}<div class="cta-closing">${ctx.closing}</div></div>
     </div>
     ${footerHtml(ctx)}
   </div>`;
@@ -848,7 +860,7 @@ function renderBoldBanner(ctx: FlyerRenderContext): TemplateRender {
     <div class="body">
       <ul class="points">${ctx.points.map((pt) => `<li><span class="arrow" aria-hidden="true">▸</span><span>${pt}</span></li>`).join("")}</ul>
       <div class="cta-bar" style="margin-left:calc(-1 * ${s.padX}); margin-right:calc(-1 * ${s.padX});">
-        <div class="cta-text">${ctx.cta}</div>
+        ${ctaBlockHtml(ctx)}
         <div class="cta-closing">${ctx.closing}</div>
       </div>
     </div>
@@ -898,7 +910,7 @@ function renderMinimal(ctx: FlyerRenderContext): TemplateRender {
     ${ctx.price ? `<div class="price">${ctx.price}</div>` : ""}
     ${ctx.promo ? `<div class="promo">${ctx.promo}</div>` : ""}
     <div class="cta-min">
-      <div class="cta-text">${ctx.cta}</div>
+      ${ctaBlockHtml(ctx, "cta-text")}
       <div class="cta-closing">${ctx.closing}</div>
     </div>
     ${footerHtml(ctx)}
@@ -943,6 +955,10 @@ export function buildFlyerHtml(row: ManagerPromotionRow): string {
     closing: escapeHtml(copy.closingLine),
     points: copy.sellingPoints.map((pt) => escapeHtml(pt)),
     address: row.inputs.address?.trim() ? escapeHtml(row.inputs.address.trim()) : "",
+    schedulingUrl:
+      row.inputs.includeSchedulingLink !== false && row.inputs.schedulingUrl?.trim()
+        ? escapeHtml(row.inputs.schedulingUrl.trim())
+        : "",
   };
   const { css, body } = TEMPLATE_RENDERERS[template](ctx);
 
@@ -973,6 +989,7 @@ export function buildFlyerHtml(row: ManagerPromotionRow): string {
     flex-direction: column;
     overflow: hidden;
   }
+  .cta-link { color: inherit; text-decoration: underline; }
 ${css}
 </style>
 </head>

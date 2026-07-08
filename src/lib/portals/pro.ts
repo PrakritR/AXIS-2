@@ -65,6 +65,7 @@ export const proPortal: PortalDefinition = {
         { id: "trust-account-balance", label: "Trust account" },
         { id: "financial-diagnostics", label: "Diagnostics" },
         { id: "ap-aging", label: "AP aging" },
+        { id: "bills", label: "Bills" },
         { id: "budget-vs-actual", label: "Budget" },
         { id: "owner-statement", label: "Owner statement" },
       ],

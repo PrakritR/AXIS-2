@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
-import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { autoFileWorkOrderReceipt } from "@/lib/documents/document-auto-file-hooks.server";
+import { notifyWorkOrderEvent } from "@/lib/work-order-notification.server";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { createExpensesFromWorkOrder, markWorkOrderPaid, mergeWorkOrderCompletion } from "@/lib/work-order-expenses";
@@ -144,31 +145,60 @@ export async function POST(req: Request) {
     const title = paid.title || "Work order";
     const residentEmail = (paid.residentEmail ?? "").trim();
     if (residentEmail.includes("@")) {
-      await deliverPortalInboxMessage(auth.db, {
+      await notifyWorkOrderEvent(auth.db, {
+        event: "completed",
         senderUserId: auth.userId,
         senderEmail: auth.email,
-        fromName: "Axis Portal",
         subject: `${title} completed`,
         text: `Your work order "${title}"${propertyLabel ? ` at ${propertyLabel}` : ""} has been completed.`,
+        title,
+        propertyLabel,
         toEmails: [residentEmail],
-        deliverToPortalInbox: true,
-        deliverViaEmail: false,
-        deliverViaSms: false,
-      }).catch(() => undefined);
+      });
     }
     if (existing.vendor_user_id) {
-      await deliverPortalInboxMessage(auth.db, {
+      await notifyWorkOrderEvent(auth.db, {
+        event: "approved_paid",
         senderUserId: auth.userId,
         senderEmail: auth.email,
-        fromName: "Axis Portal",
         subject: `${title} approved and paid`,
         text: `"${title}"${propertyLabel ? ` at ${propertyLabel}` : ""} has been approved and marked paid. Thanks for the work.`,
+        title,
+        propertyLabel,
         toUserIds: [existing.vendor_user_id],
-        deliverToPortalInbox: true,
-        deliverViaEmail: false,
-        deliverViaSms: false,
-      }).catch(() => undefined);
+      });
     }
+
+    await autoFileWorkOrderReceipt(auth.db, {
+      managerUserId: ownerManagerUserId,
+      workOrderId: workOrder.id,
+      title,
+      propertyLabel,
+      propertyId: workOrder.propertyId || workOrder.assignedPropertyId,
+      vendorId: acceptedVendorId,
+      vendorName: existingRow.vendorName,
+      vendorCostCents: acceptedVendorCostCents,
+      materialsCostCents: acceptedMaterialsCostCents,
+      workDoneSummary: body.workDoneSummary,
+      paidAtIso: paid.paidAt,
+      paymentChannel,
+    }).catch(() => undefined);
+
+    // Mirror a payment receipt into the document library (no-op unless the
+    // manager opted the "invoice" auto-file category in). Best-effort.
+    await autoFileWorkOrderReceipt(auth.db, {
+      managerUserId: ownerManagerUserId,
+      workOrderId: workOrder.id,
+      title: paid.title,
+      propertyLabel,
+      propertyId: workOrder.propertyId ?? null,
+      vendorId: acceptedVendorId ?? null,
+      vendorCostCents: acceptedVendorCostCents ?? 0,
+      materialsCostCents: acceptedMaterialsCostCents ?? 0,
+      workDoneSummary: body.workDoneSummary ?? null,
+      paidAtIso: new Date().toISOString(),
+      paymentChannel,
+    }).catch(() => undefined);
 
     track("work_order_completed", auth.userId, {
       work_order_id: workOrder.id,

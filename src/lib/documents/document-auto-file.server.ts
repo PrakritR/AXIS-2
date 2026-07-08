@@ -61,7 +61,7 @@ export async function autoFileDocumentToLibrary(
   if (!ext) return null;
 
   const objectId = randomUUID();
-  const storagePath = buildDocumentStoragePath(input.managerUserId, objectId, ext);
+  const storagePath = buildDocumentStoragePath(input.managerUserId, ext, objectId);
   const checksum = createHash("sha256").update(input.bytes).digest("hex");
 
   const { error: uploadError } = await db.storage

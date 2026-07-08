@@ -4,7 +4,7 @@
  */
 
 import type { MockProperty } from "@/data/types";
-import { cleanPropertyDisplayName } from "@/lib/manager-property-links";
+import { buildManagerTourUrl, cleanPropertyDisplayName } from "@/lib/manager-property-links";
 import { isEntireHomeListing } from "@/lib/manager-listing-submission";
 import { sanitizeFlyerImages, type PromotionInputs } from "@/lib/promotion-flyer";
 
@@ -18,6 +18,8 @@ export type PromotionDraftAutofillFields = {
   promo: string;
   cta: string;
   contact: string;
+  schedulingUrl: string;
+  includeSchedulingLink: boolean;
   images: string[];
 };
 
@@ -64,9 +66,11 @@ function promotionPropertyLabel(property: MockProperty): string {
 /** Source-field mapping for property → promotion draft autofill. */
 export function buildPromotionDraftAutofill(
   property: MockProperty,
-  opts?: { managerContact?: string },
+  opts?: { managerContact?: string; appOrigin?: string },
 ): PromotionDraftAutofillFields {
   const facts = extractPromotionListingFacts(property);
+  const origin = (opts?.appOrigin ?? "").trim() || (typeof window !== "undefined" ? window.location.origin : "");
+  const schedulingUrl = origin ? buildManagerTourUrl(origin, property.id) : "";
   const inputs = enrichPromotionInputsFromListing(
     {
       headline: "",
@@ -78,6 +82,8 @@ export function buildPromotionDraftAutofill(
       tone: "",
       address: "",
       customDetails: "",
+      schedulingUrl,
+      includeSchedulingLink: Boolean(schedulingUrl),
     },
     property,
   );
@@ -93,6 +99,8 @@ export function buildPromotionDraftAutofill(
     promo: firstBundlePromo(property),
     cta: DEFAULT_PROMOTION_CTA,
     contact: opts?.managerContact?.trim() ?? "",
+    schedulingUrl,
+    includeSchedulingLink: Boolean(schedulingUrl),
     images,
   };
 }
@@ -117,6 +125,8 @@ export function enrichPromotionDraftFromListing<T extends PromotionDraftAutofill
     promo: fill(draft.promo, source.promo),
     cta: fill(draft.cta, source.cta),
     contact: fill(draft.contact, source.contact),
+    schedulingUrl: fill(draft.schedulingUrl ?? "", source.schedulingUrl),
+    includeSchedulingLink: draft.includeSchedulingLink ?? source.includeSchedulingLink,
     images: draft.images.length ? draft.images : source.images.length ? source.images : draft.images,
   };
 }

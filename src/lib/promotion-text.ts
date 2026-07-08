@@ -186,7 +186,12 @@ export function composeFallbackPromotionText(
   const promoBit = inputs.promo.trim() ? ` ${inputs.promo.trim()}.` : "";
   const cta = inputs.cta.trim() || flyer.ctaText;
   const contact = inputs.contact.trim();
-  const ctaLine = contact ? `${cta} — ${contact}` : cta;
+  const schedulingUrl = inputs.includeSchedulingLink !== false ? (inputs.schedulingUrl ?? "").trim() : "";
+  const ctaLine = schedulingUrl
+    ? `${cta}: ${schedulingUrl}`
+    : contact
+      ? `${cta} — ${contact}`
+      : cta;
 
   const hook = flyer.headline;
   const bodyParagraphs = [

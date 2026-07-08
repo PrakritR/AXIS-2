@@ -37,6 +37,7 @@ describe("pro portal documents section", () => {
       "trust-account-balance",
       "financial-diagnostics",
       "ap-aging",
+      "bills",
       "budget-vs-actual",
       "owner-statement",
     ]);
