@@ -31,15 +31,12 @@ function decodeEntities(text: string): string {
 /** Flatten HTML markup into ordered, tag-free text blocks for layout. */
 export function htmlToBlocks(html: string): Block[] {
   const blocks: Block[] = [];
-  // Normalize line-break tags to newlines before stripping.
-  const withBreaks = html
-    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
-    .replace(/<\s*\/\s*(p|div|tr|section|header|footer|table)\s*>/gi, "\n");
+  // Normalize <br> to newlines for the plain-text fallback. Paired block tags
+  // are matched intact below, so we must NOT strip their closing tags here.
+  const withBreaks = html.replace(/<\s*br\s*\/?\s*>/gi, "\n");
   const tagPattern = /<(h1|h2|h3|h4|li|p)[^>]*>([\s\S]*?)<\/\1>/gi;
   let match: RegExpExecArray | null;
-  let matchedAny = false;
   while ((match = tagPattern.exec(withBreaks)) !== null) {
-    matchedAny = true;
     const tag = match[1]!.toLowerCase();
     const inner = decodeEntities(match[2]!.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
     if (!inner) continue;
@@ -48,7 +45,7 @@ export function htmlToBlocks(html: string): Block[] {
     else if (tag === "li") blocks.push({ kind: "listItem", text: inner });
     else blocks.push({ kind: "paragraph", text: inner });
   }
-  if (!matchedAny) {
+  if (blocks.length === 0) {
     // No block tags — treat as plain text split on blank lines / newlines.
     for (const chunk of decodeEntities(withBreaks.replace(/<[^>]+>/g, " ")).split(/\n{1,}/)) {
       const text = chunk.replace(/\s+/g, " ").trim();
