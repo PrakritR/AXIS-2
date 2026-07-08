@@ -1,6 +1,5 @@
 import type { DemoManagerOutgoingPaymentRow, DemoManagerWorkOrderRow, ManagerPaymentBucket } from "@/data/demo-portal";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
-import { demoExpenseRows } from "@/lib/demo/demo-data";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import { enrichOutgoingRowWithVendorPayments, managerVendorPayMethodLabel } from "@/lib/manager-vendor-payment-flow";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
@@ -110,21 +109,9 @@ function writeDeletedDemoExpenseIds(ids: Set<string>) {
   window.sessionStorage.setItem(DELETED_DEMO_EXPENSES_KEY, JSON.stringify([...ids]));
 }
 
-function mapDemoExpenseRows(): ManagerExpenseSnapshot[] {
-  const deleted = readDeletedDemoExpenseIds();
-  return demoExpenseRows()
-    .filter((row) => !deleted.has(row.id))
-    .map((row) => ({
-      id: row.id,
-      propertyId: null,
-      propertyName: row.property,
-      categoryCode: "other_expense",
-      categoryLabel: row.category,
-      amountCents: parseCents(row.amount),
-      expenseDate: row.date,
-      memo: row.memo,
-      vendorId: null,
-    }));
+/** Demo seed: overwrite local expense rows (no server mirror). */
+export function seedDemoManagerOutgoingExpenses(expenses: ManagerExpenseSnapshot[]): void {
+  writeSession(expenses);
 }
 
 export function deleteManagerOutgoingExpense(expenseId: string): boolean {
@@ -139,13 +126,10 @@ export function deleteManagerOutgoingExpense(expenseId: string): boolean {
 
   if (isDemoModeActive()) {
     const deleted = readDeletedDemoExpenseIds();
-    const isBuiltInDemo = demoExpenseRows().some((row) => row.id === id);
-    if (!hadLocal && !isBuiltInDemo) return false;
+    if (!hadLocal) return false;
     deleted.add(id);
     writeDeletedDemoExpenseIds(deleted);
-    if (!hadLocal) {
-      writeSession(mapDemoExpenseRows());
-    }
+    writeSession(memoryExpenses.filter((expense) => expense.id !== id));
     return true;
   }
 
@@ -160,9 +144,7 @@ export function readManagerOutgoingExpenses(): ManagerExpenseSnapshot[] {
 export async function syncManagerOutgoingExpensesFromServer(force = false): Promise<ManagerExpenseSnapshot[]> {
   hydrateFromSession();
   if (isDemoModeActive()) {
-    const demo = mapDemoExpenseRows();
-    writeSession(demo);
-    return demo;
+    return readManagerOutgoingExpenses();
   }
 
   if (!force && lastSyncedAt > 0 && Date.now() - lastSyncedAt < SYNC_TTL_MS) {

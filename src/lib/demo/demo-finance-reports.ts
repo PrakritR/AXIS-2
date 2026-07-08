@@ -10,9 +10,10 @@
 import type { ReportResult } from "@/lib/reports/types";
 import type { OccupancyReport, PropertyRentReceiptDocument } from "@/lib/reports/formal-documents/spec";
 import { readChargesForManager } from "@/lib/household-charges";
+import { readManagerOutgoingExpenses } from "@/lib/manager-outgoing-payments";
 import { centsToUsd } from "@/lib/reports/money";
 import { DEMO_MANAGER_USER_ID } from "@/lib/demo/demo-session";
-import { demoApplications, demoExpenseRows, demoProperties, PROP_LABEL } from "@/lib/demo/demo-data";
+import { demoApplications, demoProperties, PROP_LABEL } from "@/lib/demo/demo-data";
 
 function amountToCents(label: string): number {
   const n = Number.parseFloat(label.replace(/[^0-9.]/g, ""));
@@ -57,8 +58,19 @@ function demoIncomeReport(propertyId?: string): ReportResult {
 
 function demoExpensesReport(propertyId?: string): ReportResult {
   const propertyLabel = propertyId ? PROP_LABEL[propertyId] : undefined;
-  // The `id` key rides along harmlessly — the Finances table hides it.
-  const rows = demoExpenseRows().filter((row) => !propertyLabel || row.property === propertyLabel);
+  const rows = readManagerOutgoingExpenses()
+    .filter((row) => !propertyLabel || row.propertyName === propertyLabel)
+    .map((row) => ({
+      id: row.id,
+      date: row.expenseDate,
+      category: row.categoryLabel,
+      scheduleERef: "",
+      taxStatus: "",
+      amount: centsToUsd(row.amountCents),
+      vendor: "",
+      memo: row.memo ?? "",
+      property: row.propertyName ?? "",
+    }));
   const totalCents = rows.reduce((sum, row) => sum + amountToCents(row.amount), 0);
   return {
     id: "expenses",

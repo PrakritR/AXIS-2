@@ -512,24 +512,11 @@ export function readExtraListingsPublic(): MockProperty[] {
   return [...byPropertyKey.values()];
 }
 
-/** Demo sandbox listings — lazy-loaded so API routes do not hard-depend on demo-data. */
-function readDemoSeedProperties(): MockProperty[] {
-  if (!isDemoModeActive()) return [];
-  try {
-    const { demoProperties } = require("@/lib/demo/demo-data") as typeof import("@/lib/demo/demo-data");
-    return demoProperties();
-  } catch {
-    return [];
-  }
-}
-
-/** Listed properties for one manager (portal). Falls back to demo seed data in `/demo`. */
+/** Listed properties for one manager (portal). */
 export function readScopedExtraListings(userId: string | null): MockProperty[] {
   const scopeUserId = resolveManagerScopeUserId(userId);
   if (!scopeUserId) return [];
   const stored = readExtraListingsForUser(scopeUserId);
-  if (stored.length > 0) return stored;
-  if (isDemoModeActive() && scopeUserId === DEMO_MANAGER_USER_ID) return readDemoSeedProperties();
   return stored;
 }
 

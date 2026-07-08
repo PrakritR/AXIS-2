@@ -190,11 +190,11 @@ export function ResidentDashboard({
         setAppRoom(resolvedRoom);
         setAppId(row.id?.trim() || null);
       } else {
-        setAppStatus(applicationApproved ? "approved" : "pending");
-        setAppStage(applicationApproved ? "Approved" : "Submitted");
+        setAppStatus("pending");
+        setAppStage("");
         setAppProperty(null);
         setAppRoom(null);
-        setAppId(initialApplicationId);
+        setAppId(null);
       }
     };
     apply();
@@ -452,10 +452,16 @@ export function ResidentDashboard({
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
-              <PortalDashboardSectionHeader title="Application" />
-              <p className="mt-4 text-sm font-semibold text-foreground">{appStage}</p>
-              {appId ? <p className="mt-0.5 break-all text-xs font-mono text-muted">{appId}</p> : null}
-              {appProperty ? <p className="mt-1 break-words text-xs text-muted">{appProperty}</p> : null}
+              <PortalDashboardSectionHeader title="Application" href={`${BASE}/applications`} linkLabel="Applications →" />
+              {appStage ? (
+                <>
+                  <p className="mt-4 text-sm font-semibold text-foreground">{appStage}</p>
+                  {appId ? <p className="mt-0.5 break-all text-xs font-mono text-muted">{appId}</p> : null}
+                  {appProperty ? <p className="mt-1 break-words text-xs text-muted">{appProperty}</p> : null}
+                </>
+              ) : (
+                <p className="mt-4 text-sm text-muted">No applications yet. Start your first application.</p>
+              )}
             </div>
             <div className={`${PORTAL_DASHBOARD_SECTION_CARD} min-w-0`}>
               <PortalDashboardSectionHeader title="Inbox" href={`${BASE}/inbox/unopened`} linkLabel="Inbox →" />

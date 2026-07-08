@@ -2,7 +2,7 @@
  * Seeds the browser-local demo stores for the public `/demo` sandbox.
  *
  * Two modes (see `demo-guided.ts`):
- * - **idle** — full rich portfolio (`buildDemoIdleSnapshot`).
+ * - **idle** — empty portfolio (`buildDemoIdleSnapshot`).
  * - **guided** — cumulative story data through the current step (`buildDemoGuidedSnapshot`).
  *
  * Everything is written into each store's `seedDemo…` helper (never the server),
@@ -17,6 +17,7 @@ import { seedDemoWorkOrderBids } from "@/lib/work-order-bids-storage";
 import { seedDemoVendorPayouts } from "@/lib/vendor-payouts-storage";
 import { seedDemoManagerVendorRows } from "@/lib/manager-vendors-storage";
 import { seedDemoManagerPromotionRows } from "@/lib/manager-promotions-storage";
+import { seedDemoManagerOutgoingExpenses } from "@/lib/manager-outgoing-payments";
 import { seedDemoServiceRequests } from "@/lib/service-requests-storage";
 import {
   seedDemoInbox,
@@ -72,6 +73,7 @@ function applyDemoSnapshot(snapshot: DemoDataSnapshot): void {
   seedDemoVendorPayouts(snapshot.vendorPayouts);
   seedDemoManagerVendorRows(snapshot.vendors);
   seedDemoManagerPromotionRows(snapshot.promotions);
+  seedDemoManagerOutgoingExpenses([]);
   seedDemoServiceRequests(snapshot.serviceRequests);
   seedDemoInbox(MANAGER_INBOX_STORAGE_KEY, snapshot.managerInbox);
   seedDemoInbox(RESIDENT_INBOX_STORAGE_KEY, snapshot.residentInbox);

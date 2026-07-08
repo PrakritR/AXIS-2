@@ -125,9 +125,22 @@ describe("deleteManagerOutgoingExpense", () => {
     expect(readManagerOutgoingExpenses().some((row) => row.id === "exp-local")).toBe(false);
   });
 
-  it("keeps demo tombstones across sync", async () => {
+  it("does not rehydrate deleted demo expenses on sync", async () => {
     const { isDemoModeActive } = await import("@/lib/demo/demo-session");
     vi.mocked(isDemoModeActive).mockReturnValue(true);
+
+    window.sessionStorage.setItem(
+      "axis:manager-outgoing-expenses:v1",
+      JSON.stringify([
+        {
+          id: "demo-exp-6",
+          categoryCode: "other_expense",
+          categoryLabel: "Other",
+          amountCents: 1000,
+          expenseDate: "2026-06-01",
+        },
+      ]),
+    );
 
     await syncManagerOutgoingExpensesFromServer(true);
     expect(readManagerOutgoingExpenses().some((row) => row.id === "demo-exp-6")).toBe(true);
