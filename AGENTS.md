@@ -437,9 +437,16 @@ up to 2000 charges per page view — the exact Supabase-egress problem this file
 about). Every server-side path that creates a charge or marks one paid MUST call
 `syncLedgerChargeEntry`/`syncLedgerPaymentEntry` (`src/lib/reports/ledger-sync.ts`)
 next to the DB write, or the row silently never reaches reports. Current call sites:
-`/api/portal-household-charges` (client mirror upsert), the late-fee creation in
+`/api/portal-household-charges` (client mirror upsert — via the batched
+`syncDedupedCharges` wrapper), the late-fee creation in
 `/api/cron/send-payment-reminders`, `stripe-household-charge.ts`, and
 `stripe-application-fee.ts` — copy that pattern for any new charge-mutation route.
+The Stripe paid paths are self-healing: `markHouseholdChargePaidFromStripeSession`
+and `markApplicationFeePaidFromStripeSession` re-run `syncLedgerPaymentEntry` even
+on their already-paid short-circuit (best-effort — a failure is logged, never
+thrown), so a success-page retry or webhook redelivery repairs a ledger row whose
+first sync failed transiently. Phase 2 webhook work builds on these paths — keep
+that idempotent re-sync in place.
 The batched sweep logic (`backfillLedgerFromCharges` in `ledger-sync.ts`) still exists,
 but only as an explicit, admin-gated, one-time historical repair — it is invoked solely
 via `POST /api/admin/backfill-ledger` (optionally scoped to one `managerUserId` in the
