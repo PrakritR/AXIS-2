@@ -57,7 +57,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     return NextResponse.json({ error: signError?.message ?? "Failed to sign URL." }, { status: 500 });
   }
 
-  if (download) return NextResponse.redirect(signed.signedUrl, 302);
-
-  return NextResponse.json({ url: signed.signedUrl, mimeType: row.mime_type, displayName: row.display_name });
+  return NextResponse.json({
+    url: signed.signedUrl,
+    mimeType: row.mime_type,
+    displayName: row.display_name,
+    ...(download ? { fileName: resolveDownloadName(row) } : {}),
+  });
 }

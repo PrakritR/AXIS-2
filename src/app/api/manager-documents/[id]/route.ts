@@ -23,7 +23,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
   const body = (await req.json().catch(() => ({}))) as { displayName?: unknown; category?: unknown };
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (typeof body.displayName === "string") update.display_name = sanitizeDisplayName(body.displayName);
+  if (typeof body.displayName === "string") {
+    const cleaned = sanitizeDisplayName(body.displayName, "");
+    if (!cleaned) return NextResponse.json({ error: "Name cannot be empty." }, { status: 400 });
+    update.display_name = cleaned;
+  }
   if (typeof body.category === "string" && isDocumentCategory(body.category)) update.category = body.category;
 
   if (Object.keys(update).length === 1) {
