@@ -11,17 +11,23 @@ import type { PersistedInboxThread } from "@/lib/portal-inbox-storage";
 import type { WorkOrderBid } from "@/lib/work-order-bids";
 import type { VendorPayout } from "@/lib/vendor-payouts";
 import {
+  CANONICAL_DEMO_GUIDED_EMAIL,
   CANONICAL_DEMO_MANAGER_EMAIL,
   CANONICAL_DEMO_RESIDENT_EMAIL,
   CANONICAL_DEMO_VENDOR_EMAIL,
   CANONICAL_DEMO_VENDOR_NAME,
 } from "@/lib/demo/demo-canonical-accounts";
 import {
+  DEMO_GUIDED_USER_ID,
   DEMO_MANAGER_USER_ID,
   DEMO_RESIDENT_USER_ID,
   DEMO_VENDOR_USER_ID,
 } from "@/lib/demo/demo-session";
-import { buildDemoIdleSnapshot, type DemoDataSnapshot } from "@/lib/demo/demo-guided-data";
+import {
+  buildDemoBlankSnapshot,
+  buildDemoIdleSnapshot,
+  type DemoDataSnapshot,
+} from "@/lib/demo/demo-guided-data";
 import type { DemoScheduleSeed } from "@/lib/demo/demo-data";
 import type { PartnerInquiry, PlannedEvent } from "@/lib/demo-admin-scheduling";
 import {
@@ -37,19 +43,23 @@ function rowData<T>(value: unknown): T | null {
   return value && typeof value === "object" ? (value as T) : null;
 }
 
-function remapManagerScope<T extends { managerUserId?: string | null }>(rows: T[]): T[] {
-  return rows.map((row) => ({ ...row, managerUserId: DEMO_MANAGER_USER_ID }));
+function remapManagerScope<T extends { managerUserId?: string | null }>(
+  rows: T[],
+  scopeId: string = DEMO_MANAGER_USER_ID,
+): T[] {
+  return rows.map((row) => ({ ...row, managerUserId: scopeId }));
 }
 
 function remapResidentScope<T extends { residentUserId?: string | null; residentEmail?: string }>(
   rows: T[],
   residentEmail: string,
+  scopeId: string = DEMO_RESIDENT_USER_ID,
 ): T[] {
   return rows.map((row) => {
     const email = row.residentEmail?.trim().toLowerCase();
     return {
       ...row,
-      residentUserId: email === residentEmail ? DEMO_RESIDENT_USER_ID : row.residentUserId ?? null,
+      residentUserId: email === residentEmail ? scopeId : row.residentUserId ?? null,
     };
   });
 }
@@ -142,7 +152,11 @@ async function fetchInbox(
     .filter((row): row is PersistedInboxThread => Boolean(row?.id));
 }
 
-async function fetchProperties(db: Db, managerUserId: string): Promise<MockProperty[]> {
+async function fetchProperties(
+  db: Db,
+  managerUserId: string,
+  scopeId: string = DEMO_MANAGER_USER_ID,
+): Promise<MockProperty[]> {
   const { data, error } = await db
     .from("manager_property_records")
     .select("id, property_data, row_data, status")
@@ -156,21 +170,25 @@ async function fetchProperties(db: Db, managerUserId: string): Promise<MockPrope
       return {
         ...property,
         id: property.id || String(record.id),
-        managerUserId: DEMO_MANAGER_USER_ID,
+        managerUserId: scopeId,
         adminPublishLive: record.status === "live" ? true : property.adminPublishLive,
       };
     })
     .filter((row): row is NonNullable<typeof row> => row != null) as MockProperty[];
 }
 
-async function fetchSchedule(db: Db, managerUserId: string): Promise<DemoScheduleSeed> {
-  const staticSchedule = buildDemoIdleSnapshot().schedule;
+async function fetchSchedule(
+  db: Db,
+  managerUserId: string,
+  fallback: DemoScheduleSeed = buildDemoIdleSnapshot().schedule,
+  scopeId: string = DEMO_MANAGER_USER_ID,
+): Promise<DemoScheduleSeed> {
   const { data, error } = await db
     .from("portal_schedule_records")
     .select("id, row_data, record_type")
     .or(`manager_user_id.eq.${managerUserId},id.eq.axis_admin_planned_events_v1,id.eq.axis_admin_partner_inquiries_v1`)
     .limit(500);
-  if (error) return staticSchedule;
+  if (error) return fallback;
 
   const plannedEvents: PlannedEvent[] = [];
   const partnerInquiries: PartnerInquiry[] = [];
@@ -194,11 +212,13 @@ async function fetchSchedule(db: Db, managerUserId: string): Promise<DemoSchedul
     }
   }
 
-  if (plannedEvents.length === 0 && partnerInquiries.length === 0) return staticSchedule;
+  if (plannedEvents.length === 0 && partnerInquiries.length === 0) return fallback;
   return {
-    plannedEvents: plannedEvents.length ? remapManagerScope(plannedEvents) : staticSchedule.plannedEvents,
-    partnerInquiries: partnerInquiries.length ? remapManagerScope(partnerInquiries) : staticSchedule.partnerInquiries,
-    availabilityByPropertyId: staticSchedule.availabilityByPropertyId,
+    plannedEvents: plannedEvents.length ? remapManagerScope(plannedEvents, scopeId) : fallback.plannedEvents,
+    partnerInquiries: partnerInquiries.length
+      ? remapManagerScope(partnerInquiries, scopeId)
+      : fallback.partnerInquiries,
+    availabilityByPropertyId: fallback.availabilityByPropertyId,
   };
 }
 
@@ -349,4 +369,93 @@ export async function fetchDemoPortalMirrorSnapshot(): Promise<DemoDataSnapshot 
 
 export function buildStaticDemoPortalSnapshot(): DemoDataSnapshot {
   return buildDemoIdleSnapshot();
+}
+
+/**
+ * Read-only snapshot of the all-portals sandbox account (`testeverything@`) for
+ * the guided "Run demo" tour. Unlike the idle mirror there is NO static
+ * fallback: an account with no data yields empty collections, so the tour
+ * starts from the same blank slate its playback scripts were written against.
+ * Portal edits made while signed in as testeverything@ appear here; nothing in
+ * `/demo` ever writes back.
+ */
+export async function fetchDemoGuidedMirrorSnapshot(): Promise<DemoDataSnapshot | null> {
+  const db = createSupabaseServiceRoleClient();
+  const { data, error } = await db
+    .from("profiles")
+    .select("id")
+    .eq("email", CANONICAL_DEMO_GUIDED_EMAIL)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const guidedUserId = data?.id ? String(data.id) : null;
+  if (!guidedUserId) return null;
+
+  const blank = buildDemoBlankSnapshot();
+  const scope = DEMO_GUIDED_USER_ID;
+  const [
+    properties,
+    applications,
+    charges,
+    rentProfiles,
+    leases,
+    workOrders,
+    vendors,
+    promotions,
+    serviceRequests,
+    managerInbox,
+    residentInbox,
+    vendorInbox,
+    schedule,
+    workOrderBids,
+    vendorPayouts,
+  ] = await Promise.all([
+    fetchProperties(db, guidedUserId, scope),
+    fetchRowDataTable<DemoApplicantRow>(db, "manager_application_records", "manager_user_id", guidedUserId),
+    fetchRowDataTable<HouseholdCharge>(db, "portal_household_charge_records", "manager_user_id", guidedUserId),
+    fetchRowDataTable<RecurringRentProfile>(
+      db,
+      "portal_recurring_rent_profile_records",
+      "manager_user_id",
+      guidedUserId,
+    ),
+    fetchRowDataTable<LeasePipelineRow>(db, "portal_lease_pipeline_records", "manager_user_id", guidedUserId),
+    fetchRowDataTable<DemoManagerWorkOrderRow>(db, "portal_work_order_records", "manager_user_id", guidedUserId),
+    fetchRowDataTable<ManagerVendorRow>(db, "manager_vendor_records", "manager_user_id", guidedUserId),
+    fetchRowDataTable<ManagerPromotionRow>(db, "manager_promotion_records", "manager_user_id", guidedUserId),
+    fetchRowDataTable<ServiceRequest>(db, "portal_service_request_records", "manager_user_id", guidedUserId),
+    fetchInbox(db, MANAGER_INBOX_SCOPE, guidedUserId),
+    fetchInbox(db, RESIDENT_INBOX_SCOPE, guidedUserId),
+    fetchInbox(db, VENDOR_INBOX_SCOPE, guidedUserId),
+    fetchSchedule(db, guidedUserId, blank.schedule, scope),
+    fetchWorkOrderBids(db, guidedUserId),
+    fetchVendorPayouts(db, guidedUserId),
+  ]);
+
+  return {
+    ...blank,
+    properties: remapManagerScope(properties, scope),
+    applications: remapManagerScope(
+      remapResidentScope(applications, CANONICAL_DEMO_GUIDED_EMAIL, scope),
+      scope,
+    ) as DemoApplicantRow[],
+    charges: remapManagerScope(remapResidentScope(charges, CANONICAL_DEMO_GUIDED_EMAIL, scope), scope),
+    rentProfiles: remapManagerScope(remapResidentScope(rentProfiles, CANONICAL_DEMO_GUIDED_EMAIL, scope), scope),
+    leases: remapManagerScope(leases, scope),
+    workOrders: remapManagerScope(workOrders, scope),
+    workOrderBids: workOrderBids.map((row) =>
+      row.vendorUserId === guidedUserId ? { ...row, vendorUserId: scope } : row,
+    ),
+    vendorPayouts,
+    vendors: vendors.map((row) => ({
+      ...row,
+      managerUserId: scope,
+      vendorUserId: row.vendorUserId === guidedUserId ? scope : row.vendorUserId,
+    })),
+    promotions: remapManagerScope(promotions, scope),
+    serviceRequests: remapManagerScope(serviceRequests, scope),
+    managerInbox: remapInbox(managerInbox),
+    residentInbox: remapInbox(residentInbox),
+    vendorInbox: remapInbox(vendorInbox),
+    schedule,
+  };
 }

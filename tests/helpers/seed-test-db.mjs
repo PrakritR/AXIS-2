@@ -53,9 +53,18 @@ const residentPassword = process.env.E2E_RESIDENT_PASSWORD ?? "TestResident123!"
 const residentAxisId = process.env.E2E_RESIDENT_AXIS_ID ?? "AXIS-TESTRSID";
 const vendorEmail = (process.env.E2E_VENDOR_EMAIL ?? "vendor@test.axis.local").toLowerCase();
 const vendorPassword = process.env.E2E_VENDOR_PASSWORD ?? "TestVendor123!";
-const PRIMARY_RESIDENT_NAME = "Alex Rivera";
+// All-portals sandbox account for manual testing: one login that can open every
+// portal (admin + manager + resident + vendor) via the sign-in role picker.
+// Matches CANONICAL_DEMO_ADMIN_EMAIL / CANONICAL_DEMO_GUIDED_EMAIL in
+// src/lib/demo/demo-canonical-accounts.ts.
+const everythingEmail = (process.env.E2E_EVERYTHING_EMAIL ?? "testeverything@test.axis.local").toLowerCase();
+const everythingPassword = process.env.E2E_EVERYTHING_PASSWORD ?? "TestEverything123!";
+const EVERYTHING_NAME = "Everything Test";
+// Keep in sync with src/lib/demo/demo-canonical-accounts.ts (plain-node script
+// can't import the TS module).
+const PRIMARY_RESIDENT_NAME = "Test Resident";
 const CANONICAL_DEMO_MANAGER_NAME = "Demo Manager";
-const CANONICAL_DEMO_VENDOR_NAME = "Cascade Mechanical";
+const CANONICAL_DEMO_VENDOR_NAME = "Test Vendor";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -72,6 +81,7 @@ for (const [label, email] of [
   ["E2E_MANAGER_EMAIL", managerEmail],
   ["E2E_RESIDENT_EMAIL", residentEmail],
   ["E2E_VENDOR_EMAIL", vendorEmail],
+  ["E2E_EVERYTHING_EMAIL", everythingEmail],
 ]) {
   if (email === PRODUCTION_ADMIN_EMAIL) {
     console.error(`${label} is the production admin (${PRODUCTION_ADMIN_EMAIL}) — that account lives only in production.`);
@@ -269,6 +279,63 @@ try {
     onlyRole: true,
     fullName: CANONICAL_DEMO_VENDOR_NAME,
   });
+
+  // ── All-portals sandbox account (testeverything@) ─────────────────────────
+  // One login for manual testing across every portal. Primary profiles.role
+  // stays "manager" (dual-role auth prefers manager); the extra profile_roles
+  // rows unlock the admin/resident/vendor portals in the sign-in role picker.
+  // NOT onlyRole — stripping the extra roles would defeat the account.
+  const existingEverythingUser = managerList?.users?.find(
+    (u) => u.email?.toLowerCase() === everythingEmail,
+  );
+  let everythingManagerId = "MGR-TESTEVERY";
+  if (existingEverythingUser) {
+    const { data: everythingProfile } = await supabase
+      .from("profiles")
+      .select("manager_id")
+      .eq("id", existingEverythingUser.id)
+      .maybeSingle();
+    if (everythingProfile?.manager_id?.trim()) everythingManagerId = everythingProfile.manager_id.trim();
+  }
+  const everythingUserId = await ensureUser(everythingEmail, everythingPassword, "manager", {
+    managerId: everythingManagerId,
+    fullName: EVERYTHING_NAME,
+  });
+  for (const extraRole of ["admin", "resident", "vendor"]) {
+    await must(
+      supabase
+        .from("profile_roles")
+        .upsert({ user_id: everythingUserId, role: extraRole }, { onConflict: "user_id,role" }),
+      `profile_roles(${everythingEmail}:${extraRole})`,
+    );
+  }
+  // Pro tier so tier-gated manager tabs aren't paywalled for this account either.
+  const { data: everythingPurchases } = await supabase
+    .from("manager_purchases")
+    .select("id, tier")
+    .eq("user_id", everythingUserId);
+  const everythingHasPaidTier = (everythingPurchases ?? []).some((p) => {
+    const t = String(p.tier ?? "").toLowerCase();
+    return t === "pro" || t === "business";
+  });
+  if (!everythingHasPaidTier) {
+    await must(
+      supabase.from("manager_purchases").upsert(
+        {
+          stripe_checkout_session_id: "seed_e2e_everything",
+          email: everythingEmail,
+          manager_id: everythingManagerId,
+          tier: "pro",
+          billing: "portal",
+          user_id: everythingUserId,
+          promo_code: "FREE100",
+          paid_at: NOW.toISOString(),
+        },
+        { onConflict: "manager_id" },
+      ),
+      "manager_purchases(everything)",
+    );
+  }
 
   async function cleanLegacyDemoManagerPortfolio(uid) {
     const tables = [
@@ -1211,6 +1278,7 @@ try {
     manager2Email,
     residentEmail,
     vendorEmail,
+    everythingEmail,
     ...people.map((p) => p.email),
     ...DEMO_WORKFLOW_RESIDENT_EMAILS,
   ]);

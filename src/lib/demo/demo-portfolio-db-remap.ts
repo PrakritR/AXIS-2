@@ -22,7 +22,7 @@ import {
 import type { DemoScheduleSeed } from "@/lib/demo/demo-data";
 import type { PartnerInquiry, PlannedEvent } from "@/lib/demo-admin-scheduling";
 
-/** Demo idle application id for the canonical resident (Alex Rivera). */
+/** Demo idle application id for the canonical resident. */
 export const DEMO_CANONICAL_RESIDENT_APP_DEMO_ID = "demo-app-4";
 
 /** Charge/application cross-refs in demo-data for the canonical resident. */

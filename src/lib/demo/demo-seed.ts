@@ -4,7 +4,8 @@
  * Two modes (see `demo-guided.ts`):
  * - **idle** — rich portfolio (`buildDemoIdleSnapshot`), optionally overlaid from
  *   the canonical test accounts via `/api/demo/portal-snapshot`.
- * - **guided** — blank slate (`buildDemoBlankSnapshot`); autoplay creates data.
+ * - **guided** — `testeverything@`'s mirrored data (`seedDemoGuidedBaseData`),
+ *   blank slate when that account has none; autoplay creates data on top.
  *
  * Everything is written into each store's `seedDemo…` helper (never the server),
  * scoped to synthetic demo manager/resident ids. Real portal routes never call
@@ -143,6 +144,28 @@ export async function seedDemoPortalIdleData(): Promise<void> {
   if (!mirrored) {
     applyDemoSnapshot(buildDemoIdleSnapshot());
   }
+}
+
+/**
+ * Guided tour base: mirror `testeverything@`'s real portal data (edits made
+ * signed-in appear in the "Run demo" video); blank slate when the account is
+ * absent or has no data. Never writes back — same one-way rule as idle.
+ */
+export async function seedDemoGuidedBaseData(): Promise<void> {
+  if (typeof window === "undefined" || !isDemoModeActive()) return;
+  try {
+    const res = await fetch("/api/demo/portal-snapshot?scope=guided", { credentials: "same-origin" });
+    if (res.ok) {
+      const body = (await res.json()) as { source?: string; snapshot?: DemoDataSnapshot };
+      if (body.source === "mirror" && body.snapshot) {
+        applyDemoSnapshot(body.snapshot);
+        return;
+      }
+    }
+  } catch {
+    /* fall through to blank */
+  }
+  applyDemoSnapshot(buildDemoBlankSnapshot());
 }
 
 /**

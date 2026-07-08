@@ -23,7 +23,7 @@ function mkCharge(overrides: Partial<HouseholdCharge> = {}): HouseholdCharge {
     propertyId: "prop-1",
     propertyLabel: "SoMa Loft House",
     residentEmail: "resident@test.axis.local",
-    residentName: "Alex Rivera",
+    residentName: "Test Resident",
     residentUserId: "user-1",
     managerUserId: "mgr-1",
     amountLabel: "$100.00",

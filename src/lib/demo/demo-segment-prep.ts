@@ -7,7 +7,7 @@ import {
   submitManagerPendingPropertyToServer,
 } from "@/lib/demo-property-pipeline";
 import { isDemoModeActive, resolveDemoManagerScopeUserId } from "@/lib/demo/demo-session";
-import { applyDemoSnapshotForSegment, seedDemoBlankData } from "@/lib/demo/demo-seed";
+import { applyDemoSnapshotForSegment, seedDemoBlankData, seedDemoGuidedBaseData } from "@/lib/demo/demo-seed";
 import { createDemoMaintenanceWorkOrder } from "@/lib/demo/demo-work-order-actions";
 
 /** Programmatically list a property for leasing / work-order segments (no wizard UI). */
@@ -29,7 +29,9 @@ export async function prepareDemoSegment(segment: DemoSegment): Promise<{ proper
   if (!isDemoModeActive()) return { propertyId: null };
 
   if (segment === "overall") {
-    seedDemoBlankData();
+    // The main "Run demo" video starts from testeverything@'s real portal data
+    // (blank when that account has none) — the script creates its rows on top.
+    await seedDemoGuidedBaseData();
     return { propertyId: null };
   }
 

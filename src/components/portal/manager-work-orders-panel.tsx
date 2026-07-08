@@ -40,6 +40,8 @@ import { parseWorkOrderCategoryFromDescription } from "@/lib/reports/formal-docu
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { syncManagerWorkOrdersFromServer } from "@/lib/manager-work-orders-storage";
 import { fetchWorkOrderBids, type WorkOrderBid } from "@/lib/work-order-bids";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { acceptDemoWorkOrderBid, approveDemoWorkOrderPay } from "@/lib/demo/demo-work-order-actions";
 import { isWorkOrderCostLockedByVendor } from "@/lib/work-order-cost-lock";
 
 function priorityClass(p: string) {
@@ -233,6 +235,8 @@ export function ManagerWorkOrdersPanel({
       const vendor = activeVendors.find((v) => v.id === row.vendorId);
       const vendorEmail = vendor?.email?.trim() ?? "";
       if (!vendor || !vendorEmail.includes("@")) return false;
+      // /demo never sends real mail or hits authed routes — the sandbox is read-only.
+      if (isDemoModeActive()) return false;
       try {
         const res = await fetch("/api/portal/send-vendor-visit-email", {
           method: "POST",
@@ -328,6 +332,16 @@ export function ManagerWorkOrdersPanel({
     }
     setAutoSchedulingId(row.id);
     try {
+      // /demo: book a synthetic next-day slot locally instead of the authed route.
+      if (isDemoModeActive()) {
+        const slot = new Date();
+        slot.setDate(slot.getDate() + 1);
+        slot.setHours(10, 0, 0, 0);
+        const iso = slot.toISOString();
+        setVisitAtById((prev) => ({ ...prev, [row.id]: toDatetimeLocalValue(iso) }));
+        await commitScheduledVisit(row, iso);
+        return;
+      }
       const res = await fetch("/api/portal-work-orders/auto-schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -391,6 +405,25 @@ export function ManagerWorkOrdersPanel({
       const materialsCostCents = completeDraft.materialsCost.trim()
         ? Math.round(Number.parseFloat(completeDraft.materialsCost.replace(/[^0-9.]/g, "")) * 100)
         : 0;
+      // /demo: complete locally — the sandbox never writes to real work-order rows.
+      if (isDemoModeActive()) {
+        const now = new Date().toISOString();
+        updateManagerWorkOrder(completeRow.id, (r) => ({
+          ...r,
+          bucket: "completed",
+          status: "Completed",
+          category: completeDraft.category,
+          vendorCostCents: vendorCostCents > 0 ? vendorCostCents : r.vendorCostCents,
+          materialsCostCents: materialsCostCents > 0 ? materialsCostCents : r.materialsCostCents,
+          materialsMemo: completeDraft.materialsMemo,
+          workDoneSummary: completeDraft.workDoneSummary,
+          completedAt: now,
+        }));
+        showToast("Work order marked complete.");
+        setCompleteRow(null);
+        setExpandedId(null);
+        return;
+      }
       const res = await fetch("/api/portal/work-orders/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -432,6 +465,14 @@ export function ManagerWorkOrdersPanel({
   const submitApprovePay = async (row: DemoManagerWorkOrderRow) => {
     setApprovePayBusy(true);
     try {
+      // /demo: mark paid locally — never hits the real payout/bookkeeping route.
+      if (isDemoModeActive()) {
+        approveDemoWorkOrderPay(row.id);
+        showToast("Approved and paid.");
+        setApprovePayRow(null);
+        setExpandedId(null);
+        return;
+      }
       const res = await fetch("/api/portal/work-orders/approve-pay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -560,6 +601,13 @@ export function ManagerWorkOrdersPanel({
   const acceptBidHandler = async (bid: WorkOrderBid) => {
     setAcceptingBidId(bid.id);
     try {
+      // /demo: accept the bid in the local sandbox stores only.
+      if (isDemoModeActive()) {
+        if (!acceptDemoWorkOrderBid(bid.workOrderId)) throw new Error("Could not accept bid.");
+        await loadBids(bid.workOrderId);
+        showToast("Bid accepted — vendor assigned at the agreed cost.");
+        return;
+      }
       const res = await fetch("/api/portal/work-order-bids", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

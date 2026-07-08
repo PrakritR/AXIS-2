@@ -23,7 +23,7 @@ function mkCharge(id: string, status: HouseholdCharge["status"] = "pending"): Ho
     propertyId: "prop-1",
     propertyLabel: "SoMa Loft House",
     residentEmail: "resident@test.axis.local",
-    residentName: "Alex Rivera",
+    residentName: "Test Resident",
     amountLabel: "$100.00",
     balanceLabel: "$100.00",
     axisPaymentsEnabledSnapshot: true,

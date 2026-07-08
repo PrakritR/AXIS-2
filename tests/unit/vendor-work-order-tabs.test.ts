@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import type { WorkOrderBid } from "@/lib/work-order-bids";
-import { demoWorkOrders, demoWorkOrderBids } from "@/lib/demo/demo-data";
+import { demoWorkOrders, demoWorkOrderBids, DEMO_VENDOR_NAME } from "@/lib/demo/demo-data";
 import { isPricingPendingBid, vendorWorkOrderTab } from "@/lib/vendor-work-order-tabs";
 
 function row(partial: Partial<DemoManagerWorkOrderRow> = {}): DemoManagerWorkOrderRow {
@@ -41,7 +41,7 @@ function bid(partial: Partial<WorkOrderBid>): WorkOrderBid {
 
 describe("demo idle vendor services tabs", () => {
   it("has at least one work order per vendor tab", () => {
-    const vendorRows = demoWorkOrders().filter((r) => r.vendorName === "Cascade Mechanical");
+    const vendorRows = demoWorkOrders().filter((r) => r.vendorName === DEMO_VENDOR_NAME);
     const bids = Object.fromEntries(demoWorkOrderBids().map((b) => [b.workOrderId, b]));
     const tabs = new Set(vendorRows.map((row) => vendorWorkOrderTab(row, bids[row.id])));
     expect(tabs.has("quote")).toBe(true);
