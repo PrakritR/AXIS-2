@@ -3,7 +3,7 @@ import { DOCUMENT_MIME_EXTENSIONS, MANAGER_DOCUMENTS_BUCKET } from "@/lib/docume
 
 export const DOCUMENT_SIGNED_URL_TTL_SECONDS = 600;
 
-function resolveDownloadName(row: {
+export function resolveDownloadName(row: {
   display_name: string;
   original_filename: string | null;
   storage_path: string;
