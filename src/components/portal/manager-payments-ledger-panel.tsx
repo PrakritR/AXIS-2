@@ -251,7 +251,7 @@ export function ManagerPaymentsLedgerPanel({
     }
     return (
       <>
-        <div>{row.dueDate}</div>
+        <span className="block">{row.dueDate}</span>
         {row.householdChargeId && !isPaidRow(row) ? (() => {
           const reminders = manageableRemindersForCharge(scheduledMessages, row.householdChargeId);
           const activeReminders = reminders.filter((m) => m.status !== "cancelled");
