@@ -59,11 +59,13 @@ export async function PATCH(
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = {
       status,
-      decision_note: body.decisionNote?.trim() || null,
       decided_at: now,
       decided_by: auth.userId,
       updated_at: now,
     };
+    if (typeof body.decisionNote === "string") {
+      patch.decision_note = body.decisionNote.trim() || null;
+    }
     if (status === "paid") patch.paid_at = now;
 
     const { data, error } = await auth.db
