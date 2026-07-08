@@ -15,7 +15,6 @@ import {
   vendorAvailabilityStorageKey,
 } from "@/lib/demo-admin-scheduling";
 import {
-  DEMO_VENDOR_AVAILABILITY_RULES,
   DEFAULT_FLEXIBLE_TIMING_RANK,
   fetchVendorAvailability,
   fetchVendorFlexiblePreferences,
@@ -43,7 +42,7 @@ function propertyLabel(row: DemoManagerWorkOrderRow): string {
 const VENDOR_VISIT_DEFAULT_DURATION_MINUTES = 60;
 const VENDOR_WORK_COLOR =
   "bg-violet-500/25 text-violet-950 ring-violet-400/35 [html[data-theme=dark]_&]:bg-violet-500/20 [html[data-theme=dark]_&]:text-violet-100";
-let demoAvailabilityRuleCounter = DEMO_VENDOR_AVAILABILITY_RULES.length;
+let demoAvailabilityRuleCounter = 0;
 
 function vendorWorkMeetingFromRule(rule: Extract<VendorAvailabilityRule, { kind: "event" }>): DemoMeeting {
   const [year, month, day] = rule.specificDate.split("-").map(Number);
@@ -112,9 +111,7 @@ export function VendorCalendarPanel() {
   const { userId, ready } = usePortalSession();
   const demo = isDemoModeActive();
   const [rows, setRows] = useState<DemoManagerWorkOrderRow[]>(() => readVendorWorkOrderRows());
-  const [availabilityRules, setAvailabilityRules] = useState<VendorAvailabilityRule[]>(() =>
-    demo ? DEMO_VENDOR_AVAILABILITY_RULES : [],
-  );
+  const [availabilityRules, setAvailabilityRules] = useState<VendorAvailabilityRule[]>([]);
   const [preferences, setPreferences] = useState<VendorFlexiblePreferences>({
     timingRank: [...DEFAULT_FLEXIBLE_TIMING_RANK],
   });

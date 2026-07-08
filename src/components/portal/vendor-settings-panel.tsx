@@ -10,7 +10,6 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { DEMO_VENDOR_EMAIL, DEMO_VENDOR_NAME, isDemoModeActive } from "@/lib/demo/demo-session";
 import { VENDOR_TRADE_OPTIONS } from "@/lib/work-order-taxonomy";
 import {
-  DEMO_VENDOR_AVAILABILITY_RULES,
   WEEKDAY_DISPLAY_ORDER,
   WEEKDAY_LABELS,
   deleteVendorAvailabilityRule,
@@ -81,7 +80,7 @@ function notifyAvailabilityChanged(rules?: VendorAvailabilityRule[]) {
 export function VendorAvailabilityEditor() {
   const { showToast } = useAppUi();
   const demo = isDemoModeActive();
-  const [rules, setRules] = useState<VendorAvailabilityRule[]>(() => (demo ? DEMO_VENDOR_AVAILABILITY_RULES : []));
+  const [rules, setRules] = useState<VendorAvailabilityRule[]>([]);
   const [loaded, setLoaded] = useState(demo);
   const [weeklyFormOpen, setWeeklyFormOpen] = useState(false);
   const [weeklyDraft, setWeeklyDraft] = useState({ weekday: 1, start: "09:00", end: "17:00" });

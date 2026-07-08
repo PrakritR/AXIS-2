@@ -265,7 +265,7 @@ export function buildDemoOccupancyReport(propertyId?: string): OccupancyReport {
 /** Demo stand-in for `/api/reports/1099-candidates` — vendor totals from the demo expense register. */
 export function buildDemo1099Report(taxYear: string): ReportResult {
   const totals = new Map<string, number>();
-  for (const row of demoExpenseRows()) {
+  for (const row of [] as Array<{ vendor: string; amount: string }>) {
     totals.set(row.vendor, (totals.get(row.vendor) ?? 0) + amountToCents(row.amount));
   }
   const rows = [...totals.entries()]
@@ -302,7 +302,7 @@ export function buildDemoTaxSummaryReport(propertyId?: string): ReportResult {
   const tenancies = demoTenancies().filter((t) => !propertyId || t.propertyId === propertyId);
   const expenseCentsByLabel = new Map<string, number>();
   let deductibleCents = 0;
-  const expenseRows = demoExpenseRows().filter(
+  const expenseRows = ([] as Array<{ property: string; amount: string }>).filter(
     (row) => !propertyId || row.property === (PROP_LABEL[propertyId] ?? ""),
   );
   for (const row of expenseRows) {
