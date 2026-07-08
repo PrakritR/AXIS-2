@@ -1583,9 +1583,11 @@ export function demoBugFeedback(): PortalBugFeedbackRow[] {
     mk("demo-bf-1", "bug", "manager", DEMO_MANAGER_NAME, DEMO_MANAGER_EMAIL,
       "CSV export missing header row", "When I export payments the header row is blank.", "open", "medium"),
     mk("demo-bf-2", "feedback", "resident", DEMO_RESIDENT_NAME, DEMO_RESIDENT_EMAIL,
-      "Add autopay", "Would love an autopay toggle for monthly rent.", "reviewing", "low"),
+      "Add autopay", "Would love an autopay toggle for monthly rent.", "in_progress", "low"),
     mk("demo-bf-3", "bug", "manager", "Dana Whitfield", "dana.whitfield@example.com",
-      "Calendar timezone off by one", "Tour times show an hour early.", "resolved", "high"),
+      "Calendar timezone off by one", "Tour times show an hour early.", "completed", "high"),
+    mk("demo-bf-4", "feedback", "vendor", "Demo Vendor", "vendor@test.axis.local",
+      "Bid form too small on mobile", "Hard to enter pricing on phone.", "open", "medium"),
   ];
 }
 

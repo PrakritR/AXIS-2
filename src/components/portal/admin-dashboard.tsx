@@ -86,7 +86,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
 
     const feedbackRows = readBugFeedbackRows();
     const feedbackTotal = feedbackRows.length;
-    const openFeedbackAll = feedbackRows.filter((row) => row.status === "open" || row.status === "reviewing");
+    const openFeedbackAll = feedbackRows.filter((row) => row.status === "open" || row.status === "in_progress");
     const openFeedback = openFeedbackAll.slice(0, 5);
 
     const pendingMeetings = readPartnerInquiries()
@@ -234,7 +234,7 @@ export function AdminDashboard({ displayName = "there" }: { displayName?: string
                 subtitle={`${row.reporterName || row.reporterEmail} · ${row.type === "bug" ? "Bug" : "Feedback"}`}
                 badge={
                   <span className="portal-badge-pending rounded-full px-2 py-0.5 text-[10px] font-semibold">
-                    {row.status === "reviewing" ? "Reviewing" : "Open"}
+                    {row.status === "in_progress" ? "In progress" : "Open"}
                   </span>
                 }
               />

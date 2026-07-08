@@ -30,6 +30,7 @@ import {
   type BugFeedbackStatus,
   type PortalBugFeedbackRow,
 } from "@/lib/portal-bug-feedback";
+import { feedbackStatusLabel } from "@/lib/portal-bug-feedback-utils";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
 function formatWhen(iso: string) {
@@ -49,9 +50,9 @@ function feedbackStatusClass(status: BugFeedbackStatus) {
   switch (status) {
     case "open":
       return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-    case "reviewing":
+    case "in_progress":
       return "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-    case "resolved":
+    case "completed":
       return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
     default:
       return "bg-accent/30 text-muted ring-1 ring-border";
@@ -170,7 +171,7 @@ export function PortalBugFeedbackPanel({
                     <span
                       className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
                     >
-                      {row.status}
+                      {feedbackStatusLabel(row.status)}
                     </span>
                   </div>
                 </button>
@@ -211,7 +212,7 @@ export function PortalBugFeedbackPanel({
                           <span
                             className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
                           >
-                            {row.status}
+                            {feedbackStatusLabel(row.status)}
                           </span>
                         </td>
                       </tr>

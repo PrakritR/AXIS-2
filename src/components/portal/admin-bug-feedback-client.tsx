@@ -27,7 +27,7 @@ import {
   type BugFeedbackStatus,
   type PortalBugFeedbackRow,
 } from "@/lib/portal-bug-feedback";
-import { groupBugFeedbackForAdmin, roleGroupLabelForFeedback } from "@/lib/portal-bug-feedback-utils";
+import { groupBugFeedbackForAdmin, roleGroupLabelForFeedback, feedbackStatusLabel } from "@/lib/portal-bug-feedback-utils";
 
 function formatWhen(iso: string) {
   try {
@@ -45,30 +45,47 @@ function formatWhen(iso: string) {
 
 const STATUS_OPTIONS: { value: BugFeedbackStatus; label: string }[] = [
   { value: "open", label: "Open" },
-  { value: "reviewing", label: "Reviewing" },
-  { value: "resolved", label: "Resolved" },
-  { value: "closed", label: "Closed" },
+  { value: "in_progress", label: "In progress" },
+  { value: "completed", label: "Completed" },
 ];
 
-type RoleFilter = "managers" | "residents";
+type RoleFilter = "managers" | "residents" | "vendors";
+type SortFilter = "newest" | "oldest" | "status";
 
 function feedbackStatusClass(status: BugFeedbackStatus) {
   switch (status) {
     case "open":
       return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-    case "reviewing":
+    case "in_progress":
       return "portal-badge-info ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
-    case "resolved":
+    case "completed":
       return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
     default:
       return "bg-accent/30 text-muted ring-1 ring-border";
   }
 }
 
+function sortFeedbackRows(rows: PortalBugFeedbackRow[], sort: SortFilter): PortalBugFeedbackRow[] {
+  const next = [...rows];
+  if (sort === "oldest") {
+    return next.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  if (sort === "status") {
+    const rank: Record<BugFeedbackStatus, number> = { open: 0, in_progress: 1, completed: 2 };
+    return next.sort((a, b) => {
+      const byStatus = rank[a.status] - rank[b.status];
+      if (byStatus !== 0) return byStatus;
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }
+  return next.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolean }) {
   const { showToast } = useAppUi();
   const [rows, setRows] = useState<PortalBugFeedbackRow[]>(() => readBugFeedbackRows());
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("managers");
+  const [sortFilter, setSortFilter] = useState<SortFilter>("newest");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -90,15 +107,18 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
     return () => window.removeEventListener(ADMIN_UI_EVENT, onRefresh);
   }, [refresh]);
 
-  const { managerRows, residentRows } = useMemo(() => groupBugFeedbackForAdmin(rows), [rows]);
-  const visibleRows = roleFilter === "managers" ? managerRows : residentRows;
+  const { managerRows, residentRows, vendorRows } = useMemo(() => groupBugFeedbackForAdmin(rows), [rows]);
+  const sourceRows =
+    roleFilter === "managers" ? managerRows : roleFilter === "residents" ? residentRows : vendorRows;
+  const visibleRows = useMemo(() => sortFeedbackRows(sourceRows, sortFilter), [sourceRows, sortFilter]);
 
   const roleTabs = useMemo(
     () => [
       { id: "managers" as const, label: "Managers", count: managerRows.length },
       { id: "residents" as const, label: "Residents", count: residentRows.length },
+      { id: "vendors" as const, label: "Vendors", count: vendorRows.length },
     ],
-    [managerRows.length, residentRows.length],
+    [managerRows.length, residentRows.length, vendorRows.length],
   );
 
   const applySchema = async () => {
@@ -186,14 +206,29 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
   );
 
   const filterRow = (
-    <ManagerPortalStatusPills
-      tabs={roleTabs}
-      activeId={roleFilter}
-      onChange={(id) => {
-        setRoleFilter(id as RoleFilter);
-        setExpandedId(null);
-      }}
-    />
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <ManagerPortalStatusPills
+        tabs={roleTabs}
+        activeId={roleFilter}
+        onChange={(id) => {
+          setRoleFilter(id as RoleFilter);
+          setExpandedId(null);
+        }}
+      />
+      <label className="flex items-center gap-2 text-sm text-muted">
+        <span className="shrink-0 font-medium">Sort</span>
+        <Select
+          value={sortFilter}
+          onChange={(e) => setSortFilter(e.target.value as SortFilter)}
+          className="h-9 min-w-[10rem] rounded-full bg-card text-sm"
+          aria-label="Sort feedback"
+        >
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="status">Status</option>
+        </Select>
+      </label>
+    </div>
   );
 
   const content = (
@@ -246,7 +281,13 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
       {visibleRows.length === 0 ? (
         <PortalDataTableEmpty
           icon="feedback"
-          message={roleFilter === "managers" ? "No manager feedback yet." : "No resident feedback yet."}
+          message={
+            roleFilter === "managers"
+              ? "No manager feedback yet."
+              : roleFilter === "residents"
+                ? "No resident feedback yet."
+                : "No vendor feedback yet."
+          }
         />
       ) : (
         <>
@@ -270,7 +311,7 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
                       <span
                         className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
                       >
-                        {row.status}
+                        {feedbackStatusLabel(row.status)}
                       </span>
                     </div>
                   </button>
@@ -328,7 +369,7 @@ export function AdminBugFeedbackClient({ embedded = false }: { embedded?: boolea
                             <span
                               className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${feedbackStatusClass(row.status)}`}
                             >
-                              {row.status}
+                              {feedbackStatusLabel(row.status)}
                             </span>
                           </td>
                         </tr>

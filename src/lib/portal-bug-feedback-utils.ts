@@ -30,9 +30,7 @@ export function normalizeBugFeedbackRow(row: unknown): PortalBugFeedbackRow | nu
     severity: (["low", "medium", "high", "critical"].includes(String(r.severity))
       ? r.severity
       : undefined) as BugSeverity | undefined,
-    status: (["open", "reviewing", "resolved", "closed"].includes(String(r.status))
-      ? r.status
-      : "open") as BugFeedbackStatus,
+    status: normalizeBugFeedbackStatus(r.status),
     adminNotes: typeof r.adminNotes === "string" ? r.adminNotes.trim() : undefined,
     attachmentUrls: Array.isArray(r.attachmentUrls)
       ? r.attachmentUrls.map(String).filter(Boolean)
@@ -44,8 +42,26 @@ export function normalizeBugFeedbackRow(row: unknown): PortalBugFeedbackRow | nu
   };
 }
 
+export function normalizeBugFeedbackStatus(value: unknown): BugFeedbackStatus {
+  const raw = String(value ?? "").toLowerCase();
+  if (raw === "in_progress" || raw === "reviewing") return "in_progress";
+  if (raw === "completed" || raw === "resolved" || raw === "closed") return "completed";
+  return "open";
+}
+
+export function feedbackStatusLabel(status: BugFeedbackStatus): string {
+  switch (status) {
+    case "in_progress":
+      return "In progress";
+    case "completed":
+      return "Completed";
+    default:
+      return "Open";
+  }
+}
+
 export function isManagerSideReporterRole(role: BugFeedbackReporterRole): boolean {
-  return role === "manager" || role === "pro" || role === "admin" || role === "vendor";
+  return role === "manager" || role === "pro" || role === "admin";
 }
 
 export function roleGroupLabelForFeedback(role: BugFeedbackReporterRole): string {
@@ -74,11 +90,12 @@ export function countBugFeedbackTabs(rows: PortalBugFeedbackRow[]): { bugs: numb
 
 export function groupBugFeedbackForAdmin(
   rows: PortalBugFeedbackRow[],
-): { managerRows: PortalBugFeedbackRow[]; residentRows: PortalBugFeedbackRow[] } {
+): { managerRows: PortalBugFeedbackRow[]; residentRows: PortalBugFeedbackRow[]; vendorRows: PortalBugFeedbackRow[] } {
   const filtered = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return {
     managerRows: filtered.filter((r) => isManagerSideReporterRole(r.reporterRole)),
     residentRows: filtered.filter((r) => r.reporterRole === "resident"),
+    vendorRows: filtered.filter((r) => r.reporterRole === "vendor"),
   };
 }
 

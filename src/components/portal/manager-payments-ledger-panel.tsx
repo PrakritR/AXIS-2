@@ -394,6 +394,19 @@ export function ManagerPaymentsLedgerPanel({
   };
 
   const hasAnySource = useMemo(() => rows.length > 0, [rows]);
+  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
+  const tableRows = useMemo<PortalPaymentTableRow[]>(
+    () =>
+      rows.map((row) => ({
+        id: row.id,
+        charge: row.chargeTitle,
+        property: row.propertyName,
+        payee: row.residentName,
+        dueDate: row.dueDate,
+        amount: row.balanceDue,
+      })),
+    [rows],
+  );
 
   if (!hasAnySource) {
     return <PortalDataTableEmpty message="No payments in this bucket yet." icon="payment" />;
@@ -510,21 +523,6 @@ export function ManagerPaymentsLedgerPanel({
         Delete
       </Button>
     </PortalTableDetailActions>
-  );
-
-  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
-
-  const tableRows = useMemo<PortalPaymentTableRow[]>(
-    () =>
-      rows.map((row) => ({
-        id: row.id,
-        charge: row.chargeTitle,
-        property: row.propertyName,
-        payee: row.residentName,
-        dueDate: row.dueDate,
-        amount: row.balanceDue,
-      })),
-    [rows],
   );
 
   return (

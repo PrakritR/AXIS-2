@@ -85,15 +85,6 @@ function PlayIcon() {
     </svg>
   );
 }
-function RestartIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-      <path d="M3 3v5h5" />
-    </svg>
-  );
-}
-
 export function DemoPortalShell() {
   useLayoutEffect(() => {
     hydrateDemoGuidedState();
@@ -403,15 +394,6 @@ export function DemoPortalShell() {
               Exit tour
             </button>
           )}
-          <button
-            type="button"
-            onClick={startTour}
-            data-attr="demo-restart"
-            aria-label={guidedActive ? "Restart guided tour" : "Run demo"}
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-medium text-muted transition hover:bg-accent/60 hover:text-foreground"
-          >
-            <RestartIcon />
-          </button>
         </div>
       </div>
 

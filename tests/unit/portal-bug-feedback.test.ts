@@ -129,7 +129,7 @@ describe("portal bug feedback utils", () => {
     expect(filterBugFeedbackByTab(rows, "feedback").map((r) => r.id)).toEqual(["2"]);
   });
 
-  it("groups admin rows by manager-side vs resident roles", () => {
+  it("groups admin rows by manager, resident, and vendor roles", () => {
     const rows = [
       buildBugFeedbackReportInput({
         type: "bug",
@@ -151,18 +151,38 @@ describe("portal bug feedback utils", () => {
         description: "y",
         id: "r1",
       }),
+      buildBugFeedbackReportInput({
+        type: "feedback",
+        reporterUserId: "3",
+        reporterName: "V",
+        reporterEmail: "v@test.com",
+        reporterRole: "vendor",
+        title: "Vendor feedback",
+        description: "z",
+        id: "v1",
+      }),
     ];
     const grouped = groupBugFeedbackForAdmin(rows);
     expect(grouped.managerRows).toHaveLength(1);
     expect(grouped.residentRows).toHaveLength(1);
+    expect(grouped.vendorRows).toHaveLength(1);
     expect(isManagerSideReporterRole("pro")).toBe(true);
     expect(isManagerSideReporterRole("resident")).toBe(false);
     expect(roleGroupLabelForFeedback("resident")).toBe("Resident");
     expect(roleGroupLabelForFeedback("pro")).toBe("Manager");
   });
 
-  it("recognizes vendor as a manager-side reporter role with its own label", () => {
-    expect(isManagerSideReporterRole("vendor")).toBe(true);
+  it("normalizes legacy feedback statuses", () => {
+    expect(normalizeBugFeedbackRow({ id: "bf-6", status: "reviewing", title: "t", description: "d" })?.status).toBe(
+      "in_progress",
+    );
+    expect(normalizeBugFeedbackRow({ id: "bf-7", status: "resolved", title: "t", description: "d" })?.status).toBe(
+      "completed",
+    );
+  });
+
+  it("recognizes vendor as its own reporter role with its own label", () => {
+    expect(isManagerSideReporterRole("vendor")).toBe(false);
     expect(roleGroupLabelForFeedback("vendor")).toBe("Vendor");
     expect(normalizeBugFeedbackRow({ id: "bf-5", reporterRole: "vendor", title: "t", description: "d" })?.reporterRole).toBe(
       "vendor",

@@ -82,7 +82,7 @@ export function usePortalNavCounts(kind: PortalKind): Partial<Record<string, num
       const inboxUnread = readInboxMessages().filter((m) => m.folder === "inbox" && !m.read).length;
       const pendingMeetings = readPartnerInquiries().filter((r) => r.status === "pending" && r.kind !== "tour").length;
       const pendingTours = readPartnerInquiries().filter((r) => r.kind === "tour" && r.status === "pending").length;
-      const openFeedback = readBugFeedbackRows().filter((r) => r.status === "open" || r.status === "reviewing").length;
+      const openFeedback = readBugFeedbackRows().filter((r) => r.status === "open" || r.status === "in_progress").length;
       return {
         properties: pendingProps,
         events: pendingMeetings + pendingTours,

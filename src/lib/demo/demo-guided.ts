@@ -93,7 +93,14 @@ function writePersisted(state: DemoGuidedPersisted) {
 }
 
 export function hydrateDemoGuidedState(): DemoGuidedPersisted {
-  memoryState = readPersisted();
+  if (typeof window !== "undefined" && isDemoModeActive()) {
+    try {
+      window.localStorage.removeItem(DEMO_GUIDED_STORAGE_KEY);
+    } catch {
+      /* ignore quota */
+    }
+  }
+  memoryState = { ...DEFAULT_STATE };
   return memoryState;
 }
 

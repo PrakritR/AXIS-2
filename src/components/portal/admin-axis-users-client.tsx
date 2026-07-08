@@ -306,7 +306,7 @@ function ManagerDetailRow({
 }) {
   return (
     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+      <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
         <ManagerDetailContent row={row} onRefresh={onRefresh} showToast={showToast} />
       </td>
     </tr>
@@ -447,7 +447,7 @@ function SimpleAccountDetailRow({
 }) {
   return (
     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+      <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
         <SimpleAccountDetailContent
           row={row}
           apiPath={apiPath}
@@ -744,7 +744,6 @@ export function AdminAxisUsersClient() {
               <table className={PORTAL_DATA_TABLE}>
                 <thead>
                   <tr className={PORTAL_TABLE_HEAD_ROW}>
-                    <th className={`${MANAGER_TABLE_TH} text-left`}>Category</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Account</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Plan</th>
                     <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
@@ -761,9 +760,6 @@ export function AdminAxisUsersClient() {
                           onClick={createPortalRowExpandClick(() => setExpandedKey(isOpen ? null : rowKey))}
                           aria-expanded={isOpen}
                         >
-                          <td className={PORTAL_TABLE_TD}>
-                            <RolePill kind={row.kind} />
-                          </td>
                           <td className={PORTAL_TABLE_TD}>
                             <PortalTableInlineExpand expanded={isOpen} className="font-semibold text-foreground">
                               {row.fullName || row.email}

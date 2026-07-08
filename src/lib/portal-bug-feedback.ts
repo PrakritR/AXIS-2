@@ -4,7 +4,7 @@ import { normalizeBugFeedbackRow } from "@/lib/portal-bug-feedback-utils";
 
 export type BugFeedbackType = "bug" | "feedback";
 export type BugFeedbackReporterRole = "manager" | "resident" | "admin" | "pro" | "vendor";
-export type BugFeedbackStatus = "open" | "reviewing" | "resolved" | "closed";
+export type BugFeedbackStatus = "open" | "in_progress" | "completed";
 export type BugSeverity = "low" | "medium" | "high" | "critical";
 
 export type PortalBugFeedbackRow = {
