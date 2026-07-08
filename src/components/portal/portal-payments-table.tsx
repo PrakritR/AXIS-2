@@ -13,6 +13,7 @@ import {
   PORTAL_TABLE_TD,
   PORTAL_TABLE_TR_EXPANDABLE,
   PortalDataTableColGroup,
+  PortalTableExpandChevron,
   PortalTableInlineExpand,
   createPortalRowExpandClick,
   portalTableColumnPercents,
@@ -79,28 +80,34 @@ export function PortalPaymentsTable({
                     aria-label={selection!.selectLabel?.(row) ?? `Select ${row.charge}`}
                   />
                 ) : null}
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 items-start justify-between gap-3 text-left"
-                  onClick={() => onExpand(expanded ? null : row.id)}
-                  aria-expanded={expanded}
-                >
+                <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <PortalTableInlineExpand expanded={expanded} className="truncate font-semibold text-foreground">
-                      {row.charge}
-                    </PortalTableInlineExpand>
+                    <div className="flex min-w-0 items-start gap-1.5">
+                      <div className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                        {renderChargeCell ? renderChargeCell(row, expanded) : row.charge}
+                      </div>
+                      <button
+                        type="button"
+                        className="mt-0.5 shrink-0 rounded p-0.5 text-muted hover:bg-accent/50 hover:text-foreground"
+                        onClick={() => onExpand(expanded ? null : row.id)}
+                        aria-expanded={expanded}
+                        aria-label={expanded ? `Collapse ${row.charge}` : `Expand ${row.charge}`}
+                      >
+                        <PortalTableExpandChevron expanded={expanded} />
+                      </button>
+                    </div>
                     <p className="mt-0.5 truncate text-xs text-muted">{row.property}</p>
                     <p className="mt-0.5 truncate text-xs text-muted">{row.payee}</p>
-                    <p className="mt-0.5 text-xs text-muted">
+                    <div className="mt-0.5 text-xs text-muted">
                       {renderDueDateCell ? renderDueDateCell(row) : row.dueDate}
-                    </p>
+                    </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-base font-bold tabular-nums text-foreground">
+                    <div className="text-base font-bold tabular-nums text-foreground">
                       {renderAmountCell ? renderAmountCell(row) : row.amount}
-                    </p>
+                    </div>
                   </div>
-                </button>
+                </div>
               </div>
               {expanded ? (
                 <div className="mt-3 border-t border-border pt-3">
