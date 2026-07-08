@@ -160,7 +160,7 @@ async function fetchProperties(db: Db, managerUserId: string): Promise<MockPrope
         adminPublishLive: record.status === "live" ? true : property.adminPublishLive,
       };
     })
-    .filter((row): row is MockProperty => Boolean(row));
+    .filter((row): row is NonNullable<typeof row> => row != null) as MockProperty[];
 }
 
 async function fetchSchedule(db: Db, managerUserId: string): Promise<DemoScheduleSeed> {
@@ -328,7 +328,7 @@ export async function fetchDemoPortalMirrorSnapshot(): Promise<DemoDataSnapshot 
     properties: remapManagerScope(properties),
     applications: remapManagerScope(
       remapResidentScope(applications, CANONICAL_DEMO_RESIDENT_EMAIL),
-    ),
+    ) as DemoApplicantRow[],
     charges: remapManagerScope(remapResidentScope(charges, CANONICAL_DEMO_RESIDENT_EMAIL)),
     rentProfiles: remapManagerScope(remapResidentScope(rentProfiles, CANONICAL_DEMO_RESIDENT_EMAIL)),
     leases: remapManagerScope(leases),

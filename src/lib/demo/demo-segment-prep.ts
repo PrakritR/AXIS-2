@@ -71,8 +71,8 @@ export async function prepareDemoSegment(segment: DemoSegment): Promise<{ proper
       ...buildDemoBlankSnapshot(),
       properties: idle.properties,
       applications: idle.applications.filter((a) => a.bucket === "approved"),
-      leases: idle.leases.filter((l) => l.bucket === "completed" || l.status === "Fully Signed"),
-      charges: idle.charges.filter((c) => c.status === "pending" || c.status === "overdue"),
+      leases: idle.leases.filter((l) => l.status === "Fully Signed"),
+      charges: idle.charges.filter((c) => c.status === "pending"),
       rentProfiles: idle.rentProfiles,
       managerInbox: idle.managerInbox.slice(0, 3),
       residentInbox: idle.residentInbox.slice(0, 3),
@@ -91,7 +91,7 @@ export async function prepareDemoSegment(segment: DemoSegment): Promise<{ proper
         ? idle.properties.filter((p) => p.id === propertyId)
         : idle.properties.slice(0, 1),
       applications: idle.applications.filter((a) => a.bucket === "approved").slice(0, 1),
-      leases: idle.leases.filter((l) => l.bucket === "completed" || l.status === "Fully Signed").slice(0, 1),
+      leases: idle.leases.filter((l) => l.status === "Fully Signed").slice(0, 1),
       vendors: idle.vendors,
     });
     if (propertyId) {

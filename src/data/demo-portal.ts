@@ -57,6 +57,10 @@ export type DemoApplicantRow = {
   backgroundCheckStatus?: ApplicationBackgroundCheckStatus;
   /** Vendor screening report (Certn) with manager-facing pros/cons summary. */
   screening?: ApplicationScreeningReport;
+  /** Public Axis application id when linked to a resident account. */
+  axisId?: string;
+  /** Linked resident auth user id when known. */
+  residentUserId?: string | null;
   /** Checkr criminal background check (clear/consider) — run per-applicant on demand. */
   backgroundCheck?: ApplicationBackgroundCheck;
   /** Extra fields only present on manually-added residents. */
@@ -189,6 +193,8 @@ export type DemoManagerWorkOrderRow = {
   photoDataUrls?: string[];
   vendorId?: string;
   vendorName?: string;
+  /** Populated once the vendor signs up and links to manager_vendor_records. */
+  vendorUserId?: string | null;
   vendorAssignedAt?: string;
   /** Manager handles the work themselves — no vendor assigned, no vendor email sent. */
   selfAssigned?: boolean;

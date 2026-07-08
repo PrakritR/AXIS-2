@@ -34,6 +34,8 @@ export type ManagerVendorRow = {
   achPaymentsEnabled?: boolean;
   /** Derived snapshot of enabled payout methods (zelle / venmo / ach). */
   acceptedPaymentMethods?: ("zelle" | "venmo" | "ach")[];
+  /** Auth user id after the vendor accepts an invite and signs up. */
+  vendorUserId?: string | null;
   /** Synthetic settings row only — default vendor id per trade category. */
   categoryDefaults?: Record<string, string>;
   createdAt?: string;

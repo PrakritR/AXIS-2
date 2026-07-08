@@ -19,7 +19,7 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import { readManagerVendorRows, writeManagerVendorRows, type ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { readWorkOrderBids, upsertWorkOrderBid, WORK_ORDER_BIDS_EVENT } from "@/lib/work-order-bids-storage";
-import { createServiceRequest } from "@/lib/service-requests-storage";
+import { createServiceRequest, CUSTOM_SERVICE_REQUEST_OFFER_ID } from "@/lib/service-requests-storage";
 
 export const DEMO_GUIDED_WORK_ORDER_ID = "demo-guided-wo";
 
@@ -43,7 +43,8 @@ export function ensureDemoVendorDirectory(): ManagerVendorRow {
     name: CANONICAL_DEMO_VENDOR_NAME,
     email: CANONICAL_DEMO_VENDOR_EMAIL,
     phone: "(206) 555-0188",
-    category: "HVAC",
+    trade: "HVAC",
+    notes: "",
     active: true,
     managerUserId,
     vendorUserId: DEMO_VENDOR_USER_ID,
@@ -58,18 +59,17 @@ export function createDemoResidentServiceRequest(propertyId: string): string {
   );
   const id = `demo-guided-req-${Date.now()}`;
   createServiceRequest({
-    id,
-    title: "Kitchen sink slow drain",
-    category: "Plumbing",
-    priority: "Normal",
-    description: "Water backs up in the kitchen sink after a few seconds. Started this week.",
+    offerId: CUSTOM_SERVICE_REQUEST_OFFER_ID,
+    offerName: "Kitchen sink slow drain",
+    offerDescription: "Water backs up in the kitchen sink after a few seconds. Started this week.",
+    price: "",
+    deposit: "",
     propertyId: propertyId || app?.propertyId || "",
-    propertyLabel: app?.property || "Harbor View House",
-    roomLabel: app?.application?.roomChoice1 ? "Room A" : "—",
+    returnByDate: "",
+    notes: "Kitchen sink slow drain — water backs up after a few seconds.",
     residentName: CANONICAL_DEMO_GUIDED_NAME,
     residentEmail: CANONICAL_DEMO_GUIDED_EMAIL,
     managerUserId: resolveDemoManagerScopeUserId(),
-    status: "pending",
   });
   return id;
 }

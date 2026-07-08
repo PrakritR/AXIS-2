@@ -12,9 +12,10 @@ export type VendorApiActor = {
 };
 
 /** Vendor API routes must allow multi-role users (profile_roles), not only profiles.role. */
-export async function requireVendorApiAccess():
+export async function requireVendorApiAccess(): Promise<
   | { ok: true; actor: VendorApiActor }
-  | { ok: false; status: 401 | 403 } {
+  | { ok: false; status: 401 | 403 }
+> {
   const ctx = await getPortalAccessContext();
   if (!ctx.user) return { ok: false, status: 401 };
   if (!hasRole(ctx, "vendor")) return { ok: false, status: 403 };
