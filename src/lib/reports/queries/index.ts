@@ -7,7 +7,7 @@ import {
   expenseTaxStatusLabel,
   resolveExpenseTaxDeductible,
 } from "@/lib/reports/categories";
-import { primeSystemChartOfAccounts } from "@/lib/reports/chart-of-accounts-store";
+import { primeSystemChartOfAccounts, systemChartAccountByCode } from "@/lib/reports/chart-of-accounts-store";
 import { humanizeUnitLabel, loadManagerReportDisplayContext } from "@/lib/reports/display-context";
 import { scopeLabel } from "@/lib/reports/formal-documents/spec";
 import { centsToUsd, dollarsToCents } from "@/lib/reports/money";
@@ -20,6 +20,8 @@ import {
   queryGeneralLedger,
   queryTrialBalance,
   queryPayoutHistory,
+  queryTrustAccountBalance,
+  queryFinancialDiagnostics,
 } from "@/lib/reports/queries/gl-reports";
 
 function defaultDateRange(from?: string, to?: string): { from: string; to: string } {
@@ -267,9 +269,16 @@ export async function queryIncomeStatement(
   const [{ data: incomeRows }, { data: expenseRows }] = await Promise.all([incomeQuery, expenseQuery]);
 
   const incomeByCat = new Map<string, number>();
+  let excludedLiabilityCents = 0;
   for (const row of incomeRows ?? []) {
     const code = String(row.category_code);
-    incomeByCat.set(code, (incomeByCat.get(code) ?? 0) + Number(row.amount_cents));
+    const acct = systemChartAccountByCode(code);
+    const cents = Number(row.amount_cents);
+    if (acct && acct.accountType !== "income") {
+      excludedLiabilityCents += cents;
+      continue;
+    }
+    incomeByCat.set(code, (incomeByCat.get(code) ?? 0) + cents);
   }
 
   const expenseByCat = new Map<string, number>();
@@ -324,7 +333,17 @@ export async function queryIncomeStatement(
       { key: "amount", label: "Amount", align: "right", format: "money" },
     ],
     rows,
-    meta: { from, to, totalIncome: centsToUsd(totalIncome), totalExpense: centsToUsd(totalExpense) },
+    meta: {
+      from,
+      to,
+      totalIncome: centsToUsd(totalIncome),
+      totalExpense: centsToUsd(totalExpense),
+      ...(excludedLiabilityCents > 0
+        ? {
+            note: `${centsToUsd(excludedLiabilityCents)} in non-income ledger payments (e.g. security deposits) excluded from rental income.`,
+          }
+        : {}),
+    },
   };
 }
 
@@ -1014,6 +1033,10 @@ export async function runManagerReport(
       return queryCashFlowStatement(db, managerUserId, filters);
     case "payout-history":
       return queryPayoutHistory(db, managerUserId, filters);
+    case "trust-account-balance":
+      return queryTrustAccountBalance(db, managerUserId, filters);
+    case "financial-diagnostics":
+      return queryFinancialDiagnostics(db, managerUserId, filters);
     default:
       return null;
   }

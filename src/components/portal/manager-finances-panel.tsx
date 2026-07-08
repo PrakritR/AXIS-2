@@ -357,6 +357,8 @@ const FINANCE_TABS = [
   { id: "general-ledger", label: "General ledger" },
   { id: "cash-flow-statement", label: "Cash flow" },
   { id: "payout-history", label: "Payout history" },
+  { id: "trust-account-balance", label: "Trust account" },
+  { id: "financial-diagnostics", label: "Diagnostics" },
 ] as const;
 
 const LEDGER_TAB_IDS = new Set([
@@ -365,6 +367,8 @@ const LEDGER_TAB_IDS = new Set([
   "general-ledger",
   "cash-flow-statement",
   "payout-history",
+  "trust-account-balance",
+  "financial-diagnostics",
 ]);
 
 const TAB_TO_REPORT: Record<string, string> = {
@@ -375,6 +379,8 @@ const TAB_TO_REPORT: Record<string, string> = {
   "general-ledger": "general-ledger",
   "cash-flow-statement": "cash-flow-statement",
   "payout-history": "payout-history",
+  "trust-account-balance": "trust-account-balance",
+  "financial-diagnostics": "financial-diagnostics",
 };
 
 const DEFAULT_SORT: Record<string, { key: string; dir: "asc" | "desc" }> = {
@@ -385,6 +391,8 @@ const DEFAULT_SORT: Record<string, { key: string; dir: "asc" | "desc" }> = {
   "general-ledger": { key: "date", dir: "asc" },
   "cash-flow-statement": { key: "line", dir: "asc" },
   "payout-history": { key: "date", dir: "desc" },
+  "trust-account-balance": { key: "line", dir: "asc" },
+  "financial-diagnostics": { key: "severity", dir: "asc" },
 };
 
 function defaultFilters(): ReportFilterState {

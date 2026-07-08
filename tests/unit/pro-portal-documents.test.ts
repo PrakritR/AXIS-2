@@ -34,6 +34,8 @@ describe("pro portal documents section", () => {
       "general-ledger",
       "cash-flow-statement",
       "payout-history",
+      "trust-account-balance",
+      "financial-diagnostics",
     ]);
   });
 

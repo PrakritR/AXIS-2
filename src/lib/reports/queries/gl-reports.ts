@@ -346,3 +346,160 @@ export async function queryPayoutHistory(
     meta: { from, to, count: rows.length },
   };
 }
+
+const TRUST_LIABILITY_CODE = "security_deposit_liability";
+const TRUST_CASH_CODE = "trust_account_security_deposits";
+
+function glLiabilityBalanceCents(totals: Map<string, { debits: number; credits: number }>, code: string): number {
+  const sums = totals.get(code) ?? { debits: 0, credits: 0 };
+  return sums.credits - sums.debits;
+}
+
+function glAssetBalanceCents(totals: Map<string, { debits: number; credits: number }>, code: string): number {
+  const sums = totals.get(code) ?? { debits: 0, credits: 0 };
+  return sums.debits - sums.credits;
+}
+
+export async function queryTrustAccountBalance(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  await primeSystemChartOfAccounts(db);
+  const { to } = defaultDateRange(filters.from, filters.to);
+
+  const entries = await loadJournalEntriesThrough(db, managerUserId, to, filters.propertyId);
+  const totals = aggregateAccountTotals(entries);
+
+  const glTrustCashCents = glAssetBalanceCents(totals, TRUST_CASH_CODE);
+  const glLiabilityCents = glLiabilityBalanceCents(totals, TRUST_LIABILITY_CODE);
+
+  const { sumHeldDepositsCents } = await import("@/lib/reports/security-deposits");
+  const subLedgerCents = await sumHeldDepositsCents(db, managerUserId, filters.propertyId);
+
+  let bankBalanceCents = glTrustCashCents;
+  const { data: trustAccounts } = await db
+    .from("manager_bank_accounts")
+    .select("id")
+    .eq("manager_user_id", managerUserId)
+    .eq("account_type", "trust_security_deposit")
+    .eq("is_active", true)
+    .limit(5);
+
+  if (trustAccounts && trustAccounts.length > 0) {
+    const accountIds = trustAccounts.map((a) => String(a.id));
+    const { data: statements } = await db
+      .from("manager_bank_statements")
+      .select("closing_balance_cents")
+      .in("bank_account_id", accountIds)
+      .order("statement_date", { ascending: false })
+      .limit(1);
+    if (statements?.[0]) bankBalanceCents = Number(statements[0].closing_balance_cents);
+  }
+
+  const bankVsGl = bankBalanceCents - glTrustCashCents;
+  const glVsSub = glLiabilityCents - subLedgerCents;
+  const balanced = bankVsGl === 0 && glVsSub === 0;
+
+  const rows = [
+    { line: "Trust bank balance", source: "Bank statement (or GL trust cash)", amount: centsToUsd(bankBalanceCents), status: bankVsGl === 0 ? "Matched" : "Mismatch" },
+    { line: "GL trust cash account", source: TRUST_CASH_CODE, amount: centsToUsd(glTrustCashCents), status: bankVsGl === 0 ? "Matched" : `Δ ${centsToUsd(Math.abs(bankVsGl))}` },
+    { line: "GL deposit liability", source: TRUST_LIABILITY_CODE, amount: centsToUsd(glLiabilityCents), status: glVsSub === 0 ? "Matched" : `Δ ${centsToUsd(Math.abs(glVsSub))}` },
+    { line: "Deposit sub-ledger total held", source: "security_deposit_ledger", amount: centsToUsd(subLedgerCents), status: glVsSub === 0 ? "Matched" : `Δ ${centsToUsd(Math.abs(glVsSub))}` },
+  ];
+
+  return {
+    id: "trust-account-balance",
+    title: "Trust Account Balance",
+    columns: [
+      { key: "line", label: "Line" },
+      { key: "source", label: "Source" },
+      { key: "amount", label: "Amount", align: "right", format: "money" },
+      { key: "status", label: "Status" },
+    ],
+    rows,
+    meta: { to, balanced, note: balanced ? "Three-way trust check passed." : "Trust account mismatch detected." },
+  };
+}
+
+export async function queryFinancialDiagnostics(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  await primeSystemChartOfAccounts(db);
+  const { to } = defaultDateRange(filters.from, filters.to);
+  const rows: Record<string, string | boolean>[] = [];
+
+  const entries = await loadJournalEntriesThrough(db, managerUserId, to, filters.propertyId);
+  const totals = aggregateAccountTotals(entries);
+  let totalDebits = 0;
+  let totalCredits = 0;
+  for (const sums of totals.values()) {
+    totalDebits += sums.debits;
+    totalCredits += sums.credits;
+  }
+  if (totalDebits !== totalCredits) {
+    rows.push({
+      severity: "high",
+      issue: "Unbalanced journal entries",
+      detail: `Debits ${centsToUsd(totalDebits)} ≠ credits ${centsToUsd(totalCredits)}`,
+      action: "Run trial balance",
+    });
+  }
+
+  const trustReport = await queryTrustAccountBalance(db, managerUserId, filters);
+  if (trustReport.meta?.balanced === false) {
+    rows.push({
+      severity: "high",
+      issue: "Trust / deposit liability mismatch",
+      detail: String(trustReport.meta?.note ?? ""),
+      action: "Open Trust Account Balance report",
+    });
+  }
+
+  const { reclassifyMisclassifiedDeposits } = await import("@/lib/reports/security-deposits");
+  const reclassifyPreview = await reclassifyMisclassifiedDeposits(db, managerUserId, { dryRun: true });
+  if (reclassifyPreview.rowCount > 0) {
+    rows.push({
+      severity: "medium",
+      issue: "Misclassified historical security deposits",
+      detail: `${reclassifyPreview.rowCount} payment(s), ${centsToUsd(reclassifyPreview.totalCents)} as income`,
+      action: "Run deposit reclassification",
+    });
+  }
+
+  const { data: expiredDocs } = await db
+    .from("manager_documents")
+    .select("id")
+    .eq("manager_user_id", managerUserId)
+    .eq("category", "insurance")
+    .is("deleted_at", null)
+    .lt("expires_at", to)
+    .limit(20);
+  if ((expiredDocs ?? []).length > 0) {
+    rows.push({
+      severity: "medium",
+      issue: "Expired insurance documents",
+      detail: `${expiredDocs!.length}+ expired insurance file(s)`,
+      action: "Review Documents library",
+    });
+  }
+
+  if (rows.length === 0) {
+    rows.push({ severity: "ok", issue: "No issues flagged", detail: "Books look healthy", action: "—" });
+  }
+
+  return {
+    id: "financial-diagnostics",
+    title: "Financial Diagnostics",
+    columns: [
+      { key: "severity", label: "Severity" },
+      { key: "issue", label: "Issue" },
+      { key: "detail", label: "Detail" },
+      { key: "action", label: "Suggested action" },
+    ],
+    rows,
+    meta: { to, issueCount: rows.filter((r) => r.severity !== "ok").length },
+  };
+}

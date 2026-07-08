@@ -487,6 +487,22 @@ Phase 3 excludes non-income accounts properly.
 
 **Stripe Dashboard:** add events `transfer.created`, `payout.*`, `charge.refunded`, `refund.*`, `charge.dispute.*`, `payment_intent.payment_failed` to the webhook destination alongside existing checkout/subscription events.
 
+# Financials Phase 3: security deposit trust sub-ledger
+
+**Schema** — `supabase/migrations/20260712110000_security_deposit_trust.sql`: `security_deposit_ledger` (per-deposit sub-ledger with disposition status/itemization), `manager_bank_accounts` / `manager_bank_statements` / `manager_bank_statement_lines` (reconciliation foundation), `manager_reclassification_log` (audit).
+
+**Lib** — `src/lib/reports/security-deposits.ts`: `receiveSecurityDeposit()` (hooked from `syncLedgerPaymentEntry` on paid `security_deposit` charges), `disposeSecurityDeposit()` (move-out refund/withhold + GL), `reclassifyMisclassifiedDeposits()` (dry-run + opt-in historical fix from `other_income` → liability).
+
+**GL** — `postGlDepositDisposition` / `postGlReclassifyDeposit` in `gl-posting.ts` (`deposit_refund` / `adjustment` source types).
+
+**API** — `POST /api/reports/security-deposits/reclassify` (`dryRun` default true), `GET /api/security-deposits`, `POST /api/security-deposits/[id]/dispose`.
+
+**Reports** — `queryTrustAccountBalance` (three-way bank = GL trust cash = GL liability = sub-ledger), `queryFinancialDiagnostics` (unbalanced journals, trust mismatch, misclassified deposits, expired insurance). Finances tabs **Trust account** + **Diagnostics**. Income statement excludes non-income ledger categories (deposits no longer inflate rental income).
+
+**PostHog:** `security_deposit_disposed`, `security_deposit_reclassification_run` (server).
+
+**Deploy:** `npm run db:push` for `security_deposit_ledger` + bank tables before sub-ledger writes succeed.
+
 # Documents module (Phase 1: document library foundation)
 
 A general-purpose, manager-owned document store distinct from the ephemeral

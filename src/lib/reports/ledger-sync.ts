@@ -6,6 +6,7 @@ import {
 } from "@/lib/household-charges";
 import { categoryCodeForChargeKind } from "@/lib/reports/categories";
 import { postGlChargeEntry, postGlPaymentEntry } from "@/lib/reports/gl-posting";
+import { receiveSecurityDeposit } from "@/lib/reports/security-deposits";
 import { dollarsToCents } from "@/lib/reports/money";
 import { parseMoneyAmount } from "@/lib/parse-money";
 
@@ -240,6 +241,10 @@ export async function syncLedgerPaymentEntry(
   if (row) {
     const ledgerEntryId = await upsertLedgerEntryRow(db, row);
     await mirrorGlForLedgerRow(db, row, ledgerEntryId);
+
+    if (charge.kind === "security_deposit") {
+      await receiveSecurityDeposit(db, charge, { receivedDate: row.posted_date });
+    }
   }
 }
 

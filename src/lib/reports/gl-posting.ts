@@ -259,6 +259,115 @@ export async function postGlExpenseEntry(db: SupabaseClient, input: GlExpenseInp
   });
 }
 
+export type GlDepositDispositionInput = {
+  managerUserId: string;
+  sourceId: string;
+  entryDate: string;
+  refundCents: number;
+  withholdCents: number;
+  propertyId?: string | null;
+  residentUserId?: string | null;
+  memo?: string | null;
+};
+
+/** Deposit move-out: DR liability, CR trust cash (refund) and/or income (withhold). */
+export async function postGlDepositDisposition(
+  db: SupabaseClient,
+  input: GlDepositDispositionInput,
+): Promise<string | null> {
+  const refundCents = Math.max(0, Math.round(input.refundCents));
+  const withholdCents = Math.max(0, Math.round(input.withholdCents));
+  const total = refundCents + withholdCents;
+  if (total <= 0) return null;
+
+  const lines: GlJournalLineInput[] = [
+    {
+      accountCode: "security_deposit_liability",
+      debitCents: total,
+      creditCents: 0,
+      propertyId: input.propertyId,
+      residentUserId: input.residentUserId,
+      memo: input.memo,
+    },
+  ];
+  if (refundCents > 0) {
+    lines.push({
+      accountCode: "trust_account_security_deposits",
+      debitCents: 0,
+      creditCents: refundCents,
+      propertyId: input.propertyId,
+      residentUserId: input.residentUserId,
+      memo: input.memo,
+    });
+  }
+  if (withholdCents > 0) {
+    lines.push({
+      accountCode: "other_income",
+      debitCents: 0,
+      creditCents: withholdCents,
+      propertyId: input.propertyId,
+      residentUserId: input.residentUserId,
+      memo: input.memo,
+    });
+  }
+
+  return insertJournalEntry(db, {
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+    entryDate: input.entryDate,
+    memo: input.memo ?? "Security deposit disposition",
+    sourceType: "deposit_refund",
+    sourceId: input.sourceId,
+    lines,
+  });
+}
+
+export type GlReclassifyDepositInput = {
+  managerUserId: string;
+  sourceId: string;
+  entryDate: string;
+  amountCents: number;
+  propertyId?: string | null;
+  residentUserId?: string | null;
+  memo?: string | null;
+};
+
+/** Historical fix: DR misclassified income / CR deposit liability (current-dated). */
+export async function postGlReclassifyDeposit(
+  db: SupabaseClient,
+  input: GlReclassifyDepositInput,
+): Promise<string | null> {
+  const amountCents = Math.max(0, Math.round(input.amountCents));
+  if (amountCents <= 0) return null;
+
+  return insertJournalEntry(db, {
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+    entryDate: input.entryDate,
+    memo: input.memo ?? "Security deposit reclassification",
+    sourceType: "adjustment",
+    sourceId: input.sourceId,
+    lines: [
+      {
+        accountCode: "other_income",
+        debitCents: amountCents,
+        creditCents: 0,
+        propertyId: input.propertyId,
+        residentUserId: input.residentUserId,
+        memo: input.memo,
+      },
+      {
+        accountCode: "security_deposit_liability",
+        debitCents: 0,
+        creditCents: amountCents,
+        propertyId: input.propertyId,
+        residentUserId: input.residentUserId,
+        memo: input.memo,
+      },
+    ],
+  });
+}
+
 export type GlRefundInput = {
   managerUserId: string;
   sourceChargeId: string;

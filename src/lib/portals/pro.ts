@@ -62,6 +62,8 @@ export const proPortal: PortalDefinition = {
         { id: "general-ledger", label: "General ledger" },
         { id: "cash-flow-statement", label: "Cash flow" },
         { id: "payout-history", label: "Payout history" },
+        { id: "trust-account-balance", label: "Trust account" },
+        { id: "financial-diagnostics", label: "Diagnostics" },
       ],
     },
     {
