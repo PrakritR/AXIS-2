@@ -61,6 +61,7 @@ export const MANAGER_REPORT_IDS = [
   "balance-sheet",
   "general-ledger",
   "cash-flow-statement",
+  "payout-history",
 ] as const;
 
 export const RESIDENT_REPORT_IDS = ["resident-balance", "resident-ledger"] as const;

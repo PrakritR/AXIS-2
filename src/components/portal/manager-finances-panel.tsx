@@ -356,9 +356,16 @@ const FINANCE_TABS = [
   { id: "balance-sheet", label: "Balance sheet" },
   { id: "general-ledger", label: "General ledger" },
   { id: "cash-flow-statement", label: "Cash flow" },
+  { id: "payout-history", label: "Payout history" },
 ] as const;
 
-const LEDGER_TAB_IDS = new Set(["trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement"]);
+const LEDGER_TAB_IDS = new Set([
+  "trial-balance",
+  "balance-sheet",
+  "general-ledger",
+  "cash-flow-statement",
+  "payout-history",
+]);
 
 const TAB_TO_REPORT: Record<string, string> = {
   income: "rent-receipts",
@@ -367,6 +374,7 @@ const TAB_TO_REPORT: Record<string, string> = {
   "balance-sheet": "balance-sheet",
   "general-ledger": "general-ledger",
   "cash-flow-statement": "cash-flow-statement",
+  "payout-history": "payout-history",
 };
 
 const DEFAULT_SORT: Record<string, { key: string; dir: "asc" | "desc" }> = {
@@ -376,6 +384,7 @@ const DEFAULT_SORT: Record<string, { key: string; dir: "asc" | "desc" }> = {
   "balance-sheet": { key: "account", dir: "asc" },
   "general-ledger": { key: "date", dir: "asc" },
   "cash-flow-statement": { key: "line", dir: "asc" },
+  "payout-history": { key: "date", dir: "desc" },
 };
 
 function defaultFilters(): ReportFilterState {

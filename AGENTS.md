@@ -469,6 +469,24 @@ Phase 3 excludes non-income accounts properly.
 
 **Deploy:** `npm run db:push` for `gl_journal_*` tables before GL posting will succeed in dev/staging/production.
 
+# Financials Phase 2: Stripe webhook completeness
+
+**Schema** — `supabase/migrations/20260712100000_stripe_payouts_disputes.sql`: `stripe_payouts` (Connect bank payouts), `stripe_disputes`, plus `profiles.stripe_connect_charges_enabled` / `stripe_connect_payouts_enabled` cache.
+
+**Ledger fee capture** — `src/lib/stripe-ledger-fees.ts` populates `stripe_fee_cents`, `net_cents`, `axis_fee_cents`, `stripe_charge_id` on payment ledger rows after checkout (balance transaction fetch).
+
+**Webhook handlers** — `src/lib/stripe-webhook-financials.ts` + extended `src/app/api/stripe/webhook/route.ts`:
+- `account.updated` → Connect readiness on profiles
+- `transfer.created` → `stripe_transfer_id` / `net_cents` on ledger
+- `payout.paid` / `payout.failed` / `payout.canceled` → `stripe_payouts` (resolves manager via `profiles.stripe_connect_account_id`)
+- `charge.refunded` / `refund.*` → refund ledger row + `postGlRefundEntry`
+- `charge.dispute.*` → `stripe_disputes`
+- `payment_intent.payment_failed` → metadata on charge row (does not change `HouseholdCharge.status` — NSF fee status is Phase 6)
+
+**Reports** — `queryPayoutHistory` in `gl-reports.ts`; Finances **Payout history** tab + `run_financial_report` tool.
+
+**Stripe Dashboard:** add events `transfer.created`, `payout.*`, `charge.refunded`, `refund.*`, `charge.dispute.*`, `payment_intent.payment_failed` to the webhook destination alongside existing checkout/subscription events.
+
 # Documents module (Phase 1: document library foundation)
 
 A general-purpose, manager-owned document store distinct from the ephemeral

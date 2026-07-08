@@ -103,7 +103,7 @@ type LedgerEntryRow = {
   property_id: string;
   unit_label: string;
   lease_id: string | null;
-  entry_type: "charge" | "payment";
+  entry_type: "charge" | "payment" | "refund";
   category_code: string;
   amount_cents: number;
   due_date: string | null;
@@ -241,6 +241,53 @@ export async function syncLedgerPaymentEntry(
     const ledgerEntryId = await upsertLedgerEntryRow(db, row);
     await mirrorGlForLedgerRow(db, row, ledgerEntryId);
   }
+}
+
+export type LedgerRefundInput = {
+  managerUserId: string;
+  sourceChargeId: string;
+  categoryCode: string;
+  amountCents: number;
+  postedDate: string;
+  stripeChargeId: string;
+  stripeRefundId: string;
+  propertyId?: string | null;
+  residentUserId?: string | null;
+  residentEmail?: string | null;
+  description?: string | null;
+};
+
+export async function syncLedgerRefundEntry(
+  db: SupabaseClient,
+  input: LedgerRefundInput,
+): Promise<string | null> {
+  if (input.amountCents <= 0 || !isUuid(input.managerUserId)) return null;
+
+  const row: LedgerEntryRow = {
+    manager_user_id: input.managerUserId,
+    resident_user_id: isUuid(input.residentUserId) ? input.residentUserId! : null,
+    resident_email: (input.residentEmail ?? "").trim().toLowerCase(),
+    property_id: input.propertyId ?? "",
+    unit_label: "",
+    lease_id: null,
+    entry_type: "refund",
+    category_code: input.categoryCode,
+    amount_cents: input.amountCents,
+    due_date: null,
+    posted_date: input.postedDate,
+    source_charge_id: input.sourceChargeId,
+    description: input.description ?? `Refund — ${input.sourceChargeId}`,
+    updated_at: new Date().toISOString(),
+  };
+
+  const ledgerId = await upsertLedgerEntryRow(db, row);
+  if (ledgerId) {
+    await db
+      .from("ledger_entries")
+      .update({ stripe_charge_id: input.stripeChargeId, updated_at: new Date().toISOString() })
+      .eq("id", ledgerId);
+  }
+  return ledgerId;
 }
 
 /**

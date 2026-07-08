@@ -19,6 +19,7 @@ import {
   queryCashFlowStatement,
   queryGeneralLedger,
   queryTrialBalance,
+  queryPayoutHistory,
 } from "@/lib/reports/queries/gl-reports";
 
 function defaultDateRange(from?: string, to?: string): { from: string; to: string } {
@@ -1011,6 +1012,8 @@ export async function runManagerReport(
       return queryGeneralLedger(db, managerUserId, filters);
     case "cash-flow-statement":
       return queryCashFlowStatement(db, managerUserId, filters);
+    case "payout-history":
+      return queryPayoutHistory(db, managerUserId, filters);
     default:
       return null;
   }

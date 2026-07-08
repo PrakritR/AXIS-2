@@ -33,6 +33,7 @@ describe("pro portal documents section", () => {
       "balance-sheet",
       "general-ledger",
       "cash-flow-statement",
+      "payout-history",
     ]);
   });
 

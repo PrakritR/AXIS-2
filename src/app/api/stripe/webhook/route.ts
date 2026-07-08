@@ -13,6 +13,15 @@ import { stripeInvoiceSubscriptionId } from "@/lib/stripe-subscription-helpers";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { markApplicationFeePaidFromStripeSession } from "@/lib/stripe-application-fee";
 import { markHouseholdChargePaidFromStripeSession } from "@/lib/stripe-household-charge";
+import { enrichLedgerFromCheckoutSession } from "@/lib/stripe-ledger-fees";
+import {
+  handleConnectPayoutEvent,
+  handlePaymentIntentFailed,
+  handleStripeAccountUpdated,
+  handleStripeDisputeEvent,
+  handleStripeRefund,
+  handleStripeTransferCreated,
+} from "@/lib/stripe-webhook-financials";
 
 export const runtime = "nodejs";
 
@@ -27,7 +36,6 @@ function logCheckoutCompleted(session: Stripe.Checkout.Session) {
   const billing = session.metadata?.billing ?? null;
   const userId = session.metadata?.userId ?? null;
 
-   
   console.info("[stripe webhook] checkout.session.completed", {
     sessionId: session.id,
     customerId,
@@ -36,7 +44,15 @@ function logCheckoutCompleted(session: Stripe.Checkout.Session) {
     billing,
     userId,
   });
+}
 
+async function enrichCheckoutLedgerFees(stripe: Stripe, session: Stripe.Checkout.Session): Promise<void> {
+  const purpose = session.metadata?.purpose;
+  if (purpose !== "household_charge" && purpose !== "rental_application_fee") return;
+  const db = createSupabaseServiceRoleClient();
+  await enrichLedgerFromCheckoutSession(db, stripe, session).catch((e) => {
+    console.error("[stripe webhook] ledger fee enrichment", e);
+  });
 }
 
 export async function POST(req: Request) {
@@ -51,33 +67,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
   }
 
+  const stripe = getStripe();
   let event: Stripe.Event;
   try {
-    const stripe = getStripe();
     event = stripe.webhooks.constructEvent(body, signature, secret);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Invalid signature";
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
+  const db = createSupabaseServiceRoleClient();
+
   try {
     if (event.type === "account.updated") {
       const account = event.data.object as Stripe.Account;
-       
-      console.info("[stripe webhook] account.updated", {
-        accountId: account.id,
-        chargesEnabled: account.charges_enabled,
-        payoutsEnabled: account.payouts_enabled,
+      await handleStripeAccountUpdated(db, account).catch((e) => {
+        console.error("[stripe webhook] account.updated", e);
       });
-      /* Optional: upsert payout readiness into Supabase (e.g. profiles) using service role. */
     }
+
     if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
       const session = event.data.object as Stripe.Checkout.Session;
       logCheckoutCompleted(session);
       if (session.metadata?.purpose === "rental_application_fee") {
         try {
-          const db = createSupabaseServiceRoleClient();
           await markApplicationFeePaidFromStripeSession(db, session);
+          await enrichCheckoutLedgerFees(stripe, session);
           const distinctId = session.client_reference_id ?? session.id;
           track("application_fee_paid", distinctId, { session_id: session.id });
         } catch (e) {
@@ -85,8 +100,8 @@ export async function POST(req: Request) {
         }
       } else if (session.metadata?.purpose === "household_charge") {
         try {
-          const db = createSupabaseServiceRoleClient();
           await markHouseholdChargePaidFromStripeSession(db, session);
+          await enrichCheckoutLedgerFees(stripe, session);
           const distinctId = session.client_reference_id ?? session.id;
           track("household_charge_paid", distinctId, { session_id: session.id });
         } catch (e) {
@@ -99,7 +114,8 @@ export async function POST(req: Request) {
           if (uid) {
             const tier = session.metadata?.tier ?? "";
             const billing = session.metadata?.billing ?? "";
-            const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? "";
+            const subscriptionId =
+              typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? "";
             track("manager_subscription_purchased", uid, { tier, billing, subscription_id: subscriptionId });
             try {
               await reconcileManagerPurchaseWithStripe(uid);
@@ -112,7 +128,7 @@ export async function POST(req: Request) {
         }
       }
     }
-    /* Requires `invoice.paid` in the Stripe webhook destination (Dashboard → Developers → Webhooks). */
+
     if (event.type === "invoice.paid") {
       const inv = event.data.object as Stripe.Invoice;
       const subId = stripeInvoiceSubscriptionId(inv);
@@ -120,17 +136,16 @@ export async function POST(req: Request) {
         try {
           await applyScheduledDowngradeAfterInvoicePaid(subId, inv.billing_reason ?? null);
         } catch (e) {
-           
           console.error("[stripe webhook] invoice.paid scheduled downgrade", e);
         }
       }
     }
+
     if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
       const sub = event.data.object as Stripe.Subscription;
       try {
         if (event.type === "customer.subscription.deleted") {
-          const supabase = createSupabaseServiceRoleClient();
-          await supabase
+          await db
             .from("manager_purchases")
             .update({ tier: "free", billing: "free", stripe_subscription_id: null })
             .eq("stripe_subscription_id", sub.id);
@@ -138,9 +153,56 @@ export async function POST(req: Request) {
           await reconcileManagerPurchaseByStripeSubscriptionId(sub.id);
         }
       } catch (e) {
-         
         console.error("[stripe webhook] subscription event", e);
       }
+    }
+
+    if (event.type === "transfer.created") {
+      await handleStripeTransferCreated(db, event.data.object as Stripe.Transfer).catch((e) => {
+        console.error("[stripe webhook] transfer.created", e);
+      });
+    }
+
+    if (event.type === "payout.paid" || event.type === "payout.failed" || event.type === "payout.canceled") {
+      await handleConnectPayoutEvent(db, event.data.object as Stripe.Payout, event.account).catch((e) => {
+        console.error("[stripe webhook] payout event", e);
+      });
+    }
+
+    if (event.type === "charge.refunded") {
+      const charge = event.data.object as Stripe.Charge;
+      const refunds = charge.refunds?.data ?? [];
+      for (const refund of refunds) {
+        if (refund.status === "succeeded" || refund.status === "pending") {
+          await handleStripeRefund(db, refund, charge.id).catch((e) => {
+            console.error("[stripe webhook] charge.refunded", e);
+          });
+        }
+      }
+    }
+
+    if (event.type === "refund.created" || event.type === "refund.updated") {
+      const refund = event.data.object as Stripe.Refund;
+      if (refund.status === "succeeded") {
+        const chargeId = typeof refund.charge === "string" ? refund.charge : refund.charge?.id;
+        if (chargeId) {
+          await handleStripeRefund(db, refund, chargeId).catch((e) => {
+            console.error("[stripe webhook] refund event", e);
+          });
+        }
+      }
+    }
+
+    if (event.type === "charge.dispute.created" || event.type === "charge.dispute.closed" || event.type === "charge.dispute.updated") {
+      await handleStripeDisputeEvent(db, event.data.object as Stripe.Dispute).catch((e) => {
+        console.error("[stripe webhook] dispute event", e);
+      });
+    }
+
+    if (event.type === "payment_intent.payment_failed") {
+      await handlePaymentIntentFailed(db, event.data.object as Stripe.PaymentIntent).catch((e) => {
+        console.error("[stripe webhook] payment_intent.payment_failed", e);
+      });
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Webhook handler error";

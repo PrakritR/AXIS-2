@@ -303,3 +303,46 @@ export async function queryCashFlowStatement(
     },
   };
 }
+
+export async function queryPayoutHistory(
+  db: SupabaseClient,
+  managerUserId: string,
+  filters: ManagerReportFilters,
+): Promise<ReportResult> {
+  const { from, to } = defaultDateRange(filters.from, filters.to);
+
+  const { data, error } = await db
+    .from("stripe_payouts")
+    .select("stripe_payout_id, amount_cents, currency, status, arrival_date, failure_message, created_at")
+    .eq("manager_user_id", managerUserId)
+    .gte("created_at", `${from}T00:00:00.000Z`)
+    .lte("created_at", `${to}T23:59:59.999Z`)
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []).map((row) => ({
+    date: String(row.created_at ?? "").slice(0, 10),
+    payoutId: row.stripe_payout_id,
+    amount: centsToUsd(Number(row.amount_cents)),
+    status: row.status,
+    arrivalDate: row.arrival_date ?? "",
+    note: row.failure_message ?? "",
+  }));
+
+  return {
+    id: "payout-history",
+    title: "Payout History",
+    columns: [
+      { key: "date", label: "Date", format: "date" },
+      { key: "payoutId", label: "Payout ID" },
+      { key: "amount", label: "Amount", align: "right", format: "money" },
+      { key: "status", label: "Status" },
+      { key: "arrivalDate", label: "Arrival", format: "date" },
+      { key: "note", label: "Note" },
+    ],
+    rows,
+    meta: { from, to, count: rows.length },
+  };
+}

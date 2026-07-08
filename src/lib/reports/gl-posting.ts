@@ -259,6 +259,54 @@ export async function postGlExpenseEntry(db: SupabaseClient, input: GlExpenseInp
   });
 }
 
+export type GlRefundInput = {
+  managerUserId: string;
+  sourceChargeId: string;
+  stripeRefundId: string;
+  categoryCode: string;
+  amountCents: number;
+  entryDate: string;
+  propertyId?: string | null;
+  residentUserId?: string | null;
+  description?: string | null;
+  linkLedgerEntryId?: string | null;
+};
+
+/** Reverse a collected payment: DR income/liability, CR cash. */
+export async function postGlRefundEntry(db: SupabaseClient, input: GlRefundInput): Promise<string | null> {
+  if (input.amountCents <= 0) return null;
+
+  const cashAccount = cashAccountForCategory(input.categoryCode);
+
+  return insertJournalEntry(db, {
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+    entryDate: input.entryDate,
+    memo: input.description ?? `Refund ${input.stripeRefundId}`,
+    sourceType: "refund",
+    sourceId: `refund:${input.sourceChargeId}:${input.stripeRefundId}`,
+    linkLedgerEntryId: input.linkLedgerEntryId,
+    lines: [
+      {
+        accountCode: input.categoryCode,
+        debitCents: input.amountCents,
+        creditCents: 0,
+        propertyId: input.propertyId,
+        residentUserId: input.residentUserId,
+        memo: input.description,
+      },
+      {
+        accountCode: cashAccount,
+        debitCents: 0,
+        creditCents: input.amountCents,
+        propertyId: input.propertyId,
+        residentUserId: input.residentUserId,
+        memo: input.description,
+      },
+    ],
+  });
+}
+
 /** Convenience wrapper when posting from a household charge mirror. */
 export async function postGlFromHouseholdCharge(
   db: SupabaseClient,

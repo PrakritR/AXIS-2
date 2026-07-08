@@ -18,6 +18,7 @@ import {
   queryCashFlowStatement,
   queryGeneralLedger,
   queryTrialBalance,
+  queryPayoutHistory,
 } from "@/lib/reports/queries/gl-reports";
 
 /**
@@ -41,6 +42,7 @@ const REPORTS = {
   balance_sheet: queryBalanceSheet,
   general_ledger: queryGeneralLedger,
   cash_flow_statement: queryCashFlowStatement,
+  payout_history: queryPayoutHistory,
 } as const satisfies Record<
   string,
   (db: AgentContext["db"], managerUserId: string, filters: ManagerReportFilters) => Promise<ReportResult>
@@ -51,7 +53,7 @@ export type FinancialReportName = keyof typeof REPORTS;
 export const runFinancialReportTool = defineTool({
   name: "run_financial_report",
   description:
-    "Run a financial report over the current landlord's books and return its computed columns, rows, and totals. Reports: rent_roll (current rent + deposits per resident), delinquency (who is behind and by how much), income_statement, expenses, rent_receipts, rental_days, tax_summary (Schedule E style category totals), lease_expiration (upcoming lease ends), vendor_spend (spend per vendor), trial_balance, balance_sheet, general_ledger, cash_flow_statement. All figures come from this tool; never compute or estimate them yourself.",
+    "Run a financial report over the current landlord's books and return its computed columns, rows, and totals. Reports: rent_roll, delinquency, income_statement, expenses, rent_receipts, rental_days, tax_summary, lease_expiration, vendor_spend, trial_balance, balance_sheet, general_ledger, cash_flow_statement, payout_history. All figures come from this tool; never compute or estimate them yourself.",
   kind: "read",
   inputSchema: z
     .object({
