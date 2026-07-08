@@ -166,7 +166,7 @@ export function DemoSectionRenderer({
     case "dashboard":
       return (
         <ResidentDashboard
-          applicationApproved
+          applicationApproved={false}
           displayName={DEMO_RESIDENT_NAME}
           residentEmail={DEMO_RESIDENT_EMAIL}
           residentUserId={DEMO_RESIDENT_USER_ID}

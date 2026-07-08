@@ -4,38 +4,24 @@ import {
   DEMO_MANAGER_EMAIL,
   DEMO_MANAGER_USER_ID,
 } from "@/lib/demo/demo-session";
-import {
-  demoApplications,
-  demoCharges,
-  demoLeases,
-  demoManagerInbox,
-  demoProperties,
-  demoServiceRequests,
-  demoVendors,
-  demoWorkOrders,
-} from "@/lib/demo/demo-data";
+import { buildDemoIdleSnapshot } from "@/lib/demo/demo-guided-data";
+import type { DemoDataSnapshot } from "@/lib/demo/demo-guided-data";
 
 type Row = Record<string, unknown>;
 
-/**
- * In-memory, read-only tables that mirror what the demo panels show. Keyed by
- * the real portal table names each tool queries, and shaped exactly like the
- * `row_data` projections the tools expect. Built once per request.
- */
-function demoTables(): Record<string, Row[]> {
+function demoTablesFromSnapshot(snapshot: DemoDataSnapshot): Record<string, Row[]> {
   const wrap = <T extends { id: string }>(rows: T[]): Row[] =>
     rows.map((r) => ({ id: r.id, manager_user_id: DEMO_MANAGER_USER_ID, row_data: r }));
-  const props = demoProperties();
   return {
-    portal_household_charge_records: wrap(demoCharges()),
-    portal_lease_pipeline_records: wrap(demoLeases()),
-    portal_work_order_records: wrap(demoWorkOrders()),
-    manager_application_records: wrap(demoApplications()),
-    manager_vendor_records: wrap(demoVendors()),
-    portal_service_request_records: wrap(demoServiceRequests()),
-    portal_inbox_thread_records: wrap(demoManagerInbox()),
-    portal_schedule_records: [],
-    manager_property_records: props.map((p) => ({
+    portal_household_charge_records: wrap(snapshot.charges),
+    portal_lease_pipeline_records: wrap(snapshot.leases),
+    portal_work_order_records: wrap(snapshot.workOrders),
+    manager_application_records: wrap(snapshot.applications),
+    manager_vendor_records: wrap(snapshot.vendors),
+    portal_service_request_records: wrap(snapshot.serviceRequests),
+    portal_inbox_thread_records: wrap(snapshot.managerInbox),
+    portal_schedule_records: wrap(snapshot.schedule.plannedEvents),
+    manager_property_records: snapshot.properties.map((p) => ({
       id: p.id,
       manager_user_id: DEMO_MANAGER_USER_ID,
       status: "live",
@@ -62,7 +48,6 @@ function makeQuery(rows: Row[]): unknown {
           return (resolve: (value: { data: Row[]; error: null }) => unknown) =>
             resolve({ data: rows, error: null });
         }
-        // Any builder method just returns the same thenable proxy.
         return () => proxy;
       },
     },
@@ -70,8 +55,8 @@ function makeQuery(rows: Row[]): unknown {
   return proxy;
 }
 
-function makeStubDb(): AgentContext["db"] {
-  const tables = demoTables();
+function makeStubDb(snapshot: DemoDataSnapshot): AgentContext["db"] {
+  const tables = demoTablesFromSnapshot(snapshot);
   const db = {
     from(table: string) {
       return makeQuery(tables[table] ?? []);
@@ -80,14 +65,15 @@ function makeStubDb(): AgentContext["db"] {
   return db as unknown as AgentContext["db"];
 }
 
-/** A fixed, sandboxed agent context backed by fictional demo data (no real DB). */
+/** A fixed, sandboxed agent context backed by the same idle demo snapshot as the UI. */
 export function buildDemoAgentContext(): AgentContext {
+  const snapshot = buildDemoIdleSnapshot();
   return {
     landlordId: DEMO_MANAGER_USER_ID,
     userId: DEMO_MANAGER_USER_ID,
     email: DEMO_MANAGER_EMAIL,
     roles: ["manager"],
     isAdmin: false,
-    db: makeStubDb(),
+    db: makeStubDb(snapshot),
   };
 }

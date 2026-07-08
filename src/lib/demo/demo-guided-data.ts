@@ -1,7 +1,7 @@
 /**
  * Demo data snapshots for idle vs guided tour steps.
  *
- * `buildDemoIdleSnapshot` — full rich portfolio (default `/demo` explore mode).
+ * `buildDemoIdleSnapshot` — empty portfolio (default `/demo` explore mode).
  * `buildDemoGuidedSnapshot` — cumulative story data through the given step;
  * step 0 is empty, step 1 is one property, and so on through step 11.
  */
@@ -108,28 +108,9 @@ function emptySnapshot(): DemoDataSnapshot {
   };
 }
 
-/** Full pre-filled portfolio for idle explore mode. */
+/** Idle explore mode — empty portfolio; guided tour builds data step-by-step. */
 export function buildDemoIdleSnapshot(): DemoDataSnapshot {
-  return {
-    properties: demoProperties(),
-    applications: demoApplications(),
-    charges: demoCharges(),
-    rentProfiles: demoRentProfiles(),
-    leases: demoLeases(),
-    workOrders: demoWorkOrders(),
-    workOrderBids: demoWorkOrderBids(),
-    vendorPayouts: demoVendorPayouts(),
-    vendors: demoVendors(),
-    promotions: demoPromotions(),
-    serviceRequests: demoServiceRequests(),
-    managerInbox: demoManagerInbox(),
-    residentInbox: demoResidentInbox(),
-    vendorInbox: demoVendorInbox(),
-    adminInbox: demoAdminInbox(),
-    bugFeedback: demoBugFeedback(),
-    schedule: demoSchedule(),
-    residentUploads: demoResidentUploads(),
-  };
+  return emptySnapshot();
 }
 
 const GUIDED_APP_ID = "AXIS-GUIDEDAPP1";
