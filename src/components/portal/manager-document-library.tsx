@@ -36,6 +36,7 @@ import {
   DOCUMENT_VISIBILITY_LABELS,
   DOCUMENT_VISIBILITY_VALUES,
   MAX_DOCUMENT_BYTES,
+  documentSignatureBadgeTone,
   type ManagerDocumentCategory,
   type ManagerDocumentDTO,
   type ManagerDocumentVisibility,
@@ -104,6 +105,7 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<ManagerDocumentDTO | null>(null);
+  const [versionTarget, setVersionTarget] = useState<ManagerDocumentDTO | null>(null);
   const [previewTarget, setPreviewTarget] = useState<ManagerDocumentDTO | null>(null);
   const [vendorRows, setVendorRows] = useState<ManagerVendorRow[]>([]);
 
@@ -222,6 +224,34 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
     [showToast],
   );
 
+  const handleRequestSignature = useCallback(
+    async (doc: ManagerDocumentDTO) => {
+      if (doc.visibility !== "resident") {
+        showToast("Set visibility to “Share with resident” before requesting a signature.");
+        return;
+      }
+      try {
+        const res = await fetch(`/api/manager-documents/${doc.id}/request-signature`, {
+          method: "POST",
+          credentials: "include",
+        });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Failed to request signature.");
+        setDocuments((cur) =>
+          cur.map((row) =>
+            row.id === doc.id
+              ? { ...row, signatureStatus: "pending", signatureRequestedAt: new Date().toISOString() }
+              : row,
+          ),
+        );
+        showToast("Signature requested — resident notified in inbox.");
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Failed to request signature.");
+      }
+    },
+    [showToast],
+  );
+
   const propertyLabel = useCallback(
     (id: string | null | undefined) => propertyOptions.find((p) => p.id === id)?.label ?? id ?? "",
     [propertyOptions],
@@ -273,6 +303,26 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         type="button"
         variant="outline"
         className={PORTAL_DETAIL_BTN}
+        onClick={() => setVersionTarget(doc)}
+        data-attr="document-upload-version"
+      >
+        New version
+      </Button>
+      {doc.visibility === "resident" && doc.signatureStatus !== "signed" ? (
+        <Button
+          type="button"
+          variant="outline"
+          className={PORTAL_DETAIL_BTN}
+          onClick={() => void handleRequestSignature(doc)}
+          data-attr="document-request-signature"
+        >
+          Request signature
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        className={PORTAL_DETAIL_BTN}
         onClick={() => void handleShareLink(doc)}
         data-attr="document-share-link"
       >
@@ -313,6 +363,18 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         <div className="flex gap-2">
           <dt className="font-medium text-foreground/70">Uploaded</dt>
           <dd>{formatDate(doc.createdAt)}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="font-medium text-foreground/70">Signature</dt>
+          <dd>
+            {doc.signatureStatus ? (
+              <Badge tone={documentSignatureBadgeTone(doc.signatureStatus)}>
+                {doc.signatureStatus === "pending" ? "Signature pending" : doc.signatureStatus}
+              </Badge>
+            ) : (
+              "—"
+            )}
+          </dd>
         </div>
         <div className="flex gap-2">
           <dt className="font-medium text-foreground/70">Expires</dt>
@@ -557,6 +619,20 @@ export function ManagerDocumentLibrary({ userId }: { userId: string | null }) {
         }}
       />
 
+      <UploadModal
+        open={Boolean(versionTarget)}
+        onClose={() => setVersionTarget(null)}
+        propertyOptions={propertyOptions}
+        vendorRows={vendorRows.filter((v) => v.active !== false)}
+        supersedeDocumentId={versionTarget?.id}
+        title={versionTarget ? `Upload new version — ${versionTarget.displayName}` : "Upload new version"}
+        versionMode
+        onUploaded={(doc) => {
+          setDocuments((cur) => [doc, ...cur.filter((row) => row.id !== versionTarget?.id)]);
+          setVersionTarget(null);
+        }}
+      />
+
       <EditDocumentModal
         doc={renameTarget}
         vendorRows={vendorRows.filter((v) => v.active !== false)}
@@ -578,12 +654,18 @@ function UploadModal({
   propertyOptions,
   vendorRows,
   onUploaded,
+  supersedeDocumentId,
+  title = "Upload document",
+  versionMode = false,
 }: {
   open: boolean;
   onClose: () => void;
   propertyOptions: { id: string; label: string }[];
   vendorRows: { id: string; name: string }[];
   onUploaded: (doc: ManagerDocumentDTO) => void;
+  supersedeDocumentId?: string;
+  title?: string;
+  versionMode?: boolean;
 }) {
   const { showToast } = useAppUi();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -652,10 +734,11 @@ function UploadModal({
       if (visibility === "resident" && residentEmail.trim()) form.set("residentEmail", residentEmail.trim());
       if (visibility === "vendor" && vendorId) form.set("vendorId", vendorId);
       if (expiresAt.trim()) form.set("expiresAt", expiresAt.trim());
+      if (supersedeDocumentId) form.set("supersedeDocumentId", supersedeDocumentId);
       const res = await fetch("/api/manager-documents", { method: "POST", body: form, credentials: "include" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Upload failed.");
-      showToast("Document uploaded.");
+      showToast(supersedeDocumentId ? "New version uploaded." : "Document uploaded.");
       onUploaded(data.document as ManagerDocumentDTO);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Upload failed.");
@@ -668,14 +751,14 @@ function UploadModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Upload document"
+      title={title}
       footer={
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button type="button" variant="primary" onClick={() => void submit()} disabled={busy || !file} data-attr="document-upload-submit">
-            {busy ? "Uploading…" : "Upload"}
+            {busy ? "Uploading…" : versionMode ? "Upload version" : "Upload"}
           </Button>
         </div>
       }
@@ -721,6 +804,12 @@ function UploadModal({
           />
         </div>
 
+        {versionMode ? (
+          <p className="text-xs text-muted">
+            Category, scope, and visibility carry over from the current version. The prior file stays in history.
+          </p>
+        ) : (
+        <>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <label className="text-xs font-medium text-foreground/70" htmlFor="doc-category">
@@ -811,6 +900,8 @@ function UploadModal({
             </Select>
           </div>
         ) : null}
+        </>
+        )}
       </div>
     </Modal>
   );

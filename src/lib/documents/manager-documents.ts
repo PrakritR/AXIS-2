@@ -148,11 +148,18 @@ export type ManagerDocumentRow = {
   visibility: string;
   expires_at: string | null;
   superseded_by_document_id: string | null;
+  signature_status: string | null;
+  signature_requested_at: string | null;
+  signed_at: string | null;
   uploaded_by: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export type DocumentScopeKind = "manager" | "property" | "unit" | "lease" | "resident" | "vendor" | "work_order";
+
+export type DocumentSignatureStatus = "pending" | "signed" | "declined";
 
 // Client-facing DTO (camelCase). Deliberately omits storage_path — clients
 // reference a document by id and fetch a short-lived signed URL on demand.
@@ -167,11 +174,32 @@ export type ManagerDocumentDTO = {
   scopeKind: DocumentScopeKind;
   visibility: ManagerDocumentVisibility;
   expiresAt: string | null;
+  signatureStatus: DocumentSignatureStatus | null;
+  signatureRequestedAt: string | null;
+  signedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-export type DocumentScopeKind = "manager" | "property" | "unit" | "lease" | "resident" | "vendor" | "work_order";
+export function documentSignatureBadgeTone(
+  status: DocumentSignatureStatus | null | undefined,
+): "pending" | "confirmed" | "overdue" | "neutral" {
+  if (status === "pending") return "pending";
+  if (status === "signed") return "confirmed";
+  if (status === "declined") return "overdue";
+  return "neutral";
+}
+
+/** Guard version uploads: prior row must belong to the manager and not already be superseded. */
+export function validateDocumentVersionUpload(input: {
+  priorManagerUserId: string;
+  managerUserId: string;
+  priorSupersededByDocumentId: string | null;
+}): string | null {
+  if (input.priorManagerUserId !== input.managerUserId) return "Document not found.";
+  if (input.priorSupersededByDocumentId) return "That document version was already replaced.";
+  return null;
+}
 
 export function documentScopeKind(row: Pick<
   ManagerDocumentRow,
@@ -206,10 +234,16 @@ export function mapDocumentRow(row: ManagerDocumentRow): ManagerDocumentDTO {
     scopeKind: documentScopeKind(row),
     visibility: isDocumentVisibility(row.visibility) ? row.visibility : "manager",
     expiresAt: row.expires_at,
+    signatureStatus:
+      row.signature_status === "pending" || row.signature_status === "signed" || row.signature_status === "declined"
+        ? row.signature_status
+        : null,
+    signatureRequestedAt: row.signature_requested_at,
+    signedAt: row.signed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 export const DOCUMENT_SELECT_COLUMNS =
-  "id, manager_user_id, display_name, original_filename, mime_type, size_bytes, checksum, storage_path, category, property_id, unit_label, lease_id, resident_user_id, resident_email, vendor_id, work_order_id, visibility, expires_at, superseded_by_document_id, uploaded_by, deleted_at, created_at, updated_at";
+  "id, manager_user_id, display_name, original_filename, mime_type, size_bytes, checksum, storage_path, category, property_id, unit_label, lease_id, resident_user_id, resident_email, vendor_id, work_order_id, visibility, expires_at, superseded_by_document_id, signature_status, signature_requested_at, signed_at, uploaded_by, deleted_at, created_at, updated_at";

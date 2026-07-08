@@ -63,11 +63,14 @@ export const proPortal: PortalDefinition = {
         { id: "cash-flow-statement", label: "Cash flow" },
         { id: "payout-history", label: "Payout history" },
         { id: "trust-account-balance", label: "Trust account" },
+        { id: "security-deposits", label: "Deposits" },
         { id: "financial-diagnostics", label: "Diagnostics" },
         { id: "ap-aging", label: "AP aging" },
         { id: "bills", label: "Bills" },
         { id: "budget-vs-actual", label: "Budget" },
+        { id: "bank-reconciliation", label: "Bank rec" },
         { id: "owner-statement", label: "Owner statement" },
+        { id: "owner-distributions", label: "Distributions" },
       ],
     },
     {
@@ -75,6 +78,7 @@ export const proPortal: PortalDefinition = {
       label: "Documents",
       tabs: [
         { id: "library", label: "Library" },
+        { id: "templates", label: "Templates" },
         { id: "applications", label: "Applications" },
         { id: "leases", label: "Leases" },
         { id: "income-documents", label: "Income documents" },

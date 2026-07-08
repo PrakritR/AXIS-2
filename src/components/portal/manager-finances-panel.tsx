@@ -11,7 +11,11 @@ import {
   ManagerPortalPageShell,
   MANAGER_TABLE_TH,
 } from "@/components/portal/portal-metrics";
+import { ManagerBankReconciliationPanel } from "@/components/portal/manager-bank-reconciliation-panel";
 import { ManagerBillsPanel } from "@/components/portal/manager-bills-panel";
+import { ManagerBudgetsPanel } from "@/components/portal/manager-budgets-panel";
+import { ManagerOwnerDistributionsPanel } from "@/components/portal/manager-owner-distributions-panel";
+import { ManagerSecurityDepositsPanel } from "@/components/portal/manager-security-deposits-panel";
 import { PortalSectionPrimaryButton } from "@/components/portal/portal-list-section";
 import {
   ReportExportButtons,
@@ -359,11 +363,14 @@ const FINANCE_TABS = [
   { id: "cash-flow-statement", label: "Cash flow" },
   { id: "payout-history", label: "Payout history" },
   { id: "trust-account-balance", label: "Trust account" },
+  { id: "security-deposits", label: "Deposits" },
   { id: "financial-diagnostics", label: "Diagnostics" },
   { id: "ap-aging", label: "AP aging" },
   { id: "bills", label: "Bills" },
   { id: "budget-vs-actual", label: "Budget" },
+  { id: "bank-reconciliation", label: "Bank rec" },
   { id: "owner-statement", label: "Owner statement" },
+  { id: "owner-distributions", label: "Distributions" },
 ] as const;
 
 const LEDGER_TAB_IDS = new Set([
@@ -685,6 +692,15 @@ export function ManagerFinancesPanel({
 
   const headerActions = (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      {tabId === "owner-statement" ? (
+        <a
+          href={`/api/reports/owner-statement/formal-export?${query}`}
+          className="inline-flex h-9 items-center rounded-full border border-border bg-card px-4 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] hover:bg-accent/40"
+          data-attr="owner-statement-formal-pdf"
+        >
+          Formal PDF
+        </a>
+      ) : null}
       {report && report.rows.length > 0 ? (
         <ReportExportButtons
           reportId={reportId}
@@ -718,8 +734,15 @@ export function ManagerFinancesPanel({
     >
       {tabId === "bills" ? (
         <ManagerBillsPanel />
+      ) : tabId === "bank-reconciliation" ? (
+        <ManagerBankReconciliationPanel />
+      ) : tabId === "security-deposits" ? (
+        <ManagerSecurityDepositsPanel />
+      ) : tabId === "owner-distributions" ? (
+        <ManagerOwnerDistributionsPanel />
       ) : (
       <div className="space-y-5">
+        {tabId === "budget-vs-actual" ? <ManagerBudgetsPanel /> : null}
         <ReportFilterBar
           showProperty
           showDateRange

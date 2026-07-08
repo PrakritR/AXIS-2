@@ -71,14 +71,14 @@ const LEGACY_FINANCIALS_TAB_MAP: Record<string, string> = {
   "profit-loss": "expenses",
 };
 
-const DOCUMENTS_TABS = ["library", "applications", "leases", "income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
+const DOCUMENTS_TABS = ["library", "templates", "applications", "leases", "income-documents", "expense-documents", "occupancy", "1099", "tax-summary"] as const;
 
 const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
   summary: "tax-summary",
   "rent-receipts": "income-documents",
   "rental-days": "income-documents",
 };
-const FINANCIALS_TABS = ["income", "expenses", "trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement", "payout-history", "trust-account-balance", "financial-diagnostics", "ap-aging", "bills", "budget-vs-actual", "owner-statement"] as const;
+const FINANCIALS_TABS = ["income", "expenses", "trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement", "payout-history", "trust-account-balance", "security-deposits", "financial-diagnostics", "ap-aging", "bills", "budget-vs-actual", "bank-reconciliation", "owner-statement", "owner-distributions"] as const;
 
 const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash"] as const;
 

@@ -51,9 +51,11 @@ import {
   ManagerLeaseDocumentsTab,
 } from "@/components/portal/manager-documents-leasing-tabs";
 import { ManagerDocumentLibrary } from "@/components/portal/manager-document-library";
+import { ManagerDocumentTemplatesPanel } from "@/components/portal/manager-document-templates-panel";
 
 export const DOCUMENT_TABS = [
   { id: "library", label: "Library" },
+  { id: "templates", label: "Templates" },
   { id: "applications", label: "Applications" },
   { id: "leases", label: "Leases" },
   { id: "income-documents", label: "Income documents" },
@@ -253,6 +255,7 @@ export function ManagerDocumentsPanel({
   const isLeasingDocumentsTab = tabId === "applications" || tabId === "leases";
   // The Library tab manages its own upload toolbar; it has no "Generate report".
   const isLibraryTab = tabId === "library";
+  const isTemplatesTab = tabId === "templates";
   const activeTabLabel = DOCUMENT_TABS.find((tab) => tab.id === tabId)?.label ?? "Documents";
 
   const handleGenerateReport = useCallback(() => {
@@ -304,7 +307,7 @@ export function ManagerDocumentsPanel({
           {hasExportActions ? (
             <div className={`${PORTAL_PAGE_ACTIONS_DESKTOP} flex-wrap gap-2`}>{exportActions}</div>
           ) : null}
-          {!isLeasingDocumentsTab && !isLibraryTab ? (
+          {!isLeasingDocumentsTab && !isLibraryTab && !isTemplatesTab ? (
           <Button
             type="button"
             variant="primary"
@@ -328,6 +331,8 @@ export function ManagerDocumentsPanel({
       <div className="space-y-4">
         {tabId === "library" ? (
           <ManagerDocumentLibrary userId={userId ?? null} />
+        ) : tabId === "templates" ? (
+          <ManagerDocumentTemplatesPanel />
         ) : tabId === "applications" ? (
           <ManagerApplicationDocumentsTab userId={userId ?? null} />
         ) : tabId === "leases" ? (

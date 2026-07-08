@@ -8,6 +8,7 @@ import {
   SYSTEM_CHART_ACCOUNTS,
 } from "@/lib/reports/categories";
 import { postGlExpenseEntry } from "@/lib/reports/gl-posting";
+import { autoFileExpenseReceipt } from "@/lib/documents/document-auto-file-hooks.server";
 
 export const runtime = "nodejs";
 
@@ -69,6 +70,7 @@ export async function POST(req: Request) {
       memo?: string;
       vendorId?: string;
       taxDeductible?: boolean;
+      receipt?: { dataUrl?: string; filename?: string } | null;
     };
 
     const amountCents = Number(body.amountCents);
@@ -117,6 +119,18 @@ export async function POST(req: Request) {
         vendorId: body.vendorId?.trim() || null,
         memo: body.memo?.trim() || null,
       });
+    }
+    // Mirror an uploaded receipt into the document library (no-op unless the
+    // manager opted the "expense_receipt" auto-file category in). Best-effort.
+    if (data?.id && body.receipt?.dataUrl) {
+      await autoFileExpenseReceipt(auth.db, {
+        managerUserId: auth.userId,
+        expenseId: String(data.id),
+        displayName: (body.receipt.filename?.trim() || `Receipt — ${chartAccountLabel(categoryCode)}`),
+        dataUrl: body.receipt.dataUrl,
+        propertyId: body.propertyId?.trim() || null,
+        vendorId: body.vendorId?.trim() || null,
+      }).catch(() => undefined);
     }
     track("expense_created", auth.userId, {
       category_code: categoryCode,

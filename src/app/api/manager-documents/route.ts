@@ -15,6 +15,7 @@ import {
   sanitizeDisplayName,
   UUID_PATTERN,
   validateDocumentVisibilityScope,
+  validateDocumentVersionUpload,
   type ManagerDocumentRow,
   type ManagerDocumentVisibility,
 } from "@/lib/documents/manager-documents";
@@ -119,6 +120,31 @@ export async function POST(req: Request) {
   };
   const rawCategory = str("category");
   const category = rawCategory && isDocumentCategory(rawCategory) ? rawCategory : "other";
+  const supersedeDocumentId = str("supersedeDocumentId");
+  let priorRow: ManagerDocumentRow | null = null;
+
+  if (supersedeDocumentId) {
+    if (!UUID_PATTERN.test(supersedeDocumentId)) {
+      return NextResponse.json({ error: "supersedeDocumentId must be a UUID." }, { status: 400 });
+    }
+    const { data: prior, error: priorError } = await auth.db
+      .from("manager_documents")
+      .select(DOCUMENT_SELECT_COLUMNS)
+      .eq("id", supersedeDocumentId)
+      .eq("manager_user_id", auth.userId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (priorError) return NextResponse.json({ error: priorError.message }, { status: 500 });
+    if (!prior) return NextResponse.json({ error: "Document not found." }, { status: 404 });
+    priorRow = prior as ManagerDocumentRow;
+    const versionError = validateDocumentVersionUpload({
+      priorManagerUserId: priorRow.manager_user_id,
+      managerUserId: auth.userId,
+      priorSupersededByDocumentId: priorRow.superseded_by_document_id,
+    });
+    if (versionError) return NextResponse.json({ error: versionError }, { status: 409 });
+  }
+
   const displayName = sanitizeDisplayName(str("displayName") ?? file.name, file.name || "Untitled document");
 
   const residentUserId = str("residentUserId");
@@ -171,16 +197,16 @@ export async function POST(req: Request) {
     size_bytes: bytes.byteLength,
     checksum,
     storage_path: storagePath,
-    category,
-    property_id: str("propertyId"),
-    unit_label: str("unitLabel"),
-    lease_id: str("leaseId"),
-    resident_user_id: resolvedResidentUserId,
-    resident_email: residentEmail,
-    vendor_id: visibility === "vendor" ? vendorId : null,
-    work_order_id: str("workOrderId"),
-    visibility,
-    expires_at: expiresAt,
+    category: priorRow && isDocumentCategory(priorRow.category) ? priorRow.category : category,
+    property_id: str("propertyId") ?? priorRow?.property_id ?? null,
+    unit_label: str("unitLabel") ?? priorRow?.unit_label ?? null,
+    lease_id: str("leaseId") ?? priorRow?.lease_id ?? null,
+    resident_user_id: resolvedResidentUserId ?? priorRow?.resident_user_id ?? null,
+    resident_email: residentEmail ?? priorRow?.resident_email ?? null,
+    vendor_id: (visibility === "vendor" ? vendorId : null) ?? priorRow?.vendor_id ?? null,
+    work_order_id: str("workOrderId") ?? priorRow?.work_order_id ?? null,
+    visibility: priorRow && isDocumentVisibility(priorRow.visibility) ? priorRow.visibility : visibility,
+    expires_at: expiresAt ?? priorRow?.expires_at ?? null,
     uploaded_by: auth.userId,
   };
 
@@ -197,7 +223,31 @@ export async function POST(req: Request) {
   }
 
   const document = mapDocumentRow(data as ManagerDocumentRow);
-  track("document_uploaded", auth.userId, { category: document.category, scope_kind: document.scopeKind, visibility: document.visibility });
+
+  if (priorRow) {
+    const { error: linkError } = await auth.db
+      .from("manager_documents")
+      .update({
+        superseded_by_document_id: document.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", priorRow.id)
+      .eq("manager_user_id", auth.userId)
+      .is("deleted_at", null)
+      .is("superseded_by_document_id", null);
+    if (linkError) {
+      await auth.db.from("manager_documents").delete().eq("id", document.id);
+      await auth.db.storage.from(MANAGER_DOCUMENTS_BUCKET).remove([storagePath]);
+      return NextResponse.json({ error: linkError.message }, { status: 500 });
+    }
+  }
+
+  track("document_uploaded", auth.userId, {
+    category: document.category,
+    scope_kind: document.scopeKind,
+    visibility: document.visibility,
+    version_upload: Boolean(priorRow),
+  });
 
   if (visibility === "resident" || visibility === "vendor") {
     const { data: profile } = await auth.db.from("profiles").select("full_name, email").eq("id", auth.userId).maybeSingle();
