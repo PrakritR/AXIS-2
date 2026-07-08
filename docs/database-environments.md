@@ -181,6 +181,7 @@ production and dev/test. Set these in Vercel **Production** scope:
 | `DEMO_SUPABASE_URL` | Server | Same URL (server-side reads) |
 | `DEMO_SUPABASE_SERVICE_ROLE_KEY` | Server | Demo project service role |
 | `AXIS_DEMO_SEED_PASSWORD` | Server | Password for `@axis.local` demo accounts |
+| `DEMO_SUPABASE_PROJECT_REF` | Server | Demo project ref; required by `wipe-dev-supabase.mjs --demo`'s allowlist guard |
 
 When the demo env vars are unset, `/demo` falls back to browser localStorage seed
 data (no network). `/demo` nav and the landing-page demo CTA are enabled on
@@ -197,11 +198,12 @@ ALLOW_DEMO_SEED=1 AXIS_DEMO_SEED_PASSWORD='your-demo-password' \
 
 Guards:
 
-- `assertDemoProjectNotProduction` — refuses when the demo URL matches
-  `AXIS_PROD_SUPABASE_REF`
 - `assertDemoSupabaseIsolated` (runtime) — server paths refuse a demo URL that
   equals `NEXT_PUBLIC_SUPABASE_URL`
 - `assertDemoSeedGate` — requires `ALLOW_DEMO_SEED=1`
+
+`scripts/wipe-dev-supabase.mjs --demo` (see below) uses a separate allowlist
+guard, `assertAllowlistedDemoProjectUrl`, gated on `DEMO_SUPABASE_PROJECT_REF`.
 
 Demo accounts (same `@axis.local` emails as the local sandbox):
 

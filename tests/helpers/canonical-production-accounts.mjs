@@ -75,16 +75,30 @@ export function assertProductionSeedGate() {
 }
 
 /**
- * Abort when the demo seed target is the production project. Demo must use a
- * separate Supabase project (NEXT_PUBLIC_DEMO_SUPABASE_URL / DEMO_SUPABASE_URL).
+ * The demo Supabase project (docs/database-environments.md "Demo Supabase
+ * project") is a third project, separate from dev/test and production, with
+ * no fixed ref baked into source — each deployment sets its own. Wipe-only
+ * tooling must be told exactly which ref is safe via this explicit env var;
+ * it must never infer "safe" from merely "not production".
  */
-export function assertDemoProjectNotProduction(url) {
-  const requiredRef = productionSupabaseProjectRef();
+export function allowedDemoSupabaseRef() {
+  return process.env.DEMO_SUPABASE_PROJECT_REF?.trim() || "";
+}
+
+/**
+ * Allowlist gate: proceed ONLY when the URL's project ref exactly matches the
+ * explicitly configured demo project ref. Fails closed (refuses) when the ref
+ * is unset, unlike a denylist that would let any non-production URL through —
+ * including an unrecognized project a bad env value happened to resolve to.
+ */
+export function assertAllowlistedDemoProjectUrl(url) {
+  const allowedRef = allowedDemoSupabaseRef();
   const ref = supabaseProjectRef(url);
-  if (ref === requiredRef) {
+  if (!allowedRef || ref !== allowedRef) {
     throw new Error(
-      `Refusing demo seed on production project (${requiredRef}). ` +
-        `Point DEMO_SUPABASE_URL at a separate demo Supabase project.`,
+      `Refusing to target ${url} (ref "${ref}"): not the allowlisted demo Supabase project. ` +
+        `Set DEMO_SUPABASE_PROJECT_REF to the demo project's ref to confirm the target ` +
+        `(docs/database-environments.md).`,
     );
   }
 }

@@ -10,8 +10,10 @@
  *   ALLOW_DEV_WIPE=1 SEED_MANAGER_EMAIL=manager@test.axis.local node --env-file=.env.test scripts/wipe-dev-supabase.mjs
  *
  * Usage (dedicated demo project):
- *   ALLOW_DEV_WIPE=1 node --env-file=.env.local scripts/wipe-dev-supabase.mjs --demo
- *   (uses DEMO_SUPABASE_URL / DEMO_SUPABASE_SERVICE_ROLE_KEY)
+ *   ALLOW_DEV_WIPE=1 DEMO_SUPABASE_PROJECT_REF=<demo project ref> \
+ *     node --env-file=.env.local scripts/wipe-dev-supabase.mjs --demo
+ *   (uses DEMO_SUPABASE_URL / DEMO_SUPABASE_SERVICE_ROLE_KEY; DEMO_SUPABASE_PROJECT_REF
+ *   must exactly match that URL's project ref — an allowlist, not just "not production")
  *
  * Re-seed after wipe:
  *   node --env-file=.env.test scripts/seed-demo-manager-workflow.mjs
@@ -20,7 +22,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { assertTestProjectUrl, TEST_SUPABASE_PROJECT_REF } from "../tests/helpers/canonical-test-accounts.mjs";
 import {
-  assertDemoProjectNotProduction,
+  assertAllowlistedDemoProjectUrl,
   PROD_DEMO_MANAGER_EMAIL,
   PRODUCTION_SUPABASE_PROJECT_REF,
 } from "../tests/helpers/canonical-production-accounts.mjs";
@@ -57,7 +59,7 @@ if (ref === PRODUCTION_SUPABASE_PROJECT_REF) {
   process.exit(1);
 }
 if (useDemoProject) {
-  assertDemoProjectNotProduction(url);
+  assertAllowlistedDemoProjectUrl(url);
 } else {
   assertTestProjectUrl(url);
 }

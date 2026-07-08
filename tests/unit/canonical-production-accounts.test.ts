@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import {
+  assertAllowlistedDemoProjectUrl,
   assertProductionProjectUrl,
   assertProductionSeedGate,
   isProductionSupabaseProjectUrl,
@@ -16,6 +17,7 @@ describe("canonical-production-accounts", () => {
     delete process.env.ALLOW_PRODUCTION_SEED;
     delete process.env.AXIS_PRODUCTION_SEED_KEY;
     delete process.env.AXIS_PROD_SUPABASE_REF;
+    delete process.env.DEMO_SUPABASE_PROJECT_REF;
   });
 
   afterEach(() => {
@@ -55,5 +57,30 @@ describe("canonical-production-accounts", () => {
     process.env.ALLOW_PRODUCTION_SEED = "1";
     process.env.AXIS_PRODUCTION_SEED_KEY = "secret";
     expect(() => assertProductionSeedGate()).not.toThrow();
+  });
+
+  it("assertAllowlistedDemoProjectUrl refuses when DEMO_SUPABASE_PROJECT_REF is unset", () => {
+    expect(() => assertAllowlistedDemoProjectUrl(`https://some-random-project.supabase.co`)).toThrow(
+      /allowlisted demo/i,
+    );
+  });
+
+  it("assertAllowlistedDemoProjectUrl refuses a URL that doesn't match the configured ref", () => {
+    process.env.DEMO_SUPABASE_PROJECT_REF = "demo-ref-abc";
+    expect(() => assertAllowlistedDemoProjectUrl(`https://some-other-project.supabase.co`)).toThrow(
+      /allowlisted demo/i,
+    );
+  });
+
+  it("assertAllowlistedDemoProjectUrl refuses production even if it were misconfigured as the allowed ref", () => {
+    process.env.DEMO_SUPABASE_PROJECT_REF = "demo-ref-abc";
+    expect(() =>
+      assertAllowlistedDemoProjectUrl(`https://${PRODUCTION_SUPABASE_PROJECT_REF}.supabase.co`),
+    ).toThrow(/allowlisted demo/i);
+  });
+
+  it("assertAllowlistedDemoProjectUrl passes when the URL exactly matches the configured ref", () => {
+    process.env.DEMO_SUPABASE_PROJECT_REF = "demo-ref-abc";
+    expect(() => assertAllowlistedDemoProjectUrl(`https://demo-ref-abc.supabase.co`)).not.toThrow();
   });
 });
