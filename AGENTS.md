@@ -432,14 +432,19 @@ Report-query functions that loop rows calling `chartAccountLabel`/`chartAccountS
 must `await primeSystemChartOfAccounts(db)` once up top; the store caches with a 5-min TTL.
 
 **The ledger is write-through only — there is no read-time backfill.** The old
-`backfillLedgerFromCharges`/`?backfill=1` repair pass on every report load was removed
-(it re-scanned up to 2000 charges per page view — the exact Supabase-egress problem
-this file warns about). Every server-side path that creates a charge or marks one paid
-MUST call `syncLedgerChargeEntry`/`syncLedgerPaymentEntry` (`src/lib/reports/ledger-sync.ts`)
+per-request `?backfill=1` repair pass on every report load was removed (it re-scanned
+up to 2000 charges per page view — the exact Supabase-egress problem this file warns
+about). Every server-side path that creates a charge or marks one paid MUST call
+`syncLedgerChargeEntry`/`syncLedgerPaymentEntry` (`src/lib/reports/ledger-sync.ts`)
 next to the DB write, or the row silently never reaches reports. Current call sites:
 `/api/portal-household-charges` (client mirror upsert), the late-fee creation in
 `/api/cron/send-payment-reminders`, `stripe-household-charge.ts`, and
 `stripe-application-fee.ts` — copy that pattern for any new charge-mutation route.
+The batched sweep logic (`backfillLedgerFromCharges` in `ledger-sync.ts`) still exists,
+but only as an explicit, admin-gated, one-time historical repair — it is invoked solely
+via `POST /api/admin/backfill-ledger` (optionally scoped to one `managerUserId` in the
+body), never from a report route or page load. Run it once per environment after
+deploying write-through sync to mirror any charge history that predates it.
 
 **`security_deposit` charges book to `security_deposit_liability` (a liability), not
 income**; `move_in_fee` stays income (non-refundable). The `nsf_fee` charge kind exists
