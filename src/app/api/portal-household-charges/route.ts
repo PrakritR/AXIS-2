@@ -144,18 +144,24 @@ export async function POST(req: Request) {
 
       const chargeIds = normalizedCharges.filter((c) => c.id).map((c) => String(c.id));
       const previousStatusById = new Map<string, string | null>();
+      const foreignChargeIds = new Set<string>();
       if (chargeIds.length > 0) {
         const { data: existingRows } = await db
           .from("portal_household_charge_records")
-          .select("id, status")
+          .select("id, status, manager_user_id")
           .in("id", chargeIds);
         for (const row of existingRows ?? []) {
           previousStatusById.set(String(row.id), typeof row.status === "string" ? row.status : null);
+          if (user.role !== "admin" && row.manager_user_id && row.manager_user_id !== user.id) {
+            foreignChargeIds.add(String(row.id));
+          }
         }
       }
 
-      const rows = normalizedCharges
-        .filter((c) => c.id)
+      const allowedCharges = normalizedCharges.filter(
+        (c) => c.id && !foreignChargeIds.has(String(c.id)),
+      );
+      const rows = allowedCharges
         .map((c) => ({
           id: String(c.id),
           manager_user_id: user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id,
@@ -170,14 +176,16 @@ export async function POST(req: Request) {
       if (rows.length > 0) {
         const { error } = await db.from("portal_household_charge_records").upsert(rows, { onConflict: "id" });
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-        const ownedCharges = normalizedCharges
-          .filter((c) => c.id)
-          .map((c) => ({
-            ...(c as unknown as HouseholdCharge),
-            managerUserId: user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id,
-          }));
-        await reconcileDuplicateChargeList(db, ownedCharges).catch(() => undefined);
-        for (const c of normalizedCharges) {
+        const ownedCharges = allowedCharges.map((c) => ({
+          ...(c as unknown as HouseholdCharge),
+          managerUserId: user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id,
+        }));
+        await reconcileDuplicateChargeList(
+          db,
+          ownedCharges,
+          user.role === "admin" ? undefined : user.id,
+        ).catch(() => undefined);
+        for (const c of allowedCharges) {
           if (!c.id) continue;
           const chargeId = String(c.id);
           const nextStatus = typeof c.status === "string" ? c.status : null;
@@ -195,7 +203,7 @@ export async function POST(req: Request) {
     }
 
     if (rentProfiles.length > 0) {
-      const rows = rentProfiles
+      let rows = rentProfiles
         .filter((p) => p.id)
         .map((p) => ({
           id: String(p.id),
@@ -207,6 +215,18 @@ export async function POST(req: Request) {
           row_data: p,
           updated_at: now,
         }));
+      if (rows.length > 0 && user.role !== "admin") {
+        const { data: existingProfiles } = await db
+          .from("portal_recurring_rent_profile_records")
+          .select("id, manager_user_id")
+          .in("id", rows.map((r) => r.id));
+        const foreignProfileIds = new Set(
+          (existingProfiles ?? [])
+            .filter((r) => r.manager_user_id && r.manager_user_id !== user.id)
+            .map((r) => String(r.id)),
+        );
+        rows = rows.filter((r) => !foreignProfileIds.has(r.id));
+      }
       if (rows.length > 0) {
         const { error } = await db.from("portal_recurring_rent_profile_records").upsert(rows, { onConflict: "id" });
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });

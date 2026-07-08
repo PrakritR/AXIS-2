@@ -22,8 +22,10 @@ describe("reconcileDuplicateHouseholdChargeRecords", () => {
       applicationId: "app123",
     };
 
-    const ledgerDeleteIn = vi.fn().mockResolvedValue({ error: null });
-    const chargeDeleteIn = vi.fn().mockResolvedValue({ error: null });
+    const ledgerDeleteEq = vi.fn().mockResolvedValue({ error: null });
+    const chargeDeleteEq = vi.fn().mockResolvedValue({ error: null });
+    const ledgerDeleteIn = vi.fn().mockReturnValue({ eq: ledgerDeleteEq });
+    const chargeDeleteIn = vi.fn().mockReturnValue({ eq: chargeDeleteEq });
     const eqManager = vi.fn().mockResolvedValue({
       data: [
         { manager_user_id: "mgr-1", row_data: fallback },
@@ -51,7 +53,9 @@ describe("reconcileDuplicateHouseholdChargeRecords", () => {
     const result = await reconcileDuplicateHouseholdChargeRecords(db, "mgr-1");
     expect(result.removedChargeIds).toEqual([fallback.id]);
     expect(ledgerDeleteIn).toHaveBeenCalledWith("source_charge_id", [fallback.id]);
+    expect(ledgerDeleteEq).toHaveBeenCalledWith("manager_user_id", "mgr-1");
     expect(chargeDeleteIn).toHaveBeenCalledWith("id", [fallback.id]);
+    expect(chargeDeleteEq).toHaveBeenCalledWith("manager_user_id", "mgr-1");
   });
 });
 

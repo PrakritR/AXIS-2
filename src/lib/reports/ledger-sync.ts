@@ -57,15 +57,27 @@ function throwIfLedgerError(error: { message: string } | null): void {
   if (error) throw new Error(`Ledger sync failed: ${error.message}`);
 }
 
-async function removeLedgerEntriesForChargeIds(db: SupabaseClient, chargeIds: string[]): Promise<void> {
+async function removeLedgerEntriesForChargeIds(
+  db: SupabaseClient,
+  chargeIds: string[],
+  ownerUserId?: string,
+): Promise<void> {
   if (chargeIds.length === 0) return;
-  const { error } = await db.from("ledger_entries").delete().in("source_charge_id", chargeIds);
+  let query = db.from("ledger_entries").delete().in("source_charge_id", chargeIds);
+  if (ownerUserId) query = query.eq("manager_user_id", ownerUserId);
+  const { error } = await query;
   throwIfLedgerError(error);
 }
 
-async function removeDuplicateHouseholdChargeRecords(db: SupabaseClient, chargeIds: string[]): Promise<void> {
+async function removeDuplicateHouseholdChargeRecords(
+  db: SupabaseClient,
+  chargeIds: string[],
+  ownerUserId?: string,
+): Promise<void> {
   if (chargeIds.length === 0) return;
-  const { error } = await db.from("portal_household_charge_records").delete().in("id", chargeIds);
+  let query = db.from("portal_household_charge_records").delete().in("id", chargeIds);
+  if (ownerUserId) query = query.eq("manager_user_id", ownerUserId);
+  const { error } = await query;
   throwIfLedgerError(error);
 }
 
@@ -99,18 +111,21 @@ async function fetchAllChargeRecords(
  * Removes duplicate application-fee charge rows and their ledger entries
  * (prevents doubled income) among the given charges — no table scan, so it is
  * safe on hot per-mutation paths where the caller already holds the charge
- * list.
+ * list. When `ownerUserId` is set (non-admin callers passing a client-supplied
+ * charge list), deletes are scoped to rows owned by that manager so a crafted
+ * duplicate pair carrying another manager's charge id cannot delete their data.
  */
 export async function reconcileDuplicateChargeList(
   db: SupabaseClient,
   charges: (HouseholdCharge | null)[],
+  ownerUserId?: string,
 ): Promise<{ removedChargeIds: string[] }> {
   const raw = charges.filter((charge): charge is HouseholdCharge => Boolean(charge?.id));
   const duplicateIds = duplicateHouseholdChargeIds(raw);
   if (duplicateIds.length === 0) return { removedChargeIds: [] };
 
-  await removeLedgerEntriesForChargeIds(db, duplicateIds);
-  await removeDuplicateHouseholdChargeRecords(db, duplicateIds);
+  await removeLedgerEntriesForChargeIds(db, duplicateIds, ownerUserId);
+  await removeDuplicateHouseholdChargeRecords(db, duplicateIds, ownerUserId);
   return { removedChargeIds: duplicateIds };
 }
 
@@ -123,6 +138,7 @@ export async function reconcileDuplicateHouseholdChargeRecords(
   return reconcileDuplicateChargeList(
     db,
     data.map((row) => row.row_data as HouseholdCharge | null),
+    managerUserId,
   );
 }
 
