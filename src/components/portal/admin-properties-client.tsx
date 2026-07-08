@@ -417,8 +417,9 @@ export function AdminPropertiesClient() {
       title="Properties"
       filterRow={
         <ManagerPortalFilterRow>
-          <div className="min-w-0 max-w-full">
+          <div className="min-w-0 w-full max-w-full">
             <ManagerPortalStatusPills
+              compact
               tabs={kpiTabs}
               activeId={String(activeKpi)}
               onChange={(id) => {
