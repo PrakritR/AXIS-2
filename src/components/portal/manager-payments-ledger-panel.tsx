@@ -257,16 +257,23 @@ export function ManagerPaymentsLedgerPanel({
           const activeReminders = reminders.filter((m) => m.status !== "cancelled");
           if (!reminders.length) return null;
           return (
-            <button
-              type="button"
-              className="mt-1 text-[11px] font-semibold text-primary hover:underline"
+            <span
+              role="button"
+              tabIndex={0}
+              className="mt-1 inline-block cursor-pointer text-[11px] font-semibold text-primary hover:underline"
               onClick={(e) => {
+                e.stopPropagation();
+                setChargeRemindersRow(row);
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
                 e.stopPropagation();
                 setChargeRemindersRow(row);
               }}
             >
               Auto · {activeReminders.length > 0 ? activeReminders.length : "skipped"}
-            </button>
+            </span>
           );
         })() : null}
       </>

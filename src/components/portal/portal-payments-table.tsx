@@ -11,11 +11,9 @@ import {
   PORTAL_TABLE_DETAIL_ROW,
   PORTAL_TABLE_HEAD_ROW,
   PORTAL_TABLE_TD,
-  PORTAL_TABLE_TR_EXPANDABLE,
+  PORTAL_TABLE_TR,
   PortalDataTableColGroup,
   PortalTableExpandChevron,
-  PortalTableInlineExpand,
-  createPortalRowExpandClick,
   portalTableColumnPercents,
 } from "@/components/portal/portal-data-table";
 
@@ -155,13 +153,9 @@ export function PortalPaymentsTable({
                 const expanded = expandedId === row.id;
                 return (
                   <Fragment key={row.id}>
-                    <tr
-                      className={PORTAL_TABLE_TR_EXPANDABLE}
-                      onClick={createPortalRowExpandClick(() => onExpand(expanded ? null : row.id))}
-                      aria-expanded={expanded}
-                    >
+                    <tr className={PORTAL_TABLE_TR}>
                       {showSelection ? (
-                        <td className={PORTAL_TABLE_TD} onClick={(e) => e.stopPropagation()}>
+                        <td className={PORTAL_TABLE_TD}>
                           <input
                             type="checkbox"
                             className="size-4 rounded border-border"
@@ -172,11 +166,20 @@ export function PortalPaymentsTable({
                         </td>
                       ) : null}
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
-                        {renderChargeCell ? (
-                          renderChargeCell(row, expanded)
-                        ) : (
-                          <PortalTableInlineExpand expanded={expanded}>{row.charge}</PortalTableInlineExpand>
-                        )}
+                        <div className="flex min-w-0 items-start gap-1.5">
+                          <div className="min-w-0 flex-1">
+                            {renderChargeCell ? renderChargeCell(row, expanded) : row.charge}
+                          </div>
+                          <button
+                            type="button"
+                            className="mt-0.5 shrink-0 rounded p-0.5 text-muted hover:bg-accent/50 hover:text-foreground"
+                            onClick={() => onExpand(expanded ? null : row.id)}
+                            aria-expanded={expanded}
+                            aria-label={expanded ? `Collapse ${row.charge}` : `Expand ${row.charge}`}
+                          >
+                            <PortalTableExpandChevron expanded={expanded} />
+                          </button>
+                        </div>
                       </td>
                       <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.property}</td>
                       <td className={PORTAL_TABLE_TD}>{row.payee}</td>
