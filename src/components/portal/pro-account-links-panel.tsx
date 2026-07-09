@@ -1262,6 +1262,19 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
             renderPropertyPermissionsSection(pid, draft, inv, readOnly),
           )
         )}
+
+        {/* Either side of an active co-manager link can remove it. */}
+        <div className="mt-5 border-t border-border pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            className={`${PORTAL_DETAIL_BTN} border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+            onClick={() => void removeLink(inv.id)}
+            data-attr="co-manager-remove-link"
+          >
+            {readOnly ? "Leave this co-manager link" : "Remove co-manager link"}
+          </Button>
+        </div>
       </>
     );
   };
