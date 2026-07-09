@@ -16,15 +16,26 @@ export type ManagerNavRole = {
   hasEmptyPermissionCoManagerLink: boolean;
 };
 
-/** Derive portal nav role from accepted account-link invite directions. */
+/**
+ * Derive portal nav role from accepted account-link invite directions.
+ *
+ * `ownsProperties` must be true when the user has their OWN portfolio. An owner
+ * who is ALSO a co-manager for someone else's properties is still a PRIMARY
+ * manager for nav purposes — they see every section (their own properties grant
+ * full access); the per-property co-manager grants only restrict access to the
+ * LINKED properties at the data layer, never the user's own nav. Without this a
+ * property-owning manager who received an incoming link would lose nav sections
+ * (e.g. Applications) that their own properties require.
+ */
 export function deriveManagerNavRole(
   invites: Pick<AccountLinkInviteDto, "direction" | "status" | "coManagerPermissions" | "propertyCoManagerPermissions">[],
+  ownsProperties = false,
 ): ManagerNavRole {
   const accepted = invites.filter((inv) => inv.status === "accepted");
   const hasOutgoing = accepted.some((inv) => inv.direction === "outgoing");
   const incoming = accepted.filter((inv) => inv.direction === "incoming");
 
-  const isPrimaryManager = hasOutgoing || incoming.length === 0;
+  const isPrimaryManager = hasOutgoing || ownsProperties || incoming.length === 0;
   const mergedPermissions = isPrimaryManager
     ? {}
     : mergeCoManagerPermissionsFromPropertyRows(

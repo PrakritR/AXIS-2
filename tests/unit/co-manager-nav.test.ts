@@ -106,4 +106,22 @@ describe("deriveManagerNavRole", () => {
     const role = deriveManagerNavRole([]);
     expect(role.hasEmptyPermissionCoManagerLink).toBe(false);
   });
+
+  it("treats a property-owning user with an incoming co-manager link as PRIMARY", () => {
+    const incomingLink = [
+      {
+        direction: "incoming" as const,
+        status: "accepted" as const,
+        propertyCoManagerPermissions: { "prop-a": { payments: true } },
+      },
+    ];
+    // Without owning properties → gated co-manager.
+    const coManager = deriveManagerNavRole(incomingLink, false);
+    expect(coManager.isPrimaryManager).toBe(false);
+    // Owning >=1 property → primary (full nav), even with the same incoming link.
+    const owner = deriveManagerNavRole(incomingLink, true);
+    expect(owner.isPrimaryManager).toBe(true);
+    expect(owner.mergedPermissions).toEqual({});
+    expect(owner.hasEmptyPermissionCoManagerLink).toBe(false);
+  });
 });

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import { coManagerPortalSectionAllowed } from "@/lib/co-manager-permissions";
 import { deriveManagerNavRole } from "@/lib/co-manager-nav";
+import { ownedPropertyIdsForUser } from "@/lib/manager-portfolio-access";
 import { fetchAccountLinksCached } from "@/lib/portal-data-store";
 import type { PortalDefinition } from "@/lib/portal-types";
 
@@ -69,8 +70,13 @@ export function useCoManagerNavSections(definition: PortalDefinition, userId: st
       return definition.sections;
     }
 
+    // A user who owns any property is a primary manager for nav (their own
+    // portfolio needs every section); linked-property restrictions still apply
+    // at the data layer. Recomputed on `tick`, which bumps on the property
+    // pipeline sync event.
+    const ownsProperties = userId ? ownedPropertyIdsForUser(userId).size > 0 : false;
     const { isPrimaryManager, mergedPermissions, hasEmptyPermissionCoManagerLink } =
-      deriveManagerNavRole(invites);
+      deriveManagerNavRole(invites, ownsProperties);
 
     return definition.sections.filter((s) =>
       coManagerPortalSectionAllowed({
@@ -80,5 +86,5 @@ export function useCoManagerNavSections(definition: PortalDefinition, userId: st
         hasEmptyPermissionCoManagerLink,
       }),
     );
-  }, [definition, invites, userId]);
+  }, [definition, invites, userId, tick]);
 }

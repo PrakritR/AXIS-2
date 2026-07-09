@@ -26,7 +26,7 @@ import {
   type PropertyCoManagerPermissions,
 } from "@/lib/co-manager-permissions";
 
-function ownedPropertyIdsForUser(userId: string): Set<string> {
+export function ownedPropertyIdsForUser(userId: string): Set<string> {
   const owned = new Set<string>();
   for (const p of readExtraListingsForUser(userId)) owned.add(p.id);
   for (const r of readPendingManagerPropertiesForUser(userId)) owned.add(r.id);
