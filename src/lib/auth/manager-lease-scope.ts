@@ -149,14 +149,41 @@ export function leaseRecordVisibleToManager(
   return Boolean(propertyId && linkedPropertyIds.has(propertyId));
 }
 
-/** Fetch lease pipeline records visible to a manager (own rows + linked-property rows). */
+/**
+ * Linked property ids on which this user holds the `leases` grant (empty perms =
+ * full access). Implemented locally — reuses collectLinkedPropertyIdsForUser (for
+ * the cross-sandbox-filtered membership) and collectLinkedPropertyPermissionsForUser
+ * (for the per-property grant) — to avoid importing co-manager-module-scope, which
+ * imports this file (cycle). This is the SERVER gate that keeps lease PDF bytes out
+ * of a co-manager's GET response when they lack the leases grant.
+ */
+async function linkedLeasePropertyIds(db: ServiceClient, userId: string): Promise<Set<string>> {
+  const [membership, permsByProperty] = await Promise.all([
+    collectLinkedPropertyIdsForUser(db, userId),
+    collectLinkedPropertyPermissionsForUser(db, userId),
+  ]);
+  const out = new Set<string>();
+  for (const pid of membership) {
+    const perms = permsByProperty.get(pid);
+    const flat = permissionsForProperty(perms, pid);
+    if (Object.keys(flat).length === 0 || hasCoManagerPermissionLevelForProperty(perms, pid, "leases", "read")) {
+      out.add(pid);
+    }
+  }
+  return out;
+}
+
+/** Fetch lease pipeline records visible to a manager (own rows + leases-granted linked rows). */
 export async function fetchLeasesForManagerUser(
   db: ServiceClient,
+  // property_id + manager_user_id are required so leaseRecordVisibleToManager can
+  // authorize LINKED rows — without property_id the visibility re-check always
+  // failed and linked-property leases were silently dropped from the response.
   userId: string,
-  select = "id, row_data, updated_at",
+  select = "id, row_data, updated_at, manager_user_id, property_id",
   limit = 500,
 ): Promise<LeaseScopeRecord[]> {
-  const linkedPropertyIds = await collectLinkedPropertyIdsForUser(db, userId);
+  const linkedPropertyIds = await linkedLeasePropertyIds(db, userId);
 
   const { data: ownedRows, error: ownedError } = await db
     .from("portal_lease_pipeline_records")
@@ -211,9 +238,7 @@ export async function managerCanAccessLeaseRecord(
   if (record.manager_user_id === userId) return true;
   const propertyId = record.property_id?.trim() || "";
   if (!propertyId) return false;
-  if (level === "read") {
-    const linkedPropertyIds = await collectLinkedPropertyIdsForUser(db, userId);
-    return linkedPropertyIds.has(propertyId);
-  }
+  // Read too is now gated by the `leases` grant (was linked-membership only), so a
+  // co-manager without leases can neither list nor open another owner's lease.
   return managerHasCoManagerPermissionForProperty(db, userId, propertyId, "leases", level);
 }

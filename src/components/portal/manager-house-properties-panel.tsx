@@ -179,6 +179,15 @@ function ManagerPropertyInlineDetails({
         stablePropertyId &&
         collectLinkedPropertyIdsForModule(managerUserId, "applications").has(stablePropertyId),
     );
+  // Same gating for the Lease section (template/PDF editor). Linked property →
+  // only with the `leases` grant; own properties always show it.
+  const showLeaseSection =
+    !isLinkedProperty ||
+    Boolean(
+      managerUserId &&
+        stablePropertyId &&
+        collectLinkedPropertyIdsForModule(managerUserId, "leases").has(stablePropertyId),
+    );
 
   const portalSub = useMemo<
     | { sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing" | "requestChange"; saveId: string; listingId?: string }
@@ -611,19 +620,21 @@ function ManagerPropertyInlineDetails({
         />
       ) : null}
 
-      <ManagerPropertyLeasePanel
-        sub={managerSubmission}
-        saveTarget={houseSaveTarget}
-        managerUserId={managerUserId}
-        onUpdated={onUpdated}
-        showToast={showToast}
-        propertyHint={{
-          buildingName: mock.buildingName || mock.title,
-          unitLabel: mock.unitLabel,
-          rentLabel: mock.rentLabel,
-        }}
-        demoMode={isDemoModeActive()}
-      />
+      {showLeaseSection ? (
+        <ManagerPropertyLeasePanel
+          sub={managerSubmission}
+          saveTarget={houseSaveTarget}
+          managerUserId={managerUserId}
+          onUpdated={onUpdated}
+          showToast={showToast}
+          propertyHint={{
+            buildingName: mock.buildingName || mock.title,
+            unitLabel: mock.unitLabel,
+            rentLabel: mock.rentLabel,
+          }}
+          demoMode={isDemoModeActive()}
+        />
+      ) : null}
 
       <ManagerPropertyServiceOptionsPanel
         sub={managerSubmission}

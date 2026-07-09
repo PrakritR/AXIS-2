@@ -804,6 +804,16 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     return collectLinkedPropertyIdsForModule(userId, "applications").has(pid);
   }, [selected, userId, hcTick]);
 
+  // Same gating for the resident's Lease section + Download lease button: hidden
+  // on a LINKED property when the co-manager lacks the `leases` grant.
+  const showResidentLease = useMemo(() => {
+    void hcTick;
+    const pid = selected?.propertyId?.trim() || "";
+    if (!userId || !pid) return true;
+    if (!collectLinkedPropertyIds(userId).has(pid)) return true;
+    return collectLinkedPropertyIdsForModule(userId, "leases").has(pid);
+  }, [selected, userId, hcTick]);
+
   const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
     if (!selected?.email?.trim()) return null;
     const appRow = selectedApplicationRow;
@@ -1885,6 +1895,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                             </ResidentDetailSection>
                             ) : null}
 
+                            {showResidentLease ? (
                             <ResidentDetailSection
                               title="Lease"
                               summary={
@@ -2075,6 +2086,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <p className="text-sm text-muted">Approve the application and create or generate a lease here for this resident.</p>
                               )}
                             </ResidentDetailSection>
+                            ) : null}
 
                             <ResidentDetailSection
                               title="Payments"
