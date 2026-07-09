@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { collectLinkedPropertyIdsForUser } from "@/lib/auth/manager-lease-scope";
+import { collectLinkedPropertyIdsForUser, managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
@@ -186,16 +186,18 @@ async function assertCanDeleteApplicationRecords(
   }
 
   if (role === "manager" || role === "owner" || role === "pro") {
-    const linkedPropertyIds = await collectLinkedPropertyIdsForUser(db, user.id);
     for (const record of records) {
       const row = normalizeRow(record.row_data as DemoApplicantRow);
       const managerUserId = record.manager_user_id ?? row.managerUserId ?? null;
       if (managerUserId === user.id) continue;
       const propertyId = (record.property_id ?? row.propertyId ?? row.application?.propertyId ?? "").trim();
       const assignedPropertyId = (record.assigned_property_id ?? row.assignedPropertyId ?? "").trim();
-      if ((propertyId && linkedPropertyIds.has(propertyId)) || (assignedPropertyId && linkedPropertyIds.has(assignedPropertyId))) {
-        continue;
-      }
+      // Co-manager deletes require the granular "delete" level on Applications.
+      const canDelete =
+        (propertyId && (await managerHasCoManagerPermissionForProperty(db, user.id, propertyId, "applications", "delete"))) ||
+        (assignedPropertyId &&
+          (await managerHasCoManagerPermissionForProperty(db, user.id, assignedPropertyId, "applications", "delete")));
+      if (canDelete) continue;
       return "You do not have permission to delete this application.";
     }
     return null;

@@ -3,6 +3,7 @@ import "server-only";
 import { asStringArray, readPropertyPermissionsFromRow } from "@/app/api/pro/account-links/route";
 import {
   hasCoManagerPermissionLevelForProperty,
+  permissionsForProperty,
   type CoManagerPermissionId,
   type CoManagerPermissionLevel,
   type PropertyCoManagerPermissions,
@@ -115,7 +116,12 @@ export async function managerHasCoManagerPermissionForProperty(
   if (propertyRow?.manager_user_id === userId) return true;
 
   const linked = await collectLinkedPropertyPermissionsForUser(db, userId);
+  if (!linked.has(propertyId)) return false;
   const perms = linked.get(propertyId);
+  // Same default as co-manager-module-scope: an assignment with NO checked
+  // permissions grants every module at every level; a non-empty set restricts.
+  const flat = permissionsForProperty(perms, propertyId);
+  if (Object.keys(flat).length === 0) return true;
   return hasCoManagerPermissionLevelForProperty(perms, propertyId, permission, level);
 }
 
@@ -191,12 +197,23 @@ export async function fetchLeasesForManagerUser(
   });
 }
 
-/** Returns true when the user may read or mutate this lease record. */
+/**
+ * Whether the user may access this lease record. `level` defaults to read
+ * (any linked property qualifies); pass "edit"/"delete" on write paths so the
+ * co-manager's granular leases grant is enforced.
+ */
 export async function managerCanAccessLeaseRecord(
   db: ServiceClient,
   userId: string,
   record: Pick<LeaseScopeRecord, "manager_user_id" | "property_id">,
+  level: CoManagerPermissionLevel = "read",
 ): Promise<boolean> {
-  const linkedPropertyIds = await collectLinkedPropertyIdsForUser(db, userId);
-  return leaseRecordVisibleToManager(record, userId, linkedPropertyIds);
+  if (record.manager_user_id === userId) return true;
+  const propertyId = record.property_id?.trim() || "";
+  if (!propertyId) return false;
+  if (level === "read") {
+    const linkedPropertyIds = await collectLinkedPropertyIdsForUser(db, userId);
+    return linkedPropertyIds.has(propertyId);
+  }
+  return managerHasCoManagerPermissionForProperty(db, userId, propertyId, "leases", level);
 }

@@ -123,7 +123,7 @@ export async function POST(req: Request) {
         if (!record) continue;
         if (ctx.user.role !== "admin") {
           if (ctx.user.role === "resident") continue;
-          const allowed = await managerCanAccessLeaseRecord(ctx.db, ctx.user.id, record);
+          const allowed = await managerCanAccessLeaseRecord(ctx.db, ctx.user.id, record, "delete");
           if (!allowed) continue;
         }
         await ctx.db.from("portal_lease_pipeline_records").delete().eq("id", id);
@@ -163,7 +163,7 @@ export async function POST(req: Request) {
           }
         } else {
           const allowed = existingRecord
-            ? await managerCanAccessLeaseRecord(ctx.db, ctx.user.id, existingRecord)
+            ? await managerCanAccessLeaseRecord(ctx.db, ctx.user.id, existingRecord, "edit")
             : false;
           if (!allowed) return NextResponse.json({ error: "Record not found." }, { status: 404 });
           // Preserve server-trusted ownership on update.
