@@ -1,4 +1,5 @@
-import { isAdminUser } from "@/lib/auth/admin-preview";
+import { getAdminPreviewFromCookies, isAdminUser } from "@/lib/auth/admin-preview";
+import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import type { AuthRole } from "@/lib/auth/portal-roles";
 
@@ -32,6 +33,33 @@ export async function requireVendorApiAccess(): Promise<
       effectiveRole: ctx.effectiveRole,
     },
   };
+}
+
+/**
+ * Vendor-scoped user id for self-service routes (documents, availability, tax profile).
+ * Supports multi-role users (profile_roles) and admin preview of a vendor account.
+ */
+export async function resolveVendorPortalUserId(): Promise<
+  | { ok: true; userId: string }
+  | { ok: false; status: 401 | 403 }
+> {
+  const access = await requireVendorApiAccess();
+  if (access.ok) {
+    const effectiveId = await getEffectiveUserIdForPortal("vendor");
+    return { ok: true, userId: effectiveId ?? access.actor.userId };
+  }
+
+  const ctx = await getPortalAccessContext();
+  if (!ctx.user) return { ok: false, status: 401 };
+  if (await isAdminUser(ctx.user.id)) {
+    const preview = await getAdminPreviewFromCookies();
+    const effectiveId = await getEffectiveUserIdForPortal("vendor");
+    if (preview?.portal === "vendor" && effectiveId) {
+      return { ok: true, userId: effectiveId };
+    }
+  }
+
+  return { ok: false, status: access.status };
 }
 
 /** Role used for mixed manager/vendor API routes (e.g. work-order bids). */

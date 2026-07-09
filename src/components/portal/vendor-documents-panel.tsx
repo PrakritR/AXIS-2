@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { TabNav } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -29,7 +29,7 @@ import {
 } from "@/components/portal/portal-data-table";
 import { DocumentInlineViewer, triggerDocumentDownload } from "@/components/portal/resident-other-documents";
 import { PortalSharedDocumentsTable } from "@/components/portal/portal-shared-documents-table";
-import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { isDemoModeActive, subscribeDemoPath } from "@/lib/demo/demo-session";
 import { safeFormatDateTime } from "@/lib/pacific-time";
 import {
   VENDOR_DOCUMENT_HINTS,
@@ -41,6 +41,7 @@ import {
   type VendorDocumentKind,
   type VendorDocumentRecord,
 } from "@/lib/vendor-documents";
+import { shouldNotifyVendorDocumentsLoadFailure } from "@/lib/vendor-documents-client";
 
 const DEMO_VENDOR_DOCUMENTS: VendorDocumentRecord[] = [
   {
@@ -72,12 +73,17 @@ type DocumentsPayload = {
 export function VendorDocumentsPanel({
   tabId,
   basePath = "/vendor",
+  demo: demoProp,
 }: {
   tabId: string;
   basePath?: string;
+  /** When true, skip live API reads/writes and use seeded demo documents. */
+  demo?: boolean;
 }) {
   const { showToast } = useAppUi();
-  const demo = isDemoModeActive();
+  const demoFromPath = useSyncExternalStore(subscribeDemoPath, isDemoModeActive, () => false);
+  const demo = demoProp ?? demoFromPath;
+  const loadToastShown = useRef(false);
   const fileRefs = useRef<Partial<Record<VendorDocumentKind, HTMLInputElement | null>>>({});
 
   const [documents, setDocuments] = useState<VendorDocumentRecord[]>(() => (demo ? DEMO_VENDOR_DOCUMENTS : []));
@@ -86,6 +92,7 @@ export function VendorDocumentsPanel({
   const [previewKind, setPreviewKind] = useState<VendorDocumentKind | null>(null);
   const [expandedKind, setExpandedKind] = useState<VendorDocumentKind | null>(null);
   const [unlinked, setUnlinked] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const tabItems = useMemo(
     () => [
@@ -101,17 +108,29 @@ export function VendorDocumentsPanel({
     if (demo) {
       setDocuments(DEMO_VENDOR_DOCUMENTS);
       setLoading(false);
+      setAccessDenied(false);
       return;
     }
     setLoading(true);
+    setAccessDenied(false);
     try {
       const res = await fetch("/api/vendor/documents", { credentials: "include" });
       const data = (await res.json()) as DocumentsPayload & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load documents.");
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          setDocuments([]);
+          setAccessDenied(true);
+          return;
+        }
+        throw new Error(data.error ?? "Failed to load documents.");
+      }
       setUnlinked(data.linked === false);
       setDocuments(data.documents ?? []);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Failed to load documents.");
+      if (!loadToastShown.current) {
+        loadToastShown.current = true;
+        showToast(e instanceof Error ? e.message : "Failed to load documents.");
+      }
       setDocuments([]);
     } finally {
       setLoading(false);
@@ -278,6 +297,15 @@ export function VendorDocumentsPanel({
         </ManagerPortalFilterRow>
       }
     >
+      {accessDenied ? (
+        <p
+          className="mb-4 rounded-xl border px-4 py-3 text-sm portal-banner-pending"
+          data-attr="vendor-documents-access-denied-banner"
+        >
+          Sign in with a vendor account to upload and manage compliance documents here.
+        </p>
+      ) : null}
+
       {unlinked ? (
         <p
           className="mb-4 rounded-xl border px-4 py-3 text-sm portal-banner-pending"

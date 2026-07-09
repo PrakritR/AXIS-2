@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminPreviewFromCookies, isAdminUser } from "@/lib/auth/admin-preview";
-import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
-import { getPortalAccessContext } from "@/lib/auth/portal-access";
-import { requireVendorApiAccess } from "@/lib/auth/vendor-api-access";
+import { resolveVendorPortalUserId } from "@/lib/auth/vendor-api-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { VendorAvailabilityRule } from "@/lib/vendor-availability";
@@ -54,23 +51,9 @@ async function sessionManagerActor(db: Db) {
 
 /** Resolve the vendor auth user whose availability is being read or written. */
 async function resolveVendorSelfUserId(): Promise<{ userId: string } | { status: 401 | 403 }> {
-  const access = await requireVendorApiAccess();
-  if (access.ok) {
-    const effectiveId = await getEffectiveUserIdForPortal("vendor");
-    return { userId: effectiveId ?? access.actor.userId };
-  }
-
-  const ctx = await getPortalAccessContext();
-  if (!ctx.user) return { status: 401 };
-  if (await isAdminUser(ctx.user.id)) {
-    const preview = await getAdminPreviewFromCookies();
-    const effectiveId = await getEffectiveUserIdForPortal("vendor");
-    if (preview?.portal === "vendor" && effectiveId) {
-      return { userId: effectiveId };
-    }
-  }
-
-  return { status: access.status };
+  const resolved = await resolveVendorPortalUserId();
+  if (resolved.ok) return { userId: resolved.userId };
+  return { status: resolved.status };
 }
 
 /** Manager -> the vendor_user_id of a directory row they own, or null if unresolvable/unlinked. */

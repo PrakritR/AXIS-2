@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveVendorPortalUserId } from "@/lib/auth/vendor-api-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { encryptTin, tinLast4 } from "@/lib/reports/tin-crypto";
 import { resolveOwnVendorRecord } from "@/lib/vendor-own-record";
 
 export const runtime = "nodejs";
 
-/** Resolves the signed-in vendor's own directory row (manager_user_id, vendor_id) — never trusts client input for these. */
 async function resolveOwnVendorRow(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
   userId: string,
@@ -18,19 +17,16 @@ async function resolveOwnVendorRow(
 
 export async function GET() {
   try {
-    const auth = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await auth.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-
-    const db = createSupabaseServiceRoleClient();
-    const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    if (String(profile?.role ?? "").toLowerCase() !== "vendor") {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    const auth = await resolveVendorPortalUserId();
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.status === 401 ? "Unauthorized." : "Forbidden." },
+        { status: auth.status },
+      );
     }
 
-    const own = await resolveOwnVendorRow(db, user.id);
+    const db = createSupabaseServiceRoleClient();
+    const own = await resolveOwnVendorRow(db, auth.userId);
     if (!own) return NextResponse.json({ profile: null, linked: false });
 
     const { data, error } = await db
@@ -52,19 +48,16 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   try {
-    const auth = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await auth.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-
-    const db = createSupabaseServiceRoleClient();
-    const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    if (String(profile?.role ?? "").toLowerCase() !== "vendor") {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    const auth = await resolveVendorPortalUserId();
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.status === 401 ? "Unauthorized." : "Forbidden." },
+        { status: auth.status },
+      );
     }
 
-    const own = await resolveOwnVendorRow(db, user.id);
+    const db = createSupabaseServiceRoleClient();
+    const own = await resolveOwnVendorRow(db, auth.userId);
     if (!own) return NextResponse.json({ error: "No linked manager found for this vendor account." }, { status: 400 });
 
     const body = (await req.json()) as {
@@ -85,7 +78,7 @@ export async function PATCH(req: Request) {
     const row: Record<string, unknown> = {
       vendor_id: own.vendorId,
       manager_user_id: own.managerUserId,
-      vendor_user_id: user.id,
+      vendor_user_id: auth.userId,
       submitted_by_vendor: true,
       legal_name: body.legalName?.trim() || null,
       business_name: body.businessName?.trim() || null,

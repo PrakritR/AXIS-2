@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveVendorPortalUserId } from "@/lib/auth/vendor-api-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import {
@@ -11,24 +11,6 @@ import {
 import { resolveOwnVendorRecords, type OwnVendorRecord } from "@/lib/vendor-own-record";
 
 export const runtime = "nodejs";
-
-async function requireVendor(): Promise<
-  | { ok: true; userId: string; db: ReturnType<typeof createSupabaseServiceRoleClient> }
-  | { ok: false; response: NextResponse }
-> {
-  const auth = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await auth.auth.getUser();
-  if (!user) return { ok: false, response: NextResponse.json({ error: "Unauthorized." }, { status: 401 }) };
-
-  const db = createSupabaseServiceRoleClient();
-  const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (String(profile?.role ?? "").toLowerCase() !== "vendor") {
-    return { ok: false, response: NextResponse.json({ error: "Forbidden." }, { status: 403 }) };
-  }
-  return { ok: true, userId: user.id, db };
-}
 
 function expectedDocumentUrl(kind: VendorDocumentKind): string {
   return `/api/vendor/documents/file?kind=${encodeURIComponent(kind)}`;
@@ -62,10 +44,16 @@ function mergedVendorDocuments(records: OwnVendorRecord[]): VendorDocumentRecord
 
 export async function GET() {
   try {
-    const auth = await requireVendor();
-    if (!auth.ok) return auth.response;
+    const auth = await resolveVendorPortalUserId();
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.status === 401 ? "Unauthorized." : "Forbidden." },
+        { status: auth.status },
+      );
+    }
 
-    const records = await resolveOwnVendorRecords(auth.db, auth.userId);
+    const db = createSupabaseServiceRoleClient();
+    const records = await resolveOwnVendorRecords(db, auth.userId);
     const own = records[0];
     return NextResponse.json({
       linked: records.length > 0,
@@ -82,10 +70,16 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   try {
-    const auth = await requireVendor();
-    if (!auth.ok) return auth.response;
+    const auth = await resolveVendorPortalUserId();
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.status === 401 ? "Unauthorized." : "Forbidden." },
+        { status: auth.status },
+      );
+    }
 
-    const records = await resolveOwnVendorRecords(auth.db, auth.userId);
+    const db = createSupabaseServiceRoleClient();
+    const records = await resolveOwnVendorRecords(db, auth.userId);
     if (records.length === 0) {
       return NextResponse.json({ error: "No linked manager found for this vendor account." }, { status: 400 });
     }
@@ -128,7 +122,7 @@ export async function PATCH(req: Request) {
         updatedAt: now,
       };
 
-      const { error } = await auth.db
+      const { error } = await db
         .from("manager_vendor_records")
         .update({ row_data: nextRow, updated_at: now })
         .eq("id", own.id);
