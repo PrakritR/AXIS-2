@@ -17,7 +17,7 @@ const ROLE_META: Record<
     label: "Admin",
     hint: "Platform administration",
     icon: "admin",
-    tone: "steel",
+    tone: "blue",
   },
   manager: {
     label: "Property",
