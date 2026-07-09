@@ -131,7 +131,7 @@ function levelsToGrant(levels: GrantLevels): CoManagerPermissions[CoManagerPermi
 // grant-map builder lives in the lib (buildAllModulesGrant) so it is unit-tested.
 const CO_MANAGER_PERMISSION_PRESETS: { label: string; preset: CoManagerBulkPreset }[] = [
   { label: "All read-only", preset: "read" },
-  { label: "All edit", preset: "edit" },
+  { label: "All write", preset: "edit" },
   { label: "All delete", preset: "delete" },
   { label: "All full access", preset: "full" },
 ];
@@ -209,7 +209,7 @@ function CoManagerPermissionsEditor({
                     onChange={(e) => setLevels(id, { ...levels, edit: e.target.checked })}
                     className="h-3.5 w-3.5 rounded border-border text-primary"
                   />
-                  Edit
+                  Write
                 </label>
                 <label className={`inline-flex items-center gap-1.5 ${disabled ? "" : "cursor-pointer"}`}>
                   <input
