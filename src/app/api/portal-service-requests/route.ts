@@ -5,6 +5,7 @@ import { fetchRowsForManagerWithLinked, linkedPropertyIdsForModule } from "@/lib
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { residentBelongsToManager } from "@/lib/resident-manager-scope";
+import { notifyWorkOrderEvent } from "@/lib/work-order-notification.server";
 
 export const runtime = "nodejs";
 
@@ -196,10 +197,37 @@ export async function POST(req: Request) {
     if (!(await residentMayTargetRowManager(body.row))) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
+    // The client mirrors both creates and edits through this same single-row
+    // upsert, so a genuinely new submission (vs an update) is detected with an
+    // existence check BEFORE the write — only brand-new rows notify.
+    const { data: preExisting } = await db
+      .from("portal_service_request_records")
+      .select("id")
+      .eq("id", body.row.id)
+      .maybeSingle();
+    const record = recordForActor(actor, role, body.row);
     const { error } = await db
       .from("portal_service_request_records")
-      .upsert(recordForActor(actor, role, body.row), { onConflict: "id" });
+      .upsert(record, { onConflict: "id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const managerUserId = record.manager_user_id;
+    if (!preExisting && !actor.admin && role === "resident" && managerUserId) {
+      // New resident-submitted request → best-effort inbox/SMS/email notice to
+      // the property's manager. Never fails the request.
+      const title = body.row.offerName?.trim() || "Service request";
+      const description = body.row.notes?.trim() || body.row.offerDescription?.trim();
+      await notifyWorkOrderEvent(db, {
+        event: "created",
+        senderUserId: actor.userId,
+        senderEmail: actor.email,
+        senderName: body.row.residentName?.trim() || undefined,
+        subject: `New maintenance request: ${title}`,
+        text: description || `New maintenance request "${title}" submitted.`,
+        title,
+        toUserIds: [managerUserId],
+        deliverViaEmail: true,
+      }).catch(() => undefined);
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save service request.";

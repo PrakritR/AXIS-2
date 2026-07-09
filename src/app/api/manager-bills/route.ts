@@ -49,7 +49,8 @@ export async function POST(req: Request) {
       categoryCode?: string;
     };
 
-    const cm = await assertManagerFinancialsCoManagerAccess(auth.db, auth.userId, body.propertyId, auth.userId);
+    // Creating/updating bills is a write — requires the "edit" level on financials.
+    const cm = await assertManagerFinancialsCoManagerAccess(auth.db, auth.userId, body.propertyId, auth.userId, "edit");
     if (!cm.ok) return NextResponse.json({ error: cm.error }, { status: cm.status });
 
     const bill = await createManagerBill(auth.db, {

@@ -36,6 +36,7 @@ import {
   normalizePropertyCoManagerPermissions,
   permissionsForProperty,
   summarizePropertyCoManagerPermissions,
+  type CoManagerPermissionId,
   type CoManagerPermissions,
   type PropertyCoManagerPermissions,
 } from "@/lib/co-manager-permissions";
@@ -100,6 +101,29 @@ function resolvePropertyLabel(id: string, fallback: string): string {
   return resolvePropertyLabelForId(id, fallback);
 }
 
+type GrantLevels = { read?: boolean; edit?: boolean; delete?: boolean };
+
+function grantToLevels(grant: CoManagerPermissions[CoManagerPermissionId]): GrantLevels {
+  if (grant === true) return { read: true, edit: true, delete: true };
+  if (grant && typeof grant === "object") {
+    return {
+      read: grant.read === true || grant.edit === true || grant.delete === true,
+      edit: grant.edit === true,
+      delete: grant.delete === true,
+    };
+  }
+  return {};
+}
+
+function levelsToGrant(levels: GrantLevels): CoManagerPermissions[CoManagerPermissionId] | undefined {
+  if (levels.read && levels.edit && levels.delete) return true;
+  const grant: GrantLevels = {};
+  if (levels.read) grant.read = true;
+  if (levels.edit) grant.edit = true;
+  if (levels.delete) grant.delete = true;
+  return Object.keys(grant).length > 0 ? grant : undefined;
+}
+
 function CoManagerPermissionsEditor({
   value,
   onChange,
@@ -109,28 +133,63 @@ function CoManagerPermissionsEditor({
   onChange: (next: CoManagerPermissions) => void;
   disabled?: boolean;
 }) {
+  const setLevels = (id: CoManagerPermissionId, levels: GrantLevels) => {
+    const next = { ...value };
+    const grant = levelsToGrant(levels);
+    if (grant === undefined) delete next[id];
+    else next[id] = grant;
+    onChange(next);
+  };
+
   return (
     <div className="grid gap-2 sm:grid-cols-2">
-      {CO_MANAGER_PERMISSION_OPTIONS.map(({ id, label }) => (
-        <label
-          key={id}
-          className={`flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-sm ${disabled ? "opacity-60" : "cursor-pointer"}`}
-        >
-          <input
-            type="checkbox"
-            disabled={disabled}
-            checked={value[id] === true}
-            onChange={(e) => {
-              const next = { ...value };
-              if (e.target.checked) next[id] = true;
-              else delete next[id];
-              onChange(next);
-            }}
-            className="mt-0.5 h-4 w-4 rounded border-border text-primary"
-          />
-          <span className="font-medium text-foreground">{label}</span>
-        </label>
-      ))}
+      {CO_MANAGER_PERMISSION_OPTIONS.map(({ id, label }) => {
+        const levels = grantToLevels(value[id]);
+        const enabled = Boolean(levels.read);
+        return (
+          <div
+            key={id}
+            className={`rounded-lg border border-border bg-card px-3 py-2.5 text-sm ${disabled ? "opacity-60" : ""}`}
+          >
+            <label className={`flex items-start gap-2 ${disabled ? "" : "cursor-pointer"}`}>
+              <input
+                type="checkbox"
+                disabled={disabled}
+                checked={enabled}
+                onChange={(e) =>
+                  setLevels(id, e.target.checked ? { read: true } : {})
+                }
+                className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+              />
+              <span className="font-medium text-foreground">{label}</span>
+            </label>
+            {enabled ? (
+              <div className="mt-2 flex items-center gap-4 pl-6 text-xs text-muted">
+                <label className={`inline-flex items-center gap-1.5 ${disabled ? "" : "cursor-pointer"}`}>
+                  <input
+                    type="checkbox"
+                    disabled={disabled}
+                    checked={Boolean(levels.edit)}
+                    onChange={(e) => setLevels(id, { ...levels, edit: e.target.checked })}
+                    className="h-3.5 w-3.5 rounded border-border text-primary"
+                  />
+                  Edit
+                </label>
+                <label className={`inline-flex items-center gap-1.5 ${disabled ? "" : "cursor-pointer"}`}>
+                  <input
+                    type="checkbox"
+                    disabled={disabled}
+                    checked={Boolean(levels.delete)}
+                    onChange={(e) => setLevels(id, { ...levels, delete: e.target.checked })}
+                    className="h-3.5 w-3.5 rounded border-border text-primary"
+                  />
+                  Delete
+                </label>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }

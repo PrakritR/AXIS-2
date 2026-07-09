@@ -5,6 +5,7 @@ import { fetchRowsForManagerWithLinked, linkedPropertyIdsForModule } from "@/lib
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { residentBelongsToManager } from "@/lib/resident-manager-scope";
+import { notifyWorkOrderEvent } from "@/lib/work-order-notification.server";
 
 export const runtime = "nodejs";
 
@@ -243,6 +244,33 @@ function recordForActor(actor: Actor, row: DemoManagerWorkOrderRow, vendorUserId
   return { ...base, manager_user_id: actor.userId };
 }
 
+/** Best-effort "work order opened" notice to the linked resident. Callers must
+ * only invoke this for ids verified NOT to exist before this request's upsert —
+ * the manager client mirrors its full local list through POST ("replace") on
+ * every change, so newness cannot be inferred from the payload shape alone.
+ * Never throws. */
+async function notifyResidentOfCreatedWorkOrder(db: Db, actor: Actor, row: DemoManagerWorkOrderRow): Promise<void> {
+  // Only manager-authored creations notify: a resident filing their own request
+  // would just notify themselves, and admin bulk/preview writes stay silent.
+  if (actor.admin || actor.role === "resident") return;
+  const residentEmail = row.residentEmail?.trim().toLowerCase();
+  if (!residentEmail || !residentEmail.includes("@")) return;
+  const title = row.title?.trim() || "Work order";
+  await notifyWorkOrderEvent(db, {
+    event: "created",
+    senderUserId: actor.userId,
+    senderEmail: actor.email,
+    subject: `Work order opened: ${title}`,
+    text:
+      row.description?.trim() ||
+      `A work order "${title}"${row.propertyName ? ` at ${row.propertyName}` : ""} has been opened.`,
+    title,
+    propertyLabel: row.propertyName || undefined,
+    toEmails: [residentEmail],
+    deliverViaEmail: true,
+  }).catch(() => undefined);
+}
+
 export async function POST(req: Request) {
   try {
     const user = await sessionUser();
@@ -293,6 +321,20 @@ export async function POST(req: Request) {
 
     if (body.action === "replace") {
       const rows = Array.isArray(body.rows) ? body.rows : [];
+      // The manager client mirrors its FULL local list through this replace
+      // sync on every change — creating a work order arrives here too, never
+      // as a single-row insert. "Newly created" is therefore detected by
+      // selecting which incoming ids already exist BEFORE the blind upsert;
+      // re-synced existing rows never notify.
+      const incomingIds = rows.map((row) => row?.id).filter((id): id is string => Boolean(id));
+      const preExistingIds = new Set<string>();
+      if (incomingIds.length > 0) {
+        const { data: existingIdRows } = await db
+          .from("portal_work_order_records")
+          .select("id")
+          .in("id", incomingIds);
+        for (const record of existingIdRows ?? []) preExistingIds.add(String(record.id));
+      }
       for (const row of rows) {
         if (!row?.id) continue;
         if (!(await ownsExisting(row.id))) continue;
@@ -303,7 +345,12 @@ export async function POST(req: Request) {
           await resolveVendorOwnerManagerUserId(db, actor, row),
         );
         if (rejected) continue;
-        await db.from("portal_work_order_records").upsert(recordForActor(actor, row, vendorUserId), { onConflict: "id" });
+        const { error: upsertError } = await db
+          .from("portal_work_order_records")
+          .upsert(recordForActor(actor, row, vendorUserId), { onConflict: "id" });
+        if (!upsertError && !preExistingIds.has(row.id)) {
+          await notifyResidentOfCreatedWorkOrder(db, actor, row);
+        }
       }
       return NextResponse.json({ ok: true });
     }
@@ -338,10 +385,18 @@ export async function POST(req: Request) {
       await resolveVendorOwnerManagerUserId(db, actor, body.row),
     );
     if (rejected) return NextResponse.json({ error: "Forbidden: vendor not available to this manager." }, { status: 403 });
+    // Single-row upserts also serve both create and edit; detect newness with
+    // an existence check BEFORE the write so only a genuinely new row notifies.
+    const { data: preExisting } = await db
+      .from("portal_work_order_records")
+      .select("id")
+      .eq("id", body.row.id)
+      .maybeSingle();
     const { error } = await db
       .from("portal_work_order_records")
       .upsert(recordForActor(actor, body.row, vendorUserId), { onConflict: "id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!preExisting) await notifyResidentOfCreatedWorkOrder(db, actor, body.row);
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save work order.";

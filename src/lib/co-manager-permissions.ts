@@ -22,7 +22,51 @@ export type CoManagerPermissionId =
   | (typeof CO_MANAGER_PERMISSION_OPTIONS)[number]["id"]
   | (typeof LEGACY_CO_MANAGER_PERMISSION_IDS)[number];
 
-export type CoManagerPermissions = Partial<Record<CoManagerPermissionId, boolean>>;
+/** Access dimensions per module (granular RBAC). */
+export type CoManagerPermissionLevel = "read" | "edit" | "delete";
+
+/**
+ * A module grant: legacy `true` = full access (read+edit+delete); the granular
+ * object form scopes by level. `edit` / `delete` imply `read`.
+ */
+export type CoManagerPermissionGrant =
+  | boolean
+  | { read?: boolean; edit?: boolean; delete?: boolean };
+
+export type CoManagerPermissions = Partial<Record<CoManagerPermissionId, CoManagerPermissionGrant>>;
+
+function grantAllows(grant: CoManagerPermissionGrant | undefined, level: CoManagerPermissionLevel): boolean {
+  if (grant === true) return true;
+  if (!grant || typeof grant !== "object") return false;
+  if (level === "read") return grant.read === true || grant.edit === true || grant.delete === true;
+  return grant[level] === true;
+}
+
+function normalizeGrant(raw: unknown): CoManagerPermissionGrant | undefined {
+  if (raw === true) return true;
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const grant: { read?: boolean; edit?: boolean; delete?: boolean } = {};
+    if (o.read === true) grant.read = true;
+    if (o.edit === true) grant.edit = true;
+    if (o.delete === true) grant.delete = true;
+    return Object.keys(grant).length > 0 ? grant : undefined;
+  }
+  return undefined;
+}
+
+function unionGrants(
+  a: CoManagerPermissionGrant | undefined,
+  b: CoManagerPermissionGrant | undefined,
+): CoManagerPermissionGrant | undefined {
+  if (a === true || b === true) return true;
+  const merged: { read?: boolean; edit?: boolean; delete?: boolean } = {};
+  for (const level of ["read", "edit", "delete"] as const) {
+    if (grantAllows(a, level) || grantAllows(b, level)) merged[level] = true;
+  }
+  if (merged.read && merged.edit && merged.delete) return true;
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
 
 /** Per-property permission grants on an account link. */
 export type PropertyCoManagerPermissions = Record<string, CoManagerPermissions>;
@@ -44,12 +88,14 @@ export function normalizeCoManagerPermissions(raw: unknown): CoManagerPermission
   if (!raw || typeof raw !== "object") return {};
   const out: CoManagerPermissions = {};
   for (const { id } of CO_MANAGER_PERMISSION_OPTIONS) {
-    if ((raw as Record<string, unknown>)[id] === true) out[id] = true;
+    const grant = normalizeGrant((raw as Record<string, unknown>)[id]);
+    if (grant !== undefined) out[id] = grant;
   }
   for (const id of LEGACY_CO_MANAGER_PERMISSION_IDS) {
-    if ((raw as Record<string, unknown>)[id] === true) out[id] = true;
+    const grant = normalizeGrant((raw as Record<string, unknown>)[id]);
+    if (grant !== undefined) out[id] = grant;
   }
-  if (out.editListings && !out.properties) out.properties = true;
+  if (out.editListings && !out.properties) out.properties = out.editListings;
   return out;
 }
 
@@ -132,14 +178,33 @@ export function coManagerPermissionsFromLegacy(input: {
   return base;
 }
 
+/** Any access to the module (read level; `true` and any granular grant qualify). */
 export function hasCoManagerPermission(
   permissions: CoManagerPermissions | undefined,
   id: CoManagerPermissionId,
 ): boolean {
+  return hasCoManagerPermissionLevel(permissions, id, "read");
+}
+
+/** Level-specific access check. Legacy `true` grants every level. */
+export function hasCoManagerPermissionLevel(
+  permissions: CoManagerPermissions | undefined,
+  id: CoManagerPermissionId,
+  level: CoManagerPermissionLevel,
+): boolean {
   if (id === "editListings") {
-    return permissions?.properties === true || permissions?.editListings === true;
+    return grantAllows(permissions?.properties, level) || grantAllows(permissions?.editListings, level);
   }
-  return permissions?.[id] === true;
+  return grantAllows(permissions?.[id], level);
+}
+
+export function hasCoManagerPermissionLevelForProperty(
+  propertyPermissions: PropertyCoManagerPermissions | undefined,
+  propertyId: string,
+  id: CoManagerPermissionId,
+  level: CoManagerPermissionLevel,
+): boolean {
+  return hasCoManagerPermissionLevel(permissionsForProperty(propertyPermissions, propertyId), id, level);
 }
 
 export function hasCoManagerPermissionForProperty(
@@ -194,7 +259,8 @@ export function mergeCoManagerPermissions(
   const merged: CoManagerPermissions = {};
   for (const row of rows) {
     for (const { id } of CO_MANAGER_PERMISSION_OPTIONS) {
-      if (hasCoManagerPermission(row.coManagerPermissions, id)) merged[id] = true;
+      const next = unionGrants(merged[id], row.coManagerPermissions?.[id]);
+      if (next !== undefined) merged[id] = next;
     }
   }
   return merged;

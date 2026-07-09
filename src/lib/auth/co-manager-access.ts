@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { CoManagerPermissionId } from "@/lib/co-manager-permissions";
+import type { CoManagerPermissionId, CoManagerPermissionLevel } from "@/lib/co-manager-permissions";
 import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -19,7 +19,7 @@ export async function assertCoManagerModuleAccess(
   userId: string,
   propertyId: string | null | undefined,
   permission: CoManagerPermissionId,
-  opts?: { ownerManagerUserId?: string | null },
+  opts?: { ownerManagerUserId?: string | null; level?: CoManagerPermissionLevel },
 ): Promise<CoManagerAccessResult> {
   const pid = (propertyId ?? "").trim();
   const ownerId = (opts?.ownerManagerUserId ?? "").trim();
@@ -32,7 +32,7 @@ export async function assertCoManagerModuleAccess(
     return { ok: true };
   }
 
-  const allowed = await managerHasCoManagerPermissionForProperty(db, userId, pid, permission);
+  const allowed = await managerHasCoManagerPermissionForProperty(db, userId, pid, permission, opts?.level ?? "read");
   if (allowed) return { ok: true };
   return { ok: false, status: 403, error: "You do not have access to this section for this property." };
 }
@@ -43,8 +43,9 @@ export async function assertManagerFinancialsCoManagerAccess(
   userId: string,
   propertyId: string | null | undefined,
   ownerManagerUserId?: string | null,
+  level: CoManagerPermissionLevel = "read",
 ): Promise<CoManagerAccessResult> {
-  return assertCoManagerModuleAccess(db, userId, propertyId, "financials", { ownerManagerUserId });
+  return assertCoManagerModuleAccess(db, userId, propertyId, "financials", { ownerManagerUserId, level });
 }
 
 /** Map document routes to the documents module permission. */

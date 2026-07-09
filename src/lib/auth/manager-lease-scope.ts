@@ -2,8 +2,9 @@ import "server-only";
 
 import { asStringArray, readPropertyPermissionsFromRow } from "@/app/api/pro/account-links/route";
 import {
-  hasCoManagerPermissionForProperty,
+  hasCoManagerPermissionLevelForProperty,
   type CoManagerPermissionId,
+  type CoManagerPermissionLevel,
   type PropertyCoManagerPermissions,
 } from "@/lib/co-manager-permissions";
 import { isCrossSandboxPortalPair } from "@/lib/portal-sandbox-accounts";
@@ -104,6 +105,7 @@ export async function managerHasCoManagerPermissionForProperty(
   userId: string,
   propertyId: string,
   permission: CoManagerPermissionId,
+  level: CoManagerPermissionLevel = "read",
 ): Promise<boolean> {
   const { data: propertyRow } = await db
     .from("manager_property_records")
@@ -114,7 +116,7 @@ export async function managerHasCoManagerPermissionForProperty(
 
   const linked = await collectLinkedPropertyPermissionsForUser(db, userId);
   const perms = linked.get(propertyId);
-  return hasCoManagerPermissionForProperty(perms, propertyId, permission);
+  return hasCoManagerPermissionLevelForProperty(perms, propertyId, permission, level);
 }
 
 /** Primary owner or co-manager with calendar (or legacy properties) access on a property. */

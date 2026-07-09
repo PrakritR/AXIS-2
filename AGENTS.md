@@ -742,3 +742,62 @@ credentials never leave the environment. `admin@test.axis.local` is deliberately
 NOT provisioned by the route — never auto-create an admin-role account with a
 well-known password in production. Signups always land in whatever DB the
 deployment's env points at (`assertNonProdDatabase` guards the cross-wiring).
+
+# Co-manager access (module scoping + granular levels)
+
+**A co-manager link grants module access; the permissions editor restricts it.**
+An accepted `account_link_invites` row with an EMPTY permissions object grants
+every module on its assigned properties (assignment IS the grant); once any
+module is checked, the set becomes a restriction. Grants are per-property, per
+module, and now carry LEVELS: legacy `true` = read+edit+delete; the granular
+form is `{ read, edit, delete }` (`edit`/`delete` imply `read`). Model + level
+helpers live in `src/lib/co-manager-permissions.ts`
+(`hasCoManagerPermissionLevel[ForProperty]`).
+
+**Server scoping** — `src/lib/auth/co-manager-module-scope.ts`:
+`linkedPropertyIdsForModule` (property-keyed tables),
+`linkedOwnerScopeForModule` (owner-keyed tables like the vendor directory),
+`fetchRowsForManagerWithLinked` (owned+linked merge, deduped). Wired into the
+GET paths of work orders, service requests, household charges, vendors, and
+manager documents; leases/applications/property-records already had their own
+(`fetchLeasesForManagerUser` etc.). Write enforcement goes through
+`assertCoManagerModuleAccess(..., { level: "edit" })`
+(`src/lib/auth/co-manager-access.ts`) — bills POST is the exemplar.
+
+**Client mirrors** — `collectLinkedPropertyIdsForModule` /
+`collectLinkedOwnerIdsForModule` / `moduleRowVisibleToPortalUser` in
+`src/lib/manager-portfolio-access.ts`. Storage libs (household-charges,
+manager-vendors-storage, service-requests) stay dependency-free: panels pass
+the precomputed sets as OPTIONAL PARAMS (avoids the
+portal-data-store↔household-charges import cycle). Copy that pattern.
+
+**Hard-won gotcha:** the account-links API selects BOTH
+`property_co_manager_permissions` and legacy `co_manager_permissions`; a 2026-06
+migration RENAMED the legacy column away, so every select errored and the panel
+silently fell back to localStorage-only mode ("Save link (local)") — that was
+the entire "co-manager does nothing" bug. `20260716120000` restores the column.
+The panel now defaults to remote mode and only downgrades on a confirmed
+missing table (`migrationRequired`), never on transient errors.
+
+# SMS / phone system (Twilio)
+
+**Design: outbound sends from a per-manager work number; replies land in Axis.**
+Carriers do not allow sending SMS *from* a personal number — do not fake it.
+- Outbound: `sendSms` (`src/lib/twilio.ts`) via `deliverPortalInboxMessage`'s
+  `deliverViaSms` path — from `profiles.sms_from_number` (the manager's
+  provisioned work number) to recipients' `profiles.phone`. Work-order
+  lifecycle copy lives in `src/lib/work-order-notification.server.ts`.
+- Inbound: `POST /api/twilio/inbound` (Twilio Messaging webhook; signature
+  validated, `TWILIO_WEBHOOK_URL` overrides the URL behind proxies). Resolves
+  the manager by `sms_from_number = To`, the sender by `profiles.phone = From`,
+  logs to `inbound_sms_log`, delivers to the manager's Axis inbox + email, and
+  forwards to the manager's VERIFIED personal phone when
+  `profiles.sms_forward_inbound` is on.
+- Personal-number verification: `/api/manager/phone` (GET settings /
+  POST send code / PUT confirm / PATCH prefs), hashed 6-digit OTP in
+  `phone_verifications` (10-min TTL, 5 attempts, 60s resend throttle). UI:
+  `manager-phone-settings-panel.tsx` on manager Settings.
+- Env required before anything sends: `TWILIO_ACCOUNT_SID`,
+  `TWILIO_AUTH_TOKEN`, optional `TWILIO_DEFAULT_FROM` +
+  `TWILIO_WEBHOOK_URL`; per-manager numbers go in
+  `profiles.sms_from_number`. Everything no-ops gracefully without them.
