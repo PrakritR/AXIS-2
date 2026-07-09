@@ -55,7 +55,11 @@ import {
   readPendingManagerPropertiesForUser,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
-import { collectLinkedPropertyIds, syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
+import {
+  collectLinkedPropertyIds,
+  collectLinkedPropertyIdsForModule,
+  syncManagerPortfolioFromServer,
+} from "@/lib/manager-portfolio-access";
 import { resolvePropertySaveTarget } from "@/lib/manager-property-save-target";
 import {
   legacyAdminFieldsToSubmission,
@@ -160,6 +164,21 @@ function ManagerPropertyInlineDetails({
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const listingId = row?.listingId;
   const stablePropertyId = row?.listingId?.trim() || row?.adminRefId?.trim() || null;
+
+  // For a LINKED (co-managed) property, the Application section is shown only
+  // when the co-manager holds the `applications` grant on that property. Own
+  // properties always show it. (The Applications nav tab is unaffected — it is
+  // gated separately by whether applications is granted on ANY property.)
+  const isLinkedProperty = Boolean(
+    managerUserId && stablePropertyId && collectLinkedPropertyIds(managerUserId).has(stablePropertyId),
+  );
+  const showApplicationSection =
+    !isLinkedProperty ||
+    Boolean(
+      managerUserId &&
+        stablePropertyId &&
+        collectLinkedPropertyIdsForModule(managerUserId, "applications").has(stablePropertyId),
+    );
 
   const portalSub = useMemo<
     | { sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing" | "requestChange"; saveId: string; listingId?: string }
@@ -582,13 +601,15 @@ function ManagerPropertyInlineDetails({
         showToast={showToast}
       />
 
-      <ManagerPropertyApplicationQuestionsPanel
-        sub={managerSubmission}
-        saveTarget={houseSaveTarget}
-        managerUserId={managerUserId}
-        onUpdated={onUpdated}
-        showToast={showToast}
-      />
+      {showApplicationSection ? (
+        <ManagerPropertyApplicationQuestionsPanel
+          sub={managerSubmission}
+          saveTarget={houseSaveTarget}
+          managerUserId={managerUserId}
+          onUpdated={onUpdated}
+          showToast={showToast}
+        />
+      ) : null}
 
       <ManagerPropertyLeasePanel
         sub={managerSubmission}

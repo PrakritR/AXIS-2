@@ -64,7 +64,11 @@ import {
   MANAGER_APPLICATIONS_EVENT,
   normalizeApplicationAxisId,
 } from "@/lib/manager-applications-storage";
-import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
+import {
+  applicationVisibleToPortalUser,
+  collectLinkedPropertyIds,
+  collectLinkedPropertyIdsForModule,
+} from "@/lib/manager-portfolio-access";
 import { isPreviousResidentDirectoryRow, isResidentDirectoryRow } from "@/lib/current-resident";
 import { getPropertyById, getRoomChoiceLabel, LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
@@ -788,6 +792,17 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     if (!selected) return null;
     return readManagerApplicationRows().find((row) => row.id === selected.id) ?? null;
   }, [selected, hcTick]);
+
+  // The resident's Application section is hidden for a LINKED (co-managed)
+  // property when the co-manager lacks the `applications` grant on it. Own
+  // properties always show it.
+  const showResidentApplication = useMemo(() => {
+    void hcTick;
+    const pid = selected?.propertyId?.trim() || "";
+    if (!userId || !pid) return true;
+    if (!collectLinkedPropertyIds(userId).has(pid)) return true;
+    return collectLinkedPropertyIdsForModule(userId, "applications").has(pid);
+  }, [selected, userId, hcTick]);
 
   const selectedServiceResident = useMemo<(ManagerServiceResidentOption & { assignedRoomChoice?: string }) | null>(() => {
     if (!selected?.email?.trim()) return null;
@@ -1798,6 +1813,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                               </div>
                             </div>
 
+                            {showResidentApplication ? (
                             <ResidentDetailSection
                               title="Application"
                               summary={
@@ -1867,6 +1883,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
                                 <p className="text-sm text-muted">No application on file for this resident.</p>
                               )}
                             </ResidentDetailSection>
+                            ) : null}
 
                             <ResidentDetailSection
                               title="Lease"
