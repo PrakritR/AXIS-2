@@ -88,9 +88,10 @@ describe("filterRecipientsBySenderScope", () => {
       manager_application_records: [],
       portal_household_charge_records: [],
       portal_lease_pipeline_records: [],
-      portal_pro_relationship_records: [
-        { manager_user_id: "mgr_1", related_email: "partner@example.com", related_user_id: "mgr_2" },
-      ],
+      // Co-managers resolve from the authoritative account_link_invites, not the
+      // client-writable relationship mirror.
+      account_link_invites: [{ inviter_user_id: "mgr_1", invitee_user_id: "mgr_2", status: "accepted" }],
+      profiles: [{ id: "mgr_2", email: "partner@example.com" }],
     });
     const sender = { id: "mgr_1", email: "mgr@example.com", role: "manager", isAdmin: false };
 
@@ -110,10 +111,11 @@ describe("filterRecipientsBySenderScope", () => {
       ],
       portal_household_charge_records: [],
       portal_lease_pipeline_records: [],
-      portal_pro_relationship_records: [
-        { manager_user_id: "mgr_1", related_email: "co@example.com", related_user_id: "mgr_2" },
+      account_link_invites: [{ inviter_user_id: "mgr_1", invitee_user_id: "mgr_2", status: "accepted" }],
+      profiles: [
+        { id: "mgr_1", email: "mymanager@example.com" },
+        { id: "mgr_2", email: "co@example.com" },
       ],
-      profiles: [{ id: "mgr_1", email: "mymanager@example.com" }],
     });
     const sender = { id: "res_1", email: "me@example.com", role: "resident", isAdmin: false };
 

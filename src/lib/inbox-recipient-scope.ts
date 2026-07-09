@@ -39,29 +39,22 @@ function isManagerRole(role: string | null): boolean {
   return r === "manager" || r === "owner" || r === "pro";
 }
 
-/** Emails of co-managers linked to any of the given manager ids (via pro relationships). */
+/** Emails of co-managers a manager invited, from the AUTHORITATIVE account_link_invites.
+ *
+ * Deliberately NOT read from portal_pro_relationship_records: that mirror is
+ * client-writable (its related_user_id comes from the request body), so trusting
+ * it here would let a manager forge a relationship row and widen their outbound
+ * messaging scope to arbitrary users. account_link_invites.invitee_user_id is set
+ * server-side at invite creation (Axis-ID lookup), so it cannot be spoofed. */
 async function coManagerEmailsForManagers(
   db: SupabaseClient,
   managerIds: string[],
 ): Promise<Set<string>> {
   const emails = new Set<string>();
   if (managerIds.length === 0) return emails;
-  const { data } = await db
-    .from("portal_pro_relationship_records")
-    .select("related_email, related_user_id")
-    .in("manager_user_id", managerIds);
-  // related_email is frequently null on these mirror rows (the record only
-  // reliably carries the counterpart's auth id). Resolve those via profiles so
-  // owner→co-manager (and resident/vendor→co-manager) messaging isn't silently
-  // blocked by a missing denormalized email.
-  const idsToResolve = new Set<string>();
-  for (const row of data ?? []) {
-    const email = String(row.related_email ?? "").trim().toLowerCase();
-    if (email) emails.add(email);
-    else if (row.related_user_id) idsToResolve.add(String(row.related_user_id).trim());
-  }
-  if (idsToResolve.size > 0) {
-    const { data: profs } = await db.from("profiles").select("email").in("id", [...idsToResolve]);
+  const inviteeIds = await accountLinkCoManagerIdsForManagers(db, managerIds);
+  if (inviteeIds.size > 0) {
+    const { data: profs } = await db.from("profiles").select("email").in("id", [...inviteeIds]);
     for (const p of profs ?? []) {
       const e = String(p.email ?? "").trim().toLowerCase();
       if (e) emails.add(e);
@@ -384,19 +377,18 @@ async function pushCoManagers(
   push: (contact: InboxScopedContact) => void,
 ): Promise<void> {
   if (managerIds.length === 0) return;
-  const { data } = await db
-    .from("portal_pro_relationship_records")
-    .select("id, related_user_id, related_email, row_data")
-    .in("manager_user_id", managerIds);
+  // Authoritative source (account_link_invites), matching coManagerEmailsForManagers
+  // — the contact picker must not diverge from the send-scope gate, and must not
+  // read the client-writable relationship mirror.
+  const inviteeIds = await accountLinkCoManagerIdsForManagers(db, managerIds);
+  if (inviteeIds.size === 0) return;
+  const { data } = await db.from("profiles").select("id, email, full_name").in("id", [...inviteeIds]);
   for (const row of data ?? []) {
-    const email = String(row.related_email ?? "").trim();
+    const email = String(row.email ?? "").trim();
     if (!email) continue;
-    const rowData = (row.row_data ?? {}) as Record<string, unknown>;
-    const name =
-      String(rowData.linkedDisplayName ?? rowData.displayName ?? rowData.name ?? "").trim() || email;
     push({
-      id: `rel-${row.id}`,
-      name,
+      id: `cm-${row.id}`,
+      name: String(row.full_name ?? "").trim() || email,
       email,
       role: "manager",
     });

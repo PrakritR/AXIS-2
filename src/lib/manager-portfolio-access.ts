@@ -128,15 +128,6 @@ export function moduleRowVisibleToPortalUser(
   return Boolean((pid && linked.has(pid)) || (apid && linked.has(apid)));
 }
 
-/** Property ids from this user's listings plus pending rows and account-link assignments. */
-export function collectAccessiblePropertyIds(userId: string): Set<string> {
-  const s = new Set<string>();
-  for (const p of readExtraListingsForUser(userId)) s.add(p.id);
-  for (const r of readPendingManagerPropertiesForUser(userId)) s.add(r.id);
-  for (const id of collectLinkedPropertyIds(userId)) s.add(id);
-  return s;
-}
-
 /** Refresh co-manager relationships and property pipeline (includes linked owner listings). */
 export async function syncManagerPortfolioFromServer(userId: string, opts?: { force?: boolean }): Promise<void> {
   if (!userId.trim()) return;

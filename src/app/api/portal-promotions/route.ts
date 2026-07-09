@@ -6,7 +6,11 @@ import {
 } from "@/lib/promotion-flyer";
 import { type PromotionTextEntry } from "@/lib/promotion-text";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { linkedOwnerScopeForModule, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
+import {
+  linkedOwnerForProperty,
+  linkedOwnerScopeForModule,
+  linkedPropertyIdsForModule,
+} from "@/lib/auth/co-manager-module-scope";
 import { assertManagerPromotionCoManagerAccess } from "@/lib/auth/co-manager-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
@@ -135,13 +139,27 @@ export async function POST(req: Request) {
     const managerUserId = user.id;
 
     if (body.action === "replace") {
-      const rows = Array.isArray(body.rows)
-        ? body.rows
-            .filter((r) => !r.managerUserId || r.managerUserId === managerUserId)
-            .map((r) => normalizeRow(r, managerUserId))
-        : [];
+      const candidateRows = (Array.isArray(body.rows) ? body.rows : []).filter((r) => r?.id);
+      // The full-list mirror must never re-own or overwrite another manager's
+      // promotion: look up each id's stored owner and skip foreign rows (an
+      // intentional co-manager edit goes through the single-row upsert path,
+      // which gates on the promotion edit grant). Own/new rows write as before.
+      const ownerById = new Map<string, string | null>();
+      if (!admin && candidateRows.length > 0) {
+        const ids = [...new Set(candidateRows.map((r) => String(r.id)))];
+        const { data: existingRows } = await db
+          .from("manager_promotion_records")
+          .select("id, manager_user_id")
+          .in("id", ids);
+        for (const r of existingRows ?? []) {
+          ownerById.set(String(r.id), r.manager_user_id ? String(r.manager_user_id) : null);
+        }
+      }
       const failedIds: string[] = [];
-      for (const row of rows) {
+      for (const raw of candidateRows) {
+        const existingOwner = ownerById.get(String(raw.id)) ?? null;
+        if (!admin && existingOwner && existingOwner !== managerUserId) continue;
+        const row = normalizeRow(raw, managerUserId);
         const { error } = await db.from("manager_promotion_records").upsert(
           { id: row.id, manager_user_id: managerUserId, row_data: row, updated_at: row.updatedAt },
           { onConflict: "id" },
@@ -190,21 +208,35 @@ export async function POST(req: Request) {
       .eq("id", id)
       .maybeSingle();
     const existingOwner = existing?.manager_user_id ? String(existing.manager_user_id) : null;
-    // Owner to attribute the write to: a co-manager editing a linked owner's
-    // promotion must (a) hold the promotion EDIT grant and (b) preserve the
-    // owner id (never re-own the row to themselves).
+    // Owner to attribute the write to. A co-manager editing a linked owner's
+    // promotion must hold the promotion EDIT grant and the owner is preserved.
+    // The permission is anchored on the STORED property (never the client body,
+    // which could be spoofed to a property the caller can edit).
     let ownerForWrite = managerUserId;
-    if (existingOwner && !admin && existingOwner !== managerUserId) {
-      const pid = String(
-        (body.row as ManagerPromotionRow).propertyId ??
-          (existing?.row_data as ManagerPromotionRow | null)?.propertyId ??
-          "",
-      ).trim();
-      const gate = await assertManagerPromotionCoManagerAccess(db, managerUserId, pid || null, existingOwner, "edit");
-      if (!gate.ok) {
-        return NextResponse.json({ error: "Cannot edit another manager's promotion." }, { status: gate.status });
+    if (!admin) {
+      if (existingOwner && existingOwner !== managerUserId) {
+        const pid = String((existing?.row_data as ManagerPromotionRow | null)?.propertyId ?? "").trim();
+        const gate = await assertManagerPromotionCoManagerAccess(db, managerUserId, pid || null, existingOwner, "edit");
+        if (!gate.ok) {
+          return NextResponse.json({ error: "Cannot edit another manager's promotion." }, { status: gate.status });
+        }
+        ownerForWrite = existingOwner;
+      } else if (!existingOwner) {
+        // New row: attribute to the linked owner if this property was assigned to
+        // the caller (requiring promotion edit); otherwise it is the caller's own.
+        const pid = String((body.row as ManagerPromotionRow).propertyId ?? "").trim();
+        const linkedOwner = pid ? await linkedOwnerForProperty(db, managerUserId, pid) : null;
+        if (linkedOwner) {
+          const gate = await assertManagerPromotionCoManagerAccess(db, managerUserId, pid || null, linkedOwner, "edit");
+          if (!gate.ok) {
+            return NextResponse.json(
+              { error: "You do not have edit access to this property's promotions." },
+              { status: gate.status },
+            );
+          }
+          ownerForWrite = linkedOwner;
+        }
       }
-      ownerForWrite = existingOwner;
     }
 
     const row = normalizeRow(body.row, ownerForWrite);

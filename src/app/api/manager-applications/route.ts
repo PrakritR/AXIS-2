@@ -3,7 +3,7 @@ import type { DemoApplicantRow } from "@/data/demo-portal";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
-import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
+import { linkedOwnerForProperty, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
@@ -114,20 +114,41 @@ async function resolveApplicationWriteOwner(
   row: DemoApplicantRow,
 ): Promise<{ ok: boolean; owner: string | null }> {
   const ids = idVariants(String(row.id ?? ""));
-  const { data: existingRows } = await db
+  // Use .in() (parameterized) rather than interpolating the client-controlled id
+  // variants into an .or() filter string. Fail CLOSED on a query error: treating
+  // a transient failure as "no existing row" would attribute a foreign row to
+  // the caller and skip the ownership check.
+  const { data: existingRows, error: existingErr } = await db
     .from("manager_application_records")
-    .select("manager_user_id")
-    .or(ids.map((value) => `id.eq.${value}`).join(","))
+    .select("manager_user_id, property_id, assigned_property_id")
+    .in("id", ids)
     .limit(1);
-  const existingOwner = existingRows?.[0]?.manager_user_id ? String(existingRows[0].manager_user_id) : null;
-  if (!existingOwner || existingOwner === callerId) return { ok: true, owner: callerId };
+  if (existingErr) return { ok: false, owner: null };
+  const existing = existingRows?.[0];
+  const existingOwner = existing?.manager_user_id ? String(existing.manager_user_id) : null;
 
+  const canEditProperty = async (pid: string): Promise<boolean> =>
+    Boolean(pid) &&
+    ((await managerHasCoManagerPermissionForProperty(db, callerId, pid, "applications", "edit")) ||
+      (await managerHasCoManagerPermissionForProperty(db, callerId, pid, "residents", "edit")));
+
+  if (existingOwner) {
+    if (existingOwner === callerId) return { ok: true, owner: callerId };
+    // Foreign existing row: anchor the permission check on the STORED property,
+    // never the client-supplied row (which could be spoofed to a property the
+    // caller can edit). The owner is always preserved.
+    const pid = String(existing?.property_id || existing?.assigned_property_id || "").trim();
+    if (!pid) return { ok: false, owner: existingOwner };
+    return { ok: await canEditProperty(pid), owner: existingOwner };
+  }
+
+  // New row: attribution follows the ACTUAL grant. If the property was assigned
+  // to the caller by a linked owner, require edit and attribute the row to that
+  // owner (so it lands in their queue); otherwise it is the caller's own new row.
   const pid = String(row.propertyId || row.application?.propertyId || row.assignedPropertyId || "").trim();
-  if (!pid) return { ok: false, owner: existingOwner };
-  const canEdit =
-    (await managerHasCoManagerPermissionForProperty(db, callerId, pid, "applications", "edit")) ||
-    (await managerHasCoManagerPermissionForProperty(db, callerId, pid, "residents", "edit"));
-  return { ok: canEdit, owner: existingOwner };
+  const linkedOwner = pid ? await linkedOwnerForProperty(db, callerId, pid) : null;
+  if (!linkedOwner) return { ok: true, owner: callerId };
+  return { ok: await canEditProperty(pid), owner: linkedOwner };
 }
 
 async function fetchApplicationsForManagerUser(

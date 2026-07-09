@@ -13,4 +13,5 @@
 update public.portal_pro_relationship_records
 set related_user_id = (row_data->>'linkedUserId')::uuid
 where related_user_id is null
-  and coalesce(row_data->>'linkedUserId', '') ~ '^[0-9a-fA-F-]{36}$';
+  and coalesce(row_data->>'linkedUserId', '') ~*
+    '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';

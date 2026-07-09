@@ -175,14 +175,16 @@ export async function POST(req: Request) {
       const chargeIds = normalizedCharges.filter((c) => c.id).map((c) => String(c.id));
       const previousStatusById = new Map<string, string | null>();
       const existingOwnerById = new Map<string, string | null>();
+      const existingPropertyById = new Map<string, string | null>();
       if (chargeIds.length > 0) {
         const { data: existingRows } = await db
           .from("portal_household_charge_records")
-          .select("id, status, manager_user_id")
+          .select("id, status, manager_user_id, property_id")
           .in("id", chargeIds);
         for (const row of existingRows ?? []) {
           previousStatusById.set(String(row.id), typeof row.status === "string" ? row.status : null);
           existingOwnerById.set(String(row.id), row.manager_user_id ? String(row.manager_user_id) : null);
+          existingPropertyById.set(String(row.id), row.property_id ? String(row.property_id) : null);
         }
       }
 
@@ -215,16 +217,20 @@ export async function POST(req: Request) {
       for (const c of normalizedCharges) {
         if (!c.id) continue;
         const id = String(c.id);
-        const propertyId = typeof c.propertyId === "string" ? c.propertyId : null;
+        const clientPropertyId = typeof c.propertyId === "string" ? c.propertyId : null;
         const existingOwner = existingOwnerById.get(id) ?? null;
         let managerUserId: string | null;
+        let propertyId = clientPropertyId;
         if (user.role === "admin") {
           managerUserId = toUuid(c.managerUserId) ?? user.id;
         } else if (existingOwner && existingOwner !== user.id) {
-          // Foreign row: only writable with payments EDIT on its property, and
-          // the owner is always preserved (never flipped to the caller).
-          if (!(await canEditForeign(propertyId))) continue;
+          // Foreign row: only writable with payments EDIT on its STORED property
+          // (never the client-supplied one, which could be relabeled to a
+          // property the caller can edit), and the owner is always preserved.
+          const storedProperty = existingPropertyById.get(id) ?? null;
+          if (!(await canEditForeign(storedProperty))) continue;
           managerUserId = existingOwner;
+          propertyId = storedProperty;
         } else {
           managerUserId = user.id;
         }
@@ -248,19 +254,24 @@ export async function POST(req: Request) {
           db,
           user.role === "admin" ? undefined : user.id,
         ).catch(() => undefined);
-        for (const c of normalizedCharges) {
-          if (!c.id) continue;
-          const chargeId = String(c.id);
-          const nextStatus = typeof c.status === "string" ? c.status : null;
+        // Reminders + ledger/GL sync run ONLY over rows that were actually
+        // persisted (mappedRows) — NOT the full client list. A foreign charge a
+        // read-only co-manager was forbidden to persist (skipped above) must not
+        // reach syncLedgerChargeEntry, which would otherwise write owner-attributed
+        // ledger/GL rows from the co-manager's untrusted mirror copy. The owner id
+        // comes from the row's resolved manager_user_id, not the caller.
+        for (const row of mappedRows) {
+          const chargeId = row.id;
+          const nextStatus = row.status;
           if (!nextStatus) continue;
-          const managerId = user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id;
+          const managerId = row.manager_user_id ?? user.id;
           const prevStatus = previousStatusById.get(chargeId) ?? null;
           if (nextStatus === "paid" && prevStatus !== "paid") {
             await cancelFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
           } else if (nextStatus === "pending" && prevStatus === "paid") {
             await restoreFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
           }
-          await syncLedgerChargeEntry(db, c as HouseholdCharge);
+          await syncLedgerChargeEntry(db, row.row_data as HouseholdCharge);
         }
       }
     }

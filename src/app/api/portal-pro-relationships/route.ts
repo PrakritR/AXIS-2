@@ -21,7 +21,7 @@ const route = createJsonRecordRoute({
     // BOTH participants (owner ↔ co-manager) and repairs the co-manager→owner
     // inbox scope that keys off these rows.
     related_user_id: row.relatedUserId ?? row.related_user_id ?? row.linkedUserId ?? null,
-    related_email: row.relatedEmail ?? row.related_email ?? row.linkedEmail ?? null,
+    related_email: row.relatedEmail ?? row.related_email ?? null,
     row_data: row,
     updated_at: new Date().toISOString(),
   }),

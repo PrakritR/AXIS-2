@@ -31,6 +31,33 @@ function moduleAllowed(
   return hasCoManagerPermissionForProperty(propertyPerms, propertyId, module);
 }
 
+/**
+ * The OWNER (inviter) who granted this user co-manager access to `propertyId`,
+ * resolved from the authoritative `account_link_invites` table — NOT the
+ * client-writable relationship mirror. Returns null when no accepted link
+ * assigns that property to the user (i.e. it is the user's own property or
+ * unrelated). Used to attribute a co-manager's NEW row to the correct owner
+ * without trusting a client-supplied owner id.
+ */
+export async function linkedOwnerForProperty(
+  db: ServiceClient,
+  userId: string,
+  propertyId: string | null | undefined,
+): Promise<string | null> {
+  const pid = (propertyId ?? "").trim();
+  if (!pid || !userId) return null;
+  const { data } = await db
+    .from("account_link_invites")
+    .select("inviter_user_id, assigned_property_ids")
+    .eq("invitee_user_id", userId)
+    .eq("status", "accepted");
+  for (const row of data ?? []) {
+    const ids = Array.isArray(row.assigned_property_ids) ? row.assigned_property_ids.map(String) : [];
+    if (ids.includes(pid) && row.inviter_user_id) return String(row.inviter_user_id);
+  }
+  return null;
+}
+
 /** Linked property ids on which this user (as an accepted co-manager) may use `module`. */
 export async function linkedPropertyIdsForModule(
   db: ServiceClient,

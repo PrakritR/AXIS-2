@@ -56,6 +56,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (!editGate.ok) return NextResponse.json({ error: "Document not found." }, { status: 404 });
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+
+  // A co-manager (non-owner) may rename/recategorize/re-date a linked document,
+  // but must NOT change its sharing scope — otherwise they could flip an owner's
+  // private doc to vendor/resident visibility and point it at their OWN vendor
+  // (validated against the caller, not the owner), exfiltrating it out of the
+  // owner's trust boundary. Sharing changes stay owner-only.
+  const isOwner = existingOwnerId === auth.userId;
+  if (
+    !isOwner &&
+    (body.visibility !== undefined ||
+      body.residentUserId !== undefined ||
+      body.residentEmail !== undefined ||
+      body.vendorId !== undefined)
+  ) {
+    return NextResponse.json(
+      { error: "Only the document owner can change sharing." },
+      { status: 403 },
+    );
+  }
+
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
   if (typeof body.displayName === "string") update.display_name = sanitizeDisplayName(body.displayName);
