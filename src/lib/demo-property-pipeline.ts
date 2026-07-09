@@ -324,15 +324,25 @@ export async function syncPropertyPipelineFromServer(opts?: {
   }
 }
 
-export async function mirrorLocalPropertyPipelineToServer(managerUserId?: string | null): Promise<void> {
+export async function mirrorLocalPropertyPipelineToServer(
+  managerUserId?: string | null,
+  linkedPropertyIds?: Iterable<string>,
+): Promise<void> {
   if (!isBrowser() || isDemoModeActive()) return;
   const scopeUserId = managerUserId?.trim() ?? "";
+  // A co-manager's local store can hold LINKED properties that belong to another
+  // owner. Those must NEVER be mirrored back to the server under the co-manager's
+  // own id — doing so silently transfers/duplicates ownership (the property then
+  // shows in the co-manager's portal as owned, unlinked from the real owner).
+  // Callers pass the co-manager's linked-property id set so we skip them here.
+  const linked = new Set([...(linkedPropertyIds ?? [])].map((id) => String(id).trim()).filter(Boolean));
   const pendingMap = readPendingMap();
   const extrasMap = readExtrasMap();
   const jobs: Promise<unknown>[] = [];
   for (const [ownerId, rows] of Object.entries(pendingMap)) {
     if (scopeUserId && ownerId !== scopeUserId) continue;
     for (const row of rows) {
+      if (linked.has(String(row.id))) continue;
       jobs.push(
         fetch("/api/property-records", {
           method: "POST",
@@ -345,6 +355,7 @@ export async function mirrorLocalPropertyPipelineToServer(managerUserId?: string
   for (const [ownerId, rows] of Object.entries(extrasMap)) {
     if (scopeUserId && ownerId !== scopeUserId) continue;
     for (const row of rows) {
+      if (linked.has(String(row.id))) continue;
       jobs.push(
         fetch("/api/property-records", {
           method: "POST",

@@ -322,7 +322,10 @@ export function coManagerPortalSectionAllowed(input: {
   hasEmptyPermissionCoManagerLink?: boolean;
 }): boolean {
   if (input.isPrimaryManager) return true;
-  if (input.section === "relationships") return false;
+  // The Co-managers section is ALWAYS shown — every manager (primary or
+  // co-manager) can view/manage their own links from it. It is never gated by a
+  // module permission.
+  if (input.section === "relationships") return true;
   if (CO_MANAGER_ALWAYS_ALLOWED_SECTIONS.has(input.section)) return true;
   if (coManagerHasSectionPermission(input.section, input.mergedPermissions)) return true;
   // Empty-permission link ⇒ grant every module section (parity with the data layer).

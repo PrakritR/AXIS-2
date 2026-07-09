@@ -12,15 +12,15 @@ const route = createJsonRecordRoute({
   buildUpsert: (row) => ({
     id: row.id,
     manager_user_id: row.managerUserId ?? row.manager_user_id ?? null,
-    // The relationship record produced by proRelationshipRowsFromInvites carries
-    // the counterpart's auth id as `linkedUserId` (never `relatedUserId`), so
-    // without this fallback related_user_id was always written null — making the
-    // row visible ONLY to whoever's browser wrote it (the GET scope matches on
-    // manager_user_id OR related_user_id OR related_email). Populating
-    // related_user_id from linkedUserId lets the SAME accepted link resolve for
-    // BOTH participants (owner ↔ co-manager) and repairs the co-manager→owner
-    // inbox scope that keys off these rows.
-    related_user_id: row.relatedUserId ?? row.related_user_id ?? row.linkedUserId ?? null,
+    // related_user_id is intentionally NOT populated from the record's
+    // linkedUserId. This mirror is per-writer: each participant's row carries
+    // THAT writer's perspective (linkDirection, linkedAxisId, perms). Letting the
+    // counterpart read it via related_user_id fed a co-manager's incoming row back
+    // to the primary manager, who then mis-derived themselves as non-primary and
+    // lost the Co-managers nav. Cross-participant reads are unnecessary here — the
+    // relationships page reads the authoritative /api/pro/account-links, and inbox
+    // scope reads account_link_invites — so each user reads only their OWN rows.
+    related_user_id: row.relatedUserId ?? row.related_user_id ?? null,
     related_email: row.relatedEmail ?? row.related_email ?? null,
     row_data: row,
     updated_at: new Date().toISOString(),

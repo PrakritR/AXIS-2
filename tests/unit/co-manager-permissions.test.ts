@@ -143,15 +143,23 @@ describe("coManagerPortalSectionAllowed", () => {
     }
   });
 
-  it("keeps relationships gated even for an empty-permission co-manager link", () => {
+  it("always shows the Co-managers (relationships) section, even for a pure co-manager", () => {
+    // The Co-managers tab lets any manager view/manage their own links; it is
+    // never gated by primary-manager status or a module permission.
     expect(
       coManagerPortalSectionAllowed({
         section: "relationships",
         isPrimaryManager: false,
         mergedPermissions: {},
-        hasEmptyPermissionCoManagerLink: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      coManagerPortalSectionAllowed({
+        section: "relationships",
+        isPrimaryManager: false,
+        mergedPermissions: { payments: true },
+      }),
+    ).toBe(true);
   });
 
   it("does not unlock unknown sections for an empty-permission co-manager link", () => {

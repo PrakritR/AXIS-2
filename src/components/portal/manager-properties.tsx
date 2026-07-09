@@ -32,7 +32,7 @@ import {
   mirrorLocalPropertyPipelineToServer,
   PROPERTY_PIPELINE_EVENT,
 } from "@/lib/demo-property-pipeline";
-import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
+import { collectLinkedPropertyIds, syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import { buildManagerShareablePropertyOptions } from "@/lib/manager-property-links";
 import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import {
@@ -123,7 +123,7 @@ export function ManagerProperties() {
   useEffect(() => {
     queueMicrotask(() => {
       void refreshPortfolio().then(() => {
-        void mirrorLocalPropertyPipelineToServer();
+        void mirrorLocalPropertyPipelineToServer(userId, collectLinkedPropertyIds(userId ?? ""));
       });
     });
     const on = () => {

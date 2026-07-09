@@ -55,7 +55,7 @@ import {
   readPendingManagerPropertiesForUser,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
-import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
+import { collectLinkedPropertyIds, syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import { resolvePropertySaveTarget } from "@/lib/manager-property-save-target";
 import {
   legacyAdminFieldsToSubmission,
@@ -648,7 +648,7 @@ export function ManagerHousePropertiesPanel({
     if (!isDemoModeActive()) {
       void syncManagerPortfolioFromServer(scopeUserId, { force: true }).then(() => {
         setTick((t) => t + 1);
-        void mirrorLocalPropertyPipelineToServer(scopeUserId);
+        void mirrorLocalPropertyPipelineToServer(scopeUserId, collectLinkedPropertyIds(scopeUserId));
       });
     } else {
       setTick((t) => t + 1);
