@@ -6,6 +6,8 @@ import {
 } from "@/lib/promotion-flyer";
 import { type PromotionTextEntry } from "@/lib/promotion-text";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { linkedOwnerScopeForModule, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
+import { assertManagerPromotionCoManagerAccess } from "@/lib/auth/co-manager-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -64,21 +66,45 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    let query = db
+    const ownQuery = db
       .from("manager_promotion_records")
-      .select("row_data, updated_at")
+      .select("row_data, updated_at, manager_user_id")
       .order("updated_at", { ascending: false })
       .limit(500);
 
-    if (!admin) {
-      query = query.eq("manager_user_id", user.id);
-    }
-
-    const { data, error } = await query;
+    const { data, error } = admin ? await ownQuery : await ownQuery.eq("manager_user_id", user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const rows = (data ?? []).map((record) => record.row_data).filter(Boolean) as ManagerPromotionRow[];
-    return NextResponse.json({ rows });
+    const byId = new Map<string, ManagerPromotionRow>();
+    for (const record of data ?? []) {
+      const row = record.row_data as ManagerPromotionRow | null;
+      if (row?.id) byId.set(String(row.id), row);
+    }
+
+    // Co-manager access: include a linked owner's promotions on properties where
+    // this user holds the `promotion` grant (empty perms = full, per moduleAllowed).
+    if (!admin) {
+      const { ownerIds } = await linkedOwnerScopeForModule(db, user.id, "promotion");
+      ownerIds.delete(user.id);
+      const linkedPropertyIds = await linkedPropertyIdsForModule(db, user.id, "promotion");
+      if (ownerIds.size > 0 && linkedPropertyIds.size > 0) {
+        const { data: linkedData, error: linkedError } = await db
+          .from("manager_promotion_records")
+          .select("row_data, updated_at, manager_user_id")
+          .in("manager_user_id", [...ownerIds])
+          .order("updated_at", { ascending: false })
+          .limit(500);
+        if (linkedError) return NextResponse.json({ error: linkedError.message }, { status: 500 });
+        for (const record of linkedData ?? []) {
+          const row = record.row_data as ManagerPromotionRow | null;
+          const pid = row?.propertyId ? String(row.propertyId) : "";
+          if (!row?.id || !pid || !linkedPropertyIds.has(pid)) continue;
+          if (!byId.has(String(row.id))) byId.set(String(row.id), row);
+        }
+      }
+    }
+
+    return NextResponse.json({ rows: [...byId.values()] });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load promotions.";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -131,6 +157,24 @@ export async function POST(req: Request) {
     if (body.action === "delete") {
       const id = body.id?.trim();
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+      if (!admin) {
+        const { data: existing } = await db
+          .from("manager_promotion_records")
+          .select("manager_user_id, row_data")
+          .eq("id", id)
+          .maybeSingle();
+        const existingOwner = existing?.manager_user_id ? String(existing.manager_user_id) : null;
+        // A co-manager with the promotion DELETE grant may remove a linked
+        // owner's promotion; otherwise deletion stays scoped to own rows.
+        if (existingOwner && existingOwner !== managerUserId) {
+          const pid = String((existing?.row_data as ManagerPromotionRow | null)?.propertyId ?? "").trim();
+          const gate = await assertManagerPromotionCoManagerAccess(db, managerUserId, pid || null, existingOwner, "delete");
+          if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
+          const { error } = await db.from("manager_promotion_records").delete().eq("id", id);
+          if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+          return NextResponse.json({ ok: true });
+        }
+      }
       let query = db.from("manager_promotion_records").delete().eq("id", id);
       if (!admin) query = query.eq("manager_user_id", managerUserId);
       const { error } = await query;
@@ -139,20 +183,33 @@ export async function POST(req: Request) {
     }
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
-    // On an existing row, block writing over another manager's promotion.
     const id = String(body.row.id).trim();
     const { data: existing } = await db
       .from("manager_promotion_records")
-      .select("manager_user_id")
+      .select("manager_user_id, row_data")
       .eq("id", id)
       .maybeSingle();
-    if (existing && !admin && existing.manager_user_id && existing.manager_user_id !== managerUserId) {
-      return NextResponse.json({ error: "Cannot edit another manager's promotion." }, { status: 403 });
+    const existingOwner = existing?.manager_user_id ? String(existing.manager_user_id) : null;
+    // Owner to attribute the write to: a co-manager editing a linked owner's
+    // promotion must (a) hold the promotion EDIT grant and (b) preserve the
+    // owner id (never re-own the row to themselves).
+    let ownerForWrite = managerUserId;
+    if (existingOwner && !admin && existingOwner !== managerUserId) {
+      const pid = String(
+        (body.row as ManagerPromotionRow).propertyId ??
+          (existing?.row_data as ManagerPromotionRow | null)?.propertyId ??
+          "",
+      ).trim();
+      const gate = await assertManagerPromotionCoManagerAccess(db, managerUserId, pid || null, existingOwner, "edit");
+      if (!gate.ok) {
+        return NextResponse.json({ error: "Cannot edit another manager's promotion." }, { status: gate.status });
+      }
+      ownerForWrite = existingOwner;
     }
 
-    const row = normalizeRow(body.row, managerUserId);
+    const row = normalizeRow(body.row, ownerForWrite);
     const { error } = await db.from("manager_promotion_records").upsert(
-      { id: row.id, manager_user_id: managerUserId, row_data: row, updated_at: row.updatedAt },
+      { id: row.id, manager_user_id: ownerForWrite, row_data: row, updated_at: row.updatedAt },
       { onConflict: "id" },
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

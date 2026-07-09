@@ -452,7 +452,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
             (row) =>
               isResidentDirectoryRow(row) &&
               row.email?.trim() &&
-              applicationVisibleToPortalUser(row, userId),
+              applicationVisibleToPortalUser(row, userId, "residents"),
           )
           .map((row) => row.email!.trim().toLowerCase()),
       ),
@@ -540,7 +540,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   const residents = useMemo<ActiveResident[]>(() => {
     void hcTick;
     return readManagerApplicationRows()
-      .filter((row) => isResidentDirectoryRow(row) && applicationVisibleToPortalUser(row, userId))
+      .filter((row) => isResidentDirectoryRow(row) && applicationVisibleToPortalUser(row, userId, "residents"))
       .map((row) => {
         const propId = row.assignedPropertyId?.trim() || row.propertyId?.trim() || "";
         const prop = propId ? getPropertyById(propId) : null;

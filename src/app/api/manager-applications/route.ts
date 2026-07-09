@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
-import { collectLinkedPropertyIdsForUser, managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
+import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
+import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { provisionApprovedResidentAccount } from "@/lib/auth/provision-approved-resident";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { tryAutoOrderScreening } from "@/lib/screening/order-screening";
@@ -97,11 +98,51 @@ async function assertManagerOrAdminWriteAccess(
   return null;
 }
 
+/**
+ * Resolve the owner a manager write should be attributed to, and whether it is
+ * allowed. A role-only gate previously trusted the client-supplied
+ * `managerUserId`, letting any manager persist rows under another manager's id
+ * (cross-tenant write hole) and letting a read-only co-manager edit an owner's
+ * applications/residents. Rules (non-admin):
+ *  - New row or the caller's own row → forced to the caller (ignore any forged id).
+ *  - A FOREIGN existing row (owned by a linked owner) → writable only with the
+ *    applications OR residents EDIT grant on the row's property; owner preserved.
+ */
+async function resolveApplicationWriteOwner(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  callerId: string,
+  row: DemoApplicantRow,
+): Promise<{ ok: boolean; owner: string | null }> {
+  const ids = idVariants(String(row.id ?? ""));
+  const { data: existingRows } = await db
+    .from("manager_application_records")
+    .select("manager_user_id")
+    .or(ids.map((value) => `id.eq.${value}`).join(","))
+    .limit(1);
+  const existingOwner = existingRows?.[0]?.manager_user_id ? String(existingRows[0].manager_user_id) : null;
+  if (!existingOwner || existingOwner === callerId) return { ok: true, owner: callerId };
+
+  const pid = String(row.propertyId || row.application?.propertyId || row.assignedPropertyId || "").trim();
+  if (!pid) return { ok: false, owner: existingOwner };
+  const canEdit =
+    (await managerHasCoManagerPermissionForProperty(db, callerId, pid, "applications", "edit")) ||
+    (await managerHasCoManagerPermissionForProperty(db, callerId, pid, "residents", "edit"));
+  return { ok: canEdit, owner: existingOwner };
+}
+
 async function fetchApplicationsForManagerUser(
   db: ReturnType<typeof createSupabaseServiceRoleClient>,
   userId: string,
 ) {
-  const linkedPropertyIds = await collectLinkedPropertyIdsForUser(db, userId);
+  // This route feeds BOTH the Applications and Residents tabs (the client filters
+  // each tab by its own module grant). So a co-manager's linked rows are included
+  // when EITHER `applications` OR `residents` is granted on the property — a
+  // co-manager with neither grant gets none of the owner's linked rows.
+  const [appIds, resIds] = await Promise.all([
+    linkedPropertyIdsForModule(db, userId, "applications"),
+    linkedPropertyIdsForModule(db, userId, "residents"),
+  ]);
+  const linkedPropertyIds = new Set<string>([...appIds, ...resIds]);
   const select = "id, row_data, updated_at, manager_user_id, property_id, assigned_property_id";
 
   const { data: ownedRows, error: ownedError } = await db
@@ -303,7 +344,15 @@ export async function POST(req: Request) {
         const writeGate = await assertManagerOrAdminWriteAccess(db, user);
         if (writeGate) return writeGate;
       }
+      const replaceAdmin = user ? await isAdminUser(user.id) : false;
       for (const row of rows) {
+        // Attribute each row to its correct owner and enforce edit access on
+        // foreign (linked-owner) rows. Admins keep the client-supplied owner.
+        if (user && !replaceAdmin) {
+          const gate = await resolveApplicationWriteOwner(db, user.id, row);
+          if (!gate.ok) continue;
+          row.managerUserId = gate.owner ?? user.id;
+        }
         await persistNormalizedRow(db, row.id, row);
         if (row.bucket === "pending" && row.application?.consentCredit) {
           void tryAutoOrderScreening(db, row);
@@ -412,6 +461,16 @@ export async function POST(req: Request) {
     } else {
       const writeGate = await assertManagerOrAdminWriteAccess(db, user);
       if (writeGate) return writeGate;
+      if (!(await isAdminUser(user.id))) {
+        const gate = await resolveApplicationWriteOwner(db, user.id, row);
+        if (!gate.ok) {
+          return NextResponse.json(
+            { error: "You do not have edit access to this property's applications." },
+            { status: 403 },
+          );
+        }
+        row.managerUserId = gate.owner ?? user.id;
+      }
     }
     await persistNormalizedRow(db, row.id, row);
     if (row.bucket === "pending" && row.application?.consentCredit) {

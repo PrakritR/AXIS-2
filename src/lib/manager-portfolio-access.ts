@@ -153,13 +153,28 @@ export async function syncManagerPortfolioFromServer(userId: string, opts?: { fo
   }
 }
 
-/** Whether an application row should appear for this portal user. */
-export function applicationVisibleToPortalUser(row: DemoApplicantRow, userId: string | null): boolean {
+/**
+ * Whether an application/resident row should appear for this portal user.
+ *
+ * Pass `module` to gate a co-manager's LINKED-property rows by a specific grant
+ * (e.g. "residents" for the Residents tab, "applications" for Applications) so a
+ * co-manager granted only, say, `payments` on a property no longer sees its
+ * residents. Omitting `module` keeps the legacy module-agnostic behavior (any
+ * assigned property is visible) for callers that aren't module-scoped yet.
+ * Owned/pending properties are always visible regardless of `module`.
+ */
+export function applicationVisibleToPortalUser(
+  row: DemoApplicantRow,
+  userId: string | null,
+  module?: CoManagerPermissionId,
+): boolean {
   if (!userId) return false;
   if (row.managerUserId && row.managerUserId === userId) return true;
   const pid = row.assignedPropertyId?.trim() || row.propertyId?.trim() || row.application?.propertyId?.trim();
-  if (pid && collectAccessiblePropertyIds(userId).has(pid)) return true;
-  return false;
+  if (!pid) return false;
+  if (ownedPropertyIdsForUser(userId).has(pid)) return true;
+  const linked = module ? collectLinkedPropertyIdsForModule(userId, module) : collectLinkedPropertyIds(userId);
+  return linked.has(pid);
 }
 
 /** Minimal lease shape for portfolio visibility checks (avoids circular imports). */
@@ -174,8 +189,10 @@ export function leaseVisibleToPortalUser(row: LeaseVisibilityRow, userId: string
   if (!userId) return false;
   if (row.managerUserId && row.managerUserId === userId) return true;
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
-  if (pid && collectAccessiblePropertyIds(userId).has(pid)) return true;
-  return false;
+  if (!pid) return false;
+  if (ownedPropertyIdsForUser(userId).has(pid)) return true;
+  // Gate a linked owner's leases by the `leases` module grant (empty perms = full).
+  return collectLinkedPropertyIdsForModule(userId, "leases").has(pid);
 }
 
 export type ManagerPropertyFilterOption = { id: string; label: string };

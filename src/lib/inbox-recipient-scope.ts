@@ -48,11 +48,49 @@ async function coManagerEmailsForManagers(
   if (managerIds.length === 0) return emails;
   const { data } = await db
     .from("portal_pro_relationship_records")
-    .select("related_email")
+    .select("related_email, related_user_id")
     .in("manager_user_id", managerIds);
+  // related_email is frequently null on these mirror rows (the record only
+  // reliably carries the counterpart's auth id). Resolve those via profiles so
+  // owner→co-manager (and resident/vendor→co-manager) messaging isn't silently
+  // blocked by a missing denormalized email.
+  const idsToResolve = new Set<string>();
   for (const row of data ?? []) {
     const email = String(row.related_email ?? "").trim().toLowerCase();
     if (email) emails.add(email);
+    else if (row.related_user_id) idsToResolve.add(String(row.related_user_id).trim());
+  }
+  if (idsToResolve.size > 0) {
+    const { data: profs } = await db.from("profiles").select("email").in("id", [...idsToResolve]);
+    for (const p of profs ?? []) {
+      const e = String(p.email ?? "").trim().toLowerCase();
+      if (e) emails.add(e);
+    }
+  }
+  return emails;
+}
+
+/** Emails of the OWNER manager(s) who granted this co-manager access (accepted links). */
+async function ownerEmailsForCoManager(db: SupabaseClient, coManagerId: string): Promise<Set<string>> {
+  const emails = new Set<string>();
+  const id = coManagerId.trim();
+  if (!id) return emails;
+  try {
+    const { data } = await db
+      .from("account_link_invites")
+      .select("inviter_user_id")
+      .eq("status", "accepted")
+      .eq("invitee_user_id", id);
+    const ownerIds = [...new Set((data ?? []).map((r) => String(r.inviter_user_id ?? "").trim()).filter(Boolean))];
+    if (ownerIds.length > 0) {
+      const { data: profs } = await db.from("profiles").select("email").in("id", ownerIds);
+      for (const p of profs ?? []) {
+        const e = String(p.email ?? "").trim().toLowerCase();
+        if (e) emails.add(e);
+      }
+    }
+  } catch {
+    /* table may not exist */
   }
   return emails;
 }
@@ -177,14 +215,21 @@ export async function filterRecipientsBySenderScope<T extends InboxScopeRecipien
   const senderEmail = sender.email.trim().toLowerCase();
 
   if (isManagerRole(sender.role)) {
-    const coManagers = await coManagerEmailsForManagers(db, [sender.id]);
-    const vendors = await vendorEmailsForManagers(db, [sender.id]);
+    // Both directions of a co-manager link: downstream co-managers this manager
+    // granted access to, AND the upstream owner(s) who granted THIS manager
+    // access (so a co-manager can always reach the owner who linked them).
+    const [coManagers, owners, vendors] = await Promise.all([
+      coManagerEmailsForManagers(db, [sender.id]),
+      ownerEmailsForCoManager(db, sender.id),
+      vendorEmailsForManagers(db, [sender.id]),
+    ]);
     const keep = await Promise.all(
       recipients.map(async (recipient) => {
         const email = recipient.email.trim().toLowerCase();
         if (!email) return false;
         if (email === ADMIN_EMAIL) return true;
         if (coManagers.has(email)) return true;
+        if (owners.has(email)) return true;
         if (vendors.has(email)) return true;
         return managerOwnsResident(db, sender.id, {
           email,

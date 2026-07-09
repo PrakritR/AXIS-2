@@ -12,8 +12,16 @@ const route = createJsonRecordRoute({
   buildUpsert: (row) => ({
     id: row.id,
     manager_user_id: row.managerUserId ?? row.manager_user_id ?? null,
-    related_user_id: row.relatedUserId ?? row.related_user_id ?? null,
-    related_email: row.relatedEmail ?? row.related_email ?? null,
+    // The relationship record produced by proRelationshipRowsFromInvites carries
+    // the counterpart's auth id as `linkedUserId` (never `relatedUserId`), so
+    // without this fallback related_user_id was always written null — making the
+    // row visible ONLY to whoever's browser wrote it (the GET scope matches on
+    // manager_user_id OR related_user_id OR related_email). Populating
+    // related_user_id from linkedUserId lets the SAME accepted link resolve for
+    // BOTH participants (owner ↔ co-manager) and repairs the co-manager→owner
+    // inbox scope that keys off these rows.
+    related_user_id: row.relatedUserId ?? row.related_user_id ?? row.linkedUserId ?? null,
+    related_email: row.relatedEmail ?? row.related_email ?? row.linkedEmail ?? null,
     row_data: row,
     updated_at: new Date().toISOString(),
   }),

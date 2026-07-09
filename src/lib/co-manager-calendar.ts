@@ -13,12 +13,11 @@ import {
   type PartnerInquiry,
   type PlannedEvent,
 } from "@/lib/demo-admin-scheduling";
-import { hasCoManagerPermissionForProperty } from "@/lib/co-manager-permissions";
 import {
   readAllExtraListings,
   readAllPendingManagerProperties,
 } from "@/lib/demo-property-pipeline";
-import { readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
+import { collectLinkedPropertyIdsForModule, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
 import { readProRelationships } from "@/lib/pro-relationships";
 
 export type PropertyCalendarPeer = {
@@ -147,16 +146,10 @@ function viewerHasCalendarAccess(viewerUserId: string, propertyId: string): bool
   const pid = propertyId.trim();
   const listing = readAllExtraListings().find((p) => p.id === pid);
   if (listing?.managerUserId?.trim() === viewerUserId) return true;
-  for (const rel of readProRelationships(viewerUserId)) {
-    if (!rel.assignedPropertyIds.includes(pid)) continue;
-    if (
-      hasCoManagerPermissionForProperty(rel.propertyCoManagerPermissions, pid, "calendar") ||
-      hasCoManagerPermissionForProperty(rel.propertyCoManagerPermissions, pid, "properties")
-    ) {
-      return true;
-    }
-  }
-  return false;
+  // Use the shared module helper so the empty-perms = full-access rule applies
+  // (a full-access co-manager was previously denied calendar because no explicit
+  // `calendar` grant was set) and both the mirror and invite cache are consulted.
+  return collectLinkedPropertyIdsForModule(viewerUserId, "calendar").has(pid);
 }
 
 /** Pending tour requests are visible only to the manager who was available when the guest booked. */

@@ -54,8 +54,9 @@ export async function assertManagerDocumentsCoManagerAccess(
   userId: string,
   propertyId: string | null | undefined,
   ownerManagerUserId?: string | null,
+  level: CoManagerPermissionLevel = "read",
 ): Promise<CoManagerAccessResult> {
-  return assertCoManagerModuleAccess(db, userId, propertyId, "documents", { ownerManagerUserId });
+  return assertCoManagerModuleAccess(db, userId, propertyId, "documents", { ownerManagerUserId, level });
 }
 
 /** Map promotion routes to the promotion module permission. */
@@ -64,8 +65,9 @@ export async function assertManagerPromotionCoManagerAccess(
   userId: string,
   propertyId: string | null | undefined,
   ownerManagerUserId?: string | null,
+  level: CoManagerPermissionLevel = "read",
 ): Promise<CoManagerAccessResult> {
-  return assertCoManagerModuleAccess(db, userId, propertyId, "promotion", { ownerManagerUserId });
+  return assertCoManagerModuleAccess(db, userId, propertyId, "promotion", { ownerManagerUserId, level });
 }
 
 /** Map services / work-order routes to the services module permission. */
@@ -74,6 +76,7 @@ export async function assertManagerServicesCoManagerAccess(
   userId: string,
   propertyId: string | null | undefined,
   ownerManagerUserId?: string | null,
+  level: CoManagerPermissionLevel = "read",
 ): Promise<CoManagerAccessResult> {
-  return assertCoManagerModuleAccess(db, userId, propertyId, "services", { ownerManagerUserId });
+  return assertCoManagerModuleAccess(db, userId, propertyId, "services", { ownerManagerUserId, level });
 }

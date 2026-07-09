@@ -30,12 +30,14 @@ import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 import {
+  buildAllModulesGrant,
   CO_MANAGER_PERMISSION_OPTIONS,
   EMPTY_CO_MANAGER_PERMISSIONS,
   normalizeCoManagerPermissions,
   normalizePropertyCoManagerPermissions,
   permissionsForProperty,
   summarizePropertyCoManagerPermissions,
+  type CoManagerBulkPreset,
   type CoManagerPermissionId,
   type CoManagerPermissions,
   type PropertyCoManagerPermissions,
@@ -124,6 +126,16 @@ function levelsToGrant(levels: GrantLevels): CoManagerPermissions[CoManagerPermi
   return Object.keys(grant).length > 0 ? grant : undefined;
 }
 
+// "All delete" grants delete (without edit) so it stays distinct from "All edit";
+// "All full access" is read+edit+delete (collapses to the legacy `true`). The
+// grant-map builder lives in the lib (buildAllModulesGrant) so it is unit-tested.
+const CO_MANAGER_PERMISSION_PRESETS: { label: string; preset: CoManagerBulkPreset }[] = [
+  { label: "All read-only", preset: "read" },
+  { label: "All edit", preset: "edit" },
+  { label: "All delete", preset: "delete" },
+  { label: "All full access", preset: "full" },
+];
+
 function CoManagerPermissionsEditor({
   value,
   onChange,
@@ -141,8 +153,32 @@ function CoManagerPermissionsEditor({
     onChange(next);
   };
 
+  const isEmpty = Object.keys(value).length === 0;
+
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {CO_MANAGER_PERMISSION_PRESETS.map((preset) => (
+          <button
+            key={preset.label}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(buildAllModulesGrant(preset.preset))}
+            className="rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
+            data-attr={`co-manager-preset-${preset.label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+      {isEmpty ? (
+        <p className="rounded-lg border border-dashed border-border bg-accent/20 px-3 py-2 text-xs text-muted">
+          No restrictions — this co-manager has full access to every module on this property.
+          Check modules below to restrict them. (To remove the property entirely, use
+          &ldquo;Remove access&rdquo;.)
+        </p>
+      ) : null}
+      <div className="grid gap-2 sm:grid-cols-2">
       {CO_MANAGER_PERMISSION_OPTIONS.map(({ id, label }) => {
         const levels = grantToLevels(value[id]);
         const enabled = Boolean(levels.read);
@@ -190,6 +226,7 @@ function CoManagerPermissionsEditor({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -273,6 +310,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   // (migrationRequired) downgrades to localStorage-only mode.
   const [useRemote, setUseRemote] = useState(true);
   const [remoteInvites, setRemoteInvites] = useState<AccountLinkInviteDto[]>([]);
+  // A failed load must NOT silently render "0 links" (a co-manager would think
+  // their access vanished). We surface an explicit error + retry instead.
+  const [loadError, setLoadError] = useState(false);
+  const loadInFlightRef = useRef(false);
+  const loadRetriedRef = useRef(false);
   const [inviteDrafts, setInviteDrafts] = useState<Record<string, InviteDraft>>({});
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null);
@@ -289,26 +331,50 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const [transferBusy, setTransferBusy] = useState(false);
 
   const loadRemoteInvites = useCallback(async () => {
+    // In-flight guard: the initial-load effect and the post-purge refresh can
+    // both fire; without this the auto-retry below could also stack.
+    if (loadInFlightRef.current) return;
+    loadInFlightRef.current = true;
+    // On a transient failure, retry once after a short backoff before giving up
+    // — a single blip must never surface as "0 links".
+    const failSoft = (): boolean => {
+      setUseRemote(true);
+      if (!loadRetriedRef.current) {
+        loadRetriedRef.current = true;
+        window.setTimeout(() => void loadRemoteInvites(), 1200);
+        return true; // retry scheduled
+      }
+      setLoadError(true);
+      showToast("Couldn't load your linked accounts — tap retry.");
+      return false;
+    };
     try {
       const res = await fetch("/api/pro/account-links", { credentials: "include" });
-      const data = (await res.json()) as {
-        invites?: AccountLinkInviteDto[];
-        migrationRequired?: boolean;
-        error?: string;
-      };
+      let data: { invites?: AccountLinkInviteDto[]; migrationRequired?: boolean; error?: string } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        // Non-JSON (proxy/HTML error page) counts as a transient failure.
+        failSoft();
+        return;
+      }
       if (data.migrationRequired) {
         // The invites table genuinely doesn't exist — localStorage-only mode.
         setUseRemote(false);
         setRemoteInvites([]);
+        setLoadError(false);
+        loadRetriedRef.current = false;
         return;
       }
       if (!res.ok) {
         // Transient server error: STAY in remote mode with last-known invites.
         // Downgrading to local here made saves silently diverge from the account.
-        setUseRemote(true);
+        failSoft();
         return;
       }
       setUseRemote(true);
+      setLoadError(false);
+      loadRetriedRef.current = false;
       const invites = Array.isArray(data.invites) ? data.invites : [];
       setRemoteInvites(invites);
       setInviteDrafts((prev) => {
@@ -323,11 +389,12 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     } catch {
       // Network error — keep remote mode so saves fail loudly instead of
       // silently writing localStorage that never reaches the account.
-      setUseRemote(true);
+      failSoft();
     } finally {
       setRemoteLoaded(true);
+      loadInFlightRef.current = false;
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     const id = window.setTimeout(() => void loadRemoteInvites(), 0);
@@ -1249,6 +1316,27 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       }
     >
       <div className="space-y-6">
+        {loadError ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm portal-banner-danger">
+            <span className="text-[var(--status-overdue-fg)]">
+              Couldn&apos;t load your linked accounts. Your access hasn&apos;t changed — this is a
+              temporary load error.
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                loadRetriedRef.current = false;
+                setLoadError(false);
+                void loadRemoteInvites();
+              }}
+              data-attr="co-manager-retry-load"
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
+
         {linkCap != null ? (
           <div
             className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${

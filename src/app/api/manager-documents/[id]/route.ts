@@ -11,6 +11,7 @@ import {
   type ManagerDocumentRow,
   type ManagerDocumentVisibility,
 } from "@/lib/documents/manager-documents";
+import { assertManagerDocumentsCoManagerAccess } from "@/lib/auth/co-manager-access";
 import { managerOwnsVendorDirectoryRow, resolveResidentUserIdByEmail } from "@/lib/documents/document-scope.server";
 import { notifyDocumentShared } from "@/lib/documents/document-share-notify.server";
 import { parseExpiresAtInput } from "@/lib/documents/document-expiration";
@@ -36,11 +37,23 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     .from("manager_documents")
     .select(DOCUMENT_SELECT_COLUMNS)
     .eq("id", id)
-    .eq("manager_user_id", auth.userId)
     .is("deleted_at", null)
     .maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
   if (!existing) return NextResponse.json({ error: "Document not found." }, { status: 404 });
+
+  // Owner OR a co-manager with the documents EDIT grant on the doc's property.
+  // (assertCoManagerModuleAccess short-circuits true when owner === caller.)
+  const existingOwnerId = String((existing as ManagerDocumentRow).manager_user_id ?? "");
+  const existingPropertyId = (existing as ManagerDocumentRow).property_id ?? null;
+  const editGate = await assertManagerDocumentsCoManagerAccess(
+    auth.db,
+    auth.userId,
+    existingPropertyId,
+    existingOwnerId,
+    "edit",
+  );
+  if (!editGate.ok) return NextResponse.json({ error: "Document not found." }, { status: 404 });
 
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -112,7 +125,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     .from("manager_documents")
     .update(update)
     .eq("id", id)
-    .eq("manager_user_id", auth.userId)
     .is("deleted_at", null)
     .select(DOCUMENT_SELECT_COLUMNS)
     .maybeSingle();
@@ -155,11 +167,28 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
   if (!UUID_PATTERN.test(id)) return NextResponse.json({ error: "Document not found." }, { status: 404 });
 
+  // Owner OR a co-manager with the documents DELETE grant on the doc's property.
+  const { data: existing, error: readError } = await auth.db
+    .from("manager_documents")
+    .select("id, manager_user_id, property_id")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
+  if (!existing) return NextResponse.json({ error: "Document not found." }, { status: 404 });
+  const delGate = await assertManagerDocumentsCoManagerAccess(
+    auth.db,
+    auth.userId,
+    (existing as { property_id: string | null }).property_id,
+    String((existing as { manager_user_id: string | null }).manager_user_id ?? ""),
+    "delete",
+  );
+  if (!delGate.ok) return NextResponse.json({ error: "Document not found." }, { status: 404 });
+
   const { data, error } = await auth.db
     .from("manager_documents")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("manager_user_id", auth.userId)
     .is("deleted_at", null)
     .select("id")
     .maybeSingle();

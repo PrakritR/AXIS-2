@@ -140,11 +140,17 @@ export async function POST(req: Request) {
       if (user.role !== "admin") {
         const { data: existing } = await db
           .from("portal_household_charge_records")
-          .select("manager_user_id")
+          .select("manager_user_id, property_id")
           .eq("id", id)
           .maybeSingle();
         if (existing && existing.manager_user_id !== user.id) {
-          return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+          // Foreign row: a co-manager may delete a linked owner's charge only
+          // with the payments DELETE grant on its property.
+          const pid = existing.property_id ? String(existing.property_id) : null;
+          const canDelete = pid
+            ? await managerHasCoManagerPermissionForProperty(db, user.id, pid, "payments", "delete")
+            : false;
+          if (!canDelete) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
         }
       }
       await db.from("portal_household_charge_records").delete().eq("id", id);

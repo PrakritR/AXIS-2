@@ -1,14 +1,52 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAllModulesGrant,
+  CO_MANAGER_PERMISSION_OPTIONS,
   coManagerPortalSectionAllowed,
   flatCoManagerPermissionsFromProperty,
   hasCoManagerPermission,
+  hasCoManagerPermissionLevel,
   mergeCoManagerPermissionsFromPropertyRows,
   normalizeCoManagerPermissions,
   normalizePropertyCoManagerPermissions,
   permissionsForProperty,
 } from "@/lib/co-manager-permissions";
 import { deriveManagerNavRole } from "@/lib/co-manager-nav";
+
+describe("buildAllModulesGrant (editor presets)", () => {
+  const allIds = CO_MANAGER_PERMISSION_OPTIONS.map((o) => o.id);
+
+  it("stamps every module for each preset", () => {
+    for (const preset of ["read", "edit", "delete", "full"] as const) {
+      const grant = buildAllModulesGrant(preset);
+      expect(Object.keys(grant).sort()).toEqual([...allIds].sort());
+    }
+  });
+
+  it("read grants read only, not edit/delete", () => {
+    const g = buildAllModulesGrant("read");
+    expect(hasCoManagerPermissionLevel(g, "payments", "read")).toBe(true);
+    expect(hasCoManagerPermissionLevel(g, "payments", "edit")).toBe(false);
+    expect(hasCoManagerPermissionLevel(g, "payments", "delete")).toBe(false);
+  });
+
+  it("edit grants read+edit but not delete; delete grants read+delete but not edit", () => {
+    const edit = buildAllModulesGrant("edit");
+    expect(hasCoManagerPermissionLevel(edit, "documents", "edit")).toBe(true);
+    expect(hasCoManagerPermissionLevel(edit, "documents", "delete")).toBe(false);
+    const del = buildAllModulesGrant("delete");
+    expect(hasCoManagerPermissionLevel(del, "documents", "delete")).toBe(true);
+    expect(hasCoManagerPermissionLevel(del, "documents", "edit")).toBe(false);
+  });
+
+  it("full grants all three levels (collapses to legacy true)", () => {
+    const g = buildAllModulesGrant("full");
+    expect(g.calendar).toBe(true);
+    for (const level of ["read", "edit", "delete"] as const) {
+      expect(hasCoManagerPermissionLevel(g, "calendar", level)).toBe(true);
+    }
+  });
+});
 
 describe("normalizePropertyCoManagerPermissions", () => {
   it("expands legacy flat permissions to each assigned property", () => {

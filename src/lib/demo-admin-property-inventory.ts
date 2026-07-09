@@ -20,7 +20,7 @@ import {
 } from "@/lib/demo-property-pipeline";
 import { migrateAmenityOffersPropertyId } from "@/lib/manager-amenity-catalog-storage";
 import { legacyAdminFieldsToSubmission, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import { collectLinkedPropertyIds, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
+import { collectLinkedPropertyIdsForModule, readLinkedListingsForUser } from "@/lib/manager-portfolio-access";
 import type { ManagerPropertyRecordStatus } from "@/lib/persisted-property-records";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import { monthlyRentListingLabel } from "@/lib/rental-application/listing-fees-display";
@@ -242,7 +242,12 @@ function dedupeAdminPropertyRows(rows: AdminPropertyRow[]): AdminPropertyRow[] {
 }
 
 function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, userId: string): AdminPropertyRow[] {
-  const linkedIds = collectLinkedPropertyIds(userId);
+  // Gate the Properties tab by the `properties` module grant (empty perms = full
+  // access, per modulePermsAllow). Previously this used the module-agnostic
+  // collectLinkedPropertyIds, so a co-manager granted only e.g. `payments` on a
+  // property still saw it in the Properties tab. Buckets 0/2 additionally were
+  // not filtering the readLinkedListingsForUser results by the id set at all.
+  const linkedIds = collectLinkedPropertyIdsForModule(userId, "properties");
   if (linkedIds.size === 0) return [];
 
   if (bucket === 0) {
@@ -251,7 +256,7 @@ function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, user
       if (linkedIds.has(pending.id)) rows.push(pendingToAdminRow(pending));
     }
     for (const { listing } of readLinkedListingsForUser(userId)) {
-      if (listing.id.startsWith("mgr-") && listing.adminPublishLive !== true) {
+      if (linkedIds.has(listing.id) && listing.id.startsWith("mgr-") && listing.adminPublishLive !== true) {
         rows.push(mockToAdminRow(listing, listing.id));
       }
     }
@@ -260,7 +265,10 @@ function linkedAdminPropertyRowsForBucket(bucket: AdminPropertyBucketIndex, user
 
   if (bucket === 2) {
     return readLinkedListingsForUser(userId)
-      .filter(({ listing }) => listing.id.startsWith("mgr-") && listing.adminPublishLive === true)
+      .filter(
+        ({ listing }) =>
+          linkedIds.has(listing.id) && listing.id.startsWith("mgr-") && listing.adminPublishLive === true,
+      )
       .map(({ listing }) => mockToAdminRow(listing, listing.id));
   }
 

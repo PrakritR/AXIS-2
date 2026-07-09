@@ -307,7 +307,7 @@ export function ManagerApplications() {
 
   const scopedRows = useMemo(() => {
     if (!scopeUserId) return [];
-    return rows.filter((r) => applicationVisibleToPortalUser(r, scopeUserId));
+    return rows.filter((r) => applicationVisibleToPortalUser(r, scopeUserId, "applications"));
   }, [rows, scopeUserId]);
 
   const counts = useMemo(() => countByBucket(scopedRows), [scopedRows]);

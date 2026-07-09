@@ -35,6 +35,28 @@ export type CoManagerPermissionGrant =
 
 export type CoManagerPermissions = Partial<Record<CoManagerPermissionId, CoManagerPermissionGrant>>;
 
+/** Bulk preset applied to every module by the editor's preset buttons. */
+export type CoManagerBulkPreset = "read" | "edit" | "delete" | "full";
+
+/**
+ * Stamp one level combo onto every module — backs the editor's "All read-only /
+ * edit / delete / full access" buttons. "delete" grants delete WITHOUT edit so it
+ * stays distinct from "edit"; "full" collapses to the legacy `true`.
+ */
+export function buildAllModulesGrant(preset: CoManagerBulkPreset): CoManagerPermissions {
+  const grant: CoManagerPermissionGrant =
+    preset === "full"
+      ? true
+      : preset === "read"
+        ? { read: true }
+        : preset === "edit"
+          ? { read: true, edit: true }
+          : { read: true, delete: true };
+  const out: CoManagerPermissions = {};
+  for (const { id } of CO_MANAGER_PERMISSION_OPTIONS) out[id] = grant;
+  return out;
+}
+
 function grantAllows(grant: CoManagerPermissionGrant | undefined, level: CoManagerPermissionLevel): boolean {
   if (grant === true) return true;
   if (!grant || typeof grant !== "object") return false;
