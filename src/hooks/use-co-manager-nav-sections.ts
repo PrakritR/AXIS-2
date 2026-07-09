@@ -69,13 +69,15 @@ export function useCoManagerNavSections(definition: PortalDefinition, userId: st
       return definition.sections;
     }
 
-    const { isPrimaryManager, mergedPermissions } = deriveManagerNavRole(invites);
+    const { isPrimaryManager, mergedPermissions, hasEmptyPermissionCoManagerLink } =
+      deriveManagerNavRole(invites);
 
     return definition.sections.filter((s) =>
       coManagerPortalSectionAllowed({
         section: s.section,
         isPrimaryManager,
         mergedPermissions,
+        hasEmptyPermissionCoManagerLink,
       }),
     );
   }, [definition, invites, userId]);

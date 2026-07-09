@@ -50,7 +50,11 @@ export async function POST(req: Request) {
     };
 
     // Creating/updating bills is a write — requires the "edit" level on financials.
-    const cm = await assertManagerFinancialsCoManagerAccess(auth.db, auth.userId, body.propertyId, auth.userId, "edit");
+    // ownerManagerUserId is intentionally undefined: passing the caller would
+    // short-circuit the check (owner===caller => allow) and make the gate a
+    // no-op. Undefined runs the real per-property permission check, which
+    // already fast-paths true when the caller owns the property.
+    const cm = await assertManagerFinancialsCoManagerAccess(auth.db, auth.userId, body.propertyId, undefined, "edit");
     if (!cm.ok) return NextResponse.json({ error: cm.error }, { status: cm.status });
 
     const bill = await createManagerBill(auth.db, {

@@ -8,6 +8,9 @@ export const runtime = "nodejs";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
+const MAX_SENDS_PER_WINDOW = 5;
+const SEND_WINDOW_MS = 60 * 60 * 1000;
+const RESEND_THROTTLE_MS = 60 * 1000;
 
 function hashCode(code: string): string {
   return createHash("sha256").update(code).digest("hex");
@@ -58,14 +61,45 @@ export async function POST(req: Request) {
 
   const db = createSupabaseServiceRoleClient();
 
-  // Throttle: one active code per user; a fresh request replaces it, but no
-  // more than one send per 60s.
-  const { data: existing } = await db.from("phone_verifications").select("created_at").eq("user_id", user.id).maybeSingle();
-  if (existing && Date.now() - Date.parse(String(existing.created_at)) < 60_000) {
+  const { data: existing } = await db
+    .from("phone_verifications")
+    .select("created_at, send_count, first_sent_at, phone")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  // Per-user resend throttle (>=60s between sends).
+  if (existing && Date.now() - Date.parse(String(existing.created_at)) < RESEND_THROTTLE_MS) {
     return NextResponse.json({ error: "Code already sent — wait a minute before retrying." }, { status: 429 });
   }
 
+  // Absolute send cap within a rolling window (does NOT reset on resend) —
+  // bounds brute-force to MAX_SENDS × MAX_ATTEMPTS guesses per window and
+  // prevents SMS-bombing a number by repeatedly re-sending.
+  const windowStart = existing?.first_sent_at ? Date.parse(String(existing.first_sent_at)) : Date.now();
+  const withinWindow = Date.now() - windowStart < SEND_WINDOW_MS;
+  const priorSends = withinWindow ? Number(existing?.send_count ?? 0) : 0;
+  if (priorSends >= MAX_SENDS_PER_WINDOW) {
+    return NextResponse.json(
+      { error: "Too many verification attempts — try again later." },
+      { status: 429 },
+    );
+  }
+
+  // Per-TARGET throttle: block bombing an arbitrary victim number by ensuring
+  // no OTHER user has an active (recent) code out to the same phone.
+  const { data: targetActive } = await db
+    .from("phone_verifications")
+    .select("user_id, created_at")
+    .eq("phone", phone)
+    .neq("user_id", user.id)
+    .gt("created_at", new Date(Date.now() - RESEND_THROTTLE_MS).toISOString())
+    .limit(1);
+  if ((targetActive ?? []).length > 0) {
+    return NextResponse.json({ error: "That number was just sent a code — try again shortly." }, { status: 429 });
+  }
+
   const code = String(randomInt(100000, 999999));
+  const nowIso = new Date().toISOString();
   const { error } = await db.from("phone_verifications").upsert(
     {
       user_id: user.id,
@@ -73,7 +107,9 @@ export async function POST(req: Request) {
       code_hash: hashCode(code),
       expires_at: new Date(Date.now() + CODE_TTL_MS).toISOString(),
       attempts: 0,
-      created_at: new Date().toISOString(),
+      send_count: priorSends + 1,
+      first_sent_at: withinWindow && existing?.first_sent_at ? existing.first_sent_at : nowIso,
+      created_at: nowIso,
     },
     { onConflict: "user_id" },
   );

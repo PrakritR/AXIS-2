@@ -81,6 +81,61 @@ describe("coManagerPortalSectionAllowed", () => {
       }),
     ).toBe(true);
   });
+
+  it("hides ungranted module sections when merged permissions are non-empty", () => {
+    expect(
+      coManagerPortalSectionAllowed({
+        section: "payments",
+        isPrimaryManager: false,
+        mergedPermissions: { promotion: true },
+      }),
+    ).toBe(false);
+  });
+
+  it("shows module sections for an empty-permission co-manager link", () => {
+    for (const section of ["payments", "residents", "financials", "services"]) {
+      expect(
+        coManagerPortalSectionAllowed({
+          section,
+          isPrimaryManager: false,
+          mergedPermissions: {},
+          hasEmptyPermissionCoManagerLink: true,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("keeps relationships gated even for an empty-permission co-manager link", () => {
+    expect(
+      coManagerPortalSectionAllowed({
+        section: "relationships",
+        isPrimaryManager: false,
+        mergedPermissions: {},
+        hasEmptyPermissionCoManagerLink: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not unlock unknown sections for an empty-permission co-manager link", () => {
+    expect(
+      coManagerPortalSectionAllowed({
+        section: "some-unknown-section",
+        isPrimaryManager: false,
+        mergedPermissions: {},
+        hasEmptyPermissionCoManagerLink: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("still hides ungranted modules when the flag is absent (default behavior)", () => {
+    expect(
+      coManagerPortalSectionAllowed({
+        section: "payments",
+        isPrimaryManager: false,
+        mergedPermissions: {},
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("hasCoManagerPermission", () => {

@@ -77,4 +77,33 @@ describe("deriveManagerNavRole", () => {
     expect(role.isPrimaryManager).toBe(false);
     expect(role.mergedPermissions).toEqual({ applications: true, inbox: true });
   });
+
+  it("flags an incoming accepted link with empty permissions for full module nav", () => {
+    const role = deriveManagerNavRole([
+      {
+        direction: "incoming",
+        status: "accepted",
+        coManagerPermissions: {},
+      },
+    ]);
+    expect(role.isPrimaryManager).toBe(false);
+    expect(role.mergedPermissions).toEqual({});
+    expect(role.hasEmptyPermissionCoManagerLink).toBe(true);
+  });
+
+  it("does not flag full module nav when a co-manager link has explicit permissions", () => {
+    const role = deriveManagerNavRole([
+      {
+        direction: "incoming",
+        status: "accepted",
+        coManagerPermissions: { applications: true },
+      },
+    ]);
+    expect(role.hasEmptyPermissionCoManagerLink).toBe(false);
+  });
+
+  it("does not flag full module nav for a primary manager with no links", () => {
+    const role = deriveManagerNavRole([]);
+    expect(role.hasEmptyPermissionCoManagerLink).toBe(false);
+  });
 });

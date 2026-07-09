@@ -3,6 +3,7 @@ import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { isVendorCategorySettingsRow, managerVendorCategorySettingsRowId } from "@/lib/manager-vendors-storage";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { linkedOwnerScopeForModule } from "@/lib/auth/co-manager-module-scope";
+import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -182,17 +183,55 @@ export async function POST(req: Request) {
 
     const managerUserId = user.id;
 
+    // Security: ownership is decided by the STORED row's manager_user_id, never
+    // by client-supplied managerUserId. The vendors GET now returns a linked
+    // owner's rows to a co-manager, so trusting the body would let the mirror
+    // (or a crafted request) re-own another manager's vendor (adversarial-review
+    // HIGH). A co-manager may only touch a foreign row with services EDIT, and
+    // the owner is preserved.
+    const vendorOwnerById = new Map<string, string | null>();
+    if (!admin) {
+      const ids = [
+        ...new Set(
+          [...(Array.isArray(body.rows) ? body.rows : []), ...(body.row ? [body.row] : [])]
+            .map((r) => String(r?.id ?? "").trim())
+            .filter(Boolean),
+        ),
+      ];
+      if (ids.length > 0) {
+        const { data: existing } = await db.from("manager_vendor_records").select("id, manager_user_id").in("id", ids);
+        for (const r of existing ?? []) {
+          vendorOwnerById.set(String(r.id), r.manager_user_id ? String(r.manager_user_id) : null);
+        }
+      }
+    }
+    const editableForeignVendorProperty = new Map<string, boolean>();
+    const mayWriteVendor = async (row: ManagerVendorRow): Promise<{ ok: boolean; owner: string }> => {
+      if (admin) return { ok: true, owner: managerUserId };
+      const owner = vendorOwnerById.get(String(row.id)) ?? null;
+      if (!owner || owner === managerUserId) return { ok: true, owner: managerUserId };
+      const pid = String((row as { propertyId?: string }).propertyId ?? "").trim();
+      let ok = false;
+      if (pid) {
+        if (editableForeignVendorProperty.has(pid)) ok = editableForeignVendorProperty.get(pid)!;
+        else {
+          ok = await managerHasCoManagerPermissionForProperty(db, managerUserId, pid, "services", "edit");
+          editableForeignVendorProperty.set(pid, ok);
+        }
+      }
+      return { ok, owner };
+    };
+
     if (body.action === "replace") {
-      const rows = Array.isArray(body.rows)
-        ? body.rows
-            .filter((r) => !r.managerUserId || r.managerUserId === managerUserId)
-            .map((r) => normalizeRow(r, managerUserId))
-        : [];
-      for (const row of rows) {
+      for (const raw of Array.isArray(body.rows) ? body.rows : []) {
+        if (!raw?.id) continue;
+        const gate = await mayWriteVendor(raw);
+        if (!gate.ok) continue;
+        const row = normalizeRow(raw, gate.owner);
         await db.from("manager_vendor_records").upsert(
           {
             id: row.id,
-            manager_user_id: managerUserId,
+            manager_user_id: gate.owner,
             row_data: row,
             updated_at: new Date().toISOString(),
           },
@@ -213,17 +252,18 @@ export async function POST(req: Request) {
     }
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
-    if (!admin && body.row.managerUserId && body.row.managerUserId !== managerUserId) {
+    const singleGate = await mayWriteVendor(body.row);
+    if (!singleGate.ok) {
       return NextResponse.json({ error: "Cannot edit another manager's vendor." }, { status: 403 });
     }
     const sourceRow = isVendorCategorySettingsRow(body.row)
-      ? { ...body.row, id: managerVendorCategorySettingsRowId(managerUserId) }
+      ? { ...body.row, id: managerVendorCategorySettingsRowId(singleGate.owner) }
       : body.row;
-    const row = normalizeRow(sourceRow, managerUserId);
+    const row = normalizeRow(sourceRow, singleGate.owner);
     const { error } = await db.from("manager_vendor_records").upsert(
       {
         id: row.id,
-        manager_user_id: managerUserId,
+        manager_user_id: singleGate.owner,
         row_data: row,
         updated_at: new Date().toISOString(),
       },

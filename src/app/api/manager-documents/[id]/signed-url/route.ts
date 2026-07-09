@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getReportsAuthContext, assertManagerFinancialsAccess } from "@/lib/reports/auth";
 import { UUID_PATTERN } from "@/lib/documents/manager-documents";
 import { createManagerDocumentSignedUrl } from "@/lib/documents/document-signed-url.server";
+import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 
 export const runtime = "nodejs";
 
@@ -17,14 +18,25 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const { data: row, error } = await auth.db
     .from("manager_documents")
-    .select("storage_path, display_name, original_filename, mime_type")
+    .select("manager_user_id, property_id, storage_path, display_name, original_filename, mime_type")
     .eq("id", id)
-    .eq("manager_user_id", auth.userId)
     .is("deleted_at", null)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!row) return NextResponse.json({ error: "Document not found." }, { status: 404 });
+
+  // Access: the owner always; otherwise a co-manager with the documents module on
+  // the document's property. Manager-level docs (property_id null) of other owners
+  // are never reachable — the `.has(property_id)` check only matches property-scoped
+  // rows on linked properties. A denial returns the same 404 as a missing row so
+  // existence is not leaked.
+  let allowed = row.manager_user_id === auth.userId;
+  if (!allowed && row.property_id) {
+    const linkedPropertyIds = await linkedPropertyIdsForModule(auth.db, auth.userId, "documents");
+    allowed = linkedPropertyIds.has(row.property_id);
+  }
+  if (!allowed) return NextResponse.json({ error: "Document not found." }, { status: 404 });
 
   const download = new URL(req.url).searchParams.get("download") === "1";
   const signed = await createManagerDocumentSignedUrl(auth.db, row, download);

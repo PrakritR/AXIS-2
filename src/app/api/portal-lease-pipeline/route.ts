@@ -36,11 +36,20 @@ function normalizeRow(row: Record<string, unknown>) {
   return row;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** row_data may carry synthetic/demo ids ("demo-resident") — only uuid-shaped
+ *  values may reach the uuid column, else the whole upsert 500s. */
+function asUuidOrNull(value: unknown): string | null {
+  const v = typeof value === "string" ? value.trim() : "";
+  return UUID_RE.test(v) ? v : null;
+}
+
 function buildUpsert(row: Record<string, unknown>) {
   return {
     id: row.id,
     manager_user_id: row.managerUserId ?? row.manager_user_id ?? null,
-    resident_user_id: row.residentUserId ?? row.resident_user_id ?? null,
+    resident_user_id: asUuidOrNull(row.residentUserId ?? row.resident_user_id),
     resident_email: row.residentEmail ?? row.resident_email ?? null,
     property_id: row.propertyId ?? row.property_id ?? null,
     status: row.bucket ?? row.status ?? null,

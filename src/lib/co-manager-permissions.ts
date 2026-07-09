@@ -286,9 +286,26 @@ export function coManagerPortalSectionAllowed(input: {
   section: string;
   isPrimaryManager: boolean;
   mergedPermissions: CoManagerPermissions;
+  /**
+   * True when the user is a co-manager who has at least one accepted incoming
+   * link but whose merged permissions are empty (links exist, nothing is
+   * explicitly restricted). In that case every MODULE nav section is shown,
+   * mirroring the data layer's "empty permissions = full access" rule
+   * (moduleAllowed in src/lib/auth/co-manager-module-scope.ts) so the nav no
+   * longer hides sections the co-manager can already reach through the APIs.
+   * Only module sections in PORTAL_SECTION_CO_MANAGER_PERMISSION are unlocked;
+   * `relationships` stays gated and unknown sections are unaffected. Defaults to
+   * false, so a non-empty merged set still restricts as before.
+   */
+  hasEmptyPermissionCoManagerLink?: boolean;
 }): boolean {
   if (input.isPrimaryManager) return true;
   if (input.section === "relationships") return false;
   if (CO_MANAGER_ALWAYS_ALLOWED_SECTIONS.has(input.section)) return true;
-  return coManagerHasSectionPermission(input.section, input.mergedPermissions);
+  if (coManagerHasSectionPermission(input.section, input.mergedPermissions)) return true;
+  // Empty-permission link ⇒ grant every module section (parity with the data layer).
+  if (input.hasEmptyPermissionCoManagerLink && PORTAL_SECTION_CO_MANAGER_PERMISSION[input.section]) {
+    return true;
+  }
+  return false;
 }

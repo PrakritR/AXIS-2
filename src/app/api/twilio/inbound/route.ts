@@ -72,6 +72,18 @@ export async function POST(req: Request) {
 
   const db = createSupabaseServiceRoleClient();
 
+  // 0. Idempotency: Twilio retries on any non-2xx/timeout. Skip a MessageSid
+  // we've already processed so retries don't duplicate inbox threads / emails /
+  // forward SMS. (Unique index inbound_sms_log_message_sid_uniq also enforces it.)
+  if (messageSid) {
+    const { data: seen } = await db
+      .from("inbound_sms_log")
+      .select("id")
+      .eq("message_sid", messageSid)
+      .limit(1);
+    if ((seen ?? []).length > 0) return twimlOk();
+  }
+
   // 1. The manager is whoever owns the work number that was texted.
   const { data: managerRows } = await db
     .from("profiles")
@@ -110,12 +122,19 @@ export async function POST(req: Request) {
     .then(() => undefined, () => undefined);
 
   // 3. Axis inbox thread + email to the manager.
+  // Security: SMS `From` is spoofable and profiles.phone is generally
+  // unverified, so we DO NOT attribute the thread to the matched sender's
+  // account identity (that would let a spoofed text impersonate a resident).
+  // The message is authored by the manager's own workspace (senderUserId =
+  // manager) and the phone-matched label is surfaced only as display text,
+  // clearly marked as an unverified inbound text.
+  const displayLabel = sender ? `${senderLabel} (${fromPhone})` : fromPhone;
   await deliverPortalInboxMessage(db, {
-    senderUserId: sender?.id ?? manager.id,
-    senderEmail: sender?.email ?? manager.email ?? "",
-    fromName: sender ? senderLabel : `Text from ${fromPhone}`,
-    subject: `Text message from ${senderLabel}`,
-    text: body || "(empty message)",
+    senderUserId: manager.id,
+    senderEmail: manager.email ?? "",
+    fromName: `Text from ${displayLabel}`,
+    subject: `Text message from ${displayLabel}`,
+    text: `${body || "(empty message)"}\n\n— Inbound text to your Axis number (sender not identity-verified).`,
     toUserIds: [manager.id],
     deliverToPortalInbox: true,
     deliverViaEmail: true,

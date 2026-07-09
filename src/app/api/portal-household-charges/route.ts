@@ -4,6 +4,7 @@ import {
   fetchRowsForManagerWithLinked,
   linkedPropertyIdsForModule,
 } from "@/lib/auth/co-manager-module-scope";
+import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { HouseholdCharge } from "@/lib/household-charges";
@@ -167,29 +168,73 @@ export async function POST(req: Request) {
 
       const chargeIds = normalizedCharges.filter((c) => c.id).map((c) => String(c.id));
       const previousStatusById = new Map<string, string | null>();
+      const existingOwnerById = new Map<string, string | null>();
       if (chargeIds.length > 0) {
         const { data: existingRows } = await db
           .from("portal_household_charge_records")
-          .select("id, status")
+          .select("id, status, manager_user_id")
           .in("id", chargeIds);
         for (const row of existingRows ?? []) {
           previousStatusById.set(String(row.id), typeof row.status === "string" ? row.status : null);
+          existingOwnerById.set(String(row.id), row.manager_user_id ? String(row.manager_user_id) : null);
         }
       }
 
-      const rows = normalizedCharges
-        .filter((c) => c.id)
-        .map((c) => ({
-          id: String(c.id),
-          manager_user_id: user.role === "admin" ? toUuid(c.managerUserId) ?? user.id : user.id,
+      // Security: the client mirrors its FULL charge list (incl. an owner's rows a
+      // co-manager can now SEE) on every write. Never reassign a row owned by
+      // another manager to the caller, and require the payments EDIT level to
+      // touch a foreign row — otherwise a co-manager's mirror would silently
+      // steal/overwrite the owner's charges (adversarial-review CRITICAL).
+      const editableForeignProperty = new Map<string, boolean>();
+      const canEditForeign = async (propertyId: string | null): Promise<boolean> => {
+        const pid = (propertyId ?? "").trim();
+        if (!pid) return false;
+        if (editableForeignProperty.has(pid)) return editableForeignProperty.get(pid)!;
+        const ok = await managerHasCoManagerPermissionForProperty(db, user.id, pid, "payments", "edit");
+        editableForeignProperty.set(pid, ok);
+        return ok;
+      };
+
+      const mappedRows: Array<{
+        id: string;
+        manager_user_id: string | null;
+        resident_user_id: string | null;
+        resident_email: string | null;
+        property_id: string | null;
+        kind: string | null;
+        status: string | null;
+        row_data: Record<string, unknown>;
+        updated_at: string;
+      }> = [];
+      for (const c of normalizedCharges) {
+        if (!c.id) continue;
+        const id = String(c.id);
+        const propertyId = typeof c.propertyId === "string" ? c.propertyId : null;
+        const existingOwner = existingOwnerById.get(id) ?? null;
+        let managerUserId: string | null;
+        if (user.role === "admin") {
+          managerUserId = toUuid(c.managerUserId) ?? user.id;
+        } else if (existingOwner && existingOwner !== user.id) {
+          // Foreign row: only writable with payments EDIT on its property, and
+          // the owner is always preserved (never flipped to the caller).
+          if (!(await canEditForeign(propertyId))) continue;
+          managerUserId = existingOwner;
+        } else {
+          managerUserId = user.id;
+        }
+        mappedRows.push({
+          id,
+          manager_user_id: managerUserId,
           resident_user_id: toUuid(c.residentUserId),
           resident_email: typeof c.residentEmail === "string" ? c.residentEmail.trim().toLowerCase() : null,
-          property_id: typeof c.propertyId === "string" ? c.propertyId : null,
+          property_id: propertyId,
           kind: typeof c.kind === "string" ? c.kind : null,
           status: typeof c.status === "string" ? c.status : null,
           row_data: c,
           updated_at: now,
-        }));
+        });
+      }
+      const rows = mappedRows;
       if (rows.length > 0) {
         const { error } = await db.from("portal_household_charge_records").upsert(rows, { onConflict: "id" });
         if (error) return NextResponse.json({ error: error.message }, { status: 500 });
