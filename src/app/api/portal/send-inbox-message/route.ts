@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
-import {
-  resolveManagerRecipientProfiles,
-  resolvePropertyScopedManagerRecipientIds,
-} from "@/lib/co-manager-notification-recipients.server";
+import { resolvePropertyScopedManagerRecipientIds } from "@/lib/co-manager-notification-recipients.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
