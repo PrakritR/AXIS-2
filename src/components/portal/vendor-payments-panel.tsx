@@ -408,8 +408,8 @@ export function VendorPaymentsPanel() {
       <PortalTableDetailActions>
         <Button
           type="button"
-          variant="primary"
-          className={PORTAL_DETAIL_BTN}
+          variant="outline"
+          className={PORTAL_DETAIL_BTN_PRIMARY}
           disabled={busy}
           data-attr="vendor-payments-mark-paid"
           onClick={(event) => {
@@ -521,6 +521,7 @@ export function VendorPaymentsPanel() {
           rows={tableRows}
           expandedId={expandedId}
           onExpand={setExpandedId}
+          expandOnRowClick
           selection={
             showSelection
               ? {
