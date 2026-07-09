@@ -10,7 +10,11 @@ import {
 } from "@/components/portal/portal-metrics";
 import { PortalPropertyFilterPill } from "@/components/portal/manager-section-shell";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
-import { buildManagerPropertyFilterOptions } from "@/lib/manager-portfolio-access";
+import {
+  buildManagerPropertyFilterOptions,
+  collectLinkedPropertyIdsForModule,
+  moduleRowVisibleToPortalUser,
+} from "@/lib/manager-portfolio-access";
 import { syncPropertyPipelineFromServer } from "@/lib/demo-property-pipeline";
 import {
   readManagerWorkOrderRows,
@@ -19,6 +23,7 @@ import {
 } from "@/lib/manager-work-orders-storage";
 import {
   readServiceRequestsForManager,
+  readServiceRequestsForProperty,
   syncServiceRequestsFromServer,
   SERVICE_REQUESTS_EVENT,
   type ServiceRequest,
@@ -41,7 +46,7 @@ import {
 } from "@/components/portal/manager-vendors-panel";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { Button } from "@/components/ui/button";
-import { TabNav } from "@/components/ui/tabs";
+import { TabNav, useShallowTabId } from "@/components/ui/tabs";
 import {
   PORTAL_DATA_TABLE,
   PORTAL_DATA_TABLE_SCROLL,
@@ -63,13 +68,17 @@ type FilterType = "requests" | "work-orders" | "vendors";
 
 type RequestBucket = ManagerServiceRequestBucket;
 
+const SERVICES_TAB_IDS = ["requests", "work-orders", "vendors"] as const;
+
 export function ManagerAllServicesPanel({
-  tabId,
+  tabId: serverTabId,
   basePath,
 }: {
   tabId: FilterType;
   basePath: string;
 }) {
+  // Tab switches are shallow (client-only) — see TabNav `shallow` below.
+  const tabId = useShallowTabId<FilterType>(serverTabId, SERVICES_TAB_IDS);
   const { showToast } = useAppUi();
   const { userId, ready: authReady } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
@@ -106,13 +115,25 @@ export function ManagerAllServicesPanel({
   const workOrders = useMemo<DemoManagerWorkOrderRow[]>(() => {
     void dataTick;
     if (!userId) return [];
-    return readManagerWorkOrderRows().filter((r) => !r.managerUserId || r.managerUserId === userId);
+    // Owner rows + linked-property rows for co-managers with services access.
+    return readManagerWorkOrderRows().filter((r) => moduleRowVisibleToPortalUser(r, userId, "services"));
   }, [userId, dataTick]);
 
   const serviceRequests = useMemo<ServiceRequest[]>(() => {
     void dataTick;
     if (!userId) return [];
-    return readServiceRequestsForManager(userId);
+    const own = readServiceRequestsForManager(userId);
+    const seen = new Set(own.map((r) => r.id));
+    const linked: ServiceRequest[] = [];
+    for (const pid of collectLinkedPropertyIdsForModule(userId, "services")) {
+      for (const req of readServiceRequestsForProperty(pid)) {
+        if (!seen.has(req.id)) {
+          seen.add(req.id);
+          linked.push(req);
+        }
+      }
+    }
+    return [...own, ...linked];
   }, [userId, dataTick]);
 
   const filterPropertyOptions = useMemo(() => {
@@ -275,6 +296,7 @@ export function ManagerAllServicesPanel({
       filterRow={
         <ManagerPortalFilterRow>
           <TabNav
+            shallow
             activeId={typeFilter}
             items={[
               { id: "requests", label: "Requests", href: `${basePath}/services/requests`, dataAttr: "manager-services-tab-requests" },

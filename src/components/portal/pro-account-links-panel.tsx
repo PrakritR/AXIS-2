@@ -66,7 +66,7 @@ const CO_MANAGER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold border border-border bg-accent/40 text-foreground ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
 
 const LINKED_COUNT_TRIGGER =
-  "inline-flex items-center gap-1 rounded-full text-xs font-semibold text-foreground underline decoration-dotted decoration-muted-foreground/50 underline-offset-4 transition hover:text-primary";
+  "inline-flex items-center gap-1 rounded-full text-xs font-semibold text-foreground transition hover:text-primary";
 
 const OWNER_ROLE_BADGE =
   "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
@@ -210,7 +210,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const refreshLocal = useCallback(() => setLocalTick((n) => n + 1), []);
 
   const [remoteLoaded, setRemoteLoaded] = useState(false);
-  const [useRemote, setUseRemote] = useState(false);
+  // Remote (account-backed) is the default; only a confirmed missing table
+  // (migrationRequired) downgrades to localStorage-only mode.
+  const [useRemote, setUseRemote] = useState(true);
   const [remoteInvites, setRemoteInvites] = useState<AccountLinkInviteDto[]>([]);
   const [inviteDrafts, setInviteDrafts] = useState<Record<string, InviteDraft>>({});
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -235,9 +237,16 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         migrationRequired?: boolean;
         error?: string;
       };
-      if (!res.ok || data.migrationRequired) {
+      if (data.migrationRequired) {
+        // The invites table genuinely doesn't exist — localStorage-only mode.
         setUseRemote(false);
         setRemoteInvites([]);
+        return;
+      }
+      if (!res.ok) {
+        // Transient server error: STAY in remote mode with last-known invites.
+        // Downgrading to local here made saves silently diverge from the account.
+        setUseRemote(true);
         return;
       }
       setUseRemote(true);
@@ -253,8 +262,9 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         return next;
       });
     } catch {
-      setUseRemote(false);
-      setRemoteInvites([]);
+      // Network error — keep remote mode so saves fail loudly instead of
+      // silently writing localStorage that never reaches the account.
+      setUseRemote(true);
     } finally {
       setRemoteLoaded(true);
     }
@@ -456,9 +466,42 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     }
   };
 
+  // On a successful lookup, draftAxisId is set — the Link-account modal then
+  // advances from the Axis-ID step to the assign-properties step in place,
+  // instead of closing and dropping the user onto an inline page section.
   const submitLinkAccount = async () => {
-    const ok = await lookup();
-    if (ok) setLinkModalOpen(false);
+    await lookup();
+  };
+
+  /** Clear the whole in-progress link draft (used on cancel/close and after send). */
+  const resetLinkDraft = () => {
+    setAxisInput("");
+    setDraftAxisId(null);
+    setDraftName(null);
+    setDraftUserId(null);
+    setSelectedProps({});
+    setPropertyPermissionsDraft({});
+    setInviteeAtCap(false);
+  };
+
+  /** Return to the Axis-ID step, keeping the typed id so it can be re-verified. */
+  const backToLookup = () => {
+    setDraftAxisId(null);
+    setDraftName(null);
+    setDraftUserId(null);
+    setSelectedProps({});
+    setPropertyPermissionsDraft({});
+    setInviteeAtCap(false);
+  };
+
+  const openLinkModal = () => {
+    resetLinkDraft();
+    setLinkModalOpen(true);
+  };
+
+  const closeLinkModal = () => {
+    setLinkModalOpen(false);
+    resetLinkDraft();
   };
 
   const toggleProp = (id: string) => {
@@ -515,12 +558,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           return;
         }
         await loadRemoteInvites();
-        setAxisInput("");
-        setDraftAxisId(null);
-        setDraftName(null);
-        setDraftUserId(null);
-        setSelectedProps({});
-        setPropertyPermissionsDraft({});
+        resetLinkDraft();
+        setLinkModalOpen(false);
         showToast("Invite sent — waiting for their approval.");
         return;
       } catch {
@@ -548,12 +587,8 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       createdAt: new Date().toISOString(),
     };
     writeProRelationships(userId, [...all, row]);
-    setAxisInput("");
-    setDraftAxisId(null);
-    setDraftName(null);
-    setDraftUserId(null);
-    setSelectedProps({});
-    setPropertyPermissionsDraft({});
+    resetLinkDraft();
+    setLinkModalOpen(false);
     refreshLocal();
     showToast("Link saved locally (invite sync requires database migration).");
   };
@@ -1137,7 +1172,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           variant="primary"
           className={PORTAL_HEADER_ACTION_BTN}
           disabled={atLinkCap}
-          onClick={() => setLinkModalOpen(true)}
+          onClick={openLinkModal}
           title={atLinkCap ? "Remove a link or upgrade your plan to add another." : undefined}
           data-attr="co-manager-link-account"
         >
@@ -1179,61 +1214,6 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           <p className="text-xs font-medium text-[var(--status-overdue-fg)]">
             That account is already at its link limit and cannot accept new links.
           </p>
-        ) : null}
-
-        {draftAxisId ? (
-          <div className="space-y-5 border-t border-border pt-6">
-            <p className="text-sm text-muted">
-              Verified <span className="font-semibold text-foreground">{draftName}</span>{" "}
-              <span className="font-mono text-xs text-muted">({draftAxisId})</span>
-            </p>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assigned properties</p>
-              <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-border bg-accent/30 p-3">
-                {propertyOptions.length === 0 ? (
-                  <li className="text-sm text-muted">No properties yet — add listings under Properties first.</li>
-                ) : (
-                  propertyOptions.map((p) => (
-                    <li key={p.id}>
-                      <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-accent/30">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(selectedProps[p.id])}
-                          onChange={() => toggleProp(p.id)}
-                          className="mt-1 h-4 w-4 rounded border-border text-primary"
-                        />
-                        <span className="text-sm text-foreground">{p.label}</span>
-                      </label>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
-
-            {selectedPropIds.length > 0 ? (
-              <div className="space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Per-property permissions</p>
-                {selectedPropIds.map((pid) => (
-                  <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
-                    <p className="text-sm font-semibold text-foreground">{resolvePropertyLabel(pid, pid)}</p>
-                    <div className="mt-3">
-                      <CoManagerPermissionsEditor
-                        value={normalizeCoManagerPermissions(propertyPermissionsDraft[pid])}
-                        onChange={(next) =>
-                          setPropertyPermissionsDraft((prev) => ({ ...prev, [pid]: next }))
-                        }
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <Button type="button" className={`${PORTAL_HEADER_ACTION_BTN} rounded-full`} onClick={() => void saveNewLink()}>
-              {useRemote ? "Send invite" : "Save link (local)"}
-            </Button>
-          </div>
         ) : null}
 
         {coManagerBucket !== "active" && useRemote && incomingPending.length > 0 ? (
@@ -1536,40 +1516,121 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </>
         )}
 
-        <Modal open={linkModalOpen} title="Link account" onClose={() => setLinkModalOpen(false)}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submitLinkAccount();
-            }}
-            className="space-y-4"
-          >
-            <label className="block text-xs font-semibold text-muted">
-              {AXIS_ID_LABEL}
-              <input
-                type="text"
-                value={axisInput}
-                onChange={(e) => setAxisInput(e.target.value)}
-                placeholder="e.g. AXIS-1A2B3C4D"
-                autoFocus
-                className={`mt-1 h-10 w-full font-mono text-sm ${PORTAL_TOOLBAR_SELECT}`}
-              />
-            </label>
-            <div className="flex justify-start gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                disabled={lookupBusy}
-                onClick={() => setLinkModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" className="rounded-full" disabled={lookupBusy || atLinkCap}>
-                {lookupBusy ? "Checking…" : "Link account"}
-              </Button>
+        <Modal
+          open={linkModalOpen}
+          title={draftAxisId ? "Assign properties & permissions" : "Link account"}
+          onClose={closeLinkModal}
+          panelClassName={draftAxisId ? "max-w-2xl" : undefined}
+        >
+          {!draftAxisId ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitLinkAccount();
+              }}
+              className="space-y-4"
+            >
+              <label className="block text-xs font-semibold text-muted">
+                {AXIS_ID_LABEL}
+                <input
+                  type="text"
+                  value={axisInput}
+                  onChange={(e) => setAxisInput(e.target.value)}
+                  placeholder="e.g. AXIS-1A2B3C4D"
+                  autoFocus
+                  className={`mt-1 h-10 w-full font-mono text-sm ${PORTAL_TOOLBAR_SELECT}`}
+                />
+              </label>
+              <p className="text-xs text-muted">
+                Enter the {AXIS_ID_LABEL} of the manager you want to add. Next you&apos;ll choose which properties
+                they co-manage and what they can do on each.
+              </p>
+              <div className="flex justify-start gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  disabled={lookupBusy}
+                  onClick={closeLinkModal}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" className="rounded-full" disabled={lookupBusy || atLinkCap}>
+                  {lookupBusy ? "Checking…" : "Continue"}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-5">
+              <p className="text-sm text-muted">
+                Verified <span className="font-semibold text-foreground">{draftName}</span>{" "}
+                <span className="font-mono text-xs text-muted">({draftAxisId})</span>
+              </p>
+
+              {inviteeAtCap ? (
+                <p className="rounded-xl portal-banner-danger px-4 py-3 text-xs font-medium text-[var(--status-overdue-fg)]">
+                  That account is already at its link limit and cannot accept new links.
+                </p>
+              ) : null}
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Assigned properties</p>
+                <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-border bg-accent/30 p-3">
+                  {propertyOptions.length === 0 ? (
+                    <li className="text-sm text-muted">No properties yet — add listings under Properties first.</li>
+                  ) : (
+                    propertyOptions.map((p) => (
+                      <li key={p.id}>
+                        <label className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-accent/30">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(selectedProps[p.id])}
+                            onChange={() => toggleProp(p.id)}
+                            className="mt-1 h-4 w-4 rounded border-border text-primary"
+                          />
+                          <span className="text-sm text-foreground">{p.label}</span>
+                        </label>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+
+              {selectedPropIds.length > 0 ? (
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Per-property permissions</p>
+                  {selectedPropIds.map((pid) => (
+                    <div key={pid} className="rounded-xl border border-border bg-accent/25 p-4">
+                      <p className="text-sm font-semibold text-foreground">{resolvePropertyLabel(pid, pid)}</p>
+                      <div className="mt-3">
+                        <CoManagerPermissionsEditor
+                          value={normalizeCoManagerPermissions(propertyPermissionsDraft[pid])}
+                          onChange={(next) =>
+                            setPropertyPermissionsDraft((prev) => ({ ...prev, [pid]: next }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="flex justify-start gap-2">
+                <Button type="button" variant="outline" className="rounded-full" onClick={backToLookup}>
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="rounded-full"
+                  disabled={atLinkCap}
+                  onClick={() => void saveNewLink()}
+                >
+                  {useRemote ? "Send invite" : "Save link (local)"}
+                </Button>
+              </div>
             </div>
-          </form>
+          )}
         </Modal>
 
         <Modal

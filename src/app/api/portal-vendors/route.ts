@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { isVendorCategorySettingsRow, managerVendorCategorySettingsRowId } from "@/lib/manager-vendors-storage";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { linkedOwnerScopeForModule } from "@/lib/auth/co-manager-module-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -97,6 +98,33 @@ export async function GET(req: Request) {
       })
       .filter((row): row is ManagerVendorRow => row !== null);
 
+    // Co-manager access: the vendor directory is owner-keyed (no property
+    // column), so include every linked owner's rows when this user has the
+    // "services" module on at least one of that owner's assigned properties.
+    let linkedOwnerRows: ManagerVendorRow[] = [];
+    if (!admin) {
+      const { ownerIds } = await linkedOwnerScopeForModule(db, user.id, "services");
+      ownerIds.delete(user.id);
+      if (ownerIds.size > 0) {
+        const { data: linkedData, error: linkedError } = await db
+          .from("manager_vendor_records")
+          .select("row_data, manager_user_id")
+          .in("manager_user_id", [...ownerIds])
+          .order("updated_at", { ascending: false })
+          .limit(500);
+        if (linkedError) return NextResponse.json({ error: linkedError.message }, { status: 500 });
+        linkedOwnerRows = (linkedData ?? [])
+          .map((record) => {
+            const row = record.row_data as ManagerVendorRow | null;
+            if (!row?.id || isVendorCategorySettingsRow(row)) return null;
+            const ownerId = record.manager_user_id;
+            if (!ownerId) return null;
+            return normalizeRow(row, ownerId);
+          })
+          .filter((row): row is ManagerVendorRow => row !== null);
+      }
+    }
+
     let sharedRows: ManagerVendorRow[] = [];
     if (!admin) {
       const { data: sharedData, error: sharedError } = await db
@@ -119,7 +147,7 @@ export async function GET(req: Request) {
     }
 
     const seen = new Set<string>();
-    const rows = [...ownRows, ...sharedRows].filter((row) => {
+    const rows = [...ownRows, ...linkedOwnerRows, ...sharedRows].filter((row) => {
       if (seen.has(row.id)) return false;
       seen.add(row.id);
       return true;

@@ -20,6 +20,7 @@ import {
   type ManagerDocumentVisibility,
 } from "@/lib/documents/manager-documents";
 import { managerOwnsVendorDirectoryRow, resolveResidentUserIdByEmail } from "@/lib/documents/document-scope.server";
+import { linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { notifyDocumentShared } from "@/lib/documents/document-share-notify.server";
 import { defaultExpiryIsoForCategory, parseExpiresAtInput } from "@/lib/documents/document-expiration";
 
@@ -39,44 +40,69 @@ export async function GET(req: Request) {
   const scope = url.searchParams.get("scope"); // scope-kind filter
   const search = (url.searchParams.get("q") ?? "").trim();
 
-  let query = auth.db
-    .from("manager_documents")
-    .select(DOCUMENT_SELECT_COLUMNS)
-    .eq("manager_user_id", auth.userId)
-    .is("deleted_at", null)
-    .is("superseded_by_document_id", null)
-    .order("created_at", { ascending: false })
-    .limit(500);
+  // Shared filter set, applied identically to the owned and linked-property queries.
+  const buildQuery = () => {
+    let query = auth.db
+      .from("manager_documents")
+      .select(DOCUMENT_SELECT_COLUMNS)
+      .is("deleted_at", null)
+      .is("superseded_by_document_id", null)
+      .order("created_at", { ascending: false })
+      .limit(500);
 
-  if (category && isDocumentCategory(category)) query = query.eq("category", category);
-  if (propertyId) query = query.eq("property_id", propertyId);
-  if (search) query = query.ilike("display_name", `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
+    if (category && isDocumentCategory(category)) query = query.eq("category", category);
+    if (propertyId) query = query.eq("property_id", propertyId);
+    if (search) query = query.ilike("display_name", `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
 
-  // Scope-kind filters map to "which polymorphic column is set".
-  if (scope === "manager") {
-    query = query
-      .is("property_id", null)
-      .is("unit_label", null)
-      .is("lease_id", null)
-      .is("resident_user_id", null)
-      .is("vendor_id", null)
-      .is("work_order_id", null);
-  } else if (scope === "property") {
-    query = query.not("property_id", "is", null);
-  } else if (scope === "resident") {
-    query = query.not("resident_user_id", "is", null);
-  } else if (scope === "vendor") {
-    query = query.not("vendor_id", "is", null);
-  } else if (scope === "work_order") {
-    query = query.not("work_order_id", "is", null);
-  } else if (scope === "lease") {
-    query = query.not("lease_id", "is", null);
-  }
+    // Scope-kind filters map to "which polymorphic column is set".
+    if (scope === "manager") {
+      query = query
+        .is("property_id", null)
+        .is("unit_label", null)
+        .is("lease_id", null)
+        .is("resident_user_id", null)
+        .is("vendor_id", null)
+        .is("work_order_id", null);
+    } else if (scope === "property") {
+      query = query.not("property_id", "is", null);
+    } else if (scope === "resident") {
+      query = query.not("resident_user_id", "is", null);
+    } else if (scope === "vendor") {
+      query = query.not("vendor_id", "is", null);
+    } else if (scope === "work_order") {
+      query = query.not("work_order_id", "is", null);
+    } else if (scope === "lease") {
+      query = query.not("lease_id", "is", null);
+    }
 
-  const { data, error } = await query;
+    return query;
+  };
+
+  const { data, error } = await buildQuery().eq("manager_user_id", auth.userId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const documents = (data as ManagerDocumentRow[] | null ?? []).map(mapDocumentRow);
+  const rowsById = new Map<string, ManagerDocumentRow>();
+  for (const row of (data as ManagerDocumentRow[] | null) ?? []) rowsById.set(row.id, row);
+
+  // Co-manager visibility: also list property-scoped documents on properties
+  // this user is linked to for the documents module. The `.in("property_id", …)`
+  // predicate only matches rows with a property set, so other owners'
+  // manager-level documents (property_id null) can never leak. Skipped for the
+  // manager scope filter, which by definition matches only property-less rows.
+  const linkedPropertyIds = await linkedPropertyIdsForModule(auth.db, auth.userId, "documents");
+  if (linkedPropertyIds.size > 0 && scope !== "manager") {
+    const { data: linkedData, error: linkedError } = await buildQuery()
+      .in("property_id", [...linkedPropertyIds])
+      .neq("manager_user_id", auth.userId);
+    if (linkedError) return NextResponse.json({ error: linkedError.message }, { status: 500 });
+    for (const row of (linkedData as ManagerDocumentRow[] | null) ?? []) {
+      if (!rowsById.has(row.id)) rowsById.set(row.id, row);
+    }
+  }
+
+  const documents = [...rowsById.values()]
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    .map(mapDocumentRow);
   return NextResponse.json({ documents });
 }
 

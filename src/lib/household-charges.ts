@@ -1619,12 +1619,25 @@ export function readChargesForManagerResident(email: string, managerUserId: stri
     .filter((charge) => charge.status === "paid" || !isStaleRecurringHouseholdCharge(charge, profileById, scoped));
 }
 
-export function readChargesForManager(managerUserId: string | null): HouseholdCharge[] {
+export function readChargesForManager(
+  managerUserId: string | null,
+  opts?: {
+    /** Linked-property ids an accepted co-manager may see (payments module) —
+     *  computed by the caller via collectLinkedPropertyIdsForModule so this
+     *  module stays dependency-free. */
+    linkedPropertyIds?: Set<string>;
+  },
+): HouseholdCharge[] {
   const scope = managerUserId ?? HOUSEHOLD_CHARGE_DEMO_MANAGER_SCOPE;
+  const linked = opts?.linkedPropertyIds;
   const all = dedupeCharges(readAll());
   const profileById = new Map(readRentProfiles().map((p) => [p.id, p]));
   return all
-    .filter((r) => r.managerUserId === scope)
+    .filter(
+      (r) =>
+        r.managerUserId === scope ||
+        Boolean(linked?.size && r.propertyId && linked.has(r.propertyId)),
+    )
     .filter((charge) => shouldDisplayChargeInPayments(charge))
     .filter((charge) => charge.status === "paid" || !isStaleRecurringHouseholdCharge(charge, profileById, all));
 }

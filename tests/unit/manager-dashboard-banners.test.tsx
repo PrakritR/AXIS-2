@@ -58,6 +58,7 @@ vi.mock("@/lib/manager-applications-storage", () => ({
 
 vi.mock("@/lib/manager-portfolio-access", () => ({
   applicationVisibleToPortalUser: () => true,
+  collectLinkedPropertyIdsForModule: () => new Set<string>(),
 }));
 
 vi.mock("@/lib/lease-pipeline-storage", () => ({

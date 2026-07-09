@@ -38,6 +38,7 @@ import {
 } from "@/lib/manager-applications-storage";
 import {
   applicationVisibleToPortalUser,
+  collectLinkedPropertyIdsForModule,
 } from "@/lib/manager-portfolio-access";
 import {
   MANAGER_WORK_ORDERS_EVENT,
@@ -155,7 +156,7 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
       .filter((l) => l.status === "Manager Signature Pending" || l.status === "Resident Signature Pending")
       .sort((a, b) => new Date(b.updatedAtIso).getTime() - new Date(a.updatedAtIso).getTime());
 
-    const charges = readChargesForManager(userId);
+    const charges = readChargesForManager(userId, { linkedPropertyIds: collectLinkedPropertyIdsForModule(userId ?? "", "payments") });
     const pendingCharges = charges
       .filter((c) => c.status === "pending")
       .sort((a, b) => {

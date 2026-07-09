@@ -185,11 +185,20 @@ export function readManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY_FALLB
 export function readOwnManagerVendorRows(
   managerUserId: string | null | undefined,
   fallback: ManagerVendorRow[] = EMPTY_FALLBACK,
+  opts?: {
+    /** Owner manager ids whose directories this user co-manages (services module) —
+     *  computed by the caller via collectLinkedOwnerIdsForModule (dependency-free here). */
+    includeOwnerIds?: Set<string>;
+  },
 ): ManagerVendorRow[] {
   if (!managerUserId) return [];
-  return ownVendorRows(readManagerVendorRows(fallback), managerUserId).filter(
-    (row) => !isVendorCategorySettingsRow(row),
-  );
+  const owners = opts?.includeOwnerIds;
+  const rows = owners?.size
+    ? readManagerVendorRows(fallback).filter(
+        (r) => r.managerUserId === managerUserId || r.managerUserId == null || owners.has(r.managerUserId),
+      )
+    : ownVendorRows(readManagerVendorRows(fallback), managerUserId);
+  return rows.filter((row) => !isVendorCategorySettingsRow(row));
 }
 
 export function readActiveManagerVendorRows(fallback: ManagerVendorRow[] = EMPTY_FALLBACK): ManagerVendorRow[] {

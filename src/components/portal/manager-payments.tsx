@@ -33,7 +33,7 @@ import {
   readManagerApplicationRows,
   syncManagerApplicationsFromServer,
 } from "@/lib/manager-applications-storage";
-import { applicationVisibleToPortalUser } from "@/lib/manager-portfolio-access";
+import { applicationVisibleToPortalUser, collectLinkedPropertyIdsForModule } from "@/lib/manager-portfolio-access";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
 import { syncPropertyPipelineFromServer, readExtraListingsForUser } from "@/lib/demo-property-pipeline";
 import { isCurrentResidentApplicationRow } from "@/lib/current-resident";
@@ -238,7 +238,7 @@ export function ManagerPayments() {
         .map((row) => row.email?.trim().toLowerCase())
         .filter((e): e is string => Boolean(e))
     );
-    return readChargesForManager(userId)
+    return readChargesForManager(userId, { linkedPropertyIds: collectLinkedPropertyIdsForModule(userId ?? "", "payments") })
       .filter((charge) => !shouldExcludePaymentAccount(charge.residentName, charge.residentEmail))
       .filter((charge) => {
         const email = charge.residentEmail?.trim().toLowerCase();
@@ -324,7 +324,7 @@ export function ManagerPayments() {
       managerUserId: userId,
       expenses: readManagerOutgoingExpenses(),
       workOrders: readManagerWorkOrderRows(),
-      paidCharges: readChargesForManager(userId).filter((charge) => charge.status === "paid"),
+      paidCharges: readChargesForManager(userId, { linkedPropertyIds: collectLinkedPropertyIdsForModule(userId ?? "", "payments") }).filter((charge) => charge.status === "paid"),
       propertyLabelById,
       vendorNameById,
       vendorById,

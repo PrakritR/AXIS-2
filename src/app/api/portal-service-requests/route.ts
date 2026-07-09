@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ServiceRequest } from "@/lib/service-requests-storage";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { fetchRowsForManagerWithLinked, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { residentBelongsToManager } from "@/lib/resident-manager-scope";
@@ -14,6 +15,8 @@ async function sessionUser() {
   } = await supabase.auth.getUser();
   return user;
 }
+
+type ServiceRequestScopeRecord = { id: string; row_data: ServiceRequest | null; updated_at: string | null };
 
 function recordFromRow(row: ServiceRequest) {
   return {
@@ -38,17 +41,37 @@ export async function GET() {
     const role = String(profile?.role ?? user.user_metadata?.role ?? "").toLowerCase();
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
 
+    // Managers/pro see the requests they own plus rows on properties shared
+    // with them via an accepted co-manager link with services access.
+    if (!admin && role !== "resident") {
+      const linkedPropertyIds = await linkedPropertyIdsForModule(db, user.id, "services");
+      const records = await fetchRowsForManagerWithLinked<ServiceRequestScopeRecord>(
+        db,
+        "portal_service_request_records",
+        user.id,
+        linkedPropertyIds,
+        { propertyColumns: ["property_id"] },
+      );
+      const rows = records
+        .sort((a, b) => {
+          const aTs = Date.parse(String(a.updated_at ?? ""));
+          const bTs = Date.parse(String(b.updated_at ?? ""));
+          return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+        })
+        .map((record) => record.row_data)
+        .filter(Boolean) as ServiceRequest[];
+      return NextResponse.json({ rows });
+    }
+
     let query = db
       .from("portal_service_request_records")
       .select("row_data, updated_at")
       .order("updated_at", { ascending: false })
       .limit(500);
 
-    // Residents see only their own requests; managers/pro see the ones they own.
+    // Residents see only their own requests; admins see all.
     if (!admin && role === "resident") {
       query = query.eq("resident_email", email);
-    } else if (!admin) {
-      query = query.eq("manager_user_id", user.id);
     }
 
     const { data, error } = await query;

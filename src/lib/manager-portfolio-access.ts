@@ -22,6 +22,7 @@ import {
   hasCoManagerPermission,
   hasCoManagerPermissionForProperty,
   permissionsForProperty,
+  type CoManagerPermissionId,
   type PropertyCoManagerPermissions,
 } from "@/lib/co-manager-permissions";
 
@@ -55,6 +56,76 @@ export function collectLinkedPropertyIds(userId: string): Set<string> {
   const s = new Set<string>();
   addIncomingAssignedPropertyIds(userId, s);
   return s;
+}
+
+/**
+ * Client mirror of the server's module rule (src/lib/auth/co-manager-module-scope.ts):
+ * an assigned property with NO module permissions checked grants every module;
+ * a non-empty permission set restricts access to the checked modules.
+ */
+function modulePermsAllow(
+  perms: PropertyCoManagerPermissions | undefined,
+  propertyId: string,
+  module: CoManagerPermissionId,
+): boolean {
+  const flat = permissionsForProperty(perms, propertyId);
+  const anyGranted = Object.values(flat).some(Boolean);
+  if (!anyGranted) return true;
+  return hasCoManagerPermissionForProperty(perms, propertyId, module);
+}
+
+/** Linked property ids where this user may use `module` (client-side view of accepted links). */
+export function collectLinkedPropertyIdsForModule(userId: string, module: CoManagerPermissionId): Set<string> {
+  const owned = ownedPropertyIdsForUser(userId);
+  const out = new Set<string>();
+  for (const rel of readProRelationships(userId)) {
+    if (rel.linkDirection === "outgoing") continue;
+    for (const id of rel.assignedPropertyIds) {
+      const pid = id.trim();
+      if (!pid || owned.has(pid)) continue;
+      if (modulePermsAllow(rel.propertyCoManagerPermissions, pid, module)) out.add(pid);
+    }
+  }
+  for (const inv of readCachedAccountLinkInvites()) {
+    if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
+    for (const id of inv.assignedPropertyIds) {
+      const pid = id.trim();
+      if (!pid || owned.has(pid)) continue;
+      if (modulePermsAllow(inv.propertyCoManagerPermissions, pid, module)) out.add(pid);
+    }
+  }
+  return out;
+}
+
+/** Linked OWNER manager user ids where this user has `module` access on ≥1 assigned property. */
+export function collectLinkedOwnerIdsForModule(userId: string, module: CoManagerPermissionId): Set<string> {
+  const out = new Set<string>();
+  if (!userId) return out;
+  for (const inv of readCachedAccountLinkInvites()) {
+    if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
+    const ownerId = inv.linkedUserId?.trim();
+    if (!ownerId || ownerId === userId) continue;
+    const qualifies = inv.assignedPropertyIds.some((id) => {
+      const pid = id.trim();
+      return pid && modulePermsAllow(inv.propertyCoManagerPermissions, pid, module);
+    });
+    if (qualifies) out.add(ownerId);
+  }
+  return out;
+}
+
+/** Whether a row scoped by managerUserId/propertyId is visible for a module (owner or linked co-manager). */
+export function moduleRowVisibleToPortalUser(
+  row: { managerUserId?: string | null; propertyId?: string | null; assignedPropertyId?: string | null },
+  userId: string | null,
+  module: CoManagerPermissionId,
+): boolean {
+  if (!userId) return false;
+  if (!row.managerUserId || row.managerUserId === userId) return true;
+  const linked = collectLinkedPropertyIdsForModule(userId, module);
+  const pid = row.propertyId?.trim();
+  const apid = row.assignedPropertyId?.trim();
+  return Boolean((pid && linked.has(pid)) || (apid && linked.has(apid)));
 }
 
 /** Property ids from this user's listings plus pending rows and account-link assignments. */

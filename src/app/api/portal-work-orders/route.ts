@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { fetchRowsForManagerWithLinked, linkedPropertyIdsForModule } from "@/lib/auth/co-manager-module-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { residentBelongsToManager } from "@/lib/resident-manager-scope";
@@ -8,6 +9,8 @@ import { residentBelongsToManager } from "@/lib/resident-manager-scope";
 export const runtime = "nodejs";
 
 type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
+
+type WorkOrderScopeRecord = { id: string; row_data: DemoManagerWorkOrderRow | null; updated_at: string | null };
 
 async function sessionUser() {
   const supabase = await createSupabaseServerClient();
@@ -90,6 +93,45 @@ export async function GET() {
       return NextResponse.json({ rows });
     }
 
+    if (!admin && role !== "resident") {
+      // Managers see their own work orders (plus legacy unassigned rows), never
+      // other landlords' — and additionally rows on properties shared with them
+      // via an accepted co-manager link with services access.
+      const linkedPropertyIds = await linkedPropertyIdsForModule(db, user.id, "services");
+      const records = await fetchRowsForManagerWithLinked<WorkOrderScopeRecord>(
+        db,
+        "portal_work_order_records",
+        user.id,
+        linkedPropertyIds,
+        { propertyColumns: ["property_id", "assigned_property_id"] },
+      );
+      const byId = new Map<string, WorkOrderScopeRecord>();
+      for (const record of records) {
+        if (record.id) byId.set(record.id, record);
+      }
+      // Legacy unassigned rows stay visible to managers (previously included via
+      // `manager_user_id.is.null` in the .or filter).
+      const { data: legacyRows, error: legacyError } = await db
+        .from("portal_work_order_records")
+        .select("id, row_data, updated_at")
+        .is("manager_user_id", null)
+        .order("updated_at", { ascending: false })
+        .limit(500);
+      if (legacyError) return NextResponse.json({ error: legacyError.message }, { status: 500 });
+      for (const record of (legacyRows ?? []) as unknown as WorkOrderScopeRecord[]) {
+        if (record.id && !byId.has(record.id)) byId.set(record.id, record);
+      }
+      const rows = [...byId.values()]
+        .sort((a, b) => {
+          const aTs = Date.parse(String(a.updated_at ?? ""));
+          const bTs = Date.parse(String(b.updated_at ?? ""));
+          return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0);
+        })
+        .map((record) => record.row_data)
+        .filter(Boolean) as DemoManagerWorkOrderRow[];
+      return NextResponse.json({ rows });
+    }
+
     let query = db
       .from("portal_work_order_records")
       .select("row_data, updated_at")
@@ -98,10 +140,6 @@ export async function GET() {
 
     if (!admin && role === "resident") {
       query = query.eq("resident_email", email);
-    } else if (!admin) {
-      // Managers see only their own work orders (plus legacy unassigned rows),
-      // never other landlords'. This matches the manager panel's client filter.
-      query = query.or(`manager_user_id.eq.${user.id},manager_user_id.is.null`);
     }
 
     const { data, error } = await query;

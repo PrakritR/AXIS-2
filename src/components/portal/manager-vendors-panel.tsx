@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
+import { collectLinkedOwnerIdsForModule } from "@/lib/manager-portfolio-access";
 import {
   MANAGER_VENDORS_EVENT,
   makeVendorId,
@@ -94,7 +95,7 @@ export const ManagerVendorsPanel = forwardRef(function ManagerVendorsPanel(
 
   const vendors = useMemo(() => {
     void tick;
-    return readOwnManagerVendorRows(userId).sort((a, b) => a.name.localeCompare(b.name));
+    return readOwnManagerVendorRows(userId, undefined, { includeOwnerIds: collectLinkedOwnerIdsForModule(userId ?? "", "services") }).sort((a, b) => a.name.localeCompare(b.name));
   }, [tick, userId]);
 
   const openSettingsForm = useCallback((trade?: string) => {

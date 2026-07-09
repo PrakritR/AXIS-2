@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import {
+  fetchRowsForManagerWithLinked,
+  linkedPropertyIdsForModule,
+} from "@/lib/auth/co-manager-module-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import type { HouseholdCharge } from "@/lib/household-charges";
@@ -83,7 +87,25 @@ export async function GET() {
     if (chargeResult.error) return NextResponse.json({ error: chargeResult.error.message }, { status: 500 });
     if (profileResult.error) return NextResponse.json({ error: profileResult.error.message }, { status: 500 });
 
-    const rawCharges = (chargeResult.data ?? []).map((r) => r.row_data as HouseholdCharge);
+    type ChargeRecordRow = { id: string; row_data: unknown; updated_at: string | null };
+    let chargeRows = (chargeResult.data ?? []) as ChargeRecordRow[];
+    if (user.role === "manager") {
+      // Co-managers with "payments" access on linked properties also see those charges.
+      const linkedPropertyIds = await linkedPropertyIdsForModule(db, user.id, "payments");
+      if (linkedPropertyIds.size > 0) {
+        const linkedRows = await fetchRowsForManagerWithLinked<ChargeRecordRow>(
+          db,
+          "portal_household_charge_records",
+          user.id,
+          linkedPropertyIds,
+          { propertyColumns: ["property_id"] },
+        );
+        const seen = new Set(chargeRows.map((row) => row.id));
+        chargeRows = [...chargeRows, ...linkedRows.filter((row) => row.id && !seen.has(row.id))];
+      }
+    }
+
+    const rawCharges = chargeRows.map((r) => r.row_data as HouseholdCharge);
     const charges = await enrichHouseholdChargesFromPropertyRecords(db, rawCharges);
     const rentProfiles = (profileResult.data ?? []).map((r) => r.row_data);
     return NextResponse.json({ charges, rentProfiles });
