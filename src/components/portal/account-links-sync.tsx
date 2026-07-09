@@ -12,6 +12,25 @@ import {
 import { syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
 import { usePortalSession } from "@/hooks/use-portal-session";
 
+/** Orphan purge is repair work, not data the page waits on — run it at most
+ *  once per hour per tab and never block the account-links fetch on it. */
+const PURGE_THROTTLE_KEY = "axis_co_manager_purge_at_v1";
+const PURGE_THROTTLE_MS = 60 * 60 * 1000;
+
+function maybePurgeOrphanedLinks(): void {
+  try {
+    const last = Number(sessionStorage.getItem(PURGE_THROTTLE_KEY) ?? "0");
+    if (Number.isFinite(last) && Date.now() - last < PURGE_THROTTLE_MS) return;
+    sessionStorage.setItem(PURGE_THROTTLE_KEY, String(Date.now()));
+  } catch {
+    /* storage unavailable — still fire the purge, just unthrottled */
+  }
+  void fetch("/api/pro/purge-orphaned-co-manager-links", {
+    method: "POST",
+    credentials: "include",
+  }).catch(() => undefined);
+}
+
 export function AccountLinksSync() {
   const session = usePortalSession();
 
@@ -22,10 +41,7 @@ export function AccountLinksSync() {
       try {
         if (!session.userId || cancelled) return;
 
-        await fetch("/api/pro/purge-orphaned-co-manager-links", {
-          method: "POST",
-          credentials: "include",
-        }).catch(() => undefined);
+        maybePurgeOrphanedLinks();
 
         const body = await fetchAccountLinksCached();
         if (body.migrationRequired || cancelled) return;

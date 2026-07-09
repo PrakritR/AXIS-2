@@ -586,9 +586,7 @@ export function ManagerLeasesPipelinePanel({
                 <PortalTableInlineExpand expanded={expandedId === row.id} className="font-semibold text-foreground">
                   <span className="truncate">{row.residentName}</span>
                 </PortalTableInlineExpand>
-                <p className="mt-0.5 truncate text-xs text-muted">
-                  {row.unit} · {row.status ?? row.stageLabel}
-                </p>
+                <p className="mt-0.5 truncate text-xs text-muted">{row.unit}</p>
                 <p className="mt-0.5 truncate text-[11px] text-muted/90">Updated {row.updated}</p>
               </div>
             </button>
@@ -602,12 +600,11 @@ export function ManagerLeasesPipelinePanel({
       <div className={`${PORTAL_DATA_TABLE_WRAP} hidden lg:block`}>
         <div className={PORTAL_DATA_TABLE_SCROLL}>
           <table className={PORTAL_DATA_TABLE}>
-            <PortalDataTableColGroup percents={portalTableColumnPercents(4)} />
+            <PortalDataTableColGroup percents={portalTableColumnPercents(3)} />
             <thead>
               <tr className={PORTAL_TABLE_HEAD_ROW}>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Resident</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Unit / home</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Stage</th>
                 <th className={`${MANAGER_TABLE_TH} text-left`}>Updated</th>
               </tr>
             </thead>
@@ -627,12 +624,11 @@ export function ManagerLeasesPipelinePanel({
                       <PortalTableInlineExpand expanded={expandedId === row.id}>{row.residentName}</PortalTableInlineExpand>
                     </td>
                     <td className={PORTAL_TABLE_TD}>{row.unit}</td>
-                    <td className={PORTAL_TABLE_TD}>{row.status ?? row.stageLabel}</td>
                     <td className={`${PORTAL_TABLE_TD} text-muted`}>{row.updated}</td>
                   </tr>
                   {expandedId === row.id ? (
                     <tr className={PORTAL_TABLE_DETAIL_ROW}>
-                      <td colSpan={4} className={PORTAL_TABLE_DETAIL_CELL}>
+                      <td colSpan={3} className={PORTAL_TABLE_DETAIL_CELL}>
                         {renderLeaseRowDetail(row)}
                       </td>
                     </tr>

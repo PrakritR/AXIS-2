@@ -38,6 +38,8 @@ export function useInboxRowSelection(selectableIds: string[]) {
   return { selectedIds, allSelected, toggleSelected, toggleSelectAll, clearSelection };
 }
 
+/** Bulk-selection actions, styled like the Schedule tab's toolbar: no bordered
+ *  container or count label — just the buttons, left-justified. */
 export function PortalInboxSelectionToolbar({
   count,
   onClear,
@@ -49,14 +51,11 @@ export function PortalInboxSelectionToolbar({
 }) {
   if (count === 0) return null;
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
-      <span className="text-sm font-medium text-muted">{count} selected</span>
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-        {children}
-        <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={onClear}>
-          Clear
-        </Button>
-      </div>
+    <div className="flex w-full flex-wrap items-center gap-2">
+      {children}
+      <Button type="button" variant="outline" className={PORTAL_HEADER_ACTION_BTN} onClick={onClear}>
+        Clear
+      </Button>
     </div>
   );
 }

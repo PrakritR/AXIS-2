@@ -3,7 +3,7 @@
 import { Fragment } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { TabNav } from "@/components/ui/tabs";
+import { TabNav, useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalFilterRow,
@@ -96,12 +96,17 @@ function w9StatusTone(status: string) {
 }
 
 export function ManagerDocumentsPanel({
-  tabId,
+  tabId: serverTabId,
   basePath = "/portal",
 }: {
   tabId: string;
   basePath?: string;
 }) {
+  // Tab switches are shallow (client-only) — see TabNav `shallow` below.
+  const tabId = useShallowTabId(
+    serverTabId,
+    DOCUMENT_TABS.map((t) => t.id),
+  );
   const { showToast } = useAppUi();
   const { userId, ready } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
@@ -323,7 +328,7 @@ export function ManagerDocumentsPanel({
       }
       filterRow={
         <ManagerPortalFilterRow>
-          <TabNav activeId={tabId} items={documentTabItems} />
+          <TabNav shallow activeId={tabId} items={documentTabItems} />
           {hasExportActions ? <div className={`${PORTAL_FILTER_ACTIONS_MOBILE} gap-2`}>{exportActions}</div> : null}
         </ManagerPortalFilterRow>
       }

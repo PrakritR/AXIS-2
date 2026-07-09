@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { TabNav } from "@/components/ui/tabs";
+import { TabNav, useShallowTabId } from "@/components/ui/tabs";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import {
   ManagerPortalFilterRow,
@@ -453,12 +453,17 @@ type IncomeDraft = {
 };
 
 export function ManagerFinancesPanel({
-  tabId,
+  tabId: serverTabId,
   basePath = "/portal",
 }: {
   tabId: string;
   basePath?: string;
 }) {
+  // Tab switches are shallow (client-only) — see TabNav `shallow` below.
+  const tabId = useShallowTabId(
+    serverTabId,
+    FINANCE_TABS.map((t) => t.id),
+  );
   const { showToast } = useAppUi();
   const { userId, ready } = useManagerUserId();
   const [propertyTick, setPropertyTick] = useState(0);
@@ -728,7 +733,7 @@ export function ManagerFinancesPanel({
       titleAside={headerActions}
       filterRow={
         <ManagerPortalFilterRow>
-          <TabNav activeId={tabId} items={financeTabItems} />
+          <TabNav shallow activeId={tabId} items={financeTabItems} />
         </ManagerPortalFilterRow>
       }
     >

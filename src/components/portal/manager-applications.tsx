@@ -575,7 +575,6 @@ export function ManagerApplications() {
                   <p className="mt-0.5 truncate text-xs text-muted">
                     {[displayRoomForRow(row), stripPropertyRoomCountSuffix(row.property || "")].filter(Boolean).join(" · ")}
                   </p>
-                  {row.email ? <p className="mt-0.5 truncate text-[11px] text-muted/90">{row.email}</p> : null}
                 </div>
               </button>
               {expanded ? (
@@ -610,7 +609,6 @@ export function ManagerApplications() {
                         <PortalTableInlineExpand expanded={expandedId === row.id} className="font-medium leading-snug text-foreground">
                           {row.name}
                         </PortalTableInlineExpand>
-                        {row.email ? <p className="mt-1.5 text-xs leading-relaxed text-muted">{row.email}</p> : null}
                       </td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{row.property}</td>
                       <td className={`${PORTAL_TABLE_TD} align-middle leading-relaxed`}>{displayRoomForRow(row)}</td>

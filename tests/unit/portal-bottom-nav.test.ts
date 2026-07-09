@@ -91,7 +91,7 @@ describe("splitNativeBottomNavItems", () => {
       ),
     );
     expect(overflow.map((item) => item.section)).toContain("dashboard");
-    expect(overflow.map((item) => item.section)).toContain("services");
+    expect(overflow.map((item) => item.section)).toContain("documents");
     expect(overflow.map((item) => item.section)).not.toContain("bugs-feedback");
     expect(primary.length + overflow.length).toBe(items.length - 2);
   });

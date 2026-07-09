@@ -132,39 +132,42 @@ export function enrichPromotionDraftFromListing<T extends PromotionDraftAutofill
 }
 
 export function extractPromotionListingFacts(property: MockProperty): PromotionListingFacts {
+  // Every field is optional-in-practice: legacy/imported/externally-seeded rows
+  // can miss any of them, and a missing field must not crash the portal.
   const sub = property.listingSubmission;
-  const rooms = (sub?.rooms ?? []).filter((r) => r.name.trim());
+  const rooms = (sub?.rooms ?? []).filter((r) => r.name?.trim());
   const roomHighlights = rooms.slice(0, 8).map((r) => {
     const rent = r.monthlyRent > 0 ? `$${r.monthlyRent}/mo` : "";
     const avail = r.availability?.trim();
-    return [r.name.trim(), rent, avail].filter(Boolean).join(" — ");
+    return [r.name?.trim(), rent, avail].filter(Boolean).join(" — ");
   });
 
   const amenities = splitLineList(sub?.amenitiesText ?? "");
+  const beds = property.beds ?? 0;
   const listingType = sub
     ? isEntireHomeListing(sub)
       ? "Entire home"
       : rooms.length > 1
         ? "Rooms for rent"
         : "Rental listing"
-    : property.beds > 0
+    : beds > 0
       ? "Rental listing"
       : "";
 
-  const propertyName = property.buildingName.trim() || property.title.trim();
+  const propertyName = property.buildingName?.trim() || property.title?.trim() || "";
   const overview = sub?.houseOverview?.trim() || "";
 
   return {
     propertyName,
-    buildingName: property.buildingName.trim(),
-    address: property.address.trim(),
-    neighborhood: property.neighborhood.trim(),
-    unitLabel: property.unitLabel.trim(),
-    bedsBaths: property.beds > 0 ? `${property.beds} bed · ${property.baths} bath` : "",
-    rent: property.rentLabel.trim(),
-    availability: property.available.trim(),
+    buildingName: property.buildingName?.trim() ?? "",
+    address: property.address?.trim() ?? "",
+    neighborhood: property.neighborhood?.trim() ?? "",
+    unitLabel: property.unitLabel?.trim() ?? "",
+    bedsBaths: beds > 0 ? `${beds} bed · ${property.baths ?? 0} bath` : "",
+    rent: property.rentLabel?.trim() ?? "",
+    availability: property.available?.trim() ?? "",
     petFriendly: property.petFriendly ? "Pet friendly" : "",
-    tagline: property.tagline.trim() || overview.split(/\n/)[0]?.trim() || "",
+    tagline: property.tagline?.trim() || overview.split(/\n/)[0]?.trim() || "",
     overview,
     amenities,
     listingType,

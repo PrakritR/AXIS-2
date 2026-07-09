@@ -6,8 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
-import { ResidentDashboardMark } from "@/components/portal/resident-dashboard-mark";
-import { useResidentHasCompletedApplicationSubmission } from "@/hooks/use-resident-submitted-applications";
+import { AxisLogoMark } from "@/components/brand/axis-logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,30 +70,35 @@ export function PortalMobileNavBar({
     [pathname, definition],
   );
   const displayName = (name ?? "").trim() || (email ?? "").trim() || "Account";
-  const residentHasSubmittedApplication = useResidentHasCompletedApplicationSubmission();
-  const showResidentDashboardMark =
-    definition.kind === "resident" && residentHasSubmittedApplication;
 
   return (
-    <div className="portal-mobile-nav-bar mb-3 flex w-full items-center justify-between gap-2 md:hidden [html[data-native]_&]:mb-0">
+    <div className="portal-mobile-nav-bar relative mb-3 flex w-full items-center justify-between gap-2 md:hidden [html[data-native]_&]:mb-0">
+      {/* Brand mark, centered in the bar for every portal; links home. */}
+      <Link
+        href={`${definition.basePath}/dashboard`}
+        aria-label="Dashboard"
+        data-attr="portal-mobile-brand-mark"
+        className="absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 rounded-xl outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/30 active:opacity-80"
+      >
+        <AxisLogoMark size="compact" />
+      </Link>
       {back ? (
         <button
           type="button"
           data-attr="portal-mobile-back"
           onClick={() => router.push(back.href)}
-          className="-ml-2 inline-flex min-h-11 max-w-[calc(100%-3rem)] items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15 [html[data-native]_&]:min-h-9 [html[data-native]_&]:py-1"
+          className="-ml-2 inline-flex min-h-11 max-w-[38%] items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold text-primary outline-none transition hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-primary/25 active:bg-primary/15 [html[data-native]_&]:min-h-9 [html[data-native]_&]:py-1"
         >
           <ChevronLeftIcon />
           <span className="truncate">{back.label}</span>
         </button>
       ) : dashboardLabel ? (
-        <h1 className="min-w-0 truncate px-2 text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
+        <h1 className="min-w-0 max-w-[38%] truncate px-2 text-sm font-semibold text-foreground [html[data-native]_&]:py-1">
           {dashboardLabel}
         </h1>
       ) : null}
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        {showResidentDashboardMark ? <ResidentDashboardMark /> : null}
         <DropdownMenu>
           <DropdownMenuTrigger
             data-attr="portal-mobile-profile-menu"

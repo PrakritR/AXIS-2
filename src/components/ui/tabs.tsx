@@ -1,16 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useCallback, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
 export type TabItem = { href: string; label: string; id: string; dataAttr?: string };
+
+/**
+ * Active tab id for a shallow-routed tabbed panel: the server-rendered tab is
+ * the initial value; native `pushState` tab switches (TabNav `shallow`) update
+ * the pathname without a server roundtrip, and this re-derives the id from it.
+ */
+export function useShallowTabId<T extends string>(serverTabId: T, validIds: readonly T[]): T {
+  const pathname = usePathname();
+  const last = pathname?.split("/").filter(Boolean).pop() ?? "";
+  return (validIds as readonly string[]).includes(last) ? (last as T) : serverTabId;
+}
 
 export function TabNav({
   items,
   activeId,
+  shallow = false,
 }: {
   items: TabItem[];
   activeId: string;
+  /** Switch tabs client-side via history.pushState — no server render. Use only
+   *  when every tab renders the same panel keyed by the trailing path segment. */
+  shallow?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const linkRefs = useRef(new Map<string, HTMLAnchorElement>());
@@ -61,11 +77,21 @@ export function TabNav({
       ) : null}
       {items.map((t) => {
         const active = t.id === activeId;
+        const onShallowClick = shallow
+          ? (event: MouseEvent<HTMLAnchorElement>) => {
+              // Preserve cmd/ctrl/shift/middle-click open-in-new-tab behavior.
+              if (event.defaultPrevented || event.button !== 0) return;
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              window.history.pushState(null, "", t.href);
+            }
+          : undefined;
         return (
           <Link
             key={t.href}
             href={t.href}
             data-attr={t.dataAttr}
+            onClick={onShallowClick}
             ref={(el) => {
               if (el) linkRefs.current.set(t.id, el);
               else linkRefs.current.delete(t.id);

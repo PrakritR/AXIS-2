@@ -37,16 +37,9 @@ export function installNativeZoomLock(): () => void {
 
   document.addEventListener("touchmove", blockMultiTouchMove, passiveFalse);
 
-  let lastTouchEnd = 0;
-  const blockDoubleTapZoom = (event: TouchEvent) => {
-    const now = Date.now();
-    if (now - lastTouchEnd <= 300) {
-      event.preventDefault();
-    }
-    lastTouchEnd = now;
-  };
-
-  document.addEventListener("touchend", blockDoubleTapZoom, passiveFalse);
+  // Double-tap zoom is suppressed by the locked viewport meta plus
+  // `touch-action: manipulation` (globals.css). Do NOT preventDefault touchend
+  // here: on iOS that swallows the synthetic click, eating rapid taps on tabs.
 
   const viewportObserver = new MutationObserver(() => {
     lockViewportMeta();
@@ -58,7 +51,6 @@ export function installNativeZoomLock(): () => void {
     document.removeEventListener("gesturechange", blockGesture);
     document.removeEventListener("gestureend", blockGesture);
     document.removeEventListener("touchmove", blockMultiTouchMove);
-    document.removeEventListener("touchend", blockDoubleTapZoom);
     viewportObserver.disconnect();
   };
 }

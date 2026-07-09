@@ -1185,7 +1185,11 @@ html[data-native] {
   --native-safe-right: env(safe-area-inset-right, 0px);
   /* Measured from `.portal-native-bottom-nav` when present; fallback until layout runs. */
   --portal-native-bottom-nav-inset: max(2.75rem, calc(var(--native-safe-bottom) + 2rem));
-  touch-action: pan-y;
+  /* `manipulation`, NOT `pan-y`: an ancestor's touch-action restricts every
+     descendant on iOS, so `pan-y` froze horizontal scrollers (tab pill rows)
+     and cancelled diagonal swipes — scrolling felt stuck in the app.
+     Horizontal page wobble is already prevented by overflow-x: clip. */
+  touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
   overflow-x: clip;
   max-width: 100vw;
@@ -1195,7 +1199,12 @@ html[data-native] body {
   overscroll-behavior: none;
   overflow-x: clip;
   max-width: 100vw;
-  touch-action: pan-y;
+  touch-action: manipulation;
+}
+
+/* Momentum scrolling for the single portal scroller in the native WebView. */
+html[data-native] #portal-main-content {
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Portal shell — only #portal-main-content scrolls; keeps the bottom tab bar pinned. */

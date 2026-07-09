@@ -78,7 +78,7 @@ export function PortalPaymentsTable({
             <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-start gap-1.5">
-                  <div className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                  <div className="min-w-0 truncate font-semibold text-foreground">
                     {renderChargeCell ? renderChargeCell(row, expanded) : row.charge}
                   </div>
                   <span
@@ -137,7 +137,7 @@ export function PortalPaymentsTable({
                   <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-start gap-1.5">
-                        <div className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                        <div className="min-w-0 truncate font-semibold text-foreground">
                           {renderChargeCell ? renderChargeCell(row, expanded) : row.charge}
                         </div>
                         <button
@@ -233,7 +233,7 @@ export function PortalPaymentsTable({
                       ) : null}
                       <td className={`${PORTAL_TABLE_TD} font-medium text-foreground`}>
                         <div className="flex min-w-0 items-start gap-1.5">
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0">
                             {renderChargeCell ? renderChargeCell(row, expanded) : row.charge}
                           </div>
                           {expandOnRowClick ? (
