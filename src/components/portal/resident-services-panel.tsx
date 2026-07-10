@@ -59,6 +59,8 @@ import { RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS } from "@/lib/resident-work-or
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import { parseMoneyAmount } from "@/lib/household-charges";
 import { workOrderCategoryForResidentLabel } from "@/lib/work-order-taxonomy";
+import { ENTRY_PERMISSION_OPTIONS, entryPermissionLabel } from "@/lib/work-order-entry";
+import { track } from "@/lib/analytics/track-client";
 import {
   SERVICE_REQUESTS_EVENT,
   createServiceRequest,
@@ -130,7 +132,7 @@ const SAFE_PHOTO_HREF_RE = /^(?:data:image\/|https?:\/\/)/;
 
 function priorityClass(p: string) {
   const x = p.toLowerCase();
-  if (x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  if (x === "emergency" || x === "high") return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   if (x === "medium") return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
   return "bg-accent/30 text-muted ring-1 ring-border";
 }
@@ -357,6 +359,15 @@ export function WorkOrderDetail({
       <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityClass(row.priority)}`}>{row.priority}</span>
       <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Preferred arrival</p>
       <p className="mt-1 text-sm font-medium text-foreground">{row.preferredArrival ?? "Anytime"}</p>
+      {row.entryPermission || row.entryNotes ? (
+        <>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Entry</p>
+          <p className="mt-1 text-sm font-medium text-foreground">
+            {entryPermissionLabel(row.entryPermission)}
+            {row.entryNotes ? ` (${row.entryNotes})` : ""}
+          </p>
+        </>
+      ) : null}
       <p className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Details</p>
       <p className="mt-1.5 text-sm whitespace-pre-wrap leading-relaxed">{row.description}</p>
       {row.scheduled && row.scheduled !== "—" ? (
@@ -451,15 +462,20 @@ export function ResidentServicesPanel({
   const [wPriority, setWPriority] = useState("Medium");
   const [wArrivalPreset, setWArrivalPreset] = useState("Anytime");
   const [wArrivalCustom, setWArrivalCustom] = useState("");
+  const [wEntryPermission, setWEntryPermission] = useState<DemoManagerWorkOrderRow["entryPermission"]>("call_first");
+  const [wEntryNotes, setWEntryNotes] = useState("");
   const [wDetails, setWDetails] = useState("");
   const [reminderSendingId, setReminderSendingId] = useState<string | null>(null);
 
   // maintenance form
   const [mTitle, setMTitle] = useState("");
+  const [mDescription, setMDescription] = useState("");
   const [mCategory, setMCategory] = useState("Plumbing");
   const [mPriority, setMPriority] = useState("Medium");
   const [mArrivalPreset, setMArrivalPreset] = useState("Anytime");
   const [mArrivalCustom, setMArrivalCustom] = useState("");
+  const [mEntryPermission, setMEntryPermission] = useState<DemoManagerWorkOrderRow["entryPermission"]>("call_first");
+  const [mEntryNotes, setMEntryNotes] = useState("");
   const [mPhotos, setMPhotos] = useState<string[]>([]);
 
   // service request form
@@ -644,6 +660,8 @@ export function ResidentServicesPanel({
     const parsed = parsePreferredArrival(row.preferredArrival);
     setWArrivalPreset(parsed.preset);
     setWArrivalCustom(parsed.custom);
+    setWEntryPermission(row.entryPermission ?? "call_first");
+    setWEntryNotes(row.entryNotes ?? "");
     setWDetails(row.description);
   }
 
@@ -658,6 +676,8 @@ export function ResidentServicesPanel({
       title: wTitle.trim(),
       priority: wPriority,
       preferredArrival: formatPreferredArrival(wArrivalPreset, wArrivalCustom),
+      entryPermission: wEntryPermission,
+      entryNotes: wEntryNotes.trim() || undefined,
       description: wDetails.trim() || r.description,
     }));
     setAllRows(readManagerWorkOrderRows());
@@ -738,10 +758,13 @@ export function ResidentServicesPanel({
 
   const resetMaintenance = () => {
     setMTitle("");
+    setMDescription("");
     setMCategory("Plumbing");
     setMPriority("Medium");
     setMArrivalPreset("Anytime");
     setMArrivalCustom("");
+    setMEntryPermission("call_first");
+    setMEntryNotes("");
     setMPhotos([]);
     if (photoInputRef.current) photoInputRef.current.value = "";
   };
@@ -765,6 +788,7 @@ export function ResidentServicesPanel({
       return;
     }
     if (!mTitle.trim()) { showToast("Add a title first."); return; }
+    if (!mDescription.trim()) { showToast("Describe the issue first."); return; }
     if (!residentEmail) { showToast("Sign in to submit."); return; }
     setMaintenanceSubmitting(true);
     try {
@@ -786,11 +810,13 @@ export function ResidentServicesPanel({
       application?.property ||
       getPropertyById(propertyId)?.address.split(",")[0]?.trim() ||
       "Assigned house";
+    const propertyAddress = getPropertyById(propertyId)?.address.trim() || undefined;
     const row: DemoManagerWorkOrderRow & { requestType: string } = {
       id: `REQ-${Date.now()}`,
       requestType: "maintenance",
       propertyName: propertyLabel,
       propertyId,
+      propertyAddress,
       assignedPropertyId: application?.assignedPropertyId,
       assignedRoomChoice: application?.assignedRoomChoice || application?.application?.roomChoice1,
       managerUserId,
@@ -800,10 +826,12 @@ export function ResidentServicesPanel({
       status: "Submitted",
       bucket: "open",
       category: workOrderCategoryForResidentLabel(mCategory),
-      description: `${mCategory}: Your request is logged. Maintenance will review and update this thread.`,
+      description: mDescription.trim(),
       scheduled: "—",
       cost: "—",
       preferredArrival: formatPreferredArrival(mArrivalPreset, mArrivalCustom),
+      entryPermission: mEntryPermission,
+      entryNotes: mEntryNotes.trim() || undefined,
       residentName: application?.name,
       residentEmail,
       photoDataUrls: mPhotos,
@@ -824,11 +852,19 @@ export function ResidentServicesPanel({
         `Category: ${mCategory}`,
         `Priority: ${mPriority}`,
         `Preferred arrival: ${row.preferredArrival ?? "Anytime"}`,
+        `Entry: ${entryPermissionLabel(row.entryPermission)}${row.entryNotes ? ` (${row.entryNotes})` : ""}`,
         `Details: ${row.description}`,
         mPhotos.length > 0 ? `Attached photos: ${mPhotos.length}` : "",
       ],
     });
     showToast("Maintenance request submitted.");
+    track("work_order_submitted", {
+      category: row.category,
+      priority: mPriority,
+      emergency: mPriority === "Emergency",
+      photo_count: mPhotos.length,
+      entry_permission: mEntryPermission,
+    });
     if (!notifyResult.ok) {
       showToast("Request submitted, but manager notification could not be sent.");
     }
@@ -1239,6 +1275,16 @@ export function ResidentServicesPanel({
             <p className="mb-1 text-[11px] font-medium text-muted">Title</p>
             <Input value={mTitle} onChange={(e) => setMTitle(e.target.value)} placeholder="Short summary of the issue" className="bg-card" />
           </div>
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-muted">Description</p>
+            <Textarea
+              value={mDescription}
+              onChange={(e) => setMDescription(e.target.value)}
+              placeholder="What's happening? Include any details that will help maintenance."
+              rows={4}
+              className="bg-card"
+            />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="mb-1 text-[11px] font-medium text-muted">Category</p>
@@ -1254,10 +1300,16 @@ export function ResidentServicesPanel({
             <div>
               <p className="mb-1 text-[11px] font-medium text-muted">Priority</p>
               <Select value={mPriority} onChange={(e) => setMPriority(e.target.value)} className="bg-card">
+                <option>Emergency</option>
                 <option>Low</option>
                 <option>Medium</option>
                 <option>High</option>
               </Select>
+              {mPriority === "Emergency" ? (
+                <p className="mt-1 text-[11px] font-medium text-[var(--status-overdue-fg)]">
+                  For fire, gas, or major flooding, call 911 first - then submit this.
+                </p>
+              ) : null}
             </div>
           </div>
           <PreferredArrivalField
@@ -1266,6 +1318,24 @@ export function ResidentServicesPanel({
             onPresetChange={setMArrivalPreset}
             onCustomChange={setMArrivalCustom}
           />
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-muted">Can the repair person enter if you&apos;re not home?</p>
+            <Select
+              value={mEntryPermission}
+              onChange={(e) => setMEntryPermission(e.target.value as DemoManagerWorkOrderRow["entryPermission"])}
+              className="bg-card"
+            >
+              {ENTRY_PERMISSION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-muted">Entry notes (gate code, pets, parking...)</p>
+            <Input value={mEntryNotes} onChange={(e) => setMEntryNotes(e.target.value)} placeholder="Optional" className="bg-card" />
+          </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Photos (up to 6)</p>
             <Button type="button" variant="outline" className="w-fit rounded-full text-xs" onClick={() => photoInputRef.current?.click()}>
@@ -1480,6 +1550,7 @@ export function ResidentServicesPanel({
             <div>
               <p className="mb-1 text-[11px] font-medium text-muted">Priority</p>
               <Select value={wPriority} onChange={(e) => setWPriority(e.target.value)} className="bg-card">
+                <option>Emergency</option>
                 <option>Low</option>
                 <option>Medium</option>
                 <option>High</option>
@@ -1491,6 +1562,24 @@ export function ResidentServicesPanel({
               onPresetChange={setWArrivalPreset}
               onCustomChange={setWArrivalCustom}
             />
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-muted">Can the repair person enter if you&apos;re not home?</p>
+            <Select
+              value={wEntryPermission}
+              onChange={(e) => setWEntryPermission(e.target.value as DemoManagerWorkOrderRow["entryPermission"])}
+              className="bg-card"
+            >
+              {ENTRY_PERMISSION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-muted">Entry notes (gate code, pets, parking...)</p>
+            <Input value={wEntryNotes} onChange={(e) => setWEntryNotes(e.target.value)} placeholder="Optional" className="bg-card" />
           </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted">Details</p>

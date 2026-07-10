@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
+import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { assertManagerFinancialsAccess, getReportsAuthContext } from "@/lib/reports/auth";
 import type { WorkOrderCategory } from "@/lib/reports/categories";
 import { createExpensesFromWorkOrder, mergeWorkOrderCompletion } from "@/lib/work-order-expenses";
@@ -26,6 +27,14 @@ export async function POST(req: Request) {
     const workOrder = body.workOrder;
     if (!workOrder?.id) return NextResponse.json({ error: "workOrder required." }, { status: 400 });
     if (!body.category) return NextResponse.json({ error: "category required." }, { status: 400 });
+
+    const { data: existing } = await auth.db
+      .from("portal_work_order_records")
+      .select("row_data")
+      .eq("id", workOrder.id)
+      .maybeSingle();
+    const existingRow = (existing?.row_data ?? {}) as DemoManagerWorkOrderRow;
+    const alreadyCompleted = Boolean(existingRow.completedAt);
 
     const expenseEntryIds = await createExpensesFromWorkOrder(auth.db, auth.userId, {
       workOrderId: workOrder.id,
@@ -65,6 +74,26 @@ export async function POST(req: Request) {
       { onConflict: "id" },
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    if (!alreadyCompleted) {
+      const propertyLabel = updated.propertyName ? `${updated.propertyName}${updated.unit ? ` · ${updated.unit}` : ""}` : "";
+      const title = updated.title || "Work order";
+      const residentEmail = (updated.residentEmail ?? "").trim();
+      if (residentEmail.includes("@")) {
+        await deliverPortalInboxMessage(auth.db, {
+          senderUserId: auth.userId,
+          senderEmail: auth.email,
+          fromName: "Axis Portal",
+          subject: `${title} completed`,
+          text: `Your work order "${title}"${propertyLabel ? ` at ${propertyLabel}` : ""} has been completed.`,
+          toEmails: [residentEmail],
+          deliverToPortalInbox: true,
+          deliverViaEmail: false,
+          deliverViaSms: false,
+        }).catch(() => undefined);
+        track("work_order_resident_notified", auth.userId, { stage: "completed", work_order_id: workOrder.id });
+      }
+    }
 
     track("work_order_completed", auth.userId, { work_order_id: workOrder.id, property_id: workOrder.propertyId ?? "", category: body.category ?? "" });
     return NextResponse.json({ ok: true, workOrder: updated, expenseEntryIds });
