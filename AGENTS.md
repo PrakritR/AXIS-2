@@ -764,14 +764,19 @@ panel via `POST /api/portal/dispatch-proposals`, and the assistant's
 `confirmAction.type === "dispatch_work_order"`) both call the same `executeDispatch`: server
 re-derives everything from the persisted proposal (client sends only workOrderId), re-checks
 vendor ownership, assigns (acceptBid write pattern), books the vendor's next open slot when
-availability exists, and notifies the vendor. Auto mode runs the same executor when
-`guardrailsAllowAutoDispatch` passes, else downgrades to a proposal. The work-orders POST
-carries a merge-preserve guard so client mirrors can't wipe or regress the server-owned
-`dispatch` key.
+availability exists, notifies the vendor, and best-effort notifies the resident
+(vendor-assigned always, plus visit-scheduled when a slot was booked — mirroring the manual
+manager flow). Auto mode runs the same executor when `guardrailsAllowAutoDispatch` passes,
+else downgrades to a proposal. `row_data.dispatch` is strictly server-owned: the work-orders
+POST drops any client-supplied `dispatch` and replaces it with the persisted server copy (or
+deletes it when none exists), so a forged proposal on a brand-new resident row can't spoof
+the manager UI or suppress the real dispatch.
 
 **The vendor agent is answer-only by construction.** Registry
 `vendorWorkOrderAgentRegistry` (`src/lib/tools/domains/vendor-work-order.ts`) = 3 reads
-pinned to ONE work order via `ctx.vendorScope` + `escalate_to_manager`, the single write,
+pinned to ONE work order via `ctx.vendorScope` (which also drops read access the moment the
+manager reassigns the work order to another vendor, mirroring the portal GET route's
+`vendor_user_id` scoping) + `escalate_to_manager`, the single write,
 autonomously callable through the explicit `allowWriteTools` allowlist added to
 `runAgentTurn`/`toAnthropicTools`/`runReadTool` (a boolean would silently open future
 writes; the allowlist can't). No reschedule/price tools exist. Access codes live in
@@ -794,8 +799,12 @@ unknown numbers silently dropped, empty TwiML + `after()` turn) and in-app repli
 20-inbound/hour session cap, runs the pinned-Sonnet turn with
 `VENDOR_AGENT_SYSTEM_PROMPT` (language-mirroring: replies in whatever language the vendor
 writes), persists both sides, mirrors SMS into the inbox thread, and delivers replies
-(inbox append + `sendSms` from `AXIS_AGENT_SMS_FROM`) — delivery is code, never a model
-tool. Langfuse traces every turn as `vendor-agent-turn` grouped by session id.
+(inbox append always + `sendSms` from `AXIS_AGENT_SMS_FROM`) — delivery is code, never a
+model tool. The SMS leg is consent-gated: it fires only when the vendor is replying to their
+own SMS (inherently responsive) or has granted `sms_consent_at`, and the unsolicited opening
+text goes out only to a consented signed-up vendor (a pre-signup invitee was disclosed the
+job-texts terms in the invite modal, so their number is fair game). Langfuse traces every
+turn as `vendor-agent-turn` grouped by session id.
 
 **Vendor contact fields**: `profiles.phone` (E.164, validated by the intl-aware
 `normalizeE164` now exported from `src/lib/twilio.ts`), `preferred_language`,
