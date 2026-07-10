@@ -1,0 +1,61 @@
+name: iOS TestFlight
+
+# Ship a new TestFlight build on every push to production, and on demand.
+# The macOS job self-skips until the App Store Connect API key secrets exist, so
+# adding this file (and promoting it to production) never produces a red run.
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+
+concurrency:
+  # Serialize uploads so two pushes can't race for the same build number.
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  # Cheap Ubuntu gate: emits a boolean for whether the API key is configured.
+  # Only the boolean is written — the secret value never appears in logs.
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        run: echo "configured=${{ secrets.ASC_KEY_ID != '' }}" >> "$GITHUB_OUTPUT"
+
+  testflight:
+    needs: check-secrets
+    if: ${{ needs.check-secrets.outputs.configured == 'true' }}
+    # Public repo → free macOS minutes.
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Sync Capacitor (iOS, production URL)
+        run: npx cap sync ios
+        env:
+          CAP_SERVER_URL: https://www.axis-seattle-housing.com
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: ios/App
+
+      - name: Build + upload to TestFlight
+        working-directory: ios/App
+        run: bundle exec fastlane beta
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}

@@ -63,6 +63,14 @@ playwright.config.ts
 /ios/App/Pods/
 /ios/App/App/public/
 /ios/DerivedData/
+
+# fastlane / iOS release artifacts (commit config, ignore output)
+/ios/App/build/
+/ios/App/fastlane/report.xml
+/ios/App/fastlane/README.md
+/ios/App/fastlane/test_output/
+*.ipa
+*.xcarchive
 /android/.gradle/
 /android/app/src/main/assets/public/
 /android/local.properties

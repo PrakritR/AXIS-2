@@ -1,0 +1,54 @@
+default_platform(:ios)
+
+# Axis iOS release automation.
+#
+# The `beta` lane builds the app and ships it to TestFlight. It authenticates with
+# an App Store Connect API key (never an Apple ID / password), auto-manages signing
+# in the cloud via `-allowProvisioningUpdates`, and picks the next build number as
+# (latest TestFlight build + 1) so uploads are always monotonic. `MARKETING_VERSION`
+# (1.0) stays whatever the project holds — bump it in Xcode for a new marketing rev.
+#
+# Required env (set as GitHub Actions secrets — see .github/workflows/ios-testflight.yml):
+#   ASC_KEY_ID     App Store Connect API key id
+#   ASC_ISSUER_ID  App Store Connect issuer id
+#   ASC_KEY_P8     base64 of the AuthKey_XXXX.p8 file contents
+platform :ios do
+  desc "Build and upload a new build to TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_KEY_P8"),
+      is_key_content_base64: true,
+    )
+
+    next_build = (latest_testflight_build_number(
+      api_key: api_key,
+      app_identifier: "com.axisseattlehousing.app",
+      initial_build_number: 6,
+    ).to_i + 1).to_s
+
+    build_app(
+      project: "App.xcodeproj",
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store",
+      # Cloud-managed signing: xcodebuild fetches/creates the distribution cert +
+      # App Store profile using the API key already in the lane context.
+      xcargs: "-allowProvisioningUpdates CURRENT_PROJECT_VERSION=#{next_build}",
+      export_options: {
+        signingStyle: "automatic",
+        teamID: "8FH3GVHCZ9",
+      },
+      output_directory: "build",
+      output_name: "Axis.ipa",
+      clean: true,
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      # Don't block the CI job waiting for Apple's server-side processing.
+      skip_waiting_for_build_processing: true,
+    )
+  end
+end
