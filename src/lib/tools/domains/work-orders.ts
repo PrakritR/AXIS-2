@@ -7,7 +7,9 @@ import { loadAllManagerRows } from "./load-manager-rows";
 import { suggestVendorsForWorkOrder } from "@/lib/work-order-auto-match";
 
 /** Server-side read of the landlord's work orders, scoped by manager_user_id. */
-async function loadManagerWorkOrders(ctx: AgentContext): Promise<DemoManagerWorkOrderRow[]> {
+export async function loadManagerWorkOrders(
+  ctx: Pick<AgentContext, "db" | "landlordId">,
+): Promise<DemoManagerWorkOrderRow[]> {
   return loadAllManagerRows(
     ctx,
     "portal_work_order_records",
@@ -20,9 +22,13 @@ async function loadManagerWorkOrders(ctx: AgentContext): Promise<DemoManagerWork
  * landlord's work orders: the landlord's own vendors, plus other managers'
  * vendors that have opted in via `sharedWithManagers`. Mirrors the shared-row
  * query in `/api/portal-vendors` (route.ts) so agent suggestions match what
- * the manager Vendors UI already considers "available to me".
+ * the manager Vendors UI already considers "available to me". Also consumed by
+ * the dispatch pipeline (work-order-dispatch.server.ts) so suggestions and
+ * dispatch always rank from the same vendor pool.
  */
-async function loadVendorsForMatching(ctx: AgentContext): Promise<ManagerVendorRow[]> {
+export async function loadVendorsForMatching(
+  ctx: Pick<AgentContext, "db" | "landlordId">,
+): Promise<ManagerVendorRow[]> {
   const ownRows = await loadAllManagerRows(
     ctx,
     "manager_vendor_records",

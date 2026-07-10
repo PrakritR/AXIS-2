@@ -19,6 +19,12 @@ import {
   listVendorPayoutsTool,
   submitVendorInvoiceTool,
 } from "./domains/vendor-financials";
+import {
+  escalateToManagerTool,
+  getJobAccessInfoTool,
+  getJobDetailsTool,
+  listMyJobsWithThisManagerTool,
+} from "./domains/vendor-work-order";
 import { managerFinancialsWriteTools } from "./domains/financials-write";
 
 export const agentRegistry = buildRegistry([
@@ -48,6 +54,20 @@ export const vendorAgentRegistry = buildRegistry([
   listVendorInvoicesTool,
   submitVendorInvoiceTool,
   listVendorPayoutsTool,
+]);
+
+/**
+ * The 24/7 vendor work-order agent's registry: three reads pinned to ONE work
+ * order via ctx.vendorScope plus escalate_to_manager (the only write, allow-
+ * listed for autonomous calls). Deliberately tiny and separate from every other
+ * registry — the SMS/inbox agent must never see invoices, financials, or any
+ * manager tool.
+ */
+export const vendorWorkOrderAgentRegistry = buildRegistry([
+  getJobDetailsTool,
+  getJobAccessInfoTool,
+  listMyJobsWithThisManagerTool,
+  escalateToManagerTool,
 ]);
 
 /**

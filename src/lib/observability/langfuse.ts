@@ -189,6 +189,7 @@ export async function traceAgentTurn<T extends TracedResult>(
   ctx: AgentContext,
   messages: TurnInput,
   run: (observer?: AgentObserver) => Promise<T>,
+  opts?: { name?: string; sessionId?: string },
 ): Promise<T> {
   const lf = getClient();
   if (!lf) return run();
@@ -197,9 +198,9 @@ export async function traceAgentTurn<T extends TracedResult>(
   let trace: ReturnType<Langfuse["trace"]> | null = null;
   try {
     trace = lf.trace({
-      name: "axis-agent-turn",
+      name: opts?.name ?? "axis-agent-turn",
       userId: ctx.userId,
-      sessionId: ctx.userId,
+      sessionId: opts?.sessionId ?? ctx.userId,
       metadata: { landlordId: ctx.landlordId },
       input: lastUser,
     });

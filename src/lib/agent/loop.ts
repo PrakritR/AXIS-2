@@ -65,22 +65,29 @@ export async function runAgentTurn(opts: {
   registry: ToolRegistry;
   messages: Anthropic.MessageParam[];
   observer?: AgentObserver;
+  /** Override the manager-assistant system prompt (e.g. the vendor agent). */
+  system?: string;
+  /** Pin the model instead of per-turn complexity routing. */
+  model?: { model: string; tier: ModelTier };
+  /** Write tools the model may call autonomously — see toAnthropicTools. */
+  allowWriteTools?: readonly string[];
 }): Promise<AgentTurnResult> {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from env
-  const tools = toAnthropicTools(opts.registry, { readOnly: true });
+  const system = opts.system ?? SYSTEM_PROMPT;
+  const tools = toAnthropicTools(opts.registry, { readOnly: true, allowWrite: opts.allowWriteTools });
   const messages: Anthropic.MessageParam[] = [...opts.messages];
   const toolTrace: ToolTraceEntry[] = [];
 
   // Route the turn once, up front, based on its complexity, and use that model
   // for every iteration of the loop (switching models mid-turn would thrash the
   // prompt cache). Token usage accumulates across iterations for cost tracing.
-  const { model, tier } = selectModel(opts.messages);
+  const { model, tier } = opts.model ?? selectModel(opts.messages);
   const usage: TurnUsage = { inputTokens: 0, outputTokens: 0 };
 
   const observer = opts.observer;
   notify(
     observer?.onStart &&
-      (() => observer.onStart!({ system: SYSTEM_PROMPT, toolsAvailable: tools.map((t) => t.name), model, tier })),
+      (() => observer.onStart!({ system, toolsAvailable: tools.map((t) => t.name), model, tier })),
   );
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -90,7 +97,7 @@ export async function runAgentTurn(opts: {
     const response = await client.messages.create({
       model,
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system,
       tools: tools as unknown as Anthropic.Tool[],
       messages,
     });
@@ -138,7 +145,9 @@ export async function runAgentTurn(opts: {
 
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const use of toolUses) {
-      const result = await runReadTool(opts.registry, opts.ctx, use.name, use.input);
+      const result = await runReadTool(opts.registry, opts.ctx, use.name, use.input, {
+        allowWrite: opts.allowWriteTools,
+      });
       toolTrace.push({ tool: use.name, ok: result.ok });
       notify(
         observer?.onToolCall &&

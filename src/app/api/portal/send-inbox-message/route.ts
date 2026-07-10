@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import {
-  resolveManagerRecipientProfiles,
-  resolvePropertyScopedManagerRecipientIds,
-} from "@/lib/co-manager-notification-recipients.server";
+  findVendorAgentSessionByThread,
+  runVendorAgentSessionTurn,
+} from "@/lib/agent/vendor-agent.server";
+import { resolvePropertyScopedManagerRecipientIds } from "@/lib/co-manager-notification-recipients.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendPushToUser } from "@/lib/push-notifications.server";
@@ -180,7 +181,7 @@ export async function POST(req: Request) {
     if (threadId) {
       const { data: threadRow } = await db
         .from("portal_inbox_thread_records")
-        .select("id, row_data, owner_user_id, participant_email, scope")
+        .select("id, row_data, owner_user_id, participant_email, scope, thread_type")
         .eq("id", threadId)
         .maybeSingle();
       if (threadRow && (threadRow.owner_user_id === user.id || String(threadRow.participant_email ?? "").toLowerCase() === senderEmail)) {
@@ -210,6 +211,25 @@ export async function POST(req: Request) {
           },
           { onConflict: "id" },
         );
+
+        // A vendor replying in their agent thread talks to the agent, not to a
+        // human recipient — run the turn after the response and skip the normal
+        // fan-out. Only the thread OWNER (the vendor) triggers it.
+        if (String(threadRow.thread_type ?? "") === "vendor_agent" && threadRow.owner_user_id === user.id) {
+          const session = await findVendorAgentSessionByThread(db, threadId);
+          if (session) {
+            const turnTask = () =>
+              runVendorAgentSessionTurn(db, session, text, "inbox").catch((e) =>
+                console.error("vendor-agent inbox turn failed", e),
+              );
+            try {
+              after(turnTask);
+            } catch {
+              void turnTask();
+            }
+          }
+          return NextResponse.json({ ok: true, agentHandled: true });
+        }
       }
     }
 

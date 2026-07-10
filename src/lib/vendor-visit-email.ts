@@ -30,7 +30,43 @@ export function buildVendorVisitEmail(input: VendorVisitEmailInput): { subject: 
   ];
   if (input.preferredArrival?.trim()) lines.push(`Resident arrival preference: ${input.preferredArrival.trim()}`);
   if (input.description?.trim()) lines.push("", "Notes:", input.description.trim());
-  lines.push("", "If this time doesn't work, reply to this email to coordinate a new time.", "", "Axis Portal");
+  lines.push(
+    "",
+    "If this time doesn't work, reply to the Axis text message or message us from your Axis portal inbox to coordinate a new time.",
+    "",
+    "Axis Portal",
+  );
+  return { subject, body: lines.join("\n") };
+}
+
+export type VendorAssignedEmailInput = {
+  vendorName: string;
+  workOrderTitle: string;
+  propertyLabel: string;
+  unit?: string;
+  description?: string;
+};
+
+/** Assignment without a booked visit yet (no availability on file) — scheduling follows separately. */
+export function buildVendorAssignedEmail(input: VendorAssignedEmailInput): { subject: string; body: string } {
+  const unit = input.unit?.trim();
+  const where = unit && unit !== "—" ? `${input.propertyLabel} · ${unit}` : input.propertyLabel;
+  const subject = `New job assigned: ${input.workOrderTitle} — ${where}`;
+  const lines = [
+    `Hi ${input.vendorName.trim() || "there"},`,
+    "",
+    "You've been assigned a job through Axis. A visit time hasn't been booked yet.",
+    "",
+    `Work order: ${input.workOrderTitle}`,
+    `Property: ${where}`,
+  ];
+  if (input.description?.trim()) lines.push("", "Notes:", input.description.trim());
+  lines.push(
+    "",
+    "Sign in to Axis to see the details, or reply to the Axis text message with times that work for you.",
+    "",
+    "Axis Portal",
+  );
   return { subject, body: lines.join("\n") };
 }
 

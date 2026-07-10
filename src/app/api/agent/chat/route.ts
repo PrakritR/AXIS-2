@@ -9,6 +9,7 @@ import { loadAllManagerRows } from "@/lib/tools/domains/load-manager-rows";
 import type { HouseholdCharge } from "@/lib/household-charges";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentTurn } from "@/lib/observability/langfuse";
+import { executeDispatch } from "@/lib/work-order-dispatch.server";
 
 export const runtime = "nodejs";
 
@@ -27,7 +28,32 @@ export async function POST(req: Request) {
 
   // Gated write path: re-resolve the action server-side by id; the client preview
   // is never trusted. This is the fix for the write-gating bypass from the review.
-  const confirmAction = body.confirmAction as { type?: string; chargeId?: unknown } | undefined;
+  const confirmAction = body.confirmAction as
+    | { type?: string; chargeId?: unknown; workOrderId?: unknown }
+    | undefined;
+
+  if (confirmAction?.type === "dispatch_work_order") {
+    const workOrderId = String(confirmAction.workOrderId ?? "").trim();
+    try {
+      const result = await executeDispatch(ctx.db, {
+        workOrderId,
+        landlordId: ctx.landlordId,
+        actor: { userId: ctx.userId, email: ctx.email, fullName: "" },
+        decidedBy: "manager",
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status >= 500 ? 500 : 400 });
+      }
+      track("assistant_action_confirmed", ctx.userId, { action: "dispatch_work_order" });
+      const reply = result.scheduledIso
+        ? `Dispatched ${result.vendorName} and booked their next open slot. They've been notified.`
+        : `Dispatched ${result.vendorName}. No availability was on file, so pick a visit time from Work orders.`;
+      return NextResponse.json({ reply, toolTrace: [{ tool: "dispatch_work_order", ok: true }] });
+    } catch (e) {
+      console.error("[agent/chat] dispatch confirm failed:", e);
+      return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
+    }
+  }
   if (confirmAction?.type === "send_rent_reminder") {
     const chargeId = String(confirmAction.chargeId ?? "").trim();
     try {

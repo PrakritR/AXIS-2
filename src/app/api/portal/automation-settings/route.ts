@@ -1,5 +1,6 @@
 import { saveManagerAutomationSettings, normalizeManagerAutomationSettings } from "@/lib/payment-automation-settings";
 import { loadManagerAutomationSettings } from "@/lib/payment-automation-settings";
+import { loadVendorDispatchSettings, saveVendorDispatchSettings } from "@/lib/vendor-dispatch-settings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
@@ -29,8 +30,11 @@ export async function GET() {
   try {
     const ctx = await requireManager();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    const settings = await loadManagerAutomationSettings(ctx.db, ctx.userId);
-    return NextResponse.json({ settings });
+    const [settings, vendorDispatch] = await Promise.all([
+      loadManagerAutomationSettings(ctx.db, ctx.userId),
+      loadVendorDispatchSettings(ctx.db, ctx.userId),
+    ]);
+    return NextResponse.json({ settings, vendorDispatch });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -42,10 +46,25 @@ export async function PATCH(req: Request) {
     const ctx = await requireManager();
     if (!ctx) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const body = (await req.json()) as Record<string, unknown>;
-    const current = await loadManagerAutomationSettings(ctx.db, ctx.userId);
-    const merged = normalizeManagerAutomationSettings({ ...current, ...body });
-    const settings = await saveManagerAutomationSettings(ctx.db, ctx.userId, merged);
-    return NextResponse.json({ settings });
+    const { vendorDispatch: vendorDispatchPatch, ...rest } = body;
+
+    let settings = await loadManagerAutomationSettings(ctx.db, ctx.userId);
+    if (Object.keys(rest).length > 0) {
+      settings = await saveManagerAutomationSettings(
+        ctx.db,
+        ctx.userId,
+        normalizeManagerAutomationSettings({ ...settings, ...rest }),
+      );
+    }
+
+    let vendorDispatch = await loadVendorDispatchSettings(ctx.db, ctx.userId);
+    if (vendorDispatchPatch && typeof vendorDispatchPatch === "object") {
+      vendorDispatch = await saveVendorDispatchSettings(ctx.db, ctx.userId, {
+        ...vendorDispatch,
+        ...(vendorDispatchPatch as Record<string, unknown>),
+      });
+    }
+    return NextResponse.json({ settings, vendorDispatch });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: message }, { status: 500 });
