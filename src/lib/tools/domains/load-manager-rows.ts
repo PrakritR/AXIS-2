@@ -10,7 +10,7 @@ const PAGE_SIZE = 1000;
  * regardless of how many records the landlord has.
  */
 export async function loadAllManagerRows<T>(
-  ctx: AgentContext,
+  ctx: Pick<AgentContext, "db" | "landlordId">,
   table: string,
   map: (rowData: unknown) => T,
 ): Promise<T[]> {
