@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import {
   ManagerPortalPageShell,
@@ -12,6 +13,7 @@ import {
   PORTAL_DASHBOARD_STACK,
 } from "@/components/portal/portal-metrics";
 import { WorkOrderStatusBadge } from "@/components/portal/resident-services-panel";
+import { Button } from "@/components/ui/button";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   MANAGER_WORK_ORDERS_EVENT,
@@ -28,6 +30,17 @@ import {
 
 const BASE = "/vendor";
 
+const CONTACT_NUDGE_DISMISSED_KEY = "axis_vendor_contact_nudge_dismissed";
+
+function readContactNudgeDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(CONTACT_NUDGE_DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function fmt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "soon";
@@ -41,9 +54,12 @@ function propertyLabel(row: DemoManagerWorkOrderRow): string {
 
 /** Vendor Home — section previews in nav order: Services, Calendar, Messages, Payments. */
 export function VendorDashboard({ displayName }: { displayName: string }) {
+  const router = useRouter();
   const [tick, setTick] = useState(0);
   const bump = () => setTick((n) => n + 1);
   const [paymentsConnected, setPaymentsConnected] = useState(false);
+  const [needsContact, setNeedsContact] = useState(false);
+  const [contactNudgeDismissed, setContactNudgeDismissed] = useState(false);
 
   useEffect(() => {
     void Promise.allSettled([
@@ -72,6 +88,27 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    setContactNudgeDismissed(readContactNudgeDismissed());
+    if (isDemoModeActive()) return;
+    void fetch("/api/vendor/profile", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data: { contact?: { phone?: string; smsConsent?: boolean } }) => {
+        setNeedsContact(!data.contact?.phone || !data.contact?.smsConsent);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  function dismissContactNudge() {
+    setContactNudgeDismissed(true);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(CONTACT_NUDGE_DISMISSED_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
 
   const data = useMemo(() => {
     void tick;
@@ -105,6 +142,36 @@ export function VendorDashboard({ displayName }: { displayName: string }) {
       hideTitleOnNative
     >
       <div className={PORTAL_DASHBOARD_STACK}>
+        {needsContact && !contactNudgeDismissed ? (
+          <div className={PORTAL_DASHBOARD_SECTION_CARD}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">Get job offers by text</p>
+                <p className="mt-1 text-sm text-muted">
+                  Add your phone number so managers and Axis can reach you about jobs.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="primary"
+                  data-attr="vendor-contact-nudge-add-phone"
+                  onClick={() => router.push(`${BASE}/profile`)}
+                >
+                  Add phone
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0 rounded-full px-3 py-1 text-xs"
+                  onClick={dismissContactNudge}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-4 lg:grid-cols-2 [html[data-native]_&]:gap-2.5">
           <div className={PORTAL_DASHBOARD_SECTION_CARD}>
             <PortalDashboardSectionHeader

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { jsonRequest, parseJsonResponse } from "../../helpers/api-request";
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -19,6 +19,13 @@ import { POST as registerAdmin } from "@/app/api/auth/register-admin/route";
 describe("POST /api/auth/register-admin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The route validates against server env; pin it so the suite doesn't
+    // depend on whatever AXIS_ADMIN_REGISTER_KEY the ambient shell carries.
+    vi.stubEnv("AXIS_ADMIN_REGISTER_KEY", "prakrit-admin-register");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("rejects invalid admin key", async () => {

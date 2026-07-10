@@ -21,6 +21,16 @@ export type AgentContext = {
    * ownership filter). Never query it without a landlord scope.
    */
   db: ReturnType<typeof createSupabaseServiceRoleClient>;
+  /** Present only on vendor-agent turns; pins every vendor tool to one job. */
+  vendorScope?: VendorAgentScope;
+};
+
+/** The single work-order conversation a vendor-agent turn is allowed to see. */
+export type VendorAgentScope = {
+  sessionId: string;
+  vendorDirectoryId: string;
+  vendorUserId: string | null;
+  workOrderId: string;
 };
 
 /**
@@ -54,5 +64,26 @@ export async function resolveAgentContext(): Promise<AgentContext | null> {
     roles,
     isAdmin,
     db,
+  };
+}
+
+/**
+ * Context for a vendor-agent turn. There is NO authenticated user on an
+ * inbound-SMS webhook, so this is constructed ONLY from an agent_sessions row
+ * our own dispatch code created — landlordId and the scope never come from
+ * client or model input. resolveAgentContext stays vendor-rejecting on purpose.
+ */
+export function buildVendorAgentContext(
+  db: ReturnType<typeof createSupabaseServiceRoleClient>,
+  args: { landlordId: string; scope: VendorAgentScope },
+): AgentContext {
+  return {
+    landlordId: args.landlordId,
+    userId: args.scope.vendorUserId ?? args.landlordId,
+    email: "",
+    roles: ["vendor_agent"],
+    isAdmin: false,
+    db,
+    vendorScope: args.scope,
   };
 }

@@ -183,6 +183,11 @@ export type DemoManagerWorkOrderRow = {
   cost: string;
   /** Resident preference for when maintenance may arrive (e.g. "after 5pm" or "anytime"). */
   preferredArrival?: string;
+  /** Resident answer to "can the repair person enter if you're not home?" */
+  entryPermission?: "allowed" | "call_first" | "resident_present";
+  entryNotes?: string;
+  /** Full property address, snapshotted at submission time for manager/vendor display. */
+  propertyAddress?: string;
   scheduledAtIso?: string;
   residentName?: string;
   residentEmail?: string;

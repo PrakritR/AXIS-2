@@ -74,13 +74,13 @@ export async function appendInboxThreadReply(
     fromName: string;
     text: string;
   },
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; thread?: { threadType: string; ownerUserId: string | null } }> {
   const threadId = opts.threadId.trim();
   if (!threadId) return { ok: false };
   const senderEmail = opts.senderEmail.trim().toLowerCase();
   const { data: threadRow } = await db
     .from("portal_inbox_thread_records")
-    .select("id, row_data, owner_user_id, participant_email, scope")
+    .select("id, row_data, owner_user_id, participant_email, scope, thread_type")
     .eq("id", threadId)
     .maybeSingle();
   if (
@@ -115,7 +115,13 @@ export async function appendInboxThreadReply(
     },
     { onConflict: "id" },
   );
-  return { ok: true };
+  return {
+    ok: true,
+    thread: {
+      threadType: String(threadRow.thread_type ?? ""),
+      ownerUserId: (threadRow.owner_user_id as string | null) ?? null,
+    },
+  };
 }
 
 export async function deliverPortalInboxMessage(

@@ -11,6 +11,7 @@ import {
 import { runAgentTurn } from "@/lib/agent/loop";
 import { track } from "@/lib/analytics/posthog";
 import { traceAgentAction, traceAgentTurn } from "@/lib/observability/langfuse";
+import { executeDispatch } from "@/lib/work-order-dispatch.server";
 
 export const runtime = "nodejs";
 
@@ -76,6 +77,35 @@ export async function POST(req: Request) {
     const denied = await denyPendingAction(ctx, body.denyActionId);
     track("assistant_action_denied", ctx.userId, { known: denied });
     return NextResponse.json({ reply: "Okay, cancelled. Nothing was sent or changed." });
+  }
+
+  // Work-order dispatch keeps its own confirm shape: its proposal is persisted
+  // server-side on the work order row itself (row_data.dispatch, written by the
+  // deterministic prepareDispatch flow), so executeDispatch re-derives everything
+  // from that record — the client sends only the work order id. It does not go
+  // through agent_pending_actions, which exists to persist model-proposed args.
+  const legacyConfirm = body.confirmAction as { type?: string; workOrderId?: unknown } | undefined;
+  if (legacyConfirm?.type === "dispatch_work_order") {
+    const workOrderId = String(legacyConfirm.workOrderId ?? "").trim();
+    try {
+      const result = await executeDispatch(ctx.db, {
+        workOrderId,
+        landlordId: ctx.landlordId,
+        actor: { userId: ctx.userId, email: ctx.email, fullName: "" },
+        decidedBy: "manager",
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status >= 500 ? 500 : 400 });
+      }
+      track("assistant_action_confirmed", ctx.userId, { action: "dispatch_work_order" });
+      const reply = result.scheduledIso
+        ? `Dispatched ${result.vendorName} and booked their next open slot. They've been notified.`
+        : `Dispatched ${result.vendorName}. No availability was on file, so pick a visit time from Work orders.`;
+      return NextResponse.json({ reply, toolTrace: [{ tool: "dispatch_work_order", ok: true }] });
+    } catch (e) {
+      console.error("[agent/chat] dispatch confirm failed:", e);
+      return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });
+    }
   }
 
   const rawMessages = Array.isArray(body.messages) ? (body.messages as ChatMessage[]) : [];

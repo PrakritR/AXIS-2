@@ -1,5 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { track } from "@/lib/analytics/posthog";
+import {
+  findVendorAgentSessionByThread,
+  runVendorAgentSessionTurn,
+} from "@/lib/agent/vendor-agent.server";
 import { resolvePropertyScopedManagerRecipientIds } from "@/lib/co-manager-notification-recipients.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
@@ -176,13 +180,32 @@ export async function POST(req: Request) {
     const db = createSupabaseServiceRoleClient();
 
     if (threadId) {
-      await appendInboxThreadReply(db, {
+      const appended = await appendInboxThreadReply(db, {
         threadId,
         senderUserId: user.id,
         senderEmail,
         fromName,
         text,
       });
+
+      // A vendor replying in their agent thread talks to the agent, not to a
+      // human recipient — run the turn after the response and skip the normal
+      // fan-out. Only the thread OWNER (the vendor) triggers it.
+      if (appended.ok && appended.thread?.threadType === "vendor_agent" && appended.thread.ownerUserId === user.id) {
+        const session = await findVendorAgentSessionByThread(db, threadId);
+        if (session) {
+          const turnTask = () =>
+            runVendorAgentSessionTurn(db, session, text, "inbox").catch((e) =>
+              console.error("vendor-agent inbox turn failed", e),
+            );
+          try {
+            after(turnTask);
+          } catch {
+            void turnTask();
+          }
+        }
+        return NextResponse.json({ ok: true, agentHandled: true });
+      }
     }
 
     let toUserIds = normalizeUserIds(body.toUserIds);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { resolveAppOrigin } from "@/lib/app-url";
 import { generateVendorInviteToken } from "@/lib/auth/provision-vendor-account";
+import type { ManagerVendorRow } from "@/lib/manager-vendors-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import {
@@ -35,10 +36,15 @@ export async function POST(req: Request) {
       vendorId?: string;
       vendorName?: string;
       vendorEmail?: string;
+      phone?: string;
+      preferredLanguage?: string;
     };
     const vendorId = String(body.vendorId ?? "").trim();
     const vendorName = String(body.vendorName ?? "").trim();
     const vendorEmail = String(body.vendorEmail ?? "").trim().toLowerCase();
+    const phoneInput = typeof body.phone === "string" ? body.phone.trim() : "";
+    const preferredLanguageInput =
+      body.preferredLanguage === "en" || body.preferredLanguage === "es" ? body.preferredLanguage : "";
 
     if (!vendorId) return NextResponse.json({ error: "vendorId is required." }, { status: 400 });
     if (!vendorEmail || !EMAIL_RE.test(vendorEmail)) {
@@ -54,11 +60,24 @@ export async function POST(req: Request) {
     // Only the owning manager may invite for their own vendor directory row.
     const { data: vendorRow } = await db
       .from("manager_vendor_records")
-      .select("id, manager_user_id")
+      .select("id, manager_user_id, row_data")
       .eq("id", vendorId)
       .maybeSingle();
     if (!vendorRow || vendorRow.manager_user_id !== user.id) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    // Persist phone / preferred language onto the directory row so agent SMS can start
+    // before the vendor signs up. Only ever fill in a value, never blank out an existing one.
+    const currentRow = (vendorRow.row_data as ManagerVendorRow | null) ?? null;
+    const rowPatch: Partial<ManagerVendorRow> = {};
+    if (phoneInput) rowPatch.phone = phoneInput;
+    if (preferredLanguageInput) rowPatch.preferredLanguage = preferredLanguageInput;
+    if (currentRow && Object.keys(rowPatch).length > 0) {
+      await db
+        .from("manager_vendor_records")
+        .update({ row_data: { ...currentRow, ...rowPatch }, updated_at: new Date().toISOString() })
+        .eq("id", vendorId);
     }
 
     // One pending invite per vendor directory row — replace rather than pile up.
@@ -106,7 +125,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: payload.message ?? res.statusText, mailtoHref, linkUrl }, { status: 502 });
     }
 
-    track("vendor_invite_sent", user.id, { vendor_id: vendorId });
+    track("vendor_invite_sent", user.id, {
+      vendor_id: vendorId,
+      phone_provided: Boolean(phoneInput),
+      language_provided: Boolean(preferredLanguageInput),
+    });
     return NextResponse.json({ ok: true, id: payload.id ?? null, linkUrl });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to send invite." }, { status: 500 });

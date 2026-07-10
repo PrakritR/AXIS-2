@@ -76,22 +76,35 @@ export async function runAgentTurn(opts: {
   registry: ToolRegistry;
   messages: Anthropic.MessageParam[];
   observer?: AgentObserver;
+  /** Override the manager-assistant system prompt (e.g. the vendor agent). */
+  system?: string;
+  /** Pin the model instead of per-turn complexity routing. */
+  model?: { model: string; tier: ModelTier };
+  /** Write tools the model may call autonomously — see toAnthropicTools. */
+  allowWriteTools?: readonly string[];
 }): Promise<AgentTurnResult> {
   const client = new Anthropic(); // ANTHROPIC_API_KEY from env
-  const tools = toAnthropicTools(opts.registry);
+  const system = opts.system ?? SYSTEM_PROMPT;
+  // Two write postures, one loop. With an allowWriteTools allowlist (the vendor
+  // agent), the model sees reads + allowlisted writes and those writes execute
+  // directly. Without one (the manager assistant), every tool is visible and
+  // write tool_uses become confirm-gated proposals — never direct executions.
+  const tools = opts.allowWriteTools
+    ? toAnthropicTools(opts.registry, { readOnly: true, allowWrite: opts.allowWriteTools })
+    : toAnthropicTools(opts.registry);
   const messages: Anthropic.MessageParam[] = [...opts.messages];
   const toolTrace: ToolTraceEntry[] = [];
 
   // Route the turn once, up front, based on its complexity, and use that model
   // for every iteration of the loop (switching models mid-turn would thrash the
   // prompt cache). Token usage accumulates across iterations for cost tracing.
-  const { model, tier } = selectModel(opts.messages);
+  const { model, tier } = opts.model ?? selectModel(opts.messages);
   const usage: TurnUsage = { inputTokens: 0, outputTokens: 0 };
 
   const observer = opts.observer;
   notify(
     observer?.onStart &&
-      (() => observer.onStart!({ system: SYSTEM_PROMPT, toolsAvailable: tools.map((t) => t.name), model, tier })),
+      (() => observer.onStart!({ system, toolsAvailable: tools.map((t) => t.name), model, tier })),
   );
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -101,7 +114,7 @@ export async function runAgentTurn(opts: {
     const response = await client.messages.create({
       model,
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system,
       tools: tools as unknown as Anthropic.Tool[],
       messages,
     });
@@ -155,8 +168,11 @@ export async function runAgentTurn(opts: {
     let sawWriteAttempt = false;
     for (const use of toolUses) {
       const isWrite = opts.registry.get(use.name)?.kind === "write";
+      // Allowlisted writes (vendor agent) skip the proposal path and execute
+      // below via runReadTool's own allowWrite check.
+      const proposesWrite = isWrite && !(opts.allowWriteTools ?? []).includes(use.name);
 
-      if (isWrite && !sawWriteAttempt) {
+      if (proposesWrite && !sawWriteAttempt) {
         // First write tool_use: build the preview and, on success, end the turn
         // as a pending action. The handler is NEVER called here — it runs only
         // from the confirm endpoint with the server-stored input.
@@ -192,7 +208,7 @@ export async function runAgentTurn(opts: {
         continue;
       }
 
-      if (isWrite) {
+      if (proposesWrite) {
         results.push({
           type: "tool_result",
           tool_use_id: use.id,
@@ -202,7 +218,9 @@ export async function runAgentTurn(opts: {
         continue;
       }
 
-      const result = await runReadTool(opts.registry, opts.ctx, use.name, use.input);
+      const result = await runReadTool(opts.registry, opts.ctx, use.name, use.input, {
+        allowWrite: opts.allowWriteTools,
+      });
       toolTrace.push({ tool: use.name, ok: result.ok });
       notify(
         observer?.onToolCall &&

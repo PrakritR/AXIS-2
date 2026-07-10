@@ -73,14 +73,18 @@ export type AnthropicToolSchema = {
   input_schema: Record<string, unknown>;
 };
 
-/** Generate Anthropic tool definitions from the registry's Zod schemas. */
+/** Generate Anthropic tool definitions from the registry's Zod schemas.
+ * `allowWrite` names specific write tools the model may call autonomously
+ * (e.g. the vendor agent's escalate_to_manager) — an explicit allowlist so a
+ * future write tool added to a registry never becomes model-callable by
+ * accident. Everything else keeps the gated-confirm contract. */
 export function toAnthropicTools(
   registry: ToolRegistry,
-  opts: { readOnly?: boolean } = {},
+  opts: { readOnly?: boolean; allowWrite?: readonly string[] } = {},
 ): AnthropicToolSchema[] {
   const out: AnthropicToolSchema[] = [];
   for (const tool of registry.values()) {
-    if (opts.readOnly && tool.kind !== "read") continue;
+    if (opts.readOnly && tool.kind !== "read" && !(opts.allowWrite ?? []).includes(tool.name)) continue;
     out.push({
       name: tool.name,
       description: tool.description,
@@ -104,10 +108,11 @@ export async function runReadTool(
   ctx: AgentContext,
   name: string,
   rawInput: unknown,
+  opts: { allowWrite?: readonly string[] } = {},
 ): Promise<RunToolResult> {
   const tool = registry.get(name);
   if (!tool) return { ok: false, error: `Unknown tool: ${name}` };
-  if (tool.kind !== "read") {
+  if (tool.kind !== "read" && !(opts.allowWrite ?? []).includes(tool.name)) {
     return { ok: false, error: `Tool ${name} requires explicit user confirmation and cannot be called directly.` };
   }
   const parsed = tool.inputSchema.safeParse(rawInput ?? {});

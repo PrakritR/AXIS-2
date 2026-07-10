@@ -1,9 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import type { DemoManagerWorkOrderRow } from "@/data/demo-portal";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { residentBelongsToManager } from "@/lib/resident-manager-scope";
+import type { WorkOrderRowWithDispatch } from "@/lib/work-order-dispatch";
+import { prepareDispatch } from "@/lib/work-order-dispatch.server";
 
 export const runtime = "nodejs";
 
@@ -233,14 +235,41 @@ export async function POST(req: Request) {
       rows?: DemoManagerWorkOrderRow[];
     };
 
-    const ownsExisting = async (id: string): Promise<boolean> => {
+    type ExistingRecord = OwnerCols & { dispatch?: unknown };
+    const findExisting = async (id: string): Promise<ExistingRecord | null> => {
       const { data } = await db
         .from("portal_work_order_records")
-        .select("manager_user_id, resident_email")
+        .select("manager_user_id, resident_email, dispatch:row_data->dispatch")
         .eq("id", id)
         .maybeSingle();
-      // A brand-new id (no existing row) may be created.
-      return data == null || actorOwnsRecord(actor, data);
+      return (data as ExistingRecord | null) ?? null;
+    };
+
+    /** row_data.dispatch is strictly server-owned (dispatch pipeline). Clients
+     * can never set or change it: any incoming dispatch is dropped and replaced
+     * with the persisted server copy (or removed when none exists), so a forged
+     * proposal on a brand-new resident row can't spoof the manager UI or
+     * suppress the real dispatch. */
+    const preserveServerDispatch = (rowData: WorkOrderRowWithDispatch, existing: ExistingRecord | null): void => {
+      const existingDispatch = existing?.dispatch as WorkOrderRowWithDispatch["dispatch"] | undefined;
+      if (existingDispatch) {
+        rowData.dispatch = existingDispatch;
+      } else {
+        delete rowData.dispatch;
+      }
+    };
+
+    /** New resident-filed rows kick off dispatch preparation after the response
+     * is sent; the pipeline's audit dedupe key makes re-sync replays no-ops.
+     * after() needs a live request scope — outside one (tests) run inline. */
+    const maybePrepareDispatch = (existing: ExistingRecord | null, rowId: string): void => {
+      if (existing || actor.role !== "resident") return;
+      const task = () => prepareDispatch(db, rowId).catch((e) => console.error("prepareDispatch failed", rowId, e));
+      try {
+        after(task);
+      } catch {
+        void task();
+      }
     };
 
     // A resident may only file against a manager that actually has them as a
@@ -257,7 +286,9 @@ export async function POST(req: Request) {
       const rows = Array.isArray(body.rows) ? body.rows : [];
       for (const row of rows) {
         if (!row?.id) continue;
-        if (!(await ownsExisting(row.id))) continue;
+        const existing = await findExisting(row.id);
+        // A brand-new id (no existing row) may be created.
+        if (existing && !actorOwnsRecord(actor, existing)) continue;
         if (!(await residentMayTargetRowManager(row))) continue;
         const { vendorUserId, rejected } = await resolveVendorUserId(
           db,
@@ -265,7 +296,10 @@ export async function POST(req: Request) {
           await resolveVendorOwnerManagerUserId(db, actor, row),
         );
         if (rejected) continue;
-        await db.from("portal_work_order_records").upsert(recordForActor(actor, row, vendorUserId), { onConflict: "id" });
+        const persisted = recordForActor(actor, row, vendorUserId);
+        preserveServerDispatch(persisted.row_data, existing);
+        const { error } = await db.from("portal_work_order_records").upsert(persisted, { onConflict: "id" });
+        if (!error) maybePrepareDispatch(existing, row.id);
       }
       return NextResponse.json({ ok: true });
     }
@@ -288,7 +322,9 @@ export async function POST(req: Request) {
     }
 
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
-    if (!(await ownsExisting(body.row.id))) {
+    const existing = await findExisting(body.row.id);
+    // A brand-new id (no existing row) may be created.
+    if (existing && !actorOwnsRecord(actor, existing)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
     if (!(await residentMayTargetRowManager(body.row))) {
@@ -300,10 +336,13 @@ export async function POST(req: Request) {
       await resolveVendorOwnerManagerUserId(db, actor, body.row),
     );
     if (rejected) return NextResponse.json({ error: "Forbidden: vendor not available to this manager." }, { status: 403 });
+    const persisted = recordForActor(actor, body.row, vendorUserId);
+    preserveServerDispatch(persisted.row_data, existing);
     const { error } = await db
       .from("portal_work_order_records")
-      .upsert(recordForActor(actor, body.row, vendorUserId), { onConflict: "id" });
+      .upsert(persisted, { onConflict: "id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    maybePrepareDispatch(existing, body.row.id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to save work order.";

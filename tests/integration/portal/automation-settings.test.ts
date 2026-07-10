@@ -43,16 +43,28 @@ function mockManagerAuth(userId = "mgr-a") {
   };
   const rolesChain = {
     select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockResolvedValue({ data: [{ role: "manager" }] }),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn(),
+  };
+  rolesChain.eq = vi.fn().mockResolvedValue({ data: [{ role: "manager" }] });
+
+  // Backs the real loadVendorDispatchSettings/saveVendorDispatchSettings reads.
+  const settingsChain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null }),
+    upsert: vi.fn().mockResolvedValue({ error: null }),
   };
 
   vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
     from: vi.fn((table: string) => {
       if (table === "profiles") return profileChain;
       if (table === "profile_roles") return rolesChain;
+      if (table === "manager_automation_settings") return settingsChain;
       throw new Error(`Unexpected table ${table}`);
     }),
   } as never);
+  return { settingsChain };
 }
 
 describe("/api/portal/automation-settings", () => {
@@ -125,5 +137,35 @@ describe("/api/portal/automation-settings", () => {
     expect(status).toBe(200);
     expect(data.settings?.preDueReminderDays).toEqual([5, 1]);
     expect(saveManagerAutomationSettings).toHaveBeenCalled();
+  });
+
+  it("GET includes vendor-dispatch settings defaulting to off", async () => {
+    mockManagerAuth();
+
+    const res = await GET();
+    const { status, data } = await parseJsonResponse<{ vendorDispatch?: { mode: string } }>(res);
+    expect(status).toBe(200);
+    expect(data.vendorDispatch?.mode).toBe("off");
+  });
+
+  it("PATCH saves vendorDispatch without touching payment settings", async () => {
+    const { settingsChain } = mockManagerAuth();
+
+    const req = jsonRequest("http://localhost/api/portal/automation-settings", {
+      method: "PATCH",
+      body: { vendorDispatch: { mode: "approve", agentMessagingEnabled: true } },
+    });
+    const res = await PATCH(req);
+    const { status, data } = await parseJsonResponse<{
+      vendorDispatch?: { mode: string; agentMessagingEnabled: boolean };
+    }>(res);
+    expect(status).toBe(200);
+    expect(data.vendorDispatch?.mode).toBe("approve");
+    expect(data.vendorDispatch?.agentMessagingEnabled).toBe(true);
+    expect(saveManagerAutomationSettings).not.toHaveBeenCalled();
+    expect(settingsChain.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ manager_user_id: "mgr-a", vendor_dispatch: expect.objectContaining({ mode: "approve" }) }),
+      { onConflict: "manager_user_id" },
+    );
   });
 });
