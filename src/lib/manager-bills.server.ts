@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ManagerBill } from "@/lib/manager-bills";
 import { mapManagerBillRow, MANAGER_BILL_SELECT } from "@/lib/manager-bills";
-import { postGlBillApproved, postGlBillPaid, postGlExpenseEntry, postGlRefundEntry } from "@/lib/reports/gl-posting";
+import { postGlBillApproved, postGlBillPaid } from "@/lib/reports/gl-posting";
 
 export type CreateManagerBillInput = {
   managerUserId: string;
@@ -110,17 +110,11 @@ export async function payManagerBill(
   if (expenseError || !expense?.id) throw new Error(expenseError?.message ?? "Expense create failed");
 
   const expenseId = String(expense.id);
-  await postGlExpenseEntry(db, {
-    managerUserId,
-    expenseId,
-    categoryCode: bill.categoryCode,
-    amountCents: bill.amountCents,
-    entryDate: expenseDate,
-    propertyId: bill.propertyId,
-    vendorId: bill.vendorId ?? undefined,
-    memo: bill.description,
-  });
-
+  // Do NOT post a GL expense here: approval already booked DR expense / CR AP
+  // (postGlBillApproved). Payment only settles AP, so posting the expense again
+  // would double-book the expense and double-credit cash. The manager_expense_entries
+  // row above still feeds the income-statement query (which reads expense entries,
+  // not the GL). Payment posts DR AP / CR cash via postGlBillPaid only.
   await postGlBillPaid(db, {
     managerUserId,
     billId,
@@ -182,6 +176,21 @@ export async function createBillFromVendorInvoice(
     workOrderId: invoice.work_order_id ? String(invoice.work_order_id) : null,
     vendorInvoiceId: invoiceId,
     status: "approved",
+  });
+
+  // This bill is created already-approved (skipping approveManagerBill), so post
+  // the approval GL entry (DR expense / CR AP) here — otherwise payManagerBill's
+  // DR AP / CR cash would debit an AP that was never credited. Idempotent by
+  // source_type + source_id.
+  await postGlBillApproved(db, {
+    managerUserId,
+    billId: bill.id,
+    amountCents: bill.amountCents,
+    entryDate: new Date().toISOString().slice(0, 10),
+    propertyId: bill.propertyId,
+    vendorId: bill.vendorId,
+    categoryCode: bill.categoryCode,
+    memo: bill.description,
   });
 
   await db.from("vendor_invoices").update({ bill_id: bill.id, updated_at: new Date().toISOString() }).eq("id", invoiceId);

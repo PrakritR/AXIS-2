@@ -135,7 +135,11 @@ export function VendorWorkOrdersPanel() {
       void loadBids();
       void loadPayouts();
     };
-    const id = window.setInterval(refreshAll, 60_000);
+    // Don't poll three endpoints for a hidden/background tab (egress on the free
+    // plan); visibilitychange re-syncs the moment it comes back to the foreground.
+    const id = window.setInterval(() => {
+      if (!document.hidden) refreshAll();
+    }, 60_000);
     const onVisible = () => {
       if (!document.hidden) refreshAll();
     };

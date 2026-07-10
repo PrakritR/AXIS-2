@@ -154,10 +154,12 @@ export function ApplicationScreeningPanel({
   useEffect(() => {
     if (demo || bg?.status !== "pending") return;
     let cancelled = false;
+    // Skip the poll for a hidden/background tab (egress on the free plan) and
+    // widen the interval; the report only changes when Checkr finishes.
     const timer = setInterval(() => {
-      if (cancelled) return;
+      if (cancelled || document.hidden) return;
       void callBackgroundCheck("refresh");
-    }, 5000);
+    }, 10000);
     return () => {
       cancelled = true;
       clearInterval(timer);

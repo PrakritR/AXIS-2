@@ -271,7 +271,9 @@ export async function POST(req: Request) {
           } else if (nextStatus === "pending" && prevStatus === "paid") {
             await restoreFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
           }
-          await syncLedgerChargeEntry(db, row.row_data as HouseholdCharge);
+          // Attribute the ledger/GL entry to the SERVER-resolved owner, not the
+          // client-supplied row_data.managerUserId (which a caller controls).
+          await syncLedgerChargeEntry(db, { ...(row.row_data as HouseholdCharge), managerUserId: managerId });
         }
       }
     }

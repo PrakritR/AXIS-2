@@ -35,7 +35,7 @@ function mockDb(handlers: Record<string, () => unknown>) {
   return { from } as never;
 }
 
-function queryChain(result: { data: unknown[]; error?: null }, terminal: "lte" | "order" = "lte") {
+function queryChain(result: { data: unknown[]; error?: null }, terminal: "lte" | "order" | "limit" = "lte") {
   const chain: Record<string, ReturnType<typeof vi.fn>> = {};
   for (const method of ["select", "eq", "gte", "neq"]) {
     chain[method] = vi.fn().mockReturnValue(chain);
@@ -45,6 +45,7 @@ function queryChain(result: { data: unknown[]; error?: null }, terminal: "lte" |
     terminal === "lte"
       ? vi.fn().mockResolvedValue(result)
       : vi.fn().mockReturnValue(chain);
+  chain.limit = terminal === "limit" ? vi.fn().mockResolvedValue(result) : vi.fn().mockReturnValue(chain);
   return chain;
 }
 
@@ -156,7 +157,7 @@ describe("document report queries", () => {
       }),
       manager_expense_entries: () => {
         expenseCalls += 1;
-        return queryChain(expenseRows, expenseCalls === 2 ? "order" : "lte");
+        return queryChain(expenseRows, expenseCalls === 2 ? "limit" : "lte");
       },
       portal_recurring_rent_profile_records: () => profileChain,
       manager_application_records: () => ({ select: vi.fn().mockReturnThis(), limit: vi.fn().mockResolvedValue({ data: [] }) }),

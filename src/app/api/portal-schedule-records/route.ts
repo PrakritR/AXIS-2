@@ -26,14 +26,15 @@ const route = createJsonRecordRoute({
   },
   buildUpsert: (row, user) => {
     const recordType = String(row.recordType ?? row.record_type ?? "event");
-    const managerScoped = isManagerScopedScheduleRecordType(recordType);
-    const vendorScoped = user.role === "vendor";
     return {
       id: row.id,
+      // Only an admin may attribute a row to another owner (or leave it null for
+      // shared singletons, which are scoped by fixed id, not owner). EVERY
+      // non-admin write is pinned to the caller — otherwise a client could set
+      // manager_user_id to a victim manager and plant rows on their calendar for
+      // any record type outside the manager-scoped allowlist (e.g. "event").
       manager_user_id:
-        vendorScoped || (managerScoped && user.role !== "admin")
-          ? user.id
-          : row.managerUserId ?? row.manager_user_id ?? null,
+        user.role === "admin" ? (row.managerUserId ?? row.manager_user_id ?? null) : user.id,
       property_id: row.propertyId ?? row.property_id ?? null,
       record_type: recordType,
       starts_at: row.startsAt ?? row.starts_at ?? row.startIso ?? null,

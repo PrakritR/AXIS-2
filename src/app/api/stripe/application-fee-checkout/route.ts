@@ -3,6 +3,7 @@ import { resolveAppOrigin } from "@/lib/app-url";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { parseMoneyAmount } from "@/lib/parse-money";
 import { normalizeManagerSkuTier } from "@/lib/manager-access";
 import { getManagerPurchaseSku } from "@/lib/manager-access-server";
 import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
@@ -53,21 +54,26 @@ export async function POST(req: Request) {
     const residentEmail = typeof body.residentEmail === "string" ? body.residentEmail.trim() : "";
     const residentName = typeof body.residentName === "string" ? body.residentName.trim() : "";
     const managerUserId = typeof body.managerUserId === "string" ? body.managerUserId.trim() : "";
-    const amountCents = clampAmountCents(typeof body.amountCents === "number" ? body.amountCents : NaN);
 
     if (!propertyId || !residentEmail.includes("@") || !managerUserId) {
       return NextResponse.json({ error: "propertyId, residentEmail, and managerUserId are required." }, { status: 400 });
-    }
-    if (amountCents <= 0) {
-      return NextResponse.json({ error: "Invalid amount (must be between $1.00 and $1000.00)." }, { status: 400 });
     }
 
     const db = createSupabaseServiceRoleClient();
     const { data: propertyRow } = await db
       .from("manager_property_records")
-      .select("property_data")
+      .select("property_data, manager_user_id")
       .eq("id", propertyId)
       .maybeSingle();
+
+    // The Connect payout destination must be the property's REAL owner (server
+    // record), so verify the client-supplied managerUserId actually owns this
+    // property — otherwise the application fee could be routed to an arbitrary
+    // manager's Connect account.
+    const ownerUserId = String(propertyRow?.manager_user_id ?? "").trim();
+    if (!ownerUserId || managerUserId !== ownerUserId) {
+      return NextResponse.json({ error: "This property is not owned by the specified manager." }, { status: 403 });
+    }
 
     const listing = listingFromPropertyData(propertyRow?.property_data);
     if (!listingApplicationFeeChannels(listing ?? undefined).ach) {
@@ -76,6 +82,17 @@ export async function POST(req: Request) {
           code: "AXIS_PAYMENTS_DISABLED",
           error: "Bank (ACH) payments are not enabled for this property. Use Zelle or Venmo if available.",
         },
+        { status: 422 },
+      );
+    }
+
+    // The charge amount is derived from the listing's SERVER-stored application
+    // fee, never from body.amountCents — otherwise an applicant could pay $1 for a
+    // fee the manager configured at, say, $50, and still be marked fee-paid.
+    const amountCents = clampAmountCents(parseMoneyAmount(listing?.applicationFee ?? "") * 100);
+    if (amountCents <= 0) {
+      return NextResponse.json(
+        { code: "NO_APPLICATION_FEE", error: "This listing has no application fee configured." },
         { status: 422 },
       );
     }

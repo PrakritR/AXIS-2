@@ -124,6 +124,8 @@ export function CheckrScreeningModal({
     if (!open || !row || bg?.status !== "pending" || isDemo) return;
     let cancelled = false;
     const timer = setInterval(() => {
+      // Skip the poll for a hidden/background tab (egress on the free plan).
+      if (cancelled || document.hidden) return;
       void fetch("/api/screening/background-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

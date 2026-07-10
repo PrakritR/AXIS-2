@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { notifyManagerPropertyLeadMessage } from "@/lib/property-lead-notification.server";
+import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -40,6 +41,12 @@ async function resolveManagerForProperty(propertyId: string): Promise<{
 
 export async function POST(req: Request) {
   try {
+    // Public, unauthenticated endpoint that emails a manager — rate-limit per IP
+    // to prevent spam / inbox flooding via the full-table property lookup.
+    if (!rateLimit(`property-lead:${clientIpFrom(req)}`, 5, 60_000).ok) {
+      return NextResponse.json({ error: "Too many messages. Please wait a minute and try again." }, { status: 429 });
+    }
+
     const body = (await req.json()) as {
       propertyId?: string;
       name?: string;
@@ -49,12 +56,13 @@ export async function POST(req: Request) {
       body?: string;
     };
 
-    const propertyId = textField(body.propertyId);
-    const name = textField(body.name);
-    const email = textField(body.email).toLowerCase();
-    const phone = textField(body.phone);
-    const topic = textField(body.topic);
-    const message = textField(body.body);
+    // Cap every field so a caller can't ship megabytes into the email/inbox.
+    const propertyId = textField(body.propertyId).slice(0, 200);
+    const name = textField(body.name).slice(0, 200);
+    const email = textField(body.email).toLowerCase().slice(0, 320);
+    const phone = textField(body.phone).slice(0, 40);
+    const topic = textField(body.topic).slice(0, 200);
+    const message = textField(body.body).slice(0, 4000);
 
     if (!propertyId) return NextResponse.json({ error: "propertyId is required." }, { status: 400 });
     if (!name || !email.includes("@")) return NextResponse.json({ error: "Name and valid email are required." }, { status: 400 });

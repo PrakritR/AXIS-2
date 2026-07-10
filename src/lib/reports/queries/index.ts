@@ -373,7 +373,9 @@ export async function queryExpenses(
     .eq("manager_user_id", managerUserId)
     .gte("expense_date", from)
     .lte("expense_date", to)
-    .order("expense_date", { ascending: false });
+    .order("expense_date", { ascending: false })
+    // Bound egress on the Supabase free plan (matches loadCharges / loadExpenseWorkOrders).
+    .limit(2000);
   if (scope === "property" && propertyId) query = query.eq("property_id", propertyId);
   if ((scope === "tenant" || scope === "room") && propertyId) query = query.eq("property_id", propertyId);
 
