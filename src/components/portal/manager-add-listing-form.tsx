@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useManagerUserId } from "@/hooks/use-manager-user-id";
 import { isDemoModeActive } from "@/lib/demo/demo-session";
+import { isNativeRuntimeSync } from "@/lib/native/detect-native";
 import {
   DEMO_LISTING_AUTOFILL_EVENT,
   DEMO_LISTING_SUBMITTED_EVENT,
@@ -2120,11 +2121,14 @@ export function ManagerAddListingForm({
       }
       if (!isEditMode && managerTierPropertyLimitReached(skuTier, propCountBeforeSubmit)) {
         const n = normalizeManagerSkuTier(skuTier);
+        // On native iOS, drop the "Upgrade to …" clause (App Store Guideline
+        // 2.1(b) — no subscription upgrade CTAs outside IAP). Web is unchanged.
+        const upsell = (clause: string) => (isNativeRuntimeSync() ? "" : ` ${clause}`);
         showToast(
           n === "free"
-            ? `Free includes ${FREE_MAX_PROPERTIES} property. Upgrade to Pro or Business to add more.`
+            ? `Free includes ${FREE_MAX_PROPERTIES} property.${upsell("Upgrade to Pro or Business to add more.")}`
             : n === "pro"
-              ? `Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business to add more.`
+              ? `Pro includes up to ${PRO_MAX_PROPERTIES} properties.${upsell("Upgrade to Business to add more.")}`
               : `Business includes up to ${BUSINESS_MAX_PROPERTIES} properties.`,
         );
         return;

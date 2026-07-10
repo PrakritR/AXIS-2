@@ -13,6 +13,10 @@ export function PortalTierPaywall({
   basePath: string;
   featureLabel?: string;
 }) {
+  // On web: name the feature and prompt an upgrade. On native (iOS): Apple forbids
+  // presenting subscription purchasing outside IAP, so the whole "Free plan /
+  // upgrade" framing and the upgrade CTA are hidden (`.native-hide`) and replaced
+  // by neutral, non-actionable text (`.native-only`) — no button, link, or price.
   const featurePhrase = featureLabel ? (
     <>
       <span className="font-semibold text-foreground">{featureLabel}</span> is locked on the Free plan. Upgrade to{" "}
@@ -29,18 +33,32 @@ export function PortalTierPaywall({
           aria-hidden
         />
         <div className="space-y-4">
-          <p className="text-lg font-semibold tracking-[-0.02em] text-foreground">Locked on Pro or Business</p>
-          <p className="text-sm leading-relaxed text-muted">
-            {featurePhrase}
-            <span className="font-semibold text-foreground">Pro</span> or{" "}
-            <span className="font-semibold text-foreground">Business</span> to unlock residents, leases, documents,
-            finances, services, inbox, and co-managers. Free includes properties, applications, tours, and payments.
+          <p className="text-lg font-semibold tracking-[-0.02em] text-foreground">
+            <span className="native-hide">Locked on Pro or Business</span>
+            <span className="native-only">This feature isn&apos;t included on your current plan</span>
           </p>
-          <Link href={MANAGER_PLAN_PORTAL_URL} className={primaryCta}>
-            View plans &amp; upgrade
-          </Link>
+
+          {/* Web: upgrade prompt + CTA */}
+          <div className="native-hide space-y-4">
+            <p className="text-sm leading-relaxed text-muted">
+              {featurePhrase}
+              <span className="font-semibold text-foreground">Pro</span> or{" "}
+              <span className="font-semibold text-foreground">Business</span> to unlock residents, leases, documents,
+              finances, services, inbox, and co-managers. Free includes properties, applications, tours, and payments.
+            </p>
+            <Link href={MANAGER_PLAN_PORTAL_URL} className={primaryCta}>
+              View plans &amp; upgrade
+            </Link>
+          </div>
+
+          {/* Native (iOS): neutral, non-actionable — no upgrade/subscribe/price/link */}
+          <p className="native-only text-sm leading-relaxed text-muted">
+            This section isn&apos;t available on your current plan.
+          </p>
+
           <p className="text-xs text-muted">
-            Already upgraded?{" "}
+            {/* Web keeps the "Already upgraded?" framing; native shows only the link. */}
+            <span className="native-hide">Already upgraded?{" "}</span>
             <Link href={`${basePath}/dashboard`} className="font-medium text-primary underline-offset-2 hover:underline">
               Back to dashboard
             </Link>

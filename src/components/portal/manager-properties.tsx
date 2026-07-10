@@ -20,6 +20,7 @@ import {
 } from "@/components/portal/portal-metrics";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { isDemoModeActive, resolveManagerScopeUserId } from "@/lib/demo/demo-session";
+import { isNativeRuntimeSync } from "@/lib/native/detect-native";
 import {
   DEMO_OPEN_CREATE_LISTING_EVENT,
   DEMO_PROPERTIES_STAGE_EVENT,
@@ -168,11 +169,14 @@ export function ManagerProperties() {
     }
     if (atPropertyLimit) {
       const n = normalizeManagerSkuTier(skuTier);
+      // On native iOS, drop the "Upgrade to …" clause — Apple forbids surfacing
+      // subscription upgrade CTAs outside IAP (Guideline 2.1(b)). Web is unchanged.
+      const upsell = (clause: string) => (isNativeRuntimeSync() ? "" : ` ${clause}`);
       showToast(
         n === "free"
-          ? `Free includes ${FREE_MAX_PROPERTIES} property. Upgrade to Pro or Business for more.`
+          ? `Free includes ${FREE_MAX_PROPERTIES} property.${upsell("Upgrade to Pro or Business for more.")}`
           : n === "pro"
-            ? `Pro includes up to ${PRO_MAX_PROPERTIES} properties. Upgrade to Business for more.`
+            ? `Pro includes up to ${PRO_MAX_PROPERTIES} properties.${upsell("Upgrade to Business for more.")}`
             : `Business includes up to ${BUSINESS_MAX_PROPERTIES} properties.`,
       );
       return;
@@ -243,11 +247,15 @@ export function ManagerProperties() {
       >
         {atPropertyLimit && limitMax != null ? (
           <p className="mb-4 rounded-2xl border px-4 py-3 text-sm portal-banner-danger lg:mb-4">
-            You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.{" "}
-            <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={MANAGER_PLAN_PORTAL_URL}>
-              View plans
-            </Link>{" "}
-            to add more.
+            You&apos;ve reached your plan limit of {limitMax} propert{limitMax === 1 ? "y" : "ies"}.
+            {/* The plan-upgrade CTA is a subscription surface — hidden on native (iOS). */}
+            <span className="native-hide">
+              {" "}
+              <Link className="font-semibold underline underline-offset-2 hover:text-rose-900" href={MANAGER_PLAN_PORTAL_URL}>
+                View plans
+              </Link>{" "}
+              to add more.
+            </span>
           </p>
         ) : null}
         <ManagerHousePropertiesPanel

@@ -1177,6 +1177,21 @@ input[type="date"].hero-search-date-input::-webkit-date-and-time-value {
   --portal-native-bottom-nav-inset: max(2.75rem, calc(env(safe-area-inset-bottom, 0px) + 2rem));
 }
 
+/* App Store compliance (Guideline 2.1(b) / 3.1.1): the iOS app must not present
+   in-app purchasing of digital subscriptions (billing is on the web via Stripe).
+   `.native-hide` removes any upgrade / subscribe / pricing / checkout CTA or link
+   on native; `.native-only` reveals the neutral, non-actionable replacement text.
+   `data-native` is set in <head> before first paint, so nothing flashes. */
+.native-only {
+  display: none;
+}
+html[data-native] .native-hide {
+  display: none !important;
+}
+html[data-native] .native-only {
+  display: block;
+}
+
 /* Capacitor native shell — safe areas for notch / home indicator (see NativeBridge data-native). */
 html[data-native] {
   --native-safe-top: env(safe-area-inset-top, 0px);

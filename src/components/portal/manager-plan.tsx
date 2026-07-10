@@ -1088,19 +1088,34 @@ export function ManagerPlan({
       </Modal>
   );
 
+  // App Store Guideline 2.1(b)/3.1.1: the iOS app must not present subscription
+  // purchasing. The entire plan UI (cards, prices, upgrade, Stripe checkout) is
+  // hidden on native via `.native-hide` (flash-free — data-native is set in
+  // <head>), replaced by a neutral, non-actionable notice. Web is unchanged.
+  const nativeNotice = (
+    <div className="native-only mx-auto max-w-lg rounded-2xl border border-border surface-panel p-6 text-center">
+      <p className="text-lg font-semibold text-foreground">Your plan</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">
+        Your subscription is managed outside the app. Any changes to your plan are handled on the web.
+      </p>
+    </div>
+  );
+
   if (embedded) {
     return (
       <>
-        {planBody}
-        {planModals}
+        <div className="native-hide">{planBody}</div>
+        {nativeNotice}
+        <div className="native-hide">{planModals}</div>
       </>
     );
   }
 
   return (
     <ManagerPortalPageShell title="Billing">
-      {planBody}
-      {planModals}
+      <div className="native-hide">{planBody}</div>
+      {nativeNotice}
+      <div className="native-hide">{planModals}</div>
     </ManagerPortalPageShell>
   );
 }

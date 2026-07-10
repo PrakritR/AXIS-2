@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth/manager-pricing-oauth-storage";
 import { openAppUrl } from "@/lib/native/open-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import type { PlanTierId } from "@/data/manager-plan-tiers";
 import Link from "next/link";
@@ -38,8 +39,27 @@ function ManagerPricingOauthContent() {
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
   const [statusText, setStatusText] = useState("Preparing your Axis account…");
   const didRunRef = useRef(false);
+  const { isNative } = useIsNativeApp();
+
+  // Native iOS: subscription checkout is not available (App Store Guideline
+  // 2.1(b)). Route native users away from this pricing-checkout route entirely —
+  // a signed-in manager to their dashboard, otherwise to account creation.
+  useEffect(() => {
+    if (!isNative) return;
+    void (async () => {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      window.location.replace(session ? "/portal/dashboard" : "/auth/create-account");
+    })();
+  }, [isNative]);
 
   useEffect(() => {
+    // Never run the subscription provisioning/checkout flow on native iOS (App
+    // Store 2.1(b)); the effect above redirects native users away instead. Wait
+    // until isNative is definitively resolved (false = web) before provisioning.
+    if (isNative !== false) return;
     if (didRunRef.current) return;
     didRunRef.current = true;
 
@@ -127,9 +147,13 @@ function ManagerPricingOauthContent() {
         setErrorText(message);
       }
     })();
-  }, [billing, promo, tier]);
+    // `isNative` gates the native early-return above, so the effect must re-run
+    // when it resolves from null → false (web) to actually provision.
+  }, [billing, promo, tier, isNative, storedOffer]);
 
-  if (checkoutClientSecret) {
+  // Never mount the Stripe subscription checkout on native (App Store 2.1(b));
+  // the native redirect effect above navigates away.
+  if (checkoutClientSecret && !isNative) {
     return (
       <AuthCard>
         <h1 className="text-center text-xl font-semibold text-foreground">Complete payment</h1>
@@ -152,7 +176,7 @@ function ManagerPricingOauthContent() {
       <AuthCard>
         <p className="text-center text-sm text-rose-600">{errorText}</p>
         <div className="mt-6 flex justify-center gap-4">
-          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/manager/plan">
+          <Link className="native-hide text-sm font-semibold text-primary hover:underline" href="/auth/manager/plan">
             Choose plan
           </Link>
           <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/sign-in">

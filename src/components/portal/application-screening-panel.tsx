@@ -266,12 +266,17 @@ export function ApplicationScreeningPanel({
       headerActions={headerActions}
     >
       {!screeningAllowed && !demo ? (
-        <p className="text-xs text-muted">
-          Screening requires Pro or Business.{" "}
-          <Link href={MANAGER_PLAN_PORTAL_URL} className="font-semibold text-primary hover:underline">
-            Upgrade your plan
-          </Link>
-        </p>
+        <>
+          <p className="native-hide text-xs text-muted">
+            Screening requires Pro or Business.{" "}
+            <Link href={MANAGER_PLAN_PORTAL_URL} className="font-semibold text-primary hover:underline">
+              Upgrade your plan
+            </Link>
+          </p>
+          <p className="native-only text-xs text-muted">
+            Screening isn&apos;t included on your current plan.
+          </p>
+        </>
       ) : null}
       {bg?.status === "pending" ? (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">

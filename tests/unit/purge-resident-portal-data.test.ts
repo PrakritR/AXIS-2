@@ -3,11 +3,16 @@ import { purgeResidentPortalData } from "@/lib/auth/purge-portal-account-data";
 
 function mockDeleteChain() {
   return {
+    select: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     filter: vi.fn().mockReturnThis(),
-    then: (resolve: (value: { error: null }) => void) => resolve({ error: null }),
+    // Resolves both delete ops ({ error }) and the manager_application_records
+    // id lookup ({ data }) so the email-based screening/cosigner purge runs.
+    then: (resolve: (value: { error: null; data: { id: string }[] }) => void) =>
+      resolve({ error: null, data: [{ id: "app-1" }] }),
   };
 }
 

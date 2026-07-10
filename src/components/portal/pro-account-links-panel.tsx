@@ -1368,7 +1368,11 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
         ) : null}
 
         {atLinkCap ? (
-          <p className="text-xs font-medium text-[var(--status-overdue-fg)]">At limit — remove a link or change plan.</p>
+          <p className="text-xs font-medium text-[var(--status-overdue-fg)]">
+            {/* Web keeps the "change plan" option; native drops it (App Store 2.1(b)). */}
+            <span className="native-hide">At limit — remove a link or change plan.</span>
+            <span className="native-only">At limit — remove a link to add another.</span>
+          </p>
         ) : null}
         {inviteeAtCap ? (
           <p className="text-xs font-medium text-[var(--status-overdue-fg)]">

@@ -78,7 +78,9 @@ export function ManagerStartPage() {
   if (isNative) return null;
 
   return (
-    <div className="min-h-screen px-4 py-14 sm:px-5 sm:py-20">
+    // `native-hide` closes the one-frame flash of the pricing/plan-card surface
+    // on native before the isNative redirect above resolves (App Store 2.1(b)).
+    <div className="native-hide min-h-screen px-4 py-14 sm:px-5 sm:py-20">
       <div className="mx-auto max-w-3xl text-center">
         <h1 className="text-4xl font-bold tracking-[-0.03em] text-foreground sm:text-5xl md:text-[3.25rem]">Start with Axis.</h1>
 

@@ -1,5 +1,6 @@
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { purgeCoManagerReferencesToUser } from "@/lib/auth/purge-orphaned-co-manager-links";
+import { MANAGER_DOCUMENTS_BUCKET } from "@/lib/documents/manager-documents";
 import { ADMIN_INBOX_SCOPE } from "@/lib/portal-inbox-thread-scope";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
@@ -34,6 +35,24 @@ export async function purgeResidentPortalData(
   const deleteOps: PromiseLike<{ error: { message: string } | null }>[] = [];
 
   if (email) {
+    // The resident's own screening (background-check) orders and cosigner
+    // submissions are keyed by application id (not email/user id), so resolve this
+    // resident's application ids and purge those child rows too — otherwise
+    // sensitive third-party-check PII orphans after a "permanent" account delete.
+    const { data: appRows } = await db
+      .from("manager_application_records")
+      .select("id")
+      .eq("resident_email", email);
+    const applicationIds = (appRows ?? [])
+      .map((row) => (row as { id?: unknown }).id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    if (applicationIds.length > 0) {
+      deleteOps.push(
+        db.from("screening_orders").delete().in("application_id", applicationIds),
+        db.from("cosigner_submission_records").delete().in("signer_app_id", applicationIds),
+      );
+    }
+
     deleteOps.push(
       db.from("portal_household_charge_records").delete().eq("resident_email", email),
       db.from("portal_recurring_rent_profile_records").delete().eq("resident_email", email),
@@ -114,10 +133,31 @@ export async function purgeManagerPortalData(db: ServiceDb, managerUserId: strin
     db.from("manager_vendor_records").delete().eq("manager_user_id", managerUserId),
     db.from("cosigner_submission_records").delete().eq("manager_user_id", managerUserId),
     db.from("screening_orders").delete().eq("manager_user_id", managerUserId),
+    db.from("manager_documents").delete().eq("manager_user_id", managerUserId),
   ];
 
   if (email) {
     deleteOps.push(db.from("manager_purchases").delete().ilike("email", email));
+  }
+
+  // The manager document library holds the user's OWN private uploads (leases,
+  // insurance, tax PDFs). Financial ledger/GL rows are retained lawfully; user
+  // files are not — remove the private storage objects before the rows above are
+  // deleted. Best-effort: storage errors and a missing table (older DBs) must not
+  // block the account deletion.
+  try {
+    const { data: docRows } = await db
+      .from("manager_documents")
+      .select("storage_path")
+      .eq("manager_user_id", managerUserId);
+    const storagePaths = (docRows ?? [])
+      .map((row) => (row as { storage_path?: unknown }).storage_path)
+      .filter((path): path is string => typeof path === "string" && path.length > 0);
+    if (storagePaths.length > 0) {
+      await db.storage.from(MANAGER_DOCUMENTS_BUCKET).remove(storagePaths);
+    }
+  } catch {
+    /* best-effort storage cleanup */
   }
 
   assertNoDeleteErrors(await Promise.all(deleteOps));

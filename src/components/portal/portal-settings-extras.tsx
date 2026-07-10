@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { PortalRoleSwitcher } from "@/components/portal/portal-role-switcher";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
+import { PortalDeleteAccountButton } from "@/components/portal/portal-delete-account-button";
 import { PortalSignOutButton } from "@/components/portal/portal-sign-out-button";
 import type { PortalKind } from "@/lib/portal-types";
 
@@ -35,6 +36,10 @@ export function PortalSettingsExtras({ currentKind }: { currentKind: PortalKind 
       ) : null}
 
       <PortalSignOutButton className="w-full rounded-full border border-border px-4 py-3 text-center text-sm font-semibold text-foreground transition hover:bg-accent/70 disabled:opacity-60" />
+
+      <div className="border-t border-border pt-4">
+        <PortalDeleteAccountButton className="w-full rounded-full border border-danger/40 px-4 py-3 text-center text-sm font-semibold text-danger transition hover:bg-danger/5" />
+      </div>
     </PortalCollapsibleSection>
   );
 }

@@ -1,6 +1,8 @@
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
 import { purgeManagerPortalData, purgeResidentPortalData } from "@/lib/auth/purge-portal-account-data";
 import { removePortalAccess, type PortalRole } from "@/lib/auth/remove-portal-access";
+import { isAdminManagedManagerPurchase } from "@/lib/manager-admin-purchase";
+import { getStripe } from "@/lib/stripe";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
@@ -111,27 +113,95 @@ export async function deleteResidentAccount(
   return { ok: true as const, mode: result.mode };
 }
 
-/** Admin-only: purge all portal data and remove the auth user entirely. */
-export async function deletePortalAccountCompletely(db: ServiceDb, userId: string) {
-  const trimmedId = userId.trim();
-  if (!trimmedId) {
-    throw new Error("User id is required.");
+/**
+ * Best-effort cancel of the user's active Stripe subscription BEFORE their
+ * manager_purchases row is purged. Without this, deleting the account leaves the
+ * live subscription billing a now-deleted customer. Never throws — a missing
+ * subscription, an admin-comped tier (no real Stripe sub), or unconfigured Stripe
+ * must not block deletion. Stripe's own transaction records are retained lawfully.
+ */
+async function cancelActiveManagerSubscription(db: ServiceDb, userId: string): Promise<void> {
+  try {
+    const { data } = await db
+      .from("manager_purchases")
+      .select("stripe_subscription_id, stripe_checkout_session_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (isAdminManagedManagerPurchase(data?.stripe_checkout_session_id)) return;
+    const subscriptionId = data?.stripe_subscription_id?.trim();
+    if (!subscriptionId) return;
+    await getStripe().subscriptions.cancel(subscriptionId);
+  } catch {
+    /* best-effort — deletion proceeds regardless of the subscription outcome */
   }
+}
+
+/** Delete the profile roles, profile row, and auth login for a user (in that order). */
+async function deleteProfileAndAuthUser(db: ServiceDb, userId: string): Promise<void> {
+  const { error: rolesErr } = await db.from("profile_roles").delete().eq("user_id", userId);
+  if (rolesErr) throw new Error(rolesErr.message);
+
+  const { error: profileErr } = await db.from("profiles").delete().eq("id", userId);
+  if (profileErr) throw new Error(profileErr.message);
+
+  const { error: authDeleteError } = await db.auth.admin.deleteUser(userId);
+  if (authDeleteError) throw new Error(authDeleteError.message);
+}
+
+/**
+ * Shared cascade: purge all manager + resident portal data (the manager document
+ * library and its private storage objects included, via purgeManagerPortalData),
+ * then delete the roles, profile, and auth login. Used by BOTH the admin
+ * "complete delete" and the self-serve delete so the two can never drift.
+ */
+async function purgeAndDeletePortalAccount(db: ServiceDb, userId: string) {
+  const trimmedId = userId.trim();
+  if (!trimmedId) throw new Error("User id is required.");
 
   const email = await profileEmail(db, trimmedId);
   await purgeManagerPortalData(db, trimmedId);
   await purgeResidentPortalData(db, { email, userId: trimmedId });
-
-  const { error: rolesErr } = await db.from("profile_roles").delete().eq("user_id", trimmedId);
-  if (rolesErr) throw new Error(rolesErr.message);
-
-  const { error: profileErr } = await db.from("profiles").delete().eq("id", trimmedId);
-  if (profileErr) throw new Error(profileErr.message);
-
-  const { error: authDeleteError } = await db.auth.admin.deleteUser(trimmedId);
-  if (authDeleteError) throw new Error(authDeleteError.message);
+  await deleteProfileAndAuthUser(db, trimmedId);
 
   return { ok: true as const, mode: "deleted_auth_user" as const };
+}
+
+/** Admin-only: purge all portal data and remove the auth user entirely. */
+export async function deletePortalAccountCompletely(db: ServiceDb, userId: string) {
+  return purgeAndDeletePortalAccount(db, userId);
+}
+
+/**
+ * Self-delete: the authenticated user permanently deletes their OWN account,
+ * whatever role(s) they hold. The resident path's PROTECTED_ROLES /
+ * canHardDeleteResident guard exists to stop an ADMIN from hard-deleting a
+ * manager/pro through the resident tooling — it must NOT block a user from
+ * deleting themselves (App Store Guideline 5.1.1(v)). Cancels any active Stripe
+ * subscription (so billing stops), disassociates/removes vendor data keyed by
+ * vendor_user_id (not covered by the manager/resident purges), then runs the
+ * shared purge + auth delete. Afterward the email is free to register again.
+ * Best-effort on the vendor tables so a missing one never blocks the deletion.
+ */
+export async function deleteOwnAccount(db: ServiceDb, userId: string) {
+  const trimmedId = userId.trim();
+  if (!trimmedId) throw new Error("User id is required.");
+
+  // Stop billing before manager_purchases is purged inside purgeManagerPortalData.
+  await cancelActiveManagerSubscription(db, trimmedId);
+
+  // Vendor account data is keyed by vendor_user_id (not manager_user_id), so it is
+  // not covered by the manager/resident purges. Disassociate the manager-owned
+  // directory / work-order references (they belong to the manager) and delete the
+  // vendor-owned rows. Awaiting a PostgREST query resolves with { error } rather
+  // than throwing, so a missing table is simply ignored here.
+  await db.from("manager_vendor_records").update({ vendor_user_id: null }).eq("vendor_user_id", trimmedId);
+  await db.from("portal_work_order_records").update({ vendor_user_id: null }).eq("vendor_user_id", trimmedId);
+  await db.from("vendor_tax_profiles").delete().eq("vendor_user_id", trimmedId);
+  await db.from("work_order_bids").delete().eq("vendor_user_id", trimmedId);
+  await db.from("vendor_invoices").delete().eq("vendor_user_id", trimmedId);
+  await db.from("vendor_payouts").delete().eq("vendor_user_id", trimmedId);
+
+  return purgeAndDeletePortalAccount(db, trimmedId);
 }
 
 /** Cascade-delete manager properties, payments, leases, etc., then remove manager access / auth user. */

@@ -233,13 +233,18 @@ export function CheckrScreeningModal({
     <Modal open={open} onClose={onClose} title={`Run screening — ${row.name}`} panelClassName="max-w-4xl">
       <div className="space-y-5 text-sm">
         {!screeningAllowed ? (
-          <p className="text-muted">
-            Applicant screening requires Pro or Business.{" "}
-            <Link href={MANAGER_PLAN_PORTAL_URL} className="font-semibold text-primary hover:underline">
-              Upgrade your plan
-            </Link>{" "}
-            to run background checks.
-          </p>
+          <>
+            <p className="native-hide text-muted">
+              Applicant screening requires Pro or Business.{" "}
+              <Link href={MANAGER_PLAN_PORTAL_URL} className="font-semibold text-primary hover:underline">
+                Upgrade your plan
+              </Link>{" "}
+              to run background checks.
+            </p>
+            <p className="native-only text-muted">
+              Applicant screening isn&apos;t included on your current plan.
+            </p>
+          </>
         ) : !configured ? (
           <p className="text-muted">Background checks are not configured. Add CHECKR_API_KEY to enable Checkr Tenant.</p>
         ) : !row.application?.consentCredit ? (

@@ -4,11 +4,15 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { AuthLoadingCard } from "@/components/auth/auth-mobile-primitives";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
-import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-/** Native: plan selection lives in the portal — not on a giant auth signup screen. */
+/**
+ * Native: subscription plan selection is not available in the iOS app (App Store
+ * Guideline 2.1(b)). Route native users away from the plan/pricing surface — a
+ * signed-in manager goes to their dashboard, a signed-out visitor to account
+ * creation. NEVER to the in-portal plan/billing purchase screen.
+ */
 export function NativeManagerPlanRedirect() {
   const router = useRouter();
   const { isNative } = useIsNativeApp();
@@ -21,25 +25,13 @@ export function NativeManagerPlanRedirect() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (session) {
-        router.replace(MANAGER_PLAN_PORTAL_URL);
-        return;
-      }
-      router.replace("/auth/create-account");
+      router.replace(session ? "/portal/dashboard" : "/auth/create-account");
     })();
   }, [isNative, router]);
 
-  if (isNative === null || !isNative) {
-    return (
-      <AuthCard>
-        <AuthLoadingCard />
-      </AuthCard>
-    );
-  }
-
   return (
     <AuthCard>
-      <AuthLoadingCard label="Opening plans…" />
+      <AuthLoadingCard label="Opening Axis…" />
     </AuthCard>
   );
 }

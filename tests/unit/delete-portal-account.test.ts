@@ -1,13 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { purgeResidentPortalData, purgeManagerPortalData, findAuthUserIdByEmail, removePortalAccess } = vi.hoisted(
-  () => ({
-    purgeResidentPortalData: vi.fn(),
-    purgeManagerPortalData: vi.fn(),
-    findAuthUserIdByEmail: vi.fn(),
-    removePortalAccess: vi.fn(),
-  }),
-);
+const {
+  purgeResidentPortalData,
+  purgeManagerPortalData,
+  findAuthUserIdByEmail,
+  removePortalAccess,
+  getStripe,
+  isAdminManagedManagerPurchase,
+} = vi.hoisted(() => ({
+  purgeResidentPortalData: vi.fn(),
+  purgeManagerPortalData: vi.fn(),
+  findAuthUserIdByEmail: vi.fn(),
+  removePortalAccess: vi.fn(),
+  getStripe: vi.fn(),
+  isAdminManagedManagerPurchase: vi.fn(),
+}));
 
 vi.mock("@/lib/auth/purge-portal-account-data", () => ({
   purgeResidentPortalData,
@@ -22,8 +29,12 @@ vi.mock("@/lib/auth/remove-portal-access", () => ({
   removePortalAccess,
 }));
 
+vi.mock("@/lib/stripe", () => ({ getStripe }));
+vi.mock("@/lib/manager-admin-purchase", () => ({ isAdminManagedManagerPurchase }));
+
 import {
   canHardDeleteResident,
+  deleteOwnAccount,
   deletePortalAccountCompletely,
   deleteResidentAccount,
 } from "@/lib/auth/delete-portal-account";
@@ -152,6 +163,94 @@ describe("delete-portal-account", () => {
       userId: "user-1",
     });
     expect(deleteUser).toHaveBeenCalledWith("user-1");
+    expect(result).toEqual({ ok: true, mode: "deleted_auth_user" });
+  });
+
+  it("self-delete cancels the active Stripe subscription, cleans vendor data, and deletes the auth user", async () => {
+    const cancel = vi.fn(async () => ({}));
+    getStripe.mockReturnValue({ subscriptions: { cancel } });
+    isAdminManagedManagerPurchase.mockReturnValue(false);
+
+    const deleteUser = vi.fn(async () => ({ error: null }));
+    const vendorUpdate = vi.fn(() => ({ eq: async () => ({ error: null }) }));
+    const db = {
+      from: (table: string) => {
+        if (table === "manager_purchases") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({
+                  data: { stripe_subscription_id: "sub_123", stripe_checkout_session_id: "cs_live_x" },
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "profiles") {
+          return {
+            select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { email: "me@test.com" } }) }) }),
+            delete: () => ({ eq: async () => ({ error: null }) }),
+          };
+        }
+        if (table === "profile_roles") {
+          return { delete: () => ({ eq: async () => ({ error: null }) }) };
+        }
+        // Vendor tables: support both update().eq() and delete().eq().
+        return {
+          update: vendorUpdate,
+          delete: () => ({ eq: async () => ({ error: null }) }),
+        };
+      },
+      auth: { admin: { deleteUser } },
+    };
+
+    const result = await deleteOwnAccount(db as never, "user-self");
+
+    expect(cancel).toHaveBeenCalledWith("sub_123");
+    expect(vendorUpdate).toHaveBeenCalledWith({ vendor_user_id: null });
+    expect(purgeManagerPortalData).toHaveBeenCalledWith(db, "user-self");
+    expect(deleteUser).toHaveBeenCalledWith("user-self");
+    expect(result).toEqual({ ok: true, mode: "deleted_auth_user" });
+  });
+
+  it("self-delete skips Stripe cancel for admin-comped tiers (no real subscription)", async () => {
+    const cancel = vi.fn(async () => ({}));
+    getStripe.mockReturnValue({ subscriptions: { cancel } });
+    isAdminManagedManagerPurchase.mockReturnValue(true);
+
+    const deleteUser = vi.fn(async () => ({ error: null }));
+    const db = {
+      from: (table: string) => {
+        if (table === "manager_purchases") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({ data: { stripe_subscription_id: "sub_admin", stripe_checkout_session_id: "admin_comp_x" } }),
+              }),
+            }),
+          };
+        }
+        if (table === "profiles") {
+          return {
+            select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { email: "me@test.com" } }) }) }),
+            delete: () => ({ eq: async () => ({ error: null }) }),
+          };
+        }
+        if (table === "profile_roles") {
+          return { delete: () => ({ eq: async () => ({ error: null }) }) };
+        }
+        return {
+          update: () => ({ eq: async () => ({ error: null }) }),
+          delete: () => ({ eq: async () => ({ error: null }) }),
+        };
+      },
+      auth: { admin: { deleteUser } },
+    };
+
+    const result = await deleteOwnAccount(db as never, "user-comp");
+
+    expect(cancel).not.toHaveBeenCalled();
+    expect(deleteUser).toHaveBeenCalledWith("user-comp");
     expect(result).toEqual({ ok: true, mode: "deleted_auth_user" });
   });
 });
