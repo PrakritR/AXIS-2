@@ -59,7 +59,14 @@ import {
   readCosignerSubmissionsForSignerAppId,
 } from "@/lib/cosigner-submissions-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
-import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
+import {
+  inProgressApplicationResumeUrl,
+  isInProgressApplicationRow,
+} from "@/lib/rental-application/in-progress-application";
+import {
+  APPLICATION_COMPLETION_REMINDER_SUBJECT,
+  buildApplicationCompletionReminderBody,
+} from "@/lib/application-completion-reminder-email";
 import {
   removeAllApplicationCharges,
   removeResidentHouseholdPaymentData,
@@ -257,6 +264,10 @@ export function ManagerApplications() {
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
   const [reminderBusyId, setReminderBusyId] = useState<string | null>(null);
+  const [reminderPreviewBusyId, setReminderPreviewBusyId] = useState<string | null>(null);
+  const [reminderPreview, setReminderPreview] = useState<
+    { row: DemoApplicantRow; to: string; subject: string; text: string } | null
+  >(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [editApplicationOpen, setEditApplicationOpen] = useState(false);
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
@@ -493,6 +504,59 @@ export function ManagerApplications() {
       showToast("Could not send the application reminder.");
     } finally {
       setReminderBusyId(null);
+      // The confirm action is terminal (sent, drafted, or errored) — close the preview.
+      setReminderPreview(null);
+    }
+  };
+
+  // Load the exact email that would be sent (same auth/recipient/copy) so the manager
+  // can confirm before anything goes out. Demo mode builds the preview locally since the
+  // route can't resolve synthetic demo ids and must never send.
+  const openReminderPreview = async (row: DemoApplicantRow) => {
+    if (reminderPreviewBusyId || reminderBusyId) return;
+    setReminderPreviewBusyId(row.id);
+    try {
+      if (isDemoModeActive()) {
+        const origin = typeof window === "undefined" ? "" : window.location.origin;
+        const text = buildApplicationCompletionReminderBody({
+          applicantName: row.name || undefined,
+          propertyTitle: row.property || undefined,
+          resumeUrl: inProgressApplicationResumeUrl(origin, row),
+          signInUrl: `${origin}/auth/sign-in?role=resident`,
+        });
+        setReminderPreview({
+          row,
+          to: row.email?.trim() || "the applicant",
+          subject: APPLICATION_COMPLETION_REMINDER_SUBJECT,
+          text,
+        });
+        return;
+      }
+      const res = await fetch("/api/portal/send-application-completion-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ applicationId: row.id, preview: true }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        preview?: { to?: string; subject?: string; text?: string };
+      };
+      if (res.ok && data.ok && data.preview) {
+        setReminderPreview({
+          row,
+          to: data.preview.to ?? "",
+          subject: data.preview.subject ?? APPLICATION_COMPLETION_REMINDER_SUBJECT,
+          text: data.preview.text ?? "",
+        });
+        return;
+      }
+      showToast(data.error ?? "Could not load the reminder preview.");
+    } catch {
+      showToast("Could not load the reminder preview.");
+    } finally {
+      setReminderPreviewBusyId(null);
     }
   };
 
@@ -513,12 +577,12 @@ export function ManagerApplications() {
                 variant="outline"
                 className={PORTAL_DETAIL_BTN}
                 data-attr="application-send-reminder"
-                // Disabled while ANY reminder is in flight so a click on another row
-                // isn't silently dropped by the single-flight guard in the handler.
-                disabled={reminderBusyId !== null}
-                onClick={() => void sendApplicationReminder(row)}
+                // Disabled while ANY reminder preview/send is in flight so a click on
+                // another row isn't silently dropped by the single-flight guards.
+                disabled={reminderPreviewBusyId !== null || reminderBusyId !== null}
+                onClick={() => void openReminderPreview(row)}
               >
-                {reminderBusyId === row.id ? "Sending…" : "Send reminder"}
+                {reminderPreviewBusyId === row.id ? "Loading…" : "Send reminder"}
               </Button>
             ) : null}
           </>
@@ -716,6 +780,23 @@ export function ManagerApplications() {
           setApprovePreviewRow(null);
           setApproveBusyId(row.id);
           void setRowBucket(row.id, "approved", { skipWelcomeEmail: skipMessage }).finally(() => setApproveBusyId(null));
+        }}
+      />
+      <PortalNotificationPreviewModal
+        open={reminderPreview !== null}
+        title="Send application reminder"
+        onClose={() => setReminderPreview(null)}
+        recipient={reminderPreview?.to ?? ""}
+        subject={reminderPreview?.subject ?? APPLICATION_COMPLETION_REMINDER_SUBJECT}
+        body={reminderPreview?.text ?? ""}
+        intro="This is the exact email that will be sent to the applicant to finish their application."
+        showSkipMessage={false}
+        confirmLabel="Send reminder"
+        confirmBusy={reminderBusyId !== null}
+        confirmBusyLabel="Sending…"
+        onConfirm={() => {
+          if (!reminderPreview) return;
+          void sendApplicationReminder(reminderPreview.row);
         }}
       />
       <ShareLeadLinkModal

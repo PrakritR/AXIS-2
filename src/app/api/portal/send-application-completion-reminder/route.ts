@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    let body: { applicationId?: unknown };
+    let body: { applicationId?: unknown; preview?: unknown };
     try {
       body = (await req.json()) as typeof body;
     } catch {
@@ -54,6 +54,9 @@ export async function POST(req: Request) {
 
     const applicationId = typeof body.applicationId === "string" ? body.applicationId.trim() : "";
     if (!applicationId) return NextResponse.json({ error: "applicationId is required." }, { status: 400 });
+    // Preview mode returns exactly what would be sent (same auth, recipient, and copy)
+    // so the manager can confirm before a real email goes out — nothing is sent.
+    const previewOnly = body.preview === true;
 
     const svc = createSupabaseServiceRoleClient();
     const { data: requestor, error: requestorError } = await svc
@@ -114,6 +117,13 @@ export async function POST(req: Request) {
       resumeUrl,
       signInUrl,
     });
+
+    if (previewOnly) {
+      return NextResponse.json({
+        ok: true,
+        preview: { to: email, subject: APPLICATION_COMPLETION_REMINDER_SUBJECT, text },
+      });
+    }
 
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (!apiKey) {

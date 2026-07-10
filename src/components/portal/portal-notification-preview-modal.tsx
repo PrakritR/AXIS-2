@@ -14,6 +14,7 @@ export function PortalNotificationPreviewModal({
   intro,
   warning,
   footerNote,
+  showSkipMessage = true,
   skipMessageLabel = "Don't message resident",
   confirmLabel,
   confirmLabelWithoutMessage,
@@ -32,6 +33,8 @@ export function PortalNotificationPreviewModal({
   intro?: string;
   warning?: string;
   footerNote?: string;
+  /** When false the "skip message" checkbox is hidden — for flows where the message IS the action (e.g. a reminder). */
+  showSkipMessage?: boolean;
   skipMessageLabel?: string;
   confirmLabel: string;
   confirmLabelWithoutMessage?: string;
@@ -76,16 +79,18 @@ export function PortalNotificationPreviewModal({
             {body}
           </pre>
         </div>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={skipMessage}
-            onChange={(e) => setSkipMessage(e.target.checked)}
-            data-attr="portal-notification-skip-message"
-            className="mt-0.5 h-4 w-4 rounded border-border text-primary"
-          />
-          <span className="text-muted">{skipMessageLabel}</span>
-        </label>
+        {showSkipMessage ? (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={skipMessage}
+              onChange={(e) => setSkipMessage(e.target.checked)}
+              data-attr="portal-notification-skip-message"
+              className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+            />
+            <span className="text-muted">{skipMessageLabel}</span>
+          </label>
+        ) : null}
         {footerNote && !skipMessage ? <p className="text-xs text-muted">{footerNote}</p> : null}
         {skipMessage ? (
           <p className="text-xs text-muted">The action will complete without sending this message.</p>
