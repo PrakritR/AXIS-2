@@ -32,6 +32,7 @@ import {
 import {
   applyListingBedroomSlots,
   applyListingBathroomSlots,
+  listingTotalBathroomsIdFromCount,
   applyEntireHomeListingPricing,
   applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
@@ -1249,7 +1250,11 @@ export function ManagerAddListingForm({
       const appliedBaths = applyListingBathroomSlots(nextSub);
       if (!appliedBaths.ok) {
         if (isEditMode) {
-          showToast("Bathroom count was kept to match existing bathroom rows so your layout updates can continue.");
+          nextSub = {
+            ...nextSub,
+            listingTotalBathroomsId: listingTotalBathroomsIdFromCount(nextSub.bathrooms.length),
+          };
+          showToast("Bathroom count was reset to match existing bathroom rows so your layout updates can continue.");
         } else {
           showToast(appliedBaths.message);
           return;
@@ -2167,6 +2172,15 @@ export function ManagerAddListingForm({
         roomAmenitiesText: sanitizeRoomAmenityText(room.roomAmenitiesText),
       })),
     };
+    submission.sharedSpaces = submission.sharedSpaces.filter((space) => space.name.trim());
+    submission.rooms = submission.rooms.map((room, i) => ({
+      ...room,
+      name: room.name.trim() || `Room ${i + 1}`,
+    }));
+    submission.bathrooms = submission.bathrooms.map((bath, i) => ({
+      ...bath,
+      name: bath.name.trim() || emptyBathroom(i).name,
+    }));
     const roomsOk = isEntireHomeListing(submission)
       ? entireHomeMonthlyRentAmount(submission) > 0 && submission.rooms.some((r) => r.name.trim())
       : submission.rooms.some((r) => r.name.trim() && r.monthlyRent > 0);
@@ -2182,15 +2196,6 @@ export function ManagerAddListingForm({
       );
       return;
     }
-    submission.sharedSpaces = submission.sharedSpaces.filter((space) => space.name.trim());
-    submission.rooms = submission.rooms.map((room, i) => ({
-      ...room,
-      name: room.name.trim() || `Room ${i + 1}`,
-    }));
-    submission.bathrooms = submission.bathrooms.map((bath, i) => ({
-      ...bath,
-      name: bath.name.trim() || emptyBathroom(i).name,
-    }));
 
     setBusy(true);
     try {

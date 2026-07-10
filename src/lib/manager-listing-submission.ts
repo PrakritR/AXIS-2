@@ -977,7 +977,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
 
   const listingBedroomSlots =
     typeof sub.listingBedroomSlots === "number" && sub.listingBedroomSlots >= 1
-      ? Math.min(8, Math.round(sub.listingBedroomSlots))
+      ? Math.min(20, Math.round(sub.listingBedroomSlots))
       : rooms.length;
 
   const listingPlaceCategoryId =
@@ -1358,8 +1358,19 @@ export function applyListingBathroomSlots(
       bathrooms.pop();
     }
   }
-  bathrooms = bathrooms.map((bath, i) => (bath.name.trim() ? bath : emptyBathroom(i)));
+  bathrooms = bathrooms.map((bath, i) =>
+    bath.name.trim()
+      ? bath
+      : { ...bath, name: i === 0 ? "Full bath (hall)" : `Bathroom ${i + 1}` },
+  );
   return { ok: true, sub: { ...sub, bathrooms } };
+}
+
+/** Best-effort home-step bathroom option id for an existing bathroom card count. */
+export function listingTotalBathroomsIdFromCount(count: number): string {
+  const n = Math.max(1, Math.min(12, Math.round(count)));
+  if (n >= 4) return "4+";
+  return String(n);
 }
 
 export function createDefaultListingServiceOptions(): ManagerListingServiceOption[] {
