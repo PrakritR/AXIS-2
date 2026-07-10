@@ -255,7 +255,7 @@ export const sendRentRemindersTool = defineWriteTool<{ chargeIds: string[] }, { 
     // The set can drift between preview and confirm (e.g. a charge got paid);
     // say so instead of silently shrinking the send.
     if (missing.length) parts.push(`${missing.length} skipped (no longer overdue)`);
-    return { reply: `Reminders processed: ${parts.join(", ")}.` };
+    return { reply: `Done — ${parts.join(", ")}.` };
   },
 });
 

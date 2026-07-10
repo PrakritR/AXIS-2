@@ -175,8 +175,10 @@ export async function runAgentTurn(opts: {
               })),
         );
         if (previewed.ok) {
+          // No accompanying text from the model: don't echo the card's title
+          // into the bubble — hand off to the confirmation card conversationally.
           return {
-            reply: replyText || previewed.preview.title,
+            reply: replyText || "Here's what I've got ready — take a look and confirm below.",
             toolTrace,
             model,
             tier,
