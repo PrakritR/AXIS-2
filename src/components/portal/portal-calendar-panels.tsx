@@ -42,6 +42,7 @@ import {
   toLocalDateStr,
   writeAvailabilityDateSetForStorageKeyToServer,
 } from "@/lib/demo-admin-scheduling";
+import { mondayBasedDayIndex, resolveBlockBaseDates } from "@/lib/portal/availability-block";
 import {
   plannedTourVisibleToViewer,
   tourInquiryVisibleToViewer,
@@ -112,10 +113,6 @@ function addMonths(d: Date, n: number): Date {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
   x.setMonth(x.getMonth() + n);
   return x;
-}
-
-function mondayBasedDayIndex(d: Date) {
-  return (d.getDay() + 6) % 7;
 }
 
 function buildMonthCells(year: number, month: number): (number | null)[] {
@@ -852,7 +849,9 @@ export function PortalCalendarPanels({
 
     const next = new Set(activeSlots);
     const occurrences = blockCadence === "once" ? 1 : Math.max(1, blockOccurrences);
-    const baseDates = blockWeekdays.map((weekday) => addDays(weekMonday, weekday));
+    // Anchor each selected weekday to the real date visible in the active block window
+    // (compact mode may start mid-week and even straddle a Monday boundary).
+    const baseDates = resolveBlockBaseDates(activeBlockDates, weekMonday, blockWeekdays);
 
     for (let occurrenceIndex = 0; occurrenceIndex < occurrences; occurrenceIndex += 1) {
       const targetDates = baseDates.map((date) => {
@@ -871,7 +870,7 @@ export function PortalCalendarPanels({
 
     writeAvailability(next);
     setBlockModalOpen(false);
-  }, [activeSlots, blockCadence, blockEndSlotExclusive, blockOccurrences, blockStartSlot, blockWeekdays, weekMonday, writeAvailability]);
+  }, [activeBlockDates, activeSlots, blockCadence, blockEndSlotExclusive, blockOccurrences, blockStartSlot, blockWeekdays, weekMonday, writeAvailability]);
 
   const clearCurrentWeek = useCallback(() => {
     const next = new Set(activeSlots);
@@ -1269,7 +1268,10 @@ export function PortalCalendarPanels({
                   type="button"
                   onMouseDown={() => {
                     if (readOnly || meeting || active || coManagerOpen) return;
-                    startDragSelection(ds, activeBlockDateStrs.indexOf(ds), slotIdx);
+                    // Weekday must come from the column's actual date, not its position in the
+                    // window — the compact view can start on any weekday, so the Nth column is
+                    // not the Nth weekday.
+                    startDragSelection(ds, mondayBasedDayIndex(new Date(`${ds}T12:00:00`)), slotIdx);
                   }}
                   onMouseEnter={() => {
                     if (readOnly || meeting || active || coManagerOpen) return;
