@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { listingWizardStepIndices } from "@/components/portal/manager-add-listing-form";
 import {
   applyListingBedroomSlots,
+  applyListingBathroomSlots,
+  bathroomCountFromListingTotalBathroomsId,
   createDefaultListingSubmission,
   emptyBathroom,
   emptyRoom,
@@ -82,16 +84,16 @@ describe("create listing wizard", () => {
     expect(errs.listingStoriesId).toBeUndefined();
   });
 
-  it("flags unnamed bathrooms and shared spaces", () => {
+  it("treats bathroom and shared space names as optional on their steps", () => {
     const sub = createDefaultListingSubmission();
     sub.bathrooms = [{ ...emptyBathroom(0), id: "b1", name: "" }];
     sub.sharedSpaces = [{ ...emptySharedSpace(0), id: "s1", name: "" }];
 
     const bathErrs = validateListingWizardStep(2, sub);
-    expect(bathErrs[listingBathroomNameKey("b1")]).toMatch(/required/i);
+    expect(bathErrs[listingBathroomNameKey("b1")]).toBeUndefined();
 
     const spaceErrs = validateListingWizardStep(3, sub);
-    expect(spaceErrs[listingSharedSpaceNameKey("s1")]).toMatch(/required/i);
+    expect(spaceErrs[listingSharedSpaceNameKey("s1")]).toBeUndefined();
   });
 
   it("requires lease terms and fee fields on pricing step", () => {
@@ -143,6 +145,38 @@ describe("create listing wizard", () => {
       { ...emptyRoom(1), id: "r2", name: "Room B", monthlyRent: 800 },
     ];
     const blocked = applyListingBedroomSlots(sub, 1);
+    expect(blocked.ok).toBe(false);
+  });
+
+  it("maps bathroom option ids to card counts", () => {
+    expect(bathroomCountFromListingTotalBathroomsId("1.5")).toBe(2);
+    expect(bathroomCountFromListingTotalBathroomsId("4+")).toBe(4);
+    expect(bathroomCountFromListingTotalBathroomsId("2")).toBe(2);
+  });
+
+  it("grows and shrinks bathroom slots from home bathroom count", () => {
+    const sub = createDefaultListingSubmission();
+    sub.listingTotalBathroomsId = "3";
+    const grown = applyListingBathroomSlots(sub);
+    expect(grown.ok).toBe(true);
+    if (grown.ok) {
+      expect(grown.sub.bathrooms).toHaveLength(3);
+      expect(grown.sub.bathrooms[0]?.name).toBeTruthy();
+    }
+
+    const shrunk = applyListingBathroomSlots(grown.ok ? grown.sub : sub, 1);
+    expect(shrunk.ok).toBe(true);
+    if (shrunk.ok) expect(shrunk.sub.bathrooms).toHaveLength(1);
+  });
+
+  it("blocks shrinking bathroom slots when last bathroom has data", () => {
+    const sub = createDefaultListingSubmission();
+    sub.listingTotalBathroomsId = "2";
+    sub.bathrooms = [
+      { ...emptyBathroom(0), id: "b1", name: "Hall bath" },
+      { ...emptyBathroom(1), id: "b2", name: "Ensuite", location: "Room A" },
+    ];
+    const blocked = applyListingBathroomSlots(sub, 1);
     expect(blocked.ok).toBe(false);
   });
 

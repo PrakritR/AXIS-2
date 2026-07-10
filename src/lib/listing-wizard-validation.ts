@@ -1,4 +1,4 @@
-import { isDigitsOnlyLabel, isValidZipInput } from "@/lib/listing-form-inputs";
+import { isValidZipInput } from "@/lib/listing-form-inputs";
 import { isEntireHomeListing, isListingFeeAmountFilled, resolveAllowedLeaseTerms, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { listingApplicationFeeChannels } from "@/lib/rental-application/application-fee-channel";
 import { parseMoneyAmount } from "@/lib/parse-money";
@@ -54,28 +54,16 @@ export function validateListingWizardStep(
   }
 
   if (stepIndex === 1) {
-    for (const room of sub.rooms) {
-      const key = listingRoomNameKey(room.id);
-      if (!room.name.trim()) errs[key] = "Room name is required.";
-      else if (isDigitsOnlyLabel(room.name)) errs[key] = "Use a label, not numbers only (e.g. Room 12A).";
-    }
-    if (Object.keys(errs).length > 0) errs.rooms = "Complete each highlighted room below.";
+    // Room cards are auto-created from the bedroom count with default names.
+    // Names can be edited; other room fields stay optional on this step.
   }
 
   if (stepIndex === 2) {
-    for (const bath of sub.bathrooms) {
-      const key = listingBathroomNameKey(bath.id);
-      if (!bath.name.trim()) errs[key] = "Bathroom name is required.";
-    }
-    if (Object.keys(errs).length > 0) errs.bathrooms = "Name each highlighted bathroom.";
+    // Bathroom cards are auto-created from the bathroom count with default names.
   }
 
   if (stepIndex === 3) {
-    for (const space of sub.sharedSpaces) {
-      const key = listingSharedSpaceNameKey(space.id);
-      if (!space.name.trim()) errs[key] = "Shared space name is required.";
-    }
-    if (Object.keys(errs).length > 0) errs.sharedSpaces = "Name each highlighted shared space.";
+    // Shared spaces are fully optional — blank rows are dropped on submit.
   }
 
   if (stepIndex === 4) {
@@ -86,13 +74,9 @@ export function validateListingWizardStep(
       errs.monthlyRent = "Enter the monthly rent for the entire home.";
     }
     if (!isEntireHome) {
-      let anyRent = false;
-      for (const room of sub.rooms) {
-        if (room.monthlyRent > 0) anyRent = true;
-        else errs[listingRoomRentKey(room.id)] = "Enter monthly rent for this room (use 0 only if not offered).";
-      }
+      const anyRent = sub.rooms.some((room) => room.monthlyRent > 0);
       if (!anyRent && sub.rooms.length > 0) {
-        errs.monthlyRent = "Set monthly rent for at least one room.";
+        errs.monthlyRent = "Set monthly rent for at least one room (leave others at 0 if not offered).";
       }
     }
     const allowedTerms = resolveAllowedLeaseTerms(sub);

@@ -210,8 +210,9 @@ export function resolveResidentMoveInFromApplications(
   const generalHouseInfo = sub?.generalHouseInfo?.trim() || null;
   const houseRulesText = sub?.houseRulesText?.trim() || null;
   const amenities = sub ? splitLineList(sub.amenitiesText ?? "") : [];
-  const wifiNetworkName = sub?.wifiNetworkName?.trim() || null;
-  const wifiPassword = sub?.wifiPassword?.trim() || null;
+  // Wi-Fi is no longer collected or shown on move-in.
+  const wifiNetworkName = null;
+  const wifiPassword = null;
 
   return {
     propertyLabel:

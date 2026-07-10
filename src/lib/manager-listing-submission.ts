@@ -1275,6 +1275,31 @@ export function isRoomSlotRemovable(room: ManagerRoomSubmission): boolean {
   );
 }
 
+export function isBathroomSlotRemovable(bath: ManagerBathroomSubmission): boolean {
+  const name = bath.name.trim();
+  const defaultName =
+    name.length === 0 || name === "Full bath (hall)" || /^Bathroom \d+$/.test(name);
+  return (
+    defaultName &&
+    !bath.location.trim() &&
+    !bath.amenitiesText.trim() &&
+    bath.photoDataUrls.length === 0 &&
+    !bath.videoDataUrl &&
+    (bath.assignedRoomIds ?? []).length === 0 &&
+    !bath.allResidents
+  );
+}
+
+/** Map home-step bathroom option id (e.g. "1.5", "4+") to a bathroom card count. */
+export function bathroomCountFromListingTotalBathroomsId(id: string | undefined | null): number {
+  const raw = (id ?? "").trim();
+  if (!raw) return 1;
+  if (raw === "4+") return 4;
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return Math.min(12, Math.max(1, Math.ceil(n)));
+}
+
 export type ApplyBedroomSlotsResult =
   | { ok: true; sub: ManagerListingSubmissionV1 }
   | { ok: false; message: string };
@@ -1283,13 +1308,11 @@ export function applyListingBedroomSlots(
   sub: ManagerListingSubmissionV1,
   target: number,
 ): ApplyBedroomSlotsResult {
-  const clamped = Math.max(1, Math.min(8, Math.round(target)));
-  const rooms = [...sub.rooms];
+  const clamped = Math.max(1, Math.min(20, Math.round(target)));
+  let rooms = [...sub.rooms];
   if (rooms.length < clamped) {
     while (rooms.length < clamped) rooms.push(emptyRoom(rooms.length));
-    return { ok: true, sub: { ...sub, rooms, listingBedroomSlots: clamped } };
-  }
-  if (rooms.length > clamped) {
+  } else if (rooms.length > clamped) {
     while (rooms.length > clamped) {
       const last = rooms[rooms.length - 1]!;
       if (!isRoomSlotRemovable(last)) {
@@ -1301,9 +1324,42 @@ export function applyListingBedroomSlots(
       }
       rooms.pop();
     }
-    return { ok: true, sub: { ...sub, rooms, listingBedroomSlots: clamped } };
   }
-  return { ok: true, sub: { ...sub, listingBedroomSlots: clamped } };
+  rooms = rooms.map((room, i) => (room.name.trim() ? room : { ...room, name: `Room ${i + 1}` }));
+  return { ok: true, sub: { ...sub, rooms, listingBedroomSlots: clamped } };
+}
+
+export type ApplyBathroomSlotsResult =
+  | { ok: true; sub: ManagerListingSubmissionV1 }
+  | { ok: false; message: string };
+
+/** Grow/shrink bathroom cards from the home-step bathroom count; autofill default names. */
+export function applyListingBathroomSlots(
+  sub: ManagerListingSubmissionV1,
+  target?: number,
+): ApplyBathroomSlotsResult {
+  const clamped = Math.max(
+    1,
+    Math.min(12, Math.round(target ?? bathroomCountFromListingTotalBathroomsId(sub.listingTotalBathroomsId))),
+  );
+  let bathrooms = [...sub.bathrooms];
+  if (bathrooms.length < clamped) {
+    while (bathrooms.length < clamped) bathrooms.push(emptyBathroom(bathrooms.length));
+  } else if (bathrooms.length > clamped) {
+    while (bathrooms.length > clamped) {
+      const last = bathrooms[bathrooms.length - 1]!;
+      if (!isBathroomSlotRemovable(last)) {
+        return {
+          ok: false,
+          message:
+            "To list fewer bathrooms, remove or clear the extra bathroom rows (starting from the last one), or raise the bathroom count again.",
+        };
+      }
+      bathrooms.pop();
+    }
+  }
+  bathrooms = bathrooms.map((bath, i) => (bath.name.trim() ? bath : emptyBathroom(i)));
+  return { ok: true, sub: { ...sub, bathrooms } };
 }
 
 export function createDefaultListingServiceOptions(): ManagerListingServiceOption[] {

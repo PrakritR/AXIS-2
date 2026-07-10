@@ -8,12 +8,12 @@ import {
 } from "@/lib/listing-wizard-validation";
 
 describe("validateListingWizardStep", () => {
-  it("flags each room missing a name on step 1", () => {
+  it("does not require room names on step 1 (autofilled later)", () => {
     const sub = createDefaultListingSubmission();
     sub.rooms = [{ ...emptyRoom(0), id: "r1", name: "" }];
     const errs = validateListingWizardStep(1, sub);
-    expect(errs[listingRoomNameKey("r1")]).toMatch(/required/i);
-    expect(errs.rooms).toBeTruthy();
+    expect(errs[listingRoomNameKey("r1")]).toBeUndefined();
+    expect(errs.rooms).toBeUndefined();
   });
 
   it("flags per-room rent on pricing step", () => {
@@ -21,7 +21,8 @@ describe("validateListingWizardStep", () => {
     sub.listingPlaceCategoryId = "shared_home";
     sub.rooms = [{ ...emptyRoom(0), id: "r1", name: "Room A", monthlyRent: 0 }];
     const errs = validateListingWizardStep(4, sub, { entireHomeRent: 0 });
-    expect(errs[listingRoomRentKey("r1")]).toMatch(/rent/i);
+    expect(errs[listingRoomRentKey("r1")]).toBeUndefined();
+    expect(errs.monthlyRent).toMatch(/rent/i);
   });
 
   it("orders room name keys before summary on step 1", () => {

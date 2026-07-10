@@ -42,26 +42,6 @@ export function ResidentMoveInResolvedView({ resolved }: { resolved: ResidentMov
         </PortalCollapsibleSection>
       ) : null}
 
-      {resolved.wifiNetworkName || resolved.wifiPassword ? (
-        <PortalCollapsibleSection
-          title="House info"
-          surfaceMuted={false}
-          contentClassName="space-y-1 px-4 pb-4 text-muted"
-          toggleDataAttr="resident-move-in-wifi-toggle"
-        >
-          {resolved.wifiNetworkName ? (
-            <p>
-              <span className="font-semibold text-foreground">WiFi network:</span> {resolved.wifiNetworkName}
-            </p>
-          ) : null}
-          {resolved.wifiPassword ? (
-            <p>
-              <span className="font-semibold text-foreground">WiFi password:</span> {resolved.wifiPassword}
-            </p>
-          ) : null}
-        </PortalCollapsibleSection>
-      ) : null}
-
       <PortalCollapsibleSection
         title="Instructions & details"
         surfaceMuted={false}

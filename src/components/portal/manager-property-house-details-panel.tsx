@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
@@ -81,15 +81,7 @@ export function ManagerPropertyHouseDetailsPanel({
   const houseDescription = sub.houseDescription?.trim() || portalNote.houseDescription?.trim() || "";
   const houseRulesText = sub.houseRulesText?.trim() || portalNote.houseRulesText?.trim() || "";
   const generalHouseInfo = sub.generalHouseInfo?.trim() || portalNote.generalHouseInfo?.trim() || "";
-  const wifiNetworkName = sub.wifiNetworkName?.trim() || portalNote.wifiNetworkName?.trim() || "";
-  const wifiPassword = sub.wifiPassword?.trim() || portalNote.wifiPassword?.trim() || "";
-  const wifiLine = [
-    wifiNetworkName ? `Network: ${wifiNetworkName}` : "",
-    wifiPassword ? `Password: ${wifiPassword}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const hasAny = Boolean(houseDescription || houseRulesText || generalHouseInfo || wifiLine);
+  const hasAny = Boolean(houseDescription || houseRulesText || generalHouseInfo);
 
   if (!noteKey) return null;
 
@@ -98,8 +90,6 @@ export function ManagerPropertyHouseDetailsPanel({
       houseDescription: sub.houseDescription ?? portalNote.houseDescription ?? "",
       houseRulesText: sub.houseRulesText ?? portalNote.houseRulesText ?? "",
       generalHouseInfo: sub.generalHouseInfo ?? portalNote.generalHouseInfo ?? "",
-      wifiNetworkName: sub.wifiNetworkName ?? portalNote.wifiNetworkName ?? "",
-      wifiPassword: sub.wifiPassword ?? portalNote.wifiPassword ?? "",
     });
     setModalOpen(true);
   };
@@ -113,8 +103,8 @@ export function ManagerPropertyHouseDetailsPanel({
       houseDescription: draft.houseDescription ?? "",
       houseRulesText: draft.houseRulesText ?? "",
       generalHouseInfo: draft.generalHouseInfo ?? "",
-      wifiNetworkName: draft.wifiNetworkName ?? "",
-      wifiPassword: draft.wifiPassword ?? "",
+      wifiNetworkName: "",
+      wifiPassword: "",
     };
     let ok = false;
     if (saveTarget?.mode === "pending") {
@@ -132,8 +122,6 @@ export function ManagerPropertyHouseDetailsPanel({
       houseDescription: draft.houseDescription,
       houseRulesText: draft.houseRulesText,
       generalHouseInfo: draft.generalHouseInfo,
-      wifiNetworkName: draft.wifiNetworkName,
-      wifiPassword: draft.wifiPassword,
     });
     showToast("House details saved.");
     setModalOpen(false);
@@ -182,24 +170,6 @@ export function ManagerPropertyHouseDetailsPanel({
           className="mt-1"
         />
       </div>
-      <div>
-        <div className="mb-0.5 flex items-center gap-2">
-          <p className="text-sm font-medium text-foreground">Wi-Fi</p>
-          <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-        </div>
-        <div className="mt-1 grid gap-2 sm:grid-cols-2">
-          <Input
-            value={draft.wifiNetworkName ?? ""}
-            onChange={(e) => setDraft((d) => ({ ...d, wifiNetworkName: e.target.value }))}
-            placeholder="Wi-Fi network name (SSID)"
-          />
-          <Input
-            value={draft.wifiPassword ?? ""}
-            onChange={(e) => setDraft((d) => ({ ...d, wifiPassword: e.target.value }))}
-            placeholder="Wi-Fi password"
-          />
-        </div>
-      </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="primary" className="rounded-full" onClick={save}>
           Save house details
@@ -240,7 +210,6 @@ export function ManagerPropertyHouseDetailsPanel({
           <HouseDetailRow label="Description" value={houseDescription} badge="Manager only" />
           <HouseDetailRow label="House rules" value={houseRulesText} />
           <HouseDetailRow label="General info" value={generalHouseInfo} badge="Residents only" />
-          <HouseDetailRow label="Wi-Fi" value={wifiLine} badge="Residents only" />
           {!hasAny ? (
             <p className="px-4 py-3 text-sm text-muted">No house details yet — click Edit to add.</p>
           ) : null}

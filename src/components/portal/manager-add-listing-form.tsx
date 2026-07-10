@@ -31,6 +31,7 @@ import {
 } from "@/lib/manager-access";
 import {
   applyListingBedroomSlots,
+  applyListingBathroomSlots,
   applyEntireHomeListingPricing,
   applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
@@ -1184,7 +1185,12 @@ export function ManagerAddListingForm({
 
   useEffect(() => {
     if (stepIndex !== 2) return;
-    queueMicrotask(() => setSub((s) => (s.bathrooms.length > 0 ? s : { ...s, bathrooms: [emptyBathroom(0)] })));
+    queueMicrotask(() =>
+      setSub((s) => {
+        const applied = applyListingBathroomSlots(s);
+        return applied.ok ? applied.sub : s.bathrooms.length > 0 ? s : { ...s, bathrooms: [emptyBathroom(0)] };
+      }),
+    );
   }, [stepIndex]);
 
   useEffect(() => {
@@ -1227,18 +1233,55 @@ export function ManagerAddListingForm({
     setStepFieldErrors({});
     if (stepIndex === 0) {
       const slots = sub.listingBedroomSlots ?? sub.rooms.length;
-      const applied = applyListingBedroomSlots(sub, slots);
-      if (!applied.ok) {
+      let nextSub = sub;
+      const appliedRooms = applyListingBedroomSlots(nextSub, slots);
+      if (!appliedRooms.ok) {
         if (isEditMode) {
-          setSub((s) => ({ ...s, listingBedroomSlots: s.rooms.length }));
+          nextSub = { ...nextSub, listingBedroomSlots: nextSub.rooms.length };
           showToast("Bedroom count was reset to match existing room rows so your layout updates can continue.");
         } else {
-          showToast(applied.message);
+          showToast(appliedRooms.message);
           return;
         }
       } else {
-        setSub(applied.sub);
+        nextSub = appliedRooms.sub;
       }
+      const appliedBaths = applyListingBathroomSlots(nextSub);
+      if (!appliedBaths.ok) {
+        if (isEditMode) {
+          showToast("Bathroom count was kept to match existing bathroom rows so your layout updates can continue.");
+        } else {
+          showToast(appliedBaths.message);
+          return;
+        }
+      } else {
+        nextSub = appliedBaths.sub;
+      }
+      setSub(nextSub);
+    }
+    if (stepIndex === 1) {
+      setSub((s) => ({
+        ...s,
+        rooms: s.rooms.map((room, i) => ({
+          ...room,
+          name: room.name.trim() || `Room ${i + 1}`,
+        })),
+      }));
+    }
+    if (stepIndex === 2) {
+      setSub((s) => ({
+        ...s,
+        bathrooms: s.bathrooms.map((bath, i) => ({
+          ...bath,
+          name: bath.name.trim() || emptyBathroom(i).name,
+        })),
+      }));
+    }
+    if (stepIndex === 3) {
+      setSub((s) => ({
+        ...s,
+        sharedSpaces: s.sharedSpaces.filter((space) => space.name.trim()),
+      }));
     }
     const pos = wizardSteps.indexOf(stepIndex);
     if (pos < 0 || pos >= wizardSteps.length - 1) return;
@@ -2139,14 +2182,15 @@ export function ManagerAddListingForm({
       );
       return;
     }
-    if (submission.bathrooms.length > 0 && submission.bathrooms.every((b) => !b.name.trim())) {
-      showToast("Name each bathroom or remove empty bathroom rows.");
-      return;
-    }
-    if (submission.sharedSpaces.some((space) => !space.name.trim())) {
-      showToast("Name each shared space or remove empty shared space rows.");
-      return;
-    }
+    submission.sharedSpaces = submission.sharedSpaces.filter((space) => space.name.trim());
+    submission.rooms = submission.rooms.map((room, i) => ({
+      ...room,
+      name: room.name.trim() || `Room ${i + 1}`,
+    }));
+    submission.bathrooms = submission.bathrooms.map((bath, i) => ({
+      ...bath,
+      name: bath.name.trim() || emptyBathroom(i).name,
+    }));
 
     setBusy(true);
     try {
@@ -2447,7 +2491,7 @@ export function ManagerAddListingForm({
               </GridField>
               <GridField>
                 <div data-wizard-field="listingTotalBathroomsId">
-                  <FieldLabel>Bathrooms in the home *</FieldLabel>
+                  <FieldLabel hint="We’ll open that many bathroom cards on the next steps with names autofilled.">Bathrooms in the home *</FieldLabel>
                 </div>
                 <div>
                   <div className="relative">
@@ -2473,7 +2517,7 @@ export function ManagerAddListingForm({
               </GridField>
               <GridField className="sm:col-span-2">
                 <div data-wizard-field="listingBedroomSlots">
-                  <FieldLabel hint="We’ll open that many room cards on the next step. You can still add or remove rows later.">
+                  <FieldLabel hint="We’ll open that many room cards on the next step with names autofilled. Other room fields stay optional.">
                     Bedrooms in the home *
                   </FieldLabel>
                 </div>
@@ -2541,48 +2585,53 @@ export function ManagerAddListingForm({
               title="Full-house photos & video"
               description="Hero gallery at the top of your public listing — exterior, kitchen, living areas, and common spaces. Up to 12 photos."
             >
-              <div
-                className={`mt-2 ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
-                onDragOver={(e) => handleDragOver(e, "house-photos")}
-                onDragEnter={(e) => handleDragOver(e, "house-photos")}
-                onDragLeave={(e) => handleDragLeave(e, "house-photos")}
-                onDrop={onDropHousePhotos}
-              >
-                <MediaPickTrigger accept="image/*" multiple onFiles={(files) => { void onPickHousePhotos(files); }}>
-                  Add house photos
-                </MediaPickTrigger>
-                <p className="mt-3 text-sm text-muted">Drag and drop photos here, or use the button above.</p>
-                {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
-                      <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-accent/30">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="" className="h-full w-full object-cover" />
-                        <button type="button" className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70" onClick={() => removeHousePhoto(pi)} aria-label="Remove photo">×</button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-[11px] text-muted">Optional for draft — recommended before you go live.</p>
-                )}
-              </div>
-              <div
-                className={`mt-4 ${mediaDropZoneClass(activeDropZone === "house-video")}`}
-                onDragOver={(e) => handleDragOver(e, "house-video")}
-                onDragEnter={(e) => handleDragOver(e, "house-video")}
-                onDragLeave={(e) => handleDragLeave(e, "house-video")}
-                onDrop={onDropHouseVideo}
-              >
-                <FieldLabel hint="Optional walkthrough (~14 MB max).">Full-house video</FieldLabel>
-                <MediaPickTrigger accept="video/*" disabled={videoUploadingKeys.has("house")} onFiles={(files) => { void onPickHouseVideo(files?.[0] ?? null); }}>
-                  {videoUploadingKeys.has("house") ? "Uploading…" : sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
-                </MediaPickTrigger>
-                {sub.houseVideoDataUrl ? (
-                  <div className="mt-3 space-y-2">
-                    <video src={videoPreviewUrls.house ?? sub.houseVideoDataUrl} controls className="max-h-48 w-full rounded-xl border border-border bg-black object-contain" />
-                    <button type="button" onClick={clearHouseVideo} className="text-xs font-medium text-rose-600 hover:text-rose-800">Remove video</button>
-                  </div>
-                ) : null}
+              <div className="mt-2 grid gap-4 sm:grid-cols-2">
+                <div
+                  className={`flex min-h-[12.5rem] flex-col ${mediaDropZoneClass(activeDropZone === "house-photos")}`}
+                  onDragOver={(e) => handleDragOver(e, "house-photos")}
+                  onDragEnter={(e) => handleDragOver(e, "house-photos")}
+                  onDragLeave={(e) => handleDragLeave(e, "house-photos")}
+                  onDrop={onDropHousePhotos}
+                >
+                  <FieldLabel>Full-house photos</FieldLabel>
+                  <MediaPickTrigger accept="image/*" multiple onFiles={(files) => { void onPickHousePhotos(files); }}>
+                    Add house photos
+                  </MediaPickTrigger>
+                  <p className="mt-3 text-sm text-muted">Drag and drop photos here, or use the button above.</p>
+                  {(sub.housePhotoDataUrls?.length ?? 0) > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(sub.housePhotoDataUrls ?? []).map((url, pi) => (
+                        <div key={`house-p-${pi}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-border bg-accent/30">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                          <button type="button" className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-bl bg-black/55 text-sm font-bold text-white hover:bg-black/70" onClick={() => removeHousePhoto(pi)} aria-label="Remove photo">×</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional for draft — recommended before you go live.</p>
+                  )}
+                </div>
+                <div
+                  className={`flex min-h-[12.5rem] flex-col ${mediaDropZoneClass(activeDropZone === "house-video")}`}
+                  onDragOver={(e) => handleDragOver(e, "house-video")}
+                  onDragEnter={(e) => handleDragOver(e, "house-video")}
+                  onDragLeave={(e) => handleDragLeave(e, "house-video")}
+                  onDrop={onDropHouseVideo}
+                >
+                  <FieldLabel hint="Optional walkthrough (~14 MB max).">Full-house video</FieldLabel>
+                  <MediaPickTrigger accept="video/*" disabled={videoUploadingKeys.has("house")} onFiles={(files) => { void onPickHouseVideo(files?.[0] ?? null); }}>
+                    {videoUploadingKeys.has("house") ? "Uploading…" : sub.houseVideoDataUrl ? "Replace video" : "Add house video"}
+                  </MediaPickTrigger>
+                  {sub.houseVideoDataUrl ? (
+                    <div className="mt-3 space-y-2">
+                      <video src={videoPreviewUrls.house ?? sub.houseVideoDataUrl} controls className="max-h-48 w-full rounded-xl border border-border bg-black object-contain" />
+                      <button type="button" onClick={clearHouseVideo} className="text-xs font-medium text-rose-600 hover:text-rose-800">Remove video</button>
+                    </div>
+                  ) : (
+                    <p className="mt-auto pt-2 text-[11px] text-muted">Optional — MP4, MOV, or WebM.</p>
+                  )}
+                </div>
               </div>
             </ListingSubsection>
 
@@ -2664,25 +2713,6 @@ export function ManagerAddListingForm({
                   onChange={(e) => setSub((s) => ({ ...s, generalHouseInfo: e.target.value }))}
                   placeholder="Gate/door codes, laundry tips, trash schedule…"
                 />
-              </div>
-              <div>
-                <div className="mb-0.5 flex items-center gap-2">
-                  <FieldLabel>Wi-Fi</FieldLabel>
-                  <span className="portal-badge-info rounded-full px-1.5 py-0.5 text-[9px] font-semibold">Residents only</span>
-                </div>
-                <p className="mb-1.5 text-[11px] text-muted">Network name and password shown to residents in their Move-in portal after approval. Leave blank to hide.</p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Input
-                    value={sub.wifiNetworkName ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, wifiNetworkName: e.target.value }))}
-                    placeholder="Wi-Fi network name (SSID)"
-                  />
-                  <Input
-                    value={sub.wifiPassword ?? ""}
-                    onChange={(e) => setSub((s) => ({ ...s, wifiPassword: e.target.value }))}
-                    placeholder="Wi-Fi password"
-                  />
-                </div>
               </div>
             </ListingSubsection>
             </div>
@@ -3629,7 +3659,7 @@ export function ManagerAddListingForm({
                     }
                   >
                       <GridField>
-                        <FieldLabel>Room name *</FieldLabel>
+                        <FieldLabel hint="Autofilled — edit anytime.">Room name</FieldLabel>
                         <div data-wizard-field={roomNameKey}>
                           <Input
                             value={room.name}
@@ -3967,7 +3997,7 @@ export function ManagerAddListingForm({
                     }
                   >
                       <div className="sm:col-span-2" data-wizard-field={bathNameKey}>
-                        <FieldLabel>Name *</FieldLabel>
+                        <FieldLabel hint="Autofilled — edit anytime.">Name</FieldLabel>
                         <Input
                           value={b.name}
                           className={wizardFieldErrorClass(Boolean(bathNameErr))}
@@ -4231,6 +4261,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-shared"
             title="Shared spaces"
+            description="Optional — add kitchens, living rooms, and other common areas if you want them on the listing. You can skip this step."
           >
               <div className="mb-5 rounded-2xl border p-4 portal-banner-info">
                 <p className="text-sm font-semibold text-blue-950">Quick add</p>
@@ -4256,6 +4287,7 @@ export function ManagerAddListingForm({
               {sub.sharedSpaces.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border bg-accent/30 px-4 py-8 text-center">
                   <p className="text-sm font-semibold text-foreground">No shared spaces added yet.</p>
+                  <p className="mt-1 text-xs text-muted">Optional — continue without adding any, or use Quick add above.</p>
                 </div>
               ) : (
                 <div
@@ -4302,7 +4334,7 @@ export function ManagerAddListingForm({
                       }
                     >
                         <div data-wizard-field={spaceNameKey}>
-                          <FieldLabel>Name *</FieldLabel>
+                          <FieldLabel hint="Required only if you add this space.">Name</FieldLabel>
                           <Input
                             value={sp.name}
                             className={wizardFieldErrorClass(Boolean(spaceNameErr))}
