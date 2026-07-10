@@ -58,6 +58,8 @@ import {
 import {
   collectLinkedPropertyIds,
   collectLinkedPropertyIdsForModule,
+  hasLinkedPropertyModuleLevel,
+  linkedPropertyOwnerId,
   syncManagerPortfolioFromServer,
 } from "@/lib/manager-portfolio-access";
 import { resolvePropertySaveTarget } from "@/lib/manager-property-save-target";
@@ -189,14 +191,62 @@ function ManagerPropertyInlineDetails({
         collectLinkedPropertyIdsForModule(managerUserId, "leases").has(stablePropertyId),
     );
 
+  // For a LINKED property, the listing itself is owned by another manager and
+  // stored under the owner's key. Resolve that owner so edits/deletes attribute
+  // to and mutate the owner's record (the server re-checks the co-manager grant).
+  const linkedOwnerId = useMemo(
+    () =>
+      isLinkedProperty && managerUserId && stablePropertyId
+        ? linkedPropertyOwnerId(managerUserId, stablePropertyId)
+        : null,
+    [isLinkedProperty, managerUserId, stablePropertyId],
+  );
+  // Gate the destructive/edit actions on a linked property by the co-manager's
+  // granted level for the `properties` module. Own properties always qualify.
+  const canEditLevel =
+    !isLinkedProperty ||
+    Boolean(
+      managerUserId &&
+        stablePropertyId &&
+        hasLinkedPropertyModuleLevel(managerUserId, stablePropertyId, "properties", "edit"),
+    );
+  const canDeleteLevel =
+    !isLinkedProperty ||
+    Boolean(
+      managerUserId &&
+        stablePropertyId &&
+        hasLinkedPropertyModuleLevel(managerUserId, stablePropertyId, "properties", "delete"),
+    );
+
   const portalSub = useMemo<
-    | { sub: ManagerListingSubmissionV1; saveMode: "pending" | "listing" | "requestChange"; saveId: string; listingId?: string }
+    | {
+        sub: ManagerListingSubmissionV1;
+        saveMode: "pending" | "listing" | "requestChange";
+        saveId: string;
+        listingId?: string;
+        ownerUserId?: string;
+      }
     | null
   >(() => {
     if (!managerUserId || !row) return null;
 
     const listingId = row.listingId?.trim() || undefined;
     if (listingId) {
+      // Linked (co-managed) property: the listing lives under the OWNER's key in
+      // the local mirror. Resolve it there and remember the owner so the edit
+      // save + delete target the owner's record (server re-checks the grant).
+      if (linkedOwnerId) {
+        const owned = readExtraListingsForUser(linkedOwnerId).find((x) => x.id === listingId);
+        if (owned) {
+          return {
+            sub: submissionForListedEdit(owned),
+            saveMode: "listing",
+            saveId: listingId,
+            listingId,
+            ownerUserId: linkedOwnerId,
+          };
+        }
+      }
       const p = readExtraListingsForUser(managerUserId).find((x) => x.id === listingId);
       if (p) return { sub: submissionForListedEdit(p), saveMode: "listing", saveId: listingId, listingId };
       if (bucket === 1) {
@@ -213,7 +263,7 @@ function ManagerPropertyInlineDetails({
     }
 
     return null;
-  }, [managerUserId, row, bucket]);
+  }, [managerUserId, row, bucket, linkedOwnerId]);
 
   // noteKey is stable per listing — derived from row identifiers so it doesn't depend on portalSub.
   const noteKey = useMemo(
@@ -255,6 +305,12 @@ function ManagerPropertyInlineDetails({
   const actionBtnClass = "rounded-full";
   const sectionHeaderBtn = "h-8 rounded-full px-3 text-xs";
   const canEditListing = Boolean(displaySub && portalSub);
+  // Show Edit only with write (`edit`) level and Delete only with `delete` level.
+  // Own properties always qualify; a linked property is gated by the grant.
+  const canEditAction = canEditListing && canEditLevel;
+  const canDeleteAction = canEditListing && canDeleteLevel;
+  // Listing edits/deletes for a linked property must mutate the OWNER's record.
+  const listingOwnerUserId = portalSub?.ownerUserId ?? managerUserId;
 
   const openFullListingEditor = () => setListingEditorOpen(true);
   const openPreviewEditor = () => setPreviewEditorOpen(true);
@@ -278,10 +334,11 @@ function ManagerPropertyInlineDetails({
         editPendingId: portalSub.saveMode === "pending" ? portalSub.saveId : null,
         editListingId: portalSub.saveMode === "listing" ? portalSub.saveId : null,
         editRequestChangeId: portalSub.saveMode === "requestChange" ? portalSub.saveId : null,
+        editListingOwnerUserId: portalSub.ownerUserId ?? null,
       }
     : null;
 
-  const editDeleteGroup = canEditListing ? (
+  const editDeleteGroup = canEditAction ? (
     <div className="ml-auto flex flex-wrap items-center gap-2">
       <Button
         type="button"
@@ -436,30 +493,30 @@ function ManagerPropertyInlineDetails({
           >
             Unlist
           </Button>
-          {canEditListing ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className={`${actionBtnClass} w-full`}
-                data-attr="listing-edit-full"
-                onClick={openFullListingEditor}
-              >
-                Edit
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={`${actionBtnClass} w-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
-                data-attr="listing-delete"
-                onClick={() => {
-                  if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
-                  deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, managerUserId)));
-                }}
-              >
-                Delete listing
-              </Button>
-            </>
+          {canEditAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${actionBtnClass} w-full`}
+              data-attr="listing-edit-full"
+              onClick={openFullListingEditor}
+            >
+              Edit
+            </Button>
+          ) : null}
+          {canDeleteAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={`${actionBtnClass} w-full border-rose-200 text-rose-800 hover:bg-[var(--status-overdue-bg)] portal-danger-outline`}
+              data-attr="listing-delete"
+              onClick={() => {
+                if (!window.confirm("Permanently delete this listing? It will be removed from your catalog.")) return;
+                deferCatalogMutation(() => run("Listing deleted.", deleteManagerLiveListing(listingId, listingOwnerUserId)));
+              }}
+            >
+              Delete listing
+            </Button>
           ) : null}
         </div>
       ) : null}

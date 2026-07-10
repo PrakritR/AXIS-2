@@ -21,8 +21,10 @@ import { readCachedAccountLinkInvites } from "@/lib/portal-data-store";
 import {
   hasCoManagerPermission,
   hasCoManagerPermissionForProperty,
+  hasCoManagerPermissionLevelForProperty,
   permissionsForProperty,
   type CoManagerPermissionId,
+  type CoManagerPermissionLevel,
   type PropertyCoManagerPermissions,
 } from "@/lib/co-manager-permissions";
 
@@ -112,6 +114,66 @@ export function collectLinkedOwnerIdsForModule(userId: string, module: CoManager
     if (qualifies) out.add(ownerId);
   }
   return out;
+}
+
+/** Client mirror of modulePermsAllow but at a specific level (edit/delete). Empty perms = full access. */
+function modulePermsAllowLevel(
+  perms: PropertyCoManagerPermissions | undefined,
+  propertyId: string,
+  module: CoManagerPermissionId,
+  level: CoManagerPermissionLevel,
+): boolean {
+  const flat = permissionsForProperty(perms, propertyId);
+  const anyGranted = Object.values(flat).some(Boolean);
+  if (!anyGranted) return true;
+  return hasCoManagerPermissionLevelForProperty(perms, propertyId, module, level);
+}
+
+/**
+ * Whether this user may use `module` at `level` (edit/delete) on a linked property.
+ * Own properties always qualify. Used to gate destructive/edit actions that the
+ * read-only `collectLinkedPropertyIdsForModule` set does not distinguish.
+ */
+export function hasLinkedPropertyModuleLevel(
+  userId: string,
+  propertyId: string,
+  module: CoManagerPermissionId,
+  level: CoManagerPermissionLevel,
+): boolean {
+  const pid = propertyId.trim();
+  if (!userId || !pid) return false;
+  if (ownedPropertyIdsForUser(userId).has(pid)) return true;
+  for (const rel of readProRelationships(userId)) {
+    if (rel.linkDirection === "outgoing") continue;
+    if (!rel.assignedPropertyIds.some((id) => id.trim() === pid)) continue;
+    if (modulePermsAllowLevel(rel.propertyCoManagerPermissions, pid, module, level)) return true;
+  }
+  for (const inv of readCachedAccountLinkInvites()) {
+    if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
+    if (!inv.assignedPropertyIds.some((id) => id.trim() === pid)) continue;
+    if (modulePermsAllowLevel(inv.propertyCoManagerPermissions, pid, module, level)) return true;
+  }
+  return false;
+}
+
+/** The OWNER (primary manager) user id for a linked property, or null if it's the user's own / not linked. */
+export function linkedPropertyOwnerId(userId: string, propertyId: string): string | null {
+  const pid = propertyId.trim();
+  if (!userId || !pid) return null;
+  if (ownedPropertyIdsForUser(userId).has(pid)) return null;
+  for (const inv of readCachedAccountLinkInvites()) {
+    if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
+    if (!inv.assignedPropertyIds.some((id) => id.trim() === pid)) continue;
+    const owner = inv.linkedUserId?.trim();
+    if (owner && owner !== userId) return owner;
+  }
+  for (const rel of readProRelationships(userId)) {
+    if (rel.linkDirection === "outgoing") continue;
+    if (!rel.assignedPropertyIds.some((id) => id.trim() === pid)) continue;
+    const owner = (rel as { linkedUserId?: string | null }).linkedUserId?.trim();
+    if (owner && owner !== userId) return owner;
+  }
+  return null;
 }
 
 /** Whether a row scoped by managerUserId/propertyId is visible for a module (owner or linked co-manager). */

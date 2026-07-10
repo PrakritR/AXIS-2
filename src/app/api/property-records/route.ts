@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { assertCoManagerModuleAccess } from "@/lib/auth/co-manager-access";
 import { asStringArray } from "@/app/api/pro/account-links/route";
 import { isCrossSandboxPortalPair } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -114,23 +115,46 @@ export async function POST(req: Request) {
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const admin = await isAdminUser(user.id);
-    const managerUserId = body.managerUserId?.trim() || user.id;
-    if (!admin && managerUserId !== user.id) {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    const db = createSupabaseServiceRoleClient();
+
+    // Look up the stored row's owner ONCE. All authorization anchors on this
+    // server-read value, never on body.managerUserId (which a caller controls).
+    const { data: existing } = await db
+      .from("manager_property_records")
+      .select("manager_user_id")
+      .eq("id", id)
+      .maybeSingle();
+    const existingOwnerId = existing ? String(existing.manager_user_id ?? "").trim() : "";
+    const isDelete = body.action === "delete";
+
+    // Resolve who the write is attributed to, and authorize the caller.
+    let ownerForWrite: string;
+    if (admin) {
+      ownerForWrite = body.managerUserId?.trim() || existingOwnerId || user.id;
+    } else if (!existing) {
+      // Creating a brand-new record — only ever under yourself. A co-manager
+      // cannot create a property owned by someone else.
+      ownerForWrite = body.managerUserId?.trim() || user.id;
+      if (ownerForWrite !== user.id) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+    } else if (existingOwnerId === user.id) {
+      ownerForWrite = user.id; // owner editing / deleting their own listing
+    } else {
+      // Co-manager acting on a linked owner's listing: require the `properties`
+      // module at edit (write) or delete level on THIS property. The owner is
+      // preserved on write so a co-manager can never reassign ownership.
+      const access = await assertCoManagerModuleAccess(db, user.id, id, "properties", {
+        ownerManagerUserId: existingOwnerId,
+        level: isDelete ? "delete" : "edit",
+      });
+      if (!access.ok) {
+        return NextResponse.json({ error: access.error }, { status: access.status });
+      }
+      ownerForWrite = existingOwnerId;
     }
 
-    const db = createSupabaseServiceRoleClient();
-    if (body.action === "delete") {
-      if (!admin) {
-        const { data: existing } = await db
-          .from("manager_property_records")
-          .select("manager_user_id")
-          .eq("id", id)
-          .maybeSingle();
-        if (existing && existing.manager_user_id !== user.id) {
-          return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-        }
-      }
+    if (isDelete) {
       const { error } = await db.from("manager_property_records").delete().eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       track("property_deleted", user.id, { property_id: id });
@@ -139,21 +163,10 @@ export async function POST(req: Request) {
 
     if (!body.status) return NextResponse.json({ error: "status required" }, { status: 400 });
 
-    if (!admin) {
-      const { data: existing } = await db
-        .from("manager_property_records")
-        .select("manager_user_id")
-        .eq("id", id)
-        .maybeSingle();
-      if (existing && existing.manager_user_id !== user.id) {
-        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-      }
-    }
-
     const { error } = await db.from("manager_property_records").upsert(
       {
         id,
-        manager_user_id: managerUserId,
+        manager_user_id: ownerForWrite,
         status: body.status,
         row_data: body.rowData ?? null,
         property_data: body.propertyData ?? null,
