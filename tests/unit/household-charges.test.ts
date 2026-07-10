@@ -55,11 +55,16 @@ describe("household-charges pure helpers", () => {
     const paid = makeCharge({
       status: "paid",
       paidAt: "2026-06-01T12:00:00.000Z",
+      amountLabel: "$1,500.00",
       balanceLabel: "$0.00",
       dueDateLabel: "Jan 1, 2020",
     });
     expect(householdChargeToLedgerRow(paid).bucket).toBe("paid");
     expect(householdChargeToLedgerRow(paid).statusLabel).toBe("Paid");
+    // The Amount column binds to the FACE amount, not the outstanding balance —
+    // a paid charge's balance is $0.00, which used to make every Paid row read $0.
+    expect(householdChargeToLedgerRow(paid).lineAmount).toBe("$1,500.00");
+    expect(householdChargeToLedgerRow(paid).lineAmount).not.toBe("$0.00");
   });
 
   it("dedupes charges hydrated with a missing residentEmail without crashing", () => {

@@ -65,7 +65,10 @@ export async function GET() {
       .from("portal_household_charge_records")
       .select("id, row_data, updated_at")
       .order("updated_at", { ascending: false })
-      .limit(500);
+      // Higher bound so a high-volume manager's older paid rows stay in the
+      // snapshot (missing paid rows would vanish from the UI; the server-side
+      // paid-sticky guard already prevents any revert).
+      .limit(2000);
     let profileQuery = db
       .from("portal_recurring_rent_profile_records")
       .select("id, row_data, updated_at")
@@ -157,6 +160,55 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    // Explicit "unmark paid" — the ONLY way to revert a paid charge to pending.
+    // The full-list "replace" mirror can never downgrade a paid charge (see the
+    // paid-sticky guard below), so a stale client cannot clobber a paid row; a
+    // deliberate manager action routes through here instead.
+    if (body.action === "unmarkPaid") {
+      const id = body.id?.trim();
+      if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+      const { data: existing } = await db
+        .from("portal_household_charge_records")
+        .select("manager_user_id, property_id, status, row_data")
+        .eq("id", id)
+        .maybeSingle();
+      if (!existing) return NextResponse.json({ ok: true });
+      const ownerId = existing.manager_user_id ? String(existing.manager_user_id) : user.id;
+      if (user.role !== "admin" && ownerId !== user.id) {
+        const pid = existing.property_id ? String(existing.property_id) : null;
+        const canEdit = pid
+          ? await managerHasCoManagerPermissionForProperty(db, user.id, pid, "payments", "edit")
+          : false;
+        if (!canEdit) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+      const rowData = (existing.row_data ?? {}) as Record<string, unknown>;
+      const restoredBalance =
+        typeof rowData.amountLabel === "string" && rowData.amountLabel.trim()
+          ? rowData.amountLabel
+          : (rowData.balanceLabel ?? null);
+      const nextRow = {
+        ...rowData,
+        status: "pending",
+        paidAt: null,
+        balanceLabel: restoredBalance,
+        // Match the client unmark: drop the (past) due date so it lands in Pending,
+        // not Overdue, and reopen reminders.
+        dueDateLabel: null,
+        cancelledReminders: null,
+        stripeCheckoutSessionId: null,
+      };
+      const { error } = await db
+        .from("portal_household_charge_records")
+        .update({ status: "pending", row_data: nextRow, updated_at: now })
+        .eq("id", id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await restoreFuturePaymentRemindersForCharge(db, ownerId, id).catch(() => undefined);
+      await syncLedgerChargeEntry(db, { ...(nextRow as unknown as HouseholdCharge), managerUserId: ownerId }).catch(
+        () => undefined,
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     const charges = Array.isArray(body.charges) ? body.charges : [];
     const rentProfiles = Array.isArray(body.rentProfiles) ? body.rentProfiles : [];
 
@@ -217,6 +269,15 @@ export async function POST(req: Request) {
       for (const c of normalizedCharges) {
         if (!c.id) continue;
         const id = String(c.id);
+        // PAID IS STICKY. The client mirrors its full charge list on nearly every
+        // local write; if a charge was marked paid out-of-band (Stripe webhook,
+        // another device, a co-manager) while this client still holds a stale
+        // pending copy, its mirror must NOT downgrade the paid row back to
+        // pending/overdue. Skip any incoming downgrade of a stored-paid charge —
+        // the only legitimate revert is action:"unmarkPaid" above.
+        if (previousStatusById.get(id) === "paid" && (typeof c.status !== "string" || c.status !== "paid")) {
+          continue;
+        }
         const clientPropertyId = typeof c.propertyId === "string" ? c.propertyId : null;
         const existingOwner = existingOwnerById.get(id) ?? null;
         let managerUserId: string | null;
@@ -268,9 +329,10 @@ export async function POST(req: Request) {
           const prevStatus = previousStatusById.get(chargeId) ?? null;
           if (nextStatus === "paid" && prevStatus !== "paid") {
             await cancelFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
-          } else if (nextStatus === "pending" && prevStatus === "paid") {
-            await restoreFuturePaymentRemindersForCharge(db, managerId, chargeId).catch(() => undefined);
           }
+          // No paid→pending branch here: the paid-sticky guard skips those rows,
+          // so a downgrade can only arrive via action:"unmarkPaid" (which restores
+          // reminders itself). A stale mirror can no longer revert a paid charge.
           // Attribute the ledger/GL entry to the SERVER-resolved owner, not the
           // client-supplied row_data.managerUserId (which a caller controls).
           await syncLedgerChargeEntry(db, { ...(row.row_data as HouseholdCharge), managerUserId: managerId });

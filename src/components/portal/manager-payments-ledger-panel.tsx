@@ -233,7 +233,10 @@ export function ManagerPaymentsLedgerPanel({
         </span>
       );
     }
-    return <span className="tabular-nums font-semibold text-foreground">{row.balanceDue}</span>;
+    // Show the charge's FACE amount (what the charge is for), not the outstanding
+    // balance — a paid charge's balance is $0.00, which made every Paid row read
+    // "$0.00". Paid vs owed is conveyed by the status badge / bucket.
+    return <span className="tabular-nums font-semibold text-foreground">{row.lineAmount}</span>;
   };
 
   const renderDueDateCell = (row: DemoManagerPaymentLedgerRow) => {
@@ -410,7 +413,7 @@ export function ManagerPaymentsLedgerPanel({
         property: row.propertyName,
         payee: row.residentName,
         dueDate: row.dueDate,
-        amount: row.balanceDue,
+        amount: row.lineAmount,
       })),
     [rows],
   );

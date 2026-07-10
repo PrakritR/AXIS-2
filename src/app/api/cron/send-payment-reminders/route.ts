@@ -126,11 +126,22 @@ export async function GET(req: Request) {
   let lateFeesCreated = 0;
   const errors: string[] = [];
 
-  const existingLateFeeSources = new Set(
-    allCharges
-      .filter((row) => row.charge.kind === "late_fee" && row.charge.sourceChargeId)
-      .map((row) => row.charge.sourceChargeId!),
-  );
+  // Guard against re-creating a late fee that already exists in ANY status.
+  // `allCharges` is unpaid-only (status="pending"), so a PAID late fee would be
+  // absent here and the deterministic `onConflict:"id"` upsert below would revert
+  // it back to pending. Build the source set from EVERY late-fee record instead.
+  const { data: lateFeeRows } = await db
+    .from("portal_household_charge_records")
+    .select("id, row_data")
+    .eq("kind", "late_fee")
+    .limit(SENT_DEDUP_ID_LIMIT);
+  const existingLateFeeSources = new Set<string>();
+  for (const row of lateFeeRows ?? []) {
+    const sourceId = (row.row_data as HouseholdCharge | null)?.sourceChargeId;
+    if (sourceId) existingLateFeeSources.add(sourceId);
+    const idStr = String(row.id);
+    if (idStr.startsWith("hc_late_fee_")) existingLateFeeSources.add(idStr.slice("hc_late_fee_".length));
+  }
 
   for (const [managerId, charges] of chargesByManager) {
     if (managerId === "unknown") continue;

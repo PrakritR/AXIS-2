@@ -728,10 +728,13 @@ function shouldDisplayChargeInPayments(charge: HouseholdCharge, now = new Date()
   if (charge.status === "paid") return true;
   const due = householdChargeDueDate(charge);
   if (!due) return true;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const msUntilDue = due.getTime() - today.getTime();
-  const daysUntilDue = msUntilDue / (1000 * 60 * 60 * 24);
-  return daysUntilDue <= 7;
+  // Show upcoming unpaid charges through the END OF NEXT MONTH (current + next
+  // month), plus anything already overdue (due in the past). Recurring rent is
+  // materialized for exactly this horizon (current month + 1), so the display
+  // window and the generated data align — the manager/resident always see the
+  // next cycle. (Was: only within 7 days, which left the Pending tab empty.)
+  const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999);
+  return due.getTime() <= endOfNextMonth.getTime();
 }
 
 export function chargeDueLabel(charge: HouseholdCharge): string {
@@ -825,7 +828,8 @@ function submissionAmount(sub: ManagerListingSubmissionV1, kind: HouseholdCharge
 }
 
 function moneyAmountLabel(amount: number): string {
-  return `$${amount.toFixed(2)}`;
+  // Thousands separators to match seed/label formatting ($2,400.00, not $2400.00).
+  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function monthKeyFromDate(date: Date): string {
@@ -1730,10 +1734,13 @@ export function markHouseholdChargePending(chargeId: string, managerUserId: stri
   };
   next[i] = updated;
   writeAll(next);
+  // Reverting a paid charge is an explicit, deliberate action. Route it through
+  // the dedicated `unmarkPaid` server action — the full-list "replace" mirror can
+  // no longer downgrade a paid charge (paid is sticky server-side), so this is the
+  // only path that persists the revert.
   void postHouseholdPayloadAwait({
-    action: "replace",
-    charges: [updated],
-    rentProfiles: readRentProfiles(),
+    action: "unmarkPaid",
+    id: chargeId,
   }).then((ok) => {
     if (ok) emit();
   });

@@ -38,7 +38,10 @@ describe("GET /api/cron/send-payment-reminders", () => {
           return {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
+                // existing pending-charges load: .eq("status","pending").eq(...)
                 eq: vi.fn().mockResolvedValue({ data: [], error: null }),
+                // new any-status late-fee guard load: .eq("kind","late_fee").limit(...)
+                limit: vi.fn().mockResolvedValue({ data: [], error: null }),
               }),
             }),
           };

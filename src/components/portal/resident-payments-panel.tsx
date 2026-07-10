@@ -756,7 +756,9 @@ export function ResidentPaymentsPanel({
         property: row.propertyLabel,
         payee: residentPayeeLabel,
         dueDate: chargeDueLabel(row),
-        amount: row.balanceLabel,
+        // Face amount of the charge (paid rows have a $0.00 balance); the Pay
+        // button below still uses the outstanding balanceLabel.
+        amount: row.amountLabel,
       })),
     [rowsForBucket, residentPayeeLabel],
   );
