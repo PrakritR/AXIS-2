@@ -35,6 +35,7 @@
     "db:status": "supabase migration list --linked",
     "lockfile:verify": "node scripts/verify-lockfile.mjs",
     "seed:env": "node scripts/seed-worktree-env.mjs",
+    "seed:dev-account": "npx tsx scripts/seed-dev-manager-portfolio.ts",
     "admin:sync-account": "node scripts/ensure-admin-account.mjs",
     "admin:set-manager-plan": "node scripts/set-manager-plan.mjs",
     "admin:ensure-demo-manager": "node scripts/ensure-demo-manager-account.mjs",
