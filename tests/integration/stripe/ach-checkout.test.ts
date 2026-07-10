@@ -315,13 +315,27 @@ describe("ACH checkout routes", () => {
       expect(res.status).toBe(400);
     });
 
-    it("returns 400 when amountCents is invalid", async () => {
+    it("returns 403 when the specified manager does not own the property", async () => {
+      // The Connect destination must be the property's real owner; the amount is
+      // derived from the listing, so body.amountCents is ignored.
+      vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { manager_user_id: "other_mgr", property_data: { listingSubmission: { v: 1, applicationFee: "50" } } },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      } as never);
       const req = jsonRequest("http://localhost/api/stripe/application-fee-checkout", {
         method: "POST",
         body: { propertyId: "prop_1", residentEmail: "resident@example.com", managerUserId: "mgr_1", amountCents: 0 },
       });
       const res = await applicationFeeCheckout(req);
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(403);
     });
 
     it("creates hosted checkout session for valid application fee", async () => {
@@ -342,7 +356,12 @@ describe("ACH checkout routes", () => {
         from: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              maybeSingle: vi.fn().mockResolvedValue({ data: { property_data: null }, error: null }),
+              maybeSingle: vi.fn().mockResolvedValue({
+                // Owner matches the request, and the listing carries a $50 fee that
+                // the server derives the charge amount from.
+                data: { manager_user_id: "mgr_1", property_data: { listingSubmission: { v: 1, applicationFee: "50" } } },
+                error: null,
+              }),
             }),
           }),
         }),
@@ -355,7 +374,6 @@ describe("ACH checkout routes", () => {
           residentEmail: "resident@example.com",
           residentName: "Test Resident",
           managerUserId: "mgr_1",
-          amountCents: 5000,
         },
       });
       const res = await applicationFeeCheckout(req);

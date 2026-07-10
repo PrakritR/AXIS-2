@@ -1,0 +1,206 @@
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { DemoApplicantRow } from "@/data/demo-portal";
+import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/** Default lifetime for resident account-setup links emailed after apply / approval. */
+export const RESIDENT_SETUP_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function generateResidentSetupToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashResidentSetupToken(token: string): string {
+  return createHash("sha256").update(token.trim()).digest("hex");
+}
+
+function hashesEqual(a: string, b: string): boolean {
+  try {
+    const left = Buffer.from(a, "hex");
+    const right = Buffer.from(b, "hex");
+    if (left.length === 0 || left.length !== right.length) return false;
+    return timingSafeEqual(left, right);
+  } catch {
+    return false;
+  }
+}
+
+export function buildResidentSetupHref(token: string, axisId: string): string {
+  const params = new URLSearchParams({
+    token: token.trim(),
+    axis_id: normalizeApplicationAxisId(axisId),
+  });
+  return `/auth/resident-setup?${params.toString()}`;
+}
+
+export function residentSetupAccountUrl(origin: string, token: string, axisId: string): string {
+  const base = origin.replace(/\/$/, "") || "https://www.axis-seattle-housing.com";
+  return `${base}${buildResidentSetupHref(token, axisId)}`;
+}
+
+export function isResidentSetupTokenValid(row: Pick<DemoApplicantRow, "setupTokenHash" | "setupTokenExpiresAt" | "setupTokenConsumedAt">, token: string): boolean {
+  const trimmed = token.trim();
+  if (!trimmed || !row.setupTokenHash) return false;
+  if (row.setupTokenConsumedAt) return false;
+  if (row.setupTokenExpiresAt && new Date(row.setupTokenExpiresAt).getTime() < Date.now()) return false;
+  return hashesEqual(row.setupTokenHash, hashResidentSetupToken(trimmed));
+}
+
+/** Issue a fresh setup token on the application row (hash stored; raw token returned once). */
+export function attachResidentSetupToken(
+  row: DemoApplicantRow,
+  opts?: { ttlMs?: number; now?: Date },
+): { row: DemoApplicantRow; token: string } {
+  const token = generateResidentSetupToken();
+  const ttlMs = opts?.ttlMs ?? RESIDENT_SETUP_TOKEN_TTL_MS;
+  const now = opts?.now ?? new Date();
+  return {
+    token,
+    row: {
+      ...row,
+      setupTokenHash: hashResidentSetupToken(token),
+      setupTokenExpiresAt: new Date(now.getTime() + ttlMs).toISOString(),
+      setupTokenConsumedAt: null,
+    },
+  };
+}
+
+export function markResidentSetupTokenConsumed(row: DemoApplicantRow, now = new Date()): DemoApplicantRow {
+  return {
+    ...row,
+    setupTokenConsumedAt: now.toISOString(),
+  };
+}
+
+export type ResidentSetupLookup =
+  | {
+      ok: true;
+      axisId: string;
+      email: string;
+      name: string | null;
+      propertyId: string | null;
+      row: DemoApplicantRow;
+    }
+  | { ok: false; error: string; status: number };
+
+function rowFromRecord(record: { id: string; resident_email: string | null; row_data: unknown }): DemoApplicantRow | null {
+  if (!record.row_data || typeof record.row_data !== "object" || Array.isArray(record.row_data)) return null;
+  const row = record.row_data as DemoApplicantRow;
+  return {
+    ...row,
+    id: normalizeApplicationAxisId(typeof row.id === "string" ? row.id : record.id),
+    email: (row.email ?? record.resident_email ?? "").trim().toLowerCase() || row.email,
+  };
+}
+
+export async function findApplicationForResidentSetup(
+  db: SupabaseClient,
+  params: { token: string; axisId: string },
+): Promise<ResidentSetupLookup> {
+  const token = params.token.trim();
+  const axisId = normalizeApplicationAxisId(params.axisId);
+  if (!token || !axisId) {
+    return { ok: false, status: 400, error: "Setup link is missing required details." };
+  }
+
+  const variants = [...new Set([params.axisId.trim(), axisId].filter(Boolean))];
+  const { data, error } = await db
+    .from("manager_application_records")
+    .select("id, resident_email, row_data")
+    .in("id", variants)
+    .limit(5);
+
+  if (error) return { ok: false, status: 500, error: error.message };
+
+  const match = (data ?? [])
+    .map((record) => rowFromRecord(record as { id: string; resident_email: string | null; row_data: unknown }))
+    .find((row): row is DemoApplicantRow => Boolean(row && isResidentSetupTokenValid(row, token)));
+
+  if (!match) {
+    return { ok: false, status: 403, error: "This setup link is invalid or has expired." };
+  }
+
+  const email = (match.email ?? "").trim().toLowerCase();
+  if (!email.includes("@")) {
+    return { ok: false, status: 400, error: "This application is missing an email address." };
+  }
+
+  return {
+    ok: true,
+    axisId: match.id,
+    email,
+    name: match.name?.trim() || match.application?.fullLegalName?.trim() || null,
+    propertyId: match.propertyId?.trim() || match.application?.propertyId?.trim() || null,
+    row: match,
+  };
+}
+
+/** Persist a consumed setup token after successful account creation. */
+export async function consumeResidentSetupTokenOnApplication(
+  db: SupabaseClient,
+  row: DemoApplicantRow,
+): Promise<void> {
+  const consumed = markResidentSetupTokenConsumed(row);
+  await db.from("manager_application_records").upsert(
+    {
+      id: consumed.id,
+      manager_user_id: consumed.managerUserId || null,
+      resident_email: consumed.email?.trim().toLowerCase() || null,
+      property_id: consumed.propertyId || consumed.application?.propertyId || null,
+      assigned_property_id: consumed.assignedPropertyId || null,
+      row_data: consumed,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+}
+
+function idVariants(id: string): string[] {
+  const trimmed = id.trim();
+  const normalized = normalizeApplicationAxisId(trimmed);
+  return [...new Set([trimmed, normalized].filter(Boolean))];
+}
+
+/** Issue (or re-issue) a setup token on an application and persist it for emailing. */
+export async function ensureResidentSetupTokenForApplication(
+  db: SupabaseClient,
+  axisId: string,
+): Promise<
+  | { ok: true; token: string; axisId: string; email: string; row: DemoApplicantRow }
+  | { ok: false; error: string }
+> {
+  const variants = idVariants(axisId);
+  const { data, error } = await db
+    .from("manager_application_records")
+    .select("id, resident_email, row_data, manager_user_id, property_id, assigned_property_id")
+    .in("id", variants)
+    .limit(1);
+  if (error) return { ok: false, error: error.message };
+  const record = data?.[0];
+  if (!record?.row_data) return { ok: false, error: "Application not found." };
+
+  const raw = record.row_data as DemoApplicantRow;
+  const row: DemoApplicantRow = {
+    ...raw,
+    id: normalizeApplicationAxisId(typeof raw.id === "string" ? raw.id : record.id),
+    email: (raw.email ?? record.resident_email ?? "").trim().toLowerCase() || raw.email,
+  };
+  const email = (row.email ?? "").trim().toLowerCase();
+  if (!email.includes("@")) return { ok: false, error: "Application is missing an email." };
+
+  const { row: withToken, token } = attachResidentSetupToken(row);
+  await db.from("manager_application_records").upsert(
+    {
+      id: withToken.id,
+      manager_user_id: withToken.managerUserId || record.manager_user_id || null,
+      resident_email: email,
+      property_id: withToken.propertyId || record.property_id || null,
+      assigned_property_id: withToken.assignedPropertyId || record.assigned_property_id || null,
+      row_data: withToken,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+
+  return { ok: true, token, axisId: withToken.id, email, row: withToken };
+}

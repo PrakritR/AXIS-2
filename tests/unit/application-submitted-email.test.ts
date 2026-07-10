@@ -10,7 +10,7 @@ describe("application-submitted-email", () => {
     applicantName: "Alex Chen",
     applicantEmail: "alex@example.com",
     axisId: "APP-12345",
-    signupUrl: "https://app.example.com/auth/create-account?role=resident&axis_id=APP-12345",
+    signupUrl: "https://app.example.com/auth/resident-setup?token=tok&axis_id=APP-12345",
     propertyTitle: "Sunset House",
   };
 

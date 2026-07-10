@@ -5,8 +5,10 @@ import { GoogleSignedInBanner } from "@/components/auth/google-signed-in-banner"
 import {
   clearResidentSignupAxisId,
   clearResidentSignupNext,
+  clearResidentSignupSetupToken,
   readResidentSignupAxisId,
   readResidentSignupNext,
+  readResidentSignupSetupToken,
 } from "@/lib/auth/resident-oauth-storage";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -40,25 +42,28 @@ function ResidentOauthFinishContent() {
               : null,
         );
 
-        // Forward the Axis ID the applicant typed on the create-account form so the
-        // Google path enforces the same application email+ID match as the password path.
         const storedAxisId = readResidentSignupAxisId();
+        const storedToken = readResidentSignupSetupToken();
         const res = await fetch("/api/auth/register-resident-oauth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify(storedAxisId ? { axisId: storedAxisId } : {}),
+          body: JSON.stringify({
+            axisId: storedAxisId || undefined,
+            token: storedToken || undefined,
+          }),
         });
-        const body = (await res.json()) as { error?: string };
+        const body = (await res.json()) as { error?: string; redirectTo?: string };
         if (!res.ok) {
           setErrorText(body.error ?? "Could not finish resident signup.");
           return;
         }
 
         clearResidentSignupAxisId();
+        clearResidentSignupSetupToken();
         const next = readResidentSignupNext();
         clearResidentSignupNext();
-        window.location.replace(next ?? "/resident/applications/apply");
+        window.location.replace(next ?? body.redirectTo ?? "/resident/applications");
       } catch (e) {
         const message = e instanceof Error ? e.message : "Could not finish resident signup.";
         setErrorText(message);
@@ -70,9 +75,15 @@ function ResidentOauthFinishContent() {
     return (
       <AuthCard>
         <p className="text-center text-sm text-rose-600">{errorText}</p>
-        <div className="mt-6 flex justify-center">
-          <Link className="text-sm font-semibold text-primary hover:underline" href="/auth/create-account?role=resident&mode=create">
-            Back to create account
+        <div className="mt-6 flex justify-center gap-4">
+          <Link className="text-sm font-semibold text-primary hover:underline" href="/rent/browse">
+            Browse homes
+          </Link>
+          <Link
+            className="text-sm font-semibold text-primary hover:underline"
+            href="/auth/sign-in?intent=resident&next=/resident/applications"
+          >
+            Sign in
           </Link>
         </div>
       </AuthCard>

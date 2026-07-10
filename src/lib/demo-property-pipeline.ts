@@ -285,16 +285,25 @@ export async function syncPropertyPipelineFromServer(opts?: {
   try {
     propertyPipelineSyncPromise = (async () => {
       const res = await fetch("/api/property-records", { credentials: "include", cache: "no-store" });
-      const body = (await res.json()) as { snapshot?: PropertyPipelineSnapshot };
+      const body = (await res.json()) as {
+        snapshot?: PropertyPipelineSnapshot;
+        linkedPropertyIds?: string[];
+      };
       if (!res.ok || !body.snapshot) return false;
       const viewerUserId = opts?.userId?.trim() ?? "";
+      // Prefer server-authoritative linked ids (from account_link_invites) and
+      // union with any client-known ids. Scoping with only a stale empty client
+      // set previously wiped co-managed owner buckets from local storage.
+      const linkedFromServer = Array.isArray(body.linkedPropertyIds)
+        ? body.linkedPropertyIds.map((id) => String(id).trim()).filter(Boolean)
+        : [];
+      const linkedFromClient = [...(opts?.linkedPropertyIds ?? [])]
+        .map((id) => String(id).trim())
+        .filter(Boolean);
+      const linkedPropertyIds = [...new Set([...linkedFromServer, ...linkedFromClient])];
       const snapshot =
         viewerUserId
-          ? scopePropertyPipelineSnapshotForViewer(
-              body.snapshot,
-              viewerUserId,
-              opts?.linkedPropertyIds ?? [],
-            )
+          ? scopePropertyPipelineSnapshotForViewer(body.snapshot, viewerUserId, linkedPropertyIds)
           : body.snapshot;
       const sig = JSON.stringify(snapshot);
       const changed = sig !== lastPipelineSnapshotSig;

@@ -8,6 +8,7 @@ import { reportToCsv } from "@/lib/reports/export/csv";
 import { buildQuickBooksJournalCsv } from "@/lib/reports/export/quickbooks-csv";
 import { reportToPdf } from "@/lib/reports/export/pdf";
 import { parseManagerReportFilters } from "@/lib/reports/parse-filters";
+import { resolveManagerReportOwnerId } from "@/lib/reports/co-manager-report-scope";
 import {
   MANAGER_REPORT_IDS,
   RESIDENT_REPORT_IDS,
@@ -30,6 +31,8 @@ export async function GET(
     const formatParam = searchParams.get("format");
     const format = formatParam === "pdf" ? "pdf" : formatParam === "quickbooks" ? "quickbooks" : "csv";
 
+    // Co-managers granted `financials` export the owning manager's books (owner-level scope).
+    let managerUserId = auth.userId;
     let report;
     if (isResidentReport) {
       const gate = await assertResidentFinancialsAccess(auth);
@@ -48,8 +51,10 @@ export async function GET(
       }
       const gate = await assertManagerFinancialsAccess(auth);
       if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
-      const managerUserId =
-        auth.role === "admin" ? searchParams.get("managerUserId")?.trim() || auth.userId : auth.userId;
+      managerUserId =
+        auth.role === "admin"
+          ? searchParams.get("managerUserId")?.trim() || auth.userId
+          : await resolveManagerReportOwnerId(auth.db, auth.userId);
       report = await runManagerReport(auth.db, managerUserId, reportId, parseManagerReportFilters(searchParams));
     }
 
@@ -73,8 +78,6 @@ export async function GET(
       if (isResidentReport) {
         return NextResponse.json({ error: "QuickBooks export is manager-only." }, { status: 400 });
       }
-      const managerUserId =
-        auth.role === "admin" ? searchParams.get("managerUserId")?.trim() || auth.userId : auth.userId;
       const qbCsv = await buildQuickBooksJournalCsv(
         auth.db,
         managerUserId,

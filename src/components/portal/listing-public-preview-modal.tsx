@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
+import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import type { MockProperty } from "@/data/types";
 
@@ -65,12 +66,9 @@ export function ListingPublicPreviewModal({
             </button>
           </div>
         </div>
-        <div
-          data-listing-preview-scroll
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background"
-        >
-          <ListingDetailSections property={property} rich={rich} previewModal />
-        </div>
+        <ListingPreviewScrollShell className="min-h-0 flex-1">
+          <ListingDetailSections property={property} rich={rich} previewModal hidePreviewSubnav />
+        </ListingPreviewScrollShell>
         {footer ? (
           <div className="shrink-0 border-t border-border bg-card px-4 py-4 sm:px-5">{footer}</div>
         ) : null}

@@ -9,7 +9,7 @@ import {
 } from "@/components/auth/auth-mobile-primitives";
 import { OAuthSocialStack } from "@/components/auth/oauth-social-stack";
 import { ManagerTrialSignupForm } from "@/components/auth/manager-trial-signup-form";
-import { ResidentSignupForm } from "@/components/auth/resident-signup-form";
+import { ResidentSignupBlocked } from "@/components/auth/resident-signup-blocked";
 import { useAuthWelcomeChrome } from "@/components/auth/use-auth-welcome-chrome";
 import { VendorSignupForm } from "@/components/auth/vendor-signup-form";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -178,7 +178,6 @@ function NativeAuthHubInner({
     [nextFromUrl, signInIntent],
   );
   const signInContinueHref = useMemo(() => oauthContinuePath(signInNextPath), [signInNextPath]);
-  const residentSignupNext = nextFromUrl.startsWith("/") ? nextFromUrl : "/resident/applications/apply";
 
   const [billing, setBilling] = useState<"monthly" | "annual">(initialBilling);
   const [selectedTierId, setSelectedTierId] = useState<PlanTierId>(explicitTier ?? "pro");
@@ -421,12 +420,7 @@ function NativeAuthHubInner({
 
             {isCreate ? (
               role === "resident" ? (
-                <ResidentSignupForm
-                  nextPath={residentSignupNext}
-                  disabled={locked}
-                  hideLegalFooter
-                  initialEmail={email}
-                />
+                <ResidentSignupBlocked compact />
               ) : role === "vendor" ? (
                 <VendorSignupForm
                   variant="compact"

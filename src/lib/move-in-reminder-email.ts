@@ -1,7 +1,10 @@
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
+
 export const MOVE_IN_REMINDER_SUBJECT = "Your move-in is tomorrow — here's what you need to know";
 
-const PORTAL_URL = "https://www.axis-seattle-housing.com/resident/dashboard";
-
+function residentPortalUrl(): string {
+  return `${resolveEmailLinkBaseUrl()}/resident/dashboard`;
+}
 function escapeHtmlText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -40,7 +43,7 @@ export function buildMoveInReminderText(params: {
   lines.push(
     "",
     "Visit your resident portal to review your lease, charges, and any additional details:",
-    PORTAL_URL,
+    residentPortalUrl(),
     "",
     "See you soon!",
     "",
@@ -79,7 +82,7 @@ export function buildMoveInReminderHtml(params: {
   const ctaButton = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 8px 0">
 <tr>
 <td style="border-radius:10px;background:#2563eb">
-<a href="${escapeHtmlAttr(PORTAL_URL)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;line-height:1.2">Open resident portal</a>
+<a href="${escapeHtmlAttr(residentPortalUrl())}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;line-height:1.2">Open resident portal</a>
 </td>
 </tr>
 </table>`;

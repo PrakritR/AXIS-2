@@ -47,7 +47,12 @@ import {
   readPendingManagerPropertiesForUser,
   readExtraListingsForUser,
 } from "@/lib/demo-property-pipeline";
-import { resolvePropertyLabelForId, safePropertyOptionLabel, syncManagerPortfolioFromServer } from "@/lib/manager-portfolio-access";
+import {
+  readLinkedListingsForUser,
+  resolvePropertyLabelForId,
+  safePropertyOptionLabel,
+  syncManagerPortfolioFromServer,
+} from "@/lib/manager-portfolio-access";
 import {
   AXIS_ID_LABEL,
   generateRelationshipId,
@@ -504,6 +509,22 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
     });
     return [...live, ...pending];
   }, [userId, localTick]);
+
+  // Properties this manager co-manages via an incoming account link (e.g. Brooklyn
+  // when Ambika granted access). Shown under "You" so the panel matches Properties.
+  const coManagedProperties = useMemo(() => {
+    void localTick;
+    return readLinkedListingsForUser(userId).map(({ listing, ownerUserId }) => ({
+      id: listing.id,
+      label: safePropertyOptionLabel(
+        [`${listing.buildingName} · ${listing.unitLabel || "Unit"}`, listing.buildingName, listing.address],
+        listing.id,
+      ),
+      ownerUserId,
+    }));
+  }, [userId, localTick]);
+
+  const managedPropertyCount = ownedProperties.length + coManagedProperties.length;
 
   const [axisInput, setAxisInput] = useState("");
   const [linkModalOpen, setLinkModalOpen] = useState(false);
@@ -1228,6 +1249,28 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           </PortalCollapsibleSection>
         );
       })}
+      {coManagedProperties.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+            Co-managing (linked to you)
+          </p>
+          {coManagedProperties.map((prop) => (
+            <div
+              key={`linked-${prop.id}`}
+              className="rounded-xl border border-border bg-accent/20 px-4 py-3"
+              data-attr="co-managed-property"
+            >
+              <p className="text-sm font-medium text-foreground">{prop.label}</p>
+              <p className="mt-0.5 text-xs text-muted">
+                You manage this listing through a co-manager link — it is not in your owned portfolio.
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {ownedProperties.length === 0 && coManagedProperties.length === 0 ? (
+        <p className="mt-4 text-sm text-muted">No properties in your portfolio yet.</p>
+      ) : null}
     </>
   );
 
@@ -1436,17 +1479,21 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
           incomingPending.length === 0 && outgoingPending.length === 0 ? (
             <PortalDataTableEmpty message="No pending invites." icon="team" />
           ) : null
-        ) : activeCards.length === 0 && ownedProperties.length === 0 ? (
+        ) : activeCards.length === 0 && managedPropertyCount === 0 ? (
           <PortalDataTableEmpty message="No team members yet." icon="team" />
         ) : (
           <>
             <div className="space-y-2 lg:hidden">
-              {ownedProperties.length > 0 ? (
+              {managedPropertyCount > 0 ? (
                 <PortalMobileSummaryCard
                   key="__self__"
                   title="You"
                   subtitle="Main manager"
-                  meta={`${ownedProperties.length} owned`}
+                  meta={
+                    coManagedProperties.length > 0
+                      ? `${ownedProperties.length} owned · ${coManagedProperties.length} co-managing`
+                      : `${ownedProperties.length} owned`
+                  }
                   badge={<span className={OWNER_ROLE_BADGE}>Owner</span>}
                   expanded={expandedLinkId === "__self__"}
                   onClick={() => setExpandedLinkId((cur) => (cur === "__self__" ? null : "__self__"))}
@@ -1534,7 +1581,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {ownedProperties.length > 0 ? (
+                    {managedPropertyCount > 0 ? (
                       <Fragment key="__self__">
                         <tr
                           className={PORTAL_TABLE_TR_EXPANDABLE}
@@ -1558,6 +1605,13 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
                           <td className={PORTAL_TABLE_TD}>
                             <span className="tabular-nums">{ownedProperties.length}</span>
                             <span className="text-muted"> owned</span>
+                            {coManagedProperties.length > 0 ? (
+                              <>
+                                <span className="text-muted"> · </span>
+                                <span className="tabular-nums">{coManagedProperties.length}</span>
+                                <span className="text-muted"> co-managing</span>
+                              </>
+                            ) : null}
                           </td>
                         </tr>
                         {expandedLinkId === "__self__" ? (

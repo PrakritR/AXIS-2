@@ -1,0 +1,54 @@
+---
+description: Mandatory ship gate — production→iOS TestFlight, security/bug/cache reviews, full feature + edge testing
+alwaysApply: true
+---
+
+# Ship & review gate (Axis)
+
+This rule always applies. Do not mark feature work complete or promote to
+`production` without following it (unless the user explicitly waives a named step).
+
+## When pushing / promoting to production
+
+1. Promote only via fast-forward: `main` → `production` → `git push origin production`.
+2. That push must update **web (Vercel)** and **iOS (TestFlight)**:
+   - Workflow: `.github/workflows/ios-testflight.yml` (runs on `push` to `production`).
+   - After push, watch the **iOS TestFlight** GitHub Action until success (or report
+     missing `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` secrets).
+3. Run `npm run ship:preflight` before promote when the script is available.
+4. Never treat “Vercel production is live” as done without confirming TestFlight
+   (or documenting why the job skipped).
+
+Details: `AGENTS.md` (Branching & deployment), `docs/ship-gate.md`.
+
+## Reviews required for non-trivial changes
+
+Before finishing a feature branch or shipping:
+
+| Review | Action |
+| --- | --- |
+| Security | Launch `security-review` subagent — `Diff: branch changes` |
+| Correctness | Launch `bugbot` subagent — `Diff: branch changes` |
+| Cache / rendering / perf | Inspect cache headers, RSC boundaries, client bundle weight, lists, images; apply Vercel performance guidance when UI/routes changed |
+| Web ↔ native | Follow `web-native-parity` rule when portal/nav/push/routes change |
+
+Fix high/critical findings before ship. Summarize the rest for the user.
+
+## In-depth feature testing (every change)
+
+Unit tests alone are insufficient.
+
+1. Identify the **user-facing feature** touched by the diff.
+2. Exercise the **full happy path** in the browser (localhost or staging) as the
+   correct role — not `/demo` unless the change is demo-only.
+3. Run **edge checks** every time: empty/invalid input, auth failures, expired
+   links/tokens, duplicate submits, mobile width, sync/email failure paths,
+   cross-links (applications ↔ leases ↔ emails ↔ resident portal, etc.).
+4. Run targeted tests for the area, then broader unit suite before promote.
+5. Note what you tested in the PR body or handoff.
+
+## Do not
+
+- Skip TestFlight verification after a production push.
+- Ship with only “tests passed” and no manual feature walkthrough.
+- Use `/demo` as proof that production-like flows work.

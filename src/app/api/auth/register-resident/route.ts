@@ -1,144 +1,18 @@
 import { NextResponse } from "next/server";
-import { track } from "@/lib/analytics/posthog";
-import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
-import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
-import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
-import { generateAxisId } from "@/lib/manager-id";
-import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-type Body = {
-  email: string;
-  password: string;
-  axisId?: string;
-};
-
-function axisIdVariants(axisId: string): string[] {
-  const trimmed = axisId.trim();
-  const normalized = normalizeApplicationAxisId(trimmed);
-  return [...new Set([trimmed, normalized].filter(Boolean))];
-}
-
-export async function POST(req: Request) {
-  try {
-    const { email, password, axisId } = (await req.json()) as Body;
-    const normalEmail = email?.trim().toLowerCase();
-    const normalAxisId = axisId?.trim();
-
-    if (!normalEmail || !normalAxisId) {
-      return NextResponse.json({ error: "Email and Axis ID are required." }, { status: 400 });
-    }
-    if (!password || password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
-    }
-
-    const supabase = createSupabaseServiceRoleClient();
-    const { data: applicationRows, error: applicationError } = await supabase
-      .from("manager_application_records")
-      .select("id, resident_email, row_data")
-      .in("id", axisIdVariants(normalAxisId));
-
-    if (applicationError) {
-      return NextResponse.json({ error: applicationError.message }, { status: 500 });
-    }
-
-    const matchingApplication = (applicationRows ?? []).find((row) => {
-      const rowEmail = row.resident_email?.trim().toLowerCase() ?? "";
-      return rowEmail === normalEmail;
-    });
-    const matchingRowData =
-      matchingApplication?.row_data && typeof matchingApplication.row_data === "object" && !Array.isArray(matchingApplication.row_data)
-        ? (matchingApplication.row_data as Record<string, unknown>)
-        : null;
-    const applicationApproved = String(matchingRowData?.bucket ?? "").toLowerCase() === "approved";
-
-    if (!matchingApplication) {
-      const hasDifferentEmailMatch = (applicationRows ?? []).length > 0;
-      return NextResponse.json(
-        {
-          error: hasDifferentEmailMatch
-            ? "This application ID belongs to a different email address. Use the same email from the rental application."
-            : "Application ID not found. Check the ID and try again.",
-        },
-        { status: 403 },
-      );
-    }
-
-    const { data: created, error: cErr } = await supabase.auth.admin.createUser({
-      email: normalEmail,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        role: "resident",
-        axis_id: matchingApplication.id,
-      },
-    });
-
-    let userId: string;
-    let reusedExistingAuthUser = false;
-
-    if (cErr) {
-      const isAlreadyExists =
-        cErr.message.toLowerCase().includes("already") ||
-        cErr.message.toLowerCase().includes("registered");
-      if (!isAlreadyExists) {
-        return NextResponse.json({ error: cErr.message }, { status: 400 });
-      }
-      const existingId = await findAuthUserIdByEmail(supabase, normalEmail);
-      if (!existingId) {
-        return NextResponse.json({ error: "Could not locate existing account for this email." }, { status: 400 });
-      }
-      const { data: existingAuth } = await supabase.auth.admin.getUserById(existingId);
-      const metadata = existingAuth.user?.user_metadata as Record<string, unknown> | undefined;
-
-      // Email + Axis ID already matched `manager_application_records` — treat this as proof of identity
-      // so the applicant can set or change the login password (not required to reuse an old one).
-      await supabase.auth.admin.updateUserById(existingId, {
-        password,
-        email_confirm: true,
-        user_metadata: {
-          ...(metadata ?? {}),
-          role: "resident",
-          axis_id: matchingApplication.id,
-          auto_provisioned_resident: false,
-          resident_password_claimed_at: new Date().toISOString(),
-        },
-      });
-      userId = existingId;
-      reusedExistingAuthUser = true;
-    } else {
-      if (!created?.user) {
-        return NextResponse.json({ error: "Could not create user." }, { status: 400 });
-      }
-      userId = created.user.id;
-    }
-
-    const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-    const profileAxisId = existingProfile?.manager_id?.trim() || matchingApplication.id || normalAxisId || generateAxisId();
-
-    const { error: upErr } = await supabase.from("profiles").upsert(
-      {
-        id: userId,
-        email: normalEmail,
-        role: primaryRoleWhenAddingResident(existingProfile?.role as string | undefined),
-        full_name: existingProfile?.full_name ?? (typeof matchingRowData?.name === "string" ? matchingRowData.name : null),
-        manager_id: profileAxisId,
-        application_approved: applicationApproved || existingProfile?.application_approved || false,
-      },
-      { onConflict: "id" },
-    );
-    if (upErr) {
-      return NextResponse.json({ error: upErr.message }, { status: 400 });
-    }
-
-    await ensureProfileRoleRow(supabase, userId, "resident");
-
-    track("resident_account_created", userId, { axis_id: profileAxisId, reused_existing_auth_user: reusedExistingAuthUser, application_approved: applicationApproved });
-    return NextResponse.json({ ok: true, reusedExistingAuthUser, axisId: profileAxisId });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+/**
+ * Legacy Axis-ID + email resident signup.
+ * Residents now create accounts only via `/api/auth/resident-setup` (emailed setup link).
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        "Resident accounts are created from the setup link in your application email. Apply first, then check your inbox.",
+      useEndpoint: "/api/auth/resident-setup",
+    },
+    { status: 403 },
+  );
 }

@@ -242,11 +242,14 @@ export function ListingDetailSections({
   property,
   rich,
   previewModal = false,
+  hidePreviewSubnav = false,
 }: {
   property: MockProperty;
   rich: ListingRichContent;
   /** When true (public preview dialog), section tabs sit at the top and stick within the modal scroller. */
   previewModal?: boolean;
+  /** When true, parent renders pinned preview subnav outside the scroller (manager property tab). */
+  hidePreviewSubnav?: boolean;
 }) {
   const roomCount = rich.floorPlans.reduce((n, f) => n + f.rooms.length, 0);
   const houseRulesDisplay =
@@ -257,9 +260,9 @@ export function ListingDetailSections({
     <ListingPreviewNewTabContext.Provider value={previewModal}>
     <div className="bg-background text-foreground" data-listing-sections-root>
       <div className={`mx-auto flex max-w-6xl flex-col px-4 ${previewModal ? "pb-8 pt-2 sm:pb-10 sm:pt-3" : "py-8 sm:py-10 [html[data-native]_&]:pb-[max(2rem,env(safe-area-inset-bottom))] [html[data-native]_&]:pt-[max(0.5rem,env(safe-area-inset-top))]"}`}>
-        {previewModal ? (
+        {previewModal && !hidePreviewSubnav ? (
           <ListingStickySubnav mode="modal" />
-        ) : (
+        ) : previewModal ? null : (
           <Link
             href="/rent/browse"
             data-attr="listing-detail-back"

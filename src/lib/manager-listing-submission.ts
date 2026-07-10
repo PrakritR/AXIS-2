@@ -12,6 +12,8 @@ import {
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
 import { RENTAL_APPLICATION_SECTION_IDS } from "@/lib/rental-application/application-sections";
 import { parseMoneyAmount } from "@/lib/parse-money";
+import type { UtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
+import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 
 export type PaymentAtSigningOptionId =
   | "security_deposit"
@@ -55,6 +57,8 @@ export type ManagerRoomSubmission = {
   videoDataUrl: string | null;
   /** Estimated monthly utilities for this room (shown on listing). */
   utilitiesEstimate: string;
+  /** Who pays utilities — defaults to manager-billed estimate through the portal. */
+  utilitiesPaymentModel?: UtilitiesPaymentModel;
   /** How prorated first-month rent is calculated. "auto" = (days_remaining / days_in_month) × monthly rate. "daily_rate" = days_remaining × set daily rate. Defaults to "auto" when absent. */
   prorateMethod?: "auto" | "daily_rate";
   /** Daily rent rate used when prorateMethod is "daily_rate". */
@@ -159,6 +163,8 @@ export type ManagerListingSubmissionV1 = {
   entireHomeMonthlyRent?: number;
   /** Entire-home monthly utilities estimate (synced to first bedroom for signing math). */
   entireHomeUtilitiesEstimate?: string;
+  /** How utilities are paid for an entire-home lease. */
+  entireHomeUtilitiesPaymentModel?: UtilitiesPaymentModel;
   entireHomeProrateMethod?: "auto" | "daily_rate";
   entireHomeDailyRentRate?: number;
   entireHomeDailyUtilitiesRate?: number;
@@ -553,6 +559,7 @@ export type EntireHomePricingPatch = Partial<
     ManagerListingSubmissionV1,
     | "entireHomeMonthlyRent"
     | "entireHomeUtilitiesEstimate"
+    | "entireHomeUtilitiesPaymentModel"
     | "entireHomeProrateMethod"
     | "entireHomeDailyRentRate"
     | "entireHomeDailyUtilitiesRate"
@@ -565,6 +572,7 @@ export function syncEntireHomeRoomPricing(
   pricing: {
     rent: number;
     utilitiesEstimate?: string;
+    utilitiesPaymentModel?: UtilitiesPaymentModel;
     prorateMethod?: "auto" | "daily_rate";
     dailyRentRate?: number;
     dailyUtilitiesRate?: number;
@@ -572,6 +580,7 @@ export function syncEntireHomeRoomPricing(
 ): ManagerRoomSubmission[] {
   const amount = Math.max(0, Math.round(pricing.rent));
   const utils = pricing.utilitiesEstimate ?? "";
+  const utilModel = normalizeUtilitiesPaymentModel(pricing.utilitiesPaymentModel);
   const prorate = pricing.prorateMethod === "daily_rate" ? "daily_rate" : "auto";
   let assigned = false;
   return rooms.map((room) => {
@@ -581,6 +590,7 @@ export function syncEntireHomeRoomPricing(
         ...room,
         monthlyRent: amount,
         utilitiesEstimate: utils,
+        utilitiesPaymentModel: utilModel,
         prorateMethod: prorate,
         dailyRentRate: prorate === "daily_rate" ? pricing.dailyRentRate : undefined,
         dailyUtilitiesRate: prorate === "daily_rate" ? pricing.dailyUtilitiesRate : undefined,
@@ -624,6 +634,10 @@ export function applyEntireHomeListingPricing(
       patch.entireHomeUtilitiesEstimate !== undefined
         ? patch.entireHomeUtilitiesEstimate
         : (sub.entireHomeUtilitiesEstimate ?? primary?.utilitiesEstimate ?? ""),
+    entireHomeUtilitiesPaymentModel:
+      patch.entireHomeUtilitiesPaymentModel !== undefined
+        ? patch.entireHomeUtilitiesPaymentModel
+        : (sub.entireHomeUtilitiesPaymentModel ?? primary?.utilitiesPaymentModel),
     entireHomeProrateMethod:
       patch.entireHomeProrateMethod !== undefined
         ? patch.entireHomeProrateMethod
@@ -635,13 +649,17 @@ export function applyEntireHomeListingPricing(
         ? patch.entireHomeDailyUtilitiesRate
         : sub.entireHomeDailyUtilitiesRate,
   };
-  const rent = entireHomeMonthlyRentAmount(merged);
+  const rent =
+    patch.entireHomeMonthlyRent !== undefined
+      ? Math.max(0, Math.round(Number(patch.entireHomeMonthlyRent) || 0))
+      : entireHomeMonthlyRentAmount(merged);
   return {
     ...merged,
     entireHomeMonthlyRent: rent,
     rooms: syncEntireHomeRoomPricing(merged.rooms, {
       rent,
       utilitiesEstimate: merged.entireHomeUtilitiesEstimate ?? "",
+      utilitiesPaymentModel: merged.entireHomeUtilitiesPaymentModel,
       prorateMethod: merged.entireHomeProrateMethod ?? "auto",
       dailyRentRate: merged.entireHomeDailyRentRate,
       dailyUtilitiesRate: merged.entireHomeDailyUtilitiesRate,
@@ -690,6 +708,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof legacyRoom.utilitiesEstimate === "string" && legacyRoom.utilitiesEstimate.length > 0
           ? legacyRoom.utilitiesEstimate
           : fallbackUtil,
+      utilitiesPaymentModel: normalizeUtilitiesPaymentModel(
+        (legacyRoom as ManagerRoomSubmission).utilitiesPaymentModel,
+      ),
       furnishing: (() => {
         const f = typeof legacyRoom.furnishing === "string" ? legacyRoom.furnishing : "";
         return f.trim().length === 0 ? "" : f;
@@ -972,6 +993,9 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
   const primaryRoom = rooms.find((r) => r.name.trim());
   const entireHomeUtilitiesEstimate =
     typeof sub.entireHomeUtilitiesEstimate === "string" ? sub.entireHomeUtilitiesEstimate : (primaryRoom?.utilitiesEstimate ?? "");
+  const entireHomeUtilitiesPaymentModel = normalizeUtilitiesPaymentModel(
+    sub.entireHomeUtilitiesPaymentModel ?? primaryRoom?.utilitiesPaymentModel,
+  );
   const entireHomeProrateMethod: "auto" | "daily_rate" =
     sub.entireHomeProrateMethod === "daily_rate" ? "daily_rate" : (primaryRoom?.prorateMethod === "daily_rate" ? "daily_rate" : "auto");
   const entireHomeDailyRentRate = sub.entireHomeDailyRentRate ?? primaryRoom?.dailyRentRate;
@@ -985,6 +1009,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     normalizedRooms = syncEntireHomeRoomPricing(rooms, {
       rent: entireHomeMonthlyRent,
       utilitiesEstimate: entireHomeUtilitiesEstimate,
+      utilitiesPaymentModel: entireHomeUtilitiesPaymentModel,
       prorateMethod: entireHomeProrateMethod,
       dailyRentRate: entireHomeDailyRentRate,
       dailyUtilitiesRate: entireHomeDailyUtilitiesRate,
@@ -997,6 +1022,7 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     listingPlaceCategoryId,
     entireHomeMonthlyRent: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeMonthlyRent : undefined,
     entireHomeUtilitiesEstimate: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeUtilitiesEstimate : undefined,
+    entireHomeUtilitiesPaymentModel: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeUtilitiesPaymentModel : undefined,
     entireHomeProrateMethod: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeProrateMethod : undefined,
     entireHomeDailyRentRate: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeDailyRentRate : undefined,
     entireHomeDailyUtilitiesRate: isEntireHomeListing({ listingPlaceCategoryId }) ? entireHomeDailyUtilitiesRate : undefined,
@@ -1109,6 +1135,7 @@ export function emptyRoom(index: number): ManagerRoomSubmission {
     photoDataUrls: [],
     videoDataUrl: null,
     utilitiesEstimate: "",
+    utilitiesPaymentModel: "manager_billed",
   };
 }
 

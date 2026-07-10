@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { PortalCollapsibleSection } from "@/components/portal/portal-collapsible-section";
 import type { MockProperty } from "@/data/types";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
+import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { ManagerAddListingForm } from "@/components/portal/manager-add-listing-form";
 import { ManagerPropertyApplicationQuestionsPanel } from "@/components/portal/manager-property-application-questions-panel";
@@ -55,6 +56,7 @@ import {
   readPendingManagerPropertiesForUser,
   type ManagerPendingPropertyRow,
 } from "@/lib/demo-property-pipeline";
+import { samePropertyId } from "@/lib/co-manager-calendar";
 import {
   collectLinkedPropertyIds,
   collectLinkedPropertyIdsForModule,
@@ -62,6 +64,20 @@ import {
   linkedPropertyOwnerId,
   syncManagerPortfolioFromServer,
 } from "@/lib/manager-portfolio-access";
+
+const OWNERSHIP_BADGE_OWNED =
+  "inline-flex rounded-full border border-border bg-accent/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground";
+const OWNERSHIP_BADGE_LINKED =
+  "inline-flex rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted";
+
+function propertyIdIsLinked(pid: string, linkedIds: Set<string>): boolean {
+  if (!pid) return false;
+  if (linkedIds.has(pid)) return true;
+  for (const id of linkedIds) {
+    if (samePropertyId(id, pid)) return true;
+  }
+  return false;
+}
 import { resolvePropertySaveTarget } from "@/lib/manager-property-save-target";
 import {
   legacyAdminFieldsToSubmission,
@@ -649,12 +665,9 @@ function ManagerPropertyInlineDetails({
         contentClassName="p-0"
       >
         {hasPreview ? (
-          <div
-            data-listing-preview-scroll
-            className="max-h-[min(70vh,560px)] overflow-y-auto overscroll-contain rounded-b-2xl border-t border-border bg-background"
-          >
-            <ListingDetailSections property={mock!} rich={rich!} previewModal />
-          </div>
+          <ListingPreviewScrollShell className="max-h-[min(70vh,560px)] rounded-b-2xl border-t border-border">
+            <ListingDetailSections property={mock!} rich={rich!} previewModal hidePreviewSubnav />
+          </ListingPreviewScrollShell>
         ) : null}
       </PortalCollapsibleSection>
 
@@ -773,11 +786,19 @@ export function ManagerHousePropertiesPanel({
 
   const rows = useMemo(() => {
     void tick;
-    if (!scopeUserId) return [] as Array<{ sourceBucket: AdminPropertyBucketIndex; row: AdminPropertyRow }>;
+    if (!scopeUserId) return [] as Array<{ sourceBucket: AdminPropertyBucketIndex; row: AdminPropertyRow; linked: boolean }>;
     const stage = MANAGER_STAGES.find((item) => item.key === activeStage);
     if (!stage) return [];
+    const linkedIds = collectLinkedPropertyIds(scopeUserId);
     return stage.buckets.flatMap((bucket) =>
-      readAdminPropertyRows(bucket, scopeUserId).map((row) => ({ sourceBucket: bucket, row })),
+      readAdminPropertyRows(bucket, scopeUserId).map((row) => {
+        const pid = row.listingId?.trim() || row.adminRefId.trim();
+        return {
+          sourceBucket: bucket,
+          row,
+          linked: propertyIdIsLinked(pid, linkedIds),
+        };
+      }),
     );
   }, [tick, scopeUserId, activeStage]);
 
@@ -816,7 +837,7 @@ export function ManagerHousePropertiesPanel({
       ) : (
         <>
           <div className="space-y-2 lg:hidden">
-            {rows.map(({ sourceBucket, row }) => {
+            {rows.map(({ sourceBucket, row, linked }) => {
               const rowKey = row.adminRefId + (row.listingId ?? "");
               const expanded = expandedRowKey === rowKey;
 
@@ -840,6 +861,11 @@ export function ManagerHousePropertiesPanel({
                         <span className="font-medium text-foreground">{adminPropertyRentDisplayLabel(row)}</span> · {row.beds} bd / {row.baths}{" "}
                         ba · {row.neighborhood}
                       </p>
+                      <p className="mt-1.5">
+                        <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
+                          {linked ? "Co-managed" : "Owned"}
+                        </span>
+                      </p>
                     </div>
                   </button>
                   {expanded ? (
@@ -862,7 +888,7 @@ export function ManagerHousePropertiesPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ sourceBucket, row }) => {
+                  {rows.map(({ sourceBucket, row, linked }) => {
                     const rowKey = row.adminRefId + (row.listingId ?? "");
                     const expanded = expandedRowKey === rowKey;
 
@@ -882,6 +908,11 @@ export function ManagerHousePropertiesPanel({
                             <p className="mt-0.5 text-xs leading-relaxed text-muted">
                               {row.address}
                               {row.zip ? `, ${row.zip}` : ""}
+                            </p>
+                            <p className="mt-1.5">
+                              <span className={linked ? OWNERSHIP_BADGE_LINKED : OWNERSHIP_BADGE_OWNED}>
+                                {linked ? "Co-managed" : "Owned"}
+                              </span>
                             </p>
                           </td>
                           <td className={PORTAL_TABLE_TD}>

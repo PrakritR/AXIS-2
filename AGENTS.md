@@ -186,7 +186,7 @@ you want it live:
 git checkout production
 git pull
 git merge --ff-only main   # production should stay a fast-forward of main
-git push origin production  # Vercel auto-deploys this to the live domains
+git push origin production  # Vercel auto-deploys web + triggers iOS TestFlight
 git checkout main
 ```
 
@@ -202,6 +202,85 @@ model above already gives you prod + staging from one project.
 
 The Production Branch setting lives in **Vercel → Project `axis-2` → Settings →
 Git**. Don't change it back to `main`.
+
+## Production push also ships iOS (TestFlight / Xcode)
+
+Every push to `production` must update **both** the live website **and** the
+mobile app pipeline:
+
+1. **Vercel** deploys the Next.js site (WebView content for Capacitor).
+2. **GitHub Actions** workflow [`.github/workflows/ios-testflight.yml`](.github/workflows/ios-testflight.yml)
+   runs on `push` to `production`: `npx cap sync ios` with
+   `CAP_SERVER_URL=https://www.axis-seattle-housing.com`, then
+   `bundle exec fastlane beta` uploads a new build to **TestFlight**.
+
+Agents promoting to production **must**:
+
+- Confirm ASC secrets exist (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`) so the
+  macOS job does not self-skip.
+- After `git push origin production`, watch the **iOS TestFlight** workflow until
+  green (or report the failure). Do not treat “web deployed” as done.
+- If native shell files changed (`ios/`, `capacitor.config.ts`, plugins,
+  permissions), call out that TestFlight + App Store review may be required
+  beyond the automatic upload.
+- Run `npm run ship:preflight` before promoting when available.
+
+Portal UI/API changes reach the installed app via the production WebView URL
+without waiting for App Store review; the TestFlight build keeps the native
+shell (plugins, splash, push, deep links) in sync with the repo.
+
+Full mobile model: [`docs/mobile-app.md`](docs/mobile-app.md).
+Ship checklist: [`docs/ship-gate.md`](docs/ship-gate.md).
+
+# Mandatory ship / change gate (agents)
+
+Before marking feature work done, and **always** before promoting to
+`production`, agents must complete this gate. Skipping is not allowed unless the
+user explicitly waives a named step.
+
+## 1. Reviews (run in parallel when possible)
+
+| Review | How |
+| --- | --- |
+| **Security** | Launch `security-review` subagent (`Diff: branch changes`) — authz, secrets, injection, IDOR, RLS |
+| **Bug / correctness** | Launch `bugbot` subagent (`Diff: branch changes`) — logic bugs, race conditions, regressions |
+| **Cache / rendering / performance** | Check Next.js cache directives, RSC vs client boundaries, list virtualization, image/font loading, unnecessary client JS; use Vercel performance guidance when UI/routes changed |
+| **Web ↔ native parity** | Follow `.cursor/rules/web-native-parity.mdc` when portal/nav/push/routes change |
+
+Summarize findings for the user. Fix **high/critical** issues before ship; ask
+before deferring medium findings.
+
+## 2. In-depth feature testing (every change)
+
+Do **not** stop at unit tests. For the feature that changed:
+
+1. **Happy path** — exercise the full user flow in the browser on localhost
+   (or staging), signed in as the real role (manager/resident/vendor/guest).
+2. **Edge cases** — empty states, invalid input, expired tokens, unauthorized
+   access, offline/sync failure, duplicate submit, mobile viewport, demo vs
+   non-demo if relevant.
+3. **Cross-surface** — if the change touches applications / leases / emails /
+   resident portal / co-managers / payments, verify each connected surface still
+   works together.
+4. **Regression** — run targeted unit/integration tests for the area, then
+   `npm run test:unit` (or the package’s equivalent) before promote.
+5. **Record** — briefly list what you tested and what failed/fixed in the PR or
+   handoff note.
+
+`/demo` is **not** a substitute for production-like testing. Prefer `/portal`,
+`/rent/apply`, and real auth against the **dev/test** Supabase project.
+
+## 3. Promote checklist
+
+```
+[ ] Reviews complete (security + bugbot + cache/rendering as applicable)
+[ ] Feature fully exercised + edge cases checked
+[ ] Unit/integration tests green for the change
+[ ] main verified on staging preview
+[ ] ff-only merge main → production + push
+[ ] Vercel production deploy healthy
+[ ] iOS TestFlight workflow green (or secrets gap reported)
+```
 
 # Working in a git worktree
 

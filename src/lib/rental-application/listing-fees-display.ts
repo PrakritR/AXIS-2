@@ -2,6 +2,7 @@ import { LISTING_ROOM_CHOICE_SEP } from "@/lib/rental-application/data";
 import type { ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { normalizeManagerListingSubmissionV1, PAYMENT_AT_SIGNING_OPTIONS, isEntireHomeListing, entireHomeMonthlyRentAmount } from "@/lib/manager-listing-submission";
 import { parseMoneyAmount } from "@/lib/parse-money";
+import { utilitiesListingSummaryLabel } from "@/lib/listing-utilities-payment";
 
 export type ListingSigningComputationInput = ManagerListingSubmissionV1 | undefined;
 
@@ -124,16 +125,7 @@ export function paymentAtSigningDetailBody(sub: ListingSigningComputationInput):
 
 /** Single-line utilities summary for listing cards (per-room estimates). */
 export function utilitiesListingEstimateLabel(sub: ManagerListingSubmissionV1 | undefined): string {
-  if (!sub?.v) return "—";
-  const n = normalizeManagerListingSubmissionV1(sub);
-  const vals = n.rooms
-    .filter((r) => r.name.trim())
-    .map((r) => parseMoneyAmount(r.utilitiesEstimate ?? ""))
-    .filter((x) => x > 0);
-  if (!vals.length) return "—";
-  const lo = Math.min(...vals);
-  const hi = Math.max(...vals);
-  return lo === hi ? `$${lo.toFixed(2)}/mo est.` : `$${lo.toFixed(2)}–${hi.toFixed(2)}/mo est.`;
+  return utilitiesListingSummaryLabel(sub);
 }
 
 /** Multi-line detail: each room’s utilities estimate. */

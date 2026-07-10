@@ -18,7 +18,7 @@ export function buildApplicationSubmittedEmailBody(params: {
     "",
     `Your Application ID: ${params.axisId.trim()}`,
     "",
-    "Create your resident portal account using the same email address you used on this application:",
+    "Create your resident portal account with this dedicated setup link (use the same email as your application):",
     params.signupUrl,
     "",
     `Application email on file: ${params.applicantEmail.trim()}`,
@@ -78,8 +78,9 @@ export function buildApplicationSubmittedMailtoHref(params: {
   axisId: string;
   origin: string;
   propertyTitle?: string;
+  setupToken?: string;
 }): string {
-  const signupUrl = residentAccountCreationUrl(params.origin, params.axisId);
+  const signupUrl = residentAccountCreationUrl(params.origin, params.axisId, params.setupToken);
   const body = buildApplicationSubmittedEmailBody({
     applicantName: params.applicantName,
     applicantEmail: params.applicantEmail,

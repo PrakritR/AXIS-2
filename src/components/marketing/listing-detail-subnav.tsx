@@ -4,15 +4,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 const NAVBAR_ID = "axis-public-navbar";
 const PREVIEW_SCROLL_SELECTOR = "[data-listing-preview-scroll]";
+const PREVIEW_SHELL_SELECTOR = "[data-listing-preview-shell]";
 const LISTING_SECTIONS_ROOT_SELECTOR = "[data-listing-sections-root]";
 
 const nav = [
-  { id: "floor-plans", label: "Floor plans" },
-  { id: "lease-basics", label: "Lease basics" },
-  { id: "amenities", label: "Amenities" },
-  { id: "bundles", label: "Bundles & leasing" },
-  { id: "house-rules", label: "House rules" },
-  { id: "location", label: "Location" },
+  { id: "floor-plans", label: "Floor plans", shortLabel: "Floors" },
+  { id: "lease-basics", label: "Lease basics", shortLabel: "Lease" },
+  { id: "amenities", label: "Amenities", shortLabel: "Amenities" },
+  { id: "bundles", label: "Bundles & leasing", shortLabel: "Bundles" },
+  { id: "house-rules", label: "House rules", shortLabel: "Rules" },
+  { id: "location", label: "Location", shortLabel: "Location" },
 ] as const;
 
 function getListingSectionsRoot(subnavEl: HTMLElement | null): HTMLElement | null {
@@ -20,7 +21,10 @@ function getListingSectionsRoot(subnavEl: HTMLElement | null): HTMLElement | nul
 }
 
 function getScrollRootFromSubnav(subnavEl: HTMLElement | null): HTMLElement | null {
-  return subnavEl?.closest<HTMLElement>(PREVIEW_SCROLL_SELECTOR) ?? null;
+  const nested = subnavEl?.closest<HTMLElement>(PREVIEW_SCROLL_SELECTOR);
+  if (nested) return nested;
+  const shell = subnavEl?.closest<HTMLElement>(PREVIEW_SHELL_SELECTOR);
+  return shell?.querySelector<HTMLElement>(PREVIEW_SCROLL_SELECTOR) ?? null;
 }
 
 function getSectionElement(id: string, mode: "page" | "modal", subnavEl: HTMLElement | null): HTMLElement | null {
@@ -35,14 +39,21 @@ function getSectionElement(id: string, mode: "page" | "modal", subnavEl: HTMLEle
   return document.getElementById(id);
 }
 
-function syncListingScrollStack(mode: "page" | "modal", subnavEl: HTMLElement | null): number {
+function syncListingScrollStack(
+  mode: "page" | "modal",
+  subnavEl: HTMLElement | null,
+  pinned = false,
+): number {
   if (!subnavEl) return 128;
   const isNative =
     typeof document !== "undefined" && document.documentElement.hasAttribute("data-native");
   if (mode === "modal") {
     const scrollRoot = getScrollRootFromSubnav(subnavEl);
-    const stack = subnavEl.offsetHeight + 12;
+    const listingRoot = scrollRoot?.querySelector<HTMLElement>(LISTING_SECTIONS_ROOT_SELECTOR);
+    // Pinned preview subnav sits above the scroller — sections only need a small scroll margin.
+    const stack = pinned ? 12 : subnavEl.offsetHeight + 12;
     scrollRoot?.style.setProperty("--listing-sticky-stack", `${stack}px`);
+    listingRoot?.style.setProperty("--listing-sticky-stack", `${stack}px`);
     return stack;
   }
   const navEl = document.getElementById(NAVBAR_ID);
@@ -64,36 +75,44 @@ function syncListingScrollStack(mode: "page" | "modal", subnavEl: HTMLElement | 
   return stack;
 }
 
-function scrollToSection(id: string, mode: "page" | "modal", subnavEl: HTMLElement | null) {
+function scrollToSection(
+  id: string,
+  mode: "page" | "modal",
+  subnavEl: HTMLElement | null,
+  pinned = false,
+) {
   const el = getSectionElement(id, mode, subnavEl);
   if (!el) return;
 
   if (mode === "modal") {
     const root = getScrollRootFromSubnav(subnavEl);
     if (!root || !subnavEl) return;
-    syncListingScrollStack(mode, subnavEl);
+    syncListingScrollStack(mode, subnavEl, pinned);
     // Below the desktop breakpoint the preview panel is not its own scroller
     // (the page/portal scroller moves instead) — defer to scrollIntoView there.
     if (root.scrollHeight <= root.clientHeight + 1) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    const subnavH = subnavEl.getBoundingClientRect().height;
+    const subnavH = pinned ? 0 : subnavEl.getBoundingClientRect().height;
     const y = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
     root.scrollTo({ top: Math.max(0, y - subnavH - 10), behavior: "smooth" });
     return;
   }
 
-  syncListingScrollStack(mode, subnavEl);
+  syncListingScrollStack(mode, subnavEl, pinned);
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /** Sticky section tabs: full marketing pages use the public navbar offset; preview modal pins to top of its scroller. */
 export function ListingStickySubnav({
   mode = "page",
+  pinned = false,
   className = "",
 }: {
   mode?: "page" | "modal";
+  /** When true (preview shell), subnav is fixed above the scroller — not sticky over content. */
+  pinned?: boolean;
   className?: string;
 }) {
   const rootRef = useRef<HTMLElement>(null);
@@ -111,8 +130,8 @@ export function ListingStickySubnav({
 
     if (mode === "modal") {
       const scrollRoot = getScrollRootFromSubnav(subEl);
-      syncListingScrollStack(mode, subEl);
-      setPageScrolled(scrollRoot ? scrollRoot.scrollTop > 8 : false);
+      syncListingScrollStack(mode, subEl, pinned);
+      setPageScrolled(pinned ? false : scrollRoot ? scrollRoot.scrollTop > 8 : false);
     } else {
       syncListingScrollStack(mode, subEl);
       setPageScrolled(window.scrollY > 20);
@@ -120,7 +139,11 @@ export function ListingStickySubnav({
 
     // Slightly below where a clicked section lands (subnav + 10/12px offset),
     // so the spy agrees with the tab that was just clicked.
-    const line = subEl.getBoundingClientRect().bottom + 16;
+    const scrollRoot = mode === "modal" ? getScrollRootFromSubnav(subEl) : null;
+    const line =
+      mode === "modal" && pinned && scrollRoot
+        ? scrollRoot.getBoundingClientRect().top + 20
+        : subEl.getBoundingClientRect().bottom + 16;
     let next: (typeof nav)[number]["id"] = nav[0].id;
     for (const item of nav) {
       const sec = getSectionElement(item.id, mode, subEl);
@@ -137,7 +160,7 @@ export function ListingStickySubnav({
       }
     }
     setActiveId(next);
-  }, [mode]);
+  }, [mode, pinned]);
 
   useLayoutEffect(() => {
     const subEl = rootRef.current;
@@ -211,7 +234,7 @@ export function ListingStickySubnav({
       cancelled = true;
       cleanup?.();
     };
-  }, [mode, publishStackAndSpy]);
+  }, [mode, pinned, publishStackAndSpy]);
 
   useEffect(() => {
     const node = tabRefs.current.get(activeId);
@@ -233,7 +256,7 @@ export function ListingStickySubnav({
       requestAnimationFrame(() => {
         if (cancelled) return;
         clickLockRef.current = { id: hash, until: Date.now() + 1500 };
-        scrollToSection(hash, mode, rootRef.current);
+        scrollToSection(hash, mode, rootRef.current, pinned);
         setActiveId(hash);
       });
     });
@@ -241,18 +264,20 @@ export function ListingStickySubnav({
       cancelled = true;
       cancelAnimationFrame(id);
     };
-  }, [mode]);
+  }, [mode, pinned]);
 
   return (
     <nav
       ref={rootRef}
       data-listing-subnav
-      className={`sticky z-[45] -mx-4 border-b border-border px-2 py-2 shadow-sm backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:mx-0 sm:rounded-2xl sm:px-3 sm:py-2.5 [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 [html[data-native]_&]:pt-2 ${className} ${
-        pageScrolled
-          ? "bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)]"
-          : "bg-background/90"
+      className={`z-[45] border-b border-border px-2 py-2 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 ease-out sm:px-3 sm:py-2.5 [html[data-native]_&]:border-x-0 [html[data-native]_&]:px-3 [html[data-native]_&]:py-2 ${pinned ? "relative bg-background" : "sticky -mx-4 shadow-sm sm:mx-0 sm:rounded-2xl [html[data-native]_&]:-mx-0 [html[data-native]_&]:rounded-none [html[data-native]_&]:pt-2"} ${className} ${
+        pinned
+          ? "bg-background"
+          : pageScrolled
+            ? "bg-background/95 shadow-[0_1px_0_color-mix(in_srgb,var(--border)_70%,transparent)_inset,0_12px_40px_-20px_rgba(15,23,42,0.18)]"
+            : "bg-background/90"
       }`}
-      style={mode === "modal" ? { top: 0 } : undefined}
+      style={mode === "modal" && !pinned ? { top: 0 } : undefined}
       aria-label="Listing sections"
     >
       <ul
@@ -278,7 +303,7 @@ export function ListingStickySubnav({
                 onClick={() => {
                   clickLockRef.current = { id: item.id, until: Date.now() + 1500 };
                   setActiveId(item.id);
-                  scrollToSection(item.id, mode, rootRef.current);
+                  scrollToSection(item.id, mode, rootRef.current, pinned);
                   if (mode === "page") {
                     try {
                       window.history.replaceState(null, "", `#${item.id}`);
@@ -288,7 +313,8 @@ export function ListingStickySubnav({
                   }
                 }}
               >
-                {item.label}
+                <span className="sm:hidden">{item.shortLabel}</span>
+                <span className="hidden sm:inline">{item.label}</span>
               </button>
             </li>
           );

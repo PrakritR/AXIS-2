@@ -11,6 +11,7 @@ import {
   normalizeManagerListingSubmissionV1,
 } from "@/lib/manager-listing-submission";
 import { parseMoneyAmount } from "@/lib/parse-money";
+import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 
 /**
  * Placement / dates / charges for a resident, auto-filled from the application and
@@ -89,7 +90,9 @@ export function resolvePlacementValuesForRow(
   }
 
   const utilOverride = app?.managerUtilitiesOverride?.trim();
-  const utilities = utilOverride ? parseMoneyAmount(utilOverride) : parseMoneyAmount(room?.utilitiesEstimate ?? "");
+  const utilities = utilOverride
+    ? parseMoneyAmount(utilOverride)
+    : utilitiesBillableMonthlyAmount(sub ?? undefined, room);
 
   const depOverride = app?.managerSecurityDepositOverride?.trim();
   const securityDeposit = depOverride ? parseMoneyAmount(depOverride) : parseMoneyAmount(sub?.securityDeposit ?? "");

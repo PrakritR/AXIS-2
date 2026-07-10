@@ -108,14 +108,26 @@ export function propertyRowsToSnapshot(records: ManagerPropertyRecord[]): Proper
     if (record.status === "pending") {
       const row = asObject(record.row_data);
       if (!row) continue;
-      const pending = row as unknown as ManagerPendingPropertyRow;
+      const pending = {
+        ...(row as unknown as ManagerPendingPropertyRow),
+        // Keep ownership aligned with the DB column — property_data can lag after transfers.
+        submittedByUserId:
+          uid !== "__axis_legacy__"
+            ? uid
+            : (row as unknown as ManagerPendingPropertyRow).submittedByUserId,
+      };
       snapshot.pendingByUser[uid] = [...(snapshot.pendingByUser[uid] ?? []), pending];
       continue;
     }
     if (record.status === "live" || record.status === "review") {
       const prop = asObject(record.property_data);
       if (!prop) continue;
-      const property = prop as unknown as MockProperty;
+      const property = {
+        ...(prop as unknown as MockProperty),
+        // Stamp the DB owner onto the listing so linked-property resolution and
+        // co-manager "owned vs linked" checks agree with manager_property_records.
+        ...(uid !== "__axis_legacy__" ? { managerUserId: uid } : {}),
+      } as MockProperty;
       snapshot.extrasByUser[uid] = [...(snapshot.extrasByUser[uid] ?? []), property];
       continue;
     }

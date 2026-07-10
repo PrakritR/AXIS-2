@@ -8,6 +8,7 @@ import { getPropertyById, parseRoomChoiceValue } from "@/lib/rental-application/
 import { parseMoneyAmount } from "@/lib/parse-money";
 import { paymentAtSigningPriceLabel } from "@/lib/rental-application/listing-fees-display";
 import { normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
+import { utilitiesBillableMonthlyAmount } from "@/lib/listing-utilities-payment";
 import { paymentSnapshotsFromListing } from "@/lib/household-charge-payment-eligibility";
 import { ensureChargeDueDateForReminders } from "@/lib/payment-reminder-bootstrap";
 import {
@@ -1002,8 +1003,9 @@ function selectedRoomUtilities(row: Pick<DemoApplicantRow, "assignedRoomChoice" 
     }
   }
   if (!room) room = findRoomInSub(sub, choice, row.signedMonthlyRent);
-  const raw = room?.utilitiesEstimate?.trim() || "";
-  return { raw, amount: parseMoneyAmount(raw) };
+  const amount = utilitiesBillableMonthlyAmount(sub, room);
+  const raw = amount > 0 ? String(amount) : room?.utilitiesEstimate?.trim() || "";
+  return { raw, amount };
 }
 
 function selectedRoom(row: DemoApplicantRow) {

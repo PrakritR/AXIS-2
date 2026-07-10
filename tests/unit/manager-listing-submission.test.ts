@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyEntireHomeListingPricing,
   applyEntireHomeMonthlyRent,
   createDefaultListingSubmission,
   entireHomeMonthlyRentAmount,
@@ -40,6 +41,22 @@ describe("manager-listing-submission", () => {
     expect(entireHomeMonthlyRentAmount(updated)).toBe(4500);
     expect(updated.rooms[0]?.monthlyRent).toBe(4500);
     expect(updated.rooms[1]?.monthlyRent).toBe(0);
+  });
+
+  it("clears entire-home rent without falling back to per-room rent", () => {
+    const base = createDefaultListingSubmission();
+    const seeded = applyEntireHomeMonthlyRent(
+      {
+        ...base,
+        listingPlaceCategoryId: "entire_home",
+        rooms: [{ ...base.rooms[0]!, name: "Bedroom 1", monthlyRent: 1 }],
+      },
+      4500,
+    );
+    const cleared = applyEntireHomeListingPricing(seeded, { entireHomeMonthlyRent: 0 });
+    expect(cleared.entireHomeMonthlyRent).toBe(0);
+    expect(cleared.rooms[0]?.monthlyRent).toBe(0);
+    expect(entireHomeMonthlyRentAmount(cleared)).toBe(0);
   });
 
   it("normalizes shared space kind from name when missing", () => {

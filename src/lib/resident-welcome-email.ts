@@ -2,12 +2,22 @@
  * Welcome email for approved applicants — server-side send (Resend) and optional mailto fallback.
  */
 
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
+import { residentSetupAccountUrl } from "@/lib/auth/resident-setup-token";
+
 export const RESIDENT_WELCOME_EMAIL_SUBJECT = "Your Axis resident portal — account setup";
 
-const PRODUCTION_BASE_URL = "https://www.axis-seattle-housing.com";
-
-export function residentAccountCreationUrl(_origin: string, axisId: string): string {
-  return `${PRODUCTION_BASE_URL}/auth/create-account?role=resident&axis_id=${encodeURIComponent(axisId.trim())}`;
+/**
+ * Resident account / setup URL for emails.
+ * Uses resolveEmailLinkBaseUrl so local/dev emails point at localhost while
+ * production/preview still land on the canonical domain (never *.vercel.app).
+ */
+export function residentAccountCreationUrl(_origin: string, axisId: string, setupToken?: string): string {
+  const base = resolveEmailLinkBaseUrl();
+  if (setupToken?.trim()) {
+    return residentSetupAccountUrl(base, setupToken, axisId);
+  }
+  return `${base}/auth/resident-setup?axis_id=${encodeURIComponent(axisId.trim())}`;
 }
 
 /** Full invitation text (e.g. copy/paste); too long for reliable mailto URLs in most clients. */
@@ -113,8 +123,9 @@ export function buildResidentWelcomeMailtoHref(params: {
   residentName?: string;
   axisId: string;
   origin: string;
+  setupToken?: string;
 }): string {
-  const signupUrl = residentAccountCreationUrl(params.origin, params.axisId);
+  const signupUrl = residentAccountCreationUrl(params.origin, params.axisId, params.setupToken);
   const body = buildResidentWelcomeMailtoBody({
     residentName: params.residentName,
     axisId: params.axisId,

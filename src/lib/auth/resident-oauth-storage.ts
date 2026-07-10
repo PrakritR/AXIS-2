@@ -1,5 +1,6 @@
 const STORAGE_KEY = "axis:resident-signup-axis-id";
 const NEXT_STORAGE_KEY = "axis:resident-signup-next";
+const SETUP_TOKEN_KEY = "axis:resident-signup-setup-token";
 
 export function persistResidentSignupAxisId(axisId: string): void {
   if (typeof window === "undefined") return;
@@ -24,6 +25,34 @@ export function clearResidentSignupAxisId(): void {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function persistResidentSignupSetupToken(token: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SETUP_TOKEN_KEY, token.trim());
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readResidentSignupSetupToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SETUP_TOKEN_KEY);
+    return raw?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearResidentSignupSetupToken(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(SETUP_TOKEN_KEY);
   } catch {
     /* ignore */
   }

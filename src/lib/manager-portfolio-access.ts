@@ -28,6 +28,16 @@ import {
   type PropertyCoManagerPermissions,
 } from "@/lib/co-manager-permissions";
 
+/** Match property ids across minor formatting differences (avoid importing calendar — cycle). */
+function samePropertyId(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = String(a ?? "").trim();
+  const right = String(b ?? "").trim();
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const token = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+  return token(left) === token(right);
+}
+
 export function ownedPropertyIdsForUser(userId: string): Set<string> {
   const owned = new Set<string>();
   for (const p of readExtraListingsForUser(userId)) owned.add(p.id);
@@ -362,16 +372,16 @@ export function readLinkedListingsForUser(userId: string): { listing: MockProper
   const result: { listing: MockProperty; canEdit: boolean; ownerUserId: string }[] = [];
 
   const resolveListing = (pid: string): { listing: MockProperty; ownerUserId: string } | null => {
-    const fromExtras = allListings.find((l) => l.id === pid);
+    const fromExtras = allListings.find((l) => samePropertyId(l.id, pid));
     if (fromExtras) {
       const ownerUserId = fromExtras.managerUserId?.trim() ?? "";
       return ownerUserId ? { listing: fromExtras, ownerUserId } : null;
     }
-    const pending = readAllPendingManagerProperties().find((p) => p.id === pid);
+    const pending = readAllPendingManagerProperties().find((p) => samePropertyId(p.id, pid));
     if (pending) {
       const ownerUserId = pending.submittedByUserId?.trim() ?? "";
       if (!ownerUserId) return null;
-      return { listing: buildMockPropertyFromDraft(pending, pid), ownerUserId };
+      return { listing: buildMockPropertyFromDraft(pending, pending.id), ownerUserId };
     }
     return null;
   };
@@ -379,12 +389,12 @@ export function readLinkedListingsForUser(userId: string): { listing: MockProper
   const permissionsForPropertyId = (pid: string): PropertyCoManagerPermissions[string] | undefined => {
     for (const rel of readProRelationships(userId)) {
       if (rel.linkDirection === "outgoing") continue;
-      if (!rel.assignedPropertyIds.includes(pid)) continue;
+      if (!rel.assignedPropertyIds.some((id) => samePropertyId(id, pid))) continue;
       return permissionsForProperty(rel.propertyCoManagerPermissions, pid);
     }
     for (const inv of readCachedAccountLinkInvites()) {
       if (inv.status !== "accepted" || inv.direction !== "incoming") continue;
-      if (!inv.assignedPropertyIds.includes(pid)) continue;
+      if (!inv.assignedPropertyIds.some((id) => samePropertyId(id, pid))) continue;
       return permissionsForProperty(inv.propertyCoManagerPermissions, pid);
     }
     return undefined;
@@ -399,7 +409,7 @@ export function readLinkedListingsForUser(userId: string): { listing: MockProper
     seen.add(pid);
     const perms = permissionsForPropertyId(pid);
     const rel = readProRelationships(userId).find(
-      (row) => row.linkDirection !== "outgoing" && row.assignedPropertyIds.includes(pid),
+      (row) => row.linkDirection !== "outgoing" && row.assignedPropertyIds.some((id) => samePropertyId(id, pid)),
     );
     result.push({
       listing,

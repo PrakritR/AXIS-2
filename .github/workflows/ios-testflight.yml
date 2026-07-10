@@ -47,9 +47,16 @@ jobs:
         run: npm ci
 
       - name: Sync Capacitor (iOS, production URL)
-        run: npx cap sync ios
+        # Mirror npm run cap:prod (clear .cap-dev-server + prod CAP_SERVER_URL)
+        # but sync iOS only — Android is not built on this runner.
+        run: |
+          rm -f .cap-dev-server
+          npx cap sync ios
         env:
           CAP_SERVER_URL: https://www.axis-seattle-housing.com
+
+      - name: Verify Release config points at production
+        run: CONFIGURATION=Release bash scripts/verify-cap-prod-config.sh
 
       - uses: ruby/setup-ruby@v1
         with:

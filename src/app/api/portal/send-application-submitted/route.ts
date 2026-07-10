@@ -5,8 +5,10 @@ import {
   buildApplicationSubmittedEmailHtml,
   buildApplicationSubmittedMailtoHref,
 } from "@/lib/application-submitted-email";
+import { ensureResidentSetupTokenForApplication } from "@/lib/auth/resident-setup-token";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
+import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
@@ -59,19 +61,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Application not found for this email and ID." }, { status: 403 });
     }
 
+    const ensured = await ensureResidentSetupTokenForApplication(db, match.id);
+    if (!ensured.ok) {
+      return NextResponse.json({ error: ensured.error }, { status: 500 });
+    }
+
     const origin = appOrigin();
-    const signupUrl = residentAccountCreationUrl(origin, match.id);
+    const signupUrl = residentAccountCreationUrl(origin, ensured.axisId, ensured.token);
     const text = buildApplicationSubmittedEmailBody({
       applicantName: applicantName || undefined,
       applicantEmail: email,
-      axisId: match.id,
+      axisId: ensured.axisId,
       signupUrl,
       propertyTitle: propertyTitle || undefined,
     });
     const html = buildApplicationSubmittedEmailHtml({
       applicantName: applicantName || undefined,
       applicantEmail: email,
-      axisId: match.id,
+      axisId: ensured.axisId,
       signupUrl,
       propertyTitle: propertyTitle || undefined,
     });
@@ -79,14 +86,22 @@ export async function POST(req: Request) {
       to: email,
       applicantName: applicantName || undefined,
       applicantEmail: email,
-      axisId: match.id,
+      axisId: ensured.axisId,
       origin,
       propertyTitle: propertyTitle || undefined,
+      setupToken: ensured.token,
     });
+
+    if (shouldSkipOutboundEmail(email)) {
+      return NextResponse.json({ ok: true, skipped: true, mailtoHref, signupUrl });
+    }
 
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (!apiKey) {
-      return NextResponse.json({ ok: false, error: "Email delivery is not configured.", mailtoHref }, { status: 503 });
+      return NextResponse.json(
+        { ok: false, error: "Email delivery is not configured.", mailtoHref, signupUrl },
+        { status: 503 },
+      );
     }
 
     const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";

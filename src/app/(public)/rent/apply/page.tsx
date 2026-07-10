@@ -1,6 +1,6 @@
 import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
-import { residentCreateAccountHref } from "@/lib/resident-public-nav";
 import { redirect } from "next/navigation";
+import { PublicApplyClient } from "./public-apply-client";
 
 function buildApplySearch(params: Record<string, string | string[] | undefined>): string {
   const q = new URLSearchParams();
@@ -21,13 +21,9 @@ export default async function ApplyPage({
   const applyPath = `/resident/applications/apply${buildApplySearch(params)}`;
 
   const ctx = await getPortalAccessContext();
-  if (!ctx.user) {
-    redirect(residentCreateAccountHref(applyPath));
+  if (ctx.user && hasRole(ctx, "resident")) {
+    redirect(applyPath);
   }
 
-  if (!hasRole(ctx, "resident")) {
-    redirect(residentCreateAccountHref(applyPath));
-  }
-
-  redirect(applyPath);
+  return <PublicApplyClient />;
 }

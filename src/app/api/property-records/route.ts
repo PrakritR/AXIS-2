@@ -31,7 +31,8 @@ export async function GET() {
     if (admin) {
       const { data, error } = await baseQuery;
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ snapshot: propertyRowsToSnapshot(data ?? []) });
+      // Admins get the full inventory; client must scope with its own linked ids.
+      return NextResponse.json({ snapshot: propertyRowsToSnapshot(data ?? []), linkedPropertyIds: [] as string[] });
     }
 
     const { data: viewerProfile } = await db.from("profiles").select("email").eq("id", user.id).maybeSingle();
@@ -91,7 +92,13 @@ export async function GET() {
       rows = [...rows, ...((linkedRows ?? []).filter((row) => !seen.has(row.id)))];
     }
 
-    return NextResponse.json({ snapshot: propertyRowsToSnapshot(rows) });
+    // Return authoritative linked ids from the same invite query so the client
+    // does not re-scope with a stale/empty local relationship cache (which used
+    // to drop co-managed listings like Brooklyn from the local pipeline).
+    return NextResponse.json({
+      snapshot: propertyRowsToSnapshot(rows),
+      linkedPropertyIds: [...linkedPropertyIds],
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load property records.";
     return NextResponse.json({ error: message }, { status: 500 });

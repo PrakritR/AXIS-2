@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isProductionRuntime } from "@/lib/server-env";
+import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { loadResidentMoveInForEmail } from "@/lib/resident-move-in-info";
 import {
@@ -72,7 +73,7 @@ export async function GET(req: Request) {
 
   for (const rec of records ?? []) {
     const email = rec.resident_email?.trim().toLowerCase();
-    if (!email || email.endsWith("@axis.local")) continue;
+    if (!email || shouldSkipOutboundEmail(email)) continue;
 
     const row = rec.row_data as Record<string, unknown> | null;
     if (!row || typeof row !== "object") continue;

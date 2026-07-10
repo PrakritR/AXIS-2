@@ -28,7 +28,11 @@ Axis uses **one Next.js codebase** for the website and iOS/Android apps. Capacit
 
 ## Deploy model
 
-- **Portal UI / API** → Vercel deploy updates **web and app** together.
-- **Native shell only** (plugins, icons, permissions) → `npx cap sync` + store rebuild.
+- **Portal UI / API** → Vercel deploy updates **web and app WebView** together.
+- **Push to `production`** → also runs **iOS TestFlight**
+  (`.github/workflows/ios-testflight.yml`) so the native shell stays in sync.
+  Confirm that workflow after every production push (`docs/ship-gate.md`).
+- **Native shell only** (plugins, icons, permissions) → `npm run cap:prod` +
+  store rebuild / TestFlight.
 
 Full guide: `docs/web-and-native-parity.md`

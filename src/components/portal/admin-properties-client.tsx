@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ListingDetailSections } from "@/components/marketing/listing-detail-sections";
+import { ListingPreviewScrollShell } from "@/components/marketing/listing-preview-scroll-shell";
 import { AxisHeaderMarkTile } from "@/components/brand/axis-logo";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
@@ -355,12 +356,9 @@ function AdminPropertyInlineDetails({
           </Link>
         ) : null}
       </div>
-      <div
-        data-listing-preview-scroll
-        className="portal-desktop-scroll-panel overscroll-contain rounded-2xl border border-border bg-background"
-      >
-        <ListingDetailSections property={mock} rich={rich} previewModal />
-      </div>
+      <ListingPreviewScrollShell className="portal-desktop-scroll-panel max-h-[min(70vh,640px)] rounded-2xl border border-border">
+        <ListingDetailSections property={mock} rich={rich} previewModal hidePreviewSubnav />
+      </ListingPreviewScrollShell>
       <div className="rounded-2xl border border-border bg-accent/30 px-4 py-4 sm:px-5">{footer}</div>
     </div>
   );

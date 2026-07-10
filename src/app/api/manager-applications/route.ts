@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { prepareGuestApplicationUpsert } from "@/lib/auth/guest-application-upsert";
 import { linkResidentOnApplicationSubmit } from "@/lib/auth/link-resident-on-application-submit";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { managerHasCoManagerPermissionForProperty } from "@/lib/auth/manager-lease-scope";
@@ -357,19 +358,15 @@ export async function POST(req: Request) {
     const user = await sessionUser();
 
     if (body.action === "replace") {
+      if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
       const rows = Array.isArray(body.rows) ? body.rows.map(normalizeRow) : [];
-      if (!user && rows.some((row) => row.bucket === "approved")) {
-        return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-      }
-      if (user) {
-        const writeGate = await assertManagerOrAdminWriteAccess(db, user);
-        if (writeGate) return writeGate;
-      }
-      const replaceAdmin = user ? await isAdminUser(user.id) : false;
+      const writeGate = await assertManagerOrAdminWriteAccess(db, user);
+      if (writeGate) return writeGate;
+      const replaceAdmin = await isAdminUser(user.id);
       for (const row of rows) {
         // Attribute each row to its correct owner and enforce edit access on
         // foreign (linked-owner) rows. Admins keep the client-supplied owner.
-        if (user && !replaceAdmin) {
+        if (!replaceAdmin) {
           const gate = await resolveApplicationWriteOwner(db, user.id, row);
           if (!gate.ok) continue;
           row.managerUserId = gate.owner ?? user.id;
@@ -390,7 +387,7 @@ export async function POST(req: Request) {
       const { data: records, error: loadError } = await db
         .from("manager_application_records")
         .select("id, row_data, manager_user_id, resident_email, property_id, assigned_property_id")
-        .or(ids.map((value) => `id.eq.${value}`).join(","));
+        .in("id", ids);
       if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
 
       const idsToDelete = new Set<string>();
@@ -428,7 +425,24 @@ export async function POST(req: Request) {
     if (!body.row?.id) return NextResponse.json({ error: "row required" }, { status: 400 });
     let row = normalizeRow(body.row);
     if (!user) {
-      return NextResponse.json({ error: "Sign in to submit an application." }, { status: 401 });
+      const ids = idVariants(row.id);
+      const { data: records, error: loadError } = await db
+        .from("manager_application_records")
+        .select("id, row_data")
+        .in("id", ids)
+        .limit(1);
+      if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
+      const existing = records?.[0]?.row_data as DemoApplicantRow | undefined;
+      const guest = await prepareGuestApplicationUpsert(db, { row, existing: existing ?? null });
+      if (!guest.ok) {
+        return NextResponse.json({ error: guest.error }, { status: guest.status });
+      }
+      row = guest.row;
+      await persistNormalizedRow(db, row.id, row);
+      if (row.bucket === "pending" && row.application?.consentCredit) {
+        void tryAutoOrderScreening(db, row);
+      }
+      return NextResponse.json({ ok: true, setupTokenIssued: true });
     }
     const { role, email } = await resolvePortalRole(db, user);
     if (role === "resident") {
@@ -440,7 +454,7 @@ export async function POST(req: Request) {
       const { data: records, error: loadError } = await db
         .from("manager_application_records")
         .select("id, row_data")
-        .or(ids.map((value) => `id.eq.${value}`).join(","))
+        .in("id", ids)
         .limit(1);
       if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
       const existing = records?.[0]?.row_data as DemoApplicantRow | undefined;

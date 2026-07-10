@@ -50,6 +50,7 @@
     "cap:copy": "cap copy",
     "cap:ios": "cap open ios",
     "cap:android": "cap open android",
+    "ship:preflight": "bash scripts/ship-preflight.sh",
     "scrape:apm": "node scripts/scrape-allpropertymanagement.mjs",
     "scrape:apm:quick": "node scripts/scrape-allpropertymanagement.mjs --quick",
     "scrape:apm:contacts": "node scripts/scrape-apm-contacts.mjs"

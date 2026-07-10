@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyPropertyPipelineSnapshot,
+  propertyRowsToSnapshot,
   scopePropertyPipelineSnapshotForViewer,
 } from "@/lib/persisted-property-records";
 
@@ -31,5 +32,47 @@ describe("scopePropertyPipelineSnapshotForViewer", () => {
     expect(scopePropertyPipelineSnapshotForViewer(emptyPropertyPipelineSnapshot(), "", [])).toEqual(
       emptyPropertyPipelineSnapshot(),
     );
+  });
+
+  it("drops co-managed owner buckets when linked ids are empty (client must pass server ids)", () => {
+    const snapshot = {
+      pendingByUser: {},
+      extrasByUser: {
+        viewer: [{ id: "mgr-owned", title: "Owned", buildingName: "8th", address: "4709B", managerUserId: "stale-other" } as never],
+        ambika: [{ id: "mgr-brooklyn", title: "Brooklyn", buildingName: "Brooklyn", address: "5259", managerUserId: "ambika" } as never],
+      },
+      sideGlobal: { requestChange: [], unlisted: [], rejected: [] },
+      sideByUser: {},
+    };
+    const wiped = scopePropertyPipelineSnapshotForViewer(snapshot, "viewer", []);
+    expect(wiped.extrasByUser.viewer).toHaveLength(1);
+    expect(wiped.extrasByUser.ambika).toBeUndefined();
+
+    const kept = scopePropertyPipelineSnapshotForViewer(snapshot, "viewer", ["mgr-brooklyn"]);
+    expect(kept.extrasByUser.ambika).toHaveLength(1);
+  });
+});
+
+describe("propertyRowsToSnapshot", () => {
+  it("stamps managerUserId from the DB owner column onto live listings", () => {
+    const snapshot = propertyRowsToSnapshot([
+      {
+        id: "mgr-brooklyn",
+        manager_user_id: "owner-ambika",
+        status: "live",
+        row_data: null,
+        property_data: {
+          id: "mgr-brooklyn",
+          title: "5259 Brooklyn",
+          buildingName: "5259 Brooklyn Ave NE",
+          address: "5259 Brooklyn Ave NE",
+          // Stale / missing owner on the blob must not win over the DB column.
+          managerUserId: "wrong-user",
+          adminPublishLive: true,
+        },
+        edit_request_note: null,
+      },
+    ]);
+    expect(snapshot.extrasByUser["owner-ambika"]?.[0]?.managerUserId).toBe("owner-ambika");
   });
 });

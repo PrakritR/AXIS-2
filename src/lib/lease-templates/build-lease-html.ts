@@ -3,6 +3,7 @@ import { parseRoomChoiceValue } from "@/lib/rental-application/data";
 import { parseFlexibleLocalDate } from "@/lib/rental-application/lease-dates";
 import { activeCustomLeaseTerms, normalizeManagerListingSubmissionV1, type ManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
 import { paymentAtSigningPriceLabel, utilitiesListingEstimateLabel } from "@/lib/rental-application/listing-fees-display";
+import { formatUtilitiesListingLine, resolveListingUtilitiesPaymentModel } from "@/lib/listing-utilities-payment";
 import type { RentalWizardFormState } from "@/lib/rental-application/types";
 import type { LeaseGenerationContext } from "@/lib/generated-lease";
 import { leaseCss, type LeaseJurisdictionTemplateConfig } from "@/lib/lease-templates/types";
@@ -278,10 +279,24 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
     monthToMonthSurcharge > 0 ? rentLabelWithMonthlySurcharge(monthlyRentBaseStr, monthToMonthSurcharge) : monthlyRentBaseStr;
 
   const rentNum = parseAmount(monthlyRentStr);
-  const utilitiesBase = specificRoom?.utilitiesEstimate?.trim() || (sub ? utilitiesListingEstimateLabel(sub) : "") || "—";
+  const utilitiesModel = resolveListingUtilitiesPaymentModel(sub ?? undefined, specificRoom ?? undefined);
+  const utilitiesBase =
+    formatUtilitiesListingLine(utilitiesModel, specificRoom?.utilitiesEstimate?.trim()) ||
+    (sub ? utilitiesListingEstimateLabel(sub) : "") ||
+    "—";
   const utilitiesStr = escapeHtml(overrideFeeLabel(a.managerUtilitiesOverride, utilitiesBase));
-  const utilitiesNum = parseAmount(utilitiesStr);
-  const totalMonthly = rentNum != null && utilitiesNum != null ? fmtUsd(rentNum + utilitiesNum) : null;
+  const utilitiesNum =
+    utilitiesModel === "manager_billed" && !a.managerUtilitiesOverride?.trim()
+      ? parseAmount(specificRoom?.utilitiesEstimate?.trim() || utilitiesBase)
+      : a.managerUtilitiesOverride?.trim()
+        ? parseAmount(a.managerUtilitiesOverride)
+        : utilitiesModel === "manager_billed"
+          ? parseAmount(utilitiesBase)
+          : 0;
+  const totalMonthly =
+    rentNum != null
+      ? fmtUsd(rentNum + (utilitiesNum != null && utilitiesNum > 0 ? utilitiesNum : 0))
+      : null;
 
   const appFee = escapeHtml(sub?.applicationFee ?? "—");
   const secDep = escapeHtml(overrideFeeLabel(a.managerSecurityDepositOverride, sub?.securityDeposit ?? "—"));

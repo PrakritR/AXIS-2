@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
 import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@/lib/household-charges";
+import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
     }
 
     const senderLower = (user.email ?? "").trim().toLowerCase();
-    const skipExternalEmail = residentEmail.endsWith("@axis.local") || (!!senderLower && residentEmail === senderLower);
+    const skipExternalEmail = shouldSkipOutboundEmail(residentEmail) || (!!senderLower && residentEmail === senderLower);
 
     if (skipExternalEmail) {
       // Demo email — still deliver to portal inbox, just skip real email

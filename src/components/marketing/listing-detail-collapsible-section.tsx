@@ -86,18 +86,18 @@ export function ListingDetailCollapsibleSection({
   return (
     <section id={id} className={`${listingSectionScrollClass} ${className}`}>
       <div className={`${listingSectionCardClass} p-5 sm:p-7`}>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0 flex-1 pr-1">
             {eyebrow ? (
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p>
             ) : null}
             <h2
-              className={`font-bold tracking-tight text-foreground ${eyebrow ? "mt-1 text-xl sm:text-2xl" : "text-xl sm:text-2xl"}`}
+              className={`font-bold tracking-tight text-foreground ${eyebrow ? "mt-1 text-lg leading-snug sm:text-2xl" : "text-lg leading-snug sm:text-2xl"}`}
             >
               {title}
             </h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
             {headerAside ? <div className="shrink-0">{headerAside}</div> : null}
             {collapseOnMobile ? (
               <ViewToggleButton

@@ -24,6 +24,11 @@ import {
 import { compareFloorLabels, compareRoomsByFloorThenName } from "@/lib/listing-floor-order";
 import { parseMoneyAmount } from "@/lib/parse-money";
 import {
+  formatUtilitiesListingLine,
+  resolveRoomUtilitiesPaymentModel,
+  utilitiesListingSummaryLabel,
+} from "@/lib/listing-utilities-payment";
+import {
   formatListingFeeDisplay,
   paymentAtSigningDetailBody,
   paymentAtSigningPriceLabel,
@@ -51,8 +56,13 @@ function filterLeaseBasicsRows(
       case "lease-signing":
         return (sub.paymentAtSigningIncludes?.length ?? 0) > 0;
       case "lease-utilities":
-        if (utilitiesListingEstimateLabel(sub) !== "—") return true;
-        return rooms.some((r) => r.name.trim() && Boolean((r.utilitiesEstimate ?? "").trim()));
+        if (utilitiesListingSummaryLabel(sub) !== "—") return true;
+        return rooms.some(
+          (r) =>
+            r.name.trim() &&
+            (Boolean((r.utilitiesEstimate ?? "").trim()) ||
+              resolveRoomUtilitiesPaymentModel(r) !== "manager_billed"),
+        );
       default:
         return true;
     }
@@ -226,13 +236,17 @@ function buildListingFloorCard(
     const bathroomDetail = roomBathroomSetupLine(r, sub);
     const furnish = formatFurnishingForListing(r.furnishing);
     const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
-    const utilRaw = formatUtilitiesEstimate(r.utilitiesEstimate);
+    const utilRaw = formatUtilitiesListingLine(
+      resolveRoomUtilitiesPaymentModel(r),
+      r.utilitiesEstimate,
+    );
+    const utilDisplay = utilRaw === "—" ? undefined : utilRaw;
     const baseTags = roomModalIncludedTags(r, sub, amenityLabels);
     return {
       id: r.id,
       name: r.name.trim(),
       detail: roomListingTableSubtitle(r),
-      utilitiesEstimate: utilRaw || undefined,
+      utilitiesEstimate: utilDisplay,
       price: entireHome ? (r.monthlyRent > 0 ? `$${r.monthlyRent}` : "Included") : `$${r.monthlyRent}`,
       availability: "Available now",
       bathroomShareCount: bathroomShareCountForRoom(r.id, sub),
@@ -349,14 +363,14 @@ function formatFurnishing(raw: string | undefined): string | undefined {
 }
 
 function perRoomBundleSummaryLine(r: ManagerRoomSubmission, sub: ManagerListingSubmissionV1): string {
-  const u = formatUtilitiesEstimate(r.utilitiesEstimate);
+  const utilLine = formatUtilitiesListingLine(resolveRoomUtilitiesPaymentModel(r), r.utilitiesEstimate);
   const f = r.furnishing?.trim();
   const rentLabel =
     isEntireHomeListing(sub) && r.monthlyRent <= 0
       ? "Included in lease"
       : `$${r.monthlyRent}`;
   let s = `${r.name.trim()}: ${rentLabel}`;
-  if (u) s += ` · utilities ~${u}`;
+  if (utilLine !== "—") s += ` · utilities ${utilLine}`;
   if (f) s += ` · ${f}`;
   return s;
 }
@@ -377,7 +391,7 @@ function bundleSummaryItems(
           value: isEntireHomeListing(sub) ? `$${rents[0]}/mo` : `$${Math.min(...rents)} - $${Math.max(...rents)}/mo`,
         }
       : { label: "Rent", value: "Ask manager" },
-    { label: "Utilities", value: utilities.length ? [...new Set(utilities)].join(", ") : utilitiesListingEstimateLabel(sub) },
+    { label: "Utilities", value: utilitiesListingSummaryLabel(sub) },
     { label: "Signing", value: paymentAtSigningPriceLabel(sub) },
   ];
 }
@@ -419,7 +433,7 @@ function twoOrMoreRoomDetailBody(rooms: ManagerRoomSubmission[]): string {
   return [
     `Rent two or more rooms on one lease. Starting at $${start}/mo (${moneyLabel(rents[0]!)} + ${moneyLabel(rents[1]!)} for the two lowest-priced rooms).`,
     example ? `Example pairing: ${example}.` : "",
-    "Each additional room adds its listed monthly rent. Utilities are estimated separately per room.",
+    "Each additional room adds its listed monthly rent. Utilities payment varies by room — see room details.",
   ]
     .filter(Boolean)
     .join(" ");

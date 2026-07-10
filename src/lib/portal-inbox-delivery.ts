@@ -1,3 +1,4 @@
+import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
 import { sendSms } from "@/lib/twilio";
@@ -141,7 +142,7 @@ export async function deliverPortalInboxMessage(
     recipients = allowed;
   }
 
-  const toEmails = recipients.map((r) => r.email).filter((email) => !email.endsWith("@axis.local"));
+  const toEmails = recipients.map((r) => r.email).filter((email) => !shouldSkipOutboundEmail(email));
 
   if (deliverToPortalInbox) {
     const senderScope = scopeForRole(senderRole);

@@ -51,26 +51,9 @@ function GetStartedContent() {
       );
       return;
     }
-    // Resident: the user is already signed in — link them to their application by email
-    // (a pending/limited portal if no application matches yet). No Axis ID required.
-    try {
-      const res = await fetch("/api/auth/register-resident-oauth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({}),
-      });
-      const body = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        showToast(body.error ?? "Could not finish resident setup.");
-        setBusy(null);
-        return;
-      }
-      window.location.replace(nativeAwarePath("/resident"));
-    } catch {
-      showToast("Network error. Try again.");
-      setBusy(null);
-    }
+    // Residents create accounts from the emailed setup link after applying — not here.
+    showToast("Apply first, then use the account setup link from your email. Or sign in if you already have an account.");
+    window.location.replace(nativeAwarePath("/rent/browse"));
   };
 
   const signOut = async () => {
@@ -113,8 +96,8 @@ function GetStartedContent() {
           },
           {
             id: "resident",
-            label: "I'm a resident with an application",
-            hint: "Use the email on your rental application",
+            label: "I'm applying to rent",
+            hint: "Browse homes, apply, then set up from your email link",
             icon: "resident",
             tone: "steel",
           },

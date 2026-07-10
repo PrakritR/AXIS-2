@@ -1,20 +1,34 @@
 "use client";
 
 import { NativeAuthHub } from "@/components/auth/native-auth-hub";
+import { ResidentSignupBlocked } from "@/components/auth/resident-signup-blocked";
+import { AuthCard } from "@/components/auth/auth-card";
 import { useSearchParams } from "next/navigation";
 import CreateAccountClient from "./create-account-client";
 
 /**
- * Unified create-account surface for all roles (resident, manager, vendor) via NativeAuthHub.
- * Legacy post-payment links carrying checkout session_id / resident axis_id still use CreateAccountClient.
+ * Unified create-account surface.
+ * Resident self-serve signup is blocked — accounts come from emailed setup links.
+ * Legacy manager checkout session_id still uses CreateAccountClient.
  */
 export default function CreateAccountRouter() {
   const searchParams = useSearchParams();
-  const hasLegacyContext =
-    Boolean(searchParams.get("session_id")?.trim()) || Boolean(searchParams.get("axis_id")?.trim());
+  const sessionId = searchParams.get("session_id")?.trim() ?? "";
+  const role = searchParams.get("role")?.trim().toLowerCase() ?? "";
+  const axisId = searchParams.get("axis_id")?.trim() ?? "";
 
-  if (hasLegacyContext) {
+  if (sessionId) {
     return <CreateAccountClient />;
   }
+
+  // Old resident create-account links (with or without axis_id) → setup-link message.
+  if (role === "resident" || axisId) {
+    return (
+      <AuthCard>
+        <ResidentSignupBlocked />
+      </AuthCard>
+    );
+  }
+
   return <NativeAuthHub defaultMode="create" />;
 }

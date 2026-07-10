@@ -67,6 +67,10 @@ import {
   type ManagerSharedSpaceSubmission,
   type PaymentAtSigningOptionId,
 } from "@/lib/manager-listing-submission";
+import {
+  UTILITIES_PAYMENT_MODEL_OPTIONS,
+  type UtilitiesPaymentModel,
+} from "@/lib/listing-utilities-payment";
 import { RENTAL_APPLICATION_SECTIONS } from "@/lib/rental-application/application-sections";
 import {
   addListingApplicationField,
@@ -474,6 +478,37 @@ function PlaceCategoryPicker({
         })}
       </div>
       <StepFieldError msg={errorMsg} />
+    </div>
+  );
+}
+
+function UtilitiesPaymentModelPicker({
+  value,
+  onSelect,
+}: {
+  value: UtilitiesPaymentModel | undefined;
+  onSelect: (model: UtilitiesPaymentModel) => void;
+}) {
+  const selected = value ?? "manager_billed";
+  return (
+    <div className="space-y-2">
+      <FieldLabel hint="How residents pay for utilities on this listing.">Utilities payment</FieldLabel>
+      <div className="grid gap-2">
+        {UTILITIES_PAYMENT_MODEL_OPTIONS.map((opt) => {
+          const on = selected === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onSelect(opt.id)}
+              className={listingChoiceCardClass(on)}
+            >
+              <span className="text-sm font-semibold text-foreground">{opt.label}</span>
+              <span className="mt-0.5 block text-xs text-muted">{opt.hint}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2702,10 +2737,16 @@ export function ManagerAddListingForm({
                           <Input
                             inputMode="decimal"
                             className={wizardFieldErrorClass(Boolean(stepFieldErrors.monthlyRent), "pl-8")}
-                            value={entireHomeRent || ""}
+                            value={
+                              typeof sub.entireHomeMonthlyRent === "number" && sub.entireHomeMonthlyRent > 0
+                                ? String(sub.entireHomeMonthlyRent)
+                                : ""
+                            }
                             onChange={(e) => {
                               clearListingFieldError("monthlyRent");
-                              setSub((s) => applyEntireHomeListingPricing(s, { entireHomeMonthlyRent: parseSanitizedMoneyNumber(e.target.value) }));
+                              const raw = sanitizeMoneyInput(e.target.value);
+                              const nextRent = raw === "" || raw === "." ? 0 : parseSanitizedMoneyNumber(raw);
+                              setSub((s) => applyEntireHomeListingPricing(s, { entireHomeMonthlyRent: nextRent }));
                             }}
                             placeholder="4500"
                           />
@@ -2713,13 +2754,37 @@ export function ManagerAddListingForm({
                         <StepFieldError msg={stepFieldErrors.monthlyRent} />
                       </div>
                     </GridField>
+                    <div className="sm:col-span-2">
+                      <UtilitiesPaymentModelPicker
+                        value={sub.entireHomeUtilitiesPaymentModel}
+                        onSelect={(model) =>
+                          setSub((s) =>
+                            applyEntireHomeListingPricing(s, {
+                              entireHomeUtilitiesPaymentModel: model,
+                              ...(model === "included_in_rent" ? { entireHomeUtilitiesEstimate: "" } : {}),
+                            }),
+                          )
+                        }
+                      />
+                    </div>
                     <GridField>
-                      <FieldLabel hint="Monthly estimate used in signing totals.">Utilities estimate (whole home)</FieldLabel>
+                      <FieldLabel
+                        hint={
+                          (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
+                            ? "Not billed separately when included in rent."
+                            : (sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
+                              ? "Optional — typical monthly cost shown on the listing."
+                              : "Monthly estimate used in signing totals."
+                        }
+                      >
+                        Utilities estimate (whole home)
+                      </FieldLabel>
                       <div className="relative">
                         <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
                         <Input
                           inputMode="decimal"
                           className="pl-8"
+                          disabled={(sub.entireHomeUtilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
                           value={(sub.entireHomeUtilitiesEstimate ?? "").replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
                           onChange={(e) =>
                             setSub((s) => applyEntireHomeListingPricing(s, { entireHomeUtilitiesEstimate: sanitizeMoneyInput(e.target.value) }))
@@ -2775,12 +2840,40 @@ export function ManagerAddListingForm({
                             </div>
                           </GridField>
                           <GridField>
-                            <FieldLabel>Utilities estimate</FieldLabel>
+                            <FieldLabel
+                              hint={
+                                (room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"
+                                  ? "Not billed separately when included in rent."
+                                  : (room.utilitiesPaymentModel ?? "manager_billed") === "tenant_direct"
+                                    ? "Optional — typical monthly cost shown on the listing."
+                                    : "Monthly estimate billed with rent through the portal."
+                              }
+                            >
+                              Utilities estimate
+                            </FieldLabel>
                             <div className="relative">
                               <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">$</span>
-                              <Input inputMode="decimal" className="pl-8" value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()} onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })} placeholder="175" />
+                              <Input
+                                inputMode="decimal"
+                                className="pl-8"
+                                disabled={(room.utilitiesPaymentModel ?? "manager_billed") === "included_in_rent"}
+                                value={room.utilitiesEstimate.replace(/^\$/, "").replace(/\/mo(nth)?\.?$/i, "").trim()}
+                                onChange={(e) => setRoom(i, { utilitiesEstimate: sanitizeMoneyInput(e.target.value) })}
+                                placeholder="175"
+                              />
                             </div>
                           </GridField>
+                          <div className="sm:col-span-2">
+                            <UtilitiesPaymentModelPicker
+                              value={room.utilitiesPaymentModel}
+                              onSelect={(model) =>
+                                setRoom(i, {
+                                  utilitiesPaymentModel: model,
+                                  ...(model === "included_in_rent" ? { utilitiesEstimate: "" } : {}),
+                                })
+                              }
+                            />
+                          </div>
                           <div className="sm:col-span-2">
                             <ProrationMethodFields
                               prorateMethod={room.prorateMethod ?? "auto"}

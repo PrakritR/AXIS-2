@@ -184,6 +184,8 @@ function RentalApplicationWizardInner({
     propertyTitle?: string;
     emailSent?: boolean;
     syncError?: string;
+    guestFlow?: boolean;
+    mailtoHref?: string;
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showAvailabilityWarnings, setShowAvailabilityWarnings] = useState(false);
@@ -578,8 +580,10 @@ function RentalApplicationWizardInner({
       const sync = await upsertApplicationRowToServerAwait(applicationRow);
 
       let emailSent = false;
+      let mailtoHref: string | undefined;
       const propertyTitle = (listing?.title?.trim() || pid.trim()) || undefined;
-      if (sync.ok && emailTrim.includes("@") && !isDemoModeActive()) {
+      const isGuestSubmit = !residentUserId && !isDemoModeActive();
+      if (sync.ok && emailTrim.includes("@") && isGuestSubmit) {
         try {
           const res = await fetch("/api/portal/send-application-submitted", {
             method: "POST",
@@ -591,7 +595,11 @@ function RentalApplicationWizardInner({
               propertyTitle,
             }),
           });
+          const payload = (await res.json().catch(() => ({}))) as { mailtoHref?: string };
           emailSent = res.ok;
+          if (typeof payload.mailtoHref === "string" && payload.mailtoHref.startsWith("mailto:")) {
+            mailtoHref = payload.mailtoHref;
+          }
         } catch {
           emailSent = false;
         }
@@ -626,11 +634,13 @@ function RentalApplicationWizardInner({
         propertyTitle,
         emailSent,
         syncError: sync.ok ? undefined : sync.error,
+        guestFlow: isGuestSubmit,
+        mailtoHref,
       });
       if (sync.ok) {
         showToast("Application submitted.");
       } else {
-        showToast(sync.error ?? "Application saved locally but could not sync to server. Try again from create account.");
+        showToast(sync.error ?? "Application saved locally but could not sync to server. Try again.");
       }
     },
     [form, mode, router, showToast, submitting],
@@ -995,6 +1005,8 @@ function RentalApplicationWizardInner({
             email={postSubmit.email}
             emailSent={postSubmit.emailSent}
             syncError={postSubmit.syncError}
+            guestFlow={postSubmit.guestFlow}
+            mailtoHref={postSubmit.mailtoHref}
             onDone={() => setPostSubmit(null)}
           />
         ) : (

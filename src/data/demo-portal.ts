@@ -61,6 +61,12 @@ export type DemoApplicantRow = {
   axisId?: string;
   /** Linked resident auth user id when known. */
   residentUserId?: string | null;
+  /** SHA-256 hex of the one-time resident account setup token (raw token is emailed once). */
+  setupTokenHash?: string | null;
+  /** ISO expiry for the resident account setup token. */
+  setupTokenExpiresAt?: string | null;
+  /** ISO timestamp when the setup token was used to create/link a resident account. */
+  setupTokenConsumedAt?: string | null;
   /** Checkr criminal background check (clear/consider) — run per-applicant on demand. */
   backgroundCheck?: ApplicationBackgroundCheck;
   /** Extra fields only present on manually-added residents. */

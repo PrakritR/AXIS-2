@@ -5,6 +5,11 @@ export function isPortalSandboxEmail(email: string | null | undefined): boolean 
   return normalized.endsWith("@axis.local") || normalized.endsWith("@test.axis.local");
 }
 
+/** Skip Resend / external SMTP for sandbox seed accounts (same rule as isPortalSandboxEmail). */
+export function shouldSkipOutboundEmail(email: string | null | undefined): boolean {
+  return isPortalSandboxEmail(email);
+}
+
 /** Block co-manager / property links that would mix demo sandbox accounts with real portal users. */
 export function isCrossSandboxPortalPair(
   emailA: string | null | undefined,

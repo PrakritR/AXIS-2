@@ -5,6 +5,7 @@ import {
   getReportsAuthContext,
 } from "@/lib/reports/auth";
 import { parseManagerReportFilters } from "@/lib/reports/parse-filters";
+import { resolveManagerReportOwnerId } from "@/lib/reports/co-manager-report-scope";
 import {
   MANAGER_REPORT_IDS,
   RESIDENT_REPORT_IDS,
@@ -52,7 +53,11 @@ export async function GET(
     const gate = await assertManagerFinancialsAccess(auth);
     if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
-    const managerUserId = auth.role === "admin" ? searchParams.get("managerUserId")?.trim() || auth.userId : auth.userId;
+    // Co-managers granted `financials` read the owning manager's books (owner-level scope).
+    const managerUserId =
+      auth.role === "admin"
+        ? searchParams.get("managerUserId")?.trim() || auth.userId
+        : await resolveManagerReportOwnerId(auth.db, auth.userId);
 
     const report = await runManagerReport(auth.db, managerUserId, reportId, parseManagerReportFilters(searchParams));
     if (!report) return NextResponse.json({ error: "Unknown report." }, { status: 404 });

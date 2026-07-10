@@ -2,15 +2,16 @@
  * Apply-invite email for new resident accounts — server-side send (Resend).
  */
 
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
+
 export const RESIDENT_APPLY_INVITE_EMAIL_SUBJECT = "Complete your Axis housing application";
 
-const PRODUCTION_BASE_URL = "https://www.axis-seattle-housing.com";
-
 export function residentApplyPortalUrl(applyPath?: string): string {
+  const base = resolveEmailLinkBaseUrl();
   if (applyPath?.startsWith("/resident/")) {
-    return `${PRODUCTION_BASE_URL}${applyPath}`;
+    return `${base}${applyPath}`;
   }
-  return `${PRODUCTION_BASE_URL}/resident/applications`;
+  return `${base}/resident/applications`;
 }
 
 function escapeHtmlText(s: string): string {

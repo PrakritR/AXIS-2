@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { resolveAppOrigin, resolveShareableAppOrigin } from "@/lib/app-url";
+import { describe, expect, it, afterEach } from "vitest";
+import { resolveAppOrigin, resolveEmailLinkBaseUrl, resolveShareableAppOrigin } from "@/lib/app-url";
 
 describe("resolveShareableAppOrigin", () => {
   const prevCanonical = process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
@@ -32,6 +32,28 @@ describe("resolveShareableAppOrigin", () => {
     delete process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
     delete process.env.NEXT_PUBLIC_APP_URL;
     expect(resolveShareableAppOrigin()).toBe("http://localhost:3000");
+  });
+});
+
+describe("resolveEmailLinkBaseUrl", () => {
+  const prevCanonical = process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+  const prevApp = process.env.NEXT_PUBLIC_APP_URL;
+
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_CANONICAL_APP_URL = prevCanonical;
+    process.env.NEXT_PUBLIC_APP_URL = prevApp;
+  });
+
+  it("uses localhost APP_URL for local email testing", () => {
+    delete process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    expect(resolveEmailLinkBaseUrl()).toBe("http://localhost:3000");
+  });
+
+  it("never returns a vercel.app host", () => {
+    delete process.env.NEXT_PUBLIC_CANONICAL_APP_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "https://axis-2.vercel.app";
+    expect(resolveEmailLinkBaseUrl()).toBe("https://www.axis-seattle-housing.com");
   });
 });
 

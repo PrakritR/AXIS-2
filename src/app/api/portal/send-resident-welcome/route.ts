@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
+import { ensureResidentSetupTokenForApplication } from "@/lib/auth/resident-setup-token";
+import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import {
   RESIDENT_WELCOME_EMAIL_SUBJECT,
   buildResidentWelcomeEmailBody,
@@ -55,7 +57,7 @@ export async function POST(req: Request) {
     }
 
     const senderEmail = normalizeEmail(user.email);
-    const skipExternalEmail = to.endsWith("@axis.local") || (senderEmail && to === senderEmail);
+    const skipExternalEmail = shouldSkipOutboundEmail(to) || (senderEmail && to === senderEmail);
 
     const svc = createSupabaseServiceRoleClient();
     const { data: requestor, error: requestorError } = await svc
@@ -72,22 +74,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    const signupUrl = residentAccountCreationUrl("", axisId);
+    const ensured = await ensureResidentSetupTokenForApplication(svc, axisId);
+    if (!ensured.ok) {
+      return NextResponse.json({ error: ensured.error }, { status: 400 });
+    }
+    if (ensured.email !== to) {
+      return NextResponse.json(
+        { error: "Recipient email does not match the application on file." },
+        { status: 403 },
+      );
+    }
+
+    const signupUrl = residentAccountCreationUrl("", ensured.axisId, ensured.token);
     const text = buildResidentWelcomeEmailBody({
       residentName: residentName || undefined,
-      axisId,
+      axisId: ensured.axisId,
       signupUrl,
     });
     const html = buildResidentWelcomeEmailHtml({
       residentName: residentName || undefined,
-      axisId,
+      axisId: ensured.axisId,
       signupUrl,
     });
     const mailtoHref = buildResidentWelcomeMailtoHref({
       residentEmail: to,
       residentName: residentName || undefined,
-      axisId,
+      axisId: ensured.axisId,
       origin: "",
+      setupToken: ensured.token,
     });
 
     let payloadId: string | null = null;

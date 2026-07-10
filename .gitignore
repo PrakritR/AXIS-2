@@ -82,3 +82,4 @@ playwright.config.ts
 .cursor/skills/
 .env.local
 /ios/App/fastlane/.keys/
+/env.local
