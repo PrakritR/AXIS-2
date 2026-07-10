@@ -8,15 +8,14 @@ import {
   listDocumentShareLinks,
   revokeDocumentShareLink,
 } from "@/lib/documents/document-share-links.server";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 export const runtime = "nodejs";
 
-function appOrigin(req: Request): string {
-  const env = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (env) return env.replace(/\/$/, "");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  return host ? `${proto}://${host}` : "https://localhost:3000";
+// Public share links must resolve to the canonical domain — never a *.vercel.app
+// deploy URL — so a shared document link keeps working off any deploy.
+function appOrigin(): string {
+  return resolveEmailLinkBaseUrl();
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -41,7 +40,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (!cm.ok) return NextResponse.json({ error: cm.error }, { status: cm.status });
 
     const links = await listDocumentShareLinks(auth.db, { documentId: id, managerUserId: auth.userId });
-    const origin = appOrigin(req);
+    const origin = appOrigin();
     return NextResponse.json({
       links: links.map((link) => ({
         ...link,
@@ -82,7 +81,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       createdBy: auth.userId,
       expiresInDays: body.expiresInDays,
     });
-    const origin = appOrigin(req);
+    const origin = appOrigin();
     return NextResponse.json({ link: { ...link, url: buildDocumentShareUrl(origin, link.shareToken) } });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to create share link.";

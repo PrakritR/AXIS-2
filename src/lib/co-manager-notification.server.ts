@@ -4,11 +4,12 @@
 
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
 
 function appOrigin(): string {
-  return process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") || "http://localhost:3000";
+  return resolveEmailLinkBaseUrl();
 }
 
 async function profileEmail(db: Db, userId: string): Promise<{ email: string; name: string } | null> {

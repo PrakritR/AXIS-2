@@ -15,6 +15,7 @@ import { buildListingShareSummary } from "@/lib/listing-share-summary";
 import { getShareablePropertyForUser } from "@/lib/manager-property-share-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 export const runtime = "nodejs";
 
@@ -27,14 +28,9 @@ function canSendLeadInvite(role: string | null | undefined): boolean {
   return role === "admin" || role === "manager" || role === "owner" || role === "pro";
 }
 
-function appOrigin(req: Request): string {
-  const env = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (env) return env.replace(/\/$/, "");
-  try {
-    return new URL(req.url).origin;
-  } catch {
-    return "https://www.axis-seattle-housing.com";
-  }
+// Emails link to the canonical domain only — never a *.vercel.app deploy URL.
+function appOrigin(): string {
+  return resolveEmailLinkBaseUrl();
 }
 
 export async function POST(req: Request) {
@@ -94,7 +90,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "You cannot share links for this property." }, { status: 403 });
     }
     const propertyTitle = (listing?.title || listing?.buildingName || listing?.address || propertyId).trim();
-    const origin = appOrigin(req);
+    const origin = appOrigin();
     const applyUrl = buildManagerApplyUrl(origin, {
       propertyId,
       listingRoomId: listingRoomId || undefined,

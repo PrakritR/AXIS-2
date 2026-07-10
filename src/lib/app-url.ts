@@ -11,6 +11,30 @@ function isVercelDeploymentHost(hostname: string): boolean {
   return hostname.toLowerCase().endsWith(".vercel.app");
 }
 
+/** Canonical, user-facing production domain — the only host outbound emails link to. */
+export const PRODUCTION_APP_ORIGIN = "https://www.axis-seattle-housing.com";
+
+/**
+ * Base URL for links embedded in OUTBOUND EMAILS (and other shareable, on-platform
+ * links). Recipients authenticate on the canonical domain, so an email must NEVER
+ * point at a *.vercel.app deploy/preview URL. Prefers NEXT_PUBLIC_CANONICAL_APP_URL,
+ * then NEXT_PUBLIC_APP_URL when it is a non-vercel host (a real custom domain, or
+ * localhost for local-dev email testing), otherwise the production domain. It can
+ * never return a vercel host.
+ */
+export function resolveEmailLinkBaseUrl(): string {
+  for (const raw of [process.env.NEXT_PUBLIC_CANONICAL_APP_URL, process.env.NEXT_PUBLIC_APP_URL]) {
+    const trimmed = trimOrigin(raw);
+    if (!trimmed) continue;
+    try {
+      if (!isVercelDeploymentHost(new URL(trimmed).hostname)) return trimmed;
+    } catch {
+      /* ignore malformed env value */
+    }
+  }
+  return PRODUCTION_APP_ORIGIN;
+}
+
 /**
  * Origin for shareable links (invites). Prefers a canonical custom domain
  * over the default *.vercel.app deployment URL.

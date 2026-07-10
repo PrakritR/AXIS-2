@@ -6,6 +6,7 @@ import {
   resolveManagerRecipientProfiles,
   resolvePropertyLeadRecipientIds,
 } from "@/lib/co-manager-notification-recipients.server";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 
@@ -72,7 +73,7 @@ export async function notifyManagerPropertyLeadMessage(input: {
   const recipients = await resolveManagerRecipientProfiles(db, recipientIds);
   if (recipients.length === 0) return;
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") || "http://localhost:3000";
+  const origin = resolveEmailLinkBaseUrl();
   const property = input.propertyTitle?.trim() || input.propertyId;
   const subject = `Leasing message — ${input.topic}`;
   const lines = [

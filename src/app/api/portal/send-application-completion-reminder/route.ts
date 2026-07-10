@@ -15,6 +15,7 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { isAdminUser } from "@/lib/auth/admin-preview";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 export const runtime = "nodejs";
 
@@ -26,14 +27,9 @@ function idVariants(id: string): string[] {
   return [...new Set([trimmed, normalized].filter(Boolean))];
 }
 
-function appOrigin(req: Request): string {
-  const env = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (env) return env.replace(/\/$/, "");
-  try {
-    return new URL(req.url).origin;
-  } catch {
-    return "https://www.axis-seattle-housing.com";
-  }
+// Emails link to the canonical domain only — never a *.vercel.app deploy URL.
+function appOrigin(): string {
+  return resolveEmailLinkBaseUrl();
 }
 
 function canSendApplicationReminder(role: string | null | undefined): boolean {
@@ -95,7 +91,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "This application has no valid applicant email on file." }, { status: 400 });
     }
 
-    const origin = appOrigin(req);
+    const origin = appOrigin();
     const resumeUrl = inProgressApplicationResumeUrl(origin, row);
     const signInUrl = `${origin}/auth/sign-in?role=resident`;
     const text = buildApplicationCompletionReminderBody({

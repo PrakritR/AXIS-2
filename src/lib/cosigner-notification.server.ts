@@ -3,6 +3,7 @@
  */
 
 import { buildPortalApplicationOpenHref } from "@/lib/manager-applications-storage";
+import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 
@@ -65,7 +66,7 @@ export async function notifyManagerCosignerSubmitted(input: {
   const managerEmail = (profile?.email ?? "").trim().toLowerCase();
   if (!managerEmail.includes("@")) return;
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "") || "http://localhost:3000";
+  const origin = resolveEmailLinkBaseUrl();
   const appHref = `${origin}${buildPortalApplicationOpenHref(input.signerAppId)}`;
   const primary = input.primaryApplicantName?.trim() || "Primary applicant";
   const property = input.propertyTitle?.trim() ? ` for ${input.propertyTitle.trim()}` : "";
