@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chargeDueLabel,
   chargeVisibleToManager,
+  compareChargesByDueDate,
+  compareDueDateMs,
   dedupeHouseholdCharges,
   duplicateHouseholdChargeIds,
   householdChargeToLedgerRow,
@@ -65,6 +67,37 @@ describe("household-charges pure helpers", () => {
     // a paid charge's balance is $0.00, which used to make every Paid row read $0.
     expect(householdChargeToLedgerRow(paid).lineAmount).toBe("$1,500.00");
     expect(householdChargeToLedgerRow(paid).lineAmount).not.toBe("$0.00");
+  });
+
+  it("orders due-date timestamps ascending/descending with undated rows last", () => {
+    const jan = new Date("2026-01-15").getTime();
+    const jun = new Date("2026-06-15").getTime();
+    // Ascending: earlier date first.
+    expect(compareDueDateMs(jan, jun, "asc")).toBeLessThan(0);
+    // Descending: later date first.
+    expect(compareDueDateMs(jan, jun, "desc")).toBeGreaterThan(0);
+    // Undated (null) always sorts after a dated row, regardless of direction.
+    expect(compareDueDateMs(null, jun, "asc")).toBeGreaterThan(0);
+    expect(compareDueDateMs(jun, null, "asc")).toBeLessThan(0);
+    expect(compareDueDateMs(null, jun, "desc")).toBeGreaterThan(0);
+    expect(compareDueDateMs(null, null, "asc")).toBe(0);
+  });
+
+  it("sorts a paid ledger most-recent-first and pending soonest-first by due date", () => {
+    const may = makeCharge({ id: "may", rentMonth: "2026-05", dueDateLabel: "May 1, 2026" });
+    const jul = makeCharge({ id: "jul", rentMonth: "2026-07", dueDateLabel: "Jul 1, 2026" });
+    const aug = makeCharge({ id: "aug", rentMonth: "2026-08", dueDateLabel: "Aug 1, 2026" });
+    const undated = makeCharge({ id: "setup", rentMonth: undefined, dueDateLabel: "Before move-in" });
+
+    const pendingOrder = [aug, undated, may, jul]
+      .sort((a, b) => compareChargesByDueDate(a, b, "asc"))
+      .map((c) => c.id);
+    expect(pendingOrder).toEqual(["may", "jul", "aug", "setup"]);
+
+    const paidOrder = [may, undated, aug, jul]
+      .sort((a, b) => compareChargesByDueDate(a, b, "desc"))
+      .map((c) => c.id);
+    expect(paidOrder).toEqual(["aug", "jul", "may", "setup"]);
   });
 
   it("dedupes charges hydrated with a missing residentEmail without crashing", () => {

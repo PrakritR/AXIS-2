@@ -17,6 +17,7 @@ import { ManagerOutgoingPaymentsPanel } from "@/components/portal/manager-outgoi
 import { ManagerAddOutgoingPaymentModal } from "@/components/portal/manager-add-outgoing-payment-modal";
 import type { ManagerPaymentBucket, ManagerPaymentDirection } from "@/data/demo-portal";
 import {
+  compareDueDateMs,
   householdChargeToLedgerRow,
   HOUSEHOLD_CHARGES_EVENT,
   readChargesForManager,
@@ -383,7 +384,9 @@ export function ManagerPayments() {
       return true;
     });
 
-    return filtered;
+    // Order by due date: pending/overdue soonest-first (what's due next), paid most-recent-first.
+    const direction = bucket === "paid" ? "desc" : "asc";
+    return [...filtered].sort((a, b) => compareDueDateMs(a.dueDateSortMs, b.dueDateSortMs, direction));
   }, [mergedRows, bucket, propertyFilter, activeResidentFilter]);
 
   const filterRow = (

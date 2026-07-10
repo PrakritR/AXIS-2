@@ -629,6 +629,37 @@ export function householdChargeDueDate(charge: HouseholdCharge): Date | null {
   return parseDueDateLabelToDate(charge.dueDateLabel);
 }
 
+/**
+ * Order two due-date timestamps (epoch ms; `null` = no real date).
+ * `asc` = soonest first (for pending/overdue: the next thing due is at the top).
+ * `desc` = most recent first (for paid history). Undated rows always sort last.
+ */
+export function compareDueDateMs(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  direction: "asc" | "desc" = "asc",
+): number {
+  const at = a ?? null;
+  const bt = b ?? null;
+  if (at === bt) return 0;
+  if (at === null) return 1;
+  if (bt === null) return -1;
+  return direction === "asc" ? at - bt : bt - at;
+}
+
+/** Compare two charges by their resolved due date. See {@link compareDueDateMs}. */
+export function compareChargesByDueDate(
+  a: HouseholdCharge,
+  b: HouseholdCharge,
+  direction: "asc" | "desc" = "asc",
+): number {
+  return compareDueDateMs(
+    householdChargeDueDate(a)?.getTime() ?? null,
+    householdChargeDueDate(b)?.getTime() ?? null,
+    direction,
+  );
+}
+
 export function isHouseholdChargeOverdue(charge: HouseholdCharge, now = new Date()): boolean {
   if (!isUnpaidHouseholdCharge(charge)) return false;
   const due = householdChargeDueDate(charge);
@@ -2573,6 +2604,7 @@ export function householdChargeToLedgerRow(c: HouseholdCharge): DemoManagerPayme
     amountPaid: c.status === "paid" ? c.amountLabel : "$0.00",
     balanceDue: c.status === "paid" ? "$0.00" : c.balanceLabel,
     dueDate: chargeDueLabel(c),
+    dueDateSortMs: householdChargeDueDate(c)?.getTime() ?? null,
     bucket,
     statusLabel: c.status === "paid" ? "Paid" : overdue ? "Overdue" : "Pending",
     cancelledReminders: c.cancelledReminders,

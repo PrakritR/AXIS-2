@@ -139,6 +139,8 @@ export type DemoManagerPaymentLedgerRow = {
   amountPaid: string;
   balanceDue: string;
   dueDate: string;
+  /** Parsed due-date epoch ms for ordering (null when the due label isn't a real date, e.g. "Before move-in"). */
+  dueDateSortMs?: number | null;
   bucket: ManagerPaymentBucket;
   statusLabel: string;
   notes: string;
@@ -154,6 +156,8 @@ export type DemoManagerOutgoingPaymentRow = {
   chargeTitle: string;
   amountLabel: string;
   dueDate: string;
+  /** Parsed due-date epoch ms for ordering (null when the source has no date). */
+  dueDateSortMs?: number | null;
   bucket: ManagerPaymentBucket;
   statusLabel: string;
   expenseEntryId?: string;

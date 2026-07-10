@@ -167,7 +167,7 @@ import {
   type ManagerServiceRequestBucket,
 } from "@/components/portal/manager-service-request-detail";
 import { ManagerWorkOrdersPanel } from "@/components/portal/manager-work-orders-panel";
-import { isHouseholdChargeOverdue } from "@/lib/household-charges";
+import { compareChargesByDueDate, isHouseholdChargeOverdue } from "@/lib/household-charges";
 import { ManagerAddPaymentModal } from "@/components/portal/manager-add-payment-modal";
 import {
   ManagerCreateServiceRequestModal,
@@ -778,7 +778,11 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
   );
 
   const visibleCharges = useMemo(
-    () => residentCharges.filter((c) => c.status === chargeTab),
+    () =>
+      residentCharges
+        .filter((c) => c.status === chargeTab)
+        // Paid history most-recent-first; anything still owed soonest-due first.
+        .sort((a, b) => compareChargesByDueDate(a, b, chargeTab === "paid" ? "desc" : "asc")),
     [residentCharges, chargeTab],
   );
 

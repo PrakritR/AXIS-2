@@ -20,6 +20,7 @@ import { usePortalSession } from "@/hooks/use-portal-session";
 import { useNativePlatform } from "@/hooks/use-native-platform";
 import {
   chargeDueLabel,
+  compareChargesByDueDate,
   HOUSEHOLD_CHARGES_EVENT,
   HOUSEHOLD_CHARGES_SESSION_KEY,
   isHouseholdChargeOverdue,
@@ -359,8 +360,11 @@ export function ResidentPaymentsPanel({
         const aOverdue = isHouseholdChargeOverdue(a);
         const bOverdue = isHouseholdChargeOverdue(b);
         if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+        // Soonest due first among what's still owed.
+        return compareChargesByDueDate(a, b, "asc");
       }
-      return 0;
+      // Paid history: most recently due first.
+      return compareChargesByDueDate(a, b, "desc");
     });
   }, [charges]);
 

@@ -50,6 +50,13 @@ function dueDateLabelFromIso(iso: string | undefined): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/** Sortable epoch ms for an ISO date (null when absent/unparseable) — keeps ordering chronological, not alphabetical by label. */
+function dueDateMsFromIso(iso: string | undefined): number | null {
+  if (!iso) return null;
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
+}
+
 function workOrderAmountCents(row: DemoManagerWorkOrderRow): number {
   const labor = row.vendorCostCents ?? 0;
   const materials = row.materialsCostCents ?? 0;
@@ -213,6 +220,7 @@ export function buildManagerOutgoingPaymentRows(input: {
       chargeTitle: expense.memo?.trim() || expense.categoryLabel,
       amountLabel: formatMoney(expense.amountCents),
       dueDate: dueDateLabelFromIso(expense.expenseDate),
+      dueDateSortMs: dueDateMsFromIso(expense.expenseDate),
       bucket: "paid",
       statusLabel: paidChannel ? `Paid · ${managerVendorPayMethodLabel(paidChannel)}` : "Paid",
       expenseEntryId: expense.id,
@@ -242,6 +250,7 @@ export function buildManagerOutgoingPaymentRows(input: {
       amountLabel: amountCents > 0 ? formatMoney(amountCents) : workOrder.cost || "—",
       amountCents: amountCents > 0 ? amountCents : undefined,
       dueDate: dueDateLabelFromIso(workOrder.vendorMarkedDoneAt ?? workOrder.completedAt),
+      dueDateSortMs: dueDateMsFromIso(workOrder.vendorMarkedDoneAt ?? workOrder.completedAt),
       bucket,
       statusLabel: workOrderStatusLabel(bucket),
       workOrderId: workOrder.id,
@@ -265,6 +274,7 @@ export function buildManagerOutgoingPaymentRows(input: {
       amountLabel: amountCents > 0 ? formatMoney(amountCents) : workOrder.cost || "—",
       amountCents: amountCents > 0 ? amountCents : undefined,
       dueDate: dueDateLabelFromIso(workOrder.paidAt ?? workOrder.completedAt),
+      dueDateSortMs: dueDateMsFromIso(workOrder.paidAt ?? workOrder.completedAt),
       bucket: "paid",
       statusLabel: workOrder.vendorPaymentChannel
         ? `Paid · ${managerVendorPayMethodLabel(workOrder.vendorPaymentChannel)}`
@@ -291,6 +301,7 @@ export function buildManagerOutgoingPaymentRows(input: {
       chargeTitle: `Processing fee — ${charge.title}`,
       amountLabel: formatMoney(feeCents),
       dueDate: dueDateLabelFromIso(charge.paidAt),
+      dueDateSortMs: dueDateMsFromIso(charge.paidAt),
       bucket: "paid",
       statusLabel: "Paid",
       fromAxisFee: true,
@@ -301,7 +312,13 @@ export function buildManagerOutgoingPaymentRows(input: {
     const bucketOrder: Record<ManagerPaymentBucket, number> = { overdue: 0, pending: 1, paid: 2 };
     const bucketDiff = bucketOrder[a.bucket] - bucketOrder[b.bucket];
     if (bucketDiff !== 0) return bucketDiff;
-    return b.dueDate.localeCompare(a.dueDate);
+    // Same bucket: pending/overdue soonest-first, paid most-recent-first. Undated rows last.
+    const at = a.dueDateSortMs ?? null;
+    const bt = b.dueDateSortMs ?? null;
+    if (at === bt) return 0;
+    if (at === null) return 1;
+    if (bt === null) return -1;
+    return a.bucket === "paid" ? bt - at : at - bt;
   });
 }
 
