@@ -105,12 +105,6 @@ export async function addChargeSetDateReminder(chargeId: string, isoDate: string
   }
 }
 
-function formatIsoDateLabel(iso: string): string {
-  const [year, month, day] = iso.split("-").map(Number);
-  const d = new Date(year!, (month ?? 1) - 1, day ?? 1, 12, 0, 0, 0);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
 /** Compact date picker + button that adds a one-off set-date reminder. */
 export function AddSetDateReminderControl({
   onAdd,
