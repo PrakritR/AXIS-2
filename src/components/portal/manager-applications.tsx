@@ -59,6 +59,7 @@ import {
   readCosignerSubmissionsForSignerAppId,
 } from "@/lib/cosigner-submissions-storage";
 import { getRoomChoiceLabel } from "@/lib/rental-application/data";
+import { isInProgressApplicationRow } from "@/lib/rental-application/in-progress-application";
 import {
   removeAllApplicationCharges,
   removeResidentHouseholdPaymentData,
@@ -255,6 +256,7 @@ export function ManagerApplications() {
   );
   const [approvePreviewRow, setApprovePreviewRow] = useState<DemoApplicantRow | null>(null);
   const [approveBusyId, setApproveBusyId] = useState<string | null>(null);
+  const [reminderBusyId, setReminderBusyId] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [editApplicationOpen, setEditApplicationOpen] = useState(false);
   const [screeningModalOpen, setScreeningModalOpen] = useState(false);
@@ -453,6 +455,47 @@ export function ManagerApplications() {
     );
   };
 
+  const sendApplicationReminder = async (row: DemoApplicantRow) => {
+    if (reminderBusyId) return;
+    setReminderBusyId(row.id);
+    try {
+      // Demo mode must never trigger a real email/write — simulate success locally.
+      if (isDemoModeActive()) {
+        showToast("Reminder sent to the applicant.");
+        return;
+      }
+      const res = await fetch("/api/portal/send-application-completion-reminder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ applicationId: row.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; mailtoHref?: string };
+      if (res.ok && data.ok) {
+        showToast("Application reminder sent to the applicant.");
+        return;
+      }
+      // A draft is offered both when email isn't set up (503) and when a real send
+      // fails (502) — keep the copy accurate to which happened, and surface the real
+      // error on a genuine failure rather than blaming configuration.
+      if (typeof data.mailtoHref === "string" && data.mailtoHref) {
+        const { openMailtoHref } = await import("@/lib/resident-welcome-email");
+        openMailtoHref(data.mailtoHref);
+        showToast(
+          res.status === 503
+            ? "Email isn't configured — opened a draft in your mail app instead."
+            : `Couldn't send automatically${data.error ? ` (${data.error})` : ""} — opened a draft in your mail app.`,
+        );
+        return;
+      }
+      showToast(data.error ?? "Could not send the application reminder.");
+    } catch {
+      showToast("Could not send the application reminder.");
+    } finally {
+      setReminderBusyId(null);
+    }
+  };
+
   const renderApplicationDetail = (row: DemoApplicantRow) => (
     <>
       <PortalTableDetailActions placement="top">
@@ -464,6 +507,20 @@ export function ManagerApplications() {
             <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "rejected")}>
               Reject
             </Button>
+            {isInProgressApplicationRow(row) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={PORTAL_DETAIL_BTN}
+                data-attr="application-send-reminder"
+                // Disabled while ANY reminder is in flight so a click on another row
+                // isn't silently dropped by the single-flight guard in the handler.
+                disabled={reminderBusyId !== null}
+                onClick={() => void sendApplicationReminder(row)}
+              >
+                {reminderBusyId === row.id ? "Sending…" : "Send reminder"}
+              </Button>
+            ) : null}
           </>
         ) : (
           <Button type="button" variant="outline" className={PORTAL_DETAIL_BTN} onClick={() => setRowBucket(row.id, "pending")}>

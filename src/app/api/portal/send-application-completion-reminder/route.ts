@@ -16,6 +16,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
+import { track } from "@/lib/analytics/posthog";
 
 export const runtime = "nodejs";
 
@@ -129,6 +130,8 @@ export async function POST(req: Request) {
     if (!res.ok) {
       return NextResponse.json({ ok: false, error: payload.message ?? res.statusText, mailtoHref }, { status: 502 });
     }
+    // Server-confirmed outcome: the manager successfully nudged an in-progress applicant.
+    track("application_completion_reminder_sent", user.id, { has_property: Boolean(row.propertyId) });
     return NextResponse.json({ ok: true, id: payload.id ?? null });
   } catch (error) {
     return NextResponse.json(
