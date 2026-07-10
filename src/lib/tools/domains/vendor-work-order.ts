@@ -30,6 +30,9 @@ async function loadScopedWorkOrder(
     .maybeSingle();
   const row = (data?.row_data ?? null) as WorkOrderRowWithDispatch | null;
   if (!row) return null;
+  // A vendor loses read access the moment the manager reassigns the work order
+  // to someone else (mirrors the portal GET route's vendor_user_id scoping).
+  if (row.vendorId !== scope.vendorDirectoryId || row.selfAssigned) return null;
   return { row, vendorUserId: (data?.vendor_user_id as string | null) ?? null };
 }
 

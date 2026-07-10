@@ -154,6 +154,15 @@ describe("vendor work-order tools scoping", () => {
     expect(result.found).toBe(false);
   });
 
+  it("get_job_details returns found:false after the manager reassigns to a different vendor", async () => {
+    const { db } = mockDb({
+      workOrders: [{ id: "REQ-1", manager_user_id: "mgr-a", vendor_user_id: "vendor-user-2", row_data: scheduledRow({ vendorId: "v-other" }) }],
+    });
+    const ctx = buildVendorAgentContext(db, { landlordId: "mgr-a", scope: SCOPE });
+    const result = (await getJobDetailsTool.handler(ctx, {})) as { found: boolean };
+    expect(result.found).toBe(false);
+  });
+
   it("get_job_access_info denies when unassigned or unscheduled, releases when assigned + scheduled", async () => {
     const denyCases = [
       scheduledRow({ vendorId: "someone-else" }),
