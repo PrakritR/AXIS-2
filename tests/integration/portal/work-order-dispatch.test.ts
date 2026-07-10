@@ -9,8 +9,12 @@ vi.mock("@/lib/vendor-availability-server", () => ({
   resolveVendorNextAvailableSlot: vi.fn().mockResolvedValue({ iso: "2026-07-16T17:00:00.000Z" }),
 }));
 vi.mock("@/lib/analytics/posthog", () => ({ track: vi.fn() }));
+vi.mock("@/lib/portal-inbox-delivery", () => ({
+  deliverPortalInboxMessage: vi.fn().mockResolvedValue({ ok: true, recipientCount: 1 }),
+}));
 
 import { sendPushToUser } from "@/lib/push-notifications.server";
+import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
 import { sendVendorNotification } from "@/lib/vendor-notification-delivery";
 import { resolveVendorNextAvailableSlot } from "@/lib/vendor-availability-server";
 import { declineDispatch, executeDispatch, prepareDispatch } from "@/lib/work-order-dispatch.server";
@@ -297,6 +301,13 @@ describe("executeDispatch", () => {
     expect(row.dispatch?.decidedBy).toBe("manager");
     expect((workOrders.get("REQ-1") as WoRec & { vendor_user_id?: string }).vendor_user_id).toBe("vendor-user-1");
     expect(vi.mocked(sendVendorNotification)).toHaveBeenCalledTimes(1);
+    // Resident hears about both the assignment and the booked visit.
+    expect(vi.mocked(deliverPortalInboxMessage)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(deliverPortalInboxMessage).mock.calls[0]![1]).toMatchObject({
+      toEmails: ["res@a.com"],
+      deliverToPortalInbox: true,
+      deliverViaEmail: false,
+    });
     expect(auditRows.some((r) => r.dedupe_key === "dispatch_execute:REQ-1")).toBe(true);
 
     const second = await executeDispatch(db, { workOrderId: "REQ-1", landlordId: "mgr-a", actor: ACTOR, decidedBy: "manager" });

@@ -245,16 +245,17 @@ export async function POST(req: Request) {
       return (data as ExistingRecord | null) ?? null;
     };
 
-    /** row_data.dispatch is server-owned (dispatch pipeline). A client mirror
-     * fetched before a proposal or decision landed must not wipe or regress it
-     * on re-sync: absent incoming keeps the server copy, and an undecided echo
-     * never overwrites a decided one. */
+    /** row_data.dispatch is strictly server-owned (dispatch pipeline). Clients
+     * can never set or change it: any incoming dispatch is dropped and replaced
+     * with the persisted server copy (or removed when none exists), so a forged
+     * proposal on a brand-new resident row can't spoof the manager UI or
+     * suppress the real dispatch. */
     const preserveServerDispatch = (rowData: WorkOrderRowWithDispatch, existing: ExistingRecord | null): void => {
       const existingDispatch = existing?.dispatch as WorkOrderRowWithDispatch["dispatch"] | undefined;
-      if (!existingDispatch) return;
-      const incoming = rowData.dispatch;
-      if (!incoming || (existingDispatch.decidedAtIso && !incoming.decidedAtIso)) {
+      if (existingDispatch) {
         rowData.dispatch = existingDispatch;
+      } else {
+        delete rowData.dispatch;
       }
     };
 

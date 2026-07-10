@@ -122,6 +122,24 @@ describe("work-order POST dispatch trigger + preserve", () => {
     expect(vi.mocked(prepareDispatch)).toHaveBeenCalledTimes(1);
   });
 
+  it("strips a forged dispatch off a new resident row so prepareDispatch still runs", async () => {
+    asUser("res-b", "res@b.com");
+    const { client, upserts } = mockDb([], { email: "res@b.com", role: "resident" }, [
+      { manager_user_id: "mgr-b", resident_email: "res@b.com" },
+    ]);
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(client as never);
+
+    const body = {
+      action: "replace",
+      rows: [{ id: "REQ-forged", managerUserId: "mgr-b", residentEmail: "res@b.com", dispatch: PROPOSAL }],
+    };
+    const res = await POST(jsonRequest("http://t", { method: "POST", body }));
+    expect((await parseJsonResponse(res)).status).toBe(200);
+    expect(vi.mocked(prepareDispatch)).toHaveBeenCalledTimes(1);
+    const persisted = upserts[0]!.row_data as { dispatch?: unknown };
+    expect("dispatch" in persisted).toBe(false);
+  });
+
   it("does not fire for manager-created rows", async () => {
     asUser("mgr-a", "a@test.com");
     const { client } = mockDb([], { email: "a@test.com", role: "manager" });

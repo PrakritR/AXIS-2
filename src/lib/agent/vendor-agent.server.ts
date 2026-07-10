@@ -101,25 +101,38 @@ async function appendToInboxThread(
   );
 }
 
-async function vendorOptedOut(db: Db, session: VendorAgentSessionRow): Promise<boolean> {
-  if (!session.vendor_user_id) return false;
-  const { data } = await db.from("profiles").select("sms_opt_out_at").eq("id", session.vendor_user_id).maybeSingle();
-  return Boolean(data?.sms_opt_out_at);
+async function vendorSmsState(db: Db, session: VendorAgentSessionRow): Promise<{ optedOut: boolean; consentAt: string | null }> {
+  if (!session.vendor_user_id) return { optedOut: false, consentAt: null };
+  const { data } = await db
+    .from("profiles")
+    .select("sms_opt_out_at, sms_consent_at")
+    .eq("id", session.vendor_user_id)
+    .maybeSingle();
+  return { optedOut: Boolean(data?.sms_opt_out_at), consentAt: (data?.sms_consent_at as string | null) ?? null };
 }
 
-/** Send the agent's reply out over every channel the session has. Not a model tool. */
-export async function deliverVendorAgentReply(db: Db, session: VendorAgentSessionRow, text: string): Promise<void> {
+/** Send the agent's reply out over every channel the session has. Not a model tool.
+ * The SMS leg only fires when the vendor is replying to their own text (inherently
+ * responsive) or has granted SMS consent — never as an unsolicited push. */
+export async function deliverVendorAgentReply(
+  db: Db,
+  session: VendorAgentSessionRow,
+  text: string,
+  inboundChannel?: "sms" | "inbox",
+): Promise<void> {
   if (session.inbox_thread_id) {
     await appendToInboxThread(db, session.inbox_thread_id, { from: "Axis Assistant", body: text }, { unread: true });
   }
   const from = process.env.AXIS_AGENT_SMS_FROM?.trim();
-  if (session.vendor_phone_e164 && from && !(await vendorOptedOut(db, session))) {
-    const result = await sendSms(session.vendor_phone_e164, text, from);
-    if (!result.sent && result.error) {
-      // ponytail: no email fallback for agent replies yet — the inbox copy above
-      // is always written; wire sendVendorNotification here if delivery gaps show up.
-      console.error("vendor-agent SMS send failed", session.id, result.error);
-    }
+  if (!session.vendor_phone_e164 || !from) return;
+  const { optedOut, consentAt } = await vendorSmsState(db, session);
+  if (optedOut) return;
+  if (inboundChannel !== "sms" && !consentAt) return;
+  const result = await sendSms(session.vendor_phone_e164, text, from);
+  if (!result.sent && result.error) {
+    // ponytail: no email fallback for agent replies yet — the inbox copy above
+    // is always written; wire sendVendorNotification here if delivery gaps show up.
+    console.error("vendor-agent SMS send failed", session.id, result.error);
   }
 }
 
@@ -241,7 +254,7 @@ export async function runVendorAgentSessionTurn(
     tools: result.toolTrace.length,
   });
 
-  await deliverVendorAgentReply(db, session, result.reply);
+  await deliverVendorAgentReply(db, session, result.reply, channel);
   return result.reply;
 }
 
@@ -266,10 +279,19 @@ export async function ensureVendorAgentSession(
   // Phone: vendor's own profile number first, then the manager-entered directory number.
   let rawPhone: string | null = null;
   let optedOut = false;
+  // A signed-up vendor must have granted SMS consent before the unsolicited
+  // opening text; a pre-signup invitee (no profile yet) was disclosed the
+  // job-texts terms in the invite modal, so their number is fair game.
+  let consentOk = !args.vendorUserId;
   if (args.vendorUserId) {
-    const { data } = await db.from("profiles").select("phone, sms_opt_out_at").eq("id", args.vendorUserId).maybeSingle();
+    const { data } = await db
+      .from("profiles")
+      .select("phone, sms_opt_out_at, sms_consent_at")
+      .eq("id", args.vendorUserId)
+      .maybeSingle();
     rawPhone = (data?.phone as string | null) ?? null;
     optedOut = Boolean(data?.sms_opt_out_at);
+    consentOk = Boolean(data?.sms_consent_at);
   }
   if (!rawPhone) {
     const { data } = await db
@@ -342,7 +364,7 @@ export async function ensureVendorAgentSession(
   // Opening SMS: transactional job coordination; STOP is honored via the
   // webhook + Twilio Advanced Opt-Out, and we never text an opted-out number.
   const from = process.env.AXIS_AGENT_SMS_FROM?.trim();
-  if (phoneE164 && from && !optedOut) {
+  if (phoneE164 && from && !optedOut && consentOk) {
     await sendSms(
       phoneE164,
       `Axis here about the job "${args.workOrderTitle}" at ${args.propertyLabel}. Reply to this number any time with questions about the job (entry details, directions, timing). Reply STOP to opt out.`,

@@ -11,6 +11,8 @@ import { notifyManagerFromAgent } from "@/lib/agent-notify.server";
 import { ensureVendorAgentSession } from "@/lib/agent/vendor-agent.server";
 import { track } from "@/lib/analytics/posthog";
 import { formatPacificDateTime } from "@/lib/pacific-time";
+import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import { buildResidentWorkOrderUpdate } from "@/lib/work-order-resident-notifications";
 import { DEFAULT_VISIT_DURATION_MINUTES } from "@/lib/vendor-availability";
 import { resolveVendorNextAvailableSlot } from "@/lib/vendor-availability-server";
 import { loadVendorDispatchSettings } from "@/lib/vendor-dispatch-settings";
@@ -276,6 +278,28 @@ export async function executeDispatch(
       .update({ result_summary: { outcome: "failed", error: updateError.message }, dedupe_key: null })
       .eq("dedupe_key", dedupeKey);
     return { ok: false, error: "Failed to assign the vendor.", status: 500 };
+  }
+
+  // Resident notification is best-effort and mirrors the manual manager flow:
+  // vendor-assigned always, plus a visit-scheduled note when a slot was booked.
+  const residentEmail = (row.residentEmail ?? "").trim();
+  if (residentEmail) {
+    const updates = [buildResidentWorkOrderUpdate("vendor_assigned", nextRow)];
+    if (scheduledIso) {
+      updates.push(buildResidentWorkOrderUpdate("visit_scheduled", nextRow, { scheduledLabel: formatPacificDateTime(scheduledIso) }));
+    }
+    for (const update of updates) {
+      await deliverPortalInboxMessage(db, {
+        senderUserId: args.landlordId,
+        senderEmail: args.actor.email,
+        fromName: "Axis Portal",
+        subject: update.subject,
+        text: update.text,
+        toEmails: [residentEmail],
+        deliverToPortalInbox: true,
+        deliverViaEmail: false,
+      }).catch(() => undefined);
+    }
   }
 
   // Vendor notification is best-effort — the assignment above already committed.
