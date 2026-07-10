@@ -126,6 +126,21 @@ export async function GET(req: Request) {
   let lateFeesCreated = 0;
   const errors: string[] = [];
 
+  // Anti-spam: cap outbound emails per resident PER RUN so a resident with many
+  // overdue charges never receives a burst of per-charge reminders + late-fee
+  // notices in a single cron run (the reported bug: ~8 emails at once). Reminders
+  // are sent first (more useful); once a resident hits the cap, further reminders
+  // and every late-fee notice are suppressed for this run (the late-fee charge is
+  // still created and visible in their portal).
+  const MAX_EMAILS_PER_RESIDENT_PER_RUN = 1;
+  const emailsToResidentThisRun = new Map<string, number>();
+  const residentEmailBudgetLeft = (email: string) =>
+    (emailsToResidentThisRun.get(email.trim().toLowerCase()) ?? 0) < MAX_EMAILS_PER_RESIDENT_PER_RUN;
+  const noteResidentEmailed = (email: string) => {
+    const k = email.trim().toLowerCase();
+    emailsToResidentThisRun.set(k, (emailsToResidentThisRun.get(k) ?? 0) + 1);
+  };
+
   // Guard against re-creating a late fee that already exists in ANY status.
   // `allCharges` is unpaid-only (status="pending"), so a PAID late fee would be
   // absent here and the deterministic `onConflict:"id"` upsert below would revert
@@ -204,6 +219,13 @@ export async function GET(req: Request) {
         continue;
       }
 
+      // Per-resident email cap — don't send this resident a second reminder in
+      // the same run.
+      if (!residentEmailBudgetLeft(charge.residentEmail)) {
+        skipped++;
+        continue;
+      }
+
       const result = await deliverPaymentReminder({
         db,
         charge,
@@ -222,6 +244,7 @@ export async function GET(req: Request) {
       if (result.sent) {
         sent++;
         sentDedupIds.add(dedupId);
+        noteResidentEmailed(charge.residentEmail);
       }
     }
 
@@ -288,14 +311,20 @@ export async function GET(req: Request) {
           const noticeDedupId = `late_fee_notice_${lateFeeId}`;
 
           if (apiKey && settings.lateFeeNoticeEnabled && !sentDedupIds.has(noticeDedupId)) {
-            try {
-              await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ from, to: [residentLower], subject: noticeSubject, text: noticeText }),
-              });
-            } catch {
-              /* non-critical */
+            // Only email the notice if the resident is under their per-run cap;
+            // otherwise suppress the send but still write the dedup below so it is
+            // never retried (this is what prevents the late-fee-notice burst).
+            if (residentEmailBudgetLeft(charge.residentEmail)) {
+              try {
+                await fetch("https://api.resend.com/emails", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ from, to: [residentLower], subject: noticeSubject, text: noticeText }),
+                });
+                noteResidentEmailed(charge.residentEmail);
+              } catch {
+                /* non-critical */
+              }
             }
 
             await db.from("portal_outbound_mail_records").upsert(
