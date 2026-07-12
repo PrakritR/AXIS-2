@@ -92,14 +92,20 @@ export async function POST(req: Request) {
       setupToken: ensured.token,
     });
 
+    // The setup token is a resident-account claim capability, so it must only
+    // ever leave the server via the email sent to the applicant's own address —
+    // never in this route's JSON body. The one exception is the sandbox skip
+    // path (@axis.local / @test.axis.local): those aren't real recipients, and
+    // the guest wizard consumes the mailto fallback there. See the security
+    // review on the demo-first branch.
     if (shouldSkipOutboundEmail(email)) {
-      return NextResponse.json({ ok: true, skipped: true, mailtoHref, signupUrl });
+      return NextResponse.json({ ok: true, skipped: true, mailtoHref });
     }
 
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (!apiKey) {
       return NextResponse.json(
-        { ok: false, error: "Email delivery is not configured.", mailtoHref, signupUrl },
+        { ok: false, error: "Email delivery is not configured." },
         { status: 503 },
       );
     }
@@ -112,7 +118,7 @@ export async function POST(req: Request) {
     });
     const payload = (await res.json().catch(() => ({}))) as { message?: string; id?: string };
     if (!res.ok) {
-      return NextResponse.json({ ok: false, error: payload.message ?? res.statusText, mailtoHref }, { status: 502 });
+      return NextResponse.json({ ok: false, error: payload.message ?? res.statusText }, { status: 502 });
     }
     return NextResponse.json({ ok: true, id: payload.id ?? null });
   } catch (error) {

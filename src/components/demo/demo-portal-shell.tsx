@@ -36,6 +36,7 @@ import {
 import type { DemoSegment } from "@/lib/demo/demo-segments";
 import { DEMO_SEGMENT_LABELS } from "@/lib/demo/demo-segments";
 import { seedDemoBlankData, seedDemoIdleData, seedDemoPortalIdleData } from "@/lib/demo/demo-seed";
+import { isDemoSignedIn, purgeDemoSeededSessionStorage } from "@/lib/demo/demo-client-teardown";
 import { DemoSectionRenderer } from "@/components/demo/demo-section-renderer";
 import { DemoFrameAssistant } from "@/components/demo/demo-frame-assistant";
 import { DemoCursorPlayback } from "@/components/demo/demo-cursor-playback";
@@ -89,6 +90,22 @@ export function DemoPortalShell() {
   useLayoutEffect(() => {
     hydrateDemoGuidedState();
     void seedDemoPortalIdleData();
+  }, []);
+
+  // When a signed-out visitor leaves the embedded demo (SPA nav away, or a full
+  // navigation such as signing in — which then resets module memory via
+  // location.replace), purge the demo-seeded sessionStorage so the real portal
+  // never reads demo residue. Skipped when signed in: those users never seed
+  // (see demo-seed.ts) and keep a legitimate portal cache under the same keys.
+  useEffect(() => {
+    const purge = () => {
+      if (!isDemoSignedIn()) purgeDemoSeededSessionStorage();
+    };
+    window.addEventListener("pagehide", purge);
+    return () => {
+      window.removeEventListener("pagehide", purge);
+      purge();
+    };
   }, []);
 
   const guidedState = useSyncExternalStore(

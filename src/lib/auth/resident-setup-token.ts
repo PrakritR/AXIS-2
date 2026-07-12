@@ -161,20 +161,30 @@ function idVariants(id: string): string[] {
   return [...new Set([trimmed, normalized].filter(Boolean))];
 }
 
-/** Issue (or re-issue) a setup token on an application and persist it for emailing. */
+/**
+ * Issue (or re-issue) a setup token on an application and persist it for emailing.
+ *
+ * Pass `managerUserId` to scope the lookup to applications owned by that manager.
+ * Because this function ROTATES the token (invalidating any previously emailed
+ * setup link), an unscoped call lets any authenticated manager rotate another
+ * manager's applicant's token by id — so authenticated callers must scope.
+ */
 export async function ensureResidentSetupTokenForApplication(
   db: SupabaseClient,
   axisId: string,
+  options?: { managerUserId?: string | null },
 ): Promise<
   | { ok: true; token: string; axisId: string; email: string; row: DemoApplicantRow }
   | { ok: false; error: string }
 > {
   const variants = idVariants(axisId);
-  const { data, error } = await db
+  let query = db
     .from("manager_application_records")
     .select("id, resident_email, row_data, manager_user_id, property_id, assigned_property_id")
-    .in("id", variants)
-    .limit(1);
+    .in("id", variants);
+  const scopeManagerId = options?.managerUserId?.trim();
+  if (scopeManagerId) query = query.eq("manager_user_id", scopeManagerId);
+  const { data, error } = await query.limit(1);
   if (error) return { ok: false, error: error.message };
   const record = data?.[0];
   if (!record?.row_data) return { ok: false, error: "Application not found." };

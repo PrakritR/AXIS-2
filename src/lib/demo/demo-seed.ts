@@ -45,6 +45,7 @@ import {
   hydrateDemoGuidedState,
   isGuidedDemoActive,
 } from "@/lib/demo/demo-guided";
+import { isDemoSignedIn } from "@/lib/demo/demo-client-teardown";
 import {
   buildDemoBlankSnapshot,
   buildDemoGuidedSnapshot,
@@ -130,10 +131,26 @@ export function applyDemoSnapshotForSegment(snapshot: DemoDataSnapshot): void {
 }
 
 /**
+ * The homepage embeds the demo at `/`, which a signed-in manager also visits.
+ * Seeding there would write demo rows into the shared portal-store sessionStorage
+ * keys; navigating into the real portal (same tab) would then read — and mirror
+ * back to the server — that demo residue. So the homepage embed never seeds for a
+ * signed-in user. `/demo` is unaffected (it is a dedicated sandbox surface).
+ */
+function shouldSkipHomepageDemoSeed(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.location?.pathname === "/" &&
+    isDemoSignedIn()
+  );
+}
+
+/**
  * Idle `/demo` mount: prefer DB mirror when available, else static demo-data.
  */
 export async function seedDemoPortalIdleData(): Promise<void> {
   if (typeof window === "undefined" || !isDemoModeActive()) return;
+  if (shouldSkipHomepageDemoSeed()) return;
   hydrateDemoGuidedState();
   const { mode, step } = getDemoGuidedState();
   if (mode === "guided" && step > 0) {
@@ -203,6 +220,7 @@ async function fetchIdleMirrorSnapshot(): Promise<DemoDataSnapshot | null> {
  */
 export async function seedDemoPortalDataFromMirror(): Promise<boolean> {
   if (typeof window === "undefined" || !isDemoModeActive()) return false;
+  if (shouldSkipHomepageDemoSeed()) return false;
   hydrateDemoGuidedState();
   if (isGuidedDemoActive()) return false;
   const snapshot = await fetchIdleMirrorSnapshot();

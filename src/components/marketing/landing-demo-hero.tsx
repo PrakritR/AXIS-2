@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChromeSubstrate } from "@/components/brand/chrome-substrate";
-import { DemoPortalShell } from "@/components/demo/demo-portal-shell";
+import { HomepageDemoEmbed } from "@/components/marketing/homepage-demo-embed";
 import { RevealOnView } from "@/components/motion/reveal-on-view";
 
 /**
@@ -14,8 +14,9 @@ export function LandingDemoHero() {
     <section className="hero-chrome-scene relative overflow-hidden pb-14 sm:pb-16">
       <ChromeSubstrate variant="full" />
 
-      {/* Full-viewport banner (100svh minus the sticky navbar). */}
-      <div className="relative flex min-h-[calc(100svh-57px)] items-center">
+      {/* Full-viewport banner: 100svh minus the sticky navbar (56px + 1px border)
+          and the notch inset the navbar adds via pt-[env(safe-area-inset-top)]. */}
+      <div className="relative flex min-h-[calc(100svh-57px-env(safe-area-inset-top,0px))] items-center">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-5 py-20 text-center sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:gap-16 lg:text-left">
           <RevealOnView>
             <h1 className="hero-title text-[2.75rem] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[3.5rem] lg:text-[4.25rem]">
@@ -64,9 +65,10 @@ export function LandingDemoHero() {
         </a>
       </div>
 
-      {/* Below the fold: the real interactive portal. */}
+      {/* Below the fold: the real interactive portal (signed-out visitors) or a
+          return-to-portal panel (signed-in visitors). */}
       <div id="live-demo" className="relative scroll-mt-16">
-        <DemoPortalShell />
+        <HomepageDemoEmbed />
       </div>
 
       <div className="relative mx-auto max-w-6xl px-4 text-center sm:px-5">

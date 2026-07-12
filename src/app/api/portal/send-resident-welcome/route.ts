@@ -74,7 +74,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    const ensured = await ensureResidentSetupTokenForApplication(svc, axisId);
+    // Scope the (token-rotating) lookup to the caller's own applications so a
+    // manager can't rotate another manager's applicant's setup token by id.
+    // Admins are internal staff (not self-serve) and keep cross-tenant reach.
+    const scopeManagerId = requestor.role === "admin" ? undefined : user.id;
+    const ensured = await ensureResidentSetupTokenForApplication(svc, axisId, {
+      managerUserId: scopeManagerId,
+    });
     if (!ensured.ok) {
       return NextResponse.json({ error: ensured.error }, { status: 400 });
     }

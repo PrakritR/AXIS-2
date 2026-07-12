@@ -32,6 +32,7 @@ import {
   CANONICAL_DEMO_VENDOR_NAME,
 } from "@/lib/demo/demo-canonical-accounts";
 import { isGuidedDemoActive } from "@/lib/demo/demo-guided";
+import { isPublicDemoSurfaceEnabled } from "@/lib/public-demo-access";
 
 export const DEMO_MANAGER_USER_ID = "demo-manager";
 export const DEMO_RESIDENT_USER_ID = "demo-resident";
@@ -49,11 +50,18 @@ export const DEMO_GUIDED_NAME = CANONICAL_DEMO_GUIDED_NAME;
 
 export type DemoSessionSnapshot = { userId: string | null; email: string | null; ready: boolean };
 
-/** True when the browser is on a public demo sandbox surface (`/demo` or the landing-page embed at `/`). */
+/**
+ * True when the browser is on a public demo sandbox surface: `/demo`, or the
+ * landing-page embed at `/`. The `/` case only counts when the public demo
+ * surface is enabled — when it is disabled the homepage renders the classic
+ * hero (no embedded demo), so demo mode must not be active there.
+ */
 export function isDemoModeActive(): boolean {
   if (typeof window === "undefined") return false;
   const pathname = window.location?.pathname;
-  return Boolean(pathname && (pathname.startsWith("/demo") || pathname === "/"));
+  if (!pathname) return false;
+  if (pathname.startsWith("/demo")) return true;
+  return pathname === "/" && isPublicDemoSurfaceEnabled();
 }
 
 /** Re-render portal hooks when demo navigation changes the pathname or in-frame section. */
