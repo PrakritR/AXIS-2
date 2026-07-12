@@ -8,6 +8,9 @@ describe("lockPortalScroll", () => {
   let main: HTMLElement;
 
   beforeEach(() => {
+    // jsdom defaults to "/", which is now a demo surface (the landing page
+    // embeds the demo frame). Non-demo assertions need a real portal path.
+    window.history.replaceState({}, "", "/portal/dashboard");
     document.body.innerHTML = "";
     document.body.style.overflow = "";
     main = document.createElement("main");
@@ -63,6 +66,6 @@ describe("lockPortalScroll", () => {
     expect(demoScroll.style.overflow).toBe("");
     expect(demoScroll.scrollTop).toBe(64);
 
-    window.history.pushState({}, "", originalPath || "/");
+    window.history.pushState({}, "", originalPath || "/portal/dashboard");
   });
 });

@@ -10,8 +10,10 @@
  * addresses by the agent's send path, so they can never trigger a real email.
  *
  * `isDemoModeActive()` is derived from the pathname so the demo session is on
- * exactly and only under `/demo` — there is no ordering race with panel mount
- * effects, and it can never leak into a real signed-in portal session.
+ * exactly and only under `/demo` and on `/` (the landing page embeds the demo
+ * frame above the fold) — there is no ordering race with panel mount effects,
+ * and it can never leak into a real signed-in portal session: portal routes
+ * live under `/portal`, `/resident`, `/vendor`, `/admin`, never at `/`.
  *
  * Guided tour state (`demo-guided.ts`, key `axis_demo_guided_state_v1`) uses the
  * same pathname gate — production `/portal` routes never read demo localStorage.
@@ -47,9 +49,11 @@ export const DEMO_GUIDED_NAME = CANONICAL_DEMO_GUIDED_NAME;
 
 export type DemoSessionSnapshot = { userId: string | null; email: string | null; ready: boolean };
 
-/** True when the browser is on the public demo sandbox. */
+/** True when the browser is on a public demo sandbox surface (`/demo` or the landing-page embed at `/`). */
 export function isDemoModeActive(): boolean {
-  return typeof window !== "undefined" && Boolean(window.location?.pathname?.startsWith("/demo"));
+  if (typeof window === "undefined") return false;
+  const pathname = window.location?.pathname;
+  return Boolean(pathname && (pathname.startsWith("/demo") || pathname === "/"));
 }
 
 /** Re-render portal hooks when demo navigation changes the pathname or in-frame section. */

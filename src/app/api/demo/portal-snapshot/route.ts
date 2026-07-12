@@ -22,18 +22,18 @@ export async function GET(request: Request) {
       if (guided) {
         return NextResponse.json(
           { source: "mirror", snapshot: guided },
-          { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=300" } },
+          { headers: { "Cache-Control": "public, max-age=30, s-maxage=30, stale-while-revalidate=300" } },
         );
       }
       return NextResponse.json(
         { source: "blank" },
-        { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } },
+        { headers: { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" } },
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load guided demo snapshot.";
       return NextResponse.json(
         { source: "blank", error: message },
-        { status: 200, headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } },
+        { status: 200, headers: { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" } },
       );
     }
   }
@@ -42,18 +42,18 @@ export async function GET(request: Request) {
     if (mirrored) {
       return NextResponse.json(
         { source: "mirror", snapshot: mirrored },
-        { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=300" } },
+        { headers: { "Cache-Control": "public, max-age=30, s-maxage=30, stale-while-revalidate=300" } },
       );
     }
     return NextResponse.json(
       { source: "static", snapshot: buildStaticDemoPortalSnapshot() },
-      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } },
+      { headers: { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" } },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load demo snapshot.";
     return NextResponse.json(
       { source: "static", snapshot: buildStaticDemoPortalSnapshot(), error: message },
-      { status: 200, headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } },
+      { status: 200, headers: { "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300" } },
     );
   }
 }

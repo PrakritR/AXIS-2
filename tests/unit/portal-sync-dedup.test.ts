@@ -25,6 +25,10 @@ async function freshLeaseUploads() {
 describe("portal sync dedup guards", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // jsdom defaults to "/", which is now a demo surface (the landing page
+    // embeds the demo frame) — demo mode short-circuits these loaders, so
+    // emulate a signed-in portal page.
+    window.history.replaceState({}, "", "/portal/dashboard");
     const mkStorage = () => {
       const store = new Map<string, string>();
       return {

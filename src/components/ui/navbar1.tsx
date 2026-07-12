@@ -57,6 +57,14 @@ function MenuIcon({ className }: { className?: string }) {
   );
 }
 
+function ArrowRightIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4 12h16m0 0-6-6m6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function Navbar1({
   logoSlot,
   menu = [],
@@ -93,9 +101,13 @@ export function Navbar1({
             </Button>
           ) : (
             <>
-              <Button asChild variant="outline" size="sm">
-                <Link href={auth.login.url}>{auth.login.text}</Link>
-              </Button>
+              <Link
+                href={auth.login.url}
+                className="mr-2 inline-flex items-center gap-1.5 px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:text-primary"
+              >
+                {auth.login.text}
+                <ArrowRightIcon className="size-4" />
+              </Link>
               <Button
                 asChild
                 size="sm"

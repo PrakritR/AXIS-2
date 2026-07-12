@@ -168,6 +168,35 @@ export async function seedDemoGuidedBaseData(): Promise<void> {
   applyDemoSnapshot(buildDemoBlankSnapshot());
 }
 
+// TTL + in-flight guard (same pattern as the portal sync loaders): the landing
+// page mounts the demo frame on every visit, so remounts within the TTL reuse
+// the last mirror snapshot instead of re-hitting Supabase through the API.
+const DEMO_SNAPSHOT_TTL_MS = 60_000;
+let idleSnapshotCache: { at: number; snapshot: DemoDataSnapshot } | null = null;
+let idleSnapshotPromise: Promise<DemoDataSnapshot | null> | null = null;
+
+async function fetchIdleMirrorSnapshot(): Promise<DemoDataSnapshot | null> {
+  if (idleSnapshotCache && Date.now() - idleSnapshotCache.at < DEMO_SNAPSHOT_TTL_MS) {
+    return idleSnapshotCache.snapshot;
+  }
+  if (idleSnapshotPromise) return idleSnapshotPromise;
+  idleSnapshotPromise = (async () => {
+    try {
+      const res = await fetch("/api/demo/portal-snapshot", { credentials: "same-origin" });
+      if (!res.ok) return null;
+      const body = (await res.json()) as { source?: string; snapshot?: DemoDataSnapshot };
+      if (body.source !== "mirror" || !body.snapshot) return null;
+      idleSnapshotCache = { at: Date.now(), snapshot: body.snapshot };
+      return body.snapshot;
+    } catch {
+      return null;
+    } finally {
+      idleSnapshotPromise = null;
+    }
+  })();
+  return idleSnapshotPromise;
+}
+
 /**
  * Overlay a read-only mirror from the canonical test accounts (production → demo).
  * Falls back silently — use `seedDemoPortalIdleData` for mirror-first idle seeding.
@@ -176,14 +205,8 @@ export async function seedDemoPortalDataFromMirror(): Promise<boolean> {
   if (typeof window === "undefined" || !isDemoModeActive()) return false;
   hydrateDemoGuidedState();
   if (isGuidedDemoActive()) return false;
-  try {
-    const res = await fetch("/api/demo/portal-snapshot", { credentials: "same-origin" });
-    if (!res.ok) return false;
-    const body = (await res.json()) as { source?: string; snapshot?: DemoDataSnapshot };
-    if (body.source !== "mirror" || !body.snapshot) return false;
-    applyDemoSnapshot(body.snapshot);
-    return true;
-  } catch {
-    return false;
-  }
+  const snapshot = await fetchIdleMirrorSnapshot();
+  if (!snapshot) return false;
+  applyDemoSnapshot(snapshot);
+  return true;
 }
