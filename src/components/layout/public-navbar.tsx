@@ -6,7 +6,6 @@ import { Navbar1, type NavbarMenuItem } from "@/components/ui/navbar1";
 import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalDashboardPath, normalizePortalRoles, parseAuthRole, type AuthRole } from "@/lib/auth/portal-roles";
 import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
-import { isPublicDemoSurfaceEnabled } from "@/lib/public-demo-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { Session } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
@@ -83,30 +82,25 @@ export function PublicNavbar() {
       pathname.startsWith("/rent/apply"),
     [pathname],
   );
-  const managerActive = useMemo(() => pathname.startsWith("/partner"), [pathname]);
-  const vendorActive = useMemo(() => pathname.startsWith("/vendors"), [pathname]);
-  const demoActive = useMemo(() => pathname === "/demo" || pathname.startsWith("/demo/"), [pathname]);
   const contactActive = useMemo(() => pathname === "/contact", [pathname]);
 
   const menu: NavbarMenuItem[] = useMemo(
     () => {
+      // Slim marketing nav: Browse homes + Contact. Manager/vendor entry points
+      // live in the hero CTAs and footer; no "Demo" item — the landing page
+      // embeds the demo above the fold. /partner, /vendors, /demo stay routable.
       const items: NavbarMenuItem[] = [
         {
-          title: "Resident",
+          title: "Browse homes",
           url: RESIDENT_BROWSE_PATH,
           active: residentActive,
           dataAttr: "nav-resident",
         },
-        { title: "Manager", url: "/partner", active: managerActive, dataAttr: "nav-manager" },
-        { title: "Vendor", url: "/vendors", active: vendorActive, dataAttr: "nav-vendor" },
+        { title: "Contact", url: "/contact", active: contactActive, dataAttr: "nav-contact" },
       ];
-      if (isPublicDemoSurfaceEnabled()) {
-        items.push({ title: "Demo", url: "/demo", active: demoActive, dataAttr: "nav-demo" });
-      }
-      items.push({ title: "Contact", url: "/contact", active: contactActive, dataAttr: "nav-contact" });
       return items;
     },
-    [residentActive, managerActive, vendorActive, demoActive, contactActive],
+    [residentActive, contactActive],
   );
 
   const portalLink = useMemo(() => {
