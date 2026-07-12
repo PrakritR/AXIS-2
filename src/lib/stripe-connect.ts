@@ -23,7 +23,7 @@ export function isStripeConnectAccountAccessError(message: string): boolean {
 }
 
 export function managerConnectReconnectMessage(): string {
-  return "Your Stripe payout account was created under a different Axis Stripe setup. Open Portal → Payments and complete Stripe payout setup again.";
+  return "Your Stripe payout account was created under a different PropLane Stripe setup. Open Portal → Payments and complete Stripe payout setup again.";
 }
 
 /** True when the manager can receive ACH destination transfers and withdraw to their bank. */

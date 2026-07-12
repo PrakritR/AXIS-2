@@ -82,7 +82,7 @@ export function ManagerStartPage() {
     // on native before the isNative redirect above resolves (App Store 2.1(b)).
     <div className="native-hide min-h-screen px-4 py-14 sm:px-5 sm:py-20">
       <div className="mx-auto max-w-3xl text-center">
-        <h1 className="text-4xl font-bold tracking-[-0.03em] text-foreground sm:text-5xl md:text-[3.25rem]">Start with Axis.</h1>
+        <h1 className="text-4xl font-bold tracking-[-0.03em] text-foreground sm:text-5xl md:text-[3.25rem]">Start with PropLane.</h1>
 
         <div className="glass-card mt-8 inline-flex items-center gap-1 rounded-full p-1">
           <button

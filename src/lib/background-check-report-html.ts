@@ -50,8 +50,8 @@ export function buildBackgroundCheckReportHtml(
 
   const body = `
 <h1>BACKGROUND &amp; CREDIT CHECK REPORT</h1>
-<p class="sub">Axis · Screening record</p>
-<p class="generated">Axis ID ${escapeHtml(axisId)} · ${escapeHtml(applicantName)} · Generated ${escapeHtml(generatedLabel)}</p>
+<p class="sub">PropLane · Screening record</p>
+<p class="generated">PropLane ID ${escapeHtml(axisId)} · ${escapeHtml(applicantName)} · Generated ${escapeHtml(generatedLabel)}</p>
 
 ${
   screening
@@ -86,7 +86,7 @@ ${
     : ""
 }
 
-<p class="footnote">Generated from Axis screening records. Consult the full vendor report before any adverse action. Axis · Confidential</p>
+<p class="footnote">Generated from PropLane screening records. Consult the full vendor report before any adverse action. PropLane · Confidential</p>
 `;
 
   return `<!DOCTYPE html>

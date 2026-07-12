@@ -356,7 +356,7 @@ export const LISTING_PLACE_CATEGORY_OPTIONS = [
     id: "entire_home",
     label: "Entire place — one lease for the home",
     short: "Entire home",
-    hint: "Rent the full unit; you can still itemize rooms inside Axis",
+    hint: "Rent the full unit; you can still itemize rooms inside PropLane",
   },
 ] as const;
 

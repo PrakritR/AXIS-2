@@ -201,7 +201,7 @@ function ComposeModal({
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            fromName: "Axis Admin",
+            fromName: "PropLane Admin",
             toUserIds,
             subject: topicTrim,
             text: bodyTrim,
@@ -533,7 +533,7 @@ export function AdminInboxClient({ tabId }: { tabId: string }) {
                     if (!message) return;
                     if (!roleAllowsThread(message.senderRole)) return;
                     if (message.folder !== "inbox" && message.folder !== "sent") return;
-                    if (appendThreadReply(row.id, "Axis Admin", text)) {
+                    if (appendThreadReply(row.id, "PropLane Admin", text)) {
                       showToast("Added to thread.");
                       setTick((t) => t + 1);
                     } else {

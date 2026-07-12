@@ -51,12 +51,12 @@ test.describe("Resident login and application flow", () => {
     await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test("resident apply page at /rent/apply has Axis ID field", async ({ page }) => {
+  test("resident apply page at /rent/apply has PropLane ID field", async ({ page }) => {
     await page.goto("/rent/apply");
     // Look for Axis ID / application ID input
     const axisIdField = page
-      .getByLabel(/axis id|application id/i)
-      .or(page.getByPlaceholder(/axis|application/i))
+      .getByLabel(/proplane id|application id/i)
+      .or(page.getByPlaceholder(/proplane|application/i))
       .first();
     // This may or may not be present depending on which step is shown first
     // At minimum, the page should load with a heading

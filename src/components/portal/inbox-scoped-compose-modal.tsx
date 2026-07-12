@@ -42,7 +42,7 @@ type Chip =
   | { key: string; kind: "manual"; email: string };
 
 function categoryHint(portal: "resident" | "manager" | "vendor", category: InboxRecipientCategory): string {
-  if (category === "admin") return "Messages to Axis operations.";
+  if (category === "admin") return "Messages to PropLane operations.";
   if (portal === "manager") {
     if (category === "management") return "Property owners on your listings.";
     return "Tenants & approved residents.";

@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { assertNonProdDatabase } from "@/lib/server-env";
 
 export const EXISTING_ACCOUNT_PASSWORD_MISMATCH =
-  "This email already has an Axis account. Enter the same password you use for that account.";
+  "This email already has a PropLane account. Enter the same password you use for that account.";
 
 /**
  * Confirms `password` is correct for the auth user with this email (stateless; no cookies).

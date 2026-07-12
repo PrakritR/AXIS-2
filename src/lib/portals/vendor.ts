@@ -4,7 +4,7 @@ import type { PortalDefinition } from "@/lib/portal-types";
 export const vendorPortal: PortalDefinition = {
   kind: "vendor",
   basePath: "/vendor",
-  title: "Axis",
+  title: "PropLane",
   accent: "blue",
   sections: [
     { section: "dashboard", label: "Dashboard", tabs: [] },

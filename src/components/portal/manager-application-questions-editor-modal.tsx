@@ -209,7 +209,7 @@ export function ManagerApplicationQuestionsEditorModal({
         propertyIds: isBulkSave ? bulkIds : undefined,
         managerUserId,
         showToast,
-        singleSuccessMessage: "Application restored to Axis defaults.",
+        singleSuccessMessage: "Application restored to PropLane defaults.",
       })
     ) {
       return;
@@ -239,7 +239,7 @@ export function ManagerApplicationQuestionsEditorModal({
               {applicationFields.length} question{applicationFields.length === 1 ? "" : "s"} on this application
             </p>
             <Button type="button" variant="outline" className="h-8 rounded-full px-3 text-xs" onClick={restoreDefaults}>
-              Restore Axis defaults
+              Restore PropLane defaults
             </Button>
           </div>
 

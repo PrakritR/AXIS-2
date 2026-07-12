@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
     const normalEmail = email.trim().toLowerCase();
     if (!isPrimaryAdminEmail(normalEmail)) {
-      return NextResponse.json({ error: "Admin registration is restricted to the primary Axis admin email." }, { status: 403 });
+      return NextResponse.json({ error: "Admin registration is restricted to the primary PropLane admin email." }, { status: 403 });
     }
 
     const supabase = createSupabaseServiceRoleClient();

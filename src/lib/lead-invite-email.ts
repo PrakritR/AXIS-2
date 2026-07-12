@@ -4,8 +4,8 @@ export type LeadInviteKind = "apply" | "tour" | "listing";
 
 export function leadInviteSubject(kind: LeadInviteKind, propertyTitle: string): string {
   const title = propertyTitle.trim() || "your property";
-  if (kind === "listing") return `Listing: ${title} — Axis`;
-  return kind === "apply" ? `Apply for ${title} — Axis` : `Schedule a tour — ${title}`;
+  if (kind === "listing") return `Listing: ${title} — PropLane`;
+  return kind === "apply" ? `Apply for ${title} — PropLane` : `Schedule a tour — ${title}`;
 }
 
 function escapeHtmlText(s: string): string {
@@ -41,20 +41,20 @@ export function buildLeadInviteEmailBody(params: {
     if (params.managerNote?.trim()) {
       lines.push("", "Note from your property manager:", params.managerNote.trim());
     }
-    lines.push("", "— Axis");
+    lines.push("", "— PropLane");
     return lines.join("\n");
   }
 
   const intro =
     params.kind === "apply"
-      ? `Your property manager invited you to apply for ${propertyTitle} on Axis.`
-      : `Your property manager invited you to schedule a tour for ${propertyTitle} on Axis.`;
+      ? `Your property manager invited you to apply for ${propertyTitle} on PropLane.`
+      : `Your property manager invited you to schedule a tour for ${propertyTitle} on PropLane.`;
   const cta = params.kind === "apply" ? "Start your application here:" : "Schedule your tour here:";
   const lines = [greeting, "", intro, "", cta, params.linkUrl];
   if (params.managerNote?.trim()) {
     lines.push("", "Note from your property manager:", params.managerNote.trim());
   }
-  lines.push("", "— Axis");
+  lines.push("", "— PropLane");
   return lines.join("\n");
 }
 
@@ -101,7 +101,7 @@ ${listingHref ? `<p style="margin:0 0 8px 0;font-size:14px"><a href="${listingHr
 ${tourHref ? `<p style="margin:0;font-size:13px;color:#64748b"><a href="${tourHref}" style="color:#2563eb">Schedule a tour</a> · <span style="word-break:break-all">${tourPlain}</span></p>` : ""}
 ${listingPlain ? `<p style="margin:8px 0 0 0;font-size:13px;color:#64748b;word-break:break-all">${listingPlain}</p>` : ""}
 ${noteBlock}
-<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— Axis</p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— PropLane</p>
 </div>
 </body>
 </html>`;
@@ -109,8 +109,8 @@ ${noteBlock}
 
   const intro =
     params.kind === "apply"
-      ? `Your property manager invited you to apply for <strong>${propertyTitle}</strong> on Axis.`
-      : `Your property manager invited you to schedule a tour for <strong>${propertyTitle}</strong> on Axis.`;
+      ? `Your property manager invited you to apply for <strong>${propertyTitle}</strong> on PropLane.`
+      : `Your property manager invited you to schedule a tour for <strong>${propertyTitle}</strong> on PropLane.`;
   const ctaLabel = params.kind === "apply" ? "Start application" : "Schedule tour";
   return `<!DOCTYPE html>
 <html>
@@ -124,7 +124,7 @@ ${noteBlock}
 </td></tr></table>
 <p style="margin:0;font-size:13px;color:#64748b">Or copy this link: <span style="word-break:break-all;color:#334155">${urlPlain}</span></p>
 ${noteBlock}
-<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— Axis</p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— PropLane</p>
 </div>
 </body>
 </html>`;

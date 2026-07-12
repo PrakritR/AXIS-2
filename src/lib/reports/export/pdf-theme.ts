@@ -215,7 +215,7 @@ export function drawDocumentHeader(
     page.drawImage(logo, { x: margin, y: y - logoHeight + 4, width: logoWidth, height: logoHeight });
     textX = margin + logoWidth + 10;
   }
-  drawText(page, "AXIS PROPERTY MANAGEMENT", textX, y - 6, 9, bold, PDF_COLORS.muted, opts.contentWidth);
+  drawText(page, "PROPLANE PROPERTY MANAGEMENT", textX, y - 6, 9, bold, PDF_COLORS.muted, opts.contentWidth);
   y -= logo ? logoHeight + 12 : 14;
 
   drawText(page, opts.title.toUpperCase(), margin, y, 18, bold, PDF_COLORS.navy, opts.contentWidth);
@@ -469,7 +469,7 @@ export function drawStandardFooter(theme: PdfTheme, contentWidth: number) {
   pages.forEach((page, index) => {
     drawWrappedText(
       page,
-      "This document was prepared from Axis property records for management, tax, and audit purposes. Confidential — retain with supporting bank statements.",
+      "This document was prepared from PropLane property records for management, tax, and audit purposes. Confidential — retain with supporting bank statements.",
       margin,
       PDF_PAGE.footerY + 20,
       7.5,

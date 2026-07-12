@@ -136,7 +136,7 @@ export function ManagerPhoneSettingsPanel() {
   return (
     <PortalCollapsibleSection
       title="Phone & text messages"
-      subtitle="Texts to residents and vendors send from your Axis work number. Replies land in your Inbox and email — and can be forwarded to your phone."
+      subtitle="Texts to residents and vendors send from your PropLane work number. Replies land in your Inbox and email — and can be forwarded to your phone."
       surfaceMuted={false}
       contentClassName="space-y-4 px-4 pb-5"
       toggleDataAttr="manager-phone-settings-toggle"

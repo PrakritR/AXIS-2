@@ -55,7 +55,7 @@ async function deliverEmail(to: string[], subject: string, text: string, html?: 
   if (recipients.length === 0) return { sent: false, skipped: true };
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) return { sent: false, skipped: false, error: "Email delivery not configured (RESEND_API_KEY missing)." };
-  const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -179,7 +179,7 @@ export async function notifyManagerTourRequest(
       ownerUserId: recipient.userId,
       participantEmail: recipient.email,
       folder: "inbox",
-      fromName: "Axis Tours",
+      fromName: "PropLane Tours",
       fromEmail: "tours@axis.local",
       toLine: recipient.email,
       subject,
@@ -276,7 +276,7 @@ export async function notifyTenantTourConfirmed(
     ownerUserId: (guestProfile?.id as string | null) ?? null,
     participantEmail: guestEmail,
     folder: "inbox",
-    fromName: "Axis Tours",
+    fromName: "PropLane Tours",
     fromEmail: "tours@axis.local",
     toLine: guestEmail,
     subject,

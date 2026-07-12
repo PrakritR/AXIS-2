@@ -155,7 +155,7 @@ export default function ToursContactPage() {
     <div className="min-h-screen px-4 py-12 sm:py-16">
       <div className="mx-auto max-w-2xl">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          {tab === "tour" ? "Schedule tour" : "Message Axis"}
+          {tab === "tour" ? "Schedule tour" : "Message PropLane"}
         </h1>
 
         <div className="mt-6">
@@ -326,7 +326,7 @@ function TourFlow({
         </div>
 
         <div className="mt-5 rounded-2xl border border-border bg-accent/25 px-5 py-4">
-          <p className="text-sm font-semibold text-foreground">Save your tour in Axis</p>
+          <p className="text-sm font-semibold text-foreground">Save your tour in PropLane</p>
           <p className="mt-1 text-sm leading-relaxed text-muted">
             Create a free resident account to track this tour, message your manager, and apply when you are ready.
             No account is required to book a tour.
@@ -732,7 +732,7 @@ function Step2({
         </p>
       ) : availability.size === 0 ? (
         <p className="rounded-2xl border px-4 py-3 text-sm portal-banner-pending">
-          No tour windows are published for this property yet. Send a message to Axis or ask your property manager.
+          No tour windows are published for this property yet. Send a message to PropLane or ask your property manager.
         </p>
       ) : (
         <p className="text-sm text-muted">

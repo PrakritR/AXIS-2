@@ -208,10 +208,10 @@ function buildManagerTemplateLeaseHtml(ctx: LeaseGenerationContext, doc: { url: 
 .doc-embed{width:100%;height:75vh;min-height:640px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc}
 .doc-link{display:inline-block;margin:6px 0 14px;font-weight:600}</style></head><body>
 <h1>LEASE AGREEMENT</h1>
-<p class="sub">Prepared from the property manager's lease template · Generated ${generatedDate} via Axis</p>
+<p class="sub">Prepared from the property manager's lease template · Generated ${generatedDate} via PropLane</p>
 
 <h2>1. Placement Summary</h2>
-<p>This summary is compiled by Axis from the resident's application and the listing for convenience. The manager's lease document in Section 2 is the lease text.</p>
+<p>This summary is compiled by PropLane from the resident's application and the listing for convenience. The manager's lease document in Section 2 is the lease text.</p>
 <table>
   <tr><th width="35%">Resident / Tenant</th><td><strong>${tenantName}</strong><br/>Phone: ${dash(a.phone)} &nbsp;·&nbsp; Email: ${dash(a.email)}</td></tr>
   <tr><th>Property</th><td>${address}${cityZip !== "—" ? `<br/>${cityZip}` : ""}</td></tr>
@@ -228,7 +228,7 @@ function buildManagerTemplateLeaseHtml(ctx: LeaseGenerationContext, doc: { url: 
 ${isPdf ? `<object class="doc-embed" data="${docUrl}" type="application/pdf"><p>The document preview could not be shown here. <a href="${docUrl}" target="_blank" rel="noopener">Open ${docName}</a>.</p></object>` : `<iframe class="doc-embed" src="${docUrl}" title="Lease document"></iframe>`}
 
 <h2>3. Electronic Signature</h2>
-<p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the Axis portal. The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties and applies to the manager's lease document above.</p>
+<p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the PropLane portal. The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties and applies to the manager's lease document above.</p>
 </body></html>`;
 }
 
@@ -251,7 +251,7 @@ export function downloadAiGeneratedLeaseHtml(ctx: LeaseGenerationContext): void 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Axis-AI-Lease-${safe}.html`;
+  a.download = `PropLane-AI-Lease-${safe}.html`;
   a.rel = "noopener";
   document.body.appendChild(a);
   a.click();

@@ -12,15 +12,15 @@ const markTileSizes = {
 } as const;
 
 const glyphSizes = {
-  default: "h-[28px] w-[46px]",
-  compact: "h-[20px] w-[33px]",
+  default: "h-[28px] w-[28px]",
+  compact: "h-[20px] w-[20px]",
 } as const;
 
 export type AxisLogoSize = keyof typeof markTileSizes;
 
 export type AxisLogoVariant = "default" | "portalHeader" | "adminHeader";
 
-/** Inline "AX": crisp architectural mark — solid strokes, no glow or gradient blur. */
+/** Inline PropLane paper-plane mark — solid strokes, no glow or gradient blur. */
 function AxisLogoGlyph({
   className = "",
   size = "default",
@@ -31,36 +31,30 @@ function AxisLogoGlyph({
   return (
     <svg
       className={`block shrink-0 ${glyphSizes[size]} ${className}`}
-      viewBox="0 0 46 26"
+      viewBox="0 0 26 26"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       shapeRendering="geometricPrecision"
       aria-hidden
     >
       <path
-        d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45"
+        d="M3.5 11.9L22.5 3.9L15.4 22.4L11.3 14.6L3.5 11.9Z"
         className="stroke-white [html[data-theme=light]_&]:stroke-foreground"
-        strokeWidth="2.55"
+        strokeWidth="2.15"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M27 4L43 22"
+        d="M11.3 14.6L22.5 3.9"
         className="stroke-steel-light [html[data-theme=light]_&]:stroke-primary"
-        strokeWidth="2.75"
-        strokeLinecap="round"
-      />
-      <path
-        d="M43 4L27 22"
-        className="stroke-white/85 [html[data-theme=light]_&]:stroke-cobalt-deep"
-        strokeWidth="2.55"
+        strokeWidth="2.15"
         strokeLinecap="round"
       />
     </svg>
   );
 }
 
-/** Primary AX mark — crisp gradient tile + SVG glyph. */
+/** Primary PropLane mark — crisp gradient tile + SVG glyph. */
 export function AxisLogoMark({
   className = "",
   variant,
@@ -79,7 +73,7 @@ export function AxisLogoMark({
 }
 
 /**
- * Same tile chrome as the header AX mark — use for portal empty states
+ * Same tile chrome as the header brand mark — use for portal empty states
  * so icons read with the same weight as the global header.
  */
 export function AxisHeaderMarkTile({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -104,7 +98,7 @@ export function AxisLogoWordmark({ size = "default" }: { size?: AxisLogoSize }) 
     <span
       className={`font-semibold tracking-[-0.035em] text-foreground ${size === "compact" ? "text-[15px]" : "text-[17px]"}`}
     >
-      Axis
+      PropLane
     </span>
   );
 }

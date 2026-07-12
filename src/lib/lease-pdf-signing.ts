@@ -48,7 +48,7 @@ export async function buildLeaseSignaturePagePdf(row: LeasePipelineRow): Promise
   draw(signatureLine(row, "manager"), 11);
   y -= 16;
   draw("Signatures apply to the attached lease document.", 10);
-  draw("Typed names captured through the Axis portal constitute electronic signatures.", 9);
+  draw("Typed names captured through the PropLane portal constitute electronic signatures.", 9);
 
   return pdf.save();
 }

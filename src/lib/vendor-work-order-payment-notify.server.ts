@@ -121,7 +121,7 @@ export async function deliverVendorWorkOrderPaymentNotify(
     senderUserId: input.vendorUserId,
     senderEmail: input.vendorEmail,
     senderRole: "vendor",
-    fromName: input.vendorName || "Axis Portal",
+    fromName: input.vendorName || "PropLane Portal",
     subject,
     text: textWithPaymentMethods,
     toUserIds: profiles.map((profile) => profile.userId),

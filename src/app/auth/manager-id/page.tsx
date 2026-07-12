@@ -142,7 +142,7 @@ function ManagerIdContent() {
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted/70 mb-4">Account setup steps</p>
         <Step n={1} label="Reserve your account ID" done />
         <Step n={2} label="Set a password to activate your portal" />
-        <Step n={3} label="Sign in to Axis" />
+        <Step n={3} label="Sign in to PropLane" />
       </div>
 
       <button

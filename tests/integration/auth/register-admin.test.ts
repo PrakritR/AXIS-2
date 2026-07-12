@@ -40,7 +40,7 @@ describe("POST /api/auth/register-admin", () => {
     const res = await registerAdmin(req);
     const { status, data } = await parseJsonResponse<{ error: string }>(res);
     expect(status).toBe(403);
-    expect(data.error).toContain("primary Axis admin");
+    expect(data.error).toContain("primary PropLane admin");
   });
 
   it("rejects short password", async () => {

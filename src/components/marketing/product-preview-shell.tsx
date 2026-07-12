@@ -113,7 +113,7 @@ function PreviewTopbar({ scene }: { scene: ProductScene }) {
       <div>
         <p className="text-[13px] font-semibold text-white/90">{title}</p>
         <p className="text-[10px] text-white/40">
-          {scene === "manager" ? "3 properties · 12 active leases" : "Axis Housing"}
+          {scene === "manager" ? "3 properties · 12 active leases" : "PropLane Housing"}
         </p>
       </div>
       <div className="flex gap-2">

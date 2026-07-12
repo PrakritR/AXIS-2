@@ -65,7 +65,7 @@ describe("POST /api/portal/send-inbox-message", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.RESEND_API_KEY = "re_test_key";
-    process.env.RESEND_FROM = "Axis <test@axis.local>";
+    process.env.RESEND_FROM = "PropLane <test@axis.local>";
     vi.mocked(rateLimit).mockReturnValue({ ok: true } as ReturnType<typeof rateLimit>);
   });
 

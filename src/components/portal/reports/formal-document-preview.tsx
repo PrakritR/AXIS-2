@@ -24,7 +24,7 @@ function DocHeader({ title, subtitle }: { title: string; subtitle?: string }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#64748b]" style={{ fontFamily: "system-ui, sans-serif" }}>
-            Axis Property Management
+            PropLane Property Management
           </p>
           <h2 className="mt-1 text-2xl font-bold tracking-tight text-[#0f172a]">{title}</h2>
           {subtitle ? (
@@ -130,7 +130,7 @@ export function RentReceiptDocumentView({ doc }: { doc: RentReceiptDocument }) {
           for the period stated and should be retained for tax and legal records.
         </p>
       </div>
-      <DocFooter certification="This document is an official payment receipt generated from Axis property records. Retain for your records. Consult a tax or legal advisor for compliance in your jurisdiction." />
+      <DocFooter certification="This document is an official payment receipt generated from PropLane property records. Retain for your records. Consult a tax or legal advisor for compliance in your jurisdiction." />
     </DocumentPaper>
   );
 }
@@ -380,7 +380,7 @@ export function FinancialReportDocumentView({ report }: { report: ReportResult }
           </div>
         </div>
       </div>
-      <DocFooter certification="Prepared from Axis ledger records. This report is provided for property management and Schedule E (Form 1040) tax record-keeping. Verify totals against bank statements and consult your tax advisor." />
+      <DocFooter certification="Prepared from PropLane ledger records. This report is provided for property management and Schedule E (Form 1040) tax record-keeping. Verify totals against bank statements and consult your tax advisor." />
     </DocumentPaper>
   );
 }
@@ -480,7 +480,7 @@ export function OccupancyDocumentView({ report }: { report: OccupancyReport }) {
           on IRS Schedule E and to assess property performance. Personal-use days reduce the rental-use percentage.
         </p>
       </div>
-      <DocFooter certification="This occupancy report is generated from Axis property management records and reflects active lease data for the stated period. Retain for investment analysis and tax recordkeeping. Consult a tax advisor regarding rental-use percentage calculations for Schedule E." />
+      <DocFooter certification="This occupancy report is generated from PropLane property management records and reflects active lease data for the stated period. Retain for investment analysis and tax recordkeeping. Consult a tax advisor regarding rental-use percentage calculations for Schedule E." />
     </DocumentPaper>
   );
 }

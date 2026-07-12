@@ -339,7 +339,7 @@ function BrowseFiltersInline({
       <ResidentHousingChat
         onApplyFilters={onApplyChatFilters}
         title="What would you like in your next home?"
-        subtitle="Tell Axis your move-in dates, budget, neighborhood, room type, or bathroom setup — we'll filter the homes below."
+        subtitle="Tell PropLane your move-in dates, budget, neighborhood, room type, or bathroom setup — we'll filter the homes below."
         placeholder="e.g. private bath under $1,800 in Capitol Hill, moving in September"
         showMatchListings={false}
       />

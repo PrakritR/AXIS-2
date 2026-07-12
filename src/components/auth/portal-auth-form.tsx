@@ -33,9 +33,9 @@ class AuthTimeoutError extends Error {
 function friendlyAuthError(raw: string): string {
   const lower = raw.toLowerCase();
   if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("fetch")) {
-    return "We could not reach Axis. Please check your connection and try again.";
+    return "We could not reach PropLane. Please check your connection and try again.";
   }
-  if (raw.includes("NEXT_PUBLIC_SUPABASE")) return "Axis auth is not configured. Set env vars in .env.local.";
+  if (raw.includes("NEXT_PUBLIC_SUPABASE")) return "PropLane auth is not configured. Set env vars in .env.local.";
   return raw;
 }
 

@@ -118,7 +118,7 @@ html, body { background: #0f1419; color: #e8edf2; margin: 0; font-family: system
   ${historyRow("Sex offender registry", countRecordsFromSnapshot(snapshot, "sex_offender_registry"))}
   ${historyRow("Global watchlist", countRecordsFromSnapshot(snapshot, "global_watchlist"))}
 
-  <p class="footnote">Generated from Checkr Tenant screening data in Axis. Consult the full vendor report before any adverse action (FCRA). Pass-through fees may apply on live orders.</p>
+  <p class="footnote">Generated from Checkr Tenant screening data in PropLane. Consult the full vendor report before any adverse action (FCRA). Pass-through fees may apply on live orders.</p>
 </div>`;
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Screening — ${escapeHtml(applicantName)}</title><style>${styles}</style></head><body>${body}</body></html>`;

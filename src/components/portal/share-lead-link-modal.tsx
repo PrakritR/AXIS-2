@@ -338,7 +338,7 @@ export function ShareLeadLinkModal({
         subject={leadInviteSubject(kind, propertyTitle)}
         body={invitePreviewBody}
         intro="Review the email before sending."
-        footerNote="Sent via Axis when email delivery is configured."
+        footerNote="Sent via PropLane when email delivery is configured."
         confirmLabel={kind === "listing" ? "Send listing" : "Send invite"}
         confirmBusy={sendBusy}
         confirmBusyLabel="Sending…"

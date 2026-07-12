@@ -142,7 +142,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Email delivery is not configured (set RESEND_API_KEY).", mailtoHref }, { status: 503 });
     }
 
-    const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+    const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

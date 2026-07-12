@@ -606,7 +606,7 @@ export function AdminAxisUsersClient() {
 
   return (
     <ManagerPortalPageShell
-      title="Axis users"
+      title="PropLane users"
       filterRow={
         <ManagerPortalFilterRow>
           <div>

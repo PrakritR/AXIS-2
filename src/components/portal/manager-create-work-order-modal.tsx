@@ -344,7 +344,7 @@ export function ManagerCreateWorkOrderModal({
           details ? `Details: ${details}` : "",
           photos.length > 0 ? `Photos attached: ${photos.length}` : "",
           "",
-          "Sign in to your Axis resident portal to view updates under Services → Work orders.",
+          "Sign in to your PropLane resident portal to view updates under Services → Work orders.",
         ]
           .filter(Boolean)
           .join("\n"),

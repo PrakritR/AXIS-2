@@ -236,11 +236,11 @@ export default function CreateAccountClient() {
   const passwordLabel = reusingExistingAccount ? "Password" : "Create password";
   const existingAccountHint =
     role === "resident" && reusingExistingAccount
-      ? "This email already has an Axis login. Enter that account's password to add resident access."
+      ? "This email already has a PropLane login. Enter that account's password to add resident access."
       : reusingExistingAccount && existingAccountRoles.length
-        ? `This email already has Axis access for ${existingAccountRoles.map((r) => r[0]!.toUpperCase() + r.slice(1)).join(", ")}. Use the same password to add ${role} access to that login.`
+        ? `This email already has PropLane access for ${existingAccountRoles.map((r) => r[0]!.toUpperCase() + r.slice(1)).join(", ")}. Use the same password to add ${role} access to that login.`
         : reusingExistingAccount
-          ? "This email already has an Axis login. Use the same password for that account."
+          ? "This email already has a PropLane login. Use the same password for that account."
           : null;
 
   const submit = async () => {
@@ -445,8 +445,8 @@ export default function CreateAccountClient() {
           </>
         ) : role === "resident" ? (
           <>
-            Use the same email address from your rental application. Axis links your account to that application
-            automatically—no extra steps needed. After signup, your resident portal stays limited until an Axis manager
+            Use the same email address from your rental application. PropLane links your account to that application
+            automatically—no extra steps needed. After signup, your resident portal stays limited until a PropLane manager
             marks your application fee paid and approves your application.
           </>
         ) : (
@@ -705,7 +705,7 @@ export default function CreateAccountClient() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-muted/70">Checking for an existing Axis login…</p> : null}
+              {displayedEmailStatusLoading ? <p className="mt-1 text-xs text-muted/70">Checking for an existing PropLane login…</p> : null}
             </div>
               </>
             ) : null}

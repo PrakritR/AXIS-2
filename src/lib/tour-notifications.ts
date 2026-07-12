@@ -5,11 +5,11 @@
 import { formatPacificDateTime } from "@/lib/pacific-time";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 
-export const TOUR_REQUEST_MANAGER_SUBJECT = "New tour request — Axis";
+export const TOUR_REQUEST_MANAGER_SUBJECT = "New tour request — PropLane";
 
-export const TOUR_REQUEST_TENANT_SUBJECT = "We received your tour request — Axis";
+export const TOUR_REQUEST_TENANT_SUBJECT = "We received your tour request — PropLane";
 
-export const TOUR_CONFIRMED_TENANT_SUBJECT = "Your Axis tour is confirmed";
+export const TOUR_CONFIRMED_TENANT_SUBJECT = "Your PropLane tour is confirmed";
 
 export type TourNotificationContext = {
   guestName: string;
@@ -50,7 +50,7 @@ export function buildTourRequestManagerBody(ctx: TourNotificationContext): strin
   const lines = [
     "Hi,",
     "",
-    "Someone requested a property tour through Axis.",
+    "Someone requested a property tour through PropLane.",
     "",
     `Guest: ${ctx.guestName || "Guest"}${ctx.guestEmail ? ` (${ctx.guestEmail})` : ""}`,
   ];
@@ -66,9 +66,9 @@ export function buildTourRequestManagerBody(ctx: TourNotificationContext): strin
   }
   lines.push(
     "",
-    "Open your Axis manager portal calendar to approve or decline this tour request.",
+    "Open your PropLane manager portal calendar to approve or decline this tour request.",
     "",
-    "— Axis",
+    "— PropLane",
   );
   return lines.join("\n");
 }
@@ -90,7 +90,7 @@ export function buildTourRequestTenantBody(ctx: TourNotificationContext): string
     "",
     "You will receive a separate confirmation email once the manager approves your tour time.",
     "",
-    "— Axis",
+    "— PropLane",
   );
   return lines.join("\n");
 }
@@ -123,9 +123,9 @@ export function buildTourConfirmedTenantBody(ctx: TourNotificationContext): stri
     "• Employment and income details",
     "• Application fee payment (when required for this listing)",
     "",
-    "Questions before or after your tour? Reply in your Axis inbox and your property team will help.",
+    "Questions before or after your tour? Reply in your PropLane inbox and your property team will help.",
     "",
-    "— Axis",
+    "— PropLane",
   );
   return lines.join("\n");
 }
@@ -179,7 +179,7 @@ ${room}${address}${host}${instructions}
 <p style="margin:16px 0 8px 0"><strong>Next step — apply for this home</strong></p>
 <p style="margin:0 0 12px 0">If you are interested after your tour, submit your rental application using the link below.</p>
 ${cta}
-<p style="margin:0;font-size:13px;color:#64748b">Questions? Reply in your Axis inbox and your property team will help.</p>
+<p style="margin:0;font-size:13px;color:#64748b">Questions? Reply in your PropLane inbox and your property team will help.</p>
 </div>
 </body>
 </html>`;

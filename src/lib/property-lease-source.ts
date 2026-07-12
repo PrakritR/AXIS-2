@@ -11,24 +11,24 @@ export const PROPERTY_LEASE_SOURCE_OPTIONS: readonly {
 }[] = [
   {
     id: "axis_default",
-    label: "Axis default",
-    shortLabel: "Axis default",
+    label: "PropLane default",
+    shortLabel: "PropLane default",
     detail:
-      "Axis generates a complete lease from the approved application and this listing — rent, deposits, house rules, and local disclosures included.",
+      "PropLane generates a complete lease from the approved application and this listing — rent, deposits, house rules, and local disclosures included.",
   },
   {
     id: "custom_comments",
     label: "Custom comments",
     shortLabel: "Custom comments",
     detail:
-      "Write the clauses you want. Axis adds them to the generated lease as an addendum under “Additional Provisions from Property Manager”.",
+      "Write the clauses you want. PropLane adds them to the generated lease as an addendum under “Additional Provisions from Property Manager”.",
   },
   {
     id: "custom_format",
     label: "Custom lease format",
     shortLabel: "Custom lease format",
     detail:
-      "Your uploaded PDF becomes the lease document. Axis adds a placement summary and e-signatures.",
+      "Your uploaded PDF becomes the lease document. PropLane adds a placement summary and e-signatures.",
   },
 ] as const;
 
@@ -41,7 +41,7 @@ export function resolvePropertyLeaseSource(
 }
 
 export function propertyLeaseSourceLabel(source: PropertyLeaseSource): string {
-  return PROPERTY_LEASE_SOURCE_OPTIONS.find((o) => o.id === source)?.shortLabel ?? "Axis default";
+  return PROPERTY_LEASE_SOURCE_OPTIONS.find((o) => o.id === source)?.shortLabel ?? "PropLane default";
 }
 
 export function draftFieldsFromLeaseSource(

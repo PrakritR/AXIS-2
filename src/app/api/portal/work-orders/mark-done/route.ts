@@ -81,7 +81,7 @@ export async function POST(req: Request) {
       event: "vendor_marked_done",
       senderUserId: actor.userId,
       senderEmail: actor.email,
-      senderName: actor.fullName || "Axis Portal",
+      senderName: actor.fullName || "PropLane Portal",
       subject: `${rowData.title || "Work order"} marked done — approval needed`,
       text: `${actor.fullName || "Your vendor"} marked "${rowData.title || "the work order"}"${
         rowData.propertyName ? ` at ${rowData.propertyName}` : ""

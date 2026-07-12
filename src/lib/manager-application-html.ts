@@ -202,9 +202,9 @@ export function buildApplicationHtml(row: DemoApplicantRow, options: Application
     .join("  ");
 
   const body = `
-<h1>AXIS RENTAL APPLICATION</h1>
-<p class="sub">Axis · Official application record</p>
-<p class="generated">Axis ID ${escapeHtml(axisId)} · ${escapeHtml(statusLabel(row))} · Generated ${escapeHtml(generatedLabel)}</p>
+<h1>PROPLANE RENTAL APPLICATION</h1>
+<p class="sub">PropLane · Official application record</p>
+<p class="generated">PropLane ID ${escapeHtml(axisId)} · ${escapeHtml(statusLabel(row))} · Generated ${escapeHtml(generatedLabel)}</p>
 
 ${section("Application summary", [
   { label: "Applicant", value: applicantName },
@@ -339,7 +339,7 @@ ${section("Consent & signature", [
 
 ${freeTextSection("Manager notes", clean(row.detail))}
 
-<p class="footnote">Generated from Axis application records. Amounts and placement can change later in the lease or payment portal. Axis · Confidential</p>
+<p class="footnote">Generated from PropLane application records. Amounts and placement can change later in the lease or payment portal. PropLane · Confidential</p>
 `;
 
   return `<!DOCTYPE html>

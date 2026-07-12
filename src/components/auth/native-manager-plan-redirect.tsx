@@ -31,7 +31,7 @@ export function NativeManagerPlanRedirect() {
 
   return (
     <AuthCard>
-      <AuthLoadingCard label="Opening Axis…" />
+      <AuthLoadingCard label="Opening PropLane…" />
     </AuthCard>
   );
 }

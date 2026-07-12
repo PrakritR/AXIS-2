@@ -704,8 +704,8 @@ export function acceptPartnerInquiry(id: string, opts?: { instructions?: string;
   const extra = instructions ? `\n\nDetails from the host:\n${instructions}` : "";
   logDemoOutboundEmail(
     row.email,
-    row.kind === "tour" ? "Your Axis tour is scheduled" : "Your Axis partner meeting is scheduled",
-    `Hi ${row.name},\n\nYour ${row.kind === "tour" ? "tour" : "meeting"} is confirmed for:\n${when}.${extra}\n\n— Axis (outbound mail is logged for review).`,
+    row.kind === "tour" ? "Your PropLane tour is scheduled" : "Your PropLane partner meeting is scheduled",
+    `Hi ${row.name},\n\nYour ${row.kind === "tour" ? "tour" : "meeting"} is confirmed for:\n${when}.${extra}\n\n— PropLane (outbound mail is logged for review).`,
   );
   return true;
 }

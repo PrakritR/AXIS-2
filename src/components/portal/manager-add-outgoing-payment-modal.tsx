@@ -158,7 +158,7 @@ export function ManagerAddOutgoingPaymentModal({
     <Modal open={open} title="Add outgoing payment" onClose={onClose}>
       <div className="space-y-4 text-sm">
         <p className="text-muted">
-          Log taxes, mortgage, Axis fees, vendor invoices, and other property expenses. Vendor work-order payouts
+          Log taxes, mortgage, PropLane fees, vendor invoices, and other property expenses. Vendor work-order payouts
           appear automatically when you approve completed jobs.
         </p>
         <label className="flex flex-col gap-1">

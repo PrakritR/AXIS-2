@@ -53,16 +53,16 @@ export function managerTierDisplayLabel(tier: string | null | undefined): string
 export function managerSignupReservedHeadline(tier: string | null | undefined): string {
   const normalized = normalizeManagerSkuTier(tier) ?? "pro";
   if (normalized === "free") return "Free tier account reserved";
-  if (normalized === "business") return "Axis Business account reserved";
-  return "Axis Pro account reserved";
+  if (normalized === "business") return "PropLane Business account reserved";
+  return "PropLane Pro account reserved";
 }
 
 /** Phrase for create-account finish copy, e.g. "your Axis Pro account". */
 export function managerSignupFinishPhrase(tier: string | null | undefined): string {
   const normalized = normalizeManagerSkuTier(tier) ?? "pro";
   if (normalized === "free") return "your Free tier account";
-  if (normalized === "business") return "your Axis Business account";
-  return "your Axis Pro account";
+  if (normalized === "business") return "your PropLane Business account";
+  return "your PropLane Pro account";
 }
 
 export function isProSkuTier(tier: string | null | undefined): boolean {
@@ -123,7 +123,7 @@ export function formatManagerMonthlyLabel(tier: string | null | undefined): stri
 export function paidWorkspacePortalTitle(tierRaw: string | null | undefined, stripeSubscriptionId: string | null | undefined): string {
   void tierRaw;
   void stripeSubscriptionId;
-  return "Axis";
+  return "PropLane";
 }
 
 export function isStripeManagedBilling(billing: string | null | undefined): boolean {

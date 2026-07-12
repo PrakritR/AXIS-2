@@ -51,7 +51,7 @@ export const AXIS_VENDOR_CATALOG: AxisCatalogVendor[] = [
   },
   {
     catalogId: "axis-catalog-maintenance-1",
-    name: "Axis Handyman Network",
+    name: "PropLane Handyman Network",
     trade: "General maintenance",
     city: "Greater Seattle",
     zip: "98101",

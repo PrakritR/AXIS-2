@@ -61,7 +61,7 @@ export default function SharedDocumentPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-slate-900">{payload.displayName}</h1>
-      <p className="mt-1 text-sm text-slate-600">Shared securely via Axis · expires {expires}</p>
+      <p className="mt-1 text-sm text-slate-600">Shared securely via PropLane · expires {expires}</p>
       <div className="mt-6 flex flex-wrap gap-3">
         <a
           className="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"

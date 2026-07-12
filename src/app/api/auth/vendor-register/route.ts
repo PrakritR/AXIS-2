@@ -202,7 +202,7 @@ async function registerSelfServe(
     );
   }
 
-  const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
   const text = buildVendorSignupConfirmEmailBody({ fullName, confirmLink });
   const html = buildVendorSignupConfirmEmailHtml({ fullName, confirmLink });
   try {

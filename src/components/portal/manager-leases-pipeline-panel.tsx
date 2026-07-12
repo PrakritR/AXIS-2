@@ -91,13 +91,13 @@ export function ManagerLeasesPipelinePanel({
     const lines = [
       `Hi ${row.residentName || "there"},`,
       "",
-      `Your lease for ${unit} is ready to review and sign in your Axis resident portal.`,
+      `Your lease for ${unit} is ready to review and sign in your PropLane resident portal.`,
       "",
-      "Sign in to Axis, open Leases in the sidebar, and complete your signature when you're ready.",
+      "Sign in to PropLane, open Leases in the sidebar, and complete your signature when you're ready.",
       "",
-      "If you have any questions before signing, reply in your Axis inbox and we will help.",
+      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
       "",
-      "Axis",
+      "PropLane",
     ];
     return lines.join("\n");
   }
@@ -125,12 +125,12 @@ export function ManagerLeasesPipelinePanel({
     const lines = [
       `Hi ${row.residentName || "there"},`,
       "",
-      `This is a reminder to review and sign your lease for ${unit} in your Axis resident portal.`,
+      `This is a reminder to review and sign your lease for ${unit} in your PropLane resident portal.`,
       dateLine,
       "",
-      "If you have any questions before signing, reply in your Axis inbox and we will help.",
+      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
       "",
-      "Axis",
+      "PropLane",
     ].filter(Boolean);
     return lines.join("\n");
   }
@@ -182,9 +182,9 @@ export function ManagerLeasesPipelinePanel({
 
       appendLeaseThreadMessage(row.id, "manager", "Sent lease-signing reminder to resident.", managerUserId);
       if (res.skipped) {
-        showToast("Reminder sent to Axis inbox (demo email, no external email sent).");
+        showToast("Reminder sent to PropLane inbox (demo email, no external email sent).");
       } else {
-        showToast("Lease-signing reminder sent via email and Axis inbox.");
+        showToast("Lease-signing reminder sent via email and PropLane inbox.");
       }
     } catch {
       showToast("Could not send lease signing reminder.");
@@ -248,7 +248,7 @@ export function ManagerLeasesPipelinePanel({
   const openSendLeasePreview = (row: LeasePipelineRow) => {
     const residentEmail = row.residentEmail.trim().toLowerCase();
     if (!residentEmail || !residentAccountEmails.has(residentEmail)) {
-      showToast("Resident must create their Axis resident account before you can send the lease.");
+      showToast("Resident must create their PropLane resident account before you can send the lease.");
       return;
     }
     if (!row.generatedHtml && !row.managerUploadedPdf?.dataUrl) {
@@ -426,7 +426,7 @@ export function ManagerLeasesPipelinePanel({
                 {!residentAccountEmails.has(row.residentEmail.trim().toLowerCase()) ? (
                   <div className="flex flex-wrap items-start gap-2">
                     <p className="max-w-xl text-xs leading-relaxed text-amber-800">
-                      This lease cannot be sent yet. The resident must first create their Axis resident account using their
+                      This lease cannot be sent yet. The resident must first create their PropLane resident account using their
                       application ID and matching email.
                     </p>
                     <Button
@@ -533,7 +533,7 @@ export function ManagerLeasesPipelinePanel({
         recipient={leaseSentPreview?.recipient ?? ""}
         subject={leaseSentPreview?.subject ?? ""}
         body={leaseSentPreview?.body ?? ""}
-        footerNote="The lease will be released to the resident portal after you confirm. This message is delivered to Axis inbox and email."
+        footerNote="The lease will be released to the resident portal after you confirm. This message is delivered to PropLane inbox and email."
         confirmLabel="Send lease & notification"
         confirmLabelWithoutMessage="Send lease only"
         confirmBusy={Boolean(leaseSentPreview && sendingToResidentRowId === leaseSentPreview.row.id)}

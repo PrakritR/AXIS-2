@@ -14,7 +14,7 @@ export const MANAGER_VENDOR_PAY_METHOD_OPTIONS: {
   title: string;
   feeLabel: string;
 }[] = [
-  { id: "ach", title: "Bank (ACH)", feeLabel: "Pay through Axis · Stripe Connect" },
+  { id: "ach", title: "Bank (ACH)", feeLabel: "Pay through PropLane · Stripe Connect" },
   { id: "zelle", title: "Zelle", feeLabel: "No processing fee" },
   { id: "venmo", title: "Venmo", feeLabel: "No processing fee" },
 ];

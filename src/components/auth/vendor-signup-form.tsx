@@ -188,7 +188,7 @@ export function VendorSignupForm({
     return (
       <div className="vendor-signup-form space-y-2.5 sm:space-y-3">
         <p className="text-center text-[11px] leading-tight text-muted whitespace-nowrap sm:text-xs">
-          Free vendor account — work orders &amp; payouts through Axis.
+          Free vendor account — work orders &amp; payouts through PropLane.
         </p>
 
         {socialBlock}

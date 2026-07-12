@@ -41,7 +41,7 @@ export type OwnerStatementDocument = {
 };
 
 const OWNER_STATEMENT_FOOTER =
-  "Prepared from Axis property records for the period shown. Distribution reflects cash collected less expenses paid, management fee, and reserve holdback. Unpaid bills (AP) are shown for information and are not yet deducted from cash.";
+  "Prepared from PropLane property records for the period shown. Distribution reflects cash collected less expenses paid, management fee, and reserve holdback. Unpaid bills (AP) are shown for information and are not yet deducted from cash.";
 
 type Cursor = { theme: PdfTheme; page: PDFPage; y: number };
 

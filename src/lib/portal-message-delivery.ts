@@ -53,7 +53,7 @@ export function buildNewChargeNoticeBody(input: {
   const lines = [
     `Hi ${input.residentName || "there"},`,
     "",
-    "A new charge has been added to your Axis resident portal:",
+    "A new charge has been added to your PropLane resident portal:",
     "",
     `${input.chargeTitle} — ${input.amountLabel}`,
   ];
@@ -61,11 +61,11 @@ export function buildNewChargeNoticeBody(input: {
   if (input.propertyLabel?.trim()) lines.push(`Property: ${input.propertyLabel.trim()}`);
   lines.push(
     "",
-    "Please sign in to your Axis resident portal to review and pay at your earliest convenience.",
+    "Please sign in to your PropLane resident portal to review and pay at your earliest convenience.",
     "",
-    "If you have any questions, reply in your Axis inbox and we will help.",
+    "If you have any questions, reply in your PropLane inbox and we will help.",
     "",
-    "Axis",
+    "PropLane",
   );
   return lines.join("\n");
 }

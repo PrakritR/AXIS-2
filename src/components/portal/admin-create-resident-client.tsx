@@ -35,7 +35,7 @@ export function AdminCreateResidentClient() {
         showToast(body.error ?? "Could not create resident.");
         return;
       }
-      showToast(body.axisId ? `Resident account created. Axis ID: ${body.axisId}.` : "Resident account created.");
+      showToast(body.axisId ? `Resident account created. PropLane ID: ${body.axisId}.` : "Resident account created.");
       setEmail("");
       setFullName("");
       setPassword("");

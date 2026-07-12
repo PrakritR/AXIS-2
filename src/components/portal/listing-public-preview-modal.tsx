@@ -43,7 +43,7 @@ export function ListingPublicPreviewModal({
             <p id="listing-preview-title" className="truncate text-sm font-semibold text-foreground">
               {property.buildingName} · {property.unitLabel}
             </p>
-            <p className="text-xs text-muted">Public listing preview — matches Rent with Axis</p>
+            <p className="text-xs text-muted">Public listing preview — matches Rent with PropLane</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {publicHref ? (

@@ -205,7 +205,7 @@ export function flyerRowForEntry(row: ManagerPromotionRow, entry: FlyerEntry): M
 }
 
 export const PROMOTION_THEME_OPTIONS: { id: PromotionTheme; label: string }[] = [
-  { id: "cobalt", label: "Axis Cobalt" },
+  { id: "cobalt", label: "PropLane Cobalt" },
   { id: "sunset", label: "Sunset" },
   { id: "forest", label: "Forest" },
   { id: "slate", label: "Slate" },
@@ -439,18 +439,17 @@ const FONT_STACK =
 const SERIF_STACK = 'Georgia, "Times New Roman", "Iowan Old Style", serif';
 const MUTED = "#64748b";
 
-/** Inline "AX" glyph — same strokes as {@link AxisLogoMark}, redrawn as a static SVG string for standalone flyer HTML (no React/Tailwind available there). */
+/** Inline paper-plane glyph — same strokes as {@link AxisLogoMark}, redrawn as a static SVG string for standalone flyer HTML (no React/Tailwind available there). */
 function axisMarkSvg(color: string): string {
-  return `<svg viewBox="0 0 46 26" width="18" height="10" fill="none" aria-hidden="true">
-    <path d="M3.5 21.5L11 4L18.5 21.5M7.55 14.25H14.45" stroke="${color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M27 4L43 22" stroke="${color}" stroke-width="2.8" stroke-linecap="round"/>
-    <path d="M43 4L27 22" stroke="${color}" stroke-width="2.6" stroke-linecap="round"/>
+  return `<svg viewBox="0 0 26 26" width="13" height="13" fill="none" aria-hidden="true">
+    <path d="M3.5 11.9L22.5 3.9L15.4 22.4L11.3 14.6L3.5 11.9Z" stroke="${color}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M11.3 14.6L22.5 3.9" stroke="${color}" stroke-width="2.3" stroke-linecap="round"/>
   </svg>`;
 }
 
 /** Axis brand mark + wordmark, inlined for the flyer footer/header. */
 function axisBrandHtml(color: string): string {
-  return `<span class="brand-mark">${axisMarkSvg(color)}<span>Axis</span></span>`;
+  return `<span class="brand-mark">${axisMarkSvg(color)}<span>PropLane</span></span>`;
 }
 
 function footerHtml(ctx: FlyerRenderContext): string {
@@ -612,7 +611,7 @@ function renderListingSheet(ctx: FlyerRenderContext): TemplateRender {
     </div>
     <div class="foot">
       <div><div class="foot-contact">${ctx.cta}</div><div class="foot-cta">${ctx.closing}</div></div>
-      <span class="foot-brand">${axisMarkSvg(p.accent)}<span>Axis</span></span>
+      <span class="foot-brand">${axisMarkSvg(p.accent)}<span>PropLane</span></span>
     </div>
   </div>`;
   return { css, body };

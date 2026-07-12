@@ -299,7 +299,7 @@ type ChatListing = {
 
 export function ResidentHousingChat({
   onApplyFilters,
-  title = "Ask Axis",
+  title = "Ask PropLane",
   subtitle = 'Describe what you need — e.g. "2 bed under $2000 in Ballard, moving in August"',
   placeholder = "Tell us what you're looking for…",
   showMatchListings = true,

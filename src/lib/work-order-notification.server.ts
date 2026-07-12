@@ -28,7 +28,7 @@ function workOrderSmsBody(
     case "reminder":
       return `Reminder: pending work order "${title}"${at} needs attention.`;
     default:
-      return `"${title}"${at} update from Axis.`;
+      return `"${title}"${at} update from PropLane.`;
   }
 }
 
@@ -62,7 +62,7 @@ export async function notifyWorkOrderEvent(
   await deliverPortalInboxMessage(db, {
     senderUserId: input.senderUserId,
     senderEmail: input.senderEmail,
-    fromName: input.senderName?.trim() || "Axis Portal",
+    fromName: input.senderName?.trim() || "PropLane Portal",
     subject: input.subject,
     text: input.text,
     toEmails: input.toEmails,

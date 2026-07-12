@@ -302,12 +302,12 @@ export function ManagerPaymentsLedgerPanel({
     if (row.propertyName) lines.push(`Property: ${row.propertyName}`);
     lines.push(
       "",
-      "Please log in to your Axis resident portal to make your payment at your earliest convenience.",
+      "Please log in to your PropLane resident portal to make your payment at your earliest convenience.",
       "",
       "If you have any questions, please don't hesitate to reach out.",
       "",
       "Your property manager",
-      "Axis Portal",
+      "PropLane Portal",
     );
     setReminderPreview({ row, subject, body: lines.join("\n") });
   };

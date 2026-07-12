@@ -103,9 +103,9 @@ export function LeaseConfigForm({
           }}
         />
         <span>
-          <span className="block text-sm font-semibold text-foreground">Use Axis standard system</span>
+          <span className="block text-sm font-semibold text-foreground">Use PropLane standard system</span>
           <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-            Axis generates a complete room-rental lease from the approved application and this listing — rent,
+            PropLane generates a complete room-rental lease from the approved application and this listing — rent,
             deposits, house rules, and local disclosures included. Uncheck to add your own lease terms or upload a
             lease template.
           </span>
@@ -130,7 +130,7 @@ export function LeaseConfigForm({
                 <PromotionAiBetaBadge />
               </div>
               <p className="mt-1 text-xs leading-relaxed text-muted">
-                Describe custom clauses or addendum terms. Axis merges them into the generated lease.
+                Describe custom clauses or addendum terms. PropLane merges them into the generated lease.
               </p>
             </button>
 
@@ -146,7 +146,7 @@ export function LeaseConfigForm({
             >
               <p className="text-sm font-semibold text-foreground">Upload a lease template (PDF)</p>
               <p className="mt-1 text-xs leading-relaxed text-muted">
-                Your document becomes the lease text. Axis adds a placement summary and e-signatures.
+                Your document becomes the lease text. PropLane adds a placement summary and e-signatures.
               </p>
             </button>
           </div>

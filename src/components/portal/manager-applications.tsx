@@ -767,7 +767,7 @@ export function ManagerApplications() {
         }
         intro={
           approvePreviewRow
-            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their Axis resident account setup email.`
+            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their PropLane resident account setup email.`
             : undefined
         }
         confirmLabel="Approve & send setup email"

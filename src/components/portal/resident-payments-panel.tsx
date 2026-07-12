@@ -648,7 +648,7 @@ export function ResidentPaymentsPanel({
           <p className="text-xs text-muted">
             Subtotal {formatUsd(checkout.subtotalCents)}
             {checkout.processingFeeCents ? ` · Processing ${formatUsd(checkout.processingFeeCents)}` : ""}
-            {checkout.axisFeeCents ? ` · Axis fee ${formatUsd(checkout.axisFeeCents)}` : ""}
+            {checkout.axisFeeCents ? ` · PropLane fee ${formatUsd(checkout.axisFeeCents)}` : ""}
             {" · "}
             <span className="font-semibold text-foreground">Total {formatUsd(checkout.totalCents)}</span>
           </p>

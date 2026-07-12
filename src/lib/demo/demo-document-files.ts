@@ -53,16 +53,16 @@ export async function buildDemoReceiptPdfDataUrl(input: {
   };
 
   line("RENT RECEIPT", bold, 18);
-  line("Axis Housing Management · Seattle, WA", regular, 10, muted);
+  line("PropLane Housing Management · Seattle, WA", regular, 10, muted);
   y -= 16;
   line(`Received from:  ${input.residentName}`);
   line(`For:            ${input.description}`);
   line(`Amount paid:    ${input.amountLabel}`);
   line(`Payment date:   ${input.dateLabel}`);
-  line("Payment method: Axis ACH");
+  line("Payment method: PropLane ACH");
   y -= 16;
   line("Thank you — this receipt confirms your payment was recorded.", regular, 10, muted);
-  line("Sample receipt generated for the Axis interactive demo.", regular, 9, muted);
+  line("Sample receipt generated for the PropLane interactive demo.", regular, 9, muted);
 
   return bytesToPdfDataUrl(await pdf.save());
 }
@@ -101,10 +101,10 @@ export async function buildDemoBackgroundCheckPdfDataUrl(row: DemoApplicantRow):
   };
 
   line("BACKGROUND CHECK REPORT", bold, 18);
-  line("Axis Housing · Demo screening record", regular, 10, muted);
+  line("PropLane Housing · Demo screening record", regular, 10, muted);
   y -= 8;
   line(`Applicant: ${row.name || "Applicant"}`);
-  line(`Axis ID: ${row.id}`);
+  line(`PropLane ID: ${row.id}`);
   if (bg) {
     line(`Status: ${bg.status}`);
     line(`Result: ${bg.result ?? "Pending"}`);
@@ -118,7 +118,7 @@ export async function buildDemoBackgroundCheckPdfDataUrl(row: DemoApplicantRow):
     line("Report summary", bold, 12);
     line(summary.slice(0, 2400), regular, 9, muted);
   }
-  line("Sample report generated for the Axis interactive demo.", regular, 9, muted);
+  line("Sample report generated for the PropLane interactive demo.", regular, 9, muted);
 
   return bytesToPdfDataUrl(await pdf.save());
 }

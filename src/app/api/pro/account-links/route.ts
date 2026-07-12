@@ -274,7 +274,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: inviteeErr.message }, { status: 500 });
     }
     if (!inviteeProfile?.id) {
-      return NextResponse.json({ error: "No account found with this Axis ID." }, { status: 404 });
+      return NextResponse.json({ error: "No account found with this PropLane ID." }, { status: 404 });
     }
 
     const ir = String((inviteeProfile as { role?: string }).role ?? "").toLowerCase();

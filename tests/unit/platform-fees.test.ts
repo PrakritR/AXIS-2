@@ -25,7 +25,7 @@ describe("platform-fees", () => {
 
   it("returns plan copy for pricing cards", () => {
     expect(axisResidentPaymentFeePlanLine("free")).toContain("0.5%");
-    expect(axisResidentPaymentFeePlanLine("business")).toContain("No Axis fee");
+    expect(axisResidentPaymentFeePlanLine("business")).toContain("No PropLane fee");
   });
 });
 

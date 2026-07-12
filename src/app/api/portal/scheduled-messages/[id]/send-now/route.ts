@@ -72,7 +72,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     const managerName = profile?.full_name?.trim() || profile?.email?.trim() || "Your property manager";
     const managerSmsFromNumber = String(profile?.sms_from_number ?? "").trim();
     const apiKey = process.env.RESEND_API_KEY?.trim() ?? "";
-    const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+    const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
     const todayKey = new Date().toISOString().slice(0, 10);
 
     const dedupCandidates = legacyPaymentReminderDedupIds({

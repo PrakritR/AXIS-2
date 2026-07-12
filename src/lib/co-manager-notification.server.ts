@@ -37,13 +37,13 @@ export async function notifyCoManagerInviteSent(input: {
       : "assigned properties";
   const subject = `${input.inviterName} invited you as a co-manager`;
   const text = [
-    `${input.inviterName} invited you to co-manage properties on Axis.`,
+    `${input.inviterName} invited you to co-manage properties on PropLane.`,
     "",
     `Properties: ${properties}`,
     "",
     `Open your portal to review and approve the link: ${appOrigin()}/manager/relationships`,
     "",
-    "— Axis",
+    "— PropLane",
   ].join("\n");
 
   await deliverPortalInboxMessage(db, {
@@ -71,11 +71,11 @@ export async function notifyCoManagerInviteAccepted(input: {
 
   const subject = `${input.inviteeName} accepted your co-manager invite`;
   const text = [
-    `${input.inviteeName} accepted your co-manager link on Axis.`,
+    `${input.inviteeName} accepted your co-manager link on PropLane.`,
     "",
     `Manage permissions in Co-managers: ${appOrigin()}/manager/relationships`,
     "",
-    "— Axis",
+    "— PropLane",
   ].join("\n");
 
   await deliverPortalInboxMessage(db, {
@@ -104,13 +104,13 @@ export async function notifyPromotedToMainManager(input: {
 
   const subject = `You are now the main manager of ${input.propertyLabel}`;
   const text = [
-    `${input.formerOwnerName} transferred ownership of ${input.propertyLabel} to you on Axis.`,
+    `${input.formerOwnerName} transferred ownership of ${input.propertyLabel} to you on PropLane.`,
     "",
     "You are now the main manager for this property. The former owner remains a co-manager with the permissions they chose.",
     "",
     `Open your portal: ${appOrigin()}/manager/properties`,
     "",
-    "— Axis",
+    "— PropLane",
   ].join("\n");
 
   await deliverPortalInboxMessage(db, {
@@ -145,7 +145,7 @@ export async function notifyDemotedToCoManager(input: {
     "",
     `Manage your team: ${appOrigin()}/manager/relationships`,
     "",
-    "— Axis",
+    "— PropLane",
   ].join("\n");
 
   await deliverPortalInboxMessage(db, {

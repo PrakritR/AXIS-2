@@ -156,11 +156,11 @@ function customCommentsPreviewHtml(terms: string): string {
   p { font-size: 14px; }
 </style></head><body>
   <h1>Additional Provisions from Property Manager</h1>
-  <p class="note">These clauses are merged into the Axis standard lease when a resident is placed at this property.</p>
+  <p class="note">These clauses are merged into the PropLane standard lease when a resident is placed at this property.</p>
   <h2>Custom provisions</h2>
   ${formatCustomLeaseClausesHtml(terms)}
   <h2>Electronic signature</h2>
-  <p>Landlord and Resident each execute the combined lease document through the Axis portal. The Electronic Signature Certificate is the binding record for both parties.</p>
+  <p>Landlord and Resident each execute the combined lease document through the PropLane portal. The Electronic Signature Certificate is the binding record for both parties.</p>
 </body></html>`;
 }
 
@@ -176,7 +176,7 @@ function customFormatNoticeHtml(docName: string): string {
   <h1>Custom lease format</h1>
   <p>Lease template: <span class="doc">${escapeHtml(docName)}</span></p>
   <h2>At placement</h2>
-  <p>Axis compiles a placement summary (parties, room, rent, dates) and attaches your PDF as the lease document. Both parties sign once through the Axis portal.</p>
+  <p>PropLane compiles a placement summary (parties, room, rent, dates) and attaches your PDF as the lease document. Both parties sign once through the PropLane portal.</p>
   <h2>Electronic signature</h2>
   <p>The Electronic Signature Certificate appended to the signed copy is the binding record for both parties.</p>
 </body></html>`;
@@ -227,7 +227,7 @@ export function buildPropertyLeasePreview(
         jurisdictionLabel: null,
       };
     }
-    const plainText = `Lease template: ${doc.name}. Axis adds a placement summary and e-signatures at signing time.`;
+    const plainText = `Lease template: ${doc.name}. PropLane adds a placement summary and e-signatures at signing time.`;
     return {
       source,
       html: customFormatNoticeHtml(doc.name),
@@ -258,7 +258,7 @@ export function buildPropertyLeasePreview(
   if (source === "custom_comments") {
     const terms = activeCustomLeaseTerms(normalized);
     const plainText = terms
-      ? `Additional Provisions from Property Manager\n\n${terms}\n\nThese provisions are merged into the Axis standard lease when a resident is placed.`
+      ? `Additional Provisions from Property Manager\n\n${terms}\n\nThese provisions are merged into the PropLane standard lease when a resident is placed.`
       : "Custom comments configured — open Edit to add lease clauses.";
     return {
       source,
@@ -271,7 +271,7 @@ export function buildPropertyLeasePreview(
 
   if (!supported) {
     const plainText =
-      "Axis default lease applies at placement. Full preview is available for Seattle and San Francisco properties, or upload a custom PDF for other locations.";
+      "PropLane default lease applies at placement. Full preview is available for Seattle and San Francisco properties, or upload a custom PDF for other locations.";
     return {
       source,
       html: null,
@@ -284,7 +284,7 @@ export function buildPropertyLeasePreview(
   return {
     source,
     html: null,
-    plainText: "Axis default lease — preview unavailable for this property.",
+    plainText: "PropLane default lease — preview unavailable for this property.",
     unsupportedJurisdiction: true,
     jurisdictionLabel: jLabel,
   };

@@ -601,7 +601,7 @@ export function PortalCalendarPanels({
       if (skipMessage) {
         showToast("Tour confirmed (no guest notification sent).");
       } else if (result.notificationSkipped) {
-        showToast("Tour confirmed. Confirmation sent to Axis inbox (email skipped for demo address or missing provider).");
+        showToast("Tour confirmed. Confirmation sent to PropLane inbox (email skipped for demo address or missing provider).");
       } else if (result.error) {
         showToast("Tour confirmed, but the confirmation email could not be sent.");
       } else {
@@ -1118,7 +1118,7 @@ export function PortalCalendarPanels({
       recipient={tourConfirmPreview?.meeting.email ?? ""}
       subject={tourConfirmPreview?.subject ?? ""}
       body={tourConfirmPreview?.body ?? ""}
-      intro="Confirming this tour will schedule it on your calendar and send the message below to the guest via Axis inbox and email."
+      intro="Confirming this tour will schedule it on your calendar and send the message below to the guest via PropLane inbox and email."
       skipMessageLabel="Don't message guest"
       confirmLabel="Confirm tour & send notification"
       confirmLabelWithoutMessage="Confirm tour only"

@@ -669,7 +669,7 @@ const LISTING_STEP_BLURBS: Record<(typeof LISTING_FORM_STEPS)[number]["id"], str
   move:        "Move-in access instructions for residents.",
   services:    "Optional paid or free services residents can request from their portal.",
   application: "Review the rental application applicants complete for this property, and add your own questions to any section.",
-  leasedoc:    "Use the Axis standard generated lease, or provide your own lease terms or template for this property.",
+  leasedoc:    "Use the PropLane standard generated lease, or provide your own lease terms or template for this property.",
   finish:      "Sidebar quick facts and final submit.",
 };
 
@@ -2255,7 +2255,7 @@ export function ManagerAddListingForm({
           showToast("Could not save changes.");
           return;
         }
-        showToast("Listing saved. It is pending admin review before it appears on Rent with Axis again.");
+        showToast("Listing saved. It is pending admin review before it appears on Rent with PropLane again.");
         onSubmitted();
         return;
       }
@@ -4661,7 +4661,7 @@ export function ManagerAddListingForm({
           <FormSection
             id="edit-application"
             title="Rental application"
-            description="Review and adjust every question applicants answer. Built-in Axis questions can be edited or removed; add your own in any section."
+            description="Review and adjust every question applicants answer. Built-in PropLane questions can be edited or removed; add your own in any section."
           >
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4675,7 +4675,7 @@ export function ManagerAddListingForm({
                   data-attr="listing-application-restore-defaults"
                   onClick={restoreApplicationDefaults}
                 >
-                  Restore Axis defaults
+                  Restore PropLane defaults
                 </Button>
               </div>
 

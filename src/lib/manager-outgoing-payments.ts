@@ -206,7 +206,7 @@ export function buildManagerOutgoingPaymentRows(input: {
       "Portfolio";
     const payee =
       (expense.vendorId && vendorNameById.get(expense.vendorId)) ||
-      (expense.categoryCode === "service_fees" ? "Axis" : "—");
+      (expense.categoryCode === "service_fees" ? "PropLane" : "—");
     const sourceWorkOrder = expense.sourceWorkOrderId
       ? workOrderById.get(expense.sourceWorkOrderId)
       : undefined;
@@ -296,8 +296,8 @@ export function buildManagerOutgoingPaymentRows(input: {
     rows.push({
       id: `axis-fee-${charge.id}`,
       propertyName: charge.propertyLabel,
-      categoryLabel: "Axis payment cost",
-      payeeLabel: "Axis",
+      categoryLabel: "PropLane payment cost",
+      payeeLabel: "PropLane",
       chargeTitle: `Processing fee — ${charge.title}`,
       amountLabel: formatMoney(feeCents),
       dueDate: dueDateLabelFromIso(charge.paidAt),

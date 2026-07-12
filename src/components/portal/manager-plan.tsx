@@ -866,7 +866,7 @@ export function ManagerPlan({
           <div className="space-y-4">
             <p className="text-sm leading-6 text-muted">
               Complete checkout below to activate{" "}
-              <span className="font-semibold text-foreground">{tierLabel(planModal.tier)}</span> on your Axis portal
+              <span className="font-semibold text-foreground">{tierLabel(planModal.tier)}</span> on your PropLane portal
               {planModal.billing === "annual" ? " with annual billing (~20% savings)." : "."}
               {" "}
               You&apos;ll stay on this page — billing is handled securely by Stripe.
@@ -939,7 +939,7 @@ export function ManagerPlan({
           <div className="space-y-4">
             <p className="text-sm leading-6 text-muted">
               Upgrade to <span className="font-semibold text-foreground">{tierLabel(planModal.target)}</span> now? Your
-              saved card will be charged with proration. Changes apply immediately in your Axis portal.
+              saved card will be charged with proration. Changes apply immediately in your PropLane portal.
             </p>
             <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={closePlanModal}>
@@ -1024,7 +1024,7 @@ export function ManagerPlan({
                 rows={4}
                 placeholder="Tell us what we could do better…"
               />
-              <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
+              <p className="text-xs text-muted">Your response is sent to the PropLane team as feedback.</p>
             </div>
             <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closePlanModal}>
@@ -1067,7 +1067,7 @@ export function ManagerPlan({
                 rows={4}
                 placeholder="Tell us what we could do better…"
               />
-              <p className="text-xs text-muted">Your response is sent to the Axis team as feedback.</p>
+              <p className="text-xs text-muted">Your response is sent to the PropLane team as feedback.</p>
             </div>
             <div className="flex flex-wrap justify-start gap-2">
               <Button type="button" variant="outline" className="rounded-full" disabled={feedbackBusy} onClick={closePlanModal}>

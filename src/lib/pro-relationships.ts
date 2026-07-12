@@ -12,7 +12,7 @@ import {
 } from "@/lib/co-manager-permissions";
 import type { AccountLinkInviteDto } from "@/lib/account-links";
 
-export const AXIS_ID_LABEL = "Axis ID";
+export const AXIS_ID_LABEL = "PropLane ID";
 
 /** @deprecated Owner tab removed — all links are co-manager (manager) links. */
 export type ProRelationshipPerspective = "manager_tab";

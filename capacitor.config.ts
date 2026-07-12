@@ -54,7 +54,7 @@ function allowNavigationHosts(): string[] {
 
 const config: CapacitorConfig = {
   appId: "com.axisseattlehousing.app",
-  appName: "Axis",
+  appName: "PropLane",
   // Capacitor requires a webDir with an index.html even in hosted mode.
   // Ours doubles as the branded offline fallback screen.
   webDir: "native-shell",

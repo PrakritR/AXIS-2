@@ -73,7 +73,7 @@ export async function GET(req: Request) {
     const delivery = await deliverPortalInboxMessage(db, {
       senderUserId: managerUserId,
       senderEmail: managerEmail,
-      fromName: "Axis",
+      fromName: "PropLane",
       subject,
       text,
       toUserIds: [managerUserId],

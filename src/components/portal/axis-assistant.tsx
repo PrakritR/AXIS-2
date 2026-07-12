@@ -75,7 +75,7 @@ function AxisAssistantFixedTrigger() {
     <button
       type="button"
       onClick={handleOpenAssistant}
-      aria-label="Open Axis Assistant"
+      aria-label="Open PropLane Assistant"
       aria-expanded={open}
       data-attr="axis-assistant-fab"
       className="axis-assistant-fab group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-[max(1.25rem,env(safe-area-inset-right))] z-[55] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 lg:bottom-6 lg:right-6 max-lg:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] max-lg:h-11 max-lg:w-11 [html[data-native]_&]:bottom-[calc(var(--portal-native-bottom-nav-inset)+0.75rem)] [html[data-native]_&]:h-11 [html[data-native]_&]:w-11"
@@ -350,7 +350,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
       <div className="axis-assistant-root fixed inset-0 z-[65]">
         <button
           type="button"
-          aria-label="Close Axis Assistant"
+          aria-label="Close PropLane Assistant"
           className="axis-assistant-backdrop fixed inset-0"
           onClick={closePanel}
         />
@@ -377,7 +377,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                 </span>
                 <div className="min-w-0">
                   <p id="axis-assistant-title" className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
-                    Axis Assistant
+                    PropLane Assistant
                   </p>
                   <p className="truncate text-xs text-muted [html[data-native]_&]:hidden">
                     Ask about your portfolio in plain language
@@ -406,7 +406,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
                 <button
                   type="button"
                   onClick={closePanel}
-                  aria-label="Close Axis Assistant"
+                  aria-label="Close PropLane Assistant"
                   className="flex h-8 w-8 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25"
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
@@ -570,7 +570,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
       <div className="axis-assistant-root fixed inset-0 z-[65]">
         <button
           type="button"
-          aria-label="Close Axis Assistant"
+          aria-label="Close PropLane Assistant"
           className="axis-assistant-backdrop fixed inset-0"
           onClick={closePanel}
         />
@@ -578,7 +578,7 @@ function AxisAssistantChrome({ managerName, endpoint = "/api/agent/chat" }: { ma
           role="dialog"
           aria-modal="true"
           aria-busy="true"
-          aria-label="Opening Axis Assistant"
+          aria-label="Opening PropLane Assistant"
           className="axis-assistant-panel glass-card fixed z-[66] flex h-[min(38rem,calc(100dvh-7.5rem))] flex-col overflow-hidden border border-primary/15 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45),0_0_0_1px_rgba(47,107,255,0.08)] backdrop-blur-xl"
         />
       </div>

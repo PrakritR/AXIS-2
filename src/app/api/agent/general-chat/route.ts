@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       .map((b) => b.text)
       .join("")
       .trim();
-    return NextResponse.json({ reply: reply || "I'm not sure how to answer that — try asking about Axis's features, pricing, or the live demo." });
+    return NextResponse.json({ reply: reply || "I'm not sure how to answer that — try asking about PropLane's features, pricing, or the live demo." });
   } catch (e) {
     console.error("[agent/general-chat] failed:", e);
     return NextResponse.json({ error: "The assistant ran into an error. Please try again." }, { status: 500 });

@@ -213,7 +213,7 @@ function AdminPropertyInlineDetails({
                 if (row.adminRefId.startsWith("mgr-")) {
                   const id = row.listingId ?? row.adminRefId;
                   ok = republishManagerListingAfterReview(id);
-                  label = ok ? "Listing approved — live on Rent with Axis again." : "Could not publish listing.";
+                  label = ok ? "Listing approved — live on Rent with PropLane again." : "Could not publish listing.";
                 } else {
                   const created = approvePendingManagerProperty(row.adminRefId);
                   ok = Boolean(created);

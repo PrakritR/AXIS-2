@@ -167,7 +167,7 @@ export async function createAxisAchCheckoutSession(
   if (processingFeeCents + axisFeeCents > 0) {
     const feeParts: string[] = [residentProcessingFeeLabel(paymentMethod)];
     if (axisFeeCents > 0) {
-      feeParts.push("Axis service fee");
+      feeParts.push("PropLane service fee");
     }
     stripeLineItems.push({
       price_data: {

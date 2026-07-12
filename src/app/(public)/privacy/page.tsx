@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Axis collects, uses, and protects information when you use our property management platform and mobile apps.",
+    "How PropLane collects, uses, and protects information when you use our property management platform and mobile apps.",
 };
 
 const LAST_UPDATED = "June 28, 2026";
@@ -23,8 +23,8 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">Who we are</h2>
             <p className="mt-2">
-              Axis (&ldquo;we,&rdquo; &ldquo;us&rdquo;) provides property management software operated by Axis Seattle
-              Housing. This policy describes how we collect, use, and protect information when you use the Axis website
+              PropLane (&ldquo;we,&rdquo; &ldquo;us&rdquo;) provides property management software operated by PropLane Seattle
+              Housing. This policy describes how we collect, use, and protect information when you use the PropLane website
               at{" "}
               <a href="https://www.axis-seattle-housing.com" className="font-medium text-primary hover:opacity-90">
                 axis-seattle-housing.com
@@ -64,7 +64,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">How we use information</h2>
             <ul className="mt-3 list-disc space-y-2 ps-5">
-              <li>Provide, maintain, and improve the Axis platform</li>
+              <li>Provide, maintain, and improve the PropLane platform</li>
               <li>Process payments and send transaction-related communications</li>
               <li>
                 Send email, SMS, and push notifications related to your account (for example, rent reminders and messages)
@@ -77,7 +77,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">How we share information</h2>
             <p className="mt-2">
-              We share information with service providers that help us operate Axis, including Supabase (authentication
+              We share information with service providers that help us operate PropLane, including Supabase (authentication
               and database hosting), Stripe (payments), Twilio (SMS), Resend (email), and Google Firebase (push
               notifications). We do not sell your personal information.
             </p>
@@ -144,7 +144,7 @@ export default function PrivacyPolicyPage() {
               .
             </p>
             <p className="mt-2">
-              Axis Seattle Housing
+              PropLane Seattle Housing
               <br />
               5259 Brooklyn Ave NE
               <br />

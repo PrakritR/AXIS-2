@@ -22,7 +22,7 @@ export function buildVendorVisitEmail(input: VendorVisitEmailInput): { subject: 
   const lines = [
     `Hi ${input.vendorName.trim() || "there"},`,
     "",
-    "A service visit has been scheduled for you through Axis.",
+    "A service visit has been scheduled for you through PropLane.",
     "",
     `Work order: ${input.workOrderTitle}`,
     `Property: ${where}`,
@@ -30,7 +30,7 @@ export function buildVendorVisitEmail(input: VendorVisitEmailInput): { subject: 
   ];
   if (input.preferredArrival?.trim()) lines.push(`Resident arrival preference: ${input.preferredArrival.trim()}`);
   if (input.description?.trim()) lines.push("", "Notes:", input.description.trim());
-  lines.push("", "If this time doesn't work, reply to this email to coordinate a new time.", "", "Axis Portal");
+  lines.push("", "If this time doesn't work, reply to this email to coordinate a new time.", "", "PropLane Portal");
   return { subject, body: lines.join("\n") };
 }
 
@@ -51,14 +51,14 @@ export function buildVendorBidOfferEmail(input: VendorBidOfferEmailInput): { sub
   const lines = [
     `Hi ${input.vendorName.trim() || "there"},`,
     "",
-    "You're invited to submit a bid for a work order through Axis.",
+    "You're invited to submit a bid for a work order through PropLane.",
     "",
     `Work order: ${input.workOrderTitle}`,
     `Property: ${where}`,
   ];
   if (input.visitLabel?.trim()) lines.push(`Scheduled tour: ${input.visitLabel.trim()}`);
   if (input.description?.trim()) lines.push("", "Notes:", input.description.trim());
-  lines.push("", "Sign in to Axis and open Work Orders to submit your cost and availability.", "", "Axis Portal");
+  lines.push("", "Sign in to PropLane and open Work Orders to submit your cost and availability.", "", "PropLane Portal");
   return { subject, body: lines.join("\n") };
 }
 
@@ -78,9 +78,9 @@ export function buildVendorBidAcceptedEmail(input: VendorBidResultEmailInput): {
     "",
     `Your bid for "${input.workOrderTitle}" at ${where} was accepted. You're assigned at the agreed cost.`,
     "",
-    "Sign in to Axis for the work order details.",
+    "Sign in to PropLane for the work order details.",
     "",
-    "Axis Portal",
+    "PropLane Portal",
   ];
   return { subject, body: lines.join("\n") };
 }
@@ -94,7 +94,7 @@ export function buildVendorBidDeclinedEmail(input: VendorBidResultEmailInput): {
     "",
     `The manager selected another bid for "${input.workOrderTitle}" at ${where}. Thanks for submitting your bid.`,
     "",
-    "Axis Portal",
+    "PropLane Portal",
   ];
   return { subject, body: lines.join("\n") };
 }

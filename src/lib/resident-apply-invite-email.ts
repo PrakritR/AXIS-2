@@ -4,7 +4,7 @@
 
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
-export const RESIDENT_APPLY_INVITE_EMAIL_SUBJECT = "Complete your Axis housing application";
+export const RESIDENT_APPLY_INVITE_EMAIL_SUBJECT = "Complete your PropLane housing application";
 
 export function residentApplyPortalUrl(applyPath?: string): string {
   const base = resolveEmailLinkBaseUrl();
@@ -30,14 +30,14 @@ export function buildResidentApplyInviteEmailBody(params: {
   return [
     greeting,
     "",
-    "Welcome to Axis. Your resident account is ready — complete your housing application to unlock your portal.",
+    "Welcome to PropLane. Your resident account is ready — complete your housing application to unlock your portal.",
     "",
     "Start your application here:",
     params.applyUrl,
     "",
     "You can browse available listings and choose a property and room as part of the application.",
     "",
-    "— Axis",
+    "— PropLane",
   ].join("\n");
 }
 
@@ -63,10 +63,10 @@ export function buildResidentApplyInviteEmailHtml(params: {
 <body style="margin:0;padding:24px;font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;font-size:15px;background:#f8fafc">
 <div style="max-width:36rem;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px 28px 32px;border:1px solid #e2e8f0">
 <p style="margin:0 0 12px 0">${greeting}</p>
-<p style="margin:0 0 12px 0">Welcome to Axis. Your resident account is ready — complete your housing application to unlock your portal.</p>
+<p style="margin:0 0 12px 0">Welcome to PropLane. Your resident account is ready — complete your housing application to unlock your portal.</p>
 ${ctaButton}
 <p style="margin:0 0 12px 0">Browse available listings and choose a property and room as part of your application.</p>
-<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— Axis</p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— PropLane</p>
 </div>
 </body>
 </html>`;
@@ -95,7 +95,7 @@ export async function sendResidentApplyInviteEmail(params: {
     return { ok: false, error: "Email delivery is not configured (set RESEND_API_KEY)." };
   }
 
-  const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {

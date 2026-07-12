@@ -5,7 +5,7 @@
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import { residentSetupAccountUrl } from "@/lib/auth/resident-setup-token";
 
-export const RESIDENT_WELCOME_EMAIL_SUBJECT = "Your Axis resident portal — account setup";
+export const RESIDENT_WELCOME_EMAIL_SUBJECT = "Your PropLane resident portal — account setup";
 
 /**
  * Resident account / setup URL for emails.
@@ -31,9 +31,9 @@ export function buildResidentWelcomeEmailBody(params: {
   return [
     greeting,
     "",
-    "Welcome to Axis. Your rental application has been approved.",
+    "Welcome to PropLane. Your rental application has been approved.",
     "",
-    `Your Axis ID: ${id}`,
+    `Your PropLane ID: ${id}`,
     "",
     "Create your resident portal account here:",
     params.signupUrl,
@@ -46,7 +46,7 @@ export function buildResidentWelcomeEmailBody(params: {
     "",
     "Use the same email address you used on your rental application when you create your account.",
     "",
-    "— Axis",
+    "— PropLane",
   ].join("\n");
 }
 
@@ -84,12 +84,12 @@ export function buildResidentWelcomeEmailHtml(params: {
 <body style="margin:0;padding:24px;font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#0f172a;font-size:15px;background:#f8fafc">
 <div style="max-width:36rem;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px 28px 32px;border:1px solid #e2e8f0">
 <p style="margin:0 0 12px 0">${greeting}</p>
-<p style="margin:0 0 12px 0">Welcome to Axis. Your rental application has been approved.</p>
-<p style="margin:0 0 8px 0"><strong>Your Axis ID:</strong> ${id}</p>
+<p style="margin:0 0 12px 0">Welcome to PropLane. Your rental application has been approved.</p>
+<p style="margin:0 0 8px 0"><strong>Your PropLane ID:</strong> ${id}</p>
 ${ctaButton}
 <p style="margin:0 0 12px 0">You can use the portal for lease signing, payments, maintenance and service requests, and move-in details your property shares with you.</p>
 <p style="margin:0 0 12px 0">Use the same email address you used on your rental application when you create your account.</p>
-<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— Axis</p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— PropLane</p>
 </div>
 </body>
 </html>`;
@@ -110,11 +110,11 @@ function buildResidentWelcomeMailtoBody(params: {
     "",
     params.signupUrl,
     "",
-    `Your Axis ID: ${id}`,
+    `Your PropLane ID: ${id}`,
     "",
     "Use the same email address you used on your rental application when you sign up.",
     "",
-    "— Axis",
+    "— PropLane",
   ].join("\n");
 }
 

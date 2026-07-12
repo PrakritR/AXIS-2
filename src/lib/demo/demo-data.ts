@@ -164,7 +164,7 @@ function demoListingSubmission(input: {
     houseOverview:
       "Light-filled home minutes from downtown Seattle, with in-unit laundry, secure entry, and quick access to transit.",
     houseRulesText: "Quiet hours 10pm–8am · No smoking · Guests welcome up to 7 nights",
-    wifiNetworkName: "AxisHome-5G",
+    wifiNetworkName: "PropLaneHome-5G",
     wifiPassword: "welcome-home-2026",
     generalHouseInfo:
       "Trash & recycling pickup is Tuesday morning — bins live in the alley.\nBuilding entry code is shared at key pickup.",
@@ -723,13 +723,13 @@ export function demoLeaseAgreementHtml(input: {
   <p>Landlord may enter after at least <strong>24 hours' advance written notice</strong> (email to Resident's address of record shall suffice) for inspections, repairs, or showings, per RCW 59.18.150. Emergency entry without notice is permitted for imminent hazards.</p>
 
   <h2>8. Default &amp; Termination</h2>
-  <p>Upon material breach (including nonpayment, unauthorized occupants, or violation of house rules), Landlord may provide written notice to cure or vacate per RCW 59.12.030 (3-day pay-or-vacate for nonpayment; 10-day cure for other violations). Early termination requires 30 days' written notice and may incur fees as stated in the full Axis lease at signing.</p>
+  <p>Upon material breach (including nonpayment, unauthorized occupants, or violation of house rules), Landlord may provide written notice to cure or vacate per RCW 59.12.030 (3-day pay-or-vacate for nonpayment; 10-day cure for other violations). Early termination requires 30 days' written notice and may incur fees as stated in the full PropLane lease at signing.</p>
 
   ${customProvisionsHtml}
 
   <h2>${customProvisionsHtml ? "10" : "9"}. Electronic Signature</h2>
   <p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement
-  <strong>one time</strong> through the Axis portal. The <strong>Electronic Signature Certificate</strong> appended
+  <strong>one time</strong> through the PropLane portal. The <strong>Electronic Signature Certificate</strong> appended
   to the signed copy is the binding record for both parties.</p>
   <p><strong>Pets:</strong> ${esc(petPolicy)}</p>
 </body>
@@ -1199,7 +1199,7 @@ export function demoPromotions(): ManagerPromotionRow[] {
           copy: {
             format: "email_blast",
             hook: "",
-            body: "Hi there,\n\nThe Pioneer has a bright 2-bed available now in Pioneer Square. First month free for qualified applicants.\n\nBest,\nAxis Leasing",
+            body: "Hi there,\n\nThe Pioneer has a bright 2-bed available now in Pioneer Square. First month free for qualified applicants.\n\nBest,\nPropLane Leasing",
             hashtags: "",
             ctaLine: "Reply to schedule a tour",
             subjectLine: "First month free at The Pioneer",
@@ -1441,11 +1441,11 @@ export function demoResidentInbox(): PersistedInboxThread[] {
     {
       id: "demo-ri-2",
       folder: "inbox",
-      from: "Axis Payments",
+      from: "PropLane Payments",
       email: "billing@axis.local",
       subject: "Rent receipt — last month",
       preview: "Your payment of $2,400.00 was received. Thank you!",
-      body: `Hi ${DEMO_RESIDENT_NAME.split(" ")[0]},\n\nWe received your rent payment of $2,400.00. Thank you!\n\nAxis Payments`,
+      body: `Hi ${DEMO_RESIDENT_NAME.split(" ")[0]},\n\nWe received your rent payment of $2,400.00. Thank you!\n\nPropLane Payments`,
       time: dateLabel(-3),
       unread: false,
     },
@@ -1531,7 +1531,7 @@ export function demoAdminInbox(): InboxMessage[] {
       name: "Riverside Partners",
       email: "leasing@riverside.example.com",
       topic: "Partner onboarding",
-      body: "We'd like to list 40 units on Axis — who can we talk to?",
+      body: "We'd like to list 40 units on PropLane — who can we talk to?",
       createdAt: isoDaysFromNow(-2),
       read: false,
       folder: "inbox",

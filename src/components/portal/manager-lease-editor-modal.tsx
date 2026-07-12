@@ -31,11 +31,11 @@ function draftFromSubmission(sub: ManagerListingSubmissionV1): LeaseConfigDraft 
 function validateLeaseDraft(draft: LeaseConfigDraft, source: PropertyLeaseSource): string | null {
   if (source === "axis_default") return null;
   if (source === "custom_format") {
-    return draft.leaseTemplateDocUrl?.trim() ? null : "Upload your lease template (PDF), or use the Axis default lease.";
+    return draft.leaseTemplateDocUrl?.trim() ? null : "Upload your lease template (PDF), or use the PropLane default lease.";
   }
   return draft.customLeaseTerms?.trim()
     ? null
-    : "Enter the lease information you want included, or use the Axis default lease.";
+    : "Enter the lease information you want included, or use the PropLane default lease.";
 }
 
 function LeaseConfigPreview({

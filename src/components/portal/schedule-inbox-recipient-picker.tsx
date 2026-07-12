@@ -18,7 +18,7 @@ export type ScheduleRecipientKey =
 type Section = "admin" | "management" | "resident";
 
 const SECTION_META: { id: Section; title: string; hint: string }[] = [
-  { id: "admin", title: "Admin", hint: "Axis platform operations" },
+  { id: "admin", title: "Admin", hint: "PropLane platform operations" },
   { id: "management", title: "Property managers", hint: "Linked co-managers on your account" },
   { id: "resident", title: "Residents", hint: "Approved tenants — filter by property" },
 ];

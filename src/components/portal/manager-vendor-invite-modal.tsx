@@ -81,7 +81,7 @@ export function ManagerVendorInviteModal({
         <div className="space-y-4 text-sm">
           <p className="text-muted">
             Send <span className="font-medium text-foreground">{vendor.name}</span> an email inviting them to{" "}
-            <span className="font-medium text-foreground">sign up for Axis</span> as a vendor. They&apos;ll get a link to
+            <span className="font-medium text-foreground">sign up for PropLane</span> as a vendor. They&apos;ll get a link to
             create their account and connect to your vendor list.
           </p>
           <div>
@@ -102,7 +102,7 @@ export function ManagerVendorInviteModal({
           <div className="rounded-xl border border-border bg-accent/20 px-3 py-2.5 text-xs text-muted">
             <p className="font-semibold text-foreground">{vendorInviteSubject(managerName)}</p>
             <p className="mt-1 leading-relaxed">
-              The message explains how to sign up for Axis, view work orders, and message {managerName}.
+              The message explains how to sign up for PropLane, view work orders, and message {managerName}.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -86,7 +86,7 @@ function electronicSignatureBlock(row: LeasePipelineRow): string {
 <!-- axis-signatures:start -->
 <section class="axis-esign">
   <h2>Electronic Signature Certificate</h2>
-  <p>This lease requires exactly two electronic signatures—one from the landlord / authorized agent and one from the resident / tenant. This certificate is the binding record for both. Each typed name below was accepted in the Axis portal as that party&apos;s electronic signature.</p>
+  <p>This lease requires exactly two electronic signatures—one from the landlord / authorized agent and one from the resident / tenant. This certificate is the binding record for both. Each typed name below was accepted in the PropLane portal as that party&apos;s electronic signature.</p>
   <div class="axis-esign-grid">
     ${signatureCard("Landlord / Authorized Agent", manager)}
     ${signatureCard("Resident / Tenant", resident)}

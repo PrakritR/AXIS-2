@@ -337,7 +337,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
   const paymentMethod =
     manualPaymentMethods.length > 0
       ? `Payment may be made via Stripe (portal), ${manualPaymentMethods.join(", ")}, or another method agreed in writing.`
-      : "Payment shall be made via the Axis portal or by a method agreed in writing with Landlord.";
+      : "Payment shall be made via the PropLane portal or by a method agreed in writing with Landlord.";
 
   const proratedSection = proratedBlock(monthlyRentStr, utilitiesStr, a.leaseStart ?? "", {
     method: specificRoom?.prorateMethod,
@@ -368,7 +368,7 @@ export function buildLeaseHtml(ctx: LeaseGenerationContext, config: LeaseJurisdi
 
     return `<!doctype html><html><head><meta charset="utf-8"/><title>Short-Term Room Stay Agreement</title><style>${leaseCss()}</style></head><body>
 <h1>SHORT-TERM ROOM STAY AGREEMENT</h1>
-<p class="sub">${durationDays ? `${durationDays}-Day Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via Axis</p>
+<p class="sub">${durationDays ? `${durationDays}-Day Stay` : "Temporary Room Stay"} · Generated ${generatedDate} via PropLane</p>
 
 <h2>1. Parties</h2>
 <table>
@@ -418,7 +418,7 @@ ${houseRules ? `<p>${houseRules}</p>` : ""}
 <p>Guest agrees to leave the room and shared areas in clean, undamaged condition. Owner/Host may deduct unpaid amounts, cleaning costs, missing items, or damage beyond ordinary use from the deposit.</p>
 
 <h2>11. Electronic Signature</h2>
-<p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the Axis portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
+<p>Owner/Host and Guest each sign this agreement <strong>once</strong> through the PropLane portal. The <strong>Electronic Signature Certificate</strong> at the end of the signed document is the official record of both signatures. No handwritten signature blocks appear here.</p>
 ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
 </body></html>`;
   }
@@ -426,11 +426,11 @@ ${customTermsAddendumHtml(subNorm, "Additional Provisions from Owner/Host")}
   const body = `
 <h1>RESIDENTIAL ROOM RENTAL AGREEMENT</h1>
 <p class="sub">${config.headerSubtitle}</p>
-<p class="generated">Generated ${generatedDate} via Axis</p>
+<p class="generated">Generated ${generatedDate} via PropLane</p>
 
 <h2>1. Parties</h2>
 <table>
-  <tr><th width="35%">Landlord / Operator</th><td><strong>${landlordEntity}</strong><br/>Mailing address: ${landlordMailing}<br/>For notices, use Axis portal messaging or the address above.</td></tr>
+  <tr><th width="35%">Landlord / Operator</th><td><strong>${landlordEntity}</strong><br/>Mailing address: ${landlordMailing}<br/>For notices, use PropLane portal messaging or the address above.</td></tr>
   <tr><th>Resident / Tenant</th><td><strong>${tenantName}</strong><br/>Phone: ${tenantPhone} &nbsp;·&nbsp; Email: ${tenantEmail}<br/>Date of birth: ${tenantDob}</td></tr>
 </table>
 
@@ -532,7 +532,7 @@ ${houseRules
   <li>Keep the room and areas under Resident's control clean, sanitary, and free of garbage.</li>
   <li>Replace light bulbs, batteries in smoke/CO detectors, and HVAC filters (if in-room) as needed.</li>
   <li>Clear drains of hair and debris; do not flush non-flushable items.</li>
-  <li>Promptly report any mold, moisture, leaks, pests, or damage to Landlord in writing via the Axis portal.</li>
+  <li>Promptly report any mold, moisture, leaks, pests, or damage to Landlord in writing via the PropLane portal.</li>
   <li>Not damage, destroy, or remove any part of the premises, appliances, or fixtures.</li>
   <li>Keep the room ventilated to prevent mold growth; report visible mold within 24 hours.</li>
   <li>In emergency (fire, gas leak, flooding), call 911 first, then notify Landlord immediately.</li>
@@ -565,7 +565,7 @@ ${houseRules
 <p>Any payments received shall be applied in the following order: (1) outstanding damage charges; (2) outstanding utility charges; (3) late fees and administrative fees; (4) past due rent (oldest first); (5) current rent.</p>
 
 <h2>${proratedSection ? "20" : "19"}. Notices</h2>
-<p>All notices shall be in writing. Delivery by email to the address on file or via Axis portal messaging is acceptable and shall be deemed received upon sending during business hours. Legal notices may also be delivered in person or by first-class mail to the mailing addresses listed in Section 1. Either party may update their notice address in writing.</p>
+<p>All notices shall be in writing. Delivery by email to the address on file or via PropLane portal messaging is acceptable and shall be deemed received upon sending during business hours. Legal notices may also be delivered in person or by first-class mail to the mailing addresses listed in Section 1. Either party may update their notice address in writing.</p>
 
 <h2>${proratedSection ? "21" : "20"}. Lead-Based Paint Disclosure</h2>
 <p>If the property was built before 1978, federal law (42 U.S.C. § 4852d) requires disclosure of known lead-based paint hazards. Resident acknowledges receiving the EPA pamphlet "Protect Your Family From Lead in Your Home" or waiving receipt in writing. Landlord discloses any known lead hazards in the separate disclosure addendum attached hereto (or: no known lead paint hazards).</p>
@@ -607,7 +607,7 @@ ${houseRules
 </table>
 
 <h2>${proratedSection ? "26" : "25"}. Electronic Signature</h2>
-<p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the Axis portal (one manager signature and one resident signature). The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties. No duplicate handwritten signature lines are included in this document.</p>
+<p><strong>Landlord / Authorized Agent</strong> and <strong>Resident / Tenant</strong> each execute this Agreement <strong>one time</strong> through the PropLane portal (one manager signature and one resident signature). The <strong>Electronic Signature Certificate</strong> appended to the signed copy is the binding record for both parties. No duplicate handwritten signature lines are included in this document.</p>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div class="addendum page-break">
@@ -626,7 +626,7 @@ ${houseRules
   <tr><td>Common area general</td><td>&nbsp;</td><td>&nbsp;</td></tr>
   <tr><td>Other / notes</td><td colspan="2">&nbsp;</td></tr>
 </table>
-<p>When you sign this Agreement in the Axis portal, those electronic signatures apply to this checklist as well. No separate signature lines are required on this page.</p>
+<p>When you sign this Agreement in the PropLane portal, those electronic signatures apply to this checklist as well. No separate signature lines are required on this page.</p>
 </div>
 
 <div class="addendum">
@@ -647,7 +647,7 @@ ${houseRules
   <li><strong>HVAC filters (in-room):</strong> Replace or clean as recommended by Landlord, typically every 60–90 days.</li>
   <li><strong>Drains:</strong> Keep shower/sink drains free of hair and debris. Use drain covers. Do not pour grease down any drain.</li>
   <li><strong>Appliances:</strong> Report any malfunction immediately. Do not attempt to repair appliances. Clean appliances (microwave, oven) after each use.</li>
-  <li><strong>Damage reporting:</strong> Report all damage, leaks, pests, or safety hazards to Landlord via the Axis portal within 24 hours of discovery.</li>
+  <li><strong>Damage reporting:</strong> Report all damage, leaks, pests, or safety hazards to Landlord via the PropLane portal within 24 hours of discovery.</li>
   <li><strong>Emergencies:</strong> In the event of fire, gas leak, flooding, or other emergency, call 911 immediately, then notify Landlord.</li>
 </ul>
 </div>

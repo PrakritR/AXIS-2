@@ -458,7 +458,7 @@ function VendorForm({
           onChange={(e) => setDraft({ ...draft, sharedWithManagers: e.target.checked })}
         />
         <label htmlFor="vendor-shared" className="text-sm leading-6 text-foreground">
-          Share with other managers on Axis
+          Share with other managers on PropLane
           <span className="mt-0.5 block text-xs text-muted">
             Other property managers can view and assign this vendor to work orders. You can turn this off anytime.
           </span>

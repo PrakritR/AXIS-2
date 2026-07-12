@@ -72,7 +72,7 @@ export function PublicListingPageClient() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Listing not found</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted">
           This property may be unlisted or the link may be outdated. Ask your property manager for an updated link, or
-          browse available homes on Axis.
+          browse available homes on PropLane.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link

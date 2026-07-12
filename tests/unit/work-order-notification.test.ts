@@ -13,7 +13,7 @@ function workOrderSmsBody(
     case "vendor_marked_done":
       return `"${title}"${at} marked done${input.note ? `: ${input.note.slice(0, 120)}` : ""}. Review in Work Orders.`;
     default:
-      return `"${title}"${at} update from Axis.`;
+      return `"${title}"${at} update from PropLane.`;
   }
 }
 

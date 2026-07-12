@@ -150,28 +150,29 @@ function truncateToWidth(text: string, font: PDFFont, size: number, maxWidth: nu
 }
 
 /**
- * Draw the Axis "AX" monogram inside a rounded brand tile. Vector reproduction of
- * the app's <AxisLogoMark> glyph so the document header carries real branding.
+ * Draw the PropLane paper-plane mark inside a rounded brand tile. Vector
+ * reproduction of the app's <AxisLogoMark> glyph so the document header
+ * carries real branding.
  */
 function drawAxisMark(page: PDFPage, x: number, topY: number, tile: number) {
   // Brand tile.
   page.drawRectangle({ x, y: topY - tile, width: tile, height: tile, color: BRAND });
-  // Glyph is authored in a 46×26 viewBox; center it within the tile.
-  const glyphW = tile * 0.62;
-  const s = glyphW / 46;
+  // Glyph is authored in a 26×26 viewBox; center it within the tile.
+  const glyphW = tile * 0.6;
+  const s = glyphW / 26;
   const gx = x + (tile - glyphW) / 2;
   const gTop = topY - (tile - 26 * s) / 2;
   const P = (vx: number, vy: number) => ({ x: gx + vx * s, y: gTop - vy * s });
-  const stroke = Math.max(1.4, 2.55 * s);
+  const stroke = Math.max(1.4, 2.15 * s);
   const line = (a: [number, number], b: [number, number], color = WHITE, thickness = stroke) =>
     page.drawLine({ start: P(a[0], a[1]), end: P(b[0], b[1]), thickness, color, lineCap: 1 });
-  // "A"
-  line([3.5, 21.5], [11, 4]);
-  line([11, 4], [18.5, 21.5]);
-  line([7.55, 14.25], [14.45, 14.25]);
-  // "X"
-  line([27, 4], [43, 22], STEEL, Math.max(1.4, 2.75 * s));
-  line([43, 4], [27, 22]);
+  // Paper-plane body.
+  line([3.5, 11.9], [22.5, 3.9]);
+  line([22.5, 3.9], [15.4, 22.4]);
+  line([15.4, 22.4], [11.3, 14.6]);
+  line([11.3, 14.6], [3.5, 11.9]);
+  // Fold line.
+  line([11.3, 14.6], [22.5, 3.9], STEEL);
 }
 
 export type ApplicationPdfOptions = {
@@ -214,9 +215,15 @@ export async function buildApplicationPdf(
       color: NAVY,
     });
     const midY = PAGE_HEIGHT - RUNNING_HEADER_HEIGHT / 2 - 3;
-    p.drawText("AXIS", { x: MARGIN, y: midY, size: 9, font: bold, color: WHITE });
-    p.drawText("Rental Application", { x: MARGIN + 34, y: midY, size: 9, font: regular, color: STEEL });
-    const idText = `Axis ID ${axisId}`;
+    p.drawText("PROPLANE", { x: MARGIN, y: midY, size: 9, font: bold, color: WHITE });
+    p.drawText("Rental Application", {
+      x: MARGIN + bold.widthOfTextAtSize("PROPLANE", 9) + 13,
+      y: midY,
+      size: 9,
+      font: regular,
+      color: STEEL,
+    });
+    const idText = `PropLane ID ${axisId}`;
     p.drawText(idText, {
       x: PAGE_WIDTH - MARGIN - bold.widthOfTextAtSize(idText, 8.5),
       y: midY + 0.5,
@@ -294,7 +301,7 @@ export async function buildApplicationPdf(
   const bandTop = PAGE_HEIGHT - 30;
   drawAxisMark(page, MARGIN, bandTop, 40);
   const wordmarkX = MARGIN + 40 + 14;
-  page.drawText("AXIS", { x: wordmarkX, y: bandTop - 24, size: 19, font: bold, color: WHITE });
+  page.drawText("PROPLANE", { x: wordmarkX, y: bandTop - 24, size: 19, font: bold, color: WHITE });
 
   const docTitle = "RENTAL APPLICATION";
   page.drawText(docTitle, {
@@ -319,7 +326,7 @@ export async function buildApplicationPdf(
   page.drawText(applicantName, { x: MARGIN, y: y - 16, size: 17, font: bold, color: INK });
   y -= 22;
   page.drawText(
-    `Axis ID ${axisId}    ·    ${statusLabel(row)}    ·    Generated ${generatedLabel}`,
+    `PropLane ID ${axisId}    ·    ${statusLabel(row)}    ·    Generated ${generatedLabel}`,
     { x: MARGIN, y: y - 10, size: 9, font: regular, color: MUTED },
   );
   y -= 22;
@@ -567,13 +574,13 @@ export async function buildApplicationPdf(
   ensure(30);
   y -= 12;
   page.drawText(
-    "Generated from Axis application records. Amounts and placement can change later in the lease or payment portal.",
+    "Generated from PropLane application records. Amounts and placement can change later in the lease or payment portal.",
     { x: MARGIN, y: y - 9, size: 8, font: italic, color: MUTED, maxWidth: contentWidth },
   );
 
   // ---- Footer on every page ----------------------------------------------
   const pages = pdf.getPages();
-  const footerLabel = `Axis  ·  Confidential`;
+  const footerLabel = `PropLane  ·  Confidential`;
   pages.forEach((p, index) => {
     p.drawLine({
       start: { x: MARGIN, y: FOOTER_Y + 12 },
@@ -582,7 +589,7 @@ export async function buildApplicationPdf(
       color: RULE,
     });
     p.drawText(footerLabel, { x: MARGIN, y: FOOTER_Y, size: 8, font: regular, color: MUTED });
-    const idText = `Axis ID ${axisId}`;
+    const idText = `PropLane ID ${axisId}`;
     const idWidth = regular.widthOfTextAtSize(idText, 8);
     p.drawText(idText, { x: (PAGE_WIDTH - idWidth) / 2, y: FOOTER_Y, size: 8, font: regular, color: MUTED });
     const pageText = `Page ${index + 1} of ${pages.length}`;

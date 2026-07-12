@@ -52,7 +52,7 @@ export function buildRentReceiptHtml(input: RentReceiptHtmlInput): string {
 </head>
 <body>
 <h1>RENT RECEIPT</h1>
-<p class="sub">Axis Housing Management · Seattle, WA</p>
+<p class="sub">PropLane Housing Management · Seattle, WA</p>
 <p class="generated">Generated ${escapeHtml(generatedLabel)}</p>
 
 <h2>Payment record</h2>
@@ -60,7 +60,7 @@ export function buildRentReceiptHtml(input: RentReceiptHtmlInput): string {
   ${rows}
 </table>
 
-<p class="footnote">Thank you — this receipt confirms your payment was recorded. Axis Property Management · Confidential</p>
+<p class="footnote">Thank you — this receipt confirms your payment was recorded. PropLane Property Management · Confidential</p>
 </body>
 </html>`;
 }

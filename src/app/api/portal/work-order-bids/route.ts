@@ -472,7 +472,7 @@ async function acceptBid(
       await deliverPortalInboxMessage(db, {
         senderUserId: actor.userId,
         senderEmail: actor.email,
-        fromName: actor.fullName || "Axis Portal",
+        fromName: actor.fullName || "PropLane Portal",
         subject,
         text: messageBody,
         toUserIds: [record.vendor_user_id],
@@ -494,7 +494,7 @@ async function acceptBid(
       await deliverPortalInboxMessage(db, {
         senderUserId: actor.userId,
         senderEmail: actor.email,
-        fromName: actor.fullName || "Axis Portal",
+        fromName: actor.fullName || "PropLane Portal",
         subject,
         text: messageBody,
         toUserIds: [other.vendor_user_id],

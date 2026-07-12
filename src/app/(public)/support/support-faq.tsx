@@ -55,7 +55,7 @@ const RESIDENT_FAQS: FaqItem[] = [
     q: "Is there a mobile app?",
     a: (
       <>
-        Yes — Axis is available for iOS and Android. Download the app and sign in with the same account you use on the
+        Yes — PropLane is available for iOS and Android. Download the app and sign in with the same account you use on the
         web. Enable push notifications to get rent reminders and messages instantly.
       </>
     ),

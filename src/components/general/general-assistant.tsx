@@ -26,10 +26,10 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 type Suggestion = { label: string; prompt: string };
 
 const SUGGESTIONS: Suggestion[] = [
-  { label: "What is Axis?", prompt: "What is Axis and who is it for?" },
-  { label: "What can it do?", prompt: "What can Axis do for a property manager?" },
-  { label: "How much is it?", prompt: "How does Axis pricing work?" },
-  { label: "How do I start?", prompt: "How do I get started with Axis?" },
+  { label: "What is PropLane?", prompt: "What is PropLane and who is it for?" },
+  { label: "What can it do?", prompt: "What can PropLane do for a property manager?" },
+  { label: "How much is it?", prompt: "How does PropLane pricing work?" },
+  { label: "How do I start?", prompt: "How do I get started with PropLane?" },
 ];
 
 function useGeneralOpen() {
@@ -138,7 +138,7 @@ export function GeneralAssistant() {
         type="button"
         onClick={handleOpen}
         data-attr="general-assistant-open"
-        aria-label="Open Axis AI assistant"
+        aria-label="Open PropLane AI assistant"
         aria-expanded={open}
         className={cn(
           "group fixed right-[max(1.25rem,env(safe-area-inset-right))] z-[60] flex items-center justify-center rounded-full text-white shadow-[0_16px_36px_-14px_rgba(47,107,255,0.8)] outline-none transition-[transform,filter,bottom] duration-200 hover:scale-[1.03] hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95",
@@ -149,7 +149,7 @@ export function GeneralAssistant() {
         style={{ background: "var(--btn-primary)" }}
       >
         <ChatBubbleIcon className="h-[18px] w-[18px] shrink-0 lg:h-6 lg:w-6" />
-        <span className="hidden text-sm font-semibold tracking-[-0.01em] lg:inline">Ask Axis AI</span>
+        <span className="hidden text-sm font-semibold tracking-[-0.01em] lg:inline">Ask PropLane AI</span>
       </button>
     );
 
@@ -157,7 +157,7 @@ export function GeneralAssistant() {
     <div className="fixed inset-0 z-[70]">
       <button
         type="button"
-        aria-label="Close Axis AI assistant"
+        aria-label="Close PropLane AI assistant"
         className="fixed inset-0 bg-foreground/10 backdrop-blur-[2px]"
         onClick={closeGeneralAssistant}
       />
@@ -180,9 +180,9 @@ export function GeneralAssistant() {
               </span>
               <div className="min-w-0">
                 <p id="general-assistant-title" className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
-                  Axis AI
+                  PropLane AI
                 </p>
-                <p className="truncate text-xs text-muted">Ask anything about Axis</p>
+                <p className="truncate text-xs text-muted">Ask anything about PropLane</p>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -201,7 +201,7 @@ export function GeneralAssistant() {
               <button
                 type="button"
                 onClick={closeGeneralAssistant}
-                aria-label="Close Axis AI assistant"
+                aria-label="Close PropLane AI assistant"
                 className="flex h-8 w-8 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/25"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
@@ -221,7 +221,7 @@ export function GeneralAssistant() {
                   How can I help?
                 </h3>
                 <p className="max-w-[20rem] text-sm leading-relaxed text-muted">
-                  Ask about Axis — features, pricing, the live demo, or how to get started.
+                  Ask about PropLane — features, pricing, the live demo, or how to get started.
                 </p>
               </div>
               <div className="grid w-full grid-cols-2 gap-2">
@@ -289,7 +289,7 @@ export function GeneralAssistant() {
                 }
               }}
               rows={1}
-              placeholder="Ask about Axis…"
+              placeholder="Ask about PropLane…"
               className="max-h-32 min-h-[2.75rem] w-full resize-none [field-sizing:content] rounded-2xl bg-transparent py-3 pl-4 pr-12 text-sm text-foreground outline-none placeholder:text-muted/70"
             />
             <button

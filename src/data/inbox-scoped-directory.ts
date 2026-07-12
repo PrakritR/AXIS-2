@@ -19,7 +19,7 @@ import { PRIMARY_ADMIN_EMAIL } from "@/lib/auth/primary-admin";
 /** Axis partner inbox (admin). */
 export const PRIMARY_AXIS_ADMIN_EMAIL = PRIMARY_ADMIN_EMAIL;
 
-export const PRIMARY_AXIS_ADMIN_LABEL = "Axis admin";
+export const PRIMARY_AXIS_ADMIN_LABEL = "PropLane admin";
 
 /** UI buckets — how the compose modal groups recipients. */
 export type InboxRecipientCategory = "admin" | "management" | "resident";

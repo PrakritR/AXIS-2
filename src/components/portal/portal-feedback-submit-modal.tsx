@@ -111,7 +111,7 @@ export function PortalFeedbackSubmitModal({
   return (
     <Modal open={open} title="Add feedback" onClose={handleClose} panelClassName="max-w-lg">
       <p className="mb-4 text-sm text-muted">
-        Share ideas, report issues, or tell us what would make Axis better for you.
+        Share ideas, report issues, or tell us what would make PropLane better for you.
       </p>
       <div className="space-y-4">
         <div>

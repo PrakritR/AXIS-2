@@ -119,7 +119,7 @@ export function ManagerOutgoingPaymentDetail({
       void syncManagerWorkOrdersFromServer();
       showToast(
         paymentMethod === "ach"
-          ? "Approved and paid through Axis."
+          ? "Approved and paid through PropLane."
           : `Marked paid — ${managerVendorPayMethodLabel(paymentMethod)}.`,
       );
       setPayConfirmOpen(false);
@@ -170,7 +170,7 @@ export function ManagerOutgoingPaymentDetail({
 
       {row.achAvailable ? (
         <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-pending-fg)]">
-          <p className="text-xs font-semibold">Pay through Axis (ACH)</p>
+          <p className="text-xs font-semibold">Pay through PropLane (ACH)</p>
           <p className="mt-1 text-sm leading-relaxed">
             Approve &amp; pay to log the expense and send an ACH transfer when the vendor has linked their bank in the
             vendor portal.
@@ -263,7 +263,7 @@ export function ManagerOutgoingPaymentDetail({
           ) : null}
           {paymentMethod === "ach" ? (
             <p className="text-muted">
-              Axis will attempt an ACH payout to the vendor&apos;s linked bank account and log this expense.
+              PropLane will attempt an ACH payout to the vendor&apos;s linked bank account and log this expense.
             </p>
           ) : (
             <label className="flex items-start gap-2 text-sm">
@@ -273,7 +273,7 @@ export function ManagerOutgoingPaymentDetail({
                 checked={manualSentConfirmed}
                 onChange={(e) => setManualSentConfirmed(e.target.checked)}
               />
-              <span>I sent this payment outside Axis.</span>
+              <span>I sent this payment outside PropLane.</span>
             </label>
           )}
           <div className="flex justify-end gap-2">

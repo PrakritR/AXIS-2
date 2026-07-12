@@ -134,7 +134,7 @@ export async function POST(req: Request) {
     senderEmail: manager.email ?? "",
     fromName: `Text from ${displayLabel}`,
     subject: `Text message from ${displayLabel}`,
-    text: `${body || "(empty message)"}\n\n— Inbound text to your Axis number (sender not identity-verified).`,
+    text: `${body || "(empty message)"}\n\n— Inbound text to your PropLane number (sender not identity-verified).`,
     toUserIds: [manager.id],
     deliverToPortalInbox: true,
     deliverViaEmail: true,

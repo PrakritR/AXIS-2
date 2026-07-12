@@ -17,7 +17,7 @@ async function deliverEmail(to: string[], subject: string, text: string): Promis
   if (recipients.length === 0) return;
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) return;
-  const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
   await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -87,7 +87,7 @@ export async function notifyManagerPropertyLeadMessage(input: {
     "",
     `Open your inbox: ${origin}/portal/inbox`,
     "",
-    "— Axis",
+    "— PropLane",
   ].filter(Boolean);
 
   const text = lines.join("\n");

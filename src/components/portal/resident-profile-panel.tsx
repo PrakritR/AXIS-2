@@ -191,7 +191,7 @@ export function ResidentProfilePanel() {
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Axis ID</label>
+            <label className="text-sm font-semibold text-foreground">PropLane ID</label>
             <Input value={axisId} readOnly className="bg-accent/30 font-mono text-sm" />
           </div>
           <div className="space-y-2 sm:col-span-2">

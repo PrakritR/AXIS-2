@@ -40,7 +40,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     if (!profile?.id) {
-      return NextResponse.json({ ok: false, error: "No account found with this Axis ID." }, { status: 404 });
+      return NextResponse.json({ ok: false, error: "No account found with this PropLane ID." }, { status: 404 });
     }
 
     const role = String(profile.role ?? "").toLowerCase();

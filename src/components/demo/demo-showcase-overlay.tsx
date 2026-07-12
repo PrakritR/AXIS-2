@@ -107,7 +107,7 @@ function ListingShowcase() {
         {published ? (
           <div className="flex items-center justify-center gap-2 rounded-full bg-[var(--status-approved-bg,rgba(16,185,129,0.12))] px-4 py-2.5 text-sm font-semibold text-[var(--status-approved-fg,#059669)]">
             <CheckBadge className="h-5 w-5" />
-            Listing published — live on Axis
+            Listing published — live on PropLane
           </div>
         ) : (
           <button

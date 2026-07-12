@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Vendors · Axis",
+  title: "Vendors · PropLane",
   description:
-    "Get discovered by property managers, receive work orders, bid after a tour, and get paid — free to join as an Axis vendor.",
+    "Get discovered by property managers, receive work orders, bid after a tour, and get paid — free to join as a PropLane vendor.",
 };
 
 const KEY_FACTS = [
@@ -22,12 +22,12 @@ const HOW_IT_WORKS = [
   {
     step: 2,
     title: "Tour & bid",
-    body: "Visit the property, submit your price and schedule, and message in Axis.",
+    body: "Visit the property, submit your price and schedule, and message in PropLane.",
   },
   {
     step: 3,
     title: "Get paid",
-    body: "Approved work is paid directly through Axis — labor and materials tracked.",
+    body: "Approved work is paid directly through PropLane — labor and materials tracked.",
   },
 ] as const;
 
@@ -41,7 +41,7 @@ export default function VendorsPage() {
           Work orders, sent straight to you.
         </h1>
         <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-muted sm:text-base">
-          Axis connects you to property managers who need repairs, turnovers, and maintenance — without
+          PropLane connects you to property managers who need repairs, turnovers, and maintenance — without
           marketplace fees or cold outreach.
         </p>
 

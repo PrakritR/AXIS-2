@@ -123,7 +123,7 @@ export function residentPaymentMethodsSummary(
   if (sub.zellePaymentsEnabled && sub.zelleContact?.trim()) methods.push(`Zelle (${sub.zelleContact.trim()})`);
   if (sub.venmoPaymentsEnabled && sub.venmoContact?.trim()) methods.push(`Venmo (${sub.venmoContact.trim()})`);
   if (axisPaymentsEnabledOnListing(sub)) {
-    methods.push(`Axis payments — bank from ${axisAchFeeDisplayLabel()}, card/Link at higher processing`);
+    methods.push(`PropLane payments — bank from ${axisAchFeeDisplayLabel()}, card/Link at higher processing`);
   }
   if (methods.length === 0) methods.push("Zelle, Venmo, ACH, or cash — your manager marks payments received.");
   return methods;

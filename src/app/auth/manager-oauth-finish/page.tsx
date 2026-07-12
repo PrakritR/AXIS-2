@@ -82,7 +82,7 @@ function ManagerOauthFinishContent() {
     );
   }
 
-  return <AuthOAuthLoading label="Finishing account setup" caption="Finishing your Axis account…" />;
+  return <AuthOAuthLoading label="Finishing account setup" caption="Finishing your PropLane account…" />;
 }
 
 export default function ManagerOauthFinishPage() {

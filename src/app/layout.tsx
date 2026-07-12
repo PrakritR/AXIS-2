@@ -17,11 +17,11 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Axis",
-    template: "%s · Axis",
+    default: "PropLane",
+    template: "%s · PropLane",
   },
   description:
-    "Axis — AI-powered property management for applications, screening, leases, and rent collection.",
+    "PropLane — AI-powered property management for applications, screening, leases, and rent collection.",
 };
 
 export default function RootLayout({

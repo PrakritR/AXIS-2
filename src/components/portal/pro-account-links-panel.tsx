@@ -579,7 +579,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
   const lookup = async (): Promise<boolean> => {
     const raw = axisInput.trim();
     if (!raw) {
-      showToast(`Enter an ${AXIS_ID_LABEL}.`);
+      showToast(`Enter a ${AXIS_ID_LABEL}.`);
       return false;
     }
     setLookupBusy(true);
@@ -670,7 +670,7 @@ export function ProAccountLinksPanel({ userId }: { userId: string }) {
       return;
     }
     if (!draftAxisId || !draftUserId) {
-      showToast(`Verify an ${AXIS_ID_LABEL} first.`);
+      showToast(`Verify a ${AXIS_ID_LABEL} first.`);
       return;
     }
     const ids = Object.entries(selectedProps)

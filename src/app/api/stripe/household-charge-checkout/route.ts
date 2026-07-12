@@ -165,7 +165,7 @@ export async function POST(req: Request) {
       return {
         amountCents,
         productName: charge.title?.trim() || "Resident payment",
-        productDescription: charge.propertyLabel?.trim() || "Axis",
+        productDescription: charge.propertyLabel?.trim() || "PropLane",
       };
     });
 

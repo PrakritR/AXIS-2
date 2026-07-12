@@ -132,7 +132,7 @@ export function DemoFrameAssistant() {
             openAxisAssistant();
           }}
           data-attr="demo-assistant-open"
-          aria-label="Open Axis Assistant"
+          aria-label="Open PropLane Assistant"
           aria-expanded={open}
           className="absolute bottom-4 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full text-white shadow-[0_12px_28px_-12px_rgba(47,107,255,0.75)] outline-none transition-[transform,filter] duration-200 hover:scale-105 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95"
           style={{ background: "var(--btn-primary)" }}
@@ -146,7 +146,7 @@ export function DemoFrameAssistant() {
         <div className="absolute inset-0 z-50">
           <button
             type="button"
-            aria-label="Close Axis Assistant"
+            aria-label="Close PropLane Assistant"
             className="absolute inset-0 bg-foreground/10 backdrop-blur-[1px]"
             onClick={closeAxisAssistant}
           />
@@ -168,7 +168,7 @@ export function DemoFrameAssistant() {
                   </span>
                   <div className="min-w-0">
                     <p id="demo-assistant-title" className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
-                      Axis Assistant
+                      PropLane Assistant
                     </p>
                     <p className="truncate text-xs text-muted">Grounded in this portfolio</p>
                   </div>
@@ -189,7 +189,7 @@ export function DemoFrameAssistant() {
                   <button
                     type="button"
                     onClick={closeAxisAssistant}
-                    aria-label="Close Axis Assistant"
+                    aria-label="Close PropLane Assistant"
                     className="flex h-7 w-7 items-center justify-center rounded-full text-muted outline-none transition-colors hover:bg-foreground/5 hover:text-foreground"
                   >
                     <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" aria-hidden="true">

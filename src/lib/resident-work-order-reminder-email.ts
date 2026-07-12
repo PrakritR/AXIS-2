@@ -46,9 +46,9 @@ export function buildResidentWorkOrderReminderEmail(
     "",
     `Request ID: ${input.workOrderId.trim()}`,
     "",
-    "Please review and schedule this work order in Axis when ready.",
+    "Please review and schedule this work order in PropLane when ready.",
     "",
-    "Axis Portal",
+    "PropLane Portal",
   ].join("\n");
 
   return { subject, text };

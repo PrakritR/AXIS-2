@@ -97,7 +97,7 @@ export function AuthBrandHeader({
   return (
     <div className="auth-brand-header flex flex-col items-center text-center">
       {homeLink ? (
-        <Link href="/" data-attr="auth-home-logo" aria-label="Axis home">
+        <Link href="/" data-attr="auth-home-logo" aria-label="PropLane home">
           {logo}
         </Link>
       ) : (
@@ -122,7 +122,7 @@ export function AuthBrandHeader({
 }
 
 export function AuthPageHeader({
-  eyebrow = "Axis",
+  eyebrow = "PropLane",
   title,
   subtitle,
   accent = true,

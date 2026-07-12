@@ -83,7 +83,7 @@ export async function deliverPortalInboxMessage(
   const senderEmail = opts.senderEmail.trim().toLowerCase();
   const subject = opts.subject.trim();
   const text = opts.text.trim();
-  const fromName = opts.fromName.trim() || "Axis Portal";
+  const fromName = opts.fromName.trim() || "PropLane Portal";
   const deliverToPortalInbox = opts.deliverToPortalInbox !== false;
   const deliverViaEmail = opts.deliverViaEmail !== false;
   const deliverViaSms = opts.deliverViaSms === true;
@@ -211,8 +211,8 @@ export async function deliverPortalInboxMessage(
   if (deliverViaEmail && toEmails.length > 0) {
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (!apiKey) return { ok: false, error: "Email delivery not configured (RESEND_API_KEY missing)." };
-    const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
-    const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via Axis portal by ${fromName}</p>`;
+    const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
+    const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${fromName}</p>`;
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

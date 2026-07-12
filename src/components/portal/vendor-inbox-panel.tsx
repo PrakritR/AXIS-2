@@ -351,7 +351,7 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
           setLocal(rows as InboxThread[]);
           showToast(
             p.includesAxisAdmin && !p.includesDirectoryRecipients
-              ? "Message sent to Axis admin."
+              ? "Message sent to PropLane admin."
               : "Message sent via inbox and email.",
           );
           navigate("/vendor/inbox/sent");

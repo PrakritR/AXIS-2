@@ -188,7 +188,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
       adminUserId: requestedWindows[0]?.adminUserId,
       adminLabel: requestedWindows[0]?.adminLabel,
     });
-    showToast("Request sent. Your proposed windows are now in the Axis calendar.");
+    showToast("Request sent. Your proposed windows are now in the PropLane calendar.");
     setStep(1);
     setMaxStepReached(1);
     setName("");
@@ -280,7 +280,7 @@ export function PartnerMeetingScheduler({ showToast }: { showToast: (m: string) 
             ) : (
               <p className="text-sm text-muted">
                 Pick one or more 30-minute windows that work for you. Only highlighted days and times match what
-                your Axis contact published in the admin portal.
+                your PropLane contact published in the admin portal.
               </p>
             )}
 

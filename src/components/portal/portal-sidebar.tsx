@@ -57,13 +57,13 @@ function hrefForSection(def: PortalDefinition, section: string) {
 function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: string } {
   switch (kind) {
     case "resident":
-      return { subtitle: "Resident", ariaLabel: "Axis Resident Portal home" };
+      return { subtitle: "Resident", ariaLabel: "PropLane Resident Portal home" };
     case "admin":
-      return { subtitle: "Admin", ariaLabel: "Axis Admin Portal home" };
+      return { subtitle: "Admin", ariaLabel: "PropLane Admin Portal home" };
     case "vendor":
-      return { subtitle: "Vendor", ariaLabel: "Axis Vendor Portal home" };
+      return { subtitle: "Vendor", ariaLabel: "PropLane Vendor Portal home" };
     default:
-      return { subtitle: "Manager", ariaLabel: "Axis Manager Portal home" };
+      return { subtitle: "Manager", ariaLabel: "PropLane Manager Portal home" };
   }
 }
 
@@ -510,12 +510,12 @@ export function PortalSidebar({
           <Link
             href="/"
             prefetch
-            aria-label="Axis home"
+            aria-label="PropLane home"
             className="flex min-w-0 items-center gap-2.5 transition-opacity hover:opacity-90"
           >
             <AxisLogoMark size="compact" />
             <span className="min-w-0 leading-tight">
-              <span className="block text-[14px] font-semibold text-foreground">Axis</span>
+              <span className="block text-[14px] font-semibold text-foreground">PropLane</span>
               <span className="mt-0.5 inline-block rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
                 {headerSubtitle}
               </span>
@@ -575,7 +575,7 @@ export function PortalSidebar({
             <Link
               href="/"
               prefetch
-              aria-label="Axis home"
+              aria-label="PropLane home"
               className="shrink-0 transition-opacity hover:opacity-90"
             >
               <AxisLogoMark size="compact" />

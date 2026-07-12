@@ -67,7 +67,7 @@ export function ManagerCosignerReadonlyReview({
       ) : null}
     <div className="grid gap-3 xl:grid-cols-2">
       <ReviewSection title="Link to signer">
-        <Row k="Signer Axis ID" v={displayOrDash(sub.signerAppId)} />
+        <Row k="Signer PropLane ID" v={displayOrDash(sub.signerAppId)} />
         <Row k="Signer name" v={displayOrDash(sub.signerFullName)} />
         <Row k="Submitted" v={sub.submittedAt ? new Date(sub.submittedAt).toLocaleString() : "—"} />
       </ReviewSection>

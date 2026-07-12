@@ -1,6 +1,6 @@
 import { residentAccountCreationUrl } from "@/lib/resident-welcome-email";
 
-export const APPLICATION_SUBMITTED_EMAIL_SUBJECT = "Your Axis application — create your resident account";
+export const APPLICATION_SUBMITTED_EMAIL_SUBJECT = "Your PropLane application — create your resident account";
 
 export function buildApplicationSubmittedEmailBody(params: {
   applicantName?: string;
@@ -25,7 +25,7 @@ export function buildApplicationSubmittedEmailBody(params: {
     "",
     "Your portal stays limited until your property manager reviews your application and fee. You can still create your account now to save your Application ID.",
     "",
-    "— Axis",
+    "— PropLane",
   ].join("\n");
 }
 
@@ -65,7 +65,7 @@ export function buildApplicationSubmittedEmailHtml(params: {
 </td></tr></table>
 <p style="margin:0 0 12px 0;font-size:13px;color:#64748b">Use the same email as your application: ${escapeHtmlText(params.applicantEmail.trim())}</p>
 <p style="margin:0;font-size:13px;color:#64748b">If the button does not work, copy this link:<br/><span style="word-break:break-all;color:#334155">${urlPlain}</span></p>
-<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— Axis</p>
+<p style="margin:16px 0 0 0;color:#64748b;font-size:14px">— PropLane</p>
 </div>
 </body>
 </html>`;

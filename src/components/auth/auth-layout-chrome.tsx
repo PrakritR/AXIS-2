@@ -63,7 +63,7 @@ export function AuthLayoutHomeMark() {
     <Link
       href="/"
       data-attr="auth-home-logo"
-      aria-label="Axis home"
+      aria-label="PropLane home"
       className="auth-layout-home-mark absolute left-0 top-0 z-30 p-4 pl-[max(1rem,env(safe-area-inset-left))] pt-[max(1rem,env(safe-area-inset-top))]"
     >
       <AxisLogoMark size="compact" />

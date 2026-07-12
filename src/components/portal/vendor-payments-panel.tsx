@@ -164,7 +164,7 @@ function VendorPaymentExpandedDetail({
           ) : null}
           {paidChannel === "ach" ? (
             <p className="mt-1 text-sm leading-relaxed">
-              {row.payoutStatus ?? "ACH transfer through Axis when your bank is linked."}
+              {row.payoutStatus ?? "ACH transfer through PropLane when your bank is linked."}
             </p>
           ) : null}
         </div>
@@ -194,7 +194,7 @@ function VendorPaymentExpandedDetail({
 
       {bucket === "pending" && vendorProfile?.achPaymentsEnabled ? (
         <div className="glass-card mb-4 rounded-lg px-3 py-2.5 text-[var(--status-pending-fg)]">
-          <p className="text-xs font-semibold">Pay through Axis (ACH)</p>
+          <p className="text-xs font-semibold">Pay through PropLane (ACH)</p>
           <p className="mt-1 text-sm leading-relaxed">
             When your bank is linked, your manager can approve &amp; pay to send an ACH transfer automatically.
           </p>

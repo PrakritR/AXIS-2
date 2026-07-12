@@ -34,9 +34,9 @@ export function buildVendorWorkOrderPaymentNotifyEmail(
       "",
       `${vendor} reports that payment was received for "${title}" at ${where} (${amount}).`,
       "",
-      "Please confirm and update the work order in Axis under Work Orders if anything still shows pending.",
+      "Please confirm and update the work order in PropLane under Work Orders if anything still shows pending.",
       "",
-      "Axis Portal",
+      "PropLane Portal",
     ].join("\n");
     return { subject, text };
   }
@@ -49,9 +49,9 @@ export function buildVendorWorkOrderPaymentNotifyEmail(
     "",
     `Amount: ${amount}`,
     "",
-    "Please review and approve payment in Axis under Work Orders when ready.",
+    "Please review and approve payment in PropLane under Work Orders when ready.",
     "",
-    "Axis Portal",
+    "PropLane Portal",
   ].join("\n");
   return { subject, text };
 }

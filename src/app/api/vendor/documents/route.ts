@@ -99,7 +99,7 @@ export async function PATCH(req: Request) {
     if (Array.isArray(body.documents)) {
       const incoming = body.documents.filter(Boolean);
       if (!incoming.every((d) => isStoredVendorDocument(auth.userId, d))) {
-        return NextResponse.json({ error: "Documents must be uploaded through Axis first." }, { status: 400 });
+        return NextResponse.json({ error: "Documents must be uploaded through PropLane first." }, { status: 400 });
       }
       vendorDocuments = incoming;
     }

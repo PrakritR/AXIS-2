@@ -132,10 +132,10 @@ export function validateListingWizardStep(
   if (stepIndex === 8 && sub.leaseConfigMode === "custom") {
     if (sub.leaseCustomKind === "document") {
       if (!sub.leaseTemplateDocUrl?.trim()) {
-        errs.leaseTemplateDoc = "Upload your lease template (PDF), or switch back to the Axis standard lease.";
+        errs.leaseTemplateDoc = "Upload your lease template (PDF), or switch back to the PropLane standard lease.";
       }
     } else if (!sub.customLeaseTerms?.trim()) {
-      errs.customLeaseTerms = "Enter the lease information you want included, or switch back to the Axis standard lease.";
+      errs.customLeaseTerms = "Enter the lease information you want included, or switch back to the PropLane standard lease.";
     }
   }
 

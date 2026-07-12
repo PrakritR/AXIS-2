@@ -96,8 +96,8 @@ export async function POST(req: Request) {
     let emailSent = false;
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (apiKey) {
-      const from = process.env.RESEND_FROM?.trim() || "Axis <onboarding@resend.dev>";
-      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${messageBody.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via Axis portal by ${managerName}</p>`;
+      const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
+      const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${messageBody.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${managerName}</p>`;
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -125,7 +125,7 @@ export async function POST(req: Request) {
       const { data: residentProfile } = await db.from("profiles").select("phone").eq("email", residentEmail.toLowerCase()).maybeSingle();
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
-        const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Log in to your Axis portal to pay. — ${managerName}`;
+        const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Log in to your PropLane portal to pay. — ${managerName}`;
         const smsResult = await sendSms(residentPhone, smsBody, smsFromNumber);
         if (smsResult.sent) {
           const smsLogId = `outbound_sms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -173,12 +173,12 @@ function buildReminderBody({
   if (propertyLabel) lines.push(`Property: ${propertyLabel}`);
   lines.push(
     "",
-    "Please log in to your Axis resident portal to make your payment at your earliest convenience.",
+    "Please log in to your PropLane resident portal to make your payment at your earliest convenience.",
     "",
     "If you have any questions, please don't hesitate to reach out.",
     "",
     managerName,
-    "Axis Portal",
+    "PropLane Portal",
   );
   return lines.join("\n");
 }

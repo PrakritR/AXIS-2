@@ -297,9 +297,9 @@ export function ManagerVendorSettingsModal({
 
         <section className="space-y-3 rounded-2xl border border-border bg-accent/20 p-4">
           <div>
-            <p className="font-semibold text-foreground">Axis catalog</p>
+            <p className="font-semibold text-foreground">PropLane catalog</p>
             <p className="mt-1 text-xs text-muted">
-              Search curated vendors and vendors shared by other managers on Axis, then add them to your account.
+              Search curated vendors and vendors shared by other managers on PropLane, then add them to your account.
             </p>
           </div>
           <Input
@@ -321,7 +321,7 @@ export function ManagerVendorSettingsModal({
                     {row.trade || "—"}
                     {row.email ? ` · ${row.email}` : ""}
                   </p>
-                  <p className="text-[11px] text-muted">Shared on Axis</p>
+                  <p className="text-[11px] text-muted">Shared on PropLane</p>
                 </div>
                 <Button type="button" variant="outline" className="h-8 rounded-full text-xs" onClick={() => addCatalogVendor(row)}>
                   Add
@@ -338,7 +338,7 @@ export function ManagerVendorSettingsModal({
                   <p className="text-xs text-muted">
                     {row.trade} · {row.city} · {row.zip}
                   </p>
-                  <p className="text-[11px] text-muted">Axis catalog</p>
+                  <p className="text-[11px] text-muted">PropLane catalog</p>
                 </div>
                 <Button type="button" variant="outline" className="h-8 rounded-full text-xs" onClick={() => addCatalogVendor(row)}>
                   Add

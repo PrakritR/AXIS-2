@@ -48,7 +48,7 @@ export function NotificationsToggle() {
         permission === "granted"
           ? "On — rent reminders and updates arrive on this device."
           : permission === "denied"
-            ? "Turn on notifications for Axis in your device Settings to enable."
+            ? "Turn on notifications for PropLane in your device Settings to enable."
             : "Get rent reminders, work-order updates, and announcements."
       }
       surfaceMuted={false}
@@ -68,7 +68,7 @@ export function NotificationsToggle() {
         {permission === "granted"
           ? "Notifications are enabled for this device."
           : permission === "denied"
-            ? "Open your device Settings to allow notifications from Axis."
+            ? "Open your device Settings to allow notifications from PropLane."
             : "Tap Enable to allow push notifications on this device."}
       </p>
     </PortalCollapsibleSection>

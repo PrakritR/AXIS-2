@@ -1211,9 +1211,9 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
       appendLeaseThreadMessage(leaseId, "manager", "Sent lease-signing reminder to resident.", userId);
       setLeaseTick((n) => n + 1);
       if (data.skipped) {
-        showToast("Reminder sent to Axis inbox (demo email, no external email sent).");
+        showToast("Reminder sent to PropLane inbox (demo email, no external email sent).");
       } else {
-        showToast("Lease-signing reminder sent via email and Axis inbox.");
+        showToast("Lease-signing reminder sent via email and PropLane inbox.");
       }
     } catch {
       showToast("Could not send lease signing reminder.");
@@ -1240,12 +1240,12 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     const body = [
       `Hi ${res.name.split(" ")[0] ?? res.name},`,
       "",
-      `This is a reminder to review and sign your lease for ${unit} in your Axis resident portal.`,
+      `This is a reminder to review and sign your lease for ${unit} in your PropLane resident portal.`,
       dateLine,
       "",
-      "If you have any questions before signing, reply in your Axis inbox and we will help.",
+      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
       "",
-      "Axis",
+      "PropLane",
     ].filter(Boolean).join("\n");
 
     setLeaseReminderPreview({
@@ -1262,13 +1262,13 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     return [
       `Hi ${lease.residentName || res.name || "there"},`,
       "",
-      `Your lease for ${unit} is ready to review and sign in your Axis resident portal.`,
+      `Your lease for ${unit} is ready to review and sign in your PropLane resident portal.`,
       "",
-      "Sign in to Axis, open Leases in the sidebar, and complete your signature when you're ready.",
+      "Sign in to PropLane, open Leases in the sidebar, and complete your signature when you're ready.",
       "",
-      "If you have any questions before signing, reply in your Axis inbox and we will help.",
+      "If you have any questions before signing, reply in your PropLane inbox and we will help.",
       "",
-      "Axis",
+      "PropLane",
     ].join("\n");
   }
 
@@ -1403,7 +1403,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setArMoveInFee(""); setArSecurityDeposit(""); setArNotes("");
     setAddResidentOpen(false);
     setHcTick((n) => n + 1);
-    showToast(`Resident added — Axis ID: ${axisId}`);
+    showToast(`Resident added — PropLane ID: ${axisId}`);
   }
 
   function openEditResidentModal() {
@@ -2976,7 +2976,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
 
       <Modal open={addResidentOpen} title="Add resident" onClose={() => setAddResidentOpen(false)}>
         <div className="space-y-3">
-          <p className="text-xs text-muted">Creates an active resident record with an Axis ID. No application or lease is generated.</p>
+          <p className="text-xs text-muted">Creates an active resident record with a PropLane ID. No application or lease is generated.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-muted">Full name *</span>
@@ -3290,7 +3290,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         }
         intro={
           approvePreviewRow
-            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their Axis resident account setup email.`
+            ? `Approving ${approvePreviewRow.name || approvePreviewRow.email} will update their application status and can send their PropLane resident account setup email.`
             : undefined
         }
         confirmLabel="Approve & send setup email"
@@ -3338,7 +3338,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         recipient={leaseSentPreview?.recipient ?? ""}
         subject={leaseSentPreview?.subject ?? ""}
         body={leaseSentPreview?.body ?? ""}
-        footerNote="The lease will be released to the resident portal after you confirm. This message is delivered to Axis inbox and email."
+        footerNote="The lease will be released to the resident portal after you confirm. This message is delivered to PropLane inbox and email."
         confirmLabel="Send lease & notification"
         confirmLabelWithoutMessage="Send lease only"
         confirmBusy={leaseSendBusy}

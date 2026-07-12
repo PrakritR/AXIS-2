@@ -18,7 +18,7 @@ export function AdminProfileClient({
       initialFullName={fullName}
       initialEmail={email}
       initialPhone={phone}
-      idLabel="Axis ID"
+      idLabel="PropLane ID"
       idValue={adminId}
     />
   );

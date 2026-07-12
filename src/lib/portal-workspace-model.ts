@@ -198,7 +198,7 @@ export function buildPortalWorkspaceModel(
   section: string,
   tabId: string,
 ): WorkspaceModel {
-  const eyebrow = `${portal === "pro" ? "Axis Pro" : portal === "manager" ? "Manager" : portal === "resident" ? "Resident" : "Admin"} workspace`;
+  const eyebrow = `${portal === "pro" ? "PropLane Pro" : portal === "manager" ? "Manager" : portal === "resident" ? "Resident" : "Admin"} workspace`;
 
   if (section === "dashboard") {
     return {
@@ -547,7 +547,7 @@ export function buildPortalWorkspaceModel(
   if (portal === "admin" && section === "axis-users") {
     return {
       eyebrow,
-      title: "Axis users",
+      title: "PropLane users",
       subtitle: "",
       kpis: [
         { label: "Current subscribers", value: demoKpis.managers.current, hint: "" },
@@ -789,7 +789,7 @@ export function buildPortalWorkspaceModel(
       { key: "owner", label: "Owner" },
     ],
     rows: [
-      { record: "Sample A", state: "Ready", owner: "Axis" },
+      { record: "Sample A", state: "Ready", owner: "PropLane" },
       { record: "Sample B", state: "Queued", owner: "Manager" },
       { record: "Sample C", state: "Blocked", owner: "Admin" },
     ],

@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "Terms governing use of the Axis property management platform, website, and mobile applications.",
+    "Terms governing use of the PropLane property management platform, website, and mobile applications.",
 };
 
 const LAST_UPDATED = "June 29, 2026";
@@ -23,12 +23,12 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">Agreement</h2>
             <p className="mt-2">
-              These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of the Axis website at{" "}
+              These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of the PropLane website at{" "}
               <a href="https://www.axis-seattle-housing.com" className="font-medium text-primary hover:opacity-90">
                 axis-seattle-housing.com
               </a>
               , our iOS and Android mobile applications, and related property management software and services
-              (collectively, the &ldquo;Service&rdquo;) operated by Axis Seattle Housing (&ldquo;Axis,&rdquo;
+              (collectively, the &ldquo;Service&rdquo;) operated by PropLane Seattle Housing (&ldquo;PropLane,&rdquo;
               &ldquo;we,&rdquo; &ldquo;us&rdquo;).
             </p>
             <p className="mt-2">
@@ -90,7 +90,7 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">Rent and resident payments</h2>
             <p className="mt-2">
-              Axis provides tools for property managers to collect rent and related charges. We are not a bank, money
+              PropLane provides tools for property managers to collect rent and related charges. We are not a bank, money
               transmitter, or landlord. Payment processing is provided by Stripe and subject to Stripe&apos;s terms.
               Managers are responsible for compliance with applicable landlord-tenant, fair housing, and payment laws.
             </p>
@@ -99,7 +99,7 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">Content and data</h2>
             <p className="mt-2">
-              You retain ownership of content you submit (leases, messages, documents, listings, etc.). You grant Axis a
+              You retain ownership of content you submit (leases, messages, documents, listings, etc.). You grant PropLane a
               limited license to host, process, and display that content solely to operate the Service. Managers control
               resident access to property-related data within their workspace.
             </p>
@@ -115,7 +115,7 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">Intellectual property</h2>
             <p className="mt-2">
-              The Service, including software, design, trademarks, and documentation, is owned by Axis or its licensors
+              The Service, including software, design, trademarks, and documentation, is owned by PropLane or its licensors
               and protected by intellectual property laws. These Terms do not grant you any rights to our branding or
               source code except the limited right to use the Service as intended.
             </p>
@@ -134,7 +134,7 @@ export default function TermsOfServicePage() {
             <h2 className="text-lg font-semibold text-foreground">Disclaimers</h2>
             <p className="mt-2">
               THE SERVICE IS PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS AVAILABLE.&rdquo; TO THE FULLEST EXTENT PERMITTED
-              BY LAW, AXIS DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A
+              BY LAW, PROPLANE DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A
               PARTICULAR PURPOSE, AND NON-INFRINGEMENT. WE DO NOT GUARANTEE UNINTERRUPTED OR ERROR-FREE OPERATION.
             </p>
           </section>
@@ -142,10 +142,10 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">Limitation of liability</h2>
             <p className="mt-2">
-              TO THE FULLEST EXTENT PERMITTED BY LAW, AXIS AND ITS OFFICERS, DIRECTORS, EMPLOYEES, AND SUPPLIERS WILL NOT
+              TO THE FULLEST EXTENT PERMITTED BY LAW, PROPLANE AND ITS OFFICERS, DIRECTORS, EMPLOYEES, AND SUPPLIERS WILL NOT
               BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF
               PROFITS, DATA, OR GOODWILL, ARISING FROM YOUR USE OF THE SERVICE. OUR TOTAL LIABILITY FOR ANY CLAIM RELATING
-              TO THE SERVICE IS LIMITED TO THE GREATER OF (A) AMOUNTS YOU PAID TO AXIS IN THE TWELVE MONTHS BEFORE THE
+              TO THE SERVICE IS LIMITED TO THE GREATER OF (A) AMOUNTS YOU PAID TO PROPLANE IN THE TWELVE MONTHS BEFORE THE
               CLAIM OR (B) ONE HUNDRED U.S. DOLLARS ($100).
             </p>
           </section>
@@ -153,7 +153,7 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground">Indemnification</h2>
             <p className="mt-2">
-              You agree to indemnify and hold harmless Axis from claims, damages, and expenses (including reasonable
+              You agree to indemnify and hold harmless PropLane from claims, damages, and expenses (including reasonable
               attorneys&apos; fees) arising from your use of the Service, your content, or your violation of these Terms
               or applicable law.
             </p>
@@ -191,7 +191,7 @@ export default function TermsOfServicePage() {
               .
             </p>
             <p className="mt-2">
-              Axis Seattle Housing
+              PropLane Seattle Housing
               <br />
               5259 Brooklyn Ave NE
               <br />

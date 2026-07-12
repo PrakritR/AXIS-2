@@ -445,7 +445,7 @@ export function DemoPortalShell() {
             </div>
           ) : (
             <div className="flex h-12 items-center gap-2 border-b border-border px-3">
-              <span className="text-sm font-semibold text-foreground">Axis</span>
+              <span className="text-sm font-semibold text-foreground">PropLane</span>
               <span className="rounded-full bg-primary/12 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.1em] text-primary">
                 {ROLES.find((r) => r.id === role)?.label ?? "Manager"}
               </span>

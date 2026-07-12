@@ -110,7 +110,7 @@ type DemoTenancy = {
   occupied: boolean;
 };
 
-const DEMO_LANDLORD_NAME = "Alex Morgan — Axis Housing Management";
+const DEMO_LANDLORD_NAME = "Alex Morgan — PropLane Housing Management";
 const DEMO_LANDLORD_ADDRESS = "5259 Brooklyn Ave NE, Seattle, WA 98105";
 
 function todayIso(): string {

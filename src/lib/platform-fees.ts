@@ -57,7 +57,7 @@ export function platformFeeDisplayPercents(tier?: string | null): { applicationF
 export function axisResidentPaymentFeePlanLine(tier: ManagerSkuTier): string {
   const pct = platformRentBps(tier) / 100;
   if (pct <= 0) {
-    return "No Axis fee on resident online payments (residents pay processing only)";
+    return "No PropLane fee on resident online payments (residents pay processing only)";
   }
-  return `${pct}% Axis fee on resident online payments (+ processing)`;
+  return `${pct}% PropLane fee on resident online payments (+ processing)`;
 }

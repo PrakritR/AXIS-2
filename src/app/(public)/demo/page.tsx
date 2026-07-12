@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { DemoPortalExperience } from "@/components/demo/demo-portal-experience";
 
 export const metadata: Metadata = {
-  title: "Live demo · Axis",
+  title: "Live demo · PropLane",
   description:
-    "Explore an interactive, sandboxed Axis property portal — manager, resident, and vendor views with realistic data and a live AI assistant. No login required.",
+    "Explore an interactive, sandboxed PropLane property portal — manager, resident, and vendor views with realistic data and a live AI assistant. No login required.",
 };
 
 export default function DemoPage() {

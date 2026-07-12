@@ -6,7 +6,7 @@ import { SupportFaq } from "./support-faq";
 export const metadata: Metadata = {
   title: "Help & Support",
   description:
-    "Get help with Axis — contact our team, find answers for residents and property managers, and learn how to reach support.",
+    "Get help with PropLane — contact our team, find answers for residents and property managers, and learn how to reach support.",
 };
 
 const SUPPORT_EMAIL = "info@axis-seattle-housing.com";
@@ -77,7 +77,7 @@ export default function SupportPage() {
             .
           </p>
           <address className="mt-6 text-[15px] not-italic leading-relaxed text-muted">
-            Axis Seattle Housing
+            PropLane Seattle Housing
             <br />
             5259 Brooklyn Ave NE
             <br />

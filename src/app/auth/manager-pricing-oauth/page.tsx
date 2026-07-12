@@ -37,7 +37,7 @@ function ManagerPricingOauthContent() {
 
   const [errorText, setErrorText] = useState<string | null>(null);
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null);
-  const [statusText, setStatusText] = useState("Preparing your Axis account…");
+  const [statusText, setStatusText] = useState("Preparing your PropLane account…");
   const didRunRef = useRef(false);
   const { isNative } = useIsNativeApp();
 
