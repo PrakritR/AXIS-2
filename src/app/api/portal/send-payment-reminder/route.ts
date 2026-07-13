@@ -5,6 +5,7 @@ import { shouldSkipOutboundEmail } from "@/lib/portal-sandbox-accounts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
+import { DEFAULT_NOTIFICATION_PREFERENCES, resolveChannels } from "@/lib/notification-preferences";
 
 export const runtime = "nodejs";
 
@@ -92,10 +93,26 @@ export async function POST(req: Request) {
     const subject = `Payment reminder: ${chargeTitle}`;
     const messageBody = buildReminderBody({ residentName, chargeTitle, balanceDue, dueDate, propertyLabel, managerName });
 
+    // Gate email/SMS by the resident's saved "payments" preference (inbox is
+    // always delivered below). Account-less residents fall back to email-default-ON,
+    // never SMS.
+    const { data: residentProfile } = await db
+      .from("profiles")
+      .select("id, phone, phone_verified_at")
+      .eq("email", residentEmail.toLowerCase())
+      .maybeSingle();
+    const residentUserId = String(residentProfile?.id ?? "").trim() || null;
+    const channels = residentUserId
+      ? await resolveChannels(db, residentUserId, "payments", {
+          phone: (residentProfile?.phone as string | null) ?? null,
+          phone_verified_at: (residentProfile?.phone_verified_at as string | null) ?? null,
+        })
+      : { inbox: true, email: DEFAULT_NOTIFICATION_PREFERENCES.payments.email, sms: false };
+
     // 1. Send real email via Resend
     let emailSent = false;
     const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (apiKey) {
+    if (apiKey && channels.email) {
       const from = process.env.RESEND_FROM?.trim() || "PropLane <onboarding@resend.dev>";
       const html = `<p style="white-space:pre-wrap;font-family:sans-serif;font-size:15px;line-height:1.6;color:#1e293b">${messageBody.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p><hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0"><p style="font-family:sans-serif;font-size:12px;color:#94a3b8">Sent via PropLane portal by ${managerName}</p>`;
       const res = await fetch("https://api.resend.com/emails", {
@@ -119,10 +136,9 @@ export async function POST(req: Request) {
       row_data: { id: outboundId, to: residentEmail, subject, body: messageBody, sentAt: new Date().toISOString(), emailSent, chargeId: chargeId || undefined },
     }, { onConflict: "id" });
 
-    // 4. SMS delivery (if manager has sms_from_number configured)
+    // 4. SMS delivery (manager has a work number AND resident opted into payments SMS)
     const smsFromNumber = String(managerProfile?.sms_from_number ?? "").trim();
-    if (smsFromNumber) {
-      const { data: residentProfile } = await db.from("profiles").select("phone").eq("email", residentEmail.toLowerCase()).maybeSingle();
+    if (smsFromNumber && channels.sms) {
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
         const smsBody = `Hi ${residentName}, this is a payment reminder: ${chargeTitle}${balanceDue ? ` — ${balanceDue}` : ""}${propertyLabel ? ` (${propertyLabel})` : ""}. Log in to your PropLane portal to pay. — ${managerName}`;

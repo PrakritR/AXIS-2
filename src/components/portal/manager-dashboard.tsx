@@ -710,12 +710,6 @@ export function ManagerDashboard({ displayName = "there" }: { displayName?: stri
               href={`${BASE}/services/requests`}
               dataAttr="dashboard-kpi-services"
             />
-            <KpiTile
-              label="Active residents"
-              value={activeResidents.length}
-              href={`${BASE}/residents/current`}
-              dataAttr="dashboard-kpi-residents"
-            />
           </div>
         </div>
 

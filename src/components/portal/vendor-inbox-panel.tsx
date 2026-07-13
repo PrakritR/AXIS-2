@@ -7,7 +7,7 @@ import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/componen
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { appendPortalMessageToAdminInbox } from "@/lib/demo-admin-partner-inbox";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
-import { NotificationPrefsButton, NotificationPrefsPanel } from "@/components/portal/notification-prefs-panel";
+import { NotificationPrefsButton } from "@/components/portal/notification-prefs-panel";
 import {
   PortalInboxSelectionToolbar,
   useInboxRowSelection,
@@ -150,7 +150,6 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
         label,
         count: counts[id as keyof typeof counts],
       })),
-      { id: "notifications", label: "Notifications", count: 0 },
     ],
     [counts],
   );
@@ -528,9 +527,7 @@ export function VendorInboxPanel({ tabId }: { tabId: string }) {
         liveContacts={eligibleContacts}
       />
 
-      {tabId === "notifications" ? (
-        <NotificationPrefsPanel />
-      ) : rowsForTab.length === 0 ? (
+      {rowsForTab.length === 0 ? (
         <PortalInboxEmptyState title={emptyCopy} />
       ) : (
         <div className="space-y-3">

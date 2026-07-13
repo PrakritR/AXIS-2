@@ -54,8 +54,8 @@ export async function notifyCoManagerInviteSent(input: {
     text,
     toEmails: [invitee.email],
     toUserIds: [input.inviteeUserId],
-    deliverToPortalInbox: true,
-    deliverViaEmail: true,
+    // Real account/access invite — account-critical; SMS force-on for a verified invitee.
+    eventCategory: "account",
   });
 }
 
@@ -86,8 +86,9 @@ export async function notifyCoManagerInviteAccepted(input: {
     text,
     toEmails: [inviter.email],
     toUserIds: [input.inviterUserId],
-    deliverToPortalInbox: true,
-    deliverViaEmail: true,
+    // Informational status notice ("X accepted") — NOT account-critical, so SMS
+    // stays suppressible (email default ON, SMS opt-in).
+    eventCategory: "messages",
   });
 }
 
@@ -121,8 +122,8 @@ export async function notifyPromotedToMainManager(input: {
     text,
     toEmails: [newManager.email],
     toUserIds: [input.newManagerUserId],
-    deliverToPortalInbox: true,
-    deliverViaEmail: true,
+    // Informational ownership-change notice — suppressible category.
+    eventCategory: "messages",
   });
 }
 
@@ -156,7 +157,7 @@ export async function notifyDemotedToCoManager(input: {
     text,
     toEmails: [formerOwner.email],
     toUserIds: [input.formerOwnerUserId],
-    deliverToPortalInbox: true,
-    deliverViaEmail: true,
+    // Informational ownership-change notice — suppressible category.
+    eventCategory: "messages",
   });
 }

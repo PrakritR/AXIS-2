@@ -19,7 +19,6 @@ export const adminPortal: PortalDefinition = {
         { id: "opened", label: "Opened" },
         { id: "sent", label: "Sent" },
         { id: "trash", label: "Trash" },
-        { id: "notifications", label: "Notifications" },
       ],
     },
     { section: "axis-users", label: "Accounts", tabs: [] },

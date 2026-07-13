@@ -329,6 +329,7 @@ export function ManagerCreateWorkOrderModal({
       writeManagerWorkOrderRows([row, ...readManagerWorkOrderRows()]);
 
       const notify = await deliverPortalInboxMessage({
+        eventCategory: "maintenance",
         fromName: "Property Manager",
         toEmails: [selectedResident.residentEmail],
         subject: `Maintenance request opened: ${title.trim()}`,

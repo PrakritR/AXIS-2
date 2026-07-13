@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
 import type { InboxScopedContact } from "@/data/inbox-scoped-directory";
 import { INBOX_TAB_DEFS, PortalInboxEmptyState, PortalInboxMessageTable, type PortalInboxTableRow } from "@/components/portal/portal-inbox-ui";
-import { NotificationPrefsButton, NotificationPrefsPanel } from "@/components/portal/notification-prefs-panel";
+import { NotificationPrefsButton } from "@/components/portal/notification-prefs-panel";
 import {
   PortalInboxSelectionToolbar,
   sendManualScheduledMessageNow,
@@ -207,7 +207,6 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         label,
         count: id === "schedule" ? scheduledRows.length : counts[id as keyof typeof counts],
       })),
-      { id: "notifications", label: "Notifications", count: 0 },
     ],
     [counts, scheduledRows.length],
   );
@@ -730,9 +729,7 @@ export function ResidentInboxPanel({ tabId }: { tabId: string }) {
         liveContacts={eligibleContacts}
       />
 
-      {tabId === "notifications" ? (
-        <NotificationPrefsPanel />
-      ) : tabId === "schedule" ? (
+      {tabId === "schedule" ? (
         scheduledRows.length === 0 ? (
           <PortalInboxEmptyState title={emptyCopy} />
         ) : (

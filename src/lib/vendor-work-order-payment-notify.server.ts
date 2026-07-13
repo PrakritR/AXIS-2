@@ -125,9 +125,7 @@ export async function deliverVendorWorkOrderPaymentNotify(
     subject,
     text: textWithPaymentMethods,
     toUserIds: profiles.map((profile) => profile.userId),
-    deliverToPortalInbox: true,
-    deliverViaEmail: true,
-    deliverViaSms: false,
+    eventCategory: "maintenance",
   });
 
   if (!delivery.ok) return delivery;

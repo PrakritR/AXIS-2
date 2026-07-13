@@ -2,6 +2,11 @@ import { chargeDueLabel, isUnpaidHouseholdCharge, type HouseholdCharge } from "@
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import type { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  resolveChannels,
+  type NotificationCategory,
+} from "@/lib/notification-preferences";
 
 type ServiceDb = ReturnType<typeof createSupabaseServiceRoleClient>;
 
@@ -18,6 +23,8 @@ export async function deliverPaymentReminder(input: {
   text: string;
   html: string;
   slotLabel: string;
+  /** Defaults to 'payments'. Email/SMS follow the resident's per-category preference. */
+  eventCategory?: NotificationCategory;
 }): Promise<{ sent: boolean; error?: string }> {
   const { db, charge, managerId, dedupId, managerName, managerSmsFromNumber, apiKey, from, subject, text, html, slotLabel } =
     input;
@@ -26,8 +33,25 @@ export async function deliverPaymentReminder(input: {
   }
   const residentLower = charge.residentEmail.trim().toLowerCase();
 
+  // Resolve the resident's account + saved preferences once. Account-less
+  // residents (no profile row) fall back to the category default (email ON,
+  // never SMS). Inbox is always written regardless.
+  const category: NotificationCategory = input.eventCategory ?? "payments";
+  const { data: residentProfile } = await db
+    .from("profiles")
+    .select("id, phone, phone_verified_at")
+    .eq("email", residentLower)
+    .maybeSingle();
+  const residentUserId = String(residentProfile?.id ?? "").trim() || null;
+  const channels = residentUserId
+    ? await resolveChannels(db, residentUserId, category, {
+        phone: (residentProfile?.phone as string | null) ?? null,
+        phone_verified_at: (residentProfile?.phone_verified_at as string | null) ?? null,
+      })
+    : { inbox: true, email: DEFAULT_NOTIFICATION_PREFERENCES[category].email, sms: false };
+
   let emailSent = false;
-  if (apiKey) {
+  if (apiKey && channels.email) {
     try {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -135,9 +159,8 @@ export async function deliverPaymentReminder(input: {
     }
   }
 
-  if (managerSmsFromNumber) {
+  if (managerSmsFromNumber && channels.sms) {
     try {
-      const { data: residentProfile } = await db.from("profiles").select("phone").eq("email", residentLower).maybeSingle();
       const residentPhone = String(residentProfile?.phone ?? "").trim();
       if (residentPhone) {
         const smsBody = `${subject}\n\n${text.slice(0, 300)}`;
@@ -171,8 +194,6 @@ export async function deliverPaymentReminder(input: {
   }
 
   try {
-    const { data: residentForPush } = await db.from("profiles").select("id").eq("email", residentLower).maybeSingle();
-    const residentUserId = String(residentForPush?.id ?? "").trim();
     if (residentUserId) {
       const pushBody = text.replace(/\s+/g, " ").trim().slice(0, 180);
       await sendPushToUser(residentUserId, {

@@ -18,7 +18,6 @@ export const vendorPortal: PortalDefinition = {
         { id: "opened", label: "Opened" },
         { id: "sent", label: "Sent" },
         { id: "trash", label: "Trash" },
-        { id: "notifications", label: "Notifications" },
       ],
     },
     {

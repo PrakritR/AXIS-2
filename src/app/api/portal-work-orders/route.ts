@@ -267,7 +267,6 @@ async function notifyResidentOfCreatedWorkOrder(db: Db, actor: Actor, row: DemoM
     title,
     propertyLabel: row.propertyName || undefined,
     toEmails: [residentEmail],
-    deliverViaEmail: true,
   }).catch(() => undefined);
 }
 

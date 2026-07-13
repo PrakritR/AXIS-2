@@ -117,9 +117,7 @@ export async function POST(req: Request) {
         subject: `${channelLabel} payment reported`,
         text: `A resident reported sending ${updated.length === 1 ? "a payment" : `${updated.length} payments`} via ${channelLabel}. Please verify and mark the charge${updated.length === 1 ? "" : "s"} paid when received.`,
         toUserIds: [managerUserId],
-        deliverToPortalInbox: true,
-        deliverViaEmail: false,
-        deliverViaSms: false,
+        eventCategory: "payments",
       }).catch(() => undefined);
     }
 

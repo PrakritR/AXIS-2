@@ -80,7 +80,7 @@ const LEGACY_DOCUMENTS_TAB_MAP: Record<string, string> = {
 };
 const FINANCIALS_TABS = ["income", "expenses", "trial-balance", "balance-sheet", "general-ledger", "cash-flow-statement", "payout-history", "trust-account-balance", "security-deposits", "financial-diagnostics", "ap-aging", "bills", "budget-vs-actual", "bank-reconciliation", "owner-statement", "owner-distributions"] as const;
 
-const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash", "notifications"] as const;
+const MANAGER_INBOX_TABS = ["unopened", "opened", "schedule", "sent", "trash"] as const;
 
 function isManagerInboxTab(tab: string): tab is (typeof MANAGER_INBOX_TABS)[number] {
   return (MANAGER_INBOX_TABS as readonly string[]).includes(tab);
@@ -343,7 +343,7 @@ export async function renderPortalSection(
     const inboxTab = tabParts[0]!;
     // Manager-only tab that used to leak into admin pills; keep old links working.
     if (inboxTab === "schedule") redirect(`${def.basePath}/${section}/unopened`);
-    if (!["unopened", "opened", "sent", "trash", "notifications"].includes(inboxTab)) notFound();
+    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
     return <AdminInboxClient tabId={inboxTab} />;
   }
 
@@ -624,7 +624,7 @@ export async function renderPortalSection(
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
     }
     const inboxTab = tabParts[0]!;
-    if (!["unopened", "opened", "schedule", "sent", "trash", "notifications"].includes(inboxTab)) notFound();
+    if (!["unopened", "opened", "schedule", "sent", "trash"].includes(inboxTab)) notFound();
     return <ResidentInboxPanel tabId={inboxTab} />;
   }
 
@@ -672,7 +672,7 @@ export async function renderPortalSection(
       redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
     }
     const inboxTab = tabParts[0]!;
-    if (!["unopened", "opened", "sent", "trash", "notifications"].includes(inboxTab)) notFound();
+    if (!["unopened", "opened", "sent", "trash"].includes(inboxTab)) notFound();
     return <VendorInboxPanel tabId={inboxTab} />;
   }
 

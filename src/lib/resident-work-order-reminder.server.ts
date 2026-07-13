@@ -111,7 +111,6 @@ export async function deliverResidentWorkOrderReminder(
     title: rowData.title ?? "Maintenance request",
     propertyLabel: rowData.propertyName,
     toUserIds: profiles.map((profile) => profile.userId),
-    deliverViaEmail: true,
   });
 
   const nextRow: DemoManagerWorkOrderRow = {

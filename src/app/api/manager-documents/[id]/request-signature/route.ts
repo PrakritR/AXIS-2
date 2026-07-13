@@ -41,7 +41,7 @@ export async function POST(
       subject: `Signature requested: ${doc.display_name}`,
       text: "Please review and sign the document shared in your Documents portal.",
       toUserIds: [residentUserId],
-      deliverViaEmail: false,
+      eventCategory: "leases",
       senderRole: "manager",
     }).catch(() => undefined);
   }

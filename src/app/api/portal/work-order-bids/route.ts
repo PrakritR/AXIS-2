@@ -476,9 +476,7 @@ async function acceptBid(
         subject,
         text: messageBody,
         toUserIds: [record.vendor_user_id],
-        deliverToPortalInbox: true,
-        deliverViaEmail: false,
-        deliverViaSms: false,
+        eventCategory: "maintenance",
       }).catch(() => undefined);
     }
 
@@ -498,9 +496,7 @@ async function acceptBid(
         subject,
         text: messageBody,
         toUserIds: [other.vendor_user_id],
-        deliverToPortalInbox: true,
-        deliverViaEmail: false,
-        deliverViaSms: false,
+        eventCategory: "maintenance",
       }).catch(() => undefined);
     }
   }

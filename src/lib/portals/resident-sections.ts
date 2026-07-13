@@ -24,7 +24,6 @@ const INBOX_TABS = [
   { id: "schedule", label: "Schedule" },
   { id: "sent", label: "Sent" },
   { id: "trash", label: "Trash" },
-  { id: "notifications", label: "Notifications" },
 ] as const;
 
 const SERVICES_TABS = [

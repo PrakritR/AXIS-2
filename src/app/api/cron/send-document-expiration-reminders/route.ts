@@ -77,7 +77,7 @@ export async function GET(req: Request) {
       subject,
       text,
       toUserIds: [managerUserId],
-      deliverViaEmail: false,
+      eventCategory: "leases",
       senderRole: "manager",
     });
 

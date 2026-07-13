@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deliverPortalInboxMessage } from "@/lib/portal-inbox-delivery";
+import type { NotificationCategory } from "@/lib/notification-preferences";
 
 export type WorkOrderSmsEvent =
   | "created"
@@ -47,9 +48,8 @@ export async function notifyWorkOrderEvent(
     note?: string;
     toEmails?: string[];
     toUserIds?: string[];
-    deliverViaEmail?: boolean;
-    /** When true (default), also sends a concise SMS when recipients have phone numbers. */
-    deliverViaSms?: boolean;
+    /** Notification category — defaults to 'maintenance'. Email/SMS now follow the recipient's per-category preference. */
+    eventCategory?: NotificationCategory;
   },
 ): Promise<void> {
   const smsText = workOrderSmsBody(input.event, {
@@ -67,9 +67,9 @@ export async function notifyWorkOrderEvent(
     text: input.text,
     toEmails: input.toEmails,
     toUserIds: input.toUserIds,
-    deliverToPortalInbox: true,
-    deliverViaEmail: input.deliverViaEmail ?? false,
-    deliverViaSms: input.deliverViaSms !== false,
+    // Category-driven: inbox always on; email + SMS gated per recipient's
+    // maintenance preference (default email ON, SMS opt-in) with a verified phone.
+    eventCategory: input.eventCategory ?? "maintenance",
     smsText,
   }).catch(() => undefined);
 }

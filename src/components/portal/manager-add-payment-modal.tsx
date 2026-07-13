@@ -314,6 +314,7 @@ export function ManagerAddPaymentModal({
         propertyLabel: noticePreview.propertyName,
       });
       const notice = await deliverPortalInboxMessage({
+        eventCategory: "payments",
         toEmails: [noticePreview.residentEmail],
         subject,
         text: body,

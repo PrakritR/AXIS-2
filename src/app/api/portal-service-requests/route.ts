@@ -225,7 +225,6 @@ export async function POST(req: Request) {
         text: description || `New maintenance request "${title}" submitted.`,
         title,
         toUserIds: [managerUserId],
-        deliverViaEmail: true,
       }).catch(() => undefined);
     }
     return NextResponse.json({ ok: true });

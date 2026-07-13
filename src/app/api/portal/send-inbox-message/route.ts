@@ -11,6 +11,12 @@ import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { sendSms } from "@/lib/twilio";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  NOTIFICATION_CATEGORIES,
+  resolveChannels,
+  type NotificationCategory,
+} from "@/lib/notification-preferences";
 
 export const runtime = "nodejs";
 
@@ -160,6 +166,8 @@ export async function POST(req: Request) {
       propertyId?: string;
       /** When set with a single manager recipient, also notify linked co-managers with inbox access. */
       fanOutPropertyInbox?: boolean;
+      /** Gate email/SMS per recipient's saved preference for this category (inbox always on). */
+      eventCategory?: string;
     };
 
     const threadId = String(body.threadId ?? "").trim();
@@ -170,6 +178,15 @@ export async function POST(req: Request) {
     const deliverToPortalInbox = body.deliverToPortalInbox !== false;
     const deliverViaEmail = body.deliverViaEmail !== false;
     const deliverViaSms = body.deliverViaSms === true;
+    // When a category is provided, email/SMS are gated PER RECIPIENT by their
+    // saved notification preferences (this route is a parallel implementation of
+    // deliverPortalInboxMessage and must honor the same matrix). Without one, the
+    // legacy uniform booleans above apply to everyone.
+    const eventCategory: NotificationCategory | null =
+      typeof body.eventCategory === "string" &&
+      (NOTIFICATION_CATEGORIES as string[]).includes(body.eventCategory)
+        ? (body.eventCategory as NotificationCategory)
+        : null;
 
     if (!subject || !text) {
       return NextResponse.json({ ok: false, error: "subject and text are required." }, { status: 400 });
@@ -312,7 +329,54 @@ export async function POST(req: Request) {
       recipients = allowed;
     }
 
+    // Per-recipient channel resolution (category mode) mirrors core delivery:
+    // email/SMS follow each recipient's saved prefs; account-less (no userId)
+    // recipients get the category-default email and never SMS.
+    const channelByEmail = new Map<string, { email: boolean; sms: boolean }>();
+    if (eventCategory) {
+      const recipientUserIds = recipients
+        .map((r) => r.userId)
+        .filter((id): id is string => Boolean(id));
+      const phoneById = new Map<string, { phone: string | null; phone_verified_at: string | null }>();
+      if (recipientUserIds.length) {
+        const { data: recProfiles } = await db
+          .from("profiles")
+          .select("id, phone, phone_verified_at")
+          .in("id", recipientUserIds);
+        for (const p of recProfiles ?? []) {
+          phoneById.set(String(p.id), {
+            phone: (p.phone as string | null) ?? null,
+            phone_verified_at: (p.phone_verified_at as string | null) ?? null,
+          });
+        }
+      }
+      for (const r of recipients) {
+        if (r.userId) {
+          const ch = await resolveChannels(db, r.userId, eventCategory, phoneById.get(r.userId) ?? null);
+          channelByEmail.set(r.email, { email: ch.email, sms: ch.sms });
+        } else {
+          channelByEmail.set(r.email, {
+            email: DEFAULT_NOTIFICATION_PREFERENCES[eventCategory].email,
+            sms: false,
+          });
+        }
+      }
+    }
+    const emailWanted = (email: string): boolean =>
+      eventCategory ? channelByEmail.get(email)?.email === true : deliverViaEmail;
+    const anySmsWanted = eventCategory
+      ? recipients.some((r) => channelByEmail.get(r.email)?.sms === true)
+      : deliverViaSms;
+
+    // All real (non-demo) recipient emails — used for the "any real recipient?"
+    // short-circuit and per-recipient logging (unchanged meaning).
     const toEmails = recipients
+      .map((recipient) => recipient.email)
+      .filter((email) => !email.endsWith("@axis.local"));
+    // The actual email SEND list: category mode → recipients whose email channel
+    // is on; legacy → all real recipients when deliverViaEmail.
+    const emailToSend = recipients
+      .filter((recipient) => emailWanted(recipient.email))
       .map((recipient) => recipient.email)
       .filter((email) => !email.endsWith("@axis.local"));
 
@@ -393,7 +457,7 @@ export async function POST(req: Request) {
     }
 
     // If no eligible real email recipients and SMS not requested, short-circuit
-    if (toEmails.length === 0 && !deliverViaSms) {
+    if (toEmails.length === 0 && !anySmsWanted) {
       const sentAt = new Date().toISOString();
       for (const recipient of recipients) {
         const logId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -413,7 +477,7 @@ export async function POST(req: Request) {
 
     let emailResendId: string | null = null;
 
-    if (deliverViaEmail && toEmails.length > 0) {
+    if (emailToSend.length > 0) {
       const apiKey = process.env.RESEND_API_KEY?.trim();
       if (!apiKey) {
         return NextResponse.json({ ok: false, error: "Email delivery not configured (RESEND_API_KEY missing)." }, { status: 503 });
@@ -423,7 +487,7 @@ export async function POST(req: Request) {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: toEmails, subject, text, html }),
+        body: JSON.stringify({ from, to: emailToSend, subject, text, html }),
       });
       const emailPayload = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
       if (!res.ok) {
@@ -435,7 +499,7 @@ export async function POST(req: Request) {
     const sentAt = new Date().toISOString();
 
     // Log email sends
-    if (deliverViaEmail && toEmails.length > 0) {
+    if (emailToSend.length > 0) {
       for (const recipient of recipients) {
         const logId = `outbound_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         await db.from("portal_outbound_mail_records").upsert(
@@ -450,7 +514,7 @@ export async function POST(req: Request) {
               subject,
               body: text,
               sentAt,
-              emailSent: toEmails.includes(recipient.email),
+              emailSent: emailToSend.includes(recipient.email),
             },
           },
           { onConflict: "id" },
@@ -458,8 +522,10 @@ export async function POST(req: Request) {
       }
     }
 
-    // SMS delivery
-    if (deliverViaSms) {
+    // SMS delivery. In category mode each recipient is gated by their resolved
+    // SMS channel (verified, non-opted-out phone + pref on); legacy mode texts
+    // every recipient with a phone (STOP opt-out still enforced inside sendSms).
+    if (anySmsWanted) {
       const { data: senderProfile } = await db.from("profiles").select("sms_from_number").eq("id", user.id).maybeSingle();
       const smsFromNumber = String(senderProfile?.sms_from_number ?? "").trim();
 
@@ -473,6 +539,7 @@ export async function POST(req: Request) {
         const phoneByEmail = new Map((phones ?? []).map((p) => [String(p.email).toLowerCase(), String(p.phone ?? "").trim()]));
 
         for (const recipient of recipients) {
+          if (eventCategory && channelByEmail.get(recipient.email)?.sms !== true) continue;
           const recipientPhone = phoneByEmail.get(recipient.email) ?? "";
           if (!recipientPhone) continue;
           const result = await sendSms(recipientPhone, `${subject}\n\n${text}`, smsFromNumber);

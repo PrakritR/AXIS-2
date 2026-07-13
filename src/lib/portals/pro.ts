@@ -43,7 +43,6 @@ export const proPortal: PortalDefinition = {
         { id: "schedule", label: "Schedule" },
         { id: "sent", label: "Sent" },
         { id: "trash", label: "Trash" },
-        { id: "notifications", label: "Notifications" },
       ],
     },
     {

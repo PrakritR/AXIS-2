@@ -1,5 +1,7 @@
 /** Client helper — deliver to Axis inbox and email (when configured). */
 
+import type { NotificationCategory } from "@/lib/notification-preferences";
+
 export type PortalMessageDeliveryResult = {
   ok: boolean;
   skipped?: boolean;
@@ -13,6 +15,8 @@ export async function deliverPortalInboxMessage(input: {
   toBroadcast?: ("management" | "resident")[];
   subject: string;
   text: string;
+  /** Gates email/SMS per recipient's saved preference for this category (inbox always on). Omitted → 'messages' default at the route. */
+  eventCategory?: NotificationCategory;
 }): Promise<PortalMessageDeliveryResult> {
   const toEmails = (input.toEmails ?? []).map((e) => e.trim()).filter((e) => e.includes("@"));
   if (toEmails.length === 0 && !input.toBroadcast?.length) {
@@ -31,6 +35,7 @@ export async function deliverPortalInboxMessage(input: {
         text: input.text.trim(),
         deliverToPortalInbox: true,
         deliverViaEmail: true,
+        eventCategory: input.eventCategory,
       }),
     });
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; skipped?: boolean; error?: string };

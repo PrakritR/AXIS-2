@@ -105,6 +105,7 @@ export function ManagerLeasesPipelinePanel({
   async function notifyResidentLeaseReady(row: LeasePipelineRow): Promise<{ ok: boolean; skipped?: boolean }> {
     const unit = row.unit.trim() || "your unit";
     const result = await deliverPortalInboxMessage({
+      eventCategory: "leases",
       fromName: "Property Manager",
       toEmails: [row.residentEmail.trim()],
       subject: `Your lease for ${unit} is ready to sign`,
@@ -169,6 +170,7 @@ export function ManagerLeasesPipelinePanel({
     setReminderBusyForRow(row.id);
     try {
       const res = await deliverPortalInboxMessage({
+        eventCategory: "leases",
         fromName: "Property Manager",
         toEmails: [recipient],
         subject,

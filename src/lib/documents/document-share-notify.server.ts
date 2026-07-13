@@ -41,7 +41,7 @@ export async function notifyDocumentShared(
       subject,
       text,
       toUserIds,
-      deliverViaEmail: false,
+      eventCategory: "messages",
       senderRole: "manager",
     });
     track("document_shared", opts.managerUserId, {
@@ -68,7 +68,7 @@ export async function notifyDocumentShared(
     subject,
     text: `A property manager shared "${opts.documentName}" with you. Open Documents → Shared to view it.`,
     toUserIds: [vendorUserId],
-    deliverViaEmail: false,
+    eventCategory: "messages",
     senderRole: "manager",
   });
   track("document_shared", opts.managerUserId, {

@@ -996,6 +996,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     setMessageOpen(false);
     try {
       const result = await deliverPortalInboxMessage({
+        eventCategory: "messages",
         fromName: managerEmail ?? "Property Manager",
         toEmails: [selected.email],
         subject,
@@ -1139,6 +1140,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
     if (!selected) return;
     const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
     const result = await deliverPortalInboxMessage({
+      eventCategory: "messages",
       fromName: managerEmail ?? "Property Manager",
       toEmails: [selected.email],
       subject,
@@ -1308,6 +1310,7 @@ export function ManagerResidents({ tabId = "current" }: { tabId?: ResidentsTabId
         showToast("Lease sent to resident portal (no notification sent).");
       } else {
         const notice = await deliverPortalInboxMessage({
+          eventCategory: "leases",
           fromName: managerEmail ?? "Property Manager",
           toEmails: [res.email],
           subject,

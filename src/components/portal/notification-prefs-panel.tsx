@@ -99,21 +99,30 @@ function isForcedOn(category: NotificationCategory, channel: ChannelId): boolean
   return false;
 }
 
+/** Deep-equality for the small fixed preference matrix (drives the dirty flag). */
+function prefsEqual(a: NotificationPreferences, b: NotificationPreferences): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /**
  * Per-user notification channel matrix (categories × Axis inbox / Email / Text).
- * Reads and writes `/api/notification-preferences`; edits are optimistic and
- * roll back the touched cell if the PATCH fails.
+ * Edits are buffered locally and persisted only when the user clicks Save
+ * (writes the full matrix to `/api/notification-preferences`). Demo surfaces
+ * keep everything session-local (the API is unauthenticated there).
  */
 export function NotificationPrefsPanel({ hasVerifiedPhone = true }: { hasVerifiedPhone?: boolean }) {
   const { showToast } = useAppUi();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [savedPrefs, setSavedPrefs] = useState<NotificationPreferences | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
     // Demo surfaces have no authenticated user (the API 401s) and must never
-    // write real rows — start from defaults and keep edits local (see toggle).
+    // write real rows — start from defaults and keep edits local (see save()).
     if (isDemoModeActive()) {
       setPrefs(DEFAULT_NOTIFICATION_PREFERENCES);
+      setSavedPrefs(DEFAULT_NOTIFICATION_PREFERENCES);
       return () => {
         active = false;
       };
@@ -124,35 +133,50 @@ export function NotificationPrefsPanel({ hasVerifiedPhone = true }: { hasVerifie
       )
       .catch(() => ({ preferences: undefined }))
       .then((data) => {
-        if (active) setPrefs(data.preferences ?? DEFAULT_NOTIFICATION_PREFERENCES);
+        if (!active) return;
+        const loaded = data.preferences ?? DEFAULT_NOTIFICATION_PREFERENCES;
+        setPrefs(loaded);
+        setSavedPrefs(loaded);
       });
     return () => {
       active = false;
     };
   }, []);
 
-  const toggle = async (category: NotificationCategory, channel: ChannelId, next: boolean) => {
-    const current = prefs;
-    if (!current) return;
-    // Optimistic: flip just this cell.
-    setPrefs({ ...current, [category]: { ...current[category], [channel]: next } });
-    // Demo mode: edits are session-local only — never hit the (unauthenticated)
-    // API, so no error toast and no real writes.
-    if (isDemoModeActive()) return;
+  // Buffer the edit locally; persistence happens on Save.
+  const toggle = (category: NotificationCategory, channel: ChannelId, next: boolean) => {
+    setPrefs((cur) => (cur ? { ...cur, [category]: { ...cur[category], [channel]: next } } : cur));
+  };
+
+  const dirty = Boolean(prefs && savedPrefs && !prefsEqual(prefs, savedPrefs));
+
+  const save = async () => {
+    if (!prefs || saving) return;
+    setSaving(true);
+    // Demo mode: session-local only — never hit the (unauthenticated) API.
+    if (isDemoModeActive()) {
+      setSavedPrefs(prefs);
+      setSaving(false);
+      showToast("Notification preferences saved.");
+      return;
+    }
     try {
       const res = await fetch("/api/notification-preferences", {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferences: { [category]: { [channel]: next } } }),
+        body: JSON.stringify({ preferences: prefs }),
       });
       if (!res.ok) throw new Error("save failed");
+      const data = (await res.json().catch(() => ({}))) as { preferences?: NotificationPreferences };
+      const persisted = data.preferences ?? prefs;
+      setPrefs(persisted);
+      setSavedPrefs(persisted);
+      showToast("Notification preferences saved.");
     } catch {
-      showToast("Could not save the preference.");
-      // Roll back only the touched cell so concurrent edits are preserved.
-      setPrefs((s) =>
-        s ? { ...s, [category]: { ...s[category], [channel]: current[category][channel] } } : s,
-      );
+      showToast("Could not save. Please try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -221,6 +245,22 @@ export function NotificationPrefsPanel({ hasVerifiedPhone = true }: { hasVerifie
           </div>
         </div>
       )}
+      {prefs !== null ? (
+        <div className="flex items-center justify-end gap-3">
+          <span className={`text-xs ${dirty ? "text-muted" : "text-muted/50"}`}>
+            {dirty ? "Unsaved changes" : "All changes saved"}
+          </span>
+          <Button
+            type="button"
+            variant="primary"
+            disabled={!dirty || saving}
+            onClick={() => void save()}
+            data-attr="notif-pref-save"
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
