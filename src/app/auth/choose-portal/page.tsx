@@ -37,12 +37,6 @@ const ROLE_META: Record<
     icon: "vendor",
     tone: "blue",
   },
-  owner: {
-    label: "Owner",
-    hint: "Statements & distributions",
-    icon: "owner",
-    tone: "blue",
-  },
 };
 
 function ChoosePortalForm() {

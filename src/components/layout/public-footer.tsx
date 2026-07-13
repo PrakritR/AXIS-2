@@ -18,7 +18,6 @@ const FOOTER_COLUMNS: { heading: string; links: { href: string; label: string }[
     links: [
       { href: RESIDENT_BROWSE_PATH, label: "Residents" },
       { href: "/pricing", label: "Property managers" },
-      { href: "/owners", label: "Owners" },
       { href: "/vendors", label: "Vendors" },
     ],
   },

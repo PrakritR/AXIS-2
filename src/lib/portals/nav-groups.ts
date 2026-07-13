@@ -61,21 +61,12 @@ const VENDOR_GROUPS: NavGroupConfig[] = [
   { id: "account", label: null, sections: ["profile"] },
 ];
 
-const OWNER_GROUPS: NavGroupConfig[] = [
-  { id: "home", label: null, sections: ["dashboard"] },
-  { id: "portfolio", label: "Portfolio", sections: ["properties"] },
-  { id: "finances", label: "Finances", sections: ["statements", "documents"] },
-  { id: "operations", label: "Operations", sections: ["inbox"] },
-  { id: "account", label: null, sections: ["profile"] },
-];
-
 export const PORTAL_NAV_GROUPS: Record<PortalKind, NavGroupConfig[]> = {
   pro: PRO_GROUPS,
   manager: PRO_GROUPS,
   admin: ADMIN_GROUPS,
   resident: RESIDENT_GROUPS,
   vendor: VENDOR_GROUPS,
-  owner: OWNER_GROUPS,
 };
 
 export type GroupedNav<T> = { id: string; label: string | null; items: T[] };

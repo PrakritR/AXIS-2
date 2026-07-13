@@ -62,8 +62,6 @@ function portalBrandCopy(kind: PortalKind): { subtitle: string; ariaLabel: strin
       return { subtitle: "Admin", ariaLabel: "PropLane Admin Portal home" };
     case "vendor":
       return { subtitle: "Vendor", ariaLabel: "PropLane Vendor Portal home" };
-    case "owner":
-      return { subtitle: "Owner", ariaLabel: "PropLane Owner Portal home" };
     default:
       return { subtitle: "Manager", ariaLabel: "PropLane Manager Portal home" };
   }
@@ -167,8 +165,7 @@ export function PortalSidebar({
     definition.kind === "pro" ||
     definition.kind === "resident" ||
     definition.kind === "manager" ||
-    definition.kind === "vendor" ||
-    definition.kind === "owner";
+    definition.kind === "vendor";
 
   const showManagerTierLocks =
     (definition.kind === "pro" || definition.kind === "manager") && subscriptionTier === "free";

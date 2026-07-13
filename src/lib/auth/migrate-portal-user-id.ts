@@ -52,14 +52,8 @@ async function mergeProfiles(db: ServiceDb, fromUserId: string, toUserId: string
   }
 }
 
-function isPortalRole(role: string): role is "resident" | "manager" | "admin" | "vendor" | "owner" {
-  return (
-    role === "resident" ||
-    role === "manager" ||
-    role === "admin" ||
-    role === "vendor" ||
-    role === "owner"
-  );
+function isPortalRole(role: string): role is "resident" | "manager" | "admin" | "vendor" {
+  return role === "resident" || role === "manager" || role === "admin" || role === "vendor";
 }
 
 async function mergeProfileRoles(db: ServiceDb, fromUserId: string, toUserId: string) {

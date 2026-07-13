@@ -10,14 +10,16 @@ import { normalizeManagerSkuTier, type ManagerSkuTier } from "@/lib/manager-acce
 
 export type PlatformFeeKind = "application_fee" | "rent";
 
+// PropLane never takes a fee from resident/applicant transactions on ANY tier —
+// residents pay only standard payment processing. All take rates are 0 bps.
 export const PLATFORM_FEE_BPS_BY_TIER: Record<ManagerSkuTier, Record<PlatformFeeKind, number>> = {
   free: {
-    application_fee: 50,
-    rent: 50,
+    application_fee: 0,
+    rent: 0,
   },
   pro: {
-    application_fee: 25,
-    rent: 25,
+    application_fee: 0,
+    rent: 0,
   },
   business: {
     application_fee: 0,

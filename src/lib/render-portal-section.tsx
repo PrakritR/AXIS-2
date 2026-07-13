@@ -31,7 +31,6 @@ import { VendorFinancesPanel } from "@/components/portal/vendor-finances-panel";
 import { VendorPaymentsPanel } from "@/components/portal/vendor-payments-panel";
 import { VendorDocumentsPanel } from "@/components/portal/vendor-documents-panel";
 import { VendorSettingsPanel } from "@/components/portal/vendor-settings-panel";
-import { OwnerDashboard } from "@/components/portal/owner-dashboard";
 import { ManagerPortalPageShell } from "@/components/portal/portal-metrics";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PortalTierPaywall } from "@/components/portal/portal-tier-paywall";
@@ -706,62 +705,6 @@ export async function renderPortalSection(
   if (kind === "vendor" && section === "profile") {
     if (tabParts?.length) notFound();
     return <VendorSettingsPanel />;
-  }
-
-  if (kind === "owner" && section === "dashboard") {
-    if (tabParts?.length) notFound();
-    const { profile } = await getEffectiveSessionForPortal("owner");
-    return <OwnerDashboard displayName={profile?.full_name?.trim() || "there"} />;
-  }
-
-  if (kind === "owner" && section === "properties") {
-    if (tabParts?.length) notFound();
-    return (
-      <ManagerPortalPageShell title="Properties">
-        <PortalDataTableEmpty message="Your properties will appear here once your manager links them to your account." />
-      </ManagerPortalPageShell>
-    );
-  }
-
-  if (kind === "owner" && section === "statements") {
-    if (tabParts?.length) notFound();
-    return (
-      <ManagerPortalPageShell title="Statements">
-        <PortalDataTableEmpty message="Owner statements and distributions posted by your manager will appear here." />
-      </ManagerPortalPageShell>
-    );
-  }
-
-  if (kind === "owner" && section === "documents") {
-    if (tabParts?.length) notFound();
-    return (
-      <ManagerPortalPageShell title="Documents">
-        <PortalDataTableEmpty message="Documents shared with you will appear here." />
-      </ManagerPortalPageShell>
-    );
-  }
-
-  if (kind === "owner" && section === "inbox") {
-    if (!meta.tabs.length) notFound();
-    if (!tabParts?.length) {
-      redirect(`${def.basePath}/${section}/${meta.tabs[0]!.id}`);
-    }
-    const inboxTab = tabParts[0]!;
-    if (!["unopened", "opened", "sent", "trash", "notifications"].includes(inboxTab)) notFound();
-    return (
-      <ManagerPortalPageShell title="Inbox">
-        <PortalDataTableEmpty message="Messages between you and your manager will appear here." />
-      </ManagerPortalPageShell>
-    );
-  }
-
-  if (kind === "owner" && section === "profile") {
-    if (tabParts?.length) notFound();
-    return (
-      <ManagerPortalPageShell title="Settings">
-        <PortalDataTableEmpty message="Owner account settings will appear here." />
-      </ManagerPortalPageShell>
-    );
   }
 
   if (!meta.tabs.length) {

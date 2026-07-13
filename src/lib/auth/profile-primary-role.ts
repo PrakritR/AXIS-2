@@ -19,9 +19,3 @@ export function primaryRoleWhenAddingVendor(existingRole: string | null | undefi
   if (r === "admin" || r === "manager" || r === "resident") return existingRole!;
   return "vendor";
 }
-
-export function primaryRoleWhenAddingOwner(existingRole: string | null | undefined): string {
-  const r = (existingRole ?? "").toLowerCase();
-  if (r === "admin" || r === "manager" || r === "resident" || r === "vendor") return existingRole!;
-  return "owner";
-}

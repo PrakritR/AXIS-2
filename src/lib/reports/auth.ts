@@ -33,9 +33,7 @@ export type ReportsAuthContext =
 export type ReportsPreferRole = "manager" | "resident" | "vendor";
 
 function hasManagerRole(roles: string[]): boolean {
-  // `owner` is a read-only property-owner portal role — NOT manager-tier. It must
-  // not reach manager-wide financials/reports (owners get scoped owner statements).
-  return roles.some((r) => r === "manager" || r === "pro");
+  return roles.some((r) => r === "manager" || r === "owner" || r === "pro");
 }
 
 function hasResidentRole(roles: string[]): boolean {

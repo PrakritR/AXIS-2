@@ -11,7 +11,6 @@ const PORTAL_SWITCH_LABELS: Record<AuthRole, string> = {
   admin: "Switch to Admin portal",
   resident: "Switch to Resident portal",
   vendor: "Switch to Vendor portal",
-  owner: "Switch to Owner portal",
 };
 
 const KIND_ACTIVE_ROLE: Record<PortalKind, AuthRole> = {
@@ -20,11 +19,10 @@ const KIND_ACTIVE_ROLE: Record<PortalKind, AuthRole> = {
   admin: "admin",
   resident: "resident",
   vendor: "vendor",
-  owner: "owner",
 };
 
 /** Stable display order when multiple portal switches are shown. */
-const SWITCH_ORDER: AuthRole[] = ["manager", "admin", "resident", "vendor", "owner"];
+const SWITCH_ORDER: AuthRole[] = ["manager", "admin", "resident", "vendor"];
 
 /** Sidebar / account-menu destinations for users with multiple portal roles. */
 export function portalSwitchTargets(currentKind: PortalKind, roles: AuthRole[]): PortalSwitchTarget[] {

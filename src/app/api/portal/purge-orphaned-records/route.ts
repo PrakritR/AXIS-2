@@ -8,7 +8,7 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 export const runtime = "nodejs";
 
 function canManage(role: string, isAdmin: boolean) {
-  return isAdmin || role === "manager";
+  return isAdmin || role === "manager" || role === "owner";
 }
 
 function isCurrentResidentRow(row: unknown): boolean {

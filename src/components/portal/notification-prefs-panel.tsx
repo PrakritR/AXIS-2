@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAppUi } from "@/components/providers/app-ui-provider";
+import { isDemoModeActive } from "@/lib/demo/demo-session";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   NOTIFICATION_CATEGORIES,
@@ -49,6 +50,14 @@ export function NotificationPrefsPanel({ hasVerifiedPhone = true }: { hasVerifie
 
   useEffect(() => {
     let active = true;
+    // Demo surfaces have no authenticated user (the API 401s) and must never
+    // write real rows — start from defaults and keep edits local (see toggle).
+    if (isDemoModeActive()) {
+      setPrefs(DEFAULT_NOTIFICATION_PREFERENCES);
+      return () => {
+        active = false;
+      };
+    }
     void fetch("/api/notification-preferences", { credentials: "include" })
       .then(async (res) =>
         res.ok ? ((await res.json()) as { preferences?: NotificationPreferences }) : { preferences: undefined },
@@ -67,6 +76,9 @@ export function NotificationPrefsPanel({ hasVerifiedPhone = true }: { hasVerifie
     if (!current) return;
     // Optimistic: flip just this cell.
     setPrefs({ ...current, [category]: { ...current[category], [channel]: next } });
+    // Demo mode: edits are session-local only — never hit the (unauthenticated)
+    // API, so no error toast and no real writes.
+    if (isDemoModeActive()) return;
     try {
       const res = await fetch("/api/notification-preferences", {
         method: "PATCH",

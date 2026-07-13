@@ -18,17 +18,12 @@ export type PortalAccessContext = {
 };
 
 function isAuthRole(value: string): value is AuthRole {
-  return (
-    value === "resident" ||
-    value === "manager" ||
-    value === "admin" ||
-    value === "vendor" ||
-    value === "owner"
-  );
+  return value === "resident" || value === "manager" || value === "admin" || value === "vendor";
 }
 
 function mapLegacyPortalRole(role: string | null | undefined): AuthRole | null {
   const value = String(role ?? "").toLowerCase();
+  if (value === "owner") return "manager";
   return isAuthRole(value) ? value : null;
 }
 

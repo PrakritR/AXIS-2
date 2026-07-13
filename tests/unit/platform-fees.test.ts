@@ -10,21 +10,24 @@ import {
 } from "@/lib/payment-policy";
 
 describe("platform-fees", () => {
-  it("applies tier-based Axis rent fees", () => {
-    expect(platformFeeCents(10000, "rent", "free")).toBe(50);
-    expect(platformFeeCents(10000, "rent", "pro")).toBe(25);
+  it("never takes a PropLane fee on any tier", () => {
+    // PropLane takes 0% from resident/applicant transactions on every tier.
+    expect(platformFeeCents(10000, "rent", "free")).toBe(0);
+    expect(platformFeeCents(10000, "rent", "pro")).toBe(0);
     expect(platformFeeCents(10000, "rent", "business")).toBe(0);
+    expect(platformFeeCents(10000, "application_fee", "free")).toBe(0);
     expect(platformFeeCents(0, "rent", "pro")).toBe(0);
     expect(platformFeeCents(-100, "rent", "pro")).toBe(0);
   });
 
-  it("returns display percents", () => {
-    expect(platformFeeDisplayPercents("pro")).toEqual({ applicationFee: 0.25, rent: 0.25 });
+  it("returns display percents (0 on every tier)", () => {
+    expect(platformFeeDisplayPercents("free")).toEqual({ applicationFee: 0, rent: 0 });
+    expect(platformFeeDisplayPercents("pro")).toEqual({ applicationFee: 0, rent: 0 });
     expect(platformFeeDisplayPercents("business")).toEqual({ applicationFee: 0, rent: 0 });
   });
 
-  it("returns plan copy for pricing cards", () => {
-    expect(axisResidentPaymentFeePlanLine("free")).toContain("0.5%");
+  it("plan copy states no PropLane fee on every tier", () => {
+    expect(axisResidentPaymentFeePlanLine("free")).toContain("No PropLane fee");
     expect(axisResidentPaymentFeePlanLine("business")).toContain("No PropLane fee");
   });
 });
@@ -35,8 +38,9 @@ describe("resident payment fees", () => {
     expect(residentProcessingFeeCents(10000, "card")).toBe(320);
   });
 
-  it("combines processing and Axis tier fees for Connect", () => {
-    expect(residentConnectApplicationFeeCents(10000, "ach", "free")).toBe(130);
+  it("charges processing only — no PropLane platform fee on any tier", () => {
+    // Free tier no longer adds a platform fee: ACH processing (80) + 0 = 80.
+    expect(residentConnectApplicationFeeCents(10000, "ach", "free")).toBe(80);
     expect(residentConnectApplicationFeeCents(10000, "card", "business")).toBe(320);
   });
 });

@@ -44,9 +44,8 @@ export async function resolveAgentContext(): Promise<AgentContext | null> {
   const roleList = (roleRows ?? []).map((r) => String(r.role).toLowerCase());
   const legacyRole = String(profile?.role ?? "").toLowerCase();
   const roles = roleList.length > 0 ? roleList : legacyRole ? [legacyRole] : [];
-  // `owner` is read-only and must not drive the manager AI agent (write tools).
-  const isManager = roles.some((r) => r === "manager");
-  if (!isAdmin && !isManager) return null;
+  const isManagerOrOwner = roles.some((r) => r === "manager" || r === "owner");
+  if (!isAdmin && !isManagerOrOwner) return null;
 
   return {
     landlordId: user.id,

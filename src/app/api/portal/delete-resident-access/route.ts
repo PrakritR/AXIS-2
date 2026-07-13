@@ -13,7 +13,7 @@ function normalizeEmail(value: unknown): string {
 }
 
 function canManageResidentAccess(role: string | null | undefined): boolean {
-  return role === "admin" || role === "manager" || role === "pro";
+  return role === "admin" || role === "manager" || role === "owner" || role === "pro";
 }
 
 export async function POST(req: Request) {

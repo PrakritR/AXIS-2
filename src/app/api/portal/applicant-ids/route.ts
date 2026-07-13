@@ -5,7 +5,7 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 export const runtime = "nodejs";
 
 function canLookUpApplicants(role: string | null | undefined): boolean {
-  return role === "admin" || role === "manager" || role === "pro";
+  return role === "admin" || role === "manager" || role === "owner" || role === "pro";
 }
 
 export async function GET(req: Request) {

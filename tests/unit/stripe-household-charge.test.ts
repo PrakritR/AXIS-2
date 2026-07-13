@@ -7,9 +7,9 @@ import {
 import type { HouseholdCharge } from "@/lib/household-charges";
 
 describe("stripe-household-charge", () => {
-  it("calculates ACH platform fee", () => {
-    // $100 ACH: 0.8% processing (80¢) + default free-tier rent fee 0.5% (50¢)
-    expect(axisAchPlatformFeeCents(10000)).toBe(130);
+  it("charges ACH processing only — PropLane takes no platform fee", () => {
+    // $100 ACH: 0.8% processing (80¢) + 0 PropLane fee = 80¢ on every tier.
+    expect(axisAchPlatformFeeCents(10000)).toBe(80);
     expect(axisAchPlatformFeeCents(0)).toBe(0);
   });
 

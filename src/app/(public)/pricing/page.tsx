@@ -23,18 +23,7 @@ const TIER_CTA: Record<
   business: { href: `${CTA_BASE}&tier=business`, label: "Start 14-day trial", solid: false },
 };
 
-/** PropLane fee highlight per tier (already stated in each card, summarized here honestly). */
-const FEE_STRIP: { tier: string; fee: string }[] = [
-  { tier: "Free", fee: "0.5%" },
-  { tier: "Pro", fee: "0.25%" },
-  { tier: "Business", fee: "0%" },
-];
-
 const FAQ: { q: string; a: string }[] = [
-  {
-    q: "What is the PropLane payment fee?",
-    a: "On resident online payments PropLane adds a small fee on top of standard payment processing — 0.5% on Free, 0.25% on Pro, and 0% on Business. That is the whole fee: no per-unit charges and nothing hidden.",
-  },
   {
     q: "Is the free tier actually free?",
     a: "Yes — Free is $0 with no card. You get one property listing, applications and tour scheduling, and payment collection. Residents, leases, work orders, inbox, and co-managers live on Pro and up.",
@@ -243,32 +232,6 @@ export default async function PricingPage({
           {MANAGER_PLAN_TIERS.map((tier) => (
             <PlanCard key={tier.id} tier={tier} annual={annual} />
           ))}
-        </div>
-
-        {/* Payment-fee summary strip */}
-        <div className="mt-8 rounded-xl border border-border bg-card px-6 py-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="max-w-md text-[13px] leading-relaxed text-muted">
-              <span className="font-medium text-foreground">PropLane fee on resident online payments.</span>{" "}
-              A small percentage on top of standard payment processing — it drops as you move up,
-              to nothing on Business.
-            </div>
-            <div className="flex items-stretch gap-2">
-              {FEE_STRIP.map((row) => (
-                <div
-                  key={row.tier}
-                  className="rounded-lg border border-border bg-[var(--secondary)] px-4 py-2.5 text-center"
-                >
-                  <div className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">
-                    {row.fee}
-                  </div>
-                  <div className="mt-0.5 text-[11px] uppercase tracking-[0.06em] text-muted/60">
-                    {row.tier}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 
