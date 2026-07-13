@@ -10,6 +10,7 @@ import {
   SHORT_TERM_LEASE_TERM,
   getPropertyById,
   getRoomChoiceLabel,
+  isPropertyRentedByRoom,
   isRoomApprovedConflict,
   isRoomPendingConflict,
   listingAllowedLeaseTerms,
@@ -444,6 +445,9 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         : [...LEASE_TERM_OPTIONS];
     const rooms = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true }).filter((o) => o.value !== "");
     const roomsWithNone = roomSelectOptionsWithNone(form.propertyId, { includeUnavailable: true });
+    // Whole-unit listings (leased as one place, not room-by-room) don't ask for
+    // ranked 1st/2nd/3rd room choices — see the property step below.
+    const isByRoom = isPropertyRentedByRoom(form.propertyId);
     const propertySearchOptions = propertyOptions.map((o) => {
       const prop = getPropertyById(o.value);
       return {
@@ -489,7 +493,14 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             value={form.propertyId || null}
             onChange={(id) => {
               const pid = id ?? "";
-              patch({ propertyId: pid, roomChoice1: "", roomChoice2: "", roomChoice3: "", rentalType: "standard" });
+              // Whole-unit listings aren't chosen by room: auto-select the sole
+              // unit (or the property itself) so no ranked room choice is asked.
+              const wholeUnit = Boolean(pid) && !isPropertyRentedByRoom(pid);
+              const unitOpts = wholeUnit
+                ? roomSelectOptionsWithNone(pid, { includeUnavailable: true }).filter((o) => o.value !== "")
+                : [];
+              const autoRoom = wholeUnit && unitOpts.length <= 1 ? (unitOpts[0]?.value ?? pid) : "";
+              patch({ propertyId: pid, roomChoice1: autoRoom, roomChoice2: "", roomChoice3: "", rentalType: "standard" });
             }}
             placeholder="Search by address, neighborhood, or property name…"
             emptyMessage="No properties match your search."
@@ -503,6 +514,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
         </WizardFieldGate>
 
         <WizardFieldGate fieldKey="roomChoice1" enabled={showWizardField}>
+        {isByRoom ? (
         <div className="space-y-2">
           <Label required>Room preferences</Label>
           <p className="text-xs text-muted">
@@ -562,6 +574,35 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
             </div>
           </div>
         </div>
+        ) : rooms.length > 1 ? (
+        // Whole-unit listing with multiple units: pick one unit, no ranked choices.
+        <div className="space-y-2">
+          <Label required>Unit</Label>
+          <p className="text-xs text-muted">
+            This home is leased as a whole unit — choose the unit you&apos;re applying for.
+          </p>
+          <div data-wizard-field="roomChoice1">
+            <Select
+              value={form.roomChoice1}
+              disabled={!form.propertyId}
+              onChange={(e) => patch({ roomChoice1: e.target.value, roomChoice2: "", roomChoice3: "" })}
+              className={errors.roomChoice1 ? "border-red-400 ring-2 ring-red-100" : ""}
+            >
+              <option value="">{form.propertyId ? "Select a unit" : "Select a property first"}</option>
+              {rooms.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+            <FieldError msg={errors.roomChoice1} />
+          </div>
+        </div>
+        ) : (
+          // Whole-unit listing with a single unit: the property IS the choice —
+          // roomChoice1 is auto-filled on property select, so nothing to ask.
+          <div data-wizard-field="roomChoice1" className="hidden" aria-hidden />
+        )}
         </WizardFieldGate>
 
         {shortTermAllowed && showWizardField("rentalType") ? (

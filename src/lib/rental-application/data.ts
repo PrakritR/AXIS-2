@@ -392,6 +392,19 @@ export function roomSelectOptionsWithNone(propertyId: string, options: RoomAvail
   return [{ value: NONE, label: "None" }, ...getRoomOptionsForProperty(propertyId, options)];
 }
 
+/**
+ * True when the listing is rented room-by-room (its v1 submission has at least
+ * one named room), vs. leased as a whole unit. Drives the application form:
+ * by-room listings ask for ranked 1st/2nd/3rd room choices; whole-unit listings
+ * don't (there's no room to choose — the whole place is one lease).
+ */
+export function isPropertyRentedByRoom(propertyId: string): boolean {
+  const selected = getPropertyById(propertyId);
+  if (!selected?.listingSubmission || selected.listingSubmission.v !== 1) return false;
+  const sub = normalizeManagerListingSubmissionV1(selected.listingSubmission);
+  return sub.rooms.some((r) => r.name.trim());
+}
+
 export function getDemoRoomAvailabilityMessage(
   roomId: string,
   leaseStart: string,
