@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body;
     const targetUserId = typeof body.targetUserId === "string" ? body.targetUserId.trim() : "";
     const portal = body.portal;
-    if (!targetUserId || !portal || !["manager", "resident", "owner"].includes(portal)) {
+    if (!targetUserId || !portal || !["manager", "resident", "vendor"].includes(portal)) {
       return NextResponse.json({ error: "targetUserId and portal are required." }, { status: 400 });
     }
 

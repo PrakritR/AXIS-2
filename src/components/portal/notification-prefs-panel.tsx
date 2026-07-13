@@ -230,7 +230,7 @@ export function NotificationPrefsPanel({ hasVerifiedPhone = true }: { hasVerifie
                             type="checkbox"
                             className="h-4 w-4 rounded border-border accent-primary disabled:opacity-50"
                             checked={checked}
-                            disabled={forced}
+                            disabled={forced || saving}
                             onChange={(e) => void toggle(category, ch.id, e.target.checked)}
                             aria-label={`${ch.label} for ${CATEGORY_LABELS[category]}`}
                             data-attr={`notif-pref-${category}-${ch.id}`}

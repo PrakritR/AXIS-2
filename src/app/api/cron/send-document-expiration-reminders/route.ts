@@ -77,7 +77,9 @@ export async function GET(req: Request) {
       subject,
       text,
       toUserIds: [managerUserId],
-      eventCategory: "leases",
+      // Inbox-only: this reminder fires DAILY per expiring doc — emailing daily
+      // would spam the manager. The dashboard banner + library surface it too.
+      deliverViaEmail: false,
       senderRole: "manager",
     });
 
